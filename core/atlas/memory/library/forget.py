@@ -159,3 +159,117 @@ def purge_history(store: Any, needles: list[str]) -> dict[str, Any]:
             _rmtree(backup)
         raise RuntimeError(f"改写历史失败，已保持原样：{exc}") from exc
 
+
+def propagate_forget(
+    store: Any,
+    entry_refs: list[Any],
+    derived_manifest: list[str | Path],
+) -> dict[str, Any]:
+    """Remove caller-enumerated derivatives and purge their text from Git history.
+
+    ``entry_refs`` carries forgotten text values (or Entry-like objects); it never
+    resolves ids through a second ledger. ``derived_manifest`` contains paths
+    under the memory root supplied by the Markdown writer/caller. Tombstone
+    creation remains the writer's responsibility.
+    """
+    root = Path(store.root).resolve()
+    needles: set[str] = set()
+
+    def historical_values(entry_id: str) -> set[str]:
+        if not re.fullmatch(r"m_[0-9a-f]{10}", entry_id) or not store._git_available():
+            return set()
+        from .store import Entry
+
+        patch = _git(root, "log", "--all", "-p", "-S", entry_id, "--", "*.md").decode(
+            "utf-8", errors="replace"
+        )
+        values: set[str] = set()
+        for line in patch.splitlines():
+            if line.startswith(("+", "-")) and not line.startswith(("+++", "---")):
+                entry = Entry.parse(line[1:])
+                if entry and entry.id == entry_id:
+                    values.update(value for value in (entry.text, entry.value, entry.quote) if value)
+        return values
+
+    for item in entry_refs:
+        if isinstance(item, str):
+            found = store.find_entry(item) if hasattr(store, "find_entry") else None
+            if found:
+                _, entry, _ = found
+                needles.update(value for value in (entry.text, entry.value, entry.quote) if value)
+            elif re.fullmatch(r"m_[0-9a-f]{10}", item):
+                needles.update(historical_values(item))
+            else:
+                needles.add(item)
+        elif isinstance(item, dict):
+            for key in ("text", "value", "quote"):
+                value = item.get(key)
+                if isinstance(value, str) and value:
+                    needles.add(value)
+            entry_id = item.get("id")
+            found = store.find_entry(entry_id) if isinstance(entry_id, str) and hasattr(store, "find_entry") else None
+            if found:
+                _, entry, _ = found
+                needles.update(value for value in (entry.text, entry.value, entry.quote) if value)
+            elif isinstance(entry_id, str):
+                needles.update(historical_values(entry_id))
+        else:
+            for key in ("text", "value", "quote"):
+                value = getattr(item, key, None)
+                if isinstance(value, str) and value:
+                    needles.add(value)
+
+    removed: list[str] = []
+    derivative_text: set[str] = set()
+    with store.lock:
+        for raw in derived_manifest:
+            path = Path(raw)
+            target = Path(os.path.abspath(path if path.is_absolute() else root / path))
+            resolved = target.resolve()
+            try:
+                relative = target.relative_to(root)
+                resolved.relative_to(root)
+            except ValueError as exc:
+                raise ValueError(f"派生文件必须位于记忆库内：{raw}") from exc
+            if not relative.parts or relative.parts[0] == ".git":
+                raise ValueError(f"不允许删除记忆库根目录或 Git 元数据：{raw}")
+            if target.is_symlink():
+                target.unlink()
+                removed.append(relative.as_posix())
+            elif target.is_dir():
+                for child in target.rglob("*"):
+                    if child.is_file():
+                        try:
+                            derivative_text.update(
+                                line for line in child.read_text(encoding="utf-8").splitlines()
+                                if len(line.strip()) >= 2
+                            )
+                        except (UnicodeDecodeError, OSError):
+                            # Binary derived caches are rebuilt from Markdown and are
+                            # not copied into another durable source by this helper.
+                            pass
+                shutil.rmtree(target)
+                removed.append(relative.as_posix())
+            elif target.exists():
+                try:
+                    derivative_text.update(
+                        line for line in target.read_text(encoding="utf-8").splitlines()
+                        if len(line.strip()) >= 2
+                    )
+                except (UnicodeDecodeError, OSError):
+                    pass
+                target.unlink()
+                removed.append(relative.as_posix())
+
+        # Persist the caller's Markdown removal and derivative deletion before
+        # the history rewrite verifies the new tree against the worktree.
+        commit = store.commit("遗忘传播清除记忆正文与派生物")
+        history = purge_history(store, sorted(needles | derivative_text, key=len, reverse=True))
+    return {
+        "removed": sorted(removed),
+        "commit": commit,
+        "history": history,
+        "tombstone_written": False,
+        "tombstone_owner": "Markdown writer",
+    }
+
