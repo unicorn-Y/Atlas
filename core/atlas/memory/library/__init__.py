@@ -11,6 +11,7 @@ import asyncio
 import json
 import re
 import tempfile
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -69,6 +70,19 @@ def _label(entry_src: str, at: str) -> str:
     if entry_src == SRC_EPISODE:
         return f"（经历 · {day}）" if day else "（经历）"
     return f"（{entry_src or '来源不明'}{' · ' + day if day else ''}）"
+
+
+def _source_pointer(value: Any, legacy_ref: str = "") -> str:
+    if hasattr(value, "to_ref"):
+        return value.to_ref()
+    if isinstance(value, dict):
+        try:
+            from .source_ref import SourceRef
+
+            return SourceRef(**value).to_ref()
+        except (TypeError, ValueError):
+            return ""
+    return str(value or legacy_ref or "")
 
 
 def _skip_reason(workspace: str, user_text: str, config: Any = None) -> str:
@@ -206,26 +220,50 @@ class MemoryLibrary:
         refs: list[str] = []
         now = _now(self.config)
         lowered = message.casefold()
+        try:
+            from .claim_resolution import is_current_claim
+        except ImportError:
+            is_current_claim = None
+
+        def is_current(entry: Entry) -> bool:
+            return bool(is_current_claim(entry, now)) if is_current_claim else not is_expired(entry, now)
+
+        def source_pointer(entry: Entry) -> str:
+            source_ref = getattr(entry, "source_ref", None)
+            return _source_pointer(source_ref, entry.ref)
+
+        def hit_line(hit: dict[str, Any]) -> str:
+            reason = ", ".join(str(term) for term in hit.get("matched", [])[:3])
+            association = hit.get("association") or {}
+            via = (f"；关联自 {association.get('via_page')} 的 [[{association.get('link_text')}]]"
+                   if association else "")
+            time_state = "当前" if hit.get("claim_current", True) else "历史"
+            source = hit.get("source_level") or "legacy_unknown"
+            why = f"；命中 {reason}" if reason else ""
+            return (f"- [{hit.get('claim_id', hit.get('id'))}] {hit.get('text')}"
+                    f"（{time_state} · {source}{why}{via}）")
+
         cue_pages = []
         for rel, names in self.index.entities():
             if any(name and name.casefold() in lowered for name in names):
                 cue_pages.append(rel)
         for rel in cue_pages[:MAX_CUE_PAGES]:
             page = self.store.read(rel)
-            current = [e for e in page.current if not is_expired(e, now)]
+            current = [e for e in page.current if is_current(e)]
             lines = [f"- {e.text}{_label(e.src, e.at)}" for e in current[-MAX_CUE_LINES:]]
             if lines:
                 alias = f"（也叫 {'、'.join(page.aliases)}）" if page.aliases else ""
                 parts.append(f"## {page.title}{alias}\n" + "\n".join(lines))
-                refs.extend(e.ref for e in current[-MAX_CUE_LINES:] if e.ref)
+                refs.extend(pointer for e in current[-MAX_CUE_LINES:]
+                            if (pointer := source_pointer(e)))
         skip = set(RESIDENT_PAGES) | set(cue_pages)
         hits = [h for h in self.index.search(message, limit=MAX_SEARCH_FACTS * 2,
                                              kinds=("fact", "dream"), exclude_paths=tuple(skip), now=now)
                 if h["score"] >= SEARCH_MIN_SCORE][:MAX_SEARCH_FACTS]
         if hits:
-            parts.append("## 可能相关\n" + "\n".join(
-                f"- {h['text']}{_label(h['src'], h['at'])}" for h in hits))
-            refs.extend(h.get("ref") for h in hits if h.get("ref"))
+            parts.append("## 可能相关\n" + "\n".join(hit_line(h) for h in hits))
+            refs.extend(pointer for h in hits
+                        if (pointer := _source_pointer(h.get("source_ref"), str(h.get("ref") or ""))))
         resident_ids = {e.id for e in self._recent_episodes(now, 7, 6)}
         detailed = bool(_RECALL_INTENT.search(message))
         episode_hits = [h for h in self.index.search(message, limit=12, kinds=("episode",), now=now)
@@ -247,8 +285,8 @@ class MemoryLibrary:
                         line += "；" + "；".join(details)
                     line += f"；{'已验证' if entry.verified else '未验证'}"
                 lines.append(line)
-                if entry and entry.ref:
-                    refs.append(entry.ref)
+                if entry and (pointer := source_pointer(entry)):
+                    refs.append(pointer)
             parts.append("## 以前做过的相关的事\n" + "\n".join(lines))
         if _RECALL_INTENT.search(message):
             diary = [h for h in self.index.search(message, limit=3, kinds=("diary",), now=now)
@@ -256,13 +294,14 @@ class MemoryLibrary:
             if diary:
                 parts.append("## 以前的对话记录（原文节选）\n" + "\n".join(
                     f"- [{h['at'][:16].replace('T', ' ')}] {' '.join(h['text'].split())[:240]}" for h in diary))
-                refs.extend(h.get("ref") for h in diary if h.get("ref"))
+                refs.extend(pointer for h in diary
+                            if (pointer := _source_pointer(h.get("source_ref"), str(h.get("ref") or ""))))
         if not parts:
             return "", []
         detailed = bool(_RECALL_INTENT.search(message))
         refs = list(dict.fromkeys(refs))
         if detailed and refs:
-            parts.append('需要细节可用 memory_search(open="<ref>") 打开原对话：' + "、".join(refs[:3]))
+            parts.append('需要细节可用 memory_open(ref="<ref>") 打开经历或原对话：' + "、".join(refs[:3]))
         block = "Atlas 记忆库里和这句话有关的记录：\n\n" + "\n\n".join(parts)
         return block[:3000 if detailed else 1200], refs[:3] if detailed else refs
 
@@ -271,10 +310,22 @@ class MemoryLibrary:
                kinds: tuple[str, ...] = ("fact", "dream", "diary")) -> list[dict[str, Any]]:
         self.ready()
         self.index.sync()
-        keep = ("id", "path", "kind", "bucket", "text", "src", "at", "ref", "until", "quote", "score", "expired")
-        return [{k: h.get(k) for k in keep}
-                for h in self.index.search(query, limit=limit, include_history=include_history,
-                                           kinds=kinds, now=_now(self.config))]
+        keep = (
+            "id", "claim_id", "path", "kind", "bucket", "text", "src", "at", "ref", "until",
+            "quote", "score", "expired", "source_level", "recorded_at", "valid_from", "valid_to",
+            "supersedes", "retracts", "source_ref", "claim_current", "rank_reasons", "layer",
+            "association", "usage_count", "last_used",
+        )
+        results = self.index.search(query, limit=limit, include_history=include_history,
+                                    kinds=kinds, now=_now(self.config))
+        exposed = []
+        for hit in results:
+            claim_id = str(hit.get("claim_id") or hit.get("id") or "")
+            event_id = f"exposure:{uuid.uuid4().hex}:{claim_id}"
+            if claim_id:
+                self.index.record_usage_event(event_id, claim_id, "exposure")
+            exposed.append({**{k: hit.get(k) for k in keep}, "exposure_event_id": event_id})
+        return exposed
 
     # ---------- write (after the reply, in the background) ----------
     def schedule_turn(self, **kwargs: Any) -> None:
