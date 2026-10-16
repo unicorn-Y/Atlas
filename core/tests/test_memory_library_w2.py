@@ -207,6 +207,8 @@ async def test_dream_checkpoint_advances_only_after_all_projects_succeed(tmp_pat
         files=["core/atlas/api/x.py"],
     )
     page = Page(path=f"经历/{now.date().isoformat()}.md", title="episodes", current=[episode])
+    page.current.append(Entry(id="e2", text="Atlas：完成回归", src="经历",
+                              at=(now - timedelta(days=1)).isoformat(), trigger=["Atlas"]))
     library.store.write(page)
     state = tmp_path / ".dream-state.json"
     state.write_text(json.dumps({"checkpoint": "2000-01-01T00:00:00+00:00"}), encoding="utf-8")
@@ -241,20 +243,29 @@ async def test_dream_writes_project_sections_and_advances_checkpoint_after_succe
         decisions=["保留接口兼容"],
         open_items=["2026-10-20 前完成验收"],
     )
-    library.store.write(
-        Page(path=f"经历/{now.date().isoformat()}.md", title="episodes", current=[entry])
-    )
+    page = Page(path=f"经历/{now.date().isoformat()}.md", title="episodes", current=[entry])
+    page.current.append(Entry(id="episode-2", text="Atlas 记忆库：回归通过", src="经历",
+                              at=(now - timedelta(days=1)).isoformat(), trigger=["Atlas"]))
+    library.store.write(page)
     state = tmp_path / ".dream-state.json"
     state.write_text(json.dumps({"checkpoint": "2000-01-01T00:00:00+00:00"}), encoding="utf-8")
 
     async def write(_library, _model_mgr, _name, _entries):
         return (
-            {
-                "现在状态": ["接口已落地"],
-                "定下的决定": ["使用既有 API"],
-                "没做完": ["2026-10-20 前完成验收"],
-                "来龙去脉": ["来自经历"],
-            },
+            [
+                {"action": "add", "target_id": "", "old_text_hash": "",
+                 "source_refs": ["episode-1"],
+                 "fields": {"section": "现在状态", "text": "接口已落地"},
+                 "reason": "跨会话项目状态"},
+                {"action": "add", "target_id": "", "old_text_hash": "",
+                 "source_refs": ["episode-1"],
+                 "fields": {"section": "定下的决定", "text": "使用既有 API"},
+                 "reason": "经历中记录的决定"},
+                {"action": "add", "target_id": "", "old_text_hash": "",
+                 "source_refs": ["episode-1"],
+                 "fields": {"section": "没做完", "text": "2026-10-20 前完成验收"},
+                 "reason": "经历中记录的未完成事项"},
+            ],
             "",
         )
 
