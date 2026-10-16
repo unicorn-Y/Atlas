@@ -50,6 +50,13 @@ SUBAGENT_RESULT_CLOSE = "</atlas-subagent-result>"
 _SUBAGENT_INDENT = "  "
 
 
+def attach_delegation_metadata(
+    data: dict[str, Any], metadata: dict[str, Any],
+) -> dict[str, Any]:
+    """Attach pointer-only delegation metadata without changing result text."""
+    return {**data, "delegation": dict(metadata)}
+
+
 def frame_subagent_result(
     text: str, *, subtask_id: str = "", backend: str = "", agent: str = "", status: str = "",
 ) -> str:
