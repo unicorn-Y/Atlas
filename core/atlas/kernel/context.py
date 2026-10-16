@@ -176,8 +176,10 @@ class ContextManager:
         after = estimate_tokens(messages) + prefix_tokens
         method = "microcompact" if messages != list(history) else "none"
         result = CompactionResult(messages, method, before, after, budget)
+        announced = False
         if before_compact is not None and (method != "none" or after > budget or manual or force):
             await before_compact(result)
+            announced = True
         # Hysteresis: if trimming old tool outputs could not bring the context back
         # under the microcompact threshold, summarize now. Otherwise every later
         # request nibbles one more tool result (each nibble busts the prompt cache)
@@ -215,6 +217,11 @@ class ContextManager:
         if not old:
             result.error = "context_over_budget: no safely compactable history"
             return result
+        # The hysteresis path can summarize while microcompact changed nothing and the
+        # context is still under the hard budget; the caller must still get its
+        # PreCompact/lease callback before a summary replaces history.
+        if before_compact is not None and not announced:
+            await before_compact(result)
         invariants = json.dumps(dict(preserved or {}), ensure_ascii=False, default=str)
         prompt = SUMMARY_PROMPT + "\nPreserved task state:\n" + invariants
         if focus:
