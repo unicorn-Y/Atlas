@@ -25,7 +25,11 @@
 
 ## 推送及主机验收
 
-- 推送前远端更新、快进祖先关系和推送后远端 tip：待执行。
-- `D:\Atlas pull --ff-only`、FastEmbed 安装、`AtlasDev` 重启、8765 health/stats、桌面记忆页与真实对话验收：待推送后执行；在这些观察完成前不宣称上线通过。
+- 推送前重新 fetch 后 `origin/ui-redesign` 仍为 `0e989795622538dfaa300db76c792d1710b71d75`；`git merge-base --is-ancestor origin/ui-redesign HEAD` 与 `git diff --check` 通过。
+- `git push origin HEAD:ui-redesign` 快进成功；推送时远端从 `0e989795` 更新到 `40519dcc`。`git ls-remote origin refs/heads/ui-redesign` 确认 tip 为 `40519dcce902ae4526ee96d2b785702101523106`。
+- 随后唯一执行主机更新命令 `git -C D:\Atlas pull --ff-only`，退出码 1，中止于 `core/atlas/kernel/loop.py`、`core/atlas/kernel/tools.py` 的本地未提交修改覆盖保护；输出为 `Aborting`，主机 checkout 未更新。未 stash/reset/清理这些改动。
+- 按任务书停止后续主机写操作。因此 FastEmbed 安装、`AtlasDev` 重启、8765 health/stats、桌面记忆页和真实对话验收均未执行；不能据此宣称已上线。
 
 结果摘要另见同目录 `W2-ROLLOUT-RESULT.md`。
+
+**状态：部分完成。** 代码与结果已推送到 `ui-redesign`；主机上线被既有未提交文件阻断。

@@ -13,6 +13,8 @@
 
 - W2 后端、Memory Browser、`MemoryPage.test.tsx` 和本结果记录；mock 默认关闭。
 - W0：9 passed；W1：7 passed；W2：11 passed；MemoryPage focused test：1 passed；前端 build 成功；`git diff --check` 通过。命令及初次环境故障修复见 `A0-RESULT.md`。
-- 主机 fastembed、任务计划重启、8765 health/stats、真实桌面页/对话验收：待推送后执行，尚未观察。
+- 推送前远端 tip `0e989795622538dfaa300db76c792d1710b71d75` 是当前基线，祖先检查和 diff 检查通过；`git push origin HEAD:ui-redesign` 快进到 `40519dcc`，`git ls-remote` 确认 `40519dcce902ae4526ee96d2b785702101523106`。
+- 推送后唯一执行的主机命令 `git -C D:\Atlas pull --ff-only` 因 `core/atlas/kernel/loop.py`、`core/atlas/kernel/tools.py` 的现有未提交改动而退出 1 并中止。遵照任务书未清理或覆盖这些改动，也未继续做主机写操作。
+- FastEmbed、AtlasDev、8765 health/stats、桌面记忆页及真实对话验收未执行；不宣称主机已上线。
 
-推送前快进与远端 tip：待执行。
+状态：**部分完成**。W2 代码已推送；主机上线仍被上述工作树改动阻断。
