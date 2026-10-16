@@ -3,7 +3,7 @@
 Status: **IMPLEMENTATION READY — INTEGRATION AND REAL-USE GATES PENDING**
 
 Branch: `mem-m6`  
-Worktree: `D:\atlas-mem-m6`  
+Worktree: `D:\atlas-mem-m6`
 Base and merge order: `origin/mem-m2@5ffb1a16` → `origin/mem-m5@c5474a80` → `origin/mem-m1@f0fc4d40` → M1 provenance fix `origin/mem-m1@11b6eddf`. The M1/M5/M2 merges were conflict-free; the resulting pre-implementation integration commit was `bef7aaa4`.
 
 ## Implemented within M6 ownership
