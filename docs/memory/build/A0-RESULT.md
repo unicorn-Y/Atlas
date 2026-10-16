@@ -27,6 +27,7 @@
 
 - 推送前重新 fetch 后 `origin/ui-redesign` 仍为 `0e989795622538dfaa300db76c792d1710b71d75`；`git merge-base --is-ancestor origin/ui-redesign HEAD` 与 `git diff --check` 通过。
 - `git push origin HEAD:ui-redesign` 快进成功；推送时远端从 `0e989795` 更新到 `40519dcc`。`git ls-remote origin refs/heads/ui-redesign` 确认 tip 为 `40519dcce902ae4526ee96d2b785702101523106`。
+- 随后提交主机 pull 阻塞记录 `e6e7f3d356d471b8a5342a1764261d90b46a4cfb` 并快进推送；最终远端 tip 以最后一次 `git ls-remote` 复核结果为准。
 - 随后唯一执行主机更新命令 `git -C D:\Atlas pull --ff-only`，退出码 1，中止于 `core/atlas/kernel/loop.py`、`core/atlas/kernel/tools.py` 的本地未提交修改覆盖保护；输出为 `Aborting`，主机 checkout 未更新。未 stash/reset/清理这些改动。
 - 按任务书停止后续主机写操作。因此 FastEmbed 安装、`AtlasDev` 重启、8765 health/stats、桌面记忆页和真实对话验收均未执行；不能据此宣称已上线。
 
