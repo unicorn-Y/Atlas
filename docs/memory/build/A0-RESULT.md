@@ -21,6 +21,7 @@
 - W1：`python -m pytest tests\test_memory_library_w1.py -q --basetemp .tmp\pytest-a0-w1 -p no:cacheprovider --tb=short`：7 passed。
 - W2：`python -m pytest tests\test_memory_library_w2.py -q --basetemp .tmp\pytest-a0-w2 -p no:cacheprovider --tb=short`：11 passed，含 F2 无模型队列留存、F4 主循环线程调度与 10 分钟加载重试。
 - 前端：干净验证工作树 `D:\atlas-merge-w2-verify` 中 `npm ci` 成功；`npm --prefix frontend run build` 成功；`npm --prefix frontend test -- src/renderer/pages/MemoryPage.test.tsx`：1 passed。构建存在既有 chunk-size/dynamic-import 警告。
+- 当前 `MemoryPage.test.tsx` 是服务端静态渲染检查，覆盖搜索控件、导航、空态、断连提示和 mock 关闭；加载中/错误交互状态未由该测试实际触发，单独验证未完成。
 - `git diff --check origin/ui-redesign...HEAD`：通过。差异限于 W2 文档、后端、前端记忆浏览器和对应测试。主分支内的临时 npm 依赖目录有一次 `ENOTEMPTY` 清理失败，未改变受版本控制文件；干净验证工作树复验成功。
 
 ## 推送及主机验收
