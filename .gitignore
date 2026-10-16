@@ -5,7 +5,8 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 dist/
-build/
+/build/
+!docs/memory/build/
 .venv/
 .ruff_cache/
 /core/.pytest-temp-wave1/

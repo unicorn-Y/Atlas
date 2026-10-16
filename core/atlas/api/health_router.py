@@ -36,6 +36,7 @@ def _service(name: str, services: AppServices) -> Any:
 
 
 @router.get("/api/health")
+@router.get("/health")
 async def health(
     services: Annotated[AppServices, Depends(get_app_services)],
 ) -> dict[str, Any]:

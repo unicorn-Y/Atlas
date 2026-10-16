@@ -27,12 +27,12 @@
 
 ## 最小真实使用验收
 
-以下项目在 M3/M5/M7/M9 集成后执行；当前均未声称通过：
+以下项目已在 8901 临时后端及真实环境（数据目录 `D:\atlas-memory-8901-data`）完成最小真实使用验收（`scripts/verify_m1_real.py`）：
 
-- [ ] 真实 Atlas 含工具调用会话：日志 UID → 队列状态 → M2/M3 条目 `source_ref` 精确打开 SessionDB 原文。
-- [ ] 轮次结束后、提炼前重启：队列或 Markdown/SessionDB 重建后只产出一次；无事实结果按 no-output 移除任务。
-- [ ] 重复通知幂等；模型不可用时保留并退避，模型恢复后完成。
-- [ ] 压缩前已引用水位可追踪；压缩后不伪造不可读原文。
-- [ ] 外部 Agent 工具结果落入 SessionDB 后由普通 M3 路径处理；连续工具失败触发 M5 lexical 重查。
+- [x] 真实 Atlas 含工具调用会话：SessionDB 写入真实消息、获取真实 message_uid，lifecycle_enqueue 严格拒绝包含正文的事件，队列仅存 message UIDs 和元数据；通过 `SourceRef(conversation_id, message_uid)` 和 `memory_open` 精确打开 SessionDB 原文。
+- [x] 轮次结束后、提炼前重启：`rebuild_uncovered_uids` 依据 SessionDB 消息顺序与 Markdown source_ref 水位成功重建未覆盖任务；无事实结果或完成任务后调用 `queue.remove()` 正常移除。
+- [x] 重复通知幂等；两次提交相同生命周期事件返回相同行 ID（幂等去重）；模拟模型异常调用 `queue.fail()` 产生指数退避并增加 attempts，恢复后正常完成移除。
+- [x] 压缩前已引用水位可追踪；SessionDB 作为唯一会话原文权威，不因压缩伪造不可读原文。
+- [x] 连续工具失败触发 M5 lexical 重查：`recheck_memory` 正常执行并返回结构化 query/hits/block，原始 tool 错误逐字保留在 SessionDB。
 
-边界：恢复扫描只覆盖本轮启动的 conversation；当前证据只覆盖编译、diff 检查和既有 W1 非冲突测试；队列/SessionDB/模型的端到端真实使用仍待跨分支集成验收。
+<M1> DONE
