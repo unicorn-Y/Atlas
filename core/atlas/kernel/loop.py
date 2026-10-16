@@ -320,6 +320,10 @@ class AtlasKernel:
         def record(event: str, **fields: Any) -> None:
             nonlocal log_path
             try:
+                # run_id is the positional key for this run. A few lifecycle
+                # callers also include it in their payload; do not forward it
+                # again as a keyword to append_run_event.
+                fields.pop("run_id", None)
                 log_path = append_run_event(run_id, event, **fields)
             except Exception:
                 log.exception("kernel.run_log_write_failed", extra={"run_id": run_id, "event": event})
@@ -1420,6 +1424,7 @@ class AtlasKernel:
                 async def consume_tool_results(
                     results: list[ToolExecutionResult],
                 ) -> list[dict[str, Any]]:
+                    nonlocal consecutive_tool_failures
                     result_events: list[dict[str, Any]] = []
                     for result in results:
                         receipt = result.receipt.as_dict()
