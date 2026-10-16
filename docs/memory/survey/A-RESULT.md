@@ -54,7 +54,7 @@ M3移植：
 | Letta sleep-time | letta-code current, Apache-2.0；本地SHA不可用 | reflection.md:201-239; memory-worktree.ts:finalizeReflectionMemoryWorktreeUnlocked:2314+ | reflection子agent在隔离Git worktree读近转录与memory/skills | dirty/conflict处理为retryable，避免盲覆写；文件可读；usage feedback未证 | 中高；源码页，未clone。 |
 | A-MEM | ceffb860f0712bbae97b184d440df62bc910ca8d；MIT | memory_system.py:find_related_memories:288-313,update:357-396,process_memory:590-727 | 近邻memory局部演化，更新tags/links/context | 默认Chroma ephemeral；失败回原note，缺retry/审核/feedback；不适作事实权威 | 中高；源码已读。 |
 | Claude Code | 2.1.88 sourcemap，当前包2.1.296 closed source | memdir.ts:buildAssistantDailyLogPrompt:327-365; sessionMemory.ts:shouldExtractMemory:134-181 | 按主题memory文件+daily log，dream整理；session summary为压缩连续性 | prompt约束为主，没见事务retry；可读改，无反馈 | 低行为参考；闭源/版本差。 |
-| MemOS lifecycle | 不完整本地D:\memos-src\apps，无源码commit/许可完成核验 | 未能定位生产链 | 不作结论 | 未知 | 未完成。 |
+| MemOS local plugin lifecycle | D:\memos-src HEAD a7367d07e55db61099f7b4e2c1108bc5831a24f3；根 Apache-2.0 | core/memory/l2/l2.ts:runL2:61; core/memory/l3/l3.ts:runL3:84,recordFailure:599; core/memory/l3/abstract.ts:abstractDraft:59,buildWorldModelRow:165; core/skill/lifecycle.ts:applyFeedback:37 | L2把未匹配trace放candidate pool并按来源证据归纳成policy；L3按policy cluster抽象成world-model并带supersedes/sourceEpisodeIds。不是夜间文件dream，而是分层知识生命周期。 | L2候选promotion持久后挂trace；L3 KV retry backoff 5m/30m/2h/6h，四次失败quarantine，成功清retry；vector embedding失败单独入retry queue；合并时调整confidence。用到trace/source IDs，读写状态结构化；未见Markdown透明编辑面或usage feedback；Skill lifecycle另有feedback。 | 高：TS repository/plugin依赖；本地源码已读，非MemOS主Python服务。 |
 
 M4 GitHub自搜新增候选：
 - quinnmacro/dream-cycle@632728f66f272851e55af7424f5b37e18cac22e2，MIT；dream_engine.py:rem_dream_walk:31,llm_boost_relations:393,nrem_hebbian_consolidation:501。图漫游、证据门槛验证、Hebbian强化；无事实手册纠错；Python+Neo4j高成本。
@@ -106,7 +106,7 @@ M4裁决/移植：Codex phase2控制闭环为第一；OpenClaw host-side exact-m
 
 ## 尚未查清
 
-- MemOS lifecycle只有不完整D:\memos-src\apps，无法定位生产源码；不按宣传推断。
+- MemOS主项目的完整 lifecycle/dreaming 未核；已读本机 D:\memos-src local-plugin 的L2/L3分层管线，不能把它等同主服务或夜间dream。
 - Letta letta-code和部分Mastra来自GitHub源文件页面，没有本地完整HEAD；Claude Code长期memory为2.1.88 sourcemap，当前拆解为2.1.296，不能视为同版本。
 - Mem0完整UPDATE/DELETE、Claude-Mem响应校验重试、LightMem冲突逻辑、Graphiti事务、Hindsight底层写入、MemPalace源修改后delete/re-mine、Basic双写恢复未做运行验证。
 - 未运行测试/项目或性能评测，不引用跑分；许可证行是根许可或注明的子树，未逐个审所有依赖许可证。
