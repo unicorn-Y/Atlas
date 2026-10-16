@@ -768,7 +768,11 @@ def _page_dict(page: Page) -> dict[str, Any]:
                 "quote": e.quote, "ended": e.ended, "why": e.why, "key": e.key,
                 "outcome": e.outcome, "steps": e.steps, "verified": e.verified,
                 "decisions": e.decisions, "files": e.files, "commands": e.commands,
-                "facts": e.facts, "open_items": e.open_items}
+                "facts": e.facts, "open_items": e.open_items,
+                "source_level": e.source_level, "recorded_at": e.recorded_at,
+                "valid_from": e.valid_from, "valid_to": e.valid_to,
+                "supersedes": e.supersedes, "retracts": e.retracts,
+                "source_ref": e.source_ref}
     return {"path": page.path, "title": page.title, "kind": page.kind, "aliases": page.aliases,
             "current": [row(e) for e in page.current], "history": [row(e) for e in page.history],
             "notes": page.notes}

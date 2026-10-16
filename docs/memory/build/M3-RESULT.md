@@ -32,4 +32,9 @@ Status: implemented; awaiting merged M1 lifecycle integration and real Atlas ses
 - M1 must merge its `lifecycle.py`/queue changes before the adapter can be exercised end-to-end. Retry wake and startup recovery stay M1-owned; M3 exposes `processed_source_uids(conversation_id)`.
 - M4 should consume fact candidates from Markdown page history and use M7's agreed nine-field claim payload. M3 intentionally does not call `claim_resolution`.
 
+## M2 API metadata follow-up
+
+- Extended `_page_dict` entry rows in `core/atlas/memory/library/__init__.py` to expose `source_level`, `recorded_at`, `valid_from`, `valid_to`, `supersedes`, `retracts`, and `source_ref` while preserving all existing keys. Values come from the M2 `Entry` fields; `source_ref` remains its JSON object form.
+- This closes the `/api/memlib` entry-view metadata gap identified during S4 integration review. Compilation and diff checks are recorded with the follow-up commit; this does not change the outstanding real-use gate status.
+
 M3 IMPLEMENTATION READY — REAL GATE PENDING
