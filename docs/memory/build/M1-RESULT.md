@@ -5,7 +5,7 @@
 ## 实施范围
 
 - `core/atlas/agent/run_phases.py`：轮次完成后从 SessionDB 取用户/assistant 稳定 UID，向 M3 提交 `turn_end` 与 30 分钟后的 `session_idle` 事件；不再把正文传入记忆队列。
-- `core/atlas/kernel/loop.py`：记录本次写入 SessionDB 的 UID；在 pre-compress、工具连续失败两次、delegate/subagent 返回与 turn-end 边界接生命周期信号。工具连续失败时调用 M5 lexical 重查并把返回块交回模型上下文。
+- `core/atlas/kernel/loop.py`：记录本次写入 SessionDB 的 UID；在 pre-compress、工具连续失败两次、delegate/subagent 返回与 turn-end 边界接生命周期信号。工具连续失败时以原始 tool 错误调用 M5 lexical 重查；原始错误仍以 `role=tool` 写入 SessionDB，重查块作为带 `source=memory_library` 与触发原因标记的独立临时 system/context 消息注入下一轮模型输入，不混入工具输出。run log 仅记录重查事件、来源 tool_call_id 与命中 refs，不复制错误正文。
 - `core/atlas/memory/library/lifecycle.py`：校验无正文事件、幂等入队、基于 Markdown source_ref UID 水位重建缺失队列，并提供同队列单 watcher，唤醒重试、idle 与过期租约。
 - `core/atlas/memory/library/queue.py`：SQLite 仅持有 conversation/message UID、event、scope、尝试与 lease 状态；重复事件合并；失败使用 5 秒起、上限 1 小时的指数退避。旧行仅在 SessionDB 时间戳精确且唯一匹配时转为 UID；否则标记 `legacy_unanchored`，清除旧正文副本。
 
@@ -21,6 +21,7 @@
 
 - `python -m py_compile` 覆盖四个 M1 Python 文件：通过。
 - `git diff --check`：通过。
+- `core/tests/test_kernel_memory_recheck.py`：通过；验证模型输入中的 tool 消息只含原始错误、Atlas 重查块在独立标记 system 消息，且临时 SessionDB 中原文为 `role=tool` 并逐字保留。
 - `core/tests/test_memory_library_w1.py -k 'not legacy_queue_schema'`：6 passed。旧 `test_w1_legacy_queue_schema_migrates_without_dropping_rows` 未运行；它要求继续保留队列正文，与 M1 的“正文只在 SessionDB”约束相冲突，需由独立验收更新判断。
 - M3 的 `schedule_lifecycle` 与 `processed_source_uids`、M5 `recall.py` 在并行分支；尚未合入本分支，因此目前不能验证完整 adapter/真实模型路径。
 

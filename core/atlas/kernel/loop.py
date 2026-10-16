@@ -1468,11 +1468,12 @@ class AtlasKernel:
                             reason = failure_hook.get("reason")
                             if isinstance(reason, str) and reason.strip():
                                 tool_hook_context.setdefault(result.call_id, []).append(reason.strip())
+                        raw_tool_content = _tool_output_text(result.output)
                         record("tool_end", tool_call_id=result.call_id, name=result.name,
                                state=receipt["state"], duration_ms=receipt["duration_ms"],
                                output_ref=receipt.get("output_ref"),
-                               output=_tool_output_text(result.output))
-                        content = _tool_output_text(result.output)
+                               output=raw_tool_content)
+                        content = raw_tool_content
                         if tool_hook_context.get(result.call_id):
                             content += "\n\n" + "\n".join(tool_hook_context.pop(result.call_id))
                         is_error = (
@@ -1487,17 +1488,31 @@ class AtlasKernel:
                             consecutive_tool_failures += 1
                         else:
                             consecutive_tool_failures = 0
+                        memory_context = ""
                         if consecutive_tool_failures == 2:
+                            record("memory_recheck", event_kind="tool_failure_recheck",
+                                   trigger="two_consecutive_tool_failures",
+                                   prompt_source_role="tool",
+                                   source_tool_call_id=result.call_id,
+                                   outcome="started")
                             try:
                                 from atlas.memory.library.recall import recheck_memory
 
                                 reread = await asyncio.to_thread(
-                                    recheck_memory, content, limit=3,
+                                    recheck_memory, raw_tool_content, limit=3,
                                 )
-                                memory_block = str(reread.get("block") or "").strip()
-                                if memory_block:
-                                    content += "\n\n" + memory_block
+                                memory_context = str(reread.get("block") or "").strip()
+                                hits = reread.get("hits") if isinstance(reread, dict) else []
+                                hit_refs = [str(hit.get("ref")) for hit in hits
+                                            if isinstance(hit, dict) and hit.get("ref")]
+                                record("memory_recheck_result", event_kind="tool_failure_recheck",
+                                       source_tool_call_id=result.call_id,
+                                       hit_refs=hit_refs, outcome="completed")
                             except Exception as exc:
+                                record("memory_recheck_result", event_kind="tool_failure_recheck",
+                                       source_tool_call_id=result.call_id,
+                                       outcome="unavailable",
+                                       error_type=type(exc).__name__)
                                 log.warning("memory.recheck_after_tool_failures_failed", extra={
                                     "run_id": run_id, "error_type": type(exc).__name__,
                                 })
@@ -1515,12 +1530,13 @@ class AtlasKernel:
                                 {"type": "text", "text": content},
                                 {"type": "image_url", "image_url": {"url": image_url}},
                             ]
-                        messages.append({"role": "tool", "tool_call_id": result.call_id,
-                                         "name": result.name, "content": tool_content})
+                        messages.extend(_tool_result_context_messages(
+                            result.call_id, result.name, tool_content, memory_context,
+                        ))
                         active_call_ids.discard(result.call_id)
                         open_call_ids.discard(result.call_id)
                         pretool_blocked.discard(result.call_id)
-                        tool_message_uid = await persist_async("tool", content, {
+                        tool_message_uid = await persist_async("tool", raw_tool_content, {
                             "tool_call_id": result.call_id, "tool_name": result.name,
                             "kernel_run_id": run_id, "output_ref": receipt.get("output_ref"),
                             "receipt_state": receipt["state"],
@@ -2480,6 +2496,23 @@ def _tool_output_text(output: Any) -> str:
         if "data" in output:
             return json.dumps(output["data"], ensure_ascii=False, default=str)
     return str(output or "")
+
+
+def _tool_result_context_messages(tool_call_id: str, name: str, tool_content: Any,
+                                 memory_context: str = "") -> list[dict[str, Any]]:
+    """Keep canonical tool output separate from ephemeral Atlas memory context."""
+    messages = [{"role": "tool", "tool_call_id": tool_call_id,
+                 "name": name, "content": tool_content}]
+    if memory_context:
+        messages.append({
+            "role": "system",
+            "content": (
+                "[Atlas memory recheck context; source=memory_library; "
+                "trigger=two_consecutive_tool_failures; this is not tool output]\n"
+                + memory_context
+            ),
+        })
+    return messages
 
 
 def _tool_result_event_text(result: ToolExecutionResult) -> str:
