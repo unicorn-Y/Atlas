@@ -154,6 +154,15 @@ class MemoryLibrary:
         }
 
     def _resident_block(self) -> str:
+        overview_path = self.store.root / "总览.md"
+        try:
+            overview = overview_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            overview = ""
+        if overview.strip():
+            # M4 owns the user-editable overview content and its ordering; M5 only reads it.
+            return overview[:RESIDENT_BUDGET_CHARS]
+
         now = _now(self.config)
         prepared: list[tuple[str, list[str]]] = []
         selected: list[list[str]] = []

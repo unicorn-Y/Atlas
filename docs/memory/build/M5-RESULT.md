@@ -14,6 +14,7 @@ Worktree: `D:\atlas-mem-m5`
 - `core/atlas/memory/library/hybrid.py`: records normalized keyword/vector scores, fusion weights, and temporal decay in `rank_reasons`.
 - `core/atlas/memory/library/sources.py`: adds `memory_open(ref, window, engine_root=...)` and exact `SourceRef` URI/mapping resolution by `(conversation_id, message_uid)`, including bounded neighboring context and optional span/hash checks. Existing `session@timestamp` references remain readable and are labeled `precision=approximate`.
 - `core/atlas/memory/library/__init__.py`: keeps the existing `recall/search` entry points compatible, includes Claim ID/source/time/reason and association provenance in relevant summaries, and exposes citation/usage metadata in search results. M3-owned write/lifecycle portions were not changed.
+- `_resident_block` first reads M4's `总览.md` as UTF-8 and returns at most 1500 characters. Missing, unreadable, or whitespace-only overview falls back to the prior resident-page and recent-episode assembly. M5 does not generate, rewrite, or reorder the hand-maintained overview, and overview selection does not use citation/usage counts; M4 owns that content and ordering.
 - `core/atlas/memory/library/recall.py` (new): provides a single lexical-only `recheck_memory(error_text, limit=3)` for M1's repeated-tool-failure hook, plus citation-block parsing and idempotent citation event recording.
 - `MemoryIndex` maintains a derived `usage_events` table with stable event IDs and distinct event types. Public `MemoryLibrary.search(..., invocation_id=...)` records exposures using `exposure:<sha256(invocation_id)>:<claim_id>`; the kernel caller should pass a run/message/tool-call identity. When omitted, the documented deterministic fallback hashes UTC date, normalized query, filters, limit, and sorted result Claim IDs. This fallback deduplicates identical searches with the same result set on one UTC date; separate calls should pass distinct invocation IDs. Citation events update derived `usage_count/last_used`. Rebuilding or deleting `.index.sqlite` may discard these statistics, as intended for derived data.
 
@@ -32,4 +33,5 @@ The required real Atlas dialogue gate has **not** been run. After M7, M9, M1, an
 ## Verification performed
 
 - `py_compile` passed for the five changed Python modules using `D:\Atlas\core\.venv\Scripts\python.exe`.
+- Focused resident overview verification passed for non-empty UTF-8, 1500-character truncation, and missing/empty fallback behavior using a temporary memory root.
 - No pytest suite or real Atlas conversation was run in this implementation branch. The acceptance gate above remains pending integration.
