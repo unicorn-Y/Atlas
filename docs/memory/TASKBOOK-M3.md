@@ -54,6 +54,12 @@ Codex stage-one 和 Mem0 additive 提示要翻译成中文，禁止仅保留英�
 
 输出 schema 至少包含 `episode:{title,summary,decisions:[{text,reason}],files,commands,errors,numbers,unfinished,user_corrections,source_refs,source_level}` 与 `facts:[{key,value,source_level,recorded_at,valid_from,valid_to,supersedes,retracts,source_ref}]`。经验证据映射后才提交；schema 失败不可消费队列水位。
 
+## 触发时机（Claude 定稿补充）
+
+- **每轮结束（轻量，保留现状）**：照旧写日记 + 抽这一轮里明确的事实候选，让下一轮马上能用到。
+- **会话空闲 30 分钟或会话结束（完整）**：照 Codex phase1，对整段会话生成详细经历 + 会话回顾 + 原文指针；同一会话再次活跃后，下次空闲只对新增部分增量更新同一条经历（用 `source_ref + extractor_version` 判重），不另起一条。
+- 子 Agent / 外部 Agent 的会话由 M1 的 `on_delegation` 交过来，同样走完整提炼，并在经历里写明执行者。
+
 ## 逐步施工清单
 
 1. 在 A0 后确认当前实现：打开 `extract.py` 与 `library/__init__.py`，记录实际 `SYSTEM_PROMPT/SCHEMA_HINT/build_messages/parse_output/apply/MemoryLibrary._drain/observe_turn/_extract_full/_apply` 签名；确认 queue/store/sources 接口归 M1/M2 所有。

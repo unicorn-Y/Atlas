@@ -30,6 +30,13 @@
 
 禁止引用 `core/atlas/memory/library/session_sync.py` 或 `models.py`：它们在核对的 W2 API 源码中不存在。Library 文件清单以 `__init__.py`、`cleanup.py`、`dream.py`、`embed.py`、`extract.py`、`forget.py`、`hybrid.py`、`index.py`、`queue.py`、`sources.py`、`store.py` 为准。
 
+## 整合要产出的文件（Claude 定稿补充）
+
+照 Codex `codex-rs/memories/write/templates/memories/consolidation.md` 的三类产物，翻成 Atlas 透明库里的文件：
+- **`总览.md`（对应 Codex `memory_summary.md`）**：常驻进每轮提示词的短总览，不超过 1500 字。内容：用户是谁和主要偏好、最近在做的项目和进度、最近学到的重要教训、记忆库里有哪些页（给模型导航）。按 M5 的使用次数和新近度挑选；每次整合重写，但保留用户手改的段落。替换现有 `_resident_block` 的拼接方式。
+- **手册页（对应 `MEMORY.md`）**：按项目、人、主题分组，每条带关键词和 `source_ref`，模型可以直接搜。现有 我/现状/人/事 页面就是手册的一部分，不另起格式。
+- **技能候选**：交给 M8，不直接写进 skills。
+
 ## 施工步骤
 
 1. **建立可回滚基线。** 在 A0 合并后的 `ui-redesign` 记录 `git rev-parse HEAD`、记忆库根目录、当前 Git HEAD、Markdown 页面数、派生索引行数和待处理经历数；对记忆目录做 Git/文件备份。先确认 `MemoryStore.pages/read` 可以完整读取现存 Markdown。不得把数据库快照认作权威备份。

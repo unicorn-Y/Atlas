@@ -18,7 +18,8 @@
 
 1. `git -C D:\Atlas fetch origin`，记录 `origin/ui-redesign` tip、工作树状态；不得因 D:\Atlas dirty 而中止临时工作。
 2. `git -C D:\Atlas worktree add -b codex/memory-w2-rollout D:\atlas-merge-w2 origin/ui-redesign`。所有后续文件操作限定在此临时工作树。
-3. 按顺序合并：`memory-w2-plan` → `memory-w2-api` → `memory-w2-fix` 的 F2 → F4 → `memory-w2-ui`。每一步用 `git show --stat` 确认提交内容，记录 commit/hash 和冲突处理。若 branch 含多个 fix commits，按 `git log --oneline -- core/atlas/memory/library/__init__.py core/atlas/memory/library/queue.py core/atlas/memory/library/index.py core/atlas/memory/library/embed.py` 定位并逐个 cherry-pick F2/F4 commits；禁止一次 cherry-pick 整个 fix branch。
+3. **注意（Claude 定稿更正）：`origin/memory-w2-fix` 上只有任务书提交 `6c5240e`，没有任何 F2/F4 代码提交，无法 cherry-pick。** F2、F4 由本 A0 在临时工作树里**直接实现**，做法照 `git show origin/memory-w2-fix:docs/memory/TASKBOOK-W2-FIX.md` 的「F2」「F4」两节（F2：`_drain`/`observe_turn`/`_extract_full` 区分「模型没就绪」，只写日记、不删队列、不加 attempts，日志 `memory.library.turn_deferred reason=no_model`；F4：`index._schedule_embeddings` 在线程里通过 `MemoryLibrary` 记下的主 loop 用 `run_coroutine_threadsafe` 提交，拿不到主 loop 用单个 daemon 线程，`embed.py` 失败后 10 分钟允许重试加载）。下面第 3、4 步里「cherry-pick F2/F4 提交」的说法作废，改为：plan → api → 自己实现 F2 → 自己实现 F4 → ui，各一个提交。
+3b. 原第 3 步：按顺序合并：`memory-w2-plan` → `memory-w2-api` → `memory-w2-fix` 的 F2 → F4 → `memory-w2-ui`。每一步用 `git show --stat` 确认提交内容，记录 commit/hash 和冲突处理。若 branch 含多个 fix commits，按 `git log --oneline -- core/atlas/memory/library/__init__.py core/atlas/memory/library/queue.py core/atlas/memory/library/index.py core/atlas/memory/library/embed.py` 定位并逐个 cherry-pick F2/F4 commits；禁止一次 cherry-pick 整个 fix branch。
 4. F2 只保留：无模型时 `library/__init__.py` 不删除队列、`no_model` 延后日志与下一次 drain 重试。F4 只保留：embedding 从 worker thread 交由主 loop 调度，加载失败可延时重试。核对 `queue.py/index.py/embed.py` 是否包含 F2/F4 提交顺带改动，只纳入实现这两项所必需的 hunks。
 5. **不做 F1/F3/F5/F6**。F1/Dream checkpoint 缺陷、F3 永久冻结队列、F5 精确消息引用、F6 完整工具结果由后续 M2–M4/相关模块替代；不能从 fix branch 间接带入这些改动。
 

@@ -33,6 +33,14 @@
 
 不存在 `core/atlas/memory/library/session_sync.py` 或 `models.py`。不得以 SQLite index schema 当成真实数据模型。
 
+## 读取方式（Claude 定稿补充，优先级高于下文的 RecallRouter 推送）
+
+照 Codex `codex-rs/memories/read`（`ext/memories/templates/memories/read_path.md`）翻成中文提示词：
+1. **常驻**：每轮只自动带 M4 产出的 `总览.md`，加上本轮命中的少量高置信条目（保持现在 resident + relevant 的预算，不再加大推送）。
+2. **模型自己查**：把 read_path 的「什么时候该查、4–6 步内查完、先手册再经历再原文」规则写进系统提示；工具用现有 `memory_search`，加一个 `memory_open(ref)` 下钻到经历和 SessionDB 原文。
+3. **连续出错就重查**：M1 在同一任务里工具连续失败 2 次时，给模型插一句「重查一遍记忆」，并对报错原文做一次 lexical 精确检索，结果作为提示附上（对应 MemOS `decision_repair`）。
+4. **引用块**：回答用到记忆时，末尾附隐藏的引用块（格式照 Codex `<oai-mem-citation>`，改名 `<atlas-mem-citation>`），界面不显示原文；解析后给对应条目 `usage_count+1`、`last_used`，数据写进可重建的统计表，供 M4 挑选总览内容和排序。长期不用只降权、移出总览，不删除。
+
 ## 施工步骤
 
 1. **锁定已有调用面。** 在 A0 基线记录 `git rev-parse HEAD`，梳理 `MemoryLibrary.search/recall`、Agent prompt 注入点及 UI/API 返回结构。保持现有 API 字段兼容，扩展结果字段时使用可选键，明确默认返回层级和上限。

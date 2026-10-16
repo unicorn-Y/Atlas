@@ -38,6 +38,7 @@
 2. 定义内部事件形状：`conversation_id, message_uid, event_kind, occurred_at, run_id?, tool_call_id?`。事件不带 `content`。SessionDB UID 无法解析时保留会话级指针并标明精度未知，不按时间猜一个消息。
 3. 新建 `lifecycle.py`，将 kernel/run hook 归一成可重试队列任务；覆盖 turn-end、pre-compress、session-end、外部 Agent 返回。事件幂等只保证队列重复触发不造成重复处理，不宣称跨模型的事实全局幂等。
 4. 调整 run/kernel 接线：SessionDB 写入后传稳定 UID。pre-compress 提交截至压缩水位的消息引用；压缩后不能伪造已删除正文，原文可用性由 SessionDB 能否打开决定。Agent delegation 完成消息直接进入 Atlas transcript，M3 后续抽取。
+4b. **工具连续失败钩子（Claude 定稿补充）**：同一任务里工具连续失败 2 次时触发 `on_repeated_tool_failure`，交给 M5 做「重查记忆」（见 M5 读取方式第 3 条）。会话空闲 30 分钟也要发一个 `on_session_idle` 事件，供 M3 做完整提炼。
 5. 为模型/队列进程重启设计短退避重试及最大退避；no-output 是有效处理结果，不是失败：只在确实无可提炼内容时完成该水位；异常、超时和无法解析保留可重试状态。队列可由 SessionDB 最近消息 UID 水位与 Markdown 中的 `source_ref` 重建。
 6. 处理旧队列：读取既有 `TurnQueue` 行并转换为 UID 指针；只在行内原 session/timestamp 可唯一对应现存 message 时补 UID。无法唯一确认时留 `legacy_unanchored` 任务供 M3 以完整会话复核，不制造精确引用。Markdown 仍是最终记忆，队列不是导入源。
 7. 删除/替换：移除原来在不同 turn hook 中重复 enqueue/直接抽取的重复调用，保留现有记忆页 API、人工编辑与 `MemoryLibrary.schedule_turn` 兼容入口；不删 SessionDB transcript、不把 assistant/tool 输出单独持久化为另一份来源库。
