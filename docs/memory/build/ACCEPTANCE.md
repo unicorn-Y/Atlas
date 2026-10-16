@@ -15,3 +15,4 @@
 
 - 状态：等待 `A0 DONE` 及主机验收所需的部署/运行证据。
 - 当前 `origin/ui-redesign` 的 `docs/memory/build/A0-RESULT.md` 将远端推送后 tip、主机 pull、`AtlasDev` 重启、8765 与真实运行观察列为待执行，并以「部分完成」结束；不据此记录 A0 通过。
+- 只读 pull 预检：`D:\Atlas` 当前有 40 个本地变更/未跟踪路径；相对当前 HEAD，`origin/ui-redesign` 有 26 个变更路径，路径交集为 0。该项只说明当前路径清单未见重叠，不替代最终 `git pull --ff-only` 结果；尚未执行 pull。
