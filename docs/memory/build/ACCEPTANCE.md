@@ -16,3 +16,25 @@
 - 状态：等待 `A0 DONE` 及主机验收所需的部署/运行证据。
 - 当前 `origin/ui-redesign` 的 `docs/memory/build/A0-RESULT.md` 将远端推送后 tip、主机 pull、`AtlasDev` 重启、8765 与真实运行观察列为待执行，并以「部分完成」结束；不据此记录 A0 通过。
 - 只读 pull 预检：`D:\Atlas` 当前有 40 个本地变更/未跟踪路径；相对当前 HEAD，`origin/ui-redesign` 有 26 个变更路径，路径交集为 0。该项只说明当前路径清单未见重叠，不替代最终 `git pull --ff-only` 结果；尚未执行 pull。
+
+## M2 — 集成版复验通过
+
+- 验收对象：`origin/mem-integrate@07ae2b1a827303e2f749e7d4bad9054a147977fe`（包含 M2、M3、M5 接线/修正）。
+- 真实模型：隔离临时数据根 `D:\atlas-memory-e2e-data`，沿用主机模型配置与凭据读取机制，未改写主机配置或 `D:\Atlas\data`。使用 `gemini-3.8-flash` 通过临时后端真实 `/ws/chat` 生成用户断言和工具观察条目。
+- 精确来源：用户断言条目通过 conversation + message UID 的 `open_ref` 精确打开；工具观察条目通过 conversation + tool message UID + tool_call_id 精确打开。成功结果均带回对应消息 UID。
+- metadata/index：对真实模型产生的 `model_inference` 条目手工改为 `user_assertion` 并设置 `valid_from=2026-10-16`、`valid_to=2026-11-16`；删除临时库 `.index.sqlite` 后重建，搜索和 page API 返回修改后的级别、日期及来源引用，exact open 成功。另验证旧时间引用返回 approximate、伪造的失效来源返回 `ok=false`。
+- 原文搜索/API：`/api/memlib/search`、`page`、`open` 均返回预期状态/来源信息；原文搜索结果只含有界匹配摘要（`text == snippet`，长度 136），没有把完整 SessionDB 消息正文放入结果。
+- 日志正文边界：在隔离临时运行日志中检索本轮用户断言、工具观察和唯一测试标记，均为 0 命中；不把无正文日志之外的其他敏感信息范围扩大推断。
+- 判定：M2 任务书所列的精确引用、tool 引用、人工 metadata 修订与派生索引恢复、旧引用精度、失效引用、受限原文摘要门通过。临时环境缺少 `fastembed`，因此不把向量嵌入可用性列为已验证。该判定仅针对 M2 验收门，不代表整套系统可上线；M1 另有下节记录的真实运行阻断。
+
+## M1 — 打回（真实工具失败路径崩溃）
+
+- 验收对象：`origin/mem-integrate@07ae2b1a827303e2f749e7d4bad9054a147977fe`。
+- 证据：真实 `gemini-3.8-flash` 工具会话中，`local_file` 与 `tool_search` 成功后 `project_note` 失败；后端随后在 `core/atlas/kernel/loop.py:1488` 抛出 `UnboundLocalError: cannot access local variable 'consecutive_tool_failures' where it is not associated with a value`，该会话未正常完成。另有日志写入错误：`record()` 将 hook payload 内的 `run_id` 与位置参数重复传给 `append_run_event`，产生 `TypeError: append_run_event() got multiple values for argument 'run_id'`，事件写入被丢弃。
+- 处理要求：修正嵌套工具结果消费函数对失败计数的闭包赋值，并在追加 run event 前剔除或显式处理 payload 的 `run_id`；推送后重跑真实模型工具失败/重试路径，确认会话正确收敛且运行事件链完整，再提交 M1 DONE 供验收。
+- 判定：拒绝 M1 DONE / 总体验收；这是集成版的真实运行缺陷，不以静态检查、单个成功工具会话或单元测试替代修复证据。
+
+## M8 — 契约一致性退回预警（等待正式 DONE）
+
+- 对照依据：`VERDICT.md` 顶部「Claude 定稿」要求 gate pass 后自动晋升候选，并在每日变更后重跑 heldout、失败时回滚；`M8-RESULT.md` 与 S3 集成结果写明不自动晋升、需要显式用户审阅。
+- 判定：当前没有把 M8 记作正式 DONE 验收；但实现/集成说明与定稿合同冲突，必须先统一为更强的 Claude 定稿要求并补齐真实 heldout/回滚证据，才能提交 M8 DONE。若保留人工确认或缺少自动晋升/回滚，M8 将打回。
