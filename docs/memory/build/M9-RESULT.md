@@ -17,4 +17,4 @@
 - 未运行单元测试或独立模拟对话。
 - 真实 Atlas 查询、日志、人工编辑后重建、孤立/断链、forget 后清理、PPR-off 路径及删除 `.index.sqlite` 后一致性，须在 M5 接线后的真实使用验收中完成；本结果不将这些集成 gate 记为通过。
 
-M9 DONE
+M9 IMPLEMENTATION READY — REAL GATE PENDING
