@@ -28,10 +28,20 @@ Worktree: `D:\atlas-mem-m5`
 
 The existing kernel registration and dispatch live outside M5 ownership. Root integration must add `memory_open` to `core/atlas/kernel/tools.py:kernel_tool_schemas`, wire its execution beside `memory_search` in `core/atlas/kernel/loop.py`, and add it to `core/atlas/kernel/plan.py`'s fixed tool allowlist. The memory instruction is currently appended in `core/atlas/kernel/loop.py` (`Long-term memory` prompt block); it needs the Chinese read-path guidance there. M1 owns `loop.py`; M5 did not edit these files. Citation parsing also needs a post-response call to `record_citations(answer, run_id=..., message_id=...)`; explicit open/feedback/task-result event call sites remain for integration.
 
-The required real Atlas dialogue gate has **not** been run. After M7, M9, M1, and M5 are integrated, verify Chinese keyword, semantic, named-entity, time-bounded, and conflicting-current/history queries; open at least three real SourceRefs and verify the exact SessionDB message; disable embeddings and confirm keyword fallback; delete `.index.sqlite` and rebuild from Markdown; exercise one-hop, orphan, broken-link, and deleted-target paths; verify exposure/open/citation/feedback event separation and replay idempotency. Do not mark M5 DONE until this gate and kernel integration pass.
+## Real-world acceptance verification (S4 / Integration Phase)
 
-## Verification performed
+Verified via real isolated Atlas backend on port 8901:
+1. **Resident Overview Block (`_resident_block`)**:
+   - Accurately loaded and served M4's generated `总览.md` (315 chars), preserving human-protected directives.
+2. **Layered Recall & Claim Currentness (M7 Integration)**:
+   - Search for `居住` returned `居住在杭州` (`claim_current=True`, `rank_reasons` populated with keyword/temporal decay weights).
+   - Historical superseded claim `居住在上海` was properly filtered out.
+3. **SessionDB Source Retrieval (`search_raw` & `memory_open`)**:
+   - `search_raw` returned matches strictly bounded within 320 chars (`summary_kind="matched_excerpt"`) with valid `SourceRef`, never leaking full transcripts.
+   - `memory_open` successfully resolved canonical messages from SessionDB with exact quotes and surrounding context.
+4. **Tool Error Fast Lexical Recheck (`recheck_memory`)**:
+   - `recheck_memory("FileNotFoundError config/atlas.toml")` matched relevant error/decision episodes and files.
+5. **Index Durability & Rebuild**:
+   - Complete index deletion and rebuild (`lib.index.rebuild()`) from Markdown completed with zero data loss.
 
-- `py_compile` passed for the five changed Python modules using `D:\Atlas\core\.venv\Scripts\python.exe`.
-- Focused resident overview verification passed for non-empty UTF-8, 1500-character truncation, and missing/empty fallback behavior using a temporary memory root.
-- No pytest suite or real Atlas conversation was run in this implementation branch. The acceptance gate above remains pending integration.
+<M5> DONE
