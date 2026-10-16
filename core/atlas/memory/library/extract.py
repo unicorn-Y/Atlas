@@ -1,105 +1,64 @@
-"""Turn one conversation turn into memory-library changes.
+"""Extract source-backed conversation episodes and atomic memory candidates.
 
-The extraction prompt is ported from Atlas' former MemOS fork
-(``core/facts/observe.ts``, removed with the old memory systems), whose rules scored 30/30 with no misremembered facts in F3-A. Changes for
-the library: keys may name people and projects in the user's own words so each lands on
-its own page, and an ``alias`` op links names for the same person.
-
-Guards kept from the fork: a proposal is applied only when its quote really occurs in the
-user's message, and secrets are never written. Added here: values the user asked to forget
-(tombstones) are dropped, and relative dates must already be resolved by the model.
+SessionDB remains the transcript owner. This module only returns structured
+proposals and writes readable Markdown through ``MemoryStore``.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime
+from typing import Any
 
+from .source_ref import SourceRef
 from .store import (
-    SRC_EDITED, SRC_SAID, Entry, MemoryStore, Page, new_id, page_for_key, safe_name, tombstone_hashes,
+    SRC_EDITED, Entry, MemoryStore, Page, new_id, page_for_key, safe_name, tombstone_hashes,
 )
 
-MAX_USER_CHARS = 4000
 MAX_KNOWN = 150
+MAX_SESSION_CHARS = 30000
 KEY_RE = re.compile(r"^[a-z0-9_]+(\.[^\s.]+){0,4}$")
 _SECRET_RE = re.compile(
     r"(sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}"
     r"|-----BEGIN [A-Z ]*PRIVATE KEY-----|(?:密码|password|passwd|pwd|口令|token|api[_ ]?key)\s*[:：=是为]\s*\S{4,})",
     re.I,
 )
+SOURCE_LEVELS = {"user_assertion", "tool_observation", "model_inference", "legacy_unknown"}
+EXTRACTOR_VERSION = "m3-1"
 
-SYSTEM_PROMPT = """You maintain the long-term list of FACTS ABOUT THE USER for a personal assistant.
-Read the user's latest message (the assistant's reply is context only) and propose changes to that list.
 
-WHAT COUNTS AS A USER FACT
-- Something the user TELLS you about themselves or their world: identity, where they live or work, family and people they know, possessions, health, habits, preferences and dislikes, ongoing projects and their constraints, decisions they have made, plans they will carry out themselves.
-- USER ASSERTIONS ARE AUTHORITATIVE. The user is the source of truth about their own life.
+class ExtractionSchemaError(ValueError):
+    """The model returned syntactically valid JSON that violates the contract."""
 
-WHAT IS NOT A USER FACT (never record these)
-- Questions, information requests, requests for help, instructions for work happening now. Only a personal fact explicitly disclosed inside them counts: in "我女儿 6 岁了，她该上几年级？" record "用户的女儿 6 岁", not the grade question.
-- Hypotheticals and conditionals ("如果/假如/假设我想……", "if I wanted to…") do not establish a plan, decision or preference.
-- Conditions asked about in a question (e.g. asking whether a café has sockets) do not establish a preference or need.
-- Assistant suggestions, search filters, examples.
-- Text pasted from web pages, files or tool output: that is third-party content, not the user's own facts.
-- Role-play, fiction, quoting someone else, or "pretend you are…" content.
-- Things the user says about other people's opinions are facts about those people only if the user asserts them.
-- Passwords, keys, tokens, card or ID numbers: never record them.
+SYSTEM_PROMPT = """你是 Atlas 记忆提炼器。你会读取 SessionDB 按时间排序的原始消息及可用的上次提炼结果。Markdown + git 是唯一记忆真源；SessionDB 是原文真源。只返回符合 schema 的 JSON，不输出解释。
 
-CHANGES
-- If the user changes something already known ("改成周五了", "我搬到上海了", "不用 SQLite 了，改用 PostgreSQL"), emit op "set" with the SAME key as the known fact and the new value. The old value is kept as history automatically.
-- If the user says a known fact is no longer true and gives no replacement ("我已经不养猫了"), emit op "retract" for that key.
-- If the message only repeats a known fact with the same value, emit nothing for it.
-- If the user asks you to forget something ("忘掉我住哪", "别记我对花生过敏这件事"), emit op "forget" for that key with the request as quote.
+第一层：会话经历。只要有值得回顾的工作过程、决定、文件、错误、数字或未完成事项，就必须输出 episode，即使没有任何新事实。仅空会话、闲聊、单纯确认才可 no_output。记录用户目标、过程顺序、每个决定及原因、实际文件路径、实际执行命令、报错原文（保留原语言和标点）、有单位的关键数字、实际结果、未完成项和用户纠正前后内容。没有证据的字段留空或数组为空；不得补全、猜测或把摘要当原文。每项细节都附能够打开对应 SessionDB 原消息的 source_ref。保留原说话者及 source_level；不要把助手、工具或外部 Agent 的观点写成用户陈述。
 
-TEMPORARY FACTS
-- Some facts are only true for a while: a state or event tied to a time ("我明天下午有面试", "这周在北京出差", "今天头疼", "下个月在休假"). Give them forget_after = the local date-time when they stop being true (end of that day / week / period), as ISO 8601 with the local UTC offset, resolved with the clock below.
-- Lasting facts (where the user lives, family, preferences, allergies, standing project rules) have forget_after null.
+第二层：可选事实候选。扫描用户陈述、工具观察、模型推断中有来源支持的独立原子事实，包括身份、居住/工作、家庭关系、健康、习惯、喜好/厌恶、饮食/过敏、目标计划、正在做的项目和长期约束。临时事实提供可信 valid_from/valid_to；不确定的时间不猜日期。新信息才输出，结合有限已知事实和上次提炼避免重复；候选不是最终合并结果。key 表示事实主题；value 是值。source_level 只能为 user_assertion、tool_observation、model_inference。每个事实必须引用给定消息中的一个 source_ref。用户纠正永远最高；其余来源等级用户陈述 > 工具观察 > 模型推断；同等级较新有效事实优先。可标 supersedes/retracts，但不要删历史，也不要自行做最终冲突合并。
 
-KEYS
-- key is dot-separated. The first part is one of: user, person, project.
-- user.<attribute>: about the user. Attribute slugs are short lower-case English: user.home_city, user.employer, user.diet.allergy, user.preference.answer_style, user.plan.interview.
-- person.<name>.<attribute>: about someone the user knows. <name> is how the USER calls them, in the user's language (person.老王.relation, person.妈妈.health). Use the same <name> every time.
-- project.<name>.<attribute>: a project, product or event of the user's (project.Atlas.test_policy, project.搬家.date).
-- REUSE the key of a known fact when the message is about the same attribute. One key = one attribute.
-- If the user says two names are the same person ("王总就是老王"), emit op "alias" with key person.<known name> and value = the other name.
-
-OUTPUT
-- value: the bare value, in the user's language ("杭州", "周五", "对花生过敏").
-- text: one short sentence stating the fact in the user's language. Write it WITHOUT a subject when it is about the user ("住在杭州", "对花生过敏"); name the person for person facts ("老王是我同事"). Resolve relative dates ("明天", "下周三") to an actual date using the clock below, and include it.
-- quote: the exact span of the user's message that states the fact, copied character for character (no paraphrase, no translation). Proposals whose quote is not in the message are discarded.
-- forget_after: ISO 8601 date-time with offset for temporary facts, otherwise null.
-- triggers: 0-3 short words that should bring this fact to mind later (names, places, topics), in the user's language.
-- stance: "said" when the user states it as true about their own life; "hypothetical" for if/假如/假设; "question" when it only appears inside a question; "quoted" when it is someone else's words, pasted text or role-play. Only "said" facts are kept.
-- importance: 1-10, how much this matters for helping the user later (allergy, family, deadlines high; passing likes low).
-- Return {"facts": []} when the message states no fact about the user. Most messages state none; do not invent."""
-
-SYSTEM_PROMPT += """
-
-EPISODES
-- In addition to facts, return an episode object describing what happened this turn, for later questions such as what we discussed or how we did something.
-- title: what the user wanted this turn, in the user's language, at most 30 characters.
-- topics: 0-5 keywords such as product, project, person, or technology names.
-- did: what Atlas actually did, at most 60 characters, based only on TOOLS USED and its reply; use "直接回答" when no tool was used.
-- outcome: one sentence of at most 60 characters describing the result. State failure or incompletion honestly.
-- skip: true for small talk, a reply of only "ok", or a connectivity-only test.
-- decisions, files, commands, facts, open_items: each is a list of at most 5 items, each at most 80 characters. Use only this turn's user message, assistant reply and TOOLS USED; use [] when there is no evidence. Never invent.
-- Episodes are conversation history, not user facts. Never copy episode content into facts.
-"""
+安全和证据：永不记录密码、密钥、令牌、卡号或证件号。不要把工具/网页/文件中的第三方文字说成用户自己的话。source_ref 必须逐字选自输入消息清单，不能编造 UID、范围或引用。事实为空时返回 facts:[]。"""
 
 SCHEMA_HINT = (
-    '{"facts":[{"op":"set|retract|forget|alias","key":"user.home_city","value":"杭州",'
-    '"text":"住在杭州","quote":"我住在杭州","stance":"said","forget_after":null,"triggers":["杭州"],"importance":6}],'
-    '"episode":{"title":"…","topics":["…"],"did":"…","outcome":"…","skip":false,'
-    '"decisions":[],"files":[],"commands":[],"facts":[],"open_items":[]}}'
+    '{"episode":{"title":"…","summary":"按时间概括本次会话","skip":false,"decisions":[{"text":"决定","reason":"理由","source_ref":{},"source_role":"user","source_level":"user_assertion"}],'
+    '"files":[{"path":"实际路径","source_ref":{},"source_role":"assistant","source_level":"model_inference"}],'
+    '"commands":[{"text":"实际命令","source_ref":{},"source_role":"tool","source_level":"tool_observation"}],'
+    '"errors":[{"text":"原始报错","source_ref":{},"source_role":"tool","source_level":"tool_observation"}],'
+    '"numbers":[{"text":"数字及单位","source_ref":{},"source_role":"user","source_level":"user_assertion"}],'
+    '"unfinished":[{"text":"未完成事项","source_ref":{},"source_role":"assistant","source_level":"model_inference"}],'
+    '"user_corrections":[{"before":"原内容","after":"纠正后","source_ref":{},"source_role":"user","source_level":"user_assertion"}],'
+    '"source_refs":[{}],"source_level":"user_assertion|tool_observation|model_inference"},'
+    '"facts":[{"key":"user.home_city","value":"杭州","source_level":"user_assertion","recorded_at":"ISO-8601",'
+    '"valid_from":null,"valid_to":null,"supersedes":[],"retracts":[],"source_ref":{}}]}'
 )
 
 
 @dataclass
 class Proposal:
-    op: str
-    key: str
+    # Legacy fields remain for callers migrating from the turn extractor.
+    op: str = "set"
+    key: str = ""
     value: str = ""
     text: str = ""
     quote: str = ""
@@ -107,6 +66,13 @@ class Proposal:
     triggers: list[str] = field(default_factory=list)
     importance: int = 5
     stance: str = "said"
+    source_level: str = "legacy_unknown"
+    recorded_at: str = ""
+    valid_from: str | None = None
+    valid_to: str | None = None
+    supersedes: list[str] = field(default_factory=list)
+    retracts: list[str] = field(default_factory=list)
+    source_ref: dict[str, Any] | None = None
 
 
 @dataclass
@@ -116,11 +82,18 @@ class Episode:
     did: str = ""
     outcome: str = ""
     skip: bool = False
-    decisions: list[str] = field(default_factory=list)
-    files: list[str] = field(default_factory=list)
-    commands: list[str] = field(default_factory=list)
+    decisions: list[Any] = field(default_factory=list)
+    files: list[Any] = field(default_factory=list)
+    commands: list[Any] = field(default_factory=list)
     facts: list[str] = field(default_factory=list)
-    open_items: list[str] = field(default_factory=list)
+    open_items: list[Any] = field(default_factory=list)
+    summary: str = ""
+    errors: list[Any] = field(default_factory=list)
+    numbers: list[Any] = field(default_factory=list)
+    unfinished: list[Any] = field(default_factory=list)
+    user_corrections: list[Any] = field(default_factory=list)
+    source_refs: list[dict[str, Any]] = field(default_factory=list)
+    source_level: str = "legacy_unknown"
 
 
 @dataclass
@@ -131,6 +104,7 @@ class ApplyResult:
     forgotten: list[str] = field(default_factory=list)
     forgotten_texts: list[str] = field(default_factory=list)
     rejected: int = 0
+    episode_written: bool = False
 
     @property
     def empty(self) -> bool:
@@ -139,14 +113,14 @@ class ApplyResult:
     def message(self) -> str:
         parts = []
         if self.added:
-            parts.append("记下：" + "；".join(self.added))
+            parts.append("记住 " + "、".join(self.added[:3]))
         if self.changed:
-            parts.append("更新：" + "；".join(self.changed))
+            parts.append("更新 " + "、".join(self.changed[:3]))
         if self.ended:
-            parts.append("不再成立：" + "；".join(self.ended))
+            parts.append("结束 " + "、".join(self.ended[:3]))
         if self.forgotten:
-            parts.append(f"按你的要求忘掉了 {len(self.forgotten)} 条")
-        return " / ".join(parts)[:400] or "无变化"
+            parts.append(f"忘掉 {len(self.forgotten)} 条")
+        return "；".join(parts) or "没有新事实"
 
 
 def contains_secret(text: str) -> bool:
@@ -162,28 +136,78 @@ def known_facts(store: MemoryStore) -> list[tuple[str, str]]:
     return known[-MAX_KNOWN:]
 
 
-def build_messages(*, user_text: str, assistant_text: str, known: list[tuple[str, str]],
-                   clock: str, steps: list[dict] | None = None,
-                   verified: bool = False) -> list[dict[str, str]]:
-    known_block = "\n".join(f"- {k} = {v}" for k, v in known) or "(none yet)"
-    step_lines = []
-    for step in (steps or [])[:30]:
-        name = str(step.get("name") or "tool")
-        mark = "✓" if step.get("ok") else "✗" if step.get("ok") is False else "…"
-        note = " ".join(str(step.get("note") or "").split())[:200]
-        step_lines.append(f"- {name} {mark}{' ' + note if note else ''}")
-    tools_block = "TOOLS USED THIS TURN (name, ok, note):\n" + ("\n".join(step_lines) or "- (none)")
+def _ref_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, SourceRef):
+        return value.to_dict()
+    if isinstance(value, str):
+        return SourceRef.from_ref(value).to_dict()
+    if isinstance(value, dict):
+        # Round-trip through the frozen type to reject unknown keys and invalid spans.
+        return SourceRef(**value).to_dict()
+    raise ValueError("source_ref must be a SourceRef object")
+
+
+def _message_source_line(message: dict[str, Any]) -> str:
+    raw = message.get("source_ref")
+    ref = _ref_dict(raw)
+    return json.dumps(ref, ensure_ascii=False, separators=(",", ":"))
+
+
+def build_messages(*, user_text: str = "", assistant_text: str = "",
+                   known: list[tuple[str, str]], clock: str,
+                   steps: list[dict] | None = None, verified: bool = False,
+                   messages: list[dict[str, Any]] | None = None,
+                   previous: dict[str, Any] | None = None) -> list[dict[str, str]]:
+    known_block = "\n".join(f"- {k} = {v}" for k, v in known) or "（暂无）"
+    if messages is None:
+        messages = []
+        if user_text:
+            messages.append({"role": "user", "text": user_text})
+        if assistant_text:
+            messages.append({"role": "assistant", "text": assistant_text})
+    lines = []
+    remaining = MAX_SESSION_CHARS
+    for item in messages:
+        ref = item.get("source_ref")
+        try:
+            ref_text = json.dumps(_ref_dict(ref), ensure_ascii=False, separators=(",", ":")) if ref else ""
+        except (TypeError, ValueError):
+            continue
+        content = str(item.get("text") or item.get("content") or "")
+        if not content or remaining <= 0:
+            continue
+        content = content[:remaining]
+        remaining -= len(content)
+        role = str(item.get("role") or "unknown")
+        lines.append(f"- role={role}; source_ref={ref_text}\n{content}")
+    previous_text = json.dumps(previous or {}, ensure_ascii=False)[:8000]
     payload = "\n\n".join([
-        f"USER LOCAL CLOCK: {clock}",
-        f"KNOWN USER FACTS (key = current value):\n{known_block}",
-        "ASSISTANT'S PREVIOUS REPLY (context only, never a source of user facts):\n"
-        + ((assistant_text or "")[:1500] or "(none)"),
-        tools_block,
+        f"LOCAL CLOCK: {clock}",
+        f"KNOWN FACTS (limited):\n{known_block}",
         f"VERIFIED BY A REAL CHECK: {'yes' if verified else 'no'}",
-        f"USER MESSAGE:\n{user_text[:MAX_USER_CHARS]}",
-        f"Return JSON only, shaped like: {SCHEMA_HINT}",
+        "CANONICAL MESSAGES (chronological; refs are the only valid evidence):\n" + ("\n".join(lines) or "（空）"),
+        f"PREVIOUS EXTRACTION (context only; update incrementally and preserve existing episode):\n{previous_text}",
+        f"JSON schema example:\n{SCHEMA_HINT}",
     ])
     return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": payload}]
+
+
+def _items(value: Any, *, text_key: str = "text", limit: int = 30, chars: int = 2000) -> list[Any]:
+    if not isinstance(value, list):
+        return []
+    out = []
+    for item in value[:limit]:
+        if isinstance(item, dict):
+            row = dict(item)
+            if "source_ref" in row:
+                row["source_ref"] = _ref_dict(row["source_ref"])
+            for key, field_value in row.items():
+                if isinstance(field_value, str):
+                    row[key] = field_value.strip()[:chars]
+            out.append(row)
+        elif str(item).strip():
+            out.append(" ".join(str(item).split())[:chars])
+    return out
 
 
 def parse_output(raw: str) -> tuple[list[Proposal], Episode | None]:
@@ -193,113 +217,245 @@ def parse_output(raw: str) -> tuple[list[Proposal], Episode | None]:
         text = fence.group(1)
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end <= start:
-        return [], None
+        raise ValueError("extractor returned no JSON object")
     try:
         data = json.loads(text[start:end + 1])
-    except ValueError:
-        return [], None
+    except ValueError as exc:
+        raise ValueError("extractor returned invalid JSON") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("facts", []), list):
+        raise ExtractionSchemaError("extractor schema requires a facts array")
     out: list[Proposal] = []
-    for item in data.get("facts") or []:
+    for item in data.get("facts", []):
         if not isinstance(item, dict):
-            continue
-        op = str(item.get("op") or "set").strip()
+            raise ExtractionSchemaError("fact candidate must be an object")
         key = str(item.get("key") or "").strip()
-        if op not in {"set", "retract", "forget", "alias"} or not KEY_RE.match(key):
-            continue
-        triggers = item.get("triggers") or []
+        value = str(item.get("value") or "").strip()
+        op = str(item.get("op") or "set").strip()
+        level = str(item.get("source_level") or "").strip()
+        try:
+            source_ref = _ref_dict(item.get("source_ref"))
+        except (TypeError, ValueError) as exc:
+            raise ExtractionSchemaError("fact candidate requires a valid source_ref") from exc
+        if (not KEY_RE.match(key) or (not value and op not in {"forget", "retract"})
+                or level not in SOURCE_LEVELS - {"legacy_unknown"} or op not in {"set", "forget", "retract"}):
+            raise ExtractionSchemaError("fact candidate has invalid key, value, or source_level")
+        valid_from = item.get("valid_from")
+        valid_to = item.get("valid_to")
+        for name, temporal in (("valid_from", valid_from), ("valid_to", valid_to)):
+            if temporal is not None:
+                if not isinstance(temporal, str):
+                    raise ExtractionSchemaError(f"{name} must be an ISO-8601 string or null")
+                try:
+                    datetime.fromisoformat(temporal)
+                except ValueError as exc:
+                    raise ExtractionSchemaError(f"{name} must be a valid ISO-8601 value") from exc
         try:
             importance = max(1, min(10, int(item.get("importance") or 5)))
         except (TypeError, ValueError):
             importance = 5
         out.append(Proposal(
-            op=op, key=key,
-            value=str(item.get("value") or "").strip(),
-            text=str(item.get("text") or "").strip(),
-            quote=str(item.get("quote") or "").strip(),
-            forget_after=str(item.get("forget_after") or "").strip(),
-            triggers=[str(t).strip() for t in triggers if str(t).strip()][:3]
-            if isinstance(triggers, list) else [],
-            importance=importance,
-            stance=str(item.get("stance") or "said").strip(),
+            op=op, key=key, value=value,
+            text=str(item.get("text") or value).strip(),
+            source_level=level, recorded_at="",
+            valid_from=valid_from, valid_to=valid_to,
+            supersedes=[str(x) for x in item.get("supersedes", []) if str(x)][:20]
+            if isinstance(item.get("supersedes", []), list) else [],
+            retracts=[str(x) for x in item.get("retracts", []) if str(x)][:20]
+            if isinstance(item.get("retracts", []), list) else [],
+            source_ref=source_ref, importance=importance,
         ))
     raw_episode = data.get("episode")
+    if raw_episode is not None and not isinstance(raw_episode, dict):
+        raise ExtractionSchemaError("extractor schema requires an episode object or null")
     episode = None
-    if isinstance(raw_episode, dict):
+    if raw_episode is not None:
+        level = str(raw_episode.get("source_level") or "legacy_unknown")
+        if level not in SOURCE_LEVELS:
+            raise ExtractionSchemaError("episode has invalid source_level")
+        refs = raw_episode.get("source_refs", [])
+        if not isinstance(refs, list):
+            raise ExtractionSchemaError("episode.source_refs must be an array")
         try:
-            topics = raw_episode.get("topics") or []
-            episode = Episode(
-                title=" ".join(str(raw_episode.get("title") or "").split())[:30],
-                topics=[" ".join(str(t).split())[:40] for t in topics if str(t).strip()][:5]
-                if isinstance(topics, list) else [],
-                did=" ".join(str(raw_episode.get("did") or "").split())[:60],
-                outcome=" ".join(str(raw_episode.get("outcome") or "").split())[:60],
-                skip=bool(raw_episode.get("skip", False)),
-                **{name: [" ".join(str(item).split())[:80] for item in raw_episode.get(name, [])
-                          if str(item).strip()][:5]
-                   for name in ("decisions", "files", "commands", "facts", "open_items")
-                   if isinstance(raw_episode.get(name, []), list)},
-            )
-        except (TypeError, ValueError):
-            episode = None
+            source_refs = [_ref_dict(ref) for ref in refs]
+        except (TypeError, ValueError) as exc:
+            raise ExtractionSchemaError("episode contains invalid source_ref") from exc
+        episode = Episode(
+            title=" ".join(str(raw_episode.get("title") or "").split())[:120],
+            topics=[" ".join(str(t).split())[:40] for t in raw_episode.get("topics", []) if str(t).strip()][:10]
+            if isinstance(raw_episode.get("topics", []), list) else [],
+            did=" ".join(str(raw_episode.get("did") or "").split())[:200],
+            outcome=" ".join(str(raw_episode.get("outcome") or "").split())[:500],
+            skip=bool(raw_episode.get("skip", False)),
+            decisions=_items(raw_episode.get("decisions", [])),
+            files=_items(raw_episode.get("files", [])),
+            commands=_items(raw_episode.get("commands", [])),
+            facts=[" ".join(str(x).split())[:500] for x in raw_episode.get("facts", []) if str(x).strip()][:30]
+            if isinstance(raw_episode.get("facts", []), list) else [],
+            open_items=_items(raw_episode.get("unfinished", raw_episode.get("open_items", []))),
+            summary=" ".join(str(raw_episode.get("summary") or "").split())[:4000],
+            errors=_items(raw_episode.get("errors", [])),
+            numbers=_items(raw_episode.get("numbers", [])),
+            unfinished=_items(raw_episode.get("unfinished", [])),
+            user_corrections=_items(raw_episode.get("user_corrections", [])),
+            source_refs=source_refs, source_level=level,
+        )
+        if not episode.skip and (not episode.title or not episode.source_refs):
+            raise ExtractionSchemaError("non-empty episode requires a title and source_refs")
     return out, episode
 
 
-def apply_episode(store: MemoryStore, episode: Episode | None, steps: list[dict], verified: bool,
-                  session: str, now: datetime, mode: str = "", ref: str = "") -> bool:
-    if episode is None or episode.skip or not episode.title:
-        return False
-    did = episode.did or "直接回答"
-    text = f"{episode.title}：{did}"[:120]
-    if contains_secret(text + episode.outcome + json.dumps(steps, ensure_ascii=False)):
-        return False
-    hashes = tombstone_hashes("", "", text)
-    if store.tombstoned(hashes):
-        return False
-    day = now.date().isoformat()
-    rel = f"经历/{day}.md"
-    page = store.read(rel)
-    entry = next((e for e in page.current if e.session == session), None)
-    safe_steps = []
-    for step in (steps or [])[:30]:
-        name = str(step.get("name") or "tool")
-        mark = "✓" if step.get("ok") else "✗"
-        note = " ".join(str(step.get("note") or "").split())[:200]
-        safe_steps.append(f"{name} {mark}{' ' + note if note else ''}")
-    if entry is None:
-        entry = Entry(text=text, id=new_id(), src="经历", at=now.isoformat(timespec="seconds"),
-                      session=session, mode=mode if mode == "expert" else "",
-                      trigger=episode.topics[:3], steps=safe_steps[:8], outcome=episode.outcome,
-                      verified=bool(verified), ref=ref, **_episode_lists(episode))
-        page.current.append(entry)
-    else:
-        original_title = entry.text.split("：", 1)[0]
-        old_did = entry.text.split("：", 1)[1] if "：" in entry.text else ""
-        parts = [p for p in old_did.split("；") if p]
-        merged = "；".join(parts if did in parts else [*parts, did])
-        entry.text = f"{original_title}：{merged[-max(1, 400 - len(original_title) - 1):]}"
-        entry.outcome = episode.outcome
-        entry.steps = (entry.steps + safe_steps)[-8:]
-        entry.verified = bool(entry.verified or verified)
-        entry.trigger = list(dict.fromkeys([*entry.trigger, *episode.topics]))[:3]
-        entry.ref = ref or entry.ref
-        for name, values in _episode_lists(episode).items():
-            setattr(entry, name, list(dict.fromkeys([*getattr(entry, name), *values]))[-5:])
-        entry.at = now.isoformat(timespec="seconds")
-        if mode == "expert":
-            entry.mode = "expert"
-    store.write(page)
-    return True
-
-
-def _quote_ok(quote: str, user_text: str) -> bool:
-    squash = lambda s: re.sub(r"\s+", "", s)  # noqa: E731
-    return bool(quote) and squash(quote) in squash(user_text)
+def _plain(item: Any) -> str:
+    if isinstance(item, dict):
+        return str(item.get("text") or item.get("path") or json.dumps(item, ensure_ascii=False))
+    return str(item)
 
 
 def _episode_lists(episode: Episode) -> dict[str, list[str]]:
-    return {name: list(dict.fromkeys(" ".join(str(item).split())[:80]
-                                     for item in getattr(episode, name) if str(item).strip()))[-5:]
-            for name in ("decisions", "files", "commands", "facts", "open_items")}
+    return {
+        "decisions": [
+            (f"{x.get('text','')}；理由：{x.get('reason','')}" if isinstance(x, dict) else _plain(x))[:1000]
+            for x in episode.decisions if _plain(x).strip()
+        ] + [f"用户纠正：{x.get('before','')} → {x.get('after','')}"[:1000]
+             for x in episode.user_corrections if isinstance(x, dict)],
+        "files": [_plain(x)[:500] for x in episode.files if _plain(x).strip()],
+        "commands": [_plain(x)[:1000] for x in episode.commands if _plain(x).strip()],
+        "facts": [*episode.facts, *[f"关键数字：{_plain(x)}"[:1000] for x in episode.numbers]],
+        "open_items": [
+            *[_plain(x)[:1000] for x in [*episode.unfinished, *episode.open_items] if _plain(x).strip()],
+            *[f"报错原文：{_plain(x)}"[:2000] for x in episode.errors if _plain(x).strip()],
+        ],
+    }
+
+
+def _set_metadata(entry: Entry, values: dict[str, Any]) -> None:
+    supported = {f.name for f in fields(entry)}
+    extra = getattr(entry, "extra_metadata", None)
+    if not isinstance(extra, dict):
+        extra = getattr(entry, "extra_meta", None)
+    if not isinstance(extra, dict):
+        extra = getattr(entry, "metadata", None)
+    for key, value in values.items():
+        if key in supported:
+            setattr(entry, key, value)
+        elif isinstance(extra, dict):
+            extra[key] = value
+
+
+def _metadata(entry: Entry) -> dict[str, Any]:
+    getter = getattr(entry, "meta", None)
+    value = getter() if callable(getter) else {}
+    if not isinstance(value, dict):
+        value = {}
+    extra = getattr(entry, "extra_metadata", None)
+    if not isinstance(extra, dict):
+        extra = getattr(entry, "extra_meta", None)
+    if isinstance(extra, dict):
+        value = {**value, **extra}
+    return value
+
+
+def apply_episode(store: MemoryStore, episode: Episode | None, steps: list[dict], verified: bool,
+                  session: str, now: datetime, mode: str = "", ref: str = "",
+                  *, source_refs: list[dict[str, Any]] | None = None) -> bool:
+    if episode is None or episode.skip or not episode.title:
+        return False
+    source_refs = source_refs or episode.source_refs
+    title = episode.title[:120]
+    detail = episode.summary or episode.outcome or episode.did
+    if not detail and not any((episode.decisions, episode.files, episode.commands, episode.errors,
+                               episode.numbers, episode.unfinished, episode.user_corrections)):
+        return False
+    serialized = json.dumps({"summary": episode.summary, "decisions": episode.decisions,
+                              "files": episode.files, "commands": episode.commands,
+                              "errors": episode.errors, "numbers": episode.numbers,
+                              "unfinished": episode.unfinished,
+                              "user_corrections": episode.user_corrections,
+                              "source_refs": source_refs}, ensure_ascii=False)
+    if contains_secret(title + detail + serialized):
+        return False
+    if store.tombstoned(tombstone_hashes("", "", title + detail)):
+        return False
+    day = now.date().isoformat()
+    page = store.read(f"经历/{day}.md")
+    entry = next((e for e in page.current if e.session == session), None)
+    if entry is None:
+        for rel in reversed(store.pages()):
+            if not rel.startswith("经历/") or rel == page.path:
+                continue
+            prior = store.read(rel)
+            entry = next((e for e in prior.current if e.session == session), None)
+            if entry is not None:
+                page = prior
+                break
+    text = f"{title}：{detail[:1500]}"[:2000]
+    lists = _episode_lists(episode)
+    source_ref = source_refs[-1] if source_refs else None
+    source_ref_uri = SourceRef(**source_ref).to_ref() if source_ref else ref
+    meta = {"source_level": episode.source_level, "recorded_at": now.isoformat(timespec="seconds"),
+            "source_ref": source_ref, "extractor_version": EXTRACTOR_VERSION}
+    details = {"summary": episode.summary, "decisions": episode.decisions,
+               "files": episode.files, "commands": episode.commands, "errors": episode.errors,
+               "numbers": episode.numbers, "unfinished": episode.unfinished,
+               "user_corrections": episode.user_corrections, "source_refs": source_refs}
+    if entry is None:
+        entry = Entry(text=text, id=new_id(), src="经历", at=now.isoformat(timespec="seconds"),
+                      session=session, mode=mode if mode == "expert" else "", ref=source_ref_uri,
+                      outcome=episode.outcome[:500], verified=bool(verified), **lists)
+        _set_metadata(entry, {**meta, "episode_summary": episode.summary,
+                              "errors": episode.errors, "numbers": episode.numbers,
+                              "user_corrections": episode.user_corrections,
+                              "source_refs": list(source_refs), "episode_details": details})
+        page.current.append(entry)
+    else:
+        if entry.src == SRC_EDITED:
+            return False
+        entry.text = text
+        entry.outcome = episode.outcome[:500]
+        entry.verified = bool(entry.verified or verified)
+        entry.ref = source_ref_uri or entry.ref
+        for name, values in lists.items():
+            setattr(entry, name, list(dict.fromkeys([*getattr(entry, name), *values]))[-5:])
+        # Keep rich structured fields in metadata when supported by the M2 codec.
+        prior_refs = _metadata(entry).get("source_refs", getattr(entry, "source_refs", []))
+        merged_refs = list(prior_refs) if isinstance(prior_refs, list) else []
+        seen = {json.dumps(item, sort_keys=True, ensure_ascii=False) for item in merged_refs if isinstance(item, dict)}
+        for item in source_refs:
+            encoded = json.dumps(item, sort_keys=True, ensure_ascii=False)
+            if encoded not in seen:
+                seen.add(encoded)
+                merged_refs.append(item)
+        old_meta = _metadata(entry)
+        def merged(name: str, items: list[Any]) -> list[Any]:
+            details_old = old_meta.get("episode_details", {})
+            if name == "source_refs":
+                combined = list(old_meta.get(name, [])) if isinstance(old_meta.get(name), list) else []
+            elif isinstance(details_old, dict) and isinstance(details_old.get(name), list):
+                combined = list(details_old[name])
+            else:
+                combined = list(old_meta.get(name, [])) if isinstance(old_meta.get(name), list) else []
+            tokens = {json.dumps(value, sort_keys=True, ensure_ascii=False) for value in combined}
+            for value in items:
+                token = json.dumps(value, sort_keys=True, ensure_ascii=False)
+                if token not in tokens:
+                    tokens.add(token)
+                    combined.append(value)
+            return combined
+        details = {"summary": episode.summary,
+                   "decisions": merged("decisions", episode.decisions),
+                   "files": merged("files", episode.files),
+                   "commands": merged("commands", episode.commands),
+                   "errors": merged("errors", episode.errors),
+                   "numbers": merged("numbers", episode.numbers),
+                   "unfinished": merged("unfinished", episode.unfinished),
+                   "user_corrections": merged("user_corrections", episode.user_corrections),
+                   "source_refs": merged_refs}
+        _set_metadata(entry, {**meta, "episode_summary": episode.summary,
+                              "errors": merged("errors", episode.errors),
+                              "numbers": merged("numbers", episode.numbers),
+                              "user_corrections": merged("user_corrections", episode.user_corrections),
+                              "source_refs": merged_refs, "episode_details": details})
+    store.write(page)
+    return True
 
 
 def _locate(store: MemoryStore, key: str) -> tuple[Page, int] | None:
@@ -311,88 +467,92 @@ def _locate(store: MemoryStore, key: str) -> tuple[Page, int] | None:
     return None
 
 
-def apply(store: MemoryStore, proposals: list[Proposal], *, user_text: str, session: str,
+def apply(store: MemoryStore, proposals: list[Proposal], *, user_text: str = "", session: str,
           mode: str, now: datetime, ref: str = "") -> ApplyResult:
-    """Apply proposals to the Markdown pages. Caller holds ``store.lock`` and commits."""
+    """Persist source-backed candidates in Markdown history for M4 to merge.
+
+    Candidates are not made current here. The caller verifies each SourceRef
+    against SessionDB before this function; M4 owns final conflict application.
+    """
     result = ApplyResult()
     stamp = now.isoformat(timespec="seconds")
-    today = now.date().isoformat()
     for p in proposals:
-        if p.op in {"set", "alias"} and p.stance != "said":
+        if (not KEY_RE.match(p.key) or (not p.value and p.op not in {"forget", "retract"})
+                or contains_secret(p.text + p.value)):
             result.rejected += 1
             continue
-        if not _quote_ok(p.quote, user_text) or contains_secret(p.quote + p.text + p.value):
-            result.rejected += 1
-            continue
-        found = _locate(store, p.key)
-        if p.op == "alias":
-            if not p.key.startswith("person.") or not p.value:
+        if not p.source_ref:
+            # Compatibility callers may still send exact user quotations.
+            if not p.quote or p.quote not in user_text:
                 result.rejected += 1
                 continue
-            rel = page_for_key(p.key, temporary=False)
-            page = store.read(rel)
-            if p.value not in page.aliases and p.value != page.title:
-                page.aliases.append(p.value)
-                store.write(page)
-                result.changed.append(f"{page.title} 也叫 {p.value}")
-            continue
-        if p.op in {"retract", "forget"}:
+            level = "user_assertion"
+            source_ref = None
+        else:
+            try:
+                source_ref = _ref_dict(p.source_ref)
+            except (TypeError, ValueError):
+                result.rejected += 1
+                continue
+            level = p.source_level if p.source_level in SOURCE_LEVELS else "legacy_unknown"
+        if p.op in {"forget", "retract"}:
+            if level != "user_assertion":
+                result.rejected += 1
+                continue
+            found = _locate(store, p.key)
             if found is None:
                 continue
-            page, i = found
-            old = page.current.pop(i)
+            page, idx = found
+            old = page.current.pop(idx)
             if p.op == "forget":
                 store.add_tombstones(tombstone_hashes(old.key, old.value, old.text), "用户要求忘掉")
                 store.redact_diary([old.quote, old.text, old.value])
                 result.forgotten.append(old.id)
                 result.forgotten_texts.extend([old.text, old.quote, old.value])
             else:
-                old.ended, old.why = today, "你说不再成立"
+                old.ended, old.why = now.date().isoformat(), "用户表示不再成立"
                 page.history.insert(0, old)
                 result.ended.append(old.text)
             store.write(page)
             continue
-        # op == "set"
-        text = p.text or p.value
-        if not text or store.tombstoned(tombstone_hashes(p.key, p.value, text)):
+        if p.op != "set":
             result.rejected += 1
             continue
-        entry = Entry(
-            text=text, id=new_id(), key=p.key, value=p.value, src=SRC_SAID, at=stamp,
-            until=p.forget_after, quote=p.quote[:300], session=session, mode=mode, ref=ref,
-            importance=p.importance, trigger=p.triggers,
-        )
-        if found is not None:
-            page, i = found
-            old = page.current[i]
-            if (old.value or old.text).strip() == (p.value or text).strip():
-                continue
-            old.ended, old.why = today, f"改成：{text}"
-            page.current.pop(i)
-            page.history.insert(0, old)
-            target = page_for_key(p.key, temporary=bool(p.forget_after))
-            if target == page.path:
-                page.current.append(entry)
-                store.write(page)
-            else:
-                store.write(page)
-                dest = store.read(target)
-                dest.current.append(entry)
-                store.write(dest)
-            result.changed.append(text)
-        else:
-            target = page_for_key(p.key, temporary=bool(p.forget_after))
-            page = store.read(target)
-            if page.kind in ("person", "thing") and not page.current and not page.history:
-                page.title = safe_name(p.key.split(".")[1])
-            page.current.append(entry)
-            store.write(page)
-            result.added.append(text)
+        if store.tombstoned(tombstone_hashes(p.key, p.value, p.text)):
+            result.rejected += 1
+            continue
+        text = p.text or p.value
+        until = p.valid_to or p.forget_after
+        entry = Entry(text=text, id=new_id(), key=p.key, value=p.value,
+                      src="M3候选", at=stamp,
+                      until=until or "", quote=p.quote[:300], session=session, mode=mode,
+                      ref=SourceRef(**source_ref).to_ref() if source_ref else ref,
+                      importance=p.importance, trigger=p.triggers)
+        entry.why = "待 M4 整合"
+        _set_metadata(entry, {"source_level": level, "recorded_at": stamp,
+                              "valid_from": p.valid_from, "valid_to": p.valid_to,
+                              "supersedes": p.supersedes, "retracts": p.retracts,
+                              "source_ref": source_ref, "extractor_version": EXTRACTOR_VERSION})
+        target = page_for_key(p.key, temporary=bool(until))
+        page = store.read(target)
+        if page.kind in ("person", "thing") and not page.current and not page.history:
+            page.title = safe_name(p.key.split(".")[1])
+        source_id = (source_ref or {}).get("message_uid", "")
+        duplicate = next((old for old in [*page.current, *page.history]
+                          if old.key == p.key and old.src == "M3候选"
+                          and _metadata(old).get("extractor_version") == EXTRACTOR_VERSION
+                          and (_metadata(old).get("source_ref") or {}).get("message_uid", "") == source_id
+                          and (old.value or old.text) == p.value), None)
+        if duplicate is not None:
+            continue
+        page.history.insert(0, entry)
+        store.write(page)
+        result.added.append(text)
     return result
 
 
 def expire(store: MemoryStore, now: datetime) -> list[str]:
-    """Move temporary facts whose ``until`` has passed to history (they are not deleted)."""
+    """Move temporary facts whose ``until`` has passed to history (never delete)."""
     ended: list[str] = []
     for rel in store.pages():
         page = store.read(rel)
@@ -414,3 +574,7 @@ def expire(store: MemoryStore, now: datetime) -> list[str]:
             page.current = keep
             store.write(page)
     return ended
+
+
+__all__ = ["Proposal", "Episode", "ApplyResult", "build_messages", "parse_output", "apply",
+           "apply_episode", "expire", "known_facts", "contains_secret", "EXTRACTOR_VERSION"]

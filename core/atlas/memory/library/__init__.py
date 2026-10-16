@@ -287,14 +287,46 @@ class MemoryLibrary:
             log.info("memory.library.skipped", session=kwargs.get("session", ""), reason=reason)
             return
         self.ready()
-        self.queue.insert(created=_now(self.config).isoformat(timespec="seconds"),
-                          session=kwargs.get("session", ""), mode=kwargs.get("mode", ""),
-                          user_text=user_text, assistant_text=kwargs.get("assistant_text") or "",
-                          workspace=workspace,
-                          steps=json.dumps(kwargs.get("steps") or [], ensure_ascii=False),
-                          verified=bool(kwargs.get("verified", False)),
-                          turn_started=str(kwargs.get("turn_started") or ""))
-        task = asyncio.create_task(self._drain(kwargs.get("model_mgr")))
+        session = str(kwargs.get("session") or "")
+        if not session:
+            return
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import read_session_all_messages
+
+        engine_root = Path(str(self._cfg("engine_root", "") or DATA_ROOT / "engine"))
+        messages = read_session_all_messages(engine_root, session)
+        selected = [m for m in messages if m.get("role") in {"user", "assistant", "tool"}][-6:]
+        uids = [str(m.get("id") or "") for m in selected if m.get("id")]
+        if not uids:
+            log.info("memory.library.skipped", session=session, reason="no_stable_message_uids")
+            return
+        # Legacy API remains callable, but only stable references cross into the queue.
+        self.schedule_lifecycle({"conversation_id": session, "message_uids": uids,
+                                 "event_kind": "turn_end",
+                                 "occurred_at": _now(self.config).isoformat(timespec="seconds"),
+                                 "scope": "turn"}, model_mgr=kwargs.get("model_mgr"))
+
+    def schedule_lifecycle(self, event: dict[str, Any], *, model_mgr: Any = None) -> None:
+        """Queue a UID-only lifecycle signal and wake the memory worker."""
+        if not isinstance(event, dict):
+            raise TypeError("lifecycle event must be a mapping")
+        required = ("conversation_id", "message_uids", "event_kind", "occurred_at", "scope")
+        if any(key not in event for key in required):
+            raise ValueError("lifecycle event is missing required pointer fields")
+        forbidden = {"content", "text", "user_text", "assistant_text", "transcript", "messages"}
+        if forbidden.intersection(event):
+            raise ValueError("lifecycle events must not contain transcript content")
+        # M1 owns lifecycle normalization, idempotency, and queue persistence.
+        from .lifecycle import enqueue
+        from .lifecycle import start_watcher
+
+        self.ready()
+        enqueue(self.queue, event)
+        start_watcher(self.queue, lambda: self._wake_drain(model_mgr))
+        self._wake_drain(model_mgr)
+
+    def _wake_drain(self, model_mgr: Any) -> None:
+        task = asyncio.create_task(self._drain(model_mgr))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
@@ -303,44 +335,207 @@ class MemoryLibrary:
         async with self._turn_lock:
             for row in self.queue.pending():
                 try:
-                    now = datetime.fromisoformat(row["created"])
-                    ref = f"{row['session']}@{row.get('turn_started') or now.isoformat(timespec='seconds')}"
-                    if row["stage"] == "new":
-                        await asyncio.to_thread(self._write_diary, now, row["user_text"],
-                                                row["assistant_text"], row["session"], row["mode"], ref)
-                        self.queue.stage_diary_done(row["id"])
-                    result = await self.observe_turn(row, model_mgr, now)
+                    result = await self.observe_turn(row, model_mgr, _now(self.config))
                     self.queue.remove(row["id"])
-                    log.info("memory.library.turn", session=row["session"], added=len(result.added),
+                    log.info("memory.library.turn", session=row.get("conversation_id") or row.get("session", ""),
+                             outcome="episode_written" if result.episode_written else
+                             "facts_written" if not result.empty else "no_output",
+                             added=len(result.added),
                              changed=len(result.changed), ended=len(result.ended),
                              forgotten=len(result.forgotten), rejected=result.rejected)
                 except Exception as exc:
                     self.queue.fail(row["id"], str(exc))
-                    log.warning("memory.library.turn_failed", session=row["session"],
+                    log.warning("memory.library.turn_failed", session=row.get("conversation_id") or row.get("session", ""),
+                                attempts=row.get("attempts"), outcome="failed",
                                 error=str(exc), error_type=type(exc).__name__)
 
     async def observe_turn(self, row: dict[str, Any], model_mgr: Any,
                            now: datetime) -> extract.ApplyResult:
-        user_text, assistant_text = row["user_text"], row["assistant_text"]
-        proposals: list[extract.Proposal] = []
-        episode = None
-        try:
-            steps = json.loads(row.get("steps") or "[]")
-        except (TypeError, ValueError):
-            steps = []
-        if len(user_text) >= 2 and model_mgr is not None:
-            proposals, episode = await self._extract_full(user_text, assistant_text, model_mgr, now,
-                                                          steps, bool(row.get("verified", 0)))
-        ref = f"{row['session']}@{row.get('turn_started') or now.isoformat(timespec='seconds')}"
-        return await asyncio.to_thread(self._apply, proposals, user_text,
-                                       row["session"], row["mode"], now, episode=episode,
-                                       steps=steps, verified=bool(row.get("verified", 0)), ref=ref)
+        # Compatibility for old schedule_turn queue rows; M1 migrates these to UID rows.
+        if row.get("user_text") is not None:
+            user_text = str(row.get("user_text") or "")
+            try:
+                steps = json.loads(row.get("steps") or "[]")
+            except (TypeError, ValueError):
+                steps = []
+            if not user_text or model_mgr is None:
+                raise RuntimeError("legacy turn cannot be processed without input and model")
+            messages = [{"role": "user", "text": user_text}]
+            assistant = str(row.get("assistant_text") or "")
+            if assistant:
+                messages.append({"role": "assistant", "text": assistant})
+            proposals, episode = await self._extract_full(messages, model_mgr, now, previous={})
+            return await asyncio.to_thread(self._apply, proposals, user_text,
+                                           str(row.get("session") or ""), str(row.get("mode") or ""), now,
+                                           episode=episode, steps=steps, verified=bool(row.get("verified", 0)))
+
+        conversation_id = str(row.get("conversation_id") or row.get("session") or "")
+        if not conversation_id:
+            raise ValueError("lifecycle row has no conversation_id")
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import read_session_all_messages
+
+        engine_root = Path(str(self._cfg("engine_root", "") or DATA_ROOT / "engine"))
+        canonical = read_session_all_messages(engine_root, conversation_id)
+        if not canonical:
+            raise RuntimeError("SessionDB transcript is unavailable")
+        uid_set = {str(uid) for uid in row.get("message_uids", []) if str(uid)}
+        scope = str(row.get("scope") or "turn")
+        event_kind = str(row.get("event_kind") or "")
+        full = scope in {"session", "full", "idle", "session_idle", "session_end", "legacy_unanchored"} or \
+            event_kind in {"session_idle", "session_end", "on_session_idle", "on_session_end",
+                           "on_delegation", "pre_compress", "delegation_return", "session_recovery"}
+        selected = canonical if full else [m for m in canonical if str(m.get("id") or "") in uid_set]
+        processed = self._processed_source_uids(conversation_id)
+        selected = [m for m in selected if str(m.get("id") or "") not in processed]
+        if not selected:
+            # Already processed source UIDs are an idempotent success. An empty
+            # unresolved scope remains a retryable lifecycle/data-integrity error.
+            if full or uid_set.issubset({str(m.get("id") or "") for m in canonical}):
+                return extract.ApplyResult()
+            raise RuntimeError("lifecycle UID scope did not resolve to SessionDB messages")
+        messages = self._messages_with_refs(conversation_id, selected)
+        session = conversation_id
+        previous = self._previous_episode(session)
+        proposals, episode = await self._extract_full(messages, model_mgr, now, previous=previous)
+        if full:
+            episode = episode or extract.Episode("", skip=True)
+        else:
+            # Turn-end extraction remains light: keep the diary and new facts, defer the
+            # session-sized episode until idle/session-end.
+            episode = None
+        self._verify_provenance(conversation_id, proposals, episode, messages, engine_root)
+        user_text = "\n".join(m["text"] for m in messages if m["role"] == "user")
+        diary = None
+        if not full:
+            assistant_text = "\n".join(m["text"] for m in messages if m["role"] == "assistant")
+            ref = messages[-1]["source_ref"]
+            diary = (now, user_text, assistant_text, session, "",
+                     extract.SourceRef(**ref).to_ref())
+        return await asyncio.to_thread(self._apply, proposals, user_text, session,
+                                       str(row.get("mode") or ""), now, episode=episode,
+                                       ref=messages[-1]["source_ref"] and
+                                       extract.SourceRef(**messages[-1]["source_ref"]).to_ref(),
+                                       diary=diary)
+
+    def _messages_with_refs(self, conversation_id: str,
+                            messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        out = []
+        for message in messages:
+            uid = str(message.get("id") or message.get("message_uid") or "")
+            if not uid:
+                raise RuntimeError("SessionDB message is missing its stable UID")
+            metadata = message.get("metadata") if isinstance(message.get("metadata"), dict) else {}
+            content = message.get("content", "")
+            if isinstance(content, list):
+                content = "\n".join(str(x.get("text") or x) if isinstance(x, dict) else str(x)
+                                     for x in content)
+            ref = extract.SourceRef(conversation_id=conversation_id, message_uid=uid,
+                                    tool_call_id=str(metadata.get("tool_call_id") or "") or None,
+                                    observed_role=str(message.get("role") or "unknown"),
+                                    observed_at=str(message.get("created_at") or "") or None)
+            out.append({"id": uid, "role": str(message.get("role") or "unknown"),
+                        "text": str(content or ""), "source_ref": ref.to_dict(),
+                        "metadata": metadata})
+        return out
+
+    def _previous_episode(self, session: str) -> dict[str, Any]:
+        for rel in reversed(self.store.pages()):
+            if not rel.startswith(EPISODES + "/"):
+                continue
+            page = self.store.read(rel)
+            entry = next((e for e in page.current if e.session == session), None)
+            if entry is None:
+                continue
+            meta = entry.meta()
+            return {"title": entry.text.split("：", 1)[0], "summary": meta.get("episode_summary", ""),
+                    "outcome": entry.outcome, "decisions": entry.decisions, "files": entry.files,
+                    "commands": entry.commands, "facts": entry.facts,
+                    "source_refs": meta.get("source_refs", [])}
+        return {}
+
+    def _processed_source_uids(self, conversation_id: str) -> set[str]:
+        processed: set[str] = set()
+        for rel in self.store.pages():
+            page = self.store.read(rel)
+            for entry in [*page.current, *page.history]:
+                # A fact candidate may be only one of several outputs for the
+                # same UID. It is deduplicated independently and must not act
+                # as the lifecycle watermark for the whole source message.
+                if getattr(entry, "src", "") == "M3候选":
+                    continue
+                meta = entry.meta() if callable(getattr(entry, "meta", None)) else {}
+                version = meta.get("extractor_version")
+                if version != extract.EXTRACTOR_VERSION:
+                    continue
+                refs = list(getattr(entry, "source_refs", []) or [])
+                if isinstance(meta.get("source_refs"), list):
+                    refs.extend(meta["source_refs"])
+                single = getattr(entry, "source_ref", None)
+                if single:
+                    refs.append(single)
+                raw_ref = entry.ref
+                if raw_ref and str(raw_ref).startswith("atlas://source/v1?"):
+                    try:
+                        refs.append(extract.SourceRef.from_ref(str(raw_ref)).to_dict())
+                    except ValueError:
+                        pass
+                for ref in refs:
+                    try:
+                        parsed = extract.SourceRef(**ref) if isinstance(ref, dict) else extract.SourceRef.from_ref(str(ref))
+                    except (TypeError, ValueError):
+                        continue
+                    if parsed.conversation_id == conversation_id:
+                        processed.add(parsed.message_uid)
+        return processed
+
+    def processed_source_uids(self, conversation_id: str) -> set[str]:
+        """Expose M3's durable UID watermark to M1's queue rebuild helper."""
+        self.ready()
+        return self._processed_source_uids(conversation_id)
+
+    def _verify_provenance(self, conversation_id: str, proposals: list[extract.Proposal],
+                           episode: extract.Episode | None, messages: list[dict[str, Any]],
+                           engine_root: Path) -> None:
+        available = {json.dumps(m["source_ref"], ensure_ascii=False, sort_keys=True): m for m in messages}
+        refs = [p.source_ref for p in proposals if p.source_ref]
+        if episode:
+            refs.extend(episode.source_refs)
+        for raw in refs:
+            ref = extract.SourceRef(**raw)
+            if ref.conversation_id != conversation_id:
+                raise ValueError("extractor returned a SourceRef for another conversation")
+            key = json.dumps(ref.to_dict(), ensure_ascii=False, sort_keys=True)
+            match = available.get(key)
+            if match is None:
+                raise ValueError("extractor SourceRef must exactly match an input message reference")
+            from atlas.engine.session_sync import session_message_evidence
+
+            evidence = session_message_evidence(engine_root, conversation_id, ref.message_uid)
+            if not evidence or str(evidence.get("message_uid") or "") != ref.message_uid:
+                raise ValueError("SourceRef UID is not verifiable in SessionDB")
+            role = str(match.get("role") or "unknown")
+            for proposal in proposals:
+                if proposal.source_ref and proposal.source_ref.get("message_uid") == ref.message_uid:
+                    if proposal.source_level == "user_assertion" and role != "user":
+                        raise ValueError("user_assertion must cite a user message")
+                    if proposal.source_level == "tool_observation" and role not in {"tool", "tool_call"}:
+                        raise ValueError("tool_observation must cite a tool message")
+        if episode:
+            for ref in episode.source_refs:
+                if json.dumps(ref, ensure_ascii=False, sort_keys=True) not in available:
+                    raise ValueError("episode source_refs must exactly match input message references")
 
     def _write_diary(self, now: datetime, user_text: str, assistant_text: str,
                      session: str, mode: str, ref: str = "") -> None:
         self.ready()
-        meta = '{"session":"%s","ref":"%s"%s}' % (re.sub(r"[^\w-]", "", session)[:64], ref,
-                                       ',"mode":"expert"' if mode == "expert" else "")
+        diary_path = self.store.root / DIARY / f"{now.date().isoformat()}.md"
+        if ref and diary_path.exists() and ref in diary_path.read_text(encoding="utf-8"):
+            return
+        metadata = {"session": session, "ref": ref, "extractor_version": extract.EXTRACTOR_VERSION}
+        if mode == "expert":
+            metadata["mode"] = "expert"
+        meta = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
         reply = " ".join((assistant_text or "").split())[:1500]
         block = (f"## {now.strftime('%H:%M')}\n<!-- {meta} -->\n"
                  f"你：{user_text[:2000]}\n\n它：{reply or '（无文字回复）'}")
@@ -370,38 +565,55 @@ class MemoryLibrary:
                 return chosen
         raise RuntimeError("no memory writer model available")
 
-    async def _extract_full(self, user_text: str, assistant_text: str, model_mgr: Any,
-                            now: datetime, steps: list[dict], verified: bool):
+    async def _extract_full(self, messages: list[dict[str, Any]], model_mgr: Any,
+                            now: datetime, *, previous: dict[str, Any] | None = None):
         router = getattr(model_mgr, "model_router", None)
         if router is None:
-            return [], None
+            raise RuntimeError("memory writer model router is unavailable")
         model_id = self._model_id(model_mgr)
         known = await asyncio.to_thread(extract.known_facts, self.store)
         clock = f"{now.strftime('%Y-%m-%d %A %H:%M')} (UTC{now.strftime('%z')})"
-        messages = extract.build_messages(user_text=user_text, assistant_text=assistant_text,
-                                          known=known, clock=clock, steps=steps, verified=verified)
-        result = await asyncio.wait_for(
-            router.complete_for(model_id, "memory_library", messages, max_tokens=1600, temperature=0.1),
-            timeout=float(self._cfg("writer_timeout_seconds", 90)),
-        )
-        return extract.parse_output(str(getattr(result, "text", "") or ""))
+        prompt = extract.build_messages(messages=messages, known=known, clock=clock, previous=previous)
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                result = await asyncio.wait_for(
+                    router.complete_for(model_id, "memory_library", prompt, max_tokens=6000, temperature=0.1),
+                    timeout=float(self._cfg("writer_timeout_seconds", 90)),
+                )
+                return extract.parse_output(str(getattr(result, "text", "") or ""))
+            except extract.ExtractionSchemaError:
+                raise
+            except Exception as exc:  # providers and JSON decoders expose several transient error types
+                last_error = exc
+                if attempt == 2:
+                    break
+                log.warning("memory.library.extract_retry", attempt=attempt + 1,
+                            outcome="retry", error_type=type(exc).__name__)
+                await asyncio.sleep(min(0.25 * (2 ** attempt), 1.0))
+        raise RuntimeError(f"memory extraction failed after 3 attempts: {last_error}") from last_error
 
     async def _extract(self, user_text: str, assistant_text: str, model_mgr: Any,
                        now: datetime) -> list[extract.Proposal]:
-        proposals, _episode = await self._extract_full(user_text, assistant_text, model_mgr, now, [], False)
+        messages = [{"role": "user", "text": user_text}, {"role": "assistant", "text": assistant_text}]
+        proposals, _episode = await self._extract_full(messages, model_mgr, now, previous={})
         return proposals
 
     def _apply(self, proposals: list[extract.Proposal], user_text: str, session: str,
                mode: str, now: datetime, *, episode: extract.Episode | None = None,
                steps: list[dict] | None = None, verified: bool = False,
-               ref: str = "") -> extract.ApplyResult:
+               ref: str = "", diary: tuple[datetime, str, str, str, str, str] | None = None) -> extract.ApplyResult:
         with self.store.lock:
             ended = extract.expire(self.store, now)
             result = extract.apply(self.store, proposals, user_text=user_text,
                                    session=session, mode=mode, now=now, ref=ref)
             episode_changed = extract.apply_episode(self.store, episode, steps or [], verified,
-                                                    session, now, mode, ref)
+                                                    session, now, mode, ref,
+                                                    source_refs=episode.source_refs if episode else None)
+            result.episode_written = episode_changed
             result.ended.extend(ended)
+            if diary:
+                self._write_diary(*diary)
             message = result.message() if not result.empty else (
                 f"经历：{episode.title}" if episode_changed and episode else "日记")
             self.store.commit(message)
@@ -556,7 +768,11 @@ def _page_dict(page: Page) -> dict[str, Any]:
                 "quote": e.quote, "ended": e.ended, "why": e.why, "key": e.key,
                 "outcome": e.outcome, "steps": e.steps, "verified": e.verified,
                 "decisions": e.decisions, "files": e.files, "commands": e.commands,
-                "facts": e.facts, "open_items": e.open_items}
+                "facts": e.facts, "open_items": e.open_items,
+                "source_level": e.source_level, "recorded_at": e.recorded_at,
+                "valid_from": e.valid_from, "valid_to": e.valid_to,
+                "supersedes": e.supersedes, "retracts": e.retracts,
+                "source_ref": e.source_ref}
     return {"path": page.path, "title": page.title, "kind": page.kind, "aliases": page.aliases,
             "current": [row(e) for e in page.current], "history": [row(e) for e in page.history],
             "notes": page.notes}
