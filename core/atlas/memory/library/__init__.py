@@ -54,6 +54,10 @@ INSTRUCTION = (
 _SINGLETON: MemoryLibrary | None = None
 
 
+class ModelUnavailable(RuntimeError):
+    """The turn is durable but cannot be extracted until a writer model is ready."""
+
+
 def _now(config: Any = None) -> datetime:
     try:
         from atlas.time_context import now_local
@@ -314,6 +318,8 @@ class MemoryLibrary:
                     log.info("memory.library.turn", session=row["session"], added=len(result.added),
                              changed=len(result.changed), ended=len(result.ended),
                              forgotten=len(result.forgotten), rejected=result.rejected)
+                except ModelUnavailable:
+                    log.info("memory.library.turn_deferred", session=row["session"], reason="no_model")
                 except Exception as exc:
                     self.queue.fail(row["id"], str(exc))
                     log.warning("memory.library.turn_failed", session=row["session"],
@@ -328,7 +334,9 @@ class MemoryLibrary:
             steps = json.loads(row.get("steps") or "[]")
         except (TypeError, ValueError):
             steps = []
-        if len(user_text) >= 2 and model_mgr is not None:
+        if len(user_text) >= 2:
+            if model_mgr is None:
+                raise ModelUnavailable("no memory writer model available")
             proposals, episode = await self._extract_full(user_text, assistant_text, model_mgr, now,
                                                           steps, bool(row.get("verified", 0)))
         ref = f"{row['session']}@{row.get('turn_started') or now.isoformat(timespec='seconds')}"
@@ -374,8 +382,13 @@ class MemoryLibrary:
                             now: datetime, steps: list[dict], verified: bool):
         router = getattr(model_mgr, "model_router", None)
         if router is None:
-            return [], None
-        model_id = self._model_id(model_mgr)
+            raise ModelUnavailable("no memory writer model available")
+        try:
+            model_id = self._model_id(model_mgr)
+        except RuntimeError as exc:
+            if str(exc) == "no memory writer model available":
+                raise ModelUnavailable(str(exc)) from exc
+            raise
         known = await asyncio.to_thread(extract.known_facts, self.store)
         clock = f"{now.strftime('%Y-%m-%d %A %H:%M')} (UTC{now.strftime('%z')})"
         messages = extract.build_messages(user_text=user_text, assistant_text=assistant_text,
