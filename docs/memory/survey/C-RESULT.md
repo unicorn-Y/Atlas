@@ -22,6 +22,7 @@
 | LangMem | `48e3c11f5bb527282c7d5339c6a87a0b35abccfc`；根许可文件存在 | `src/langmem/short_term/summarization.py:_preprocess_messages:102,153,173`, `summarize_messages:337,467-485` | Rolling summary 记录已摘要 message IDs 和 last-ID watermark，重复输入不会重复归并；不是完整 session/subagent hook 系统。Python但需 LangGraph/LangChain/model adapter，移植成本中。 | 本地源码实读 |
 | LangChain AgentMiddleware（新增） | `c088db971097f0f12c7b8c30d473e8dbde09c823`；根许可文件存在 | `libs/langchain_v1/langchain/agents/middleware/types.py:AgentMiddleware`; `factory.py` | before_agent/before_model/after_model/after_agent 组合接口和 wrap/retry 语义可供借鉴，不自带记忆；Python runtime 较重，移植事件契约成本低、框架成本高。 | 本地源码实读 |
 | AgentMemory（新增） | `b5e00d027bc0f5f6cb7529bc1acfe6688ba105d1`；未发现 LICENSE/COPYING/NOTICE，许可需确认 | `src/hooks/codex-user-prompt.ts:main:5`; `codex-post-tool.ts:main:27-64`; `src/services/agent-installer.ts` | prompt hook 注入任务召回，post-tool 对卡住/失败事件二次 recall；异常 fail-open。TS+本地服务/MCP+SQLite，移植成本高。许可不能假定。 | 本地源码实读 |
+| Open SWE（新增） | `langchain-ai/open-swe@b15db46a513d20a330c1a6294921e70a2aaaf977`；根 MIT，未见子树 LICENSE | `openswe/middleware/transcript.py:TranscriptMiddleware.abefore_agent:687-710,aafter_agent:1198-1227` | before-agent 创建持久 transcript run，after-agent 幂等 enqueue `turn.completed` 并结束 writer；异常记录 warning，取消分支另有收尾。PostgreSQL-backed transcript 事件，不是长期语义记忆/经验提炼；可借可靠 turn 边界与 terminal event。Python+LangChain/Postgres，移植中高。 | 本地源码实读 |
 | Mastra memory processor | `mastra-ai/mastra@a15924e709dd5d9439a6c102901c326ab0ec77fb`；根 `LICENSE.md`，该 subtree 无独立许可 | `packages/core/src/processors/memory/message-history.ts:processInput:187-279,processOutputResult:286-343,persistMessages:352+` | 输入按 thread/resource 从 storage 取历史，token boundary/last-N 截断后加回上下文；输出经 transcript transform/redaction 后持久化，错误向 runner 抛出，没有本处自动 retry；过滤 partial tool calls/working-memory tags。适合双向 processor 生命周期，但存储由可替换 storage 实现；TS runner依赖中高。 | 固定 SHA 的 sparse local clone 源码实读 |
 | Letta agent loop | 本地 `letta` 目标树 `5bcdd177d70fa2b31a754cfcd801e77b2e1ab16a` 不含预期 `letta/services/group_manager.py`；固定 SHA URL 404，未能确认许可/实现 | 任务书目标 agent-loop/shared-block 源码不在 checkout | 无法从现有证据评价存储、写入、retry、去重/纠错、召回/反馈；不将二手摘要当实现。 | 未核实 |
 
@@ -172,14 +173,14 @@ Claude 骨架：支持透明且用户可改的文本层，但把媒体本体作�
 ## 整体未查清
 
 - 本轮 D: 可用空间降为 0；部分 checkout 因此不完整。对已知失败 clone 的精确目录清理命令被自动策略拒绝，未绕过。不得声称任务书要求的所有候选均已 clone。
-- AMA `tool.py`、Letta pinned shared-block源码、AWM源码/许可、SkillOpt上游SHA与内核、部分 Anthropic skill 子目录许可证仍缺；详见各模块。
+- AMA `tool.py`、Letta pinned shared-block源码、3,298技能库存归属/许可/重复率盘点、部分 Anthropic skill 子目录许可证仍缺；AWM 与 SkillOpt 源码已在空间恢复后 sparse clone 复核。
 - 项目许可和移植成本只是基于本轮看到的 manifest/LICENSE/依赖，不是法律意见或性能测量。没有运行代码或测试（本任务为调研）。
 
 ## 新增候选
 
 | 模块 | 新候选 | 搜索词 |
 |---|---|---|
-| M1 | LangChain AgentMiddleware (`langchain-ai/langchain@c088db971097f0f12c7b8c30d473e8dbde09c823`)、AgentMemory (`b5e00d027bc0f5f6cb7529bc1acfe6688ba105d1`)、open-swe (`b15db46a513d20a330c1a6294921e70a2aaaf977`; 仅看到 `docs/CUSTOMIZATION.md` `@after_agent`，不计完整源码审查) | `site:github.com agent memory lifecycle hooks before_agent after_agent hooks`; `agent memory hooks UserPromptSubmit PostToolUse fail-open SQLite` |
+| M1 | LangChain AgentMiddleware (`langchain-ai/langchain@c088db971097f0f12c7b8c30d473e8dbde09c823`)、AgentMemory (`b5e00d027bc0f5f6cb7529bc1acfe6688ba105d1`)、Open SWE (`langchain-ai/open-swe@b15db46a513d20a330c1a6294921e70a2aaaf977`) | `site:github.com agent memory lifecycle hooks before_agent after_agent hooks`; `agent memory hooks UserPromptSubmit PostToolUse fail-open SQLite` |
 | M2 | bettyguo/agent-memory、pbmagnet4/nlm-memory、openclaw/openclaw | `"agent trajectory" "source span" citation HMAC`; `"get_session" "transcript" memory agent hook`; `"sessionId" "transcript records" agent memory plugin` |
 | M6 | open-multi-agent/open-multi-agent、AndrewMoryakov/AgentMemory、AgentEnsemble/agentensemble（pinned Git blob，未完整 checkout） | `agent memory shared context runtime MCP`; `shared memory multi-agent orchestration` |
 | M8 | OAWM、MemForge、AgenticMemory | `agent procedural skill evolution feedback lifecycle`; `promotion receipt verified workflow memory`; `agent skill confidence success failure sleep cycle` |
