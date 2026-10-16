@@ -1,8 +1,9 @@
 /*
  * Atlas wrapper around the ZCode reasoning block (components/reasoning/*, ported from
  * zai-org/ZCode packages/ui/src/components/ai-elements/reasoning.tsx and its helpers).
- * Collapsed by default while streaming and when done; the trigger shows "正在思考 · <newest line>"
- * live and "思考 · 持续了 N 秒" afterwards. Atlas extras kept: copy button and the truncation note.
+ * Open by default and left open (like Hermes): the reader follows the model's thinking as it streams
+ * and can still read it afterwards; collapsing is the reader's choice. Collapsed, the trigger shows
+ * "正在思考 · <newest line>". Atlas extras kept: copy button and the truncation note.
  */
 import { useState } from 'react';
 import { ClipboardCopy } from 'lucide-react';
@@ -36,7 +37,7 @@ export default function ReasoningBlock({ text, streaming, startedAt, endedAt, tr
   </button>;
 
   return <div className="my-2 min-w-0" data-conversation-selectable="true">
-    <Reasoning className="w-full" isStreaming={streaming} autoCollapseKey={streaming ? null : 'complete'}
+    <Reasoning className="w-full" isStreaming={streaming} defaultOpen
       {...(duration !== undefined ? { duration } : {})}>
       <ReasoningTrigger streamingText={text} />
       <ReasoningContent footer={footer}>

@@ -2075,6 +2075,27 @@ async def _handle_resume(
                 await manager.send(conn_id, env)
 
 
+def _effective_reasoning_effort(model_mgr: Any, model_id: str, requested: str | None) -> str | None:
+    """The effort to send for this run, or None when the model cannot reason.
+
+    Aliases such as ``wb-pool`` are not litellm names, so look the model up first and trust its
+    declared capabilities. "Default" means medium (OpenAI's own default): some providers
+    (DeepSeek behind the WorkBuddy proxy) only think, and stream their reasoning, when an
+    effort is sent at all.
+    """
+    config: dict[str, Any] = {}
+    if model_mgr is not None:
+        with suppress(Exception):
+            config = next((item for item in model_mgr.list_models()
+                           if item.get("id") == model_id or item.get("litellm_model") == model_id), {})
+    capabilities = config.get("capabilities") if isinstance(config.get("capabilities"), dict) else {}
+    supported = bool(capabilities.get("supports_reasoning")) or _model_supports_reasoning(
+        config or {"litellm_model": model_id})
+    if not supported:
+        return None
+    return requested or "medium"
+
+
 def _map_tool_runtime_event(
     event: dict[str, Any],
 ) -> tuple[str, dict[str, Any]] | None:
@@ -2155,6 +2176,7 @@ async def _execute_run(
     manager = manager or _server().runtime_mgr
     services = manager.services
     model_mgr = getattr(services, "model_mgr", None) or getattr(_server(), "model_mgr", None)
+    reasoning_effort = _effective_reasoning_effort(model_mgr, model_id or run.model, run.reasoning_effort)
     memory = getattr(services, "memory", None) or getattr(_server(), "memory", None)
     orchestrator = getattr(services, "orchestrator", None) or getattr(_server(), "orchestrator", None)
     local_execution = getattr(services, "local_execution", None) or getattr(_server(), "local_execution", None)
@@ -2218,9 +2240,7 @@ async def _execute_run(
                 usage_positions[request_id] = len(run.usage)
             run.usage.append(row)
         if run.reasoning_effort and run.reasoning_effort_applied is None:
-            run.reasoning_effort_applied = _model_supports_reasoning(
-                {"litellm_model": model_id or run.model}
-            )
+            run.reasoning_effort_applied = reasoning_effort is not None
             row["reasoning_effort_applied"] = run.reasoning_effort_applied
         if usage_ledger is not None and not duplicate:
             event_model = str(row.get("model") or model_id or run.model)
@@ -2677,9 +2697,7 @@ async def _execute_run(
             sandbox_enabled=bool(run.sandbox),
             project_id=run.project_id,
             task_id=run.task_id,
-            reasoning_effort=(run.reasoning_effort if _model_supports_reasoning(
-                {"litellm_model": model_id or run.model}
-            ) else None),
+            reasoning_effort=reasoning_effort,
             subtask_started=subtask_started,
             subtask_progress=subtask_progress,
             subtask_completed=subtask_completed,
