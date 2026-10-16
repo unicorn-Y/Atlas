@@ -8,11 +8,11 @@ Every run calls :meth:`MemoryLibrary.recall` before the model sees the message a
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import tempfile
-import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -307,7 +307,8 @@ class MemoryLibrary:
 
     # ---------- search tool ----------
     def search(self, query: str, limit: int = 8, include_history: bool = False,
-               kinds: tuple[str, ...] = ("fact", "dream", "diary")) -> list[dict[str, Any]]:
+               kinds: tuple[str, ...] = ("fact", "dream", "diary"), *,
+               invocation_id: str | None = None) -> list[dict[str, Any]]:
         self.ready()
         self.index.sync()
         keep = (
@@ -318,10 +319,27 @@ class MemoryLibrary:
         )
         results = self.index.search(query, limit=limit, include_history=include_history,
                                     kinds=kinds, now=_now(self.config))
+        if invocation_id and invocation_id.strip():
+            invocation = invocation_id.strip()
+        else:
+            # Deterministic fallback coalesces identical searches that return the same Claims
+            # on one UTC date; tool callers should pass a run/message/tool-call identity.
+            fallback = {
+                "day": datetime.now(timezone.utc).date().isoformat(),
+                "query": " ".join(query.casefold().split()),
+                "limit": int(limit),
+                "include_history": bool(include_history),
+                "kinds": sorted(kinds),
+                "claim_ids": sorted(str(hit.get("claim_id") or hit.get("id") or "")
+                                     for hit in results),
+            }
+            invocation = "fallback:" + json.dumps(fallback, ensure_ascii=False, sort_keys=True,
+                                                    separators=(",", ":"))
+        invocation_hash = hashlib.sha256(invocation.encode("utf-8")).hexdigest()
         exposed = []
         for hit in results:
             claim_id = str(hit.get("claim_id") or hit.get("id") or "")
-            event_id = f"exposure:{uuid.uuid4().hex}:{claim_id}"
+            event_id = f"exposure:{invocation_hash}:{claim_id}"
             if claim_id:
                 self.index.record_usage_event(event_id, claim_id, "exposure")
             exposed.append({**{k: hit.get(k) for k in keep}, "exposure_event_id": event_id})
