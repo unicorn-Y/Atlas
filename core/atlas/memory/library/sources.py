@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from atlas.memory.library.source_ref import SourceRef
+
+RAW_SNIPPET_MAX_CHARS = 320
 
 
 def _text(content: Any) -> str:
@@ -25,13 +28,20 @@ def _at(message: dict[str, Any]) -> str:
 
 
 def open_ref(
-    ref: SourceRef | str,
+    ref: SourceRef | str | Mapping[str, Any],
     window: int = 1,
     *,
     engine_root: str | Path | None = None,
     root: str | Path | None = None,
 ) -> dict[str, Any]:
-    exact: SourceRef | None = ref if isinstance(ref, SourceRef) else None
+    try:
+        exact: SourceRef | None = (
+            ref if isinstance(ref, SourceRef)
+            else SourceRef(**dict(ref)) if isinstance(ref, Mapping)
+            else None
+        )
+    except (TypeError, ValueError):
+        return {"ok": False, "reason": "出处格式无效", "precision": "exact"}
     raw_ref = exact.to_ref() if exact is not None else str(ref or "")
     if exact is None and raw_ref.startswith("atlas://"):
         try:
@@ -133,10 +143,27 @@ def open_ref(
     total = 0
     truncated = False
     result = []
+    target_full_text = ""
+    span_applied = False
     for row in selected_messages:
         role = str(row.get("role") or "unknown")
         text = _text(row.get("content", row.get("text")))
         metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+        is_target = bool(exact and (
+            str(row.get("id") or "") == exact.message_uid
+            or (exact.tool_call_id and (
+                str(metadata.get("tool_call_id") or "") == exact.tool_call_id
+                or any(isinstance(call, dict) and str(call.get("id") or "") == exact.tool_call_id
+                       for call in (metadata.get("tool_calls") or []))
+            ))
+        ))
+        full_text = text
+        if is_target:
+            target_full_text = full_text
+            if (exact.span_start is not None and exact.span_end is not None
+                    and exact.span_end <= len(full_text)):
+                text = full_text[exact.span_start:exact.span_end]
+                span_applied = True
         tool = None
         if role == "tool" or metadata.get("tool_name"):
             tool = {
@@ -157,7 +184,9 @@ def open_ref(
             truncated = True
         total += len(text)
         result.append(
-            {"role": role, "text": text, "at": _at(row), **({"tool": tool} if tool else {})}
+            {"role": role, "text": text, "at": _at(row),
+             "message_uid": str(row.get("id") or ""), "target": is_target,
+             **({"tool": tool} if tool else {})}
         )
         calls = metadata.get("tool_calls")
         if isinstance(calls, list):
@@ -186,7 +215,9 @@ def open_ref(
         **({"message_uid": exact.message_uid, "source_ref": exact.to_ref()}
            if exact is not None else {}),
         "precision": precision,
-        **({"span_applied": False} if exact is not None and exact.span_start is not None else {}),
+        **({"span_applied": span_applied} if exact is not None and exact.span_start is not None else {}),
+        **({"content_hash_ok": (not exact.content_hash or hashlib.sha256(
+            target_full_text.encode("utf-8")).hexdigest() == exact.content_hash)} if exact is not None else {}),
         "title": title,
         "messages": result,
         "truncated": truncated,
@@ -194,7 +225,7 @@ def open_ref(
 
 
 def memory_open(
-    ref: SourceRef | str,
+    ref: SourceRef | str | Mapping[str, Any],
     window: int = 1,
     *,
     engine_root: str | Path | None = None,
@@ -223,6 +254,11 @@ def search_raw(query: str, limit: int = 10) -> list[dict[str, Any]]:
     for row in found:
         conversation_id = str(row.get("conversation_id") or "")
         message_uid = str(row.get("id") or "")
+        # Session search returns a bounded match excerpt. Never substitute the
+        # transcript/content field here: full messages are opened only by SourceRef.
+        snippet = " ".join(str(row.get("snippet") or "").split())[:RAW_SNIPPET_MAX_CHARS]
+        if not snippet:
+            continue
         try:
             ref = SourceRef(conversation_id, message_uid).to_ref()
         except ValueError:
@@ -232,13 +268,15 @@ def search_raw(query: str, limit: int = 10) -> list[dict[str, Any]]:
             "kind": "raw",
             "path": "原对话",
             "title": conversation_id,
-            "text": str(row.get("content") or ""),
-            "snippet": str(row.get("snippet") or row.get("content") or ""),
+            "text": snippet,
+            "snippet": snippet,
             "src": "原对话",
             "at": str(row.get("created_at") or ""),
             "ref": ref,
+            "source_ref": SourceRef(conversation_id, message_uid).to_dict(),
             "score": 1.0,
             "project": "",
+            "summary_kind": "matched_excerpt",
         })
     return results
 

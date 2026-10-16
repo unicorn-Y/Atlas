@@ -59,8 +59,15 @@ def merge_scores(
                 item[key] = row[key]
     merged = []
     for row in by_id.values():
-        row["score"] = vector_weight * row["vector_score"] + text_weight * row["text_score"]
-        row["score"] *= temporal_decay(row.get("path", ""), row.get("at", ""), now)
+        raw_score = vector_weight * row["vector_score"] + text_weight * row["text_score"]
+        decay = temporal_decay(row.get("path", ""), row.get("at", ""), now)
+        row["score"] = raw_score * decay
+        row["rank_reasons"] = {
+            "keyword_score": round(float(row["text_score"]), 4),
+            "vector_score": round(float(row["vector_score"]), 4),
+            "temporal_decay": round(decay, 4),
+            "fusion": {"keyword_weight": text_weight, "vector_weight": vector_weight},
+        }
         merged.append(row)
     merged.sort(key=lambda row: row["score"], reverse=True)
     if len(merged) <= limit:

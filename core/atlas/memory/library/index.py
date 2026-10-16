@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import math
 import re
 import sqlite3
@@ -60,6 +61,14 @@ CREATE TABLE IF NOT EXISTS items (
 );
 CREATE INDEX IF NOT EXISTS items_path ON items(path);
 CREATE VIRTUAL TABLE IF NOT EXISTS items_fts USING fts5(body, tokenize='trigram');
+CREATE TABLE IF NOT EXISTS usage_events (
+  event_id TEXT PRIMARY KEY,
+  claim_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  occurred_at TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS usage_events_claim ON usage_events(claim_id, event_type, occurred_at);
 """
 
 
@@ -268,7 +277,8 @@ class MemoryIndex:
 
     def _keyword_search(self, query: str, *, limit: int = 8, kinds: tuple[str, ...] = ("fact", "diary"),
                include_history: bool = False, now: datetime | None = None,
-               exclude_paths: tuple[str, ...] = ()) -> list[dict[str, Any]]:
+               exclude_paths: tuple[str, ...] = (),
+               include_paths: tuple[str, ...] = ()) -> list[dict[str, Any]]:
         q_tokens = tokenize(query)
         if not q_tokens:
             return []
@@ -295,10 +305,12 @@ class MemoryIndex:
             rows = [dict(r) for r in db.execute(f"SELECT * FROM items WHERE rowid IN ({marks})", list(rowids))]
         now = now or datetime.now().astimezone()
         excluded = set(exclude_paths)
+        included = set(include_paths)
         q_weight = sum(idf[t] for t in useful) or 1.0
         results = []
         for row in rows:
             if (row["kind"] not in kinds or row["path"] in excluded or
+                    (included and row["path"] not in included) or
                     (row["bucket"] == "history" and not include_history)):
                 continue
             expired = is_expired(row["until"], now)
@@ -375,7 +387,8 @@ class MemoryIndex:
         return self._embedding_state
 
     def _vector_search(self, query: str, *, kinds: tuple[str, ...], include_history: bool,
-                       now: datetime, exclude_paths: tuple[str, ...]) -> list[dict[str, Any]]:
+                       now: datetime, exclude_paths: tuple[str, ...],
+                       include_paths: tuple[str, ...] = ()) -> list[dict[str, Any]]:
         rows = self._vector_cache.get(query)
         if rows is None:
             from .embed import embed_texts
@@ -424,23 +437,28 @@ class MemoryIndex:
             if len(self._vector_cache) > 8:
                 self._vector_cache.pop(next(iter(self._vector_cache)))
         excluded = set(exclude_paths)
+        included = set(include_paths)
         results = [row for row in rows if row["kind"] in kinds and row["path"] not in excluded
+                   and (not included or row["path"] in included)
                    and (include_history or (row["bucket"] != "history" and not is_expired(row["until"], now)))]
         results.sort(key=lambda row: row["vector_score"], reverse=True)
         return results[:400]
 
     def search(self, query: str, *, limit: int = 8, kinds: tuple[str, ...] = ("fact", "diary"),
                include_history: bool = False, now: datetime | None = None,
-               exclude_paths: tuple[str, ...] = ()) -> list[dict[str, Any]]:
+               exclude_paths: tuple[str, ...] = (), include_paths: tuple[str, ...] = (),
+               expand_associations: bool = True) -> list[dict[str, Any]]:
         from .hybrid import merge_scores
 
         now = now or datetime.now().astimezone()
         requested = tuple(k for k in kinds if k != "raw")
         keyword = self._keyword_search(query, limit=400, kinds=requested,
                                        include_history=include_history, now=now,
-                                       exclude_paths=exclude_paths) if requested else []
+                                       exclude_paths=exclude_paths,
+                                       include_paths=include_paths) if requested else []
         vector = self._vector_search(query, kinds=requested, include_history=include_history,
-                                     now=now, exclude_paths=exclude_paths) if requested else []
+                                     now=now, exclude_paths=exclude_paths,
+                                     include_paths=include_paths) if requested else []
         include_raw = "raw" in kinds
         results = merge_scores(keyword, vector, now=now, limit=400 if include_raw else limit)
         if include_raw:
@@ -449,7 +467,158 @@ class MemoryIndex:
             results.extend(search_raw(query, limit))
             results.sort(key=lambda row: float(row.get("score", 0)), reverse=True)
             results = results[:limit]
-        return results
+        results = self._decorate_claim_rows(results, now=now, include_history=include_history)
+        if expand_associations and results and requested and not include_raw:
+            results = self._expand_associations(
+                query, results, limit=limit, kinds=requested, include_history=include_history, now=now,
+                exclude_paths=exclude_paths,
+            )
+        return results[:limit]
+
+    def search_lexical(self, query: str, *, limit: int = 3,
+                       now: datetime | None = None) -> list[dict[str, Any]]:
+        """One-pass exact lexical retrieval for M1's repeated-tool-failure repair."""
+        now = now or datetime.now().astimezone()
+        rows = self._keyword_search(
+            query, limit=max(limit, 1), kinds=("fact", "dream", "episode", "diary"),
+            include_history=False, now=now,
+        )
+        return self._decorate_claim_rows(rows, now=now, include_history=False)[:max(limit, 1)]
+
+    def record_usage_event(self, event_id: str, claim_id: str, event_type: str, *,
+                           occurred_at: str | None = None,
+                           metadata: dict[str, Any] | None = None) -> bool:
+        """Idempotently record a derived usage signal without claim text."""
+        allowed = {"exposure", "reference_open", "agent_citation", "useful_feedback",
+                   "not_useful_feedback", "task_outcome"}
+        if not event_id or not claim_id or event_type not in allowed:
+            return False
+        stamp = occurred_at or datetime.now().astimezone().isoformat(timespec="seconds")
+        payload = {key: value for key, value in (metadata or {}).items()
+                   if key in {"query_hash", "outcome", "channel"}}
+        with self._lock:
+            db = self._conn()
+            cursor = db.execute(
+                "INSERT OR IGNORE INTO usage_events(event_id,claim_id,event_type,occurred_at,metadata_json) "
+                "VALUES(?,?,?,?,?)",
+                (event_id, claim_id, event_type, stamp,
+                 json.dumps(payload, ensure_ascii=False, separators=(",", ":"))),
+            )
+            db.commit()
+            return cursor.rowcount > 0
+
+    def usage_stats(self, claim_id: str) -> tuple[int, str | None]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT COUNT(*) AS count, MAX(occurred_at) AS last_used FROM usage_events "
+                "WHERE claim_id=? AND event_type='agent_citation'", (claim_id,),
+            ).fetchone()
+        return int(row["count"] or 0), row["last_used"]
+
+    def _entry_map(self, paths: set[str]) -> dict[tuple[str, str], Any]:
+        entries: dict[tuple[str, str], Any] = {}
+        for path in paths:
+            try:
+                page = self.store.read(path)
+            except (OSError, ValueError):
+                continue
+            for entry in (*page.current, *page.history):
+                entries[(path, entry.id)] = entry
+        return entries
+
+    def _decorate_claim_rows(self, rows: list[dict[str, Any]], *, now: datetime,
+                             include_history: bool) -> list[dict[str, Any]]:
+        memory_rows = [row for row in rows if row.get("kind") != "raw"]
+        entries = self._entry_map({str(row.get("path") or "") for row in memory_rows})
+        try:
+            from .claim_resolution import is_current_claim
+        except ImportError:
+            is_current_claim = None
+        decorated: list[dict[str, Any]] = []
+        for row in rows:
+            if row.get("kind") == "raw":
+                decorated.append({**row, "layer": "claim", "claim_id": row.get("id")})
+                continue
+            path, claim_id = str(row.get("path") or ""), str(row.get("id") or "")
+            entry = entries.get((path, claim_id))
+            if entry is None:
+                continue
+            current = bool(is_current_claim(entry, now)) if is_current_claim else (
+                row.get("bucket") != "history" and not is_expired(entry, now)
+            )
+            if not current and not include_history:
+                continue
+            source_ref = getattr(entry, "source_ref", None)
+            if hasattr(source_ref, "to_dict"):
+                source_ref = source_ref.to_dict()
+            usage_count, last_used = self.usage_stats(claim_id)
+            decorated.append({
+                **row,
+                "claim_id": claim_id,
+                "source_level": getattr(entry, "source_level", "legacy_unknown") or "legacy_unknown",
+                "recorded_at": getattr(entry, "recorded_at", "") or entry.at or None,
+                "valid_from": getattr(entry, "valid_from", None),
+                "valid_to": getattr(entry, "valid_to", None),
+                "supersedes": list(getattr(entry, "supersedes", []) or []),
+                "retracts": list(getattr(entry, "retracts", []) or []),
+                "source_ref": source_ref,
+                "usage_count": usage_count,
+                "last_used": last_used,
+                "claim_current": current,
+                "claim_currentness": "m7" if is_current_claim else "legacy_bucket_fallback",
+                "rank_reasons": row.get("rank_reasons") or {"matched_terms": row.get("matched", [])},
+                "layer": "claim",
+            })
+        return decorated
+
+    def _expand_associations(self, query: str, seeds: list[dict[str, Any]], *, limit: int,
+                             kinds: tuple[str, ...], include_history: bool, now: datetime,
+                             exclude_paths: tuple[str, ...]) -> list[dict[str, Any]]:
+        try:
+            from .association import build_link_index, expand_one_hop, rank_associations
+        except ImportError:
+            return seeds
+        page_seeds = [
+            {"path": str(row.get("path") or ""), "id": row.get("claim_id"),
+             "source_ref": row.get("source_ref")}
+            for row in seeds if row.get("path") and row.get("kind") in ("fact", "dream", "episode")
+        ][:3]
+        if not page_seeds:
+            return seeds
+        try:
+            link_index = build_link_index(self.store)
+            linked = expand_one_hop(page_seeds, link_index, max(1, min(3, limit // 3 or 1)))
+            linked = rank_associations(page_seeds, linked)
+        except (OSError, ValueError, TypeError):
+            return seeds
+        exclude = tuple(set(exclude_paths) | {str(row.get("path") or "") for row in seeds})
+        additions: list[dict[str, Any]] = []
+        for association in linked:
+            page_path = str(association.get("page_path") or "")
+            if not page_path:
+                continue
+            candidates = self.search(
+                query, limit=2, kinds=kinds, include_history=include_history, now=now,
+                exclude_paths=exclude, include_paths=(page_path,), expand_associations=False,
+            )
+            for candidate in candidates:
+                candidate.update({
+                    "layer": "associated_claim",
+                    "association": {key: association.get(key) for key in (
+                        "via_page", "link_text", "seed_id", "seed_source_ref", "reason", "rank_reasons"
+                    )},
+                    "rank_reasons": {
+                        **(candidate.get("rank_reasons") or {}),
+                        "association": association.get("reason") or "explicit_wikilink_one_hop",
+                    },
+                })
+                additions.append(candidate)
+        by_id = {str(row.get("id")): row for row in seeds}
+        for row in additions:
+            by_id.setdefault(str(row.get("id")), row)
+        combined = list(by_id.values())
+        combined.sort(key=lambda row: float(row.get("score", 0)), reverse=True)
+        return combined[:limit]
 
     def facts(self, paths: list[str] | None = None) -> list[dict[str, Any]]:
         with self._lock:
