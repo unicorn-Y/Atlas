@@ -517,6 +517,10 @@ class AtlasKernel:
             pretool_blocked: set[str] = set()
             tool_hook_context: dict[str, list[str]] = {}
             bad_tool_args: dict[str, str] = {}
+            # The tool node already reports each call's real output on event_queue;
+            # those ids get no second, output-less tool_result from the batch end.
+            tool_started_at: dict[str, float] = {}
+            forwarded_results: set[str] = set()
 
             async def dispatch_tool(call_id: str, name: str, args: dict[str, Any]) -> Any:
                 if call_id in bad_tool_args:
@@ -618,6 +622,7 @@ class AtlasKernel:
                         proxy_runtime._preapproved_tool_call_ids.add(call_id)
                         pretool_blocked.discard(call_id)
                 active_call_ids.add(call_id)
+                tool_started_at[call_id] = time.monotonic()
                 record("tool_start", tool_call_id=call_id, name=name, arguments=tool_args)
                 return await self._dispatch(
                     agent, proxy_runtime, call_id, name, tool_args, event_queue,
@@ -1474,6 +1479,10 @@ class AtlasKernel:
                             "duration_ms": receipt["duration_ms"],
                         })
                         stuck.observe_tool(result.name, tool_args, result.output, is_error=is_error)
+                        tool_started_at.pop(result.call_id, None)
+                        if result.call_id in forwarded_results:
+                            forwarded_results.discard(result.call_id)
+                            continue
                         result_events.append(emit(
                             "tool_result", id=result.call_id, name=result.name,
                             content=[{"type": "text", "text": _tool_result_event_text(result)}],
@@ -1497,6 +1506,14 @@ class AtlasKernel:
                                     and queued_event.get("type") == "approval_required"
                                     and state.phase == RunPhase.TOOLS):
                                 transition(RunPhase.WAITING_APPROVAL)
+                            if (isinstance(queued_event, dict)
+                                    and queued_event.get("type") == "tool_result"
+                                    and str(queued_event.get("id")) in open_call_ids
+                                    and str(queued_event.get("id")) not in forwarded_results):
+                                queued_event = _with_execution(
+                                    queued_event, tool_started_at.get(str(queued_event["id"])),
+                                )
+                                forwarded_results.add(str(queued_event["id"]))
                             yield queued_event
                             queue_get = asyncio.create_task(event_queue.get())
                     results: list[ToolExecutionResult] = await tool_task
@@ -2420,6 +2437,17 @@ def _tool_output_text(output: Any) -> str:
         if "data" in output:
             return json.dumps(output["data"], ensure_ascii=False, default=str)
     return str(output or "")
+
+
+def _with_execution(event: dict[str, Any], started_at: float | None) -> dict[str, Any]:
+    """Add the receipt fields (state, duration) to the tool node's own result event."""
+    data = dict(event["data"]) if isinstance(event.get("data"), dict) else {}
+    data.setdefault("state", str(data.get("outcome") or (
+        "failed" if event.get("is_error") else "completed"
+    )))
+    if started_at is not None:
+        data.setdefault("duration_ms", int((time.monotonic() - started_at) * 1000))
+    return {**event, "data": data}
 
 
 def _tool_result_event_text(result: ToolExecutionResult) -> str:

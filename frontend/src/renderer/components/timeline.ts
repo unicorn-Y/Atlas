@@ -485,6 +485,8 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         forgetResolved();
         const execution = data.execution && typeof data.execution === 'object' ? data.execution as Record<string, unknown> : undefined;
         const key = String(data.tool_call_id || data.call_id || '');
+        // A repeated completion for a call that already finished belongs to that row; keep the first result.
+        if (key && byExecution.get(key) && byExecution.get(key)!.state !== 'running') break;
         let step = (key && byExecution.get(key)) || byExecution.get(`name:${String(data.name)}`);
         if (!step || step.state !== 'running') {
           const toolName = String(data.name ?? '工具');
