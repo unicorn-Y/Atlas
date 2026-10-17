@@ -488,6 +488,10 @@ class MemoryIndex:
         include_raw = "raw" in kinds
         results = merge_scores(keyword, vector, now=now,
                                limit=min(100000, max(400, limit)) if include_raw else limit)
+        from . import get_library
+        library = get_library()
+        if library:
+            results = [row for row in results if not library.store.source_tombstoned(str(row.get("ref") or ""))]
         if include_raw:
             from .sources import search_raw
 
@@ -537,7 +541,9 @@ class MemoryIndex:
 
             def stage(row: dict[str, Any], *, keyword: float = 0.0,
                       vector: float = 0.0, raw: bool = False) -> None:
-                if not eligible(row):
+                from . import get_library
+                library = get_library()
+                if not eligible(row) or (library and library.store.source_tombstoned(str(row.get("ref") or ""))):
                     return
                 db.execute(
                     "INSERT INTO temp.browse_candidates(id,path,kind,bucket,text,src,at,ref,until,quote,"

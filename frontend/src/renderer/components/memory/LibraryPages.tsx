@@ -74,13 +74,16 @@ function EntryRow({ entry, apiBaseUrl, onChanged, onToast, past = false }: {
   const forget = async () => {
     setBusy(true);
     try {
-      const report = await api<{ diary_pages: number; history: { rewritten: boolean; error?: string } }>(
+      const report = await api<{ diary_pages: number; source_excluded: boolean;
+        history: { rewritten: boolean; error?: string; reason?: string } }>(
         apiBaseUrl, '/api/memlib/forget', { method: 'POST', json: { id: entry.id } },
       );
       const history = report.history.error
         ? `历史记录没改成（${report.history.error}）`
-        : report.history.rewritten ? '历史记录也已改写' : '历史里本来就没有';
-      onToast(`已忘掉：页面、日记${report.diary_pages}页、${history}。没覆盖：原始聊天记录。`);
+        : report.history.reason ?? (report.history.rewritten ? '历史记录也已改写' : '历史里本来就没有');
+      onToast(report.source_excluded
+        ? `已停止将此来源用于记忆：页面、日记${report.diary_pages}页、${history}。原始聊天记录仍可手动查看。`
+        : `已移除派生记忆：页面、日记${report.diary_pages}页、${history}。没有精确来源 UID，来源排除未覆盖；原始聊天记录仍可手动查看。`);
       onChanged();
     } catch (exc) { onToast(exc instanceof Error ? exc.message : String(exc)); }
     finally { setBusy(false); }

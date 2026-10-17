@@ -348,6 +348,40 @@ class MemoryStore:
             for value in sorted(hashes):
                 handle.write(json.dumps({"h": value, "at": stamp, "why": reason}, ensure_ascii=False) + "\n")
 
+    def source_tombstoned(self, ref: str) -> bool:
+        if not ref:
+            return False
+        from .source_ref import SourceRef
+
+        try:
+            source = SourceRef.from_ref(ref)
+        except (TypeError, ValueError):
+            return False
+        path = self.root / TOMBSTONES
+        if not path.exists():
+            return False
+        identity = source.to_dict()
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            try:
+                if json.loads(raw).get("source") == identity:
+                    return True
+            except ValueError:
+                continue
+        return False
+
+    def add_source_tombstone(self, ref: str, reason: str) -> bool:
+        from .source_ref import SourceRef
+
+        try:
+            source = SourceRef.from_ref(ref)
+        except (TypeError, ValueError):
+            return False
+        stamp = datetime.now().astimezone().isoformat(timespec="seconds")
+        with (self.root / TOMBSTONES).open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"source": source.to_dict(), "at": stamp, "why": reason},
+                                    ensure_ascii=False) + "\n")
+        return True
+
     # ---------- git ----------
     def _git_available(self) -> bool:
         if self._git_ok is None:
