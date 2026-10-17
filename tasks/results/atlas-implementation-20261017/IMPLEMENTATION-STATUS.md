@@ -23,7 +23,7 @@ Status: `AWAITING_GPT6_REVIEW`
 - BLOCK-1 fixed: Dream writes from latest locked owner state, retaining concurrent additions while not restoring deleted/replaced stale lines.
 - BLOCK-2/BLOCK-3 fixed: per-directory updater backup/activation tracking, rollback after second bundle replacement or post-activation rebuild failure, and no-op update exit before candidate setup.
 - FIND-4 fixed: browse scans keyword/vector candidates in bounded batches into temporary SQLite staging, filters/deduplicates and counts all matches, and returns the requested page without a 100k candidate ceiling. Raw transcript search is offset-paged in 50-row batches. Score normalization, keyword rounding, vector clamping, and temporal decay follow the prior hybrid semantics.
-- FIND-5 partial: references use only an explicitly supplied, SessionDB-verified UID; repeated text cannot select a newer message, and absent UID yields missing precision. The normal user-turn append currently does not expose a UID at the scheduling entry point, so normal-path references remain missing until that source event is wired through.
+- FIND-5 fixed: the normal-path reference is now wired end to end. `KernelRequest` carries `message_uid`; `AtlasKernel.run` keeps the UID returned by the durable user-row insert (`append_session_message` already returned one — it was being discarded), also recovers the trailing durable row's UID when the caller already persisted it, and reports it on `hermes.result`; `run_phases` adopts it into `state.request.message_uid` and passes it to `schedule_turn`. References are still only built from a SessionDB-verified UID, so repeated text cannot select a newer message and an absent UID still yields missing precision (it is never guessed). Two turns of the same text ("继续" twice) now produce two distinct SourceRefs.
 - FIND-6 fixed at focused-test level: isolated real API/WebSocket Atlas executor test starts `clock.sleep`, sends `run.cancel`, and observes `run.cancelled` without a `tool.completed`. Test client ping is disabled only for this case because temporary server startup's skills scan can exceed the default websocket ping interval; the business timeout remains 90 seconds.
 - FIND-7 fixed: updater returns before candidate worktree/dependency/build setup when no remote commit is pending.
 
@@ -31,4 +31,4 @@ ATL-017 high-authority CDP/Computer Use behavior was preserved because no concre
 
 No files or real data under `D:\Atlas` were modified. One earlier memory test made a read-only SessionDB lookup for a synthetic nonexistent session ID; no matching session was found and no writes occurred. Subsequent memory checks used isolated data roots or monkeypatches.
 
-The independent web ChatGPT GPT-6 reviewer owns final acceptance. This status is not a PASS. FIND-5 remains explicitly partial.
+The independent web ChatGPT GPT-6 reviewer owns final acceptance. This status is not a PASS.

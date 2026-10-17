@@ -833,6 +833,11 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
                 continue
             await runtime.event_queue.put(event)
         final_text = final_result.get("final_response", "")
+        # FIND-5: the kernel mints the durable user row for this turn; carry its
+        # identity forward so the memory library cites the exact message instead
+        # of guessing by text. Empty when the kernel could not determine it —
+        # the library then records ``missing``, never a guessed ``exact``.
+        state.request.message_uid = str(final_result.get("user_message_uid") or "") or state.request.message_uid
         # A terminal provider failure (e.g. a non-retryable 404 for the wire
         # model) still returns a result — empty response, null usage. Surface
         # it as a run error so the engine reports run.failed and `atlas run`

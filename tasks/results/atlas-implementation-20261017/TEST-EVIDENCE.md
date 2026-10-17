@@ -2,6 +2,8 @@
 
 All results below are focused checks reported from the isolated implementation worktrees; broad unrelated suites were not run.
 
+Superseding note for FIND-5: the normal-path gap recorded in the earlier row is closed on this tip. The kernel now keeps the UID returned by the durable user-row insert and reports it on `hermes.result`, and the finalizer passes it to `schedule_turn`, so ordinary turns get an `exact` SourceRef.
+
 | Area | Result | Boundary |
 |---|---|---|
 | R1 auxiliary retry | `9 passed, 65 deselected`; diff check clean | No live provider/API request |
@@ -16,7 +18,8 @@ All results below are focused checks reported from the isolated implementation w
 | Context handoff | `2 passed`; frontend build passed; modified-file Ruff and diff checks passed | No automatic sending |
 | Rework BLOCK-1 Dream concurrency | Integration-tree targeted new/addition/deletion/replacement cases: `3 passed, 21 deselected`; worker RED reproduced deletion/replacement resurrection | Isolated pytest tmp paths |
 | Rework BLOCK-2/BLOCK-3/FIND-7 updater | Integration-tree `node --test scripts/atlas-update-transaction.test.mjs`: `3 passed`; `node --check` and `git diff --check` passed | Injects second bundle backup failure, post-activation rebuild failure, and no-op update |
-| Rework FIND-4/FIND-5 memory browse/source | Integration-tree `5 passed`; includes 100,005 candidates, filtered total/high offset, raw >50, explicit repeated-text UID and missing UID, score normalization under post-filters | Normal user-turn UID remains unavailable and therefore missing; no D:\Atlas data |
+| Rework FIND-4/FIND-5 memory browse/source | Integration-tree `5 passed`; includes 100,005 candidates, filtered total/high offset, raw >50, explicit repeated-text UID and missing UID, score normalization under post-filters | No D:\Atlas data |
+| FIND-5 UID chain wiring (normal path) | `test_memory_source_uid_chain.py` `7 passed` in 26.74s; `test_memory_source_uid_e2e.py` `4 passed` in 4.19s; combined with the existing source/audit/kernel files `21 passed` in 68.56s. E2E uses a real temp SessionDB: two appends of the same text return two distinct UIDs, the transcript exposes both in order, the trailing-row recovery branch adopts the current turn's UID (not the earlier identical one), the library stores `atlas://source/v1?...message_uid=<real uid>`, and an empty UID stores `missing` with an empty ref | Temp `engine` dir only; `atlas.config.DATA_ROOT` monkeypatched to its parent so the real SessionDB lookup runs |
 | Rework FIND-6 full Stop path | Integration-tree targeted `test_api_stop_cancels_slow_atlas_kernel_tool`: `1 passed` in 47.12s; existing test file had worker run `4 passed` | One initial run with default WebSocket ping timed out during ~36s test-server skills startup before lifecycle events; setting test-only `ping_interval=None` stabilized it while preserving 90s business timeout |
 
 The broad `core/tests/test_kernel_tool_error_regressions.py` attempt with system Python first lacked the declared `json_repair` dependency. The relevant regression passed under the project interpreter. A later full-file attempt stalled and was stopped; it is not counted as passing. No global or unrelated suite was run for this rework.

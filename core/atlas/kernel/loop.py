@@ -107,6 +107,10 @@ class KernelRequest:
     initial_usage_rows: list[dict[str, Any]] = field(default_factory=list)
     usage_budget: Any = None
     runtime_config: dict[str, Any] = field(default_factory=dict)
+    # FIND-5: the durable id of this turn's user row, filled by the finalizer from
+    # the kernel's ``hermes.result``. Empty means "unknown", which the memory
+    # library records as ``missing`` rather than guessing by message text.
+    message_uid: str = ""
 
 
 def _message_text(message: dict[str, Any]) -> str:
@@ -345,13 +349,19 @@ class AtlasKernel:
             if state.phase != phase:
                 state.transition(phase)
 
-        def persist(role: str, content: Any, metadata: dict[str, Any] | None = None) -> None:
+        # FIND-5: the durable id of this turn's user row. Minted by the insert
+        # that follows (kernel-side) and returned on ``hermes.result`` so the
+        # memory library can build an exact SourceRef instead of guessing
+        # "latest user row whose text matches".
+        user_message_uid = ""
+
+        def persist(role: str, content: Any, metadata: dict[str, Any] | None = None) -> str:
             from atlas.engine.session_sync import append_session_message
 
-            append_session_message(self.data_dir / "engine", session_id, role, content, metadata)
+            return append_session_message(self.data_dir / "engine", session_id, role, content, metadata)
 
-        async def persist_async(role: str, content: Any, metadata: dict[str, Any] | None = None) -> None:
-            await asyncio.to_thread(persist, role, content, metadata)
+        async def persist_async(role: str, content: Any, metadata: dict[str, Any] | None = None) -> str:
+            return await asyncio.to_thread(persist, role, content, metadata)
 
         try:
             record("run_start", model=selected_model, session_id=session_id,
@@ -378,11 +388,26 @@ class AtlasKernel:
                 log.exception("kernel.session_read_failed", extra={"session_id": session_id})
                 canonical_rows = []
             history = _session_history(canonical_rows) if canonical_rows else copy.deepcopy(request.history)
-            if not any(m.get("role") == "user" and _message_text(m) == request.message for m in history[-3:]):
-                await persist_async("user", request.message, {"kernel_run_id": run_id})
+            # Only the trailing row can be "this turn's user row already durable" (a caller that
+            # inserted it before the run). Scanning further back would swallow a repeated user
+            # message — two turns of "继续" in a row — and leave the second one unpersisted, which
+            # also makes its SourceRef point at the first turn.
+            pending_user = bool(history) and history[-1].get("role") == "user" \
+                and _message_text(history[-1]) == request.message
+            if not pending_user:
+                user_message_uid = await persist_async("user", request.message, {"kernel_run_id": run_id})
                 history.append({"role": "user", "content": request.user_content or request.message})
             elif request.user_content is not None and history and history[-1].get("role") == "user":
                 history[-1]["content"] = request.user_content
+            if not user_message_uid and pending_user:
+                # The row was already durable when this run started (the caller persisted it).
+                # Recover its identity from the transcript instead of letting the memory library
+                # guess by text; empty means the library records ``missing``, never a guess.
+                user_message_uid = next((
+                    str(row.get("message_uid") or "") for row in reversed(canonical_rows or [])
+                    if row.get("role") == "user" and row.get("message_uid")
+                    and _message_text(row) == request.message
+                ), "")
             durable_history = copy.deepcopy(history)
 
             started = started_call_ids(canonical_rows, run_log_root)
@@ -1627,7 +1652,8 @@ class AtlasKernel:
                    duration_ms=elapsed, total_input_tokens=sum(int(row.get("input_tokens") or 0) for row in usage_rows),
                    total_output_tokens=sum(int(row.get("output_tokens") or 0) for row in usage_rows))
             yield emit("hermes.result", result={"final_response": final_response,
-                                                "usage": usage_rows})
+                                                "usage": usage_rows,
+                                                "user_message_uid": user_message_uid})
         except asyncio.CancelledError:
             if state.phase not in {RunPhase.DONE, RunPhase.FAILED, RunPhase.INTERRUPTED}:
                 transition(RunPhase.INTERRUPTED)
