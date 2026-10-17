@@ -2878,6 +2878,10 @@ async def _execute_run(
                 await emit("run.failed", {
                     "category": category,
                     "detail": event.get("detail", "Unknown error"),
+                    **{key: event[key] for key in (
+                        "model_id", "provider", "status", "error_category", "raw_detail", "request_id",
+                        "attempts", "manual_retry_allowed", "retry_after_s",
+                    ) if key in event},
                 })
                 return
 

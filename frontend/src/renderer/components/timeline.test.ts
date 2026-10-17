@@ -23,6 +23,17 @@ describe('describeTool', () => {
 });
 
 describe('buildTimeline', () => {
+  it('retains structured model failure details for the error card', () => {
+    const [failure] = buildTimeline([ev('run.failed', {
+      category: 'model', error_category: 'overloaded', model_id: 'model-a', provider: 'provider-a', status: 503,
+      raw_detail: 'upstream unavailable', request_id: 'req-1', attempts: 3,
+      manual_retry_allowed: true, detail: '模型请求失败',
+    })]);
+    expect(failure).toMatchObject({ kind: 'failed', category: 'model', errorCategory: 'overloaded', modelId: 'model-a',
+      provider: 'provider-a', status: 503, rawDetail: 'upstream unavailable', requestId: 'req-1',
+      attempts: 3, manualRetryAllowed: true });
+  });
+
   it('pairs tool start and finish by tool_call_id and never shows bookkeeping events', () => {
     seq = 0;
     const items = buildTimeline([

@@ -298,7 +298,11 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
     if request.model and not selected_config:
         yield {
             "type": "error", "category": "model",
-            "detail": f"Model selection failed: Unknown model: {request.model}",
+            "detail": "找不到所选模型。已保留本轮已完成内容。",
+            "error_category": "model_not_found",
+            "raw_detail": f"Unknown model: {request.model}",
+            "model_id": request.model, "attempts": 0,
+            "manual_retry_allowed": True,
         }
         state.abort = True
         return
@@ -308,14 +312,16 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
     if isinstance(agent._model_mgr, ModelManager):
         credential_error = agent._model_mgr.missing_model_credentials(runtime.model)
         if credential_error:
-            yield {"type": "error", "category": "model", "detail": credential_error,
-                   "code": "MODEL_CREDENTIALS_MISSING"}
+            yield {"type": "error", "category": "model",
+                   "detail": "模型凭据缺失或无效。已保留本轮已完成内容。",
+                   "error_category": "authentication", "raw_detail": credential_error,
+                   "code": "MODEL_CREDENTIALS_MISSING", "model_id": runtime.model,
+                   "provider": selected_config.get("provider", ""), "attempts": 0,
+                   "manual_retry_allowed": True}
             state.abort = True
             return
-    runtime.fallback_models = list(
-        selected_config.get("fallback")
-        or _agent.get_config().get("models.fallback", []) or []
-    )
+    # A run remains pinned to its selected model; fallbacks require a user choice.
+    runtime.fallback_models = []
     state.litellm_model = str(selected_config.get("litellm_model") or runtime.model)
 
     log.info(

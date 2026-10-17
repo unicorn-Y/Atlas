@@ -233,6 +233,22 @@ describe('follow-up queue', () => {
     expect(state.queue['c-done'].map((item) => item.content)).toEqual(['second follow-up']);
     expect(state.runs.filter((run) => run.conversationId === 'c-done')).toHaveLength(2);
   });
+
+  it('pauses queued follow-ups after a model failure and keeps them queued', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 } as Response));
+    await useAtlasStore.getState().initialize();
+    useAtlasStore.setState({ activeConversationId: 'c-model-fail', activeRunId: 'r-model-fail',
+      conversations: [], runs: [running('r-model-fail', 'c-model-fail')], queue: {}, queuePaused: {} });
+    await useAtlasStore.getState().sendMessage('continue after recovery');
+
+    useAtlasStore.getState().appendEvent({ id: 'e-model-fail', runId: 'r-model-fail', sequence: 2,
+      type: 'run.failed', timestamp: new Date().toISOString(), data: { category: 'model', attempts: 3 } });
+
+    const state = useAtlasStore.getState();
+    expect(state.queuePaused['c-model-fail']).toBe(true);
+    expect(state.queue['c-model-fail'].map((item) => item.content)).toEqual(['continue after recovery']);
+    expect(state.runs.filter((run) => run.conversationId === 'c-model-fail')).toHaveLength(1);
+  });
 });
 
 describe('steering a running run', () => {

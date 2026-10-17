@@ -375,21 +375,10 @@ class ModelRouter:
         self, model_id: str, purpose: str, messages: list[dict[str, Any]],
         fallbacks: list[str] | None = None, **kwargs: Any,
     ) -> CompletionResult:
-        candidates = [model_id, *(fallbacks or [])]
-        for alt in ("deepseek-v4.1-flash", "deepseek-v3"):
-            if alt not in candidates:
-                candidates.append(alt)
-        last_error = None
-        for candidate in candidates:
-            try:
-                route = await self.resolve(candidate, purpose)
-                return await self.complete(route, messages, **kwargs)
-            except Exception as exc:
-                last_error = exc
-                continue
-        if last_error is not None:
-            raise last_error
-        raise RuntimeError("No model candidates available")
+        # ``fallbacks`` is accepted for compatibility but never used to silently
+        # switch models. Each auxiliary operation has its own explicitly chosen id.
+        route = await self.resolve(model_id, purpose)
+        return await self.complete(route, messages, **kwargs)
 
     @staticmethod
     def hermes_agent_kwargs(route: RouteSpec) -> dict[str, Any]:
@@ -649,6 +638,27 @@ def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
     return data
 
 
+_ERROR_BODY_MAX_BYTES = 16 * 1024
+
+
+def _raise_for_status_with_body(response: httpx.Response) -> None:
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        body = bytearray()
+        try:
+            for chunk in response.iter_bytes(chunk_size=4096):
+                body.extend(chunk[:_ERROR_BODY_MAX_BYTES - len(body)])
+                if len(body) >= _ERROR_BODY_MAX_BYTES:
+                    break
+        except Exception:
+            pass
+        if body:
+            encoding = response.encoding or "utf-8"
+            setattr(exc, "_atlas_response_body", bytes(body).decode(encoding, errors="replace"))
+        raise
+
+
 def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: dict[str, Any], network: ModelNetworkSettings):
     timeout = kwargs.get("timeout") or httpx.Timeout(connect=15.0, read=None, write=30.0, pool=10.0)
     url, headers, payload = _request_details(route, messages, {**kwargs, "stream": True})
@@ -656,7 +666,7 @@ def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
         payload["stream"] = True
     with _client(route, network, timeout) as client:
         with client.stream("POST", url, headers=headers, json=payload) as response:
-            response.raise_for_status()
+            _raise_for_status_with_body(response)
             if route.api_mode == "anthropic_messages":
                 tool_indexes: dict[int, int] = {}
                 next_tool_index = 0
