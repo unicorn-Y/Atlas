@@ -427,7 +427,11 @@ async def test_dream_does_not_checkpoint_unqualified_episode_and_rechecks_late_i
     episode.text = "Project 项目明确提及，补充为可归类经历"
     library.store.write(Page(path="经历/2026-10-15.md", title="episodes", current=[episode]))
     async def write(*_args, **_kwargs):
-        return ({"现在状态": ["已识别"], "定下的决定": [], "没做完": [], "来龙去脉": []}, "")
+        # Mirror the real helper: report the page as it looked when the request went out,
+        # so the post-model staleness check compares like with like.
+        project_path = tmp_path / "事" / "Project.md"
+        snapshot = project_path.read_text(encoding="utf-8") if project_path.exists() else ""
+        return ({"现在状态": ["已识别"], "定下的决定": [], "没做完": [], "来龙去脉": []}, snapshot)
     monkeypatch.setattr(dream, "_write_project", write)
     report = await dream.run_dream(library, model_mgr=object())
     assert report["ok"] is True
@@ -547,6 +551,85 @@ async def test_dream_keeps_replacement_and_drops_replaced_owner_line(tmp_path, m
     assert report["ok"] is True
     assert "替换后的决定" in saved
     assert "待替换决定" not in saved
+
+
+@pytest.mark.asyncio
+async def test_dream_discards_model_answer_that_repeats_a_line_deleted_while_it_ran(tmp_path, monkeypatch):
+    """BLOCK-5: a stale model answer must not resurrect a line the owner deleted.
+
+    The model is handed the page as it looked before its (slow) call; the owner deletes a
+    line meanwhile; the model echoes that dead line back as a fresh ``整理`` summary. The
+    snapshot changed, so the whole answer is discarded and the entries stay unprocessed.
+    """
+    from atlas.memory.library import dream
+
+    monkeypatch.setattr("atlas.memory.library.embed._load_model", lambda: None)
+    library = MemoryLibrary(tmp_path)
+    library.ready()
+    now = datetime.now().astimezone()
+    episode = Entry(id="stale-episode", text="Atlas 项目明确提及", src="经历",
+                    at=now.isoformat(), trigger=["Atlas"])
+    library.store.write(Page(path=f"经历/{now.date().isoformat()}.md", title="episodes",
+                             current=[episode]))
+    project_path = tmp_path / "事" / "Atlas.md"
+    doomed = Entry(text="待删除旧决定", src="你改的").line()
+    project_path.parent.mkdir(parents=True, exist_ok=True)
+    old_snapshot = f"# Atlas\n\n## 现在状态\n{doomed}\n"
+    project_path.write_text(old_snapshot, encoding="utf-8")
+    state = tmp_path / ".dream-state.json"
+    state.write_text(json.dumps({"checkpoint": "2000-01-01T00:00:00+00:00"}), encoding="utf-8")
+
+    async def write(*_args, **_kwargs):
+        # The owner deletes the line while the model is thinking.
+        project_path.write_text("# Atlas\n\n## 现在状态\n", encoding="utf-8")
+        # The model answers from the stale page and repeats the deleted line verbatim.
+        return ({"现在状态": ["待删除旧决定", "别的摘要"], "定下的决定": [],
+                 "没做完": [], "来龙去脉": []}, old_snapshot)
+
+    monkeypatch.setattr(dream, "_write_project", write)
+    report = await dream.run_dream(library, model_mgr=object())
+
+    assert report["ok"] is True
+    assert report["projects"] == [], "a stale answer must not be written"
+    assert "Atlas" in report["skipped"]
+    saved = project_path.read_text(encoding="utf-8")
+    assert "待删除旧决定" not in saved, "the deleted line must not come back as a Dream summary"
+    assert "别的摘要" not in saved
+    persisted = json.loads(state.read_text(encoding="utf-8"))
+    assert not any("stale-episode" in item for item in persisted.get("processed_ids", [])), \
+        "skipped entries must stay pending for the next run"
+
+
+@pytest.mark.asyncio
+async def test_dream_still_writes_when_the_page_did_not_change(tmp_path, monkeypatch):
+    """The unchanged-snapshot path must keep consuming entries (no regression)."""
+    from atlas.memory.library import dream
+
+    monkeypatch.setattr("atlas.memory.library.embed._load_model", lambda: None)
+    library = MemoryLibrary(tmp_path)
+    library.ready()
+    now = datetime.now().astimezone()
+    episode = Entry(id="fresh-episode", text="Atlas 项目明确提及", src="经历",
+                    at=now.isoformat(), trigger=["Atlas"])
+    library.store.write(Page(path=f"经历/{now.date().isoformat()}.md", title="episodes",
+                             current=[episode]))
+    project_path = tmp_path / "事" / "Atlas.md"
+    project_path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot = "# Atlas\n\n## 现在状态\n"
+    project_path.write_text(snapshot, encoding="utf-8")
+    state = tmp_path / ".dream-state.json"
+    state.write_text(json.dumps({"checkpoint": "2000-01-01T00:00:00+00:00"}), encoding="utf-8")
+
+    async def write(*_args, **_kwargs):
+        return ({"现在状态": ["新摘要"], "定下的决定": [], "没做完": [], "来龙去脉": []}, snapshot)
+
+    monkeypatch.setattr(dream, "_write_project", write)
+    report = await dream.run_dream(library, model_mgr=object())
+
+    assert report["ok"] is True and report["projects"] == ["Atlas"]
+    assert "新摘要" in project_path.read_text(encoding="utf-8")
+    persisted = json.loads(state.read_text(encoding="utf-8"))
+    assert "Atlas\x1ffresh-episode" in persisted["processed_ids"]
 
 
 @pytest.mark.asyncio

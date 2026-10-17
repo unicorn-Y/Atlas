@@ -171,15 +171,23 @@ async def run_dream(library: Any, model_mgr: Any = None) -> dict[str, Any]:
             sections, existing = await _write_project(library, model_mgr, name, entries)
             prepared[name] = (sections, existing, entries)
         written: list[str] = []
+        skipped: list[str] = []
         added = changed = 0
         with library.store.lock:
-            for name, (sections, _existing, entries) in prepared.items():
-                # Model completion may take long enough for a user to edit the page.
-                # The current page is authoritative: carrying lines from the old
-                # snapshot would resurrect owner edits that were deleted or replaced.
+            for name, (sections, existing, entries) in prepared.items():
+                # BLOCK-5: the model answered from ``existing``, the page as it looked when the
+                # request went out. Model completion may take long enough for the owner to edit
+                # or delete lines, so a changed page invalidates the whole answer — writing it
+                # would resurrect deleted lines as if they were fresh ``整理`` summaries. The
+                # minimal safe rule: adopt nothing from a stale snapshot; leave the entries
+                # unprocessed so the next run re-consolidates against the current page.
                 path = f"{THINGS}/{safe_name(name)}.md"
                 disk_path = library.store.root / path
                 current = disk_path.read_text(encoding="utf-8") if disk_path.exists() else ""
+                if current != existing:
+                    log.info("memory.library.dream_skipped_page_changed", project=name)
+                    skipped.append(name)
+                    continue
                 source_lines = _old_owner_lines(current)
                 refs = ",".join(dict.fromkeys(e.id for e in entries))
                 output = [f"# {name}"]
@@ -217,11 +225,15 @@ async def run_dream(library: Any, model_mgr: Any = None) -> dict[str, Any]:
                                 )
                             )
                             library.store.write(page)
-            library.store.commit("整理：" + "、".join(written))
+            if written:
+                library.store.commit("整理：" + "、".join(written))
         if prepared:
+            # Only projects whose page was still the model's snapshot may consume their
+            # entries; a skipped project keeps them pending for the next run (BLOCK-5).
             processed_ids.update(
                 f"{name}\x1f{entry.id}"
                 for name, (_sections, _existing, entries) in prepared.items()
+                if name not in skipped
                 for entry in entries
             )
             state_path.write_text(
@@ -230,7 +242,8 @@ async def run_dream(library: Any, model_mgr: Any = None) -> dict[str, Any]:
                 encoding="utf-8",
             )
         library.index.sync()
-        return {"ok": True, "projects": written, "added": added, "changed": changed, "error": None}
+        return {"ok": True, "projects": written, "skipped": skipped,
+                "added": added, "changed": changed, "error": None}
     except Exception as exc:  # noqa: BLE001 - any failed phase must leave the checkpoint unchanged.
         log.warning("memory.library.dream_failed", error=str(exc), error_type=type(exc).__name__)
         return {"ok": False, "projects": [], "added": 0, "changed": 0, "error": str(exc)}

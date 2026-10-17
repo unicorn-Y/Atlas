@@ -144,6 +144,41 @@ def _session_history(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return messages
 
 
+def _reusable_user_uid(
+    history: list[dict[str, Any]], message: str, run_id: str, request_uid: str = "",
+) -> str:
+    """Return the uid of a *provably current-turn* durable user row, else ``""``.
+
+    BLOCK-4: role+text equality never proves ownership. A turn that died after its user
+    row became durable leaves an identical trailer at the end of the transcript; adopting
+    it would make the new turn's memories point at the interrupted turn's message. Reuse
+    therefore requires positive evidence that the trailing row belongs to *this* run: the
+    caller handed us its uid, or the row carries this run's ``kernel_run_id`` (or
+    ``source_run_id``, the external-import writer's equivalent). Anything else is treated
+    as an ordinary new turn, which appends its own durable row.
+    """
+    if not history:
+        return ""
+    tail = history[-1]
+    if not isinstance(tail, dict) or tail.get("role") != "user":
+        return ""
+    if _message_text(tail) != message:
+        return ""
+    uid = str(tail.get("message_uid") or "")
+    if not uid:
+        return ""
+    metadata = tail.get("display_metadata")
+    if not isinstance(metadata, dict):
+        candidate = tail.get("metadata")
+        metadata = candidate if isinstance(candidate, dict) else {}
+    owner_run = str(metadata.get("kernel_run_id") or metadata.get("source_run_id") or "")
+    if request_uid and uid == str(request_uid):
+        return uid
+    if owner_run and owner_run == str(run_id):
+        return uid
+    return ""
+
+
 def _unverified_code_paths(runtime: Any) -> list[str]:
     if getattr(runtime, "verification_passed", False):
         return []
@@ -388,26 +423,24 @@ class AtlasKernel:
                 log.exception("kernel.session_read_failed", extra={"session_id": session_id})
                 canonical_rows = []
             history = _session_history(canonical_rows) if canonical_rows else copy.deepcopy(request.history)
-            # Only the trailing row can be "this turn's user row already durable" (a caller that
-            # inserted it before the run). Scanning further back would swallow a repeated user
-            # message — two turns of "继续" in a row — and leave the second one unpersisted, which
-            # also makes its SourceRef point at the first turn.
-            pending_user = bool(history) and history[-1].get("role") == "user" \
-                and _message_text(history[-1]) == request.message
-            if not pending_user:
+            # BLOCK-4: only a trailing user row that provably belongs to *this* run may be
+            # adopted in place of a fresh insert. Role+text equality is not proof — an
+            # interrupted turn leaves an identical trailer behind, and reusing its uid would
+            # stamp the new turn's memories with the dead turn's message identity.
+            adopted_uid = _reusable_user_uid(
+                history, request.message, run_id, str(getattr(request, "message_uid", "") or ""),
+            )
+            if not adopted_uid:
                 user_message_uid = await persist_async("user", request.message, {"kernel_run_id": run_id})
                 history.append({"role": "user", "content": request.user_content or request.message})
             elif request.user_content is not None and history and history[-1].get("role") == "user":
                 history[-1]["content"] = request.user_content
-            if not user_message_uid and pending_user:
-                # The row was already durable when this run started (the caller persisted it).
-                # Recover its identity from the transcript instead of letting the memory library
-                # guess by text; empty means the library records ``missing``, never a guess.
-                user_message_uid = next((
-                    str(row.get("message_uid") or "") for row in reversed(canonical_rows or [])
-                    if row.get("role") == "user" and row.get("message_uid")
-                    and _message_text(row) == request.message
-                ), "")
+            if not user_message_uid and adopted_uid:
+                # The row was already durable when this run started, and it carries this
+                # run's own marker (the caller persisted it with our kernel_run_id or gave
+                # us its uid). An unattributable trailer means "unknown", which the memory
+                # library records as ``missing`` rather than guessing.
+                user_message_uid = adopted_uid
             durable_history = copy.deepcopy(history)
 
             started = started_call_ids(canonical_rows, run_log_root)
