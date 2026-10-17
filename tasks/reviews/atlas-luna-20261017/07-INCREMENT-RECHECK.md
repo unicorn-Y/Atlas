@@ -146,3 +146,29 @@
 - `origin/fix/atlas-model-retry-policy-20261017` @ `e2599784` 已确认在远端，与 `origin/ui-redesign` 的关系是 **1 个 commit**（`ui-redesign..W1` 仅 `e2599784`），无其他分支混入。
 - **一处不纯**：该 commit 里包含 `tasks/reviews/atlas-luna-20261017/06-MODEL-RETRY-FIX.md`（73 行，W1 作者自己的工作说明，mtime 15:24，早于审查分支首提交 16:32，**不是我污染的**）。按「代码分支只放代码」的口径，它更适合落在审查分支；但该 commit 已推送且可能被验收引用，改写历史会破坏 SHA 可追溯性。**本轮不动它**，在此登记，交由 GPT-6 决定是否要求 W1 后续 commit 移除。
 - 审查分支 `origin/review/atlas-luna-global-audit-20261017` @ `a2e548e2` 只包含 `tasks/reviews/atlas-luna-20261017/` 下的产物，无 `core/` 或 `frontend/` 改动（`git diff --stat origin/ui-redesign...HEAD` 仅审查目录）。
+
+## §6 子代理增量审计：`task/hermes-atlas-implementation-20261017`（5 项）
+
+独立子代理（gemini-3.8-flash-medium）复核该分支，产出 `INCR-001` ～ `INCR-005`，JSON 存 `evidence/INCR-TASK-HERMES-IMPL.json`。
+
+**分支谱系（主执行者复核确认）**：
+```
+0b1ba411 (ui-redesign 基线)
+  └─ f69f8b21  docs(review): 全局审查交付 00-06        ← 本审查分支的 commit
+      └─ 87aed27c  docs(review): 校正 absorbed 计数
+          └─ 56e2b7b3  docs(taskbook): authorize parallel Atlas bug fixes   ← 该分支 tip
+```
+`git rev-list --left-right --count 0b1ba411...该分支` = `0 3`，即 **behind 0 / ahead 3，未被基线吸收**。
+**关键**：`f69f8b21`、`87aed27c` 是本审查分支的提交，说明该分支是在**审查产物之上**追加了一份任务书，而非独立施工线。
+
+| ID | 优先级 | 结论 | 证据 |
+|---|---|---|---|
+| INCR-001 | P1 | 任务书自称「立刻动代码、必须交真实代码」，**实际源码改动 0 行** | `git diff --stat 0b1ba411 56e2b7b3 -- . ":(exclude)tasks"` 为空 |
+| INCR-002 | P1 | 强制交付目录 `tasks/results/atlas-implementation-20261017/` **全量缺失** | `git ls-tree 56e2b7b3 tasks/results/` 无此项 |
+| INCR-003 | P1 | 规划的 ATL-001～ATL-021 共 21 项修复**无一产生代码** | `core/atlas/kernel/`、`models/router.py`、`memory/` 在该分支无 commit 触碰 |
+| INCR-004 | P2 | 宣称从 14 个独有分支选择性吸收，**未落地、无 router/前端接线** | 任务书 65-83 行 vs 实际零吸收 |
+| INCR-005 | P2 | 冗余携带 32 份审查文档（2 万行），与本审查分支重复 | `git ls-tree -r 该分支 tasks/reviews/atlas-luna-20261017` = 32 文件 |
+
+**定性**：该分支是**授权/调度文档分支**，不是实现分支。上述 5 项均为「声称做了但代码没有」的证据型差距，不构成对 W1 的影响，也不改变总账 25 项——它们描述的是"另一条线没开工"，与本轮 Atlas 代码缺陷是两回事。**不擅自施工**，仅登记。
+
+> 附注：INCR-005 的"重复"是**正常且必要**的——分支既然长在审查产物之上，携带它们是谱系结果，不是冗余错误。真正值得指出的是"继承了审查结论却一条都没修"。

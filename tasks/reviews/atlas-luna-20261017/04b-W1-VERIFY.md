@@ -74,3 +74,34 @@ PYTHONPATH="$PWD/core" /d/Atlas/core/.venv/Scripts/python.exe -m pytest \
 - 未做真实 provider 故障注入（不烧 token）。第 7 条的 UI 呈现未截图肉眼验收，仅代码链路核对。
 - 前端 `npm run typecheck` 未跑（W1 分支只改 4 个 ts/tsx 文件，测试已在 W1 自带用例覆盖）。
 - 运行版 `ModelCallError` 缺 `attempts` 字段属**产品缺陷证据**；脚本已改为 `getattr` 读该字段，使条目 2 的判定回到「请求次数」这一主信号，不再因缺字段抛异常而伪装成失败。
+
+## § 独立第二方复验（真实 socket 网关，非 mock）
+
+由独立子代理另建一套 **真 HTTP 服务**（`ThreadingHTTPServer` 监听 localhost，真 socket 收发）驱动 `complete_stream()`，与本文件的 `FakeGateway`(纯对象桩) 是两条互不依赖的实现。主执行者已亲自复现：
+
+```bash
+cd D:/Temp/luna-audit-20261017/verify_w1
+PYTHONPATH="D:/atlas-luna-w1-20261017/core" D:/Atlas/core/.venv/Scripts/python.exe \
+  -m pytest test_independent_model_retry.py -p no:cacheprovider --basetemp=/d/Temp/pt-w1verify -q
+# LOADED: D:\atlas-luna-w1-20261017\core\atlas\kernel\model_call.py
+# 9 passed in 7.67s
+```
+
+**结果：W1 9/9 PASS，`deviation_found: false`**，7 条规格逐条命中，与本文件 § 上表的请求计数完全一致（2 / 3 / 1 / 3 / 1 / 1 / 1）。
+
+两条额外代码事实（该复验顺带确认）：
+- `max_retries` 在 `complete_stream` 入口被 `min(2, max_retries)` 硬锁，**无任何绕行路径**：`unbounded_connection_retries` 不突破、`retry_watchdog` 不突破、凭据池无内部重试。
+- `run_phases.py` 显式把 `fallback_models` 置 `[]`；前端 `useAtlasStore` 收到 `category==='model'` 失败事件时置 `queuePaused[conversationId]=true`，`dispatchQueue` 直接 return，**队列不自动续派、内容完整保留**。
+
+### 这套测试的适用边界（避免误读）
+
+同一套测试打在**运行版基线**上是 `9 failed`，但失败原因是 `AttributeError: module 'atlas.kernel.model_call' has no attribute '_wait_for_retry'` ——即**W1 独有的内部函数还不存在**，属于"接口不兼容"而非"行为不符"。
+
+所以两套测试的分工必须讲清：
+| 套件 | 性质 | 能证明什么 |
+|---|---|---|
+| 本文件 `verify_w1.py`（FakeGateway） | 同一套断言分别跑 W1 与基线 | **逐项行为差异**（11 vs 3 次请求、84 次、`duplicate` 文本），是"改了什么"的证据 |
+| `test_independent_model_retry.py`（真 socket） | 只针对 W1，走真实 HTTP 栈 | **W1 在真实传输层也成立**，排除 mock 掩盖，是"改动可信"的证据 |
+| 基线跑真 socket 套件 | 9 failed by AttributeError | **不能**当作"基线行为差"的证据 |
+
+两套结论一致、互不替代，均为 9/9。

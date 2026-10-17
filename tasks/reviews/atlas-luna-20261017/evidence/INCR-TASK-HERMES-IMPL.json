@@ -1,0 +1,55 @@
+{
+  "branch": "origin/task/hermes-atlas-implementation-20261017",
+  "merge_base": "0b1ba4114e25643369c95bfac85d37563788444f",
+  "ahead": 3,
+  "behind": 0,
+  "absorbed": false,
+  "summary": "分支 origin/task/hermes-atlas-implementation-20261017 相对基线 0b1ba411 (ui-redesign) ahead 3, behind 0，未被吸收。该分支本质为任务授权书分支，3 个 commit 均为文档类提交，Atlas 源码改动为 0 行，未实际落地任何缺陷修复与功能接线。",
+  "issues": [
+    {
+      "id": "INCR-001",
+      "title": "任务书声明「立刻动代码、必须交真实代码」但实际代码改动为 0",
+      "priority": "P1",
+      "evidence": "origin/task/hermes-atlas-implementation-20261017@56e2b7b3 tasks/taskbooks/ATLAS-HERMES-IMPLEMENTATION-20261017.md:3-8,95-103；git diff --stat 0b1ba411 56e2b7b3 -- . \":(exclude)tasks\" 结果为空",
+      "classification": "功能缺口",
+      "minimal_fix": "将该分支明确标识为任务授权/调度文档，不可作为代码实现分支合并；真实修复需在独立分支实际提交代码。",
+      "complexity": "S"
+    },
+    {
+      "id": "INCR-002",
+      "title": "任务书强制要求的交付产物目录 tasks/results/atlas-implementation-20261017/ 全量缺失",
+      "priority": "P1",
+      "evidence": "origin/task/hermes-atlas-implementation-20261017@56e2b7b3 tasks/taskbooks/ATLAS-HERMES-IMPLEMENTATION-20261017.md:88-93；git ls-tree 56e2b7b3 tasks/results/ 显示无该目录",
+      "classification": "功能缺口",
+      "minimal_fix": "在实施修复并产出真实代码后，按任务书规范补充 IMPLEMENTATION-STATUS.md 等 4 份精简核销文件。",
+      "complexity": "S"
+    },
+    {
+      "id": "INCR-003",
+      "title": "规划的 21 项缺陷修复（ATL-001～ATL-021）全部未产生代码变更",
+      "priority": "P1",
+      "evidence": "origin/task/hermes-atlas-implementation-20261017@56e2b7b3 tasks/taskbooks/ATLAS-HERMES-IMPLEMENTATION-20261017.md:22-83；core/atlas/kernel/、models/router.py、memory/ 等目标文件在分支中无任何 commit 触碰",
+      "classification": "功能缺口",
+      "minimal_fix": "按照 A-E 组优先级，在真实执行 worker 中逐项落实对应缺陷代码修改与测试。",
+      "complexity": "L"
+    },
+    {
+      "id": "INCR-004",
+      "title": "规划从 14 个独有分支选择性吸收的功能未落地且无 API/UI 接线",
+      "priority": "P2",
+      "evidence": "origin/task/hermes-atlas-implementation-20261017@56e2b7b3 tasks/taskbooks/ATLAS-HERMES-IMPLEMENTATION-20261017.md:65-83；分支未吸收 absorb-all, feat/personal-todos 等功能分支提交，无相关 router 与前端接入",
+      "classification": "功能缺口",
+      "minimal_fix": "在修复基础 Bug 后，按需单项挑选成熟功能 cherry-pick 并完成端到端接线。",
+      "complexity": "L"
+    },
+    {
+      "id": "INCR-005",
+      "title": "分支冗余携带 32 份前序审查文档（tasks/reviews/atlas-luna-20261017/）",
+      "priority": "P2",
+      "evidence": "origin/task/hermes-atlas-implementation-20261017@f69f8b21,87aed27c tasks/reviews/atlas-luna-20261017/ (共 32 文件, 20019 行) 与 review/atlas-luna-global-audit-20261017 重复",
+      "classification": "代码确认",
+      "minimal_fix": "该部分为审计文档记录，未来合入主干或基线时应注意避免文档与代码混杂，或剥离至 docs/review 专用分支。",
+      "complexity": "S"
+    }
+  ]
+}
