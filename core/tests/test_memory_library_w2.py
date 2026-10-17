@@ -434,3 +434,31 @@ async def test_timeline_compound_cursor_pages_equal_timestamps_without_gaps(monk
     ids = [row["id"] for row in first["items"] + second["items"]]
     assert len(ids) == len(set(ids)) == 4
     assert second["next"] is None
+
+
+@pytest.mark.asyncio
+async def test_search_filters_and_paginates_beyond_first_thousand(monkeypatch):
+    from atlas.api import memory_library_router as router
+
+    candidates = [
+        {"id": str(i), "kind": "fact", "path": "事/Atlas.md", "text": "match",
+         "src": "你说的", "at": "2026-10-17T10:00:00+08:00", "score": 1.0}
+        for i in range(1205)
+    ]
+    class Index:
+        def _schedule_embeddings(self):
+            return None
+    class Library:
+        index = Index()
+        def search(self, _q, limit, _history, _kinds):
+            assert limit == 100000
+            return candidates
+    monkeypatch.setattr(router, "_lib", lambda: Library())
+    async def run(fn, *args):
+        return fn(*args)
+    monkeypatch.setattr(router, "_run", run)
+    result = await router.search(q="match", src="你说的", from_="", to="", project="Atlas",
+                                 kinds="memory", limit=20, offset=1180)
+    assert result["total"] == 1205
+    assert len(result["items"]) == 20
+    assert result["items"][0]["id"] == "1180"
