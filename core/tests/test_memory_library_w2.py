@@ -532,3 +532,28 @@ async def test_search_filters_and_paginates_beyond_first_thousand(monkeypatch):
     assert result["total"] == 1205
     assert len(result["items"]) == 20
     assert result["items"][0]["id"] == "1180"
+
+
+@pytest.mark.asyncio
+async def test_startup_schedules_bounded_pending_drain_after_model_ready(monkeypatch):
+    from atlas import server
+    from atlas.api import memory_library_router as router
+
+    drained = []
+    class Library:
+        _tasks = set()
+        class Queue:
+            @staticmethod
+            def count():
+                return 1
+        queue = Queue()
+        async def _drain(self, model_mgr):
+            drained.append(model_mgr)
+    library = Library()
+    model_mgr = SimpleNamespace(model_router=object())
+    monkeypatch.setattr(server, "model_mgr", model_mgr)
+    monkeypatch.setattr(router, "get_library", lambda: library)
+    monkeypatch.setattr(router, "_dream_task", asyncio.get_running_loop().create_future())
+    await router.start_dream_scheduler()
+    await asyncio.gather(*list(library._tasks))
+    assert drained == [model_mgr]
