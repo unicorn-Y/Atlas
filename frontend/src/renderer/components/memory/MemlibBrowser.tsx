@@ -1,12 +1,51 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
-import { BookOpen, CalendarDays, Check, Database, FolderKanban, GitCompare, LoaderCircle, Search, Sparkles, UserRound, X } from 'lucide-react';
+import { BookOpen, CalendarDays, Check, Database, FolderKanban, GitCompare, LoaderCircle, RefreshCw, Search, Sparkles, UserRound, X } from 'lucide-react';
 import { api } from '../../services/api';
 import { LibChangesView, PeopleView, TodayView } from './LibraryPages';
 import { MOCK_MEMLIB_ENABLED, mockMemlib, mockStats, type Episode, type Entry, type MemlibItem, type OpenResult, type Project, type ProjectSummary, type Stats } from './mockMemlib';
 
 type View = 'search' | 'timeline' | 'projects' | 'people' | 'me' | 'changes';
 type Props = { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void };
+export type FailedQueueItem = { id: number; created: string; session: string; stage: string; attempts: number; last_error: string };
+type FailedQueueBusyId = number | 'all' | null;
+
+export async function fetchFailedQueue(apiBaseUrl: string): Promise<FailedQueueItem[]> {
+  const result = await api<{ items: FailedQueueItem[] }>(apiBaseUrl, '/api/memlib/queue/failed?limit=100');
+  return result.items;
+}
+
+export async function retryFailedQueue(apiBaseUrl: string, id: number | null): Promise<{ retried: number }> {
+  return api(apiBaseUrl, '/api/memlib/queue/retry', { method: 'POST', json: { id } });
+}
+
+export function FailedQueuePanel({ items, busyId, error, loading = false, onRetry, onRefresh }: {
+  items: FailedQueueItem[];
+  busyId: FailedQueueBusyId;
+  error: string;
+  loading?: boolean;
+  onRetry: (id: number | null) => void;
+  onRefresh: () => void;
+}) {
+  if (!items.length && !error && !loading) return null;
+  return <section aria-label="失败队列" className="mx-4 mt-3 rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 py-2 lg:mx-6">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-2 text-xs"><b>失败队列</b>{items.length > 0 && <span className="text-fg-3">{items.length} 条待恢复</span>}{loading && <LoaderCircle size={13} className="animate-spin text-fg-3" />}</div>
+      <div className="flex items-center gap-1">
+        <button type="button" className="btn ghost px-2 py-1 text-xs" disabled={loading || busyId !== null} onClick={onRefresh}><RefreshCw size={12} />刷新</button>
+        {items.length > 0 && <button type="button" className="btn ghost px-2 py-1 text-xs" disabled={loading || busyId !== null} onClick={() => onRetry(null)}>{busyId === 'all' ? '正在重试…' : '全部重试'}</button>}
+      </div>
+    </div>
+    {error && <p role="alert" className="mb-0 mt-2 text-xs text-danger">失败队列操作失败：{error}</p>}
+    {items.length > 0 && <ul className="mb-0 mt-2 grid gap-1.5 p-0">
+      {items.map((item) => <li key={item.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-[var(--line)] pt-1.5 text-xs">
+        <div className="min-w-0"><div className="flex flex-wrap gap-x-2 text-fg-3"><span>{item.session || '未知会话'}</span><span>{item.stage}</span><span>尝试 {item.attempts} 次</span><span>{asDate(item.created)}</span></div><p className="mb-0 mt-0.5 break-words text-danger">{item.last_error || '未提供错误详情'}</p></div>
+        <button type="button" className="btn ghost px-2 py-1 text-xs" disabled={loading || busyId !== null} onClick={() => onRetry(item.id)} aria-label={`重试失败项 ${item.id}`}>{busyId === item.id ? '正在重试…' : '重试此项'}</button>
+      </li>)}
+    </ul>}
+  </section>;
+}
+
 const SOURCES = [
   ['你说的', '你说的'], ['你改的', '你改的'], ['推测', '推测'], ['经历', '经历'], ['整理', '整理'], ['原对话', '原对话'],
 ] as const;
@@ -117,9 +156,44 @@ export default function MemlibBrowser({ apiBaseUrl, connected, onToast }: Props)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [refId, setRefId] = useState('');
+  const [failedQueue, setFailedQueue] = useState<FailedQueueItem[]>([]);
+  const [failedQueueError, setFailedQueueError] = useState('');
+  const [failedQueueLoading, setFailedQueueLoading] = useState(false);
+  const [failedQueueBusyId, setFailedQueueBusyId] = useState<FailedQueueBusyId>(null);
   const requestId = useRef(0);
   const searchCount = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  const loadFailedQueue = useCallback(async () => {
+    if (!connected || MOCK_MEMLIB_ENABLED) {
+      setFailedQueue([]);
+      setFailedQueueLoading(false);
+      setFailedQueueError('');
+      return;
+    }
+    setFailedQueueLoading(true);
+    setFailedQueueError('');
+    try {
+      setFailedQueue(await fetchFailedQueue(apiBaseUrl));
+    } catch (reason) {
+      setFailedQueueError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setFailedQueueLoading(false);
+    }
+  }, [apiBaseUrl, connected]);
+  useEffect(() => { void loadFailedQueue(); }, [loadFailedQueue]);
+  const retryQueue = async (id: number | null) => {
+    setFailedQueueBusyId(id ?? 'all');
+    setFailedQueueError('');
+    try {
+      const result = await retryFailedQueue(apiBaseUrl, id);
+      onToast(`已重新加入 ${result.retried} 条失败记录`);
+      await loadFailedQueue();
+    } catch (reason) {
+      setFailedQueueError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setFailedQueueBusyId(null);
+    }
+  };
   const queryParams = useMemo(() => {
     const params = new URLSearchParams({ q: debouncedQuery, src: sources.join(','), kinds: KIND_QUERY, limit: '100', offset: '0' });
     const low = range === 'today' ? today() : range === '7d' ? dateBefore(7) : range === '30d' ? dateBefore(30) : range === 'custom' ? from : '';
@@ -276,6 +350,7 @@ export default function MemlibBrowser({ apiBaseUrl, connected, onToast }: Props)
         </div>
       </div>
       {!connected && !MOCK_MEMLIB_ENABLED && <div className="mx-4 mt-3 rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-xs text-fg-3">记忆服务未连接，连接后即可读取和管理记忆。</div>}
+      <FailedQueuePanel items={failedQueue} busyId={failedQueueBusyId} error={failedQueueError} loading={failedQueueLoading} onRetry={(id) => void retryQueue(id)} onRefresh={() => void loadFailedQueue()} />
       {error && view !== 'search' && <div role="alert" className="mx-4 mt-3 flex items-center justify-between rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-xs text-danger"><span>{error}</span><button aria-label="关闭错误提示" onClick={() => setError('')}><X size={14}/></button></div>}
       <div className="min-h-0 flex-1 overflow-hidden px-4 py-4 lg:px-6">{renderContent()}</div>
     </main>
