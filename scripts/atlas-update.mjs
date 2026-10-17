@@ -172,9 +172,15 @@ function runAt(workRoot, command, commandArgs, options = {}) {
   }).trim();
 }
 
-function replaceDirectory(source, target, backup) {
-  if (fs.existsSync(target)) fs.renameSync(target, backup);
+function replaceDirectory(source, target, backup, state) {
+  state.hadTarget = fs.existsSync(target);
+  if (state.hadTarget) {
+    fs.renameSync(target, backup);
+    state.backedUp = true;
+  }
+  state.activationStarted = true;
   fs.renameSync(source, target);
+  state.activated = true;
 }
 
 function stagedUpdate() {
@@ -183,6 +189,30 @@ function stagedUpdate() {
     throw new Error('Update cancelled: tracked local changes must be committed or stashed first.');
   }
   const branch = sh('git', ['rev-parse', '--abbrev-ref', 'HEAD']);
+  // Fetch into the active repository first. An up-to-date checkout needs no candidate
+  // worktree, dependency setup, or build at all.
+  try { sh('git', ['fetch', '--quiet', 'origin', branch]); }
+  catch (error) {
+    if (!readPending()) throw new Error(`fetch failed: ${String(error?.stderr || error?.message || error).trim()}`);
+    log(`fetch skipped; applying verified pending commit instead: ${String(error?.message || error).split('\n')[0]}`);
+  }
+  const pendingBeforeStage = readPending();
+  let targetHead = before;
+  try {
+    const remoteHead = sh('git', ['rev-parse', `origin/${branch}`]);
+    runAt(root, 'git', ['merge-base', '--is-ancestor', before, remoteHead]);
+    targetHead = remoteHead;
+  } catch {
+    // A diverged/nonexistent remote remains a hard failure in the candidate fast-forward.
+  }
+  if (pendingBeforeStage?.commit) {
+    try { runAt(root, 'git', ['merge-base', '--is-ancestor', targetHead, pendingBeforeStage.commit]); targetHead = pendingBeforeStage.commit; }
+    catch {
+      try { runAt(root, 'git', ['merge-base', '--is-ancestor', pendingBeforeStage.commit, targetHead]); }
+      catch { /* candidate merge below reports incompatible pending history */ }
+    }
+  }
+  if (targetHead === before) return { pulled: false, reason: 'already up to date', before, after: before, changed: [] };
   const stage = path.join(path.dirname(root), `.atlas-update-stage-${process.pid}`);
   const candidate = path.join(stage, 'candidate');
   const backups = path.join(stage, 'backups');
@@ -191,13 +221,21 @@ function stagedUpdate() {
   let worktreeAdded = false;
   const changed = [];
   let committed = false;
+  let safeToRemoveStage = false;
+  const directoryStates = Object.fromEntries(['dist', 'dist-electron'].map((name) => [name, {
+    target: path.join(root, 'frontend', name), backup: path.join(backups, name), hadTarget: false, backedUp: false, activationStarted: false, activated: false,
+  }]));
+  const resourceStates = {
+    coreVenv: { target: path.join(root, 'core', '.venv'), backup: path.join(backups, 'core-venv'), hadTarget: false, backedUp: false, activationStarted: false, activated: false },
+    nodeModules: { target: path.join(root, 'node_modules'), backup: path.join(backups, 'node_modules'), hadTarget: false, backedUp: false, activationStarted: false, activated: false },
+    stamp: { target: stampFile, backup: path.join(backups, 'build-stamp.json'), hadTarget: false, backedUp: false, activationStarted: false, activated: false },
+  };
   try {
     runAt(root, 'git', ['worktree', 'add', '--detach', candidate, before]);
     worktreeAdded = true;
     fs.mkdirSync(backups, { recursive: true });
     try {
-      runAt(candidate, 'git', ['fetch', '--quiet', 'origin', branch]);
-      runAt(candidate, 'git', ['merge', '--ff-only', `origin/${branch}`]);
+      runAt(candidate, 'git', ['merge', '--ff-only', targetHead]);
     } catch (error) {
       if (!readPending()) throw new Error(`fetch/fast-forward failed: ${String(error?.stderr || error?.message || error).trim()}`);
       log(`fetch/fast-forward skipped; applying verified pending commit instead: ${String(error?.message || error).split('\n')[0]}`);
@@ -224,27 +262,26 @@ function stagedUpdate() {
 
     runAt(root, 'git', ['merge', '--ff-only', candidateHead]);
     committed = true;
-    const names = ['dist', 'dist-electron'];
-    for (const name of names) replaceDirectory(path.join(candidate, 'frontend', name), path.join(root, 'frontend', name), path.join(backups, name));
+    for (const [name, state] of Object.entries(directoryStates)) {
+      replaceDirectory(path.join(candidate, 'frontend', name), state.target, state.backup, state);
+    }
 
     const pythonChanged = changed.includes('core/pyproject.toml') || changed.includes('core/requirements.lock')
       || !fs.existsSync(python);
     if (pythonChanged) {
       const envBackup = path.join(backups, 'core-venv');
       const envPath = path.join(root, 'core', '.venv');
-      if (fs.existsSync(envPath)) fs.renameSync(envPath, envBackup);
-      try {
-        runAt(root, isWin ? 'py' : 'python', isWin
+      const state = resourceStates.coreVenv;
+      state.hadTarget = fs.existsSync(envPath);
+      if (state.hadTarget) { fs.renameSync(envPath, envBackup); state.backedUp = true; }
+      state.activationStarted = true;
+      runAt(root, isWin ? 'py' : 'python', isWin
           ? ['-3.14', '-m', 'venv', envPath]
           : ['-m', 'venv', envPath]);
-        const activePython = path.join(envPath, isWin ? 'Scripts/python.exe' : 'bin/python');
-        runAt(root, activePython, ['-m', 'pip', 'install', '-q', '--no-cache-dir', '-e', 'core']);
-        runAt(root, activePython, ['-m', 'pip', 'install', '-q', '--disable-pip-version-check', '--no-cache-dir', '-r', 'core/requirements.lock']);
-      } catch (error) {
-        fs.rmSync(envPath, { recursive: true, force: true });
-        if (fs.existsSync(envBackup)) fs.renameSync(envBackup, envPath);
-        throw error;
-      }
+      state.activated = true;
+      const activePython = path.join(envPath, isWin ? 'Scripts/python.exe' : 'bin/python');
+      runAt(root, activePython, ['-m', 'pip', 'install', '-q', '--no-cache-dir', '-e', 'core']);
+      runAt(root, activePython, ['-m', 'pip', 'install', '-q', '--disable-pip-version-check', '--no-cache-dir', '-r', 'core/requirements.lock']);
     }
     const activeElectron = path.join(root, 'node_modules', 'electron', 'dist', isWin ? 'electron.exe' : 'electron');
     const npmChanged = changed.some((file) => ['package.json', 'package-lock.json', 'frontend/package.json'].includes(file))
@@ -252,51 +289,52 @@ function stagedUpdate() {
     if (npmChanged) {
       const modulesPath = path.join(root, 'node_modules');
       const modulesBackup = path.join(backups, 'node_modules');
-      if (fs.existsSync(modulesPath)) fs.renameSync(modulesPath, modulesBackup);
-      try { runAt(root, npm, ['ci', '--no-audit', '--no-fund']); }
-      catch (error) {
-        fs.rmSync(modulesPath, { recursive: true, force: true });
-        if (fs.existsSync(modulesBackup)) fs.renameSync(modulesBackup, modulesPath);
-        throw error;
-      }
+      const state = resourceStates.nodeModules;
+      state.hadTarget = fs.existsSync(modulesPath);
+      if (state.hadTarget) { fs.renameSync(modulesPath, modulesBackup); state.backedUp = true; }
+      state.activationStarted = true;
+      runAt(root, npm, ['ci', '--no-audit', '--no-fund']);
+      state.activated = true;
     }
     const newStamp = path.join(root, 'data', 'build-stamp.json.new');
-    if (fs.existsSync(stampFile)) fs.renameSync(stampFile, path.join(backups, 'build-stamp.json'));
+    const stampState = resourceStates.stamp;
+    stampState.hadTarget = fs.existsSync(stampFile);
+    if (stampState.hadTarget) { fs.renameSync(stampFile, stampState.backup); stampState.backedUp = true; }
+    stampState.activationStarted = true;
     fs.copyFileSync(candidateBuildStamp, newStamp);
     fs.renameSync(newStamp, stampFile);
+    stampState.activated = true;
+    // Run the active checkout's required rebuild/validation before discarding rollback data.
+    const steps = rebuild();
     fs.rmSync(backups, { recursive: true, force: true });
-    return { pulled: before !== candidateHead, before, after: candidateHead, changed };
+    safeToRemoveStage = true;
+    return { pulled: before !== candidateHead, before, after: candidateHead, changed, steps };
   } catch (error) {
     if (committed) {
-      for (const name of ['dist', 'dist-electron']) {
-        const target = path.join(root, 'frontend', name);
-        const saved = path.join(backups, name);
-        if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
-        if (fs.existsSync(saved)) fs.renameSync(saved, target);
+      for (const state of Object.values(directoryStates)) {
+        if ((state.backedUp || state.activationStarted) && fs.existsSync(state.target)) fs.rmSync(state.target, { recursive: true, force: true });
+        if (state.backedUp && fs.existsSync(state.backup)) fs.renameSync(state.backup, state.target);
       }
-      const envPath = path.join(root, 'core', '.venv');
-      const envBackup = path.join(backups, 'core-venv');
-      if (fs.existsSync(envBackup)) {
-        if (fs.existsSync(envPath)) fs.rmSync(envPath, { recursive: true, force: true });
-        fs.renameSync(envBackup, envPath);
+      for (const state of Object.values(resourceStates)) {
+        if ((state.backedUp || state.activationStarted) && fs.existsSync(state.target)) fs.rmSync(state.target, { recursive: true, force: true });
+        if (state.backedUp && fs.existsSync(state.backup)) fs.renameSync(state.backup, state.target);
       }
-      const modulesPath = path.join(root, 'node_modules');
-      const modulesBackup = path.join(backups, 'node_modules');
-      if (fs.existsSync(modulesBackup)) {
-        if (fs.existsSync(modulesPath)) fs.rmSync(modulesPath, { recursive: true, force: true });
-        fs.renameSync(modulesBackup, modulesPath);
-      }
-      const oldStamp = path.join(backups, 'build-stamp.json');
       try { fs.rmSync(path.join(root, 'data', 'build-stamp.json.new'), { force: true }); } catch { /* best effort */ }
-      if (fs.existsSync(oldStamp)) fs.renameSync(oldStamp, stampFile);
       runAt(root, 'git', ['reset', '--hard', before]);
+      safeToRemoveStage = true;
+    } else {
+      safeToRemoveStage = true;
     }
     throw error;
   } finally {
     if (worktreeAdded) {
       try { runAt(root, 'git', ['worktree', 'remove', '--force', candidate]); } catch { /* retain error result; stale worktree can be repaired */ }
     }
-    try { fs.rmSync(stage, { recursive: true, force: true }); } catch { /* best-effort temporary cleanup */ }
+    if (safeToRemoveStage) {
+      try { fs.rmSync(stage, { recursive: true, force: true }); } catch { /* best-effort temporary cleanup */ }
+    } else {
+      log(`rollback incomplete; retained recovery files at ${stage}`);
+    }
   }
 }
 
