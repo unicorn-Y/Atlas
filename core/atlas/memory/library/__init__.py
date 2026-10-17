@@ -58,6 +58,29 @@ class ModelUnavailable(RuntimeError):
     """The turn is durable but cannot be extracted until a writer model is ready."""
 
 
+def _source_ref_for_turn(session: str, user_text: str) -> str:
+    """Bind a turn only when SessionDB confirms the exact latest user message."""
+    if not session or not user_text:
+        return ""
+    try:
+        from atlas.config import DATA_ROOT
+        from atlas.engine.session_sync import latest_session_message
+        from .source_ref import SourceRef
+
+        message = latest_session_message(DATA_ROOT / "engine", session, role="user")
+        if not message:
+            return ""
+        content = message.get("content")
+        if isinstance(content, list):
+            content = "\n".join(str(item.get("text") or "") if isinstance(item, dict) else str(item)
+                                 for item in content)
+        if " ".join(str(content or "").split()) != " ".join(user_text.split()):
+            return ""
+        return SourceRef(session, str(message.get("id") or "")).to_ref()
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError):
+        return ""
+
+
 def _now(config: Any = None) -> datetime:
     try:
         from atlas.time_context import now_local
@@ -295,13 +318,16 @@ class MemoryLibrary:
         except RuntimeError:
             pass
         self.ready()
+        source_ref = _source_ref_for_turn(str(kwargs.get("session") or ""), user_text)
         self.queue.insert(created=_now(self.config).isoformat(timespec="seconds"),
                           session=kwargs.get("session", ""), mode=kwargs.get("mode", ""),
                           user_text=user_text, assistant_text=kwargs.get("assistant_text") or "",
                           workspace=workspace,
                           steps=json.dumps(kwargs.get("steps") or [], ensure_ascii=False),
                           verified=bool(kwargs.get("verified", False)),
-                          turn_started=str(kwargs.get("turn_started") or ""))
+                          turn_started=str(kwargs.get("turn_started") or ""),
+                          source_ref=source_ref,
+                          source_precision="exact" if source_ref else "missing")
         task = asyncio.create_task(self._drain(kwargs.get("model_mgr")))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
@@ -312,10 +338,14 @@ class MemoryLibrary:
             for row in self.queue.pending():
                 try:
                     now = datetime.fromisoformat(row["created"])
-                    ref = f"{row['session']}@{row.get('turn_started') or now.isoformat(timespec='seconds')}"
+                    ref = row.get("source_ref") or (
+                        f"{row['session']}@{row.get('turn_started') or now.isoformat(timespec='seconds')}"
+                        if row.get("source_precision") == "approximate" else ""
+                    )
                     if row["stage"] == "new":
                         await asyncio.to_thread(self._write_diary, now, row["user_text"],
-                                                row["assistant_text"], row["session"], row["mode"], ref)
+                                                row["assistant_text"], row["session"], row["mode"], ref,
+                                                str(row["id"]))
                         self.queue.stage_diary_done(row["id"])
                     result = await self.observe_turn(row, model_mgr, now)
                     self.queue.remove(row["id"])
@@ -343,16 +373,31 @@ class MemoryLibrary:
                 raise ModelUnavailable("no memory writer model available")
             proposals, episode = await self._extract_full(user_text, assistant_text, model_mgr, now,
                                                           steps, bool(row.get("verified", 0)))
-        ref = f"{row['session']}@{row.get('turn_started') or now.isoformat(timespec='seconds')}"
+        ref = row.get("source_ref") or (
+            f"{row['session']}@{row.get('turn_started') or now.isoformat(timespec='seconds')}"
+            if row.get("source_precision") == "approximate" else ""
+        )
         return await asyncio.to_thread(self._apply, proposals, user_text,
                                        row["session"], row["mode"], now, episode=episode,
                                        steps=steps, verified=bool(row.get("verified", 0)), ref=ref)
 
     def _write_diary(self, now: datetime, user_text: str, assistant_text: str,
-                     session: str, mode: str, ref: str = "") -> None:
+                     session: str, mode: str, ref: str = "", idempotency_key: str = "") -> None:
         self.ready()
-        meta = '{"session":"%s","ref":"%s"%s}' % (re.sub(r"[^\w-]", "", session)[:64], ref,
-                                       ',"mode":"expert"' if mode == "expert" else "")
+        rel = f"{DIARY}/{now.date().isoformat()}.md"
+        diary_path = self.store.root / rel
+        if idempotency_key and diary_path.exists():
+            try:
+                existing = diary_path.read_text(encoding="utf-8")
+                if f'"turn_id":"{idempotency_key}"' in existing:
+                    return
+            except OSError:
+                pass
+        meta = '{"session":"%s","ref":"%s"%s%s}' % (
+            re.sub(r"[^\w-]", "", session)[:64], ref,
+            ',"mode":"expert"' if mode == "expert" else "",
+            f',"turn_id":"{idempotency_key}"' if idempotency_key else "",
+        )
         reply = " ".join((assistant_text or "").split())[:1500]
         block = (f"## {now.strftime('%H:%M')}\n<!-- {meta} -->\n"
                  f"你：{user_text[:2000]}\n\n它：{reply or '（无文字回复）'}")

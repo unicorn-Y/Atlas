@@ -21,6 +21,7 @@ class TurnQueue:
             user_text TEXT, assistant_text TEXT,
             workspace TEXT, steps TEXT NOT NULL DEFAULT '[]', verified INTEGER NOT NULL DEFAULT 0,
             turn_started TEXT,
+            source_ref TEXT NOT NULL DEFAULT '', source_precision TEXT NOT NULL DEFAULT 'approximate',
             stage TEXT NOT NULL DEFAULT 'new', attempts INTEGER NOT NULL DEFAULT 0,
             last_error TEXT)""")
         columns = {row[1] for row in db.execute("PRAGMA table_info(pending)")}
@@ -32,6 +33,10 @@ class TurnQueue:
             db.execute("ALTER TABLE pending ADD COLUMN verified INTEGER NOT NULL DEFAULT 0")
         if "turn_started" not in columns:
             db.execute("ALTER TABLE pending ADD COLUMN turn_started TEXT")
+        if "source_ref" not in columns:
+            db.execute("ALTER TABLE pending ADD COLUMN source_ref TEXT NOT NULL DEFAULT ''")
+        if "source_precision" not in columns:
+            db.execute("ALTER TABLE pending ADD COLUMN source_precision TEXT NOT NULL DEFAULT 'approximate'")
         db.commit()
         return db
 
@@ -46,14 +51,15 @@ class TurnQueue:
 
     def insert(self, *, created: str, session: str, mode: str,
                user_text: str, assistant_text: str, workspace: str = "",
-               steps: str = "[]", verified: bool = False, turn_started: str = "") -> int:
+               steps: str = "[]", verified: bool = False, turn_started: str = "",
+               source_ref: str = "", source_precision: str = "missing") -> int:
         with self._connection() as db:
             cursor = db.execute(
                 "INSERT INTO pending(created,session,mode,user_text,assistant_text,workspace,steps,verified,"
-                "turn_started) "
-                "VALUES(?,?,?,?,?,?,?,?,?)",
+                "turn_started,source_ref,source_precision) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (created, session, mode, user_text, assistant_text, workspace, steps, int(verified),
-                 turn_started),
+                 turn_started, source_ref, source_precision),
             )
             return int(cursor.lastrowid)
 

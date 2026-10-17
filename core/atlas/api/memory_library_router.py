@@ -369,7 +369,14 @@ async def start_dream_scheduler() -> None:
         from atlas import server
 
         async def drain_pending() -> None:
-            await asyncio.sleep(1)
+            for _ in range(60):
+                model_mgr = getattr(server, "model_mgr", None)
+                if model_mgr is not None and getattr(model_mgr, "model_router", None) is not None:
+                    break
+                await asyncio.sleep(1)
+            else:
+                log.info("memory.library.startup_drain_deferred", reason="model_not_ready")
+                return
             await library._drain(getattr(server, "model_mgr", None))
 
         task = asyncio.create_task(drain_pending())
