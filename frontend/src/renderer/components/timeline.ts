@@ -94,7 +94,7 @@ export type TimelineItem =
   | { kind: 'review'; id: string; scope: string; scopeLabel: string; workspace: string; findings: ReviewFinding[] }
   | { kind: 'artifact'; id: string; name: string; summary: string }
   | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
-  | { kind: 'failed'; id: string; detail: string };
+  | { kind: 'failed'; id: string; detail: string; category?: string; errorCategory?: string; modelId?: string; provider?: string; status?: number; rawDetail?: string; requestId?: string; attempts?: number; retryAfterSeconds?: number; manualRetryAllowed?: boolean };
 
 const TARGET_KEYS = ['path', 'file_path', 'filepath', 'file', 'command', 'cmd', 'query', 'pattern', 'url', 'q', 'target', 'name'];
 
@@ -712,7 +712,18 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         break;
       case 'run.failed':
         dropPreparing();
-        items.push({ kind: 'failed', id: event.id, detail: text(data.detail ?? data.code) || '未知错误' });
+        items.push({
+          kind: 'failed', id: event.id, detail: text(data.detail ?? data.code) || '未知错误',
+          category: text(data.category) || undefined, modelId: text(data.model_id) || undefined,
+          errorCategory: text(data.error_category) || undefined,
+          provider: text(data.provider) || undefined,
+          status: typeof data.status === 'number' ? data.status : undefined,
+          rawDetail: text(data.raw_detail) || undefined,
+          requestId: text(data.request_id) || undefined,
+          attempts: typeof data.attempts === 'number' ? data.attempts : undefined,
+          retryAfterSeconds: typeof data.retry_after_s === 'number' ? data.retry_after_s : undefined,
+          manualRetryAllowed: typeof data.manual_retry_allowed === 'boolean' ? data.manual_retry_allowed : undefined,
+        });
         break;
       default:
         break;

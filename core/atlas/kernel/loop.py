@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Callable
 
 from atlas.kernel.context import CompactionResult, ContextManager, estimate_tokens
-from atlas.kernel.model_call import ModelCallError, ModelCallResult, complete_stream
+from atlas.kernel.model_call import ModelCallError, ModelCallResult, _safe_error_detail, complete_stream
 from atlas.kernel.plan import PlanMode
 from atlas.kernel.prompt import build_prompt
 from atlas.kernel.repair import repair_unpaired_tool_calls, started_call_ids
@@ -1627,7 +1627,8 @@ class AtlasKernel:
                     await exec_manager.shutdown()
             raise
         except Exception as exc:
-            failure = f"{type(exc).__name__}: {exc}"
+            failure = (_safe_error_detail(exc) if isinstance(exc, ModelCallError)
+                       else f"{type(exc).__name__}: {exc}")
             if state.phase not in {RunPhase.DONE, RunPhase.FAILED, RunPhase.INTERRUPTED}:
                 state.error = failure
                 transition(RunPhase.FAILED)
@@ -1648,8 +1649,31 @@ class AtlasKernel:
             except Exception:
                 log.exception("kernel.stop_failure_hook_failed", extra={"run_id": run_id})
             log_detail = f"{failure} (run log: {log_path})" if log_path else failure
-            yield emit("error", category="model" if isinstance(exc, ModelCallError) else "runtime",
-                       detail=log_detail, log_path=str(log_path or ""))
+            event_data: dict[str, Any] = {
+                "category": "model" if isinstance(exc, ModelCallError) else "runtime",
+                "detail": log_detail, "log_path": str(log_path or ""),
+            }
+            if isinstance(exc, ModelCallError):
+                categories = {
+                    "authentication": "模型身份验证失败", "billing": "模型额度不足",
+                    "model_not_found": "找不到所选模型", "invalid_request": "模型请求参数无效",
+                    "context_window_exceeded": "输入超出模型上下文限制",
+                    "content_filter": "模型内容过滤器拒绝了请求", "rate_limit": "模型服务限流",
+                    "connection": "模型服务连接失败", "timeout": "模型请求超时",
+                    "overloaded": "模型服务暂时过载", "provider": "模型服务暂时错误",
+                    "route": "模型路由或凭据配置错误", "budget": "运行额度限制已达到",
+                }
+                event_data.update({
+                    "model_id": exc.model, "provider": exc.provider,
+                    "status": exc.status, "request_id": exc.request_id,
+                    "error_category": exc.category,
+                    "attempts": exc.attempts, "retry_after_s": exc.retry_after_s,
+                    "raw_detail": _safe_error_detail(exc), "manual_retry_allowed": True,
+                })
+                event_data["detail"] = (
+                    f"{categories.get(exc.category, '模型请求失败')}。已保留本轮已完成内容。"
+                )
+            yield emit("error", **event_data)
         finally:
             if exec_manager is not None and state.phase in {RunPhase.FAILED, RunPhase.INTERRUPTED}:
                 await exec_manager.shutdown()

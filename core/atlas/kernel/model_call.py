@@ -9,7 +9,6 @@ import asyncio
 import json
 import math
 import os
-import random
 import re
 import time
 import uuid
@@ -39,11 +38,18 @@ class _ToolDelta:
 
 class ModelCallError(RuntimeError):
     def __init__(self, detail: str, *, category: str, status: int | None = None,
-                 retryable: bool = False) -> None:
+                 retryable: bool = False, model: str = "", provider: str = "",
+                 attempts: int = 0, request_id: str | None = None,
+                 retry_after_s: float | None = None) -> None:
         super().__init__(detail)
         self.category = category
         self.status = status
         self.retryable = retryable
+        self.model = model
+        self.provider = provider
+        self.attempts = attempts
+        self.request_id = request_id
+        self.retry_after_s = retry_after_s
 
 
 _RATE_LIMIT_RETRY_RE = re.compile(
@@ -168,6 +174,9 @@ def _error_text(exc: BaseException) -> str:
             break
         seen.add(id(current))
         parts.append(type(current).__name__)
+        captured_body = _get(current, "_atlas_response_body")
+        if captured_body:
+            parts.append(str(captured_body))
         for key in ("message", "body", "code", "type", "error", "detail"):
             try:
                 value = _get(current, key)
@@ -190,6 +199,51 @@ def _error_text(exc: BaseException) -> str:
     return " ".join(parts).lower()
 
 
+def _safe_error_detail(exc: BaseException) -> str:
+    """Keep provider wording while applying Atlas's shared secret redactor."""
+    parts: list[str] = [str(exc).strip()]
+    current: Any = exc
+    seen: set[int] = set()
+    for _ in range(4):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        captured_body = _get(current, "_atlas_response_body")
+        if captured_body:
+            parts.append(str(captured_body))
+        response = _get(current, "response")
+        try:
+            response_text = _get(response, "text")
+            if response_text:
+                parts.append(str(response_text))
+        except Exception:
+            pass
+        current = _get(current, "__cause__") or _get(current, "__context__")
+    detail = " ".join(part for part in parts if part) or type(exc).__name__
+    from atlas.engine_core.agent.redact import redact_sensitive_text
+
+    return redact_sensitive_text(detail, force=True)[:1000]
+
+
+def _request_id(exc: BaseException) -> str | None:
+    current: Any = exc
+    seen: set[int] = set()
+    for _ in range(4):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        response = _get(current, "response")
+        headers = _get(response, "headers")
+        for value in (
+            _get(current, "request_id"), _get(current, "requestId"),
+            _get(headers, "x-request-id"), _get(headers, "request-id"),
+        ):
+            if value:
+                return str(value)[:200]
+        current = _get(current, "__cause__") or _get(current, "__context__")
+    return None
+
+
 def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
     status = _status(exc)
     text = _error_text(exc)
@@ -204,7 +258,7 @@ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
         "content_filter", "content filter", "safety filter", "content was blocked",
         "content policy", "moderation_blocked", "blocked by policy",
     )):
-        return "content_filter", True, status
+        return "content_filter", False, status
     if status == 402 or any(marker in text for marker in (
         "insufficient_quota", "credit_balance_exhausted", "spend_limit_exceeded",
         "usage_limit_reached", "billing_error", "billing limit", "spend limit",
@@ -221,6 +275,12 @@ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
         "model_not_found", "model not found", "unknown model",
     )):
         return "model_not_found", False, status
+    # Provider error prose can contain words like "timeout" or "connection";
+    # explicit permanent HTTP request statuses take precedence over that wording.
+    if status in {400, 422}:
+        return "invalid_request", False, status
+    if status is not None and status not in {408, 429, 500, 502, 503, 504, 529}:
+        return "provider", False, status
     if status == 429 or any(marker in text for marker in (
         "rate_limit_error", "rate_limit_exceeded", "rate limit", "too many requests",
         "slow_down", "http 429", "(429)", "429",
@@ -228,9 +288,9 @@ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
         return "rate_limit", True, status or 429
     if status == 529 or "overload" in text or "server_is_overloaded" in text:
         return "overloaded", True, status
-    if status in {408, 425, 504} or "timeout" in name or "timed out" in text:
+    if status == 408 or "timeout" in name or "timed out" in text:
         return "timeout", True, status
-    if status is not None and (status >= 500 or status == 409):
+    if status in {500, 502, 503, 504}:
         return "provider", True, status
     if any(marker in name or marker in text for marker in (
         "connection", "connecterror", "incompleteread", "streamclosed", "remoteprotocol",
@@ -238,8 +298,6 @@ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
         "incomplete chunked read", "streamerror", "response stream",
     )):
         return "connection", True, status
-    if status in {400, 422}:
-        return "invalid_request", False, status
     return "model", False, status
 
 
@@ -337,15 +395,15 @@ def _retry_after(exc: BaseException) -> float | None:
     return None
 
 
-def _backoff(retry_index: int) -> float:
-    """Codex's shared 200 ms exponential backoff with up to 10% jitter."""
-    base = 0.2 * (2 ** max(0, retry_index))
-    return base * random.uniform(0.9, 1.1)
-
-
-def _overloaded_backoff(retry_index: int, base_delay_s: float) -> float:
-    """Claude Code's documented 500 ms exponential start for 529 responses."""
-    return min(300.0, base_delay_s * (2 ** min(max(0, retry_index), 16)))
+async def _wait_for_retry(delay: float, cancel_event: asyncio.Event | None) -> None:
+    if cancel_event is None:
+        await asyncio.sleep(delay)
+        return
+    try:
+        await asyncio.wait_for(cancel_event.wait(), timeout=delay)
+        raise asyncio.CancelledError
+    except asyncio.TimeoutError:
+        return
 
 
 async def _publish(
@@ -561,54 +619,57 @@ async def complete_stream(
     on_text: Callable[[str], Awaitable[None] | None] | None = None,
     on_attempt: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
     on_event: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
-    unbounded_connection_retries: bool = True,
+    unbounded_connection_retries: bool = False,
     retry_watchdog: bool | None = None,
     retry_watchdog_max_wait_s: float | None = None,
     overloaded_retry_base_delay_s: float | None = None,
     usage_budget: Any = None,
 ) -> ModelCallResult:
     """Stream one model response through Atlas ModelRouter and HTTPX transport."""
-    from atlas.agent.fallback_cooldown import cool, is_cooling
     from atlas.models.tokens import estimate_tokens
 
     router = agent._model_router
-    candidates = [model_id, *(fallback_models or [])]
-    candidates = list(dict.fromkeys(str(item) for item in candidates if item))
-    max_retries, retry_watchdog, retry_watchdog_max_wait_s, overloaded_retry_base_delay_s = (
-        _retry_environment(
+    # A conversation turn is pinned to the selected model. Auxiliary tasks may
+    # choose their own model explicitly, but never retry through another model.
+    candidates = [str(model_id)] if model_id else []
+    max_retries = _retry_environment(
             max_retries, retry_watchdog, retry_watchdog_max_wait_s,
             overloaded_retry_base_delay_s,
-        )
-    )
+        )[0]
+    max_retries = min(2, max_retries)
     combined_text = ""
     combined_reasoning = ""
     combined_refusal = ""
     request_messages = list(messages)
-    content_filter_guidance_added = False
     last_error: ModelCallError | None = None
     total_attempts = 0
     overall_started = time.monotonic()
     last_route: Any = None
     last_usage: dict[str, Any] = {}
 
-    for candidate_index, candidate in enumerate(candidates):
-        if candidate_index and is_cooling(candidate):
-            continue
+    if not candidates:
+        raise ModelCallError("未选择可用模型", category="route", model="", attempts=0)
+
+    for candidate in candidates:
         try:
             route = await router.resolve(candidate, "conversation")
         except Exception as exc:
-            last_error = ModelCallError(str(exc), category="route", retryable=False)
-            if candidate_index + 1 < len(candidates):
-                continue
+            category, _, status = classify_error(exc)
+            model_mgr = getattr(agent, "_model_mgr", None)
+            list_models = getattr(model_mgr, "list_models", None)
+            model_config = next((item for item in list_models()
+                                 if item.get("id") == candidate), {}) if callable(list_models) else {}
+            last_error = ModelCallError(
+                _safe_error_detail(exc), category=category if category != "model" else "route",
+                status=status, retryable=False, model=candidate,
+                provider=str(model_config.get("provider") or getattr(exc, "provider", "")),
+                attempts=0, request_id=_request_id(exc),
+            )
             raise last_error from exc
         last_route = route
         wire_model = route.wire_model or route.model
         route_started = time.monotonic()
         retry_index = 0
-        connection_retry_count = 0
-        connection_retry_delay = 5.0
-        overloaded_retry_count = 0
-        watchdog_capacity_wait_s = 0.0
 
         while True:
             if cancel_event is not None and cancel_event.is_set():
@@ -622,12 +683,15 @@ async def complete_stream(
                 request_id, estimated, purpose="conversation",
                 model=route.model_id or candidate, wire_model=wire_model,
             ):
-                raise ModelCallError("Run input-token budget reached", category="budget")
+                raise ModelCallError("Run input-token budget reached", category="budget",
+                                     model=route.model_id or candidate, provider=route.provider,
+                                     attempts=0, request_id=request_id)
             stream = None
             attempt_text = ""
             attempt_reasoning = ""
             attempt_refusal = ""
             attempt_tools: dict[int, _ToolDelta] = {}
+            attempt_had_delta = False
             attempt_usage: dict[str, Any] = {}
             finish_reason: str | None = None
             attempt_started = time.monotonic()
@@ -681,6 +745,7 @@ async def complete_stream(
                         attempt_usage = _usage_dict(usage)
                     if text_delta is not None:
                         piece = str(text_delta)
+                        attempt_had_delta = attempt_had_delta or bool(piece)
                         attempt_text += piece
                         merged = _merge_delta(combined_text, attempt_text)
                         if merged.startswith(combined_text) and len(merged) > len(combined_text):
@@ -694,6 +759,7 @@ async def complete_stream(
                                 "type": "text_delta", "delta": delta, "attempt": total_attempts,
                             })
                     if reasoning_delta:
+                        attempt_had_delta = True
                         attempt_reasoning += reasoning_delta
                         merged = _merge_delta(combined_reasoning, attempt_reasoning)
                         if merged.startswith(combined_reasoning) and len(merged) > len(combined_reasoning):
@@ -703,6 +769,7 @@ async def complete_stream(
                                 "type": "reasoning_delta", "delta": delta, "attempt": total_attempts,
                             })
                     if refusal_delta:
+                        attempt_had_delta = True
                         attempt_refusal += refusal_delta
                         merged = _merge_delta(combined_refusal, attempt_refusal)
                         if merged.startswith(combined_refusal) and len(merged) > len(combined_refusal):
@@ -718,7 +785,7 @@ async def complete_stream(
                             except (TypeError, ValueError) as exc:
                                 raise ModelCallError(
                                     "Model returned an invalid tool-call index",
-                                    category="malformed_response", retryable=True,
+                                    category="malformed_response", retryable=False,
                                 ) from exc
                             current = attempt_tools.setdefault(index, _ToolDelta())
                             function = _get(delta, "function") or {}
@@ -737,6 +804,7 @@ async def complete_stream(
                             current.name += name
                             current.arguments += arguments
                             if call_id or name or arguments:
+                                attempt_had_delta = True
                                 await _publish(on_event, {
                                     "type": "tool_call_delta", "attempt": total_attempts,
                                     "index": index,
@@ -747,7 +815,7 @@ async def complete_stream(
                 if finish_reason == "content_filter":
                     raise ModelCallError(
                         "Model response stopped by the content filter",
-                        category="content_filter", retryable=True,
+                        category="content_filter", retryable=False,
                     )
                 if finish_reason is None:
                     raise ModelCallError(
@@ -793,52 +861,30 @@ async def complete_stream(
                         "usage_available": False, "input_tokens": None,
                     })
                 category, retryable, status = classify_error(exc)
-                error = exc if isinstance(exc, ModelCallError) else ModelCallError(
-                    str(exc), category=category, status=status, retryable=retryable,
-                )
-                last_error = error
-                if status in {429, 529}:
-                    cool(route.model_id or candidate, 60.0)
                 retry_after = _retry_after(exc)
-                connection_retry = bool(
-                    error.retryable and error.category == "connection"
-                    and unbounded_connection_retries
-                    and "bedrock" not in str(route.provider).lower()
+                error = exc if isinstance(exc, ModelCallError) else ModelCallError(
+                    _safe_error_detail(exc), category=category, status=status, retryable=retryable,
+                    model=route.model_id or candidate, provider=route.provider,
+                    request_id=_request_id(exc) or request_id,
                 )
-                watchdog_capacity_retry = bool(
-                    error.retryable and retry_watchdog and status in {429, 529}
-                    and error.category in {"rate_limit", "overloaded"}
-                )
-                will_retry = connection_retry or watchdog_capacity_retry or bool(
-                    error.retryable and retry_index < max_retries
-                )
-                if watchdog_capacity_retry and retry_watchdog_max_wait_s is not None:
-                    remaining_wait = retry_watchdog_max_wait_s - watchdog_capacity_wait_s
-                    if remaining_wait <= 0:
-                        will_retry = False
-
-                delay = connection_retry_delay if connection_retry else retry_after
+                if isinstance(error, ModelCallError):
+                    error.model = route.model_id or candidate
+                    error.provider = route.provider
+                    error.status = error.status if error.status is not None else status
+                    error.attempts = total_attempts
+                    error.request_id = error.request_id or _request_id(exc) or request_id
+                    error.retry_after_s = retry_after
+                last_error = error
+                will_retry = bool(error.retryable and retry_index < max_retries and not attempt_had_delta)
+                if retry_after is not None and retry_after > 15:
+                    will_retry = False
+                delay = retry_after
                 if will_retry and delay is None:
-                    if status == 529 or error.category == "overloaded":
-                        delay = _overloaded_backoff(
-                            overloaded_retry_count, overloaded_retry_base_delay_s,
-                        )
-                    else:
-                        delay = _backoff(retry_index)
-                if watchdog_capacity_retry and will_retry and retry_watchdog_max_wait_s is not None:
-                    remaining_wait = max(0.0, retry_watchdog_max_wait_s - watchdog_capacity_wait_s)
-                    delay = min(delay or 0.0, remaining_wait)
-                retry_kind = (
-                    "connection" if connection_retry else
-                    "watchdog_capacity" if watchdog_capacity_retry and will_retry else
-                    "overloaded" if status == 529 or error.category == "overloaded" else
-                    "standard" if will_retry else None
-                )
-                retry_number = (
-                    connection_retry_count + 1 if connection_retry else
-                    overloaded_retry_count + 1 if status == 529 or error.category == "overloaded" else
-                    retry_index + 1
-                )
+                    delay = (0.5, 1.5)[min(retry_index, 1)]
+                if will_retry and status == 429 and delay is not None:
+                    delay = max(delay, 0.5)
+                retry_kind = "rate_limit" if status == 429 else "transient" if will_retry else None
+                retry_number = retry_index + 1 if will_retry else None
                 if on_attempt is not None:
                     event = {"ok": False, "attempt": total_attempts,
                              "model": route.model_id or candidate,
@@ -849,42 +895,18 @@ async def complete_stream(
                              "retry_kind": retry_kind,
                              "retry_number": retry_number if will_retry else None,
                              "retry_delay_s": delay,
-                             "retry_after_s": retry_after}
+                             "retry_after_s": retry_after,
+                             "detail": _safe_error_detail(exc),
+                             "request_id": error.request_id,
+                             "attempts": total_attempts}
                     published = on_attempt(event)
                     if asyncio.iscoroutine(published):
                         await published
                 if not will_retry:
                     break
-                if error.category == "content_filter" and not content_filter_guidance_added:
-                    request_messages.insert(0, {
-                        "role": "system",
-                        "content": (
-                            "<content_filter_guidance>\n"
-                            "Your previous response was blocked by a content filter. Do not treat this as a transient failure or try to reproduce or work around the blocked content through repeated attempts, altered formatting, splitting, encoding, tools, subagents, or later wakes. Briefly explain the limitation and offer a permitted alternative. Continue unrelated authorized work.\n"
-                            "</content_filter_guidance>"
-                        ),
-                    })
-                    content_filter_guidance_added = True
                 assert delay is not None
-                if cancel_event is not None:
-                    try:
-                        await asyncio.wait_for(cancel_event.wait(), timeout=delay)
-                        raise asyncio.CancelledError
-                    except asyncio.TimeoutError:
-                        pass
-                else:
-                    await asyncio.sleep(delay)
-                if connection_retry:
-                    connection_retry_count += 1
-                    connection_retry_delay = min(60.0, connection_retry_delay * 2)
-                elif watchdog_capacity_retry:
-                    watchdog_capacity_wait_s += delay
-                    if status == 529 or error.category == "overloaded":
-                        overloaded_retry_count += 1
-                else:
-                    retry_index += 1
-                    if status == 529 or error.category == "overloaded":
-                        overloaded_retry_count += 1
+                await _wait_for_retry(delay, cancel_event)
+                retry_index += 1
             finally:
                 if stream is not None:
                     close = getattr(stream, "close", None)
@@ -893,9 +915,6 @@ async def complete_stream(
                             await asyncio.to_thread(close)
                         except Exception:
                             pass
-        if last_error and last_error.status not in {429, 529} and candidate_index + 1 >= len(candidates):
-            break
-
     if last_error is not None:
         raise last_error
     raise ModelCallError("No available model route", category="route")

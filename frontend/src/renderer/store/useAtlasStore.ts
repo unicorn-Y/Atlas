@@ -683,6 +683,10 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
             return { pendingSteers, queue: { ...state.queue, [run.conversationId]: [...unconfirmed, ...(state.queue[run.conversationId] ?? [])] } };
           });
         }
+        if (event.type === 'run.failed' && event.data.category === 'model'
+            && (get().queue[run.conversationId]?.length ?? 0) > 0) {
+          set((state) => ({ queuePaused: { ...state.queuePaused, [run.conversationId]: true } }));
+        }
         dispatchQueue(run.conversationId);
         void reloadMessages(run.conversationId).catch((error) => fail(error, '无法读取对话历史'));
         // The run may have created a worktree or remembered a directory for the conversation.

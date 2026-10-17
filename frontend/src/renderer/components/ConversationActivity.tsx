@@ -17,6 +17,15 @@ import type { InspectorTab } from '../shell/Inspector';
 import { TokenUsageCard, TokenUsageToggle } from './TokenUsage';
 import { usageSummary } from './runInsights';
 
+const MODEL_ERROR_LABEL: Record<string, string> = {
+  authentication: '模型身份验证失败', billing: '模型额度不足',
+  model_not_found: '找不到所选模型', invalid_request: '模型请求参数无效',
+  context_window_exceeded: '输入超出模型上下文限制', content_filter: '模型内容过滤器拒绝了请求',
+  rate_limit: '模型服务限流', connection: '模型服务连接失败', timeout: '模型请求超时',
+  overloaded: '模型服务暂时过载', provider: '模型服务暂时错误',
+  route: '模型路由或凭据配置错误', budget: '运行额度限制已达到',
+};
+
 interface ConversationActivityProps {
   events: AgentEvent[];
   store: ReturnType<typeof useAtlasStore.getState>;
@@ -91,7 +100,14 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     </div>;
     case 'done': return <DoneLine key={item.id} item={item} events={events} store={store} setTab={setTab} />;
     case 'failed': return <div key={item.id} role="alert" className="my-4 rounded-xl bg-danger-soft px-4 py-3 text-[13px] text-danger">
-      没能完成：{item.detail}
+      <div>没能完成：{item.detail}</div>
+      {item.category === 'model' && <div className="mt-2 space-y-1 text-[12px] text-fg-2">
+        <div>{MODEL_ERROR_LABEL[item.errorCategory ?? ''] ?? '模型请求失败'}{item.modelId ? ` · ${item.modelId}` : ''}{item.provider ? ` · ${item.provider}` : ''}{item.status ? ` · HTTP ${item.status}` : ''}</div>
+        {item.retryAfterSeconds !== undefined && item.retryAfterSeconds > 15 && <div>预计恢复：约 {Math.ceil(item.retryAfterSeconds)} 秒后</div>}
+        {item.rawDetail && <div className="break-words">上游说明：{item.rawDetail}</div>}
+        {item.requestId && <div>请求 ID：{item.requestId}</div>}
+        {item.attempts !== undefined && <div>请求次数：{item.attempts} · 可手动重试：{item.manualRetryAllowed ? '是' : '否'}</div>}
+      </div>}
     </div>;
     default: return null;
   }
