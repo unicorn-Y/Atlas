@@ -482,6 +482,89 @@ async def test_dream_preserves_owner_edit_made_during_model_call(tmp_path, monke
 
 
 @pytest.mark.asyncio
+async def test_dream_keeps_concurrent_owner_addition_without_readding_old_snapshot(tmp_path, monkeypatch):
+    from atlas.memory.library import dream
+
+    monkeypatch.setattr("atlas.memory.library.embed._load_model", lambda: None)
+    library = MemoryLibrary(tmp_path)
+    library.ready()
+    now = datetime.now().astimezone()
+    episode = Entry(id="add-episode", text="Atlas 项目明确提及", src="经历", at=now.isoformat(), trigger=["Atlas"])
+    library.store.write(Page(path=f"经历/{now.date().isoformat()}.md", title="episodes", current=[episode]))
+    project_path = tmp_path / "事" / "Atlas.md"
+    original = Entry(text="旧决定", src="你改的").line()
+    project_path.parent.mkdir(parents=True, exist_ok=True)
+    old_snapshot = f"# Atlas\n\n## 现在状态\n{original}\n"
+    project_path.write_text(old_snapshot, encoding="utf-8")
+
+    async def write(*_args, **_kwargs):
+        added = Entry(text="并发新增", src="你改的").line()
+        project_path.write_text(f"# Atlas\n\n## 现在状态\n{original}\n{added}\n", encoding="utf-8")
+        return ({"现在状态": ["模型摘要"], "定下的决定": [], "没做完": [], "来龙去脉": []}, old_snapshot)
+
+    monkeypatch.setattr(dream, "_write_project", write)
+    report = await dream.run_dream(library, model_mgr=object())
+    saved = project_path.read_text(encoding="utf-8")
+    assert report["ok"] is True
+    assert "旧决定" in saved and "并发新增" in saved
+
+
+@pytest.mark.asyncio
+async def test_dream_does_not_resurrect_owner_line_deleted_during_model_call(tmp_path, monkeypatch):
+    from atlas.memory.library import dream
+
+    monkeypatch.setattr("atlas.memory.library.embed._load_model", lambda: None)
+    library = MemoryLibrary(tmp_path)
+    library.ready()
+    now = datetime.now().astimezone()
+    episode = Entry(id="delete-episode", text="Atlas 项目明确提及", src="经历", at=now.isoformat(), trigger=["Atlas"])
+    library.store.write(Page(path=f"经历/{now.date().isoformat()}.md", title="episodes", current=[episode]))
+    project_path = tmp_path / "事" / "Atlas.md"
+    old = Entry(text="待删除旧决定", src="你改的").line()
+    project_path.parent.mkdir(parents=True, exist_ok=True)
+    old_snapshot = f"# Atlas\n\n## 现在状态\n{old}\n"
+    project_path.write_text(old_snapshot, encoding="utf-8")
+
+    async def write(*_args, **_kwargs):
+        project_path.write_text("# Atlas\n\n## 现在状态\n", encoding="utf-8")
+        return ({"现在状态": ["模型摘要"], "定下的决定": [], "没做完": [], "来龙去脉": []}, old_snapshot)
+
+    monkeypatch.setattr(dream, "_write_project", write)
+    report = await dream.run_dream(library, model_mgr=object())
+    assert report["ok"] is True
+    assert "待删除旧决定" not in project_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_dream_keeps_replacement_and_drops_replaced_owner_line(tmp_path, monkeypatch):
+    from atlas.memory.library import dream
+
+    monkeypatch.setattr("atlas.memory.library.embed._load_model", lambda: None)
+    library = MemoryLibrary(tmp_path)
+    library.ready()
+    now = datetime.now().astimezone()
+    episode = Entry(id="replace-episode", text="Atlas 项目明确提及", src="经历", at=now.isoformat(), trigger=["Atlas"])
+    library.store.write(Page(path=f"经历/{now.date().isoformat()}.md", title="episodes", current=[episode]))
+    project_path = tmp_path / "事" / "Atlas.md"
+    old = Entry(text="待替换决定", src="你改的").line()
+    project_path.parent.mkdir(parents=True, exist_ok=True)
+    old_snapshot = f"# Atlas\n\n## 现在状态\n{old}\n"
+    project_path.write_text(old_snapshot, encoding="utf-8")
+
+    async def write(*_args, **_kwargs):
+        replacement = Entry(text="替换后的决定", src="你改的").line()
+        project_path.write_text(f"# Atlas\n\n## 现在状态\n{replacement}\n", encoding="utf-8")
+        return ({"现在状态": ["模型摘要"], "定下的决定": [], "没做完": [], "来龙去脉": []}, old_snapshot)
+
+    monkeypatch.setattr(dream, "_write_project", write)
+    report = await dream.run_dream(library, model_mgr=object())
+    saved = project_path.read_text(encoding="utf-8")
+    assert report["ok"] is True
+    assert "替换后的决定" in saved
+    assert "待替换决定" not in saved
+
+
+@pytest.mark.asyncio
 async def test_timeline_compound_cursor_pages_equal_timestamps_without_gaps(monkeypatch):
     from atlas.api import memory_library_router as router
 
