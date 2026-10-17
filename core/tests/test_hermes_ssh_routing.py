@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from atlas.engine.hermes_runtime import HermesRuntime
+from atlas.engine.tool_registry import _append_remote_lsp_notice
 
 
 def test_ssh_workspace_maps_to_hermes_terminal_scope_without_network():
@@ -18,6 +19,18 @@ def test_ssh_workspace_maps_to_hermes_terminal_scope_without_network():
         "TERMINAL_SSH_PERSISTENT": "true",
         "TERMINAL_CWD": "/srv/project",
     }
+
+
+def test_ssh_write_result_discloses_missing_remote_lsp_but_local_result_does_not():
+    remote = SimpleNamespace(workspace="ssh://build-host/srv/project")
+    local = SimpleNamespace(workspace="C:/work/project")
+
+    notice = _append_remote_lsp_notice(remote, "write_file", "写入完成")
+    assert notice.startswith("写入完成")
+    assert "未执行 Atlas LSP 诊断" in notice
+    assert "language-server/session transport" in notice
+    assert _append_remote_lsp_notice(remote, "read_file", "读取完成") == "读取完成"
+    assert _append_remote_lsp_notice(local, "write_file", "写入完成") == "写入完成"
 
 
 @pytest.mark.asyncio

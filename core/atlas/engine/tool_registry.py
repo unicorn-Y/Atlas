@@ -80,6 +80,17 @@ def _append_repetition_reminder(
     return result
 
 
+def _append_remote_lsp_notice(runtime: Any, name: str, result: str) -> str:
+    """Expose that SSH writes currently have no Atlas LSP diagnostic pass."""
+    workspace = str(getattr(runtime, "workspace", "") or "")
+    if workspace.startswith("ssh://") and name in _LSP_WRITE_TOOLS:
+        return (
+            f"{result}\n\n"
+            "SSH 远端写入未执行 Atlas LSP 诊断（当前没有远端 language-server/session transport）。"
+        )
+    return result
+
+
 def _read_text_for_lsp(raw_path: Any, runtime: Any) -> str | None:
     """Best-effort workspace-aware text read (``None`` = missing/unreadable)."""
     raw = str(raw_path or "")
@@ -523,6 +534,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                         for item in bound_runtime.todo_store.snapshot()["todos"]
                     ])
                 result = str(messages[-1].content) if messages else "工具没有返回内容。"
+                result = _append_remote_lsp_notice(bound_runtime, _name, result)
                 return _append_repetition_reminder(bound_runtime, _name, args, result)
 
             native_entry = _hermes_entries.get(name)
