@@ -1,0 +1,71 @@
+[
+  {
+    "local_id": "W6-001",
+    "priority": "P1",
+    "domain": "启动/调试面",
+    "symptom": "源码启动默认启用CDP 9335并允许任意Origin，拥有本机端口访问的进程可连接并控制/检查桌面页面会话。代码确认，实际Electron PID持有9335；未验证跨主机可达性。",
+    "runtime_affected": true,
+    "evidence": [
+      { "branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "scripts/atlas-update.mjs", "line": 188, "function": "launch" },
+      { "branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "scripts/atlas-update.mjs", "line": 192, "function": "launch" },
+      { "branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "scripts/atlas-update.mjs", "line": 195, "function": "launch" }
+    ],
+    "classification": "代码确认",
+    "minimal_fix": "默认关闭CDP，仅通过明确的opt-in启用；调试启用时限制回环绑定及可信来源。",
+    "reuse": "无需引入外部实现；Electron/Chromium现有调试参数即可。",
+    "complexity": "S",
+    "worker": "W6"
+  },
+  {
+    "local_id": "W6-002",
+    "priority": "P1",
+    "domain": "更新/回滚",
+    "symptom": "源代码fast-forward与依赖安装后原地构建；失败只记录错误，但relaunch/launch-only仍会重启，未恢复旧源码、依赖或dist，可能启动半更新版本。源码确认，未故障注入。",
+    "runtime_affected": true,
+    "evidence": [
+      { "branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "scripts/atlas-update.mjs", "line": 74, "function": "pull" },
+      { "branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "scripts/atlas-update.mjs", "line": 136, "function": "rebuild" },
+      { "branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "scripts/atlas-update.mjs", "line": 258, "function": "failure/relaunch" }
+    ],
+    "classification": "代码确认",
+    "minimal_fix": "新版本在隔离目录完成安装/构建和入口校验后再切换；失败时保留旧版本并停止自动重启失败版本。",
+    "reuse": "可复用现有build-stamp与updater状态文件，增加暂存/切换步骤。",
+    "complexity": "M",
+    "worker": "W6"
+  },
+  {
+    "local_id": "W6-003",
+    "priority": "P2",
+    "domain": "依赖pin/Python启动",
+    "symptom": "新建core虚拟环境仅pip install -e core，主要依赖为>=范围；首次build stamp缺失时updater的requirements.lock变更条件不触发，首次安装未应用完整锁文件。",
+    "runtime_affected": true,
+    "evidence": [
+      { "branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "start-atlas.bat", "line": 19, "function": "venv bootstrap" },
+      { "branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "start-atlas.bat", "line": 23, "function": "venv bootstrap" },
+      { "branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "scripts/atlas-update.mjs", "line": 150, "function": "rebuild" },
+      { "branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/pyproject.toml", "line": 10, "function": "project dependencies" }
+    ],
+    "classification": "代码确认",
+    "minimal_fix": "首次创建或重建venv时安装requirements.lock，并纳入完成状态记录。",
+    "reuse": "复用现有core/requirements.lock，无需新锁定工具。",
+    "complexity": "S",
+    "worker": "W6"
+  },
+  {
+    "local_id": "W6-004",
+    "priority": "P2",
+    "domain": "源码/构建产物一致性",
+    "symptom": "launch-only只比较build stamp和HEAD；重建健康判定只查renderer index与preload，没有校验Electron主进程bundle。stamp相同且主bundle缺失时会跳过重建并尝试启动。",
+    "runtime_affected": true,
+    "evidence": [
+      { "branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "scripts/atlas-update.mjs", "line": 209, "function": "launch-only fast path" },
+      { "branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "scripts/atlas-update.mjs", "line": 169, "function": "rebuild artifact probe" }
+    ],
+    "classification": "代码确认",
+    "minimal_fix": "stamp快路径和rebuild探测都检查dist-electron/main/electron.js及所有启动必需bundle。",
+    "reuse": "沿用现有文件存在性探测逻辑。",
+    "complexity": "S",
+    "worker": "W6"
+  }
+]
+

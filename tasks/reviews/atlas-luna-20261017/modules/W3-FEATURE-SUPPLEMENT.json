@@ -1,0 +1,798 @@
+[
+  {
+    "id": "A001",
+    "current_status": "原有",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:99-120,590-601",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:353-375"
+    ],
+    "assessment": "侧栏按会话摘要列出最近会话，store启动时载入摘要并恢复已选会话；实际分页/最近排序与后端策略未在此处证明。"
+  },
+  {
+    "id": "A002",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:451-467,705-710",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:152-156"
+    ],
+    "assessment": "新建时立即创建后端会话；草稿按conversationId写localStorage，尚无持久化的未发送空白会话实体。"
+  },
+  {
+    "id": "A003",
+    "current_status": "原有",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:570-589",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:395-410"
+    ],
+    "assessment": "已有列表行点击及openConversation载入历史和设为活动会话；仅静态调用链证据。"
+  },
+  {
+    "id": "A004",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:238-253,780-785,850-880"
+    ],
+    "assessment": "侧栏搜索过滤会话标题及项目/工作区关联；未看到提示词全文和ID均可搜索的证据。"
+  },
+  {
+    "id": "A005",
+    "current_status": "原有",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:958-976",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:293-298"
+    ],
+    "assessment": "命令中心跨会话搜消息调用searchMessages并呈现命中摘要，可跳转至命中会话；结果完整性未运行验证。"
+  },
+  {
+    "id": "A006",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:293-327,379-397,497-503"
+    ],
+    "assessment": "当前会话构造搜索行、快捷键打开ConversationSearch并滚动至命中位置。"
+  },
+  {
+    "id": "A007",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:50,152,246-253,789-792",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:653-690"
+    ],
+    "assessment": "筛选running/waiting/completed/failed/unread等；后台store更新事件状态，尚未证明重启后运行态持久化。"
+  },
+  {
+    "id": "A008",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:49,201-207,242-285"
+    ],
+    "assessment": "按project/workspace分组并有worktree筛选；environment筛选未见。"
+  },
+  {
+    "id": "A009",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:99-120,273-275"
+    ],
+    "assessment": "按日期生成today/yesterday/earlier分组并渲染。"
+  },
+  {
+    "id": "A010",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:140-184,459-514,789-803"
+    ],
+    "assessment": "自定义组可本地持久化、折叠并通过拖放归类；组名编辑入口在侧栏操作逻辑中，未做运行交互验证。"
+  },
+  {
+    "id": "A011",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:459-514"
+    ],
+    "assessment": "drag/drop可移动会话到组、pin/archive/project/custom/workspace/label目标。"
+  },
+  {
+    "id": "A012",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:201-207,270-285"
+    ],
+    "assessment": "项目列表从GET /api/projects加载并分组导航；独立项目管理操作另核A013。"
+  },
+  {
+    "id": "A013",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:201-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:201-207"
+    ],
+    "assessment": "存在项目读取与项目页入口；不能据本证据确认创建、导入、关闭、最近关闭均具备。"
+  },
+  {
+    "id": "A014",
+    "current_status": "原有",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:515-532,823-842",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:862-874"
+    ],
+    "assessment": "会话pin动作更新store并显示pinned分区。"
+  },
+  {
+    "id": "A015",
+    "current_status": "原有",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:459-514,515-532,823-842",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:862-874"
+    ],
+    "assessment": "归档/取消归档并列归档区；持久化由store接口承担。"
+  },
+  {
+    "id": "A016",
+    "current_status": "原有",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:515-532,806-820"
+    ],
+    "assessment": "支持多选并批量pin/unread/archive/delete/export等动作。"
+  },
+  {
+    "id": "A017",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:515-532,662-670",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:834-846"
+    ],
+    "assessment": "删除有确认门槛并调用delete；单条恢复/软删除历史清理未见。"
+  },
+  {
+    "id": "A018",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:431-453,570-589"
+    ],
+    "assessment": "行支持右键、菜单键/Shift+F10和触屏长按菜单。"
+  },
+  {
+    "id": "A019",
+    "current_status": "原有",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:423-425,570-589",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:834-846"
+    ],
+    "assessment": "行菜单/双击进入重命名，提交到backend.renameConversation。"
+  },
+  {
+    "id": "A020",
+    "current_status": "原有",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:662-670",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:973-978"
+    ],
+    "assessment": "上下文菜单duplicate调用后端复制会话并打开副本；克隆运行环境语义未证明。"
+  },
+  {
+    "id": "A021",
+    "current_status": "原有",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:235,770-795",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:662-670"
+    ],
+    "assessment": "打开会话自动加入持久化tabs并可旁边打开；可见多标签/旁开入口。"
+  },
+  {
+    "id": "A022",
+    "current_status": "原有",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:515-532,662-670",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:879-900"
+    ],
+    "assessment": "单条和批量导出动作进入store导出流程。"
+  },
+  {
+    "id": "A023",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:417-421,431-440",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:879-900"
+    ],
+    "assessment": "可复制日志位置；导出路径/工作区路径是否各有明确复制会话ID入口未确认。"
+  },
+  {
+    "id": "A024",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:431-440",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:130-132"
+    ],
+    "assessment": "应用有平台集成设置及目录相关菜单；未证明会话行打开项目目录动作。"
+  },
+  {
+    "id": "A025",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:653-690",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:590-601"
+    ],
+    "assessment": "事件投影更新状态并显示运行/失败/完成/unread标识；waiting的恢复及持久化未证明。"
+  },
+  {
+    "id": "A026",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:346,515-532,806-820",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:653-690"
+    ],
+    "assessment": "手动未读切换与打开会话清读/后台完成未读投影均有路径。"
+  },
+  {
+    "id": "A027",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:653-690",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/services/runtimeEvents.ts:25-45"
+    ],
+    "assessment": "运行事件投影至全局store、后台完成可置未读并通知；未确认统一Activity视图和OS通知投递。"
+  },
+  {
+    "id": "A028",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:153-198",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:590-601"
+    ],
+    "assessment": "活动区展示usage/model/reasoning token和步骤摘要；独立会话详情、成本、轮次数统计未全确认。"
+  },
+  {
+    "id": "A029",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/services/shortcuts.ts:14,30-33",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:806,820-823",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:318-342"
+    ],
+    "assessment": "注册并分发侧栏搜索、项目选择、切换分组等快捷键。"
+  },
+  {
+    "id": "A030",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:806-880,881-895,958-976"
+    ],
+    "assessment": "命令中心包含会话操作并有slash命令；来源/说明/模糊匹配等完整command registry能力需看服务层实现，入口已接线。"
+  },
+  {
+    "id": "A031",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:770-795,881-895"
+    ],
+    "assessment": "标签页支持上一/下一导航，/resume支持打开或搜索最近会话。"
+  },
+  {
+    "id": "A032",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:881-895",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/services/slashCommands.ts:1-34"
+    ],
+    "assessment": "查阅会话命令和backend adapter前端入口，未找到会话目录迁移命令/API接线。"
+  },
+  {
+    "id": "A033",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:653-690",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:484-505"
+    ],
+    "assessment": "全局store可在当前视图之外接收runtime事件并维护后台会话状态；进程退出后任务持续能力未证明。"
+  },
+  {
+    "id": "A034",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:78-82,705-723,774-825",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationQueuePanel.tsx:1-74"
+    ],
+    "assessment": "会话级消息队列与编辑/调度入口存在；store状态持久化与窗口重启恢复未见。"
+  },
+  {
+    "id": "A035",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:515-532",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:879-900"
+    ],
+    "assessment": "存在全局批量归档/导出，但未见按项目批量归档的专门入口或filter-to-archive动作。"
+  },
+  {
+    "id": "A036",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:52,201-207,278-285"
+    ],
+    "assessment": "读取project color/icon并按项目分组展示；用户自定义颜色/图标管理入口未确认。"
+  },
+  {
+    "id": "B001",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:28-71,193-271,446-462",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:40-110"
+    ],
+    "assessment": "将历史消息与assistant/tool/reasoning/approval/plan/artifact等事件归并为时间线行并分组展示。"
+  },
+  {
+    "id": "B002",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:158-162,193-271,462-526"
+    ],
+    "assessment": "使用virtuoso虚拟列表，支持load earlier与滚动状态恢复。"
+  },
+  {
+    "id": "B003",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:293-327,379-397,497-503"
+    ],
+    "assessment": "会话内全文搜索、命中定位及前后导航入口已接线。"
+  },
+  {
+    "id": "B004",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:379-397,475-503",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ForkTree.tsx:1-64"
+    ],
+    "assessment": "搜索定位和键盘/轮次定位存在；分支树导航与消息定位闭环未确认。"
+  },
+  {
+    "id": "B005",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:252-285,378-400",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:454-462"
+    ],
+    "assessment": "消息有折叠/上下文动作；引用/附件摘要呈现需依据具体history payload，未统一证明。"
+  },
+  {
+    "id": "B006",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:252-285",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:538-560",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:1020-1045"
+    ],
+    "assessment": "消息工具动作含编辑/重提交流程并保存编辑草稿；未证明编辑附件完整恢复。"
+  },
+  {
+    "id": "B007",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:252-285"
+    ],
+    "assessment": "消息操作有复制单条入口；未找到复制assistant整轮聚合动作。"
+  },
+  {
+    "id": "B008",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:252-285",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:881-895"
+    ],
+    "assessment": "复核消息动作及命令菜单，未找到回复/产品反馈提交入口。"
+  },
+  {
+    "id": "B009",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:252-295",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:943-978"
+    ],
+    "assessment": "可从消息fork或复制会话；逐消息重跑动作未确认。"
+  },
+  {
+    "id": "B010",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:346-357",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:505-508,538-553"
+    ],
+    "assessment": "选中文本加入草稿或触发side chat选择事件；side chat实际执行仍须另一入口接手。"
+  },
+  {
+    "id": "B011",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:172-239",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MermaidBlock.tsx:14-35"
+    ],
+    "assessment": "Markdown/GFM/highlight与静态Mermaid渲染接线。"
+  },
+  {
+    "id": "B012",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:188",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/message-actions/CodeBlock.tsx:181-220"
+    ],
+    "assessment": "代码块使用专用renderer并支持代码复制/局部diff；逐种语言标识和软换行控制未确认。"
+  },
+  {
+    "id": "B013",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:152-160,226-239"
+    ],
+    "assessment": "链接安全处理与工作区文件链接打开编辑器；行列跳转能力未证明。"
+  },
+  {
+    "id": "B014",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:303-327"
+    ],
+    "assessment": "文件链接右键菜单支持复制路径、加入上下文及在编辑器打开。"
+  },
+  {
+    "id": "B015",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:108-160",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:612-662",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/FilesPanel.tsx:22-25,454-499"
+    ],
+    "assessment": "图片及常见文档附件有渲染/文件面板预览入口；视频与Office完整预览支持未确认。"
+  },
+  {
+    "id": "B016",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:260-285,346-357",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/message-actions/CodeBlock.tsx:181-220"
+    ],
+    "assessment": "文本选择可作为评注/草稿动作；独立assistant preview card未确认。"
+  },
+  {
+    "id": "B017",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:253-335",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/tool-cards/ToolExecutionCard.tsx:1-102"
+    ],
+    "assessment": "存在按步骤分类的统一tool card renderer；每种工具是否有专用renderer不完整。"
+  },
+  {
+    "id": "B018",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/tool-cards/ToolExecutionCard.tsx:12-20,37-98,100-108",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/ChangesPanel.tsx:228-267"
+    ],
+    "assessment": "文件读写/编辑分类卡与Run Changes diff可见；逐文件工具专用diff映射未逐类确认。"
+  },
+  {
+    "id": "B019",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/tool-cards/ToolExecutionCard.tsx:37-102",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:253-335"
+    ],
+    "assessment": "通用tool卡展示输出及参数详情；shell命令专用错误/截断呈现范围未确认。"
+  },
+  {
+    "id": "B020",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:253-335",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/tool-cards/ToolExecutionCard.tsx:1-36"
+    ],
+    "assessment": "通用工具卡分类处理步骤；Search/Grep/WebFetch各结果专用卡不完整。"
+  },
+  {
+    "id": "B021",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:59-61,312-335",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:446-462"
+    ],
+    "assessment": "Plan/approval与Todo编辑notice在时间线呈现；Question结果卡类型未证实。"
+  },
+  {
+    "id": "B022",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:303-335",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ForkTree.tsx:1-64"
+    ],
+    "assessment": "有subagent运行卡和会话分支树入口；可回查子会话与stop/steer全链路未确认。"
+  },
+  {
+    "id": "B023",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:253-335",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/tool-cards/ToolExecutionCard.tsx:1-36"
+    ],
+    "assessment": "MCP/plugin结果可落统一工具卡；独立MCP专用可视化renderer未见完整证据。"
+  },
+  {
+    "id": "B024",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:289-295",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/tool-cards/ToolExecutionCard.tsx:88-102"
+    ],
+    "assessment": "输入/结果/输出有展开详情及复制动作；完整参数和截断原因是否齐备未证明。"
+  },
+  {
+    "id": "B025",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:339-379",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:142-144"
+    ],
+    "assessment": "权限卡提供allow once/always/deny与理由，并调用审批store方法；权限范围解释完整性未确认。"
+  },
+  {
+    "id": "B026",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/Composer.tsx:390-419,428-452,503-581"
+    ],
+    "assessment": "多行composer、Enter偏好和消息历史恢复存在；发送/换行行为依本地设置。"
+  },
+  {
+    "id": "B027",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:925,1099,1436",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/Composer.tsx:116-167"
+    ],
+    "assessment": "模型选择接入composer，状态栏可显模型/推理/上下文偏好；上下文用量设置的端到端精度未确认。"
+  },
+  {
+    "id": "B028",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/Composer.tsx:428-430,463-503",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:538-553,612-662"
+    ],
+    "assessment": "文件选择、拖放、粘贴、附件移除/进度投影及提交链路存在；失败重试是否完整未证实。"
+  },
+  {
+    "id": "B029",
+    "current_status": "原有",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:152-156,214-218,752-781"
+    ],
+    "assessment": "草稿按conversationId保存和恢复，切换会话由draftKey隔离。"
+  },
+  {
+    "id": "B030",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/Composer.tsx:32-80,239-280",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:538-553,583-588",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:1110-1127"
+    ],
+    "assessment": "@/#引用建议与提交context_files接线；所有引用种类和文件树拖入语义未全确认。"
+  },
+  {
+    "id": "B031",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/Composer.tsx:32-80,239-280",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/services/slashCommands.ts:1-34"
+    ],
+    "assessment": "检查mention providers和slash registry，未见消息级$skill结构化引用链。"
+  },
+  {
+    "id": "B032",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/services/slashCommands.ts:1-34",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/Composer.tsx:5,64-66,239-280"
+    ],
+    "assessment": "slash registry支持注册/匹配并用于建议；来源、帮助说明、模糊搜索覆盖程度待核。"
+  },
+  {
+    "id": "B033",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:881-895",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/Composer.tsx:239-280"
+    ],
+    "assessment": "内建命令清单未见/compact命令注册或压缩执行API。"
+  },
+  {
+    "id": "B034",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:881-895",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:118-125"
+    ],
+    "assessment": "未见/fast模式命令或等效前端动作。"
+  },
+  {
+    "id": "B035",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:881-895",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:118-125"
+    ],
+    "assessment": "未见生命周期/goals slash命令入口；存在goal相关页面/状态，不据此认定Codex /goal等价能力。"
+  },
+  {
+    "id": "B036",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:881-895,925,1099,1436",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:118-125"
+    ],
+    "assessment": "/model与模型选择入口存在；/reasoning档位命令和上游选项覆盖未证实。"
+  },
+  {
+    "id": "B037",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:881-895",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:294-295"
+    ],
+    "assessment": "能派发side chat选择事件但未见/side命令或独立不打断主聊天会话执行器。"
+  },
+  {
+    "id": "B038",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:881-895",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Sidebar.tsx:459-514"
+    ],
+    "assessment": "有会话工作树信息/分组和Worktree页面入口；当前聊天/worktree slash选择是否对接未确认。"
+  },
+  {
+    "id": "B039",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:881-895",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:943-946"
+    ],
+    "assessment": "存在forkFrom消息分支操作，但未找到/ fork slash command注册。"
+  },
+  {
+    "id": "B040",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:881-895",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:59-61"
+    ],
+    "assessment": "计划模式入口和plan事件渲染存在；Codex /plan命令等价性未证明。"
+  },
+  {
+    "id": "B041",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:881-895",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:131"
+    ],
+    "assessment": "/review动作在活动卡上调用sendMessage，未证实复核当前工作区改动的端到端工具响应。"
+  },
+  {
+    "id": "B042",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:881-895",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:118-125"
+    ],
+    "assessment": "未见/local,/cloud,/cloud-environment执行位置命令/选择器接线。"
+  },
+  {
+    "id": "B043",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/Composer.tsx:46-49,158-160,390-419",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:253-256,770"
+    ],
+    "assessment": "Enter发送偏好有本地状态；steer/redirect/queue默认值本地持久化，但偏好设置入口需区分。"
+  },
+  {
+    "id": "B044",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/Composer.tsx:95-107,172-189,406-419"
+    ],
+    "assessment": "上箭头触发持久消息历史recall，空输入切换历史并可返回当前草稿。"
+  },
+  {
+    "id": "B045",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:253-335,339-379",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:193-271"
+    ],
+    "assessment": "流事件转活动步骤、工具卡和待审批交互状态并在完成/失败时投影。"
+  },
+  {
+    "id": "B046",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:54-57",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Inspector.tsx:1-80"
+    ],
+    "assessment": "artifact事件有查看入口指向Artifacts面板；Sources打开/下载文件来源未确认。"
+  },
+  {
+    "id": "B047",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:806-823,770-795",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:319-327"
+    ],
+    "assessment": "有command center、会话tab导航和会话查找快捷键；官方列表其余new/fork/chat等全局快捷键未齐证。"
+  },
+  {
+    "id": "B048",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/Composer.tsx:239-280",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/services/slashCommands.ts:1-34"
+    ],
+    "assessment": "slash command/mention机制已检查，未见! shell模式解析与执行接线。"
+  },
+  {
+    "id": "B049",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/Composer.tsx:428-430,463-503,570-581",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:538-553"
+    ],
+    "assessment": "Add/附件入口含文件、绘图等动作；Goal/Workflow快捷插入是否指向可执行流程未确认。"
+  },
+  {
+    "id": "B050",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:22,78-82,705-723,774-825",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationQueuePanel.tsx:1-74"
+    ],
+    "assessment": "steer/redirect/queue三种运行中消息路线与队列UI存在；等待建议和运行时错误队列行为另有风险记录。"
+  },
+  {
+    "id": "B051",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:1241-1252",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:774-825",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationQueuePanel.tsx:33-74"
+    ],
+    "assessment": "存在编辑、拖放排序、立即调度/删除及undo恢复；错误态自动继续风险已列W3-001。"
+  },
+  {
+    "id": "B052",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:59-61,339-379",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:446-462"
+    ],
+    "assessment": "当前轮审批和Plan卡接线，Todo编辑提示及提交存在；Todo各状态是否实时同步需看事件端。"
+  },
+  {
+    "id": "B053",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/FilesPanel.tsx:22-25,454-499",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:303-327"
+    ],
+    "assessment": "文件面板提供工作区文件预览，文件上下文及复制路径来自链接菜单；Git状态/右键行为全量未确认。"
+  },
+  {
+    "id": "B054",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/ChangesPanel.tsx:40-85,228-267",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:1436"
+    ],
+    "assessment": "Run Changes面板可展示文件diff及操作；文件数/增删行摘要汇总展示未确认。"
+  }
+]
+

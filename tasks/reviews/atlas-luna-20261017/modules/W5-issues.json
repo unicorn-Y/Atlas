@@ -1,0 +1,162 @@
+[
+  {
+    "local_id": "W5-001",
+    "priority": "P1",
+    "domain": "Dream / checkpoint / recovery",
+    "symptom": "run_dream 扫描 checkpoint 之后的经历，并在全部生成完成后把全局 checkpoint 推到运行时 now。若在扫描完成、checkpoint 写入前到达的经历具有早于 now 的 entry.at（例如重启后处理迟到队列），下次 _episode_groups 会因 entry.at <= checkpoint 永久跳过它；全局时间水位也无法表达逐 source 的处理状态。",
+    "runtime_affected": "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f 源码符合该条件；是否发生于当前实际运行进程未核实。",
+    "evidence": [
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/dream.py", "line": 28, "function": "_episode_groups"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/dream.py", "line": 154, "function": "run_dream"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/tests/test_memory_library_w2.py", "line": 274, "function": "test_dream_checkpoint_advances_only_after_all_projects_succeed (does not cover late/concurrent sources)"}
+    ],
+    "classification": "代码确认",
+    "minimal_fix": "以 entry/source ID + extractor version 保存已成功处理游标；只有该 source 的结果持久化后才推进它的状态。至少复核扫描期间新增的 source，避免以运行时间覆盖尚未看见的条目。",
+    "reuse": "V4.1 M01 的 ReMe Extract/Integrate/Finish 思路；继续用 Atlas 现有 SQLite/Git，不引入 ReMe service。",
+    "complexity": "M",
+    "worker": "W5"
+  },
+  {
+    "local_id": "W5-002",
+    "priority": "P1",
+    "domain": "Dream / manual edit / concurrent writes",
+    "symptom": "_write_project 在模型调用前读取 existing 页面并等待 LLM；run_dream 最后只用 store.lock 包住写入，却按旧 existing 保护用户编辑行并整页覆盖。若用户在 LLM 等待期间编辑/新增该项目条目，旧快照不含新行，最终写入会删除该编辑。",
+    "runtime_affected": "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f 源码存在该竞态；并发发生频率未测。",
+    "evidence": [
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/dream.py", "line": 65, "function": "_write_project"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/dream.py", "line": 105, "function": "_write_project (await model completion)"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/dream.py", "line": 167, "function": "run_dream (lock then stale-snapshot overwrite)"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/__init__.py", "line": 431, "function": "edit_entry"}
+    ],
+    "classification": "代码确认",
+    "minimal_fix": "生成后在 lock 内重新读取最新页面并合并；如果需要 LLM 重整完整页面，则对输入页面 hash 做 CAS，检测冲突时保留用户最新版本并重试生成。",
+    "reuse": "复用 MemoryStore.write 的原子 rename 与既有 SRC_EDITED 来源标识；不加通用并发框架。",
+    "complexity": "M",
+    "worker": "W5"
+  },
+  {
+    "local_id": "W5-003",
+    "priority": "P1",
+    "domain": "queue / failed recovery",
+    "symptom": "queue.pending 只返回 attempts < 3 的行；fail 将 attempts 加一，第三次后行永久不再进入消费列表。接口只有 failed_count，没有 reset/retry 操作，故经历结构化提炼可永久停留在失败行，只有已有日记阶段可读。",
+    "runtime_affected": "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f 源码确认；真实失败行数量未读（未访问数据）。",
+    "evidence": [
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/queue.py", "line": 60, "function": "TurnQueue.pending"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/queue.py", "line": 73, "function": "TurnQueue.failed_count"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/queue.py", "line": 77, "function": "TurnQueue.fail"}
+    ],
+    "classification": "代码确认",
+    "minimal_fix": "保留失败详情并暴露显式恢复一次的用户入口；对可重试错误施加退避与有界次数，终态错误允许手动重置 attempts。",
+    "reuse": "沿用现有 SQLite pending 表及 pending_failed 计数，不引入新 broker。",
+    "complexity": "S",
+    "worker": "W5"
+  },
+  {
+    "local_id": "W5-004",
+    "priority": "P2",
+    "domain": "queue / process restart",
+    "symptom": "队列行能跨 Library 对象/重启持久化，但消费 drain 仅由 observe_turn 写入新行后 create_task；应用 startup 钩子启动的是 Dream scheduler，没有扫描既有 queue。因此没有下一次会话轮次时，重启前的 pending 工作不会主动继续。",
+    "runtime_affected": "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f 源码确认；空闲启动期间实际延迟未观测。",
+    "evidence": [
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/__init__.py", "line": 298, "function": "MemoryLibrary.observe_turn (insert and schedule drain)"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/__init__.py", "line": 309, "function": "MemoryLibrary._drain"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/api/memory_library_router.py", "line": 333, "function": "start_dream_scheduler (startup hook)"}
+    ],
+    "classification": "代码确认",
+    "minimal_fix": "在已存在的应用启动/lifespan 中用当前 model_mgr 对 pending 行启动一次有界 drain；无模型则保留并记录 deferred 状态。",
+    "reuse": "复用当前 queue.pending/_drain 与已有 lifecycle；不另建常驻队列服务。",
+    "complexity": "S",
+    "worker": "W5"
+  },
+  {
+    "local_id": "W5-005",
+    "priority": "P2",
+    "domain": "index / search pagination and filters",
+    "symptom": "/api/memlib/search 先请求 relevance 排序前 1000 条，再由 API 对 src/from/to/project 过滤。符合过滤器的结果若落在索引候选窗口 1000 以外，items 与 total 都看不到；offset 只作用于已过滤的该窗口。",
+    "runtime_affected": "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f 源码确认；数据量及真实漏结果未测。",
+    "evidence": [
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/api/memory_library_router.py", "line": 112, "function": "search (fixed 1000 candidate limit)"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/api/memory_library_router.py", "line": 114, "function": "search (post-query filters)"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/api/memory_library_router.py", "line": 128, "function": "search (offset/limit page)"}
+    ],
+    "classification": "代码确认",
+    "minimal_fix": "把 source/date/project predicates 下推到 Index 查询；若做不到，迭代取候选直到收齐一页并且 total 完整。",
+    "reuse": "复用 MemoryIndex 的 keyword/vector/hybrid 排名及 API 参数，不替换检索算法。",
+    "complexity": "M",
+    "worker": "W5"
+  },
+  {
+    "local_id": "W5-006",
+    "priority": "P2",
+    "domain": "timeline / cursor pagination",
+    "symptom": "timeline 按 at 倒序排序，下一页只返回 page[-1].at；下一次请求排除所有 entry.at >= before。若多条经历共享该秒级 timestamp（常见于连续写入），游标处其余相同时间经历全部被跳过。",
+    "runtime_affected": "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f 源码确认；同 timestamp 实例未测试。",
+    "evidence": [
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/api/memory_library_router.py", "line": 148, "function": "timeline"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/api/memory_library_router.py", "line": 157, "function": "timeline (before comparison)"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/api/memory_library_router.py", "line": 162, "function": "timeline (sort)"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/api/memory_library_router.py", "line": 186, "function": "timeline (timestamp-only next cursor)"}
+    ],
+    "classification": "代码确认",
+    "minimal_fix": "用稳定复合游标 `(at,id)`，排序也按 `(at,id)`；before 谓词严格按同一排序键推进。",
+    "reuse": "沿用现有 endpoint 与稳定 Entry.id，不需迁移存储格式。",
+    "complexity": "S",
+    "worker": "W5"
+  },
+  {
+    "local_id": "W5-007",
+    "priority": "P1",
+    "domain": "provenance / source authenticity",
+    "symptom": "open_ref 接受 `session@timestamp`，在该 SessionDB 中选时间差最近的 user 消息；无有效时间时取最后一条 user。它不能保证入口 ref 指向经历实际来源 message，无法按 exact UID 区分同时间消息。mem-integrate 的 SourceRef 实现不在本基线。",
+    "runtime_affected": "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f 源码确认；错误打开的真实引用未抽查（不读真实会话）。",
+    "evidence": [
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/sources.py", "line": 25, "function": "open_ref"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/sources.py", "line": 61, "function": "open_ref (nearest timestamp selection)"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/sources.py", "line": 153, "function": "search_raw (timestamp ref construction)"},
+      {"branch": "mem-integrate", "fullSHA": "4046764fbabda187a4b329c830a4b9cab9631951", "path": "core/atlas/memory/library/source_ref.py", "line": 1, "function": "SourceRef (file absent from current baseline)"}
+    ],
+    "classification": "代码确认",
+    "minimal_fix": "沿用 SessionDB 的 message_uid；新引用 exact 打开且缺失时报 missing，不回退猜测；旧 timestamp 引用标 approximate。",
+    "reuse": "直接复用 `mem-m2` SourceRef contract 与 SessionDB UID；不生成第二种 transcript ID。",
+    "complexity": "M",
+    "worker": "W5"
+  },
+  {
+    "local_id": "W5-008",
+    "priority": "P2",
+    "domain": "forget / source propagation",
+    "symptom": "forget_entry 删除派生 Markdown、日记匹配文本和记忆 Git 可达历史，但明确把 Atlas 原始会话库列为 not_covered；同一来源仍可由显式 kind=raw 的 /api/memlib/search 查询，之后也可重新进入整理流程。当前 UI/API 有披露边界，因此属于忘记语义尚未覆盖 canonical source 的功能缺口。",
+    "runtime_affected": "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f 源码确认；没有读取或查询真实 source 内容。",
+    "evidence": [
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/__init__.py", "line": 467, "function": "forget_entry"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/__init__.py", "line": 483, "function": "forget_entry (history rewrite only for memory store)"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/sources.py", "line": 153, "function": "search_raw"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/api/memory_library_router.py", "line": 108, "function": "search (raw kind opt-in)"}
+    ],
+    "classification": "功能缺口",
+    "minimal_fix": "先保持 UI 明确说明原会话未删除；如产品将 forget 定义为源级删除，则以 exact SourceRef 对 canonical SessionDB 传播删除/失效，并令 raw search/后续提炼尊重 tombstone。",
+    "reuse": "复用 existing tombstone hashes + M2 SourceRef；仅实现 source invalidation，不复制 transcript。",
+    "complexity": "M",
+    "worker": "W5"
+  },
+  {
+    "local_id": "W5-009",
+    "priority": "P2",
+    "domain": "forget / Git history rewrite / concurrent recovery",
+    "symptom": "forget 的 Git rewrite 先备份、导出、重写、检查 commit 数/残留 needle/工作树，再替换 .git，并对已捕获异常尝试还原；但互斥仅为一个 MemoryStore 实例的 threading.RLock。两个实例或另一进程若共享同一 memory root，writer 可在校验和 .git swap 之间修改工作树或 refs，现有快照校验并不形成跨进程事务。恢复失败时异常被吞并且保留备份供人工处理，真实并发/失败注入未验证。",
+    "runtime_affected": "当前默认单实例路径有锁；只有同 root 多实例/多进程 writer 才受影响，部署形态未验证。",
+    "evidence": [
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/store.py", "line": 228, "function": "MemoryStore.__init__ (instance-local RLock)"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/forget.py", "line": 97, "function": "purge_history (rewrite transaction begins)"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/forget.py", "line": 119, "function": "purge_history (verify before swap)"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/forget.py", "line": 128, "function": "purge_history (.git swap)"},
+      {"branch": "ui-redesign", "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f", "path": "core/atlas/memory/library/forget.py", "line": 142, "function": "purge_history (rollback)"}
+    ],
+    "classification": "待验证",
+    "minimal_fix": "只有在确认存在多 writer 时，用 memory-root 级 OS file lock 包住 forget 与修改事务；做两条最小故障注入，分别覆盖 swap 前失败和 swap 后 restore 失败，并保留人工恢复路径。",
+    "reuse": "沿用已有 backup、commit count、needle/tree 校验与 rollback；不重写忘记算法。",
+    "complexity": "M",
+    "worker": "W5"
+  }
+]
+

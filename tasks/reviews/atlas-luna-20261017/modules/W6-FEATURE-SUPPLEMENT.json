@@ -1,0 +1,459 @@
+[
+  {
+    "current_status": "已做",
+    "id": "C051",
+    "assessment": "用户级 cost 与 turn limit 有面板和读写 API；这里只确认源码链，未执行超限运行验收。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/RunLimitsPanel.tsx:18-86 RunLimitsPanel -> /api/run-limits"
+    ]
+  },
+  {
+    "current_status": "已做",
+    "id": "C052",
+    "assessment": "本地模型目录、发现、下载/安装、Ollama pull 与 activate/eject 已有面板/API；未操作真实模型。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/LocalModelsPanel.tsx:40-110 LocalModelsPanel -> /api/local/models/*",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/local_models_router.py:228-305 catalog/search/download/activate"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C053",
+    "assessment": "已支持外部 provider 历史列举及指定会话导入；跨来源映射、完整选择 UX/多格式覆盖是否等同目标仍有限，静态核验。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/external_history_router.py:29-67 list/import routes",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/runtime/external_import.py:475-510 provider import/select logic"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C054",
+    "assessment": "存在本地诊断报告，不等于崩溃上传及其隐私开关；在前端设置、Electron main、API 路由按 telemetry/crash/report 搜索未发现远端上报链。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/DiagnosticsPanel.tsx:63-91 本地诊断导出/复制入口",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:52-58 settings IPC allowlist；检索 main/API telemetry/crash-upload/privacy toggle 未见实现"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C055",
+    "assessment": "有源码更新检查/应用入口，但未见 stable/beta/nightly 通道配置或通道选择；仅静态源码证据，更新未运行。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/sourceUpdate.ts:27-73 checkSourceUpdate",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:693-703 update:check/apply IPC"
+    ]
+  },
+  {
+    "current_status": "已做",
+    "id": "C056",
+    "assessment": "Electron 解析 atlas:// URL 并处理 OS open-url/second-instance；未在本机安装包实际验证 scheme 注册及系统分发。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:342-350 atlas:// URL 校验/解析",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:597-612 second-instance/open-url 分发"
+    ]
+  },
+  {
+    "current_status": "已做",
+    "id": "C057",
+    "assessment": "OS 全局快捷键支持设置、注册状态与冲突错误呈现，另有浮动输入快捷键；本次未实测键盘注册。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:302-322 globalShortcut 注册/状态",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/PlatformSettingsPanel.tsx:28-57,130-142 快捷键配置 UI"
+    ]
+  },
+  {
+    "current_status": "已做",
+    "id": "C058",
+    "assessment": "桌面平台设置可切换主窗口置顶；运行效果未实测。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:514,618-628 setAlwaysOnTop IPC/窗口状态",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/PlatformSettingsPanel.tsx:60-66,123-128"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C059",
+    "assessment": "提供从 Atlas 打开 VS Code/JetBrains 等 IDE 的本地入口；未发现 IDE 插件、双向上下文或专属协议集成。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:398-447 IDE_COMMANDS/openEditor 调用链",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/PlatformSettingsPanel.tsx:8-22 editor options"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C060",
+    "assessment": "有本地集成总览、自动化/渠道/Linear等入口；UI明确云托管任务无 Atlas 云执行服务，不能判为云任务已做。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/SettingsIntegrationsPanel.tsx:26-38 integration overview and local/cloud task entries",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/integrations_router.py:1-8 local integrations/hub surface"
+    ]
+  },
+  {
+    "current_status": "已做",
+    "id": "C061",
+    "assessment": "Slack Gateway channel adapter 及本地渠道配置/凭据 API 存在；未连接真实 Slack workspace 验收。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/channels/adapters/slack.py:1-64 Slack Socket Mode adapter",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/channel_router.py:55-68,120-156 channel status/config/credential routes"
+    ]
+  },
+  {
+    "current_status": "已做",
+    "id": "C062",
+    "assessment": "Linear 本地集成包含凭据状态与 issue/comment API；未用真实 Linear 帐户验证。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/LinearIntegrationPanel.tsx:39-112 panel",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/linear_integration_router.py:191-264 status/credential/issues/comments"
+    ]
+  },
+  {
+    "current_status": "已做",
+    "id": "C063",
+    "assessment": "连接的 MCP session 有资源列表、内容读取前端及 API；未接入真实资源服务器验收。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/McpResourcesPanel.tsx:84-150 list/read UI",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/mcp_resources_router.py:271-295 GET/read routes"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C064",
+    "assessment": "可设置单个会话权限模式、路径和 sandbox；所查设置 UI/API 未见独立的全局自动接受/权限规则编辑器。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/WorkspaceSecurityPanel.tsx:49-160 conversation security settings",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/conversations_router.py:399-448 permission_mode/sandbox validation"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C065",
+    "assessment": "有定时/事件自动化通用配置，但未找到基于设备低峰/空闲时段的专门任务调度策略；本结论限自动化 schema/UI 搜索。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/automation_router.py:37-100 automation trigger/policy schema",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings/sheet registry；按 idle/off-peak scheduling 检索未见"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C066",
+    "assessment": "浏览器有录制工作流入口，另有本地 recipe CRUD；未找到工作流协作共享/发布链路，不能覆盖“共享”。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/browser_router.py:122-180 learned workflow recording routes",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/RecipeManagerPanel.tsx:163-169 recipe editor"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C067",
+    "assessment": "浏览器接管模式可配置且 app 有持久化浏览器分区；所查链路未见 Chrome profile/cookie/localStorage 导入与清理功能。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:49-50 persist:atlas-browser partition",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/browser_router.py:95-115 browser takeover settings"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C068",
+    "assessment": "Computer Use 有运行时授权审批和停止路径；未确认提供独立插件总开关，设置组件展示的是状态/诊断而非权限总开关。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/computer_router.py:88-116 pending approval/resolve/stop",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/x2/ComputerStatusSection.tsx:25-36 status UI"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C069",
+    "assessment": "文件搜索尊重 .gitignore；未找到专用 .zcodeignore 管理/编辑支持。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/workspace_router.py:806-876 file search applies .gitignore rules",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/MainConfigPanel.tsx:1-90 raw config editor; rg .zcodeignore 未见"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C070",
+    "assessment": "Agent/workspace worktree 创建、清理安全边界存在；未找到统一策略偏好 UI（保留/清理/基础分支等），部分匹配。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/subagent_worktree.py:237-306 create/finalize cleanup guard",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/workspace_router.py:1210-1235 worktree deletion/LSP cleanup"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C071",
+    "assessment": "支持 ssh:// workspace 浏览/读取，但写入明确返回 501；本轮查到的是消费配置的远端路径，未核到可编辑 SSH host 管理设置，故部分。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/workspace_router.py:338-350,401-412,483-494 SSH workspace read/list path",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/workspace_router.py:444-452 SSH save explicitly 501"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C072",
+    "assessment": "包声明 CLI entry point 且启动脚本将项目装入私有 venv；未发现面向用户的 CLI 安装/路径暴露向导。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/pyproject.toml:83-84 atlas CLI entry point",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f start-atlas.bat:19-24 editable install in project venv"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C073",
+    "assessment": "有固定内置 LSP 状态与诊断；面板没有自定义 server command/config 编辑入口，限定于设置 UI 与 registry 检索。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/LspStatusSection.tsx:7-27 status/diagnostics only",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/lsp/servers.py:443 built-in server definitions"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C074",
+    "assessment": "web_search provider 可通过原始配置按 provider 顺序设置；未发现专用搜索 provider 设置面板/即时选择 UX。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/MainConfigPanel.tsx:1-90 expert TOML config editor",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f config/atlas.example.toml:85-100 web_search provider config/failover"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C075",
+    "assessment": "高级配置可编辑原始配置，但在检索到的设置页/主进程/API 中未发现集中实验功能开关管理器。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings registry sections",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/MainConfigPanel.tsx:1-90 raw config surface；feature-flag toggle 检索未见"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C076",
+    "assessment": "可归档项目/会话，但搜索设置页和归档 API 未发现 3/7/14/30 天自动清理保留期配置。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings navigation; no archive retention selector found",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/projects_router.py:128 archived project listing only"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C077",
+    "assessment": "有配置导入导出预览，不是数据库目录迁移；所查设置/API 未见 DB 迁移操作链。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ConfigTransferPanel.tsx:20-63 settings import/export preview",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/settings_export_router.py:54-63 import preview contract；database directory migration 搜索未见"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C078",
+    "assessment": "运行事件/会话持久化是现有行为，但未找到可配置的完整模型输入输出保留策略；静态查看设置与会话更新 schema。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/conversations_router.py:49-50 conversation update model",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings nav；model IO retention setting search 未见"
+    ]
+  },
+  {
+    "current_status": "已做",
+    "id": "C079",
+    "assessment": "有系统托盘图标/菜单并在所有窗口关闭后驻留；实际托盘运行状态未测。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:152-179 tray menu/createTray",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:801-807 before-quit/window-all-closed lifecycle"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C080",
+    "assessment": "当前桌面 main 未见任务期间系统防休眠 API 或生命周期调用；依据 Electron main 与 core 全文符号检索。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:1-20 Electron main imports and lifecycle module; no powerSaveBlocker use in module"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C081",
+    "assessment": "有主窗口与浮动 composer 两种窗口，但单实例逻辑将第二次启动导向既有窗口；未见每项目多主窗口管理。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:267,493 BrowserWindow creation (main + composer)",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:593-600 single-instance behavior/second-instance focuses existing window"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C082",
+    "assessment": "设置 UI/API 路由搜索未发现公开会话分享服务或访问控制链；此判定是当前仓库范围内未找到。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings/sheet registry; no public share service UI",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/application.py:90-140 mounted route registry search; no session-public-share route found"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C083",
+    "assessment": "渠道路由和 agent binding 存在；所查模型/UI 未发现跨消息渠道汇聚到一个 home session 及统一 dock 的链路。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/channels/routing.py:1-13 channel/account/agent routing contract",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/agent_router.py:90-105 channel binding projection"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C084",
+    "assessment": "有多 agent group orchestrator API/调度 seam；未见常驻 Bot roster 与消息群聊协作产品面，router 标注需集成 dispatcher。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/group_router.py:1-19 group orchestration surface",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/group_router.py:73,187 orchestrator binding/dispatch boundary"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C085",
+    "assessment": "当前 app 路由、设置导航和 API 源码检索未找到 Claude 手机 Dispatch 任务桥接/调用链。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings/sheet registry",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:342-350 Atlas scheme dispatch"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C086",
+    "assessment": "云持续任务服务未见；集成面板明确说明 Atlas 云执行服务不可用。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/SettingsIntegrationsPanel.tsx:33-38 local automation and cloud task entry (cloud unavailable)",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/integrations_router.py:1-8 local integrations/hub surface"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C087",
+    "assessment": "当前源码搜索未发现 OpenCode Web 设备 pairing/授权面或对应 API。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:342-350 Atlas settings deep-link parser",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 route/settings registry"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C088",
+    "assessment": "支持外观与通知偏好；未见状态栏/标题栏内容自定义能力，主窗口仅固定创建参数。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/AppearanceNotificationsPanel.tsx:33-37 theme/notification preferences",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:493-514 main window setup; no title/status bar customization hook found"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C089",
+    "assessment": "有本地文件预览服务，但未发现 Claude Preview Server 多配置管理；对照搜索仅覆盖该名称相关 UI/API。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/workspace_router.py:529-550 workspace file preview route",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings/page registry"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C090",
+    "assessment": "有本地集成入口汇总，但 connectors 并非统一 CRUD 生命周期管理，渠道、Linear、扩展仍分散在不同设置面。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/SettingsIntegrationsPanel.tsx:26-38 integration links",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 distinct settings sections"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C091",
+    "assessment": "未找到 Claude Mods 自定义交互面加载/管理接口；当前扩展包/recipe 不能据此推断等同。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ExtensionPackagesPanel.tsx:1-5 Atlas extension package surface",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings registry"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C092",
+    "assessment": "当前源码未找到 OpenCode V2 cli.json 的导入/解析/兼容入口。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:398-447 local IDE command dispatch",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings/page registry"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C093",
+    "assessment": "没有发现 OpenCode V2 CLI 本地插件加载器；Atlas 扩展包面不等于 OpenCode 插件加载。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ExtensionPackagesPanel.tsx:1-5 Atlas extension package surface",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings registry"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C094",
+    "assessment": "未找到 OpenCode V1→V2 插件迁移器或转换 API。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ExtensionPackagesPanel.tsx:1-5 Atlas extension package surface",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings registry"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C095",
+    "assessment": "当前 app 源码/API 搜索未发现 Codex Sites 托管网页项目接入。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings/page registry",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/application.py:90-140 mounted API router registry"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C096",
+    "assessment": "未找到 Codex Chronicle 屏幕采集/上下文记忆的产品入口或集成 API。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings/page registry",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:453-479 browser web-content isolation"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C097",
+    "assessment": "未发现 Codex Micro 外设映射或状态页面/API。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings/page registry",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/application.py:90-140 mounted API router registry"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C098",
+    "assessment": "当前 app 源码未发现 Codex Daybreak 模式入口/配置。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-139 settings/page registry",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:453-479 browser web-content isolation"
+    ]
+  },
+  {
+    "current_status": "部分",
+    "id": "C099",
+    "assessment": "存在 Atlas 会话级权限/sandbox 配置；未找到 Codex 专属调试沙箱设置或完整隔离运行调试台，按部分记。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/WorkspaceSecurityPanel.tsx:49-160 conversation permission/sandbox settings",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/conversations_router.py:399-448 sandbox/permission validation"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C100",
+    "assessment": "网络设置仅配置本地模型代理/CA；未见对本机代理软件资源开销的采集、测量或诊断链。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/NetworkSettingsPanel.tsx:1-45 local-model proxy/CA form",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/network_settings_router.py:1-5 proxy credentials/config; proxy software overhead diagnostic search found no measurement path"
+    ]
+  },
+  {
+    "current_status": "未做",
+    "id": "C101",
+    "assessment": "语音输入/输出偏好存在，但所查语音 UI/应用逻辑没有自定义听写词典入口或持久化。",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:680-695 voice input/output preference handling; no custom vocabulary path"
+    ]
+  }
+]
+

@@ -1,0 +1,22 @@
+[
+  {
+    "local_id": "W4-001",
+    "priority": "P2",
+    "domain": "SSH workspace / LSP",
+    "symptom": "SSH workspace 的 native file write 路径明确跳过 Atlas 的 LSP pre/post edit reporting；远端编辑因此没有本地 workspace 相同的 Atlas post-edit diagnostics。",
+    "runtime_affected": "仅影响选中的 workspace 为 ssh:// 且通过 engine tool registry native file write 执行的运行；本轮未建立 SSH 会话或实测。",
+    "evidence": {
+      "branch": "ui-redesign",
+      "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f",
+      "path": "core/atlas/engine/tool_registry.py",
+      "line": 470,
+      "function": "register_tools"
+    },
+    "classification": "代码确认（静态；运行未验证）",
+    "minimal_fix": "若产品要求 SSH 编辑也有诊断，在 SSH 主机运行或复用 language server 并桥接 LSP transport；否则在 SSH 工具结果/界面明确标注远端编辑不产生 Atlas LSP diagnostics。当前只记录缺口，不改实现。",
+    "reuse": "先复用 Atlas 现有 LSP seam：core/atlas/engine/lsp_bridge.py 与 core/atlas/engine/tool_registry.py:129-230；协议参考 Microsoft LSP 仓库 protocol.md（GitHub 读取已核路径存在）：https://github.com/microsoft/language-server-protocol/blob/main/protocol.md。",
+    "complexity": "L",
+    "worker": "W4"
+  }
+]
+

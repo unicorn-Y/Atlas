@@ -1,0 +1,766 @@
+[
+  {
+    "id": "D001",
+    "feature": "文件读取（路径、范围、编码/大文件保护）",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/local_execution.py:235-285,788-867",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_node.py:1212-1220",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2370-2420"
+    ],
+    "assessment": "local_file read 有编码选择、行/字节范围及默认读取硬上限；但读取路径不强制限于 workspace（全权模式可读任意本机路径），故按路径保护要求判部分。注册→执行：local_execution schema→ToolNode→_file_operation。未读取真实用户文件。"
+  },
+  {
+    "id": "D002",
+    "feature": "文件写入",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/local_execution.py:235-285,845-878",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_node.py:1336-1359",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2370-2420"
+    ],
+    "assessment": "local_file write/append/mkdir及local_edit/local_edit_batch均接入执行器；但_local_execution._ensure_workspace_path只阻止修改workspace根本身，不把目标限制在workspace内，任意本机路径仍可写，LEDGER缺口成立，故部分。只读源码，未写文件。"
+  },
+  {
+    "id": "D003",
+    "feature": "文件编辑、批量编辑",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/local_execution.py:287-304,491-493,677-750",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/edit.py:41-62,444-468,559-590",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1011-1030,2370-2420"
+    ],
+    "assessment": "单文件edit有已读校验与唯一匹配；local_edit_batch先验证最多32个workspace文件后原子替换并回滚。但local_edit自身可对workspace外路径修改，且batch接口目标与kernel apply_patch行为不是统一契约，故原路径/批量原子回执缺口仍判部分。"
+  },
+  {
+    "id": "D004",
+    "feature": "Patch / apply patch",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/edit.py:41-62,444-468,559-590",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1011-1030,2370-2420"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D005",
+    "feature": "文件 glob",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/workspace_queries.py:43-72,128-147",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1813-1840",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1011-1030"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D006",
+    "feature": "内容搜索 / Grep",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/workspace_queries.py:73-127,128-147",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1813-1840",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1011-1030"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D007",
+    "feature": "符号/LSP 查询",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/workspace_lsp.py:61-103,104-138",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1840-1862",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:220-224"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D008",
+    "feature": "Notebook 编辑",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/notebook_edit.py:22-62,231-347",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:209-211",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2177-2205"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D009",
+    "feature": "Bash / shell 命令",
+    "ledger_status": "原有",
+    "current_status": "原有",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/local_execution.py:177-234,453-492",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2225-2258",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/exec.py:90-161"
+    ],
+    "assessment": "此能力是 Atlas 原有机制；确认当前入口/执行链仍存在，不计为新近吸收成果。运行行为未实测。"
+  },
+  {
+    "id": "D010",
+    "feature": "PowerShell 命令",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:189-193",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2234-2245",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/local_execution.py:453-492"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D011",
+    "feature": "后台进程启动、等待、输入、输出、停止",
+    "ledger_status": "部分",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:194-210",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2247-2268",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/exec.py:90-161,341-350"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D012",
+    "feature": "任务清单 CRUD",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/claude_tasks.py:37-73,128-205,206-258,270-291",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:212-214",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2168-2176"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D013",
+    "feature": "计划模式入口/退出",
+    "ledger_status": "部分",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:99-116",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1863-1930",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/planning.py:1-87"
+    ],
+    "assessment": "EnterPlanMode 切到 read-only plan mode，ExitPlanMode 要求已有 plan_state 且 plan_approval_callback 批准后才能退出；显式入口/状态转换已存在。审批前置是设计约束，不是缺失。"
+  },
+  {
+    "id": "D014",
+    "feature": "询问用户 / 结构化问题",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:122-143",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2126-2160",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/run_drive.py:2520-2550"
+    ],
+    "assessment": "schema 支持 id/header/question/options/description/multi-select，dispatch 返回 keyed answers；异步别名 schema 未列 multi_select 字段，structured API 对标题/多选的端到端映射仍不一致，故部分。"
+  },
+  {
+    "id": "D015",
+    "feature": "Codex 异步向用户发送消息",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:144-146",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2161-2166",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/run_drive.py:2707-2718"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D016",
+    "feature": "代理创建和委派",
+    "ledger_status": "部分",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:302-365",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_node.py:725-801,885-950",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/enrichment.py:437-505,742-783"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D017",
+    "feature": "子代理消息、恢复、等待、中断、关闭",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:370-415",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_node.py:825-882",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/enrichment.py:830-900,960-1000"
+    ],
+    "assessment": "子任务状态、消息、等待、恢复、取消、升级、关闭均有注册和 backend route；但只在当前 delegation/runtime registry 范围，不能证明跨会话 registry/权限/消息路由全生命周期，故部分。"
+  },
+  {
+    "id": "D018",
+    "feature": "会话上下文读取/工具历史",
+    "ledger_status": "部分",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:114-117",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:503,649-656,2065-2108"
+    ],
+    "assessment": "read_tool_history 由当前 kernel messages callback 提供本轮工具调用/结果；new_context 执行本轮强制 compaction 并发 context.window.switched。此前“缺当前工具历史”在基线不成立，判已做。"
+  },
+  {
+    "id": "D019",
+    "feature": "等待工作区路径可用",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:167-169",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2212-2224"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D020",
+    "feature": "当前时间与延时",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:91-94",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1793-1800"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D021",
+    "feature": "Web 搜索",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/web.py:114-137",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:15-45",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_node.py:1236-1239",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/web.py:22-87",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/websearch/router.py:19-30"
+    ],
+    "assessment": "web_search schema 有 balanced/strict/long mode、域过滤；tool_catalog 接入 web 工具，但当前模式并不驱动 provider 检索策略，provider能力与缺省/DDG行为仍有限，故部分。"
+  },
+  {
+    "id": "D022",
+    "feature": "Web 抓取",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/web.py:139-150",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:15-45",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_node.py:1236-1255",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/web.py:88-104",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/web_extract.py:165-239"
+    ],
+    "assessment": "web_fetch 与 web_extract 已接线并限制返回字符数；完整检查显示重定向/响应硬限制和 TTL 缓存未达到 LEDGER 要求，保留部分判定。"
+  },
+  {
+    "id": "D023",
+    "feature": "图片查看/输入",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:95-98",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1801-1812",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/local_image.py:1-85"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D024",
+    "feature": "图片生成/编辑",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/media_generation_search.py:50-181",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:224-226",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1750-1772"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D025",
+    "feature": "X/Twitter 搜索",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/media_generation_search.py:50-181,182-260",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:224-226",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1750-1772"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D026",
+    "feature": "视频 URL/文件分析",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/media_generation_search.py:50-181,182-260",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:224-226",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1750-1772"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D027",
+    "feature": "视频生成、编辑和延长",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/media_generation_search.py:50-181,182-260",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:224-226",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1750-1772"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D028",
+    "feature": "文本转语音/音乐生成",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/media_generation_search.py:50-181,182-260",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:224-226",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1750-1772"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D029",
+    "feature": "Computer Use",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/computer.py:608-635,650-702",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:32-48",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2370-2420"
+    ],
+    "assessment": "computer tool schemas/注册和 dispatch 已接入；现有以聚合动作 API 为主，缺独立 request_access/stop control callable，故部分。"
+  },
+  {
+    "id": "D030",
+    "feature": "Browser 标签页/预览/导航",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/browser.py:773-805",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:356-435,871-934",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1709-1747"
+    ],
+    "assessment": "browser_use 的 operation dispatcher覆盖 tabs/navigation 与 pane/session操作子集；LEDGER记载 panel sync 消费与 tab stop/handoff 缺口仍未由此调用链消除，故部分。"
+  },
+  {
+    "id": "D031",
+    "feature": "Browser 文档/DOM 操作",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/browser.py:773-805",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:356-435,600-700",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1709-1747"
+    ],
+    "assessment": "compat dispatcher支持 locator 类选择及 click/fill 等一部分 DOM 操作；未发现 fill_form/selectOption/locator press 等完整映射，故部分。"
+  },
+  {
+    "id": "D032",
+    "feature": "Browser 文件交互",
+    "ledger_status": "没做",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/browser.py:773-805",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:356-435,600-870",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1709-1747"
+    ],
+    "assessment": "已查 browser schema 与 compat operation dispatcher；未发现上传/下载/拖放或受授权文件句柄 API，按当前工具面判未做。"
+  },
+  {
+    "id": "D033",
+    "feature": "Browser console/network/trace/CPU/heap/Lighthouse",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/browser.py:773-805",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:356-435,600-870",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1709-1747"
+    ],
+    "assessment": "browser dispatcher具 console 能力；未发现内建网络捕获、trace、CPU/heap profiler、Lighthouse 的完整工具链，故部分。"
+  },
+  {
+    "id": "D034",
+    "feature": "MCP 动态工具调用",
+    "ledger_status": "原有",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mcp_client.py:178-233,249-361,520-556",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/engine/tool_registry.py:360-420,432-475",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2370-2420",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mcp_client.py:442-475",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/__init__.py:729-740",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1010-1030,1666-1708,2396-2415"
+    ],
+    "assessment": "MCPClient连接配置server并动态获取工具，engine tool registry 挂接executor；kernel通用tool route调用注册工具。当前基线的动态调用入口存在；未连接现场server验证。"
+  },
+  {
+    "id": "D035",
+    "feature": "MCP Streamable HTTP 与认证",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mcp_client.py:90-116,249-361,380-430",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/engine/hermes_runtime.py:619-660"
+    ],
+    "assessment": "MCPClient支持 streamable HTTP transport 和 headers；核对配置/认证实现未发现完整 OAuth/PKCE 与持久令牌刷新生命周期，故部分。"
+  },
+  {
+    "id": "D036",
+    "feature": "MCP server instructions",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mcp_client.py:273-290",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/engine/tool_registry.py:360-420",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2370-2420"
+    ],
+    "assessment": "MCP 初始化读取 server instructions，并明确作为不可信服务端内容注入模型上下文；工具调用仍经 Atlas policy/dispatch。源码链确认已做。"
+  },
+  {
+    "id": "D037",
+    "feature": "MCP resource 列表/读取",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:64-74",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1997-2018",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mcp_client.py:577-661"
+    ],
+    "assessment": "kernel schemas→_dispatch→MCPClient资源/模板列表和按 URI读取均有明确路径，支持分页游标和内容类型。未连接真实 MCP server。"
+  },
+  {
+    "id": "D038",
+    "feature": "MCP 工具延迟发现/搜索",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:75-77",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2044-2064",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/library/runtime.py:1-120"
+    ],
+    "assessment": "tool_search只查询已枚举工具并返回匹配 schema metadata；虽然匹配可写入当前会话的 deferred schemas，但启动仍先枚举完整候选集，尚不等同真正延迟发现，故部分。"
+  },
+  {
+    "id": "D039",
+    "feature": "插件/skill 工具",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:132-160",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_node.py:550-620",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/plugins/runtime.py:1-160"
+    ],
+    "assessment": "Atlas skills有 use_skill/skill_search 接口和 dispatch；未见把已安装插件提供的 skills/commands 统一并入同一可调用/搜索 registry，故部分。"
+  },
+  {
+    "id": "D040",
+    "feature": "插件安装/发现请求",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:170-176",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1936-1996",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/plugin_marketplace.py:11-23",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/plugins/runtime.py:1-160"
+    ],
+    "assessment": "marketplace查询与request_plugin_install有schema、approval、install/load executor；但可用目录仅对marketplace列表做过滤，不统一列出所有已安装plugin的运行状态，故部分。"
+  },
+  {
+    "id": "D041",
+    "feature": "工具权限请求",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:118-121",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2104-2125"
+    ],
+    "assessment": "request_permissions schema 进入 approval_required 并由当前 run approval callback 返回一次性 allow/deny，未自动批准；源码链完整。"
+  },
+  {
+    "id": "D042",
+    "feature": "工具审批范围/理由",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:590-608,1960-1990,2104-2130,2270-2330",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_node.py:475-526"
+    ],
+    "assessment": "多个 approval-required 分支都可见，但 scope/resource/reason 字段并非所有PreToolUse/工具分支统一传递；按一致性缺口判部分。"
+  },
+  {
+    "id": "D043",
+    "feature": "Tool registry 和兼容名称",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:41-258",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1011-1030,1666-1792,1863-2365"
+    ],
+    "assessment": "kernel_tool_schemas及agent schemas聚合后供模型选择，executor由名称分散dispatch且MCP另有registry；注册、策略、执行未由单一registry源驱动，故部分。"
+  },
+  {
+    "id": "D044",
+    "feature": "Workflow 动态编排",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:239-240",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2357-2365",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/workflow_tool.py:46-160",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/workflow/scheduler.py:21-200"
+    ],
+    "assessment": "workflow工具可动态计划、持久journal运行、pause/resume；named workflow定义save/list/get不属于该kernel workflow路径，workspace workflow管理也明确无可复用命名脚本registry，故部分。"
+  },
+  {
+    "id": "D045",
+    "feature": "OpenCode 工作流运行管理",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/workspace_workflows.py:60-70,347-480,1041-1067",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:227-229",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1772-1791"
+    ],
+    "assessment": "workflow_run_manage支持list/get/status/resume，并对不支持 action 返回明确错误；它管理已存在run而非创建定义，和D044区分。源码链已做。"
+  },
+  {
+    "id": "D046",
+    "feature": "OpenCode session rename/move 与 worktree 生命周期",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/workspace_workflows.py:70-82,540-680",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/enrichment.py:830-900,960-1000",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/subagent_worktree.py:237-336"
+    ],
+    "assessment": "session rename/move、worktree创建/删除管理已注册，但move受 worktree约束且跨workspace活动会话handoff/自动清理未覆盖；委派Git worker隔离仅适用特定路径，故部分。"
+  },
+  {
+    "id": "D047",
+    "feature": "OpenCode model/provider 发现",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/workspace_workflows.py:84-88,696-746,1051-1060",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1772-1791"
+    ],
+    "assessment": "model_provider_discovery查询Atlas配置和静态provider catalog；未达到完整动态provider/model discover/filter/page接口，故部分。"
+  },
+  {
+    "id": "D048",
+    "feature": "应用生成生命周期",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/workspace_workflows.py:89-96,730-780,1059-1062",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1772-1791"
+    ],
+    "assessment": "workspace_app_manage管理生成的HTML文件/元数据，但没有独立 app/window launch/close 生命周期，故部分。"
+  },
+  {
+    "id": "D049",
+    "feature": "交互式数据可视化",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/workspace_workflows.py:97-108,780-869,1059-1063",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1772-1791"
+    ],
+    "assessment": "visualization_artifact生成受支持图表工件并保存工作区；图型种类有限，未见内嵌交互式可视化器，故部分。"
+  },
+  {
+    "id": "D050",
+    "feature": "Goose focused code analysis",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/workspace_workflows.py:109-116,870-943,1063-1065",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1772-1791"
+    ],
+    "assessment": "focused_call_graph从workspace LSP call hierarchy执行有界调用图分析；不可用语言服务有显式结果路径，schema/dispatch/executor完整。未运行语言服务器。"
+  },
+  {
+    "id": "D051",
+    "feature": "Goose 文件树摘要",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/workspace_workflows.py:117-124,944-1040,1065-1067",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1772-1791"
+    ],
+    "assessment": "workspace_summarize在Git workspace内读取树结构并遵循ignore/路径/敏感文件与大小边界，dispatch接线完整。未扫描用户workspace。"
+  },
+  {
+    "id": "D052",
+    "feature": "无头/SDK/app-server 调用",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/app_server.py:220-290",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/run_drive.py:1-30"
+    ],
+    "assessment": "app_server提供ACP文本会话/调用入口；当前实现明确返回 per-session MCP injection unavailable，loadSession与free-text elicitation未接入，故部分。"
+  },
+  {
+    "id": "D053",
+    "feature": "Git 平台 PR 创建与评论",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:177-183",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2272-2312",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/git_platform.py:46-89"
+    ],
+    "assessment": "git_pr_create和git_pr_comment有注册、审批和git_platform executor；未发现可信PR状态/徽章查询工具，故部分。未push或调用GitHub写操作。"
+  },
+  {
+    "id": "D054",
+    "feature": "Android 环境预检",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:78-80,197-230,514-518",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-218",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1766-1771"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D055",
+    "feature": "Android 项目发现",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:79,231-270,518-520",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-218",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1766-1771"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D056",
+    "feature": "Android 创建应用",
+    "ledger_status": "部分",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:80-84,274-409,520-522",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-218",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1766-1771"
+    ],
+    "assessment": "android_create_app schema/dispatch与scaffold executor存在；schema缺compileSdk、overwrite参数，冲突/覆盖前确认未完整，故部分。未创建设备或项目。"
+  },
+  {
+    "id": "D057",
+    "feature": "Android 构建应用",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:84-85,410-470,522-529",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-218",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1766-1771"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D058",
+    "feature": "Android 构建并运行",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:85-88,522-537",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-218",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1766-1771"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D059",
+    "feature": "Android 设备列表",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:88-90,539-545",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-218",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1766-1771"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D060",
+    "feature": "Android AVD 列表",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:89-90,546-550",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-218",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1766-1771"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D061",
+    "feature": "Android 启动模拟器",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:90-93,550-552",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-218",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1766-1771"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D062",
+    "feature": "Android 停止模拟器",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:93-94,552-558",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-218",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1766-1771"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D063",
+    "feature": "Android 创建 AVD",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:94-97,558-571",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-218",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1766-1771"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  },
+  {
+    "id": "D064",
+    "feature": "Android 安装 APK",
+    "ledger_status": "已做",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:97-100,571-580",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-218",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1766-1771"
+    ],
+    "assessment": "基线可见模型侧入口/工具注册与 dispatch/executor 调用链；源码显示功能具备。未启动运行时，不能据此声称本机端到端验收。"
+  }
+]
+

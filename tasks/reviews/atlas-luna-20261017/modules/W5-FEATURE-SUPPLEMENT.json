@@ -1,0 +1,464 @@
+[
+  {
+    "id": "C001",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:103-130,1422-1436"
+    ],
+    "assessment": "导航分组、入口与 pane 渲染已存在。"
+  },
+  {
+    "id": "C002",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:1422-1436",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/pages/SettingsPage.tsx:209,296"
+    ],
+    "assessment": "仅组级和 Provider/Model 搜索；未索引每项直达。"
+  },
+  {
+    "id": "C003",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/config_editor_router.py:54-75",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/models_settings_router.py:117-159,213-241",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/MainConfigPanel.tsx:74,106-110"
+    ],
+    "assessment": "可看有效配置/部分来源；缺全局优先级解析和管理员只读策略。"
+  },
+  {
+    "id": "C004",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:162-163,194-205,103-130"
+    ],
+    "assessment": "有布局/外观/语音偏好；未见 Enter-send、多行、follow-up、防休眠和语言闭环。"
+  },
+  {
+    "id": "C005",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/NetworkSettingsPanel.tsx:5-10,69-81",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/PlatformSettingsPanel.tsx:46-73,118-156"
+    ],
+    "assessment": "代理/CA、开机启动、置顶、快捷键、编辑器存在；shell/终端、休眠/托盘缺失。"
+  },
+  {
+    "id": "C006",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/config_editor_router.py:54-75",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/DiagnosticsPanel.tsx:38-56"
+    ],
+    "assessment": "有效配置/诊断存在；无全设置来源优先级/变更追踪。"
+  },
+  {
+    "id": "C007",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/pages/SettingsPage.tsx:85-114,166-221 (provider load/search/filter/config form)",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/models_settings_router.py:67-96,117-159,294-323 (provider/model listing, configuration and selected-model connection test)"
+    ],
+    "assessment": "Provider 目录、选择、配置表单和连接测试存在；认证来源/多账号生命周期只部分支持。"
+  },
+  {
+    "id": "C008",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/models_settings_router.py:213-241,263-292",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/pages/SettingsPage.tsx:72-76,166-189"
+    ],
+    "assessment": "仅静态凭据；无 OAuth 多账号/刷新登出/来源选择/切换。"
+  },
+  {
+    "id": "C009",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/pages/SettingsPage.tsx:120-150,285-330",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ModelCatalogPreferencesPanel.tsx:120-159"
+    ],
+    "assessment": "搜索/筛选/显示/置顶/默认存在；变体与全量目录不完整。"
+  },
+  {
+    "id": "C010",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/pages/SettingsPage.tsx:56-69,332-335 (provider/model callbacks and reasoning stages)",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/run_phases.py:160-165,276-283 (run request fields and propagation)"
+    ],
+    "assessment": "自定义模型和 reasoning effort 有运行时字段；未见 fast mode 与通用模态元数据路由合同。"
+  },
+  {
+    "id": "C011",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/models_settings_router.py:294-323 (POST /api/settings/test-connection resolves and probes selected model; returns error details)",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/pages/SettingsPage.tsx:323-325 (renders selected test result and expandable error detail)"
+    ],
+    "assessment": "单个所选模型的连接探测和错误详情已贯通；缺每个候选模型在选择器中的持续可用性/连接状态提示，故为部分。"
+  },
+  {
+    "id": "C012",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/pages/SettingsPage.tsx:72-76,254-270",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/config_editor_router.py:78-108"
+    ],
+    "assessment": "只有本地用户名/配置编辑；无登录退出/Profile 隔离服务。"
+  },
+  {
+    "id": "C013",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/usage_router.py:1-80",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:101-130"
+    ],
+    "assessment": "usage/token 统计存在；热图、预算、外部额度未完整。"
+  },
+  {
+    "id": "C014",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/services/mcpSettingsApi.ts:63-105",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/McpServersPanel.tsx:93-140",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/mcp_resources_router.py:271-310"
+    ],
+    "assessment": "MCP 列表/保存删除/重启/状态贯通。"
+  },
+  {
+    "id": "C015",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/McpServersPanel.tsx:54-90,217-250",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/services/mcpSettingsApi.ts:63-105"
+    ],
+    "assessment": "支持 command/args/cwd/env 与 URL/transport；未证实 headers/timeout/SSE 全支持。"
+  },
+  {
+    "id": "C016",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/McpServersPanel.tsx:217-250",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/mcp_resources_router.py:271-310"
+    ],
+    "assessment": "未见 OAuth/PKCE/scopes/reauth router/UI。"
+  },
+  {
+    "id": "C017",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/McpServersPanel.tsx:93-140,217-250",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/mcp_resources_router.py:271-310"
+    ],
+    "assessment": "有 server 管理；无 Agent scope/逐工具 allow rules。"
+  },
+  {
+    "id": "C018",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/plugins_router.py:40-119,121-197",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ExtensionCatalogPanel.tsx:44,132-180"
+    ],
+    "assessment": "插件生命周期 API/目录 UI 存在；商店详情/分类/统一发现/诊断有限。"
+  },
+  {
+    "id": "C019",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/plugins_router.py:121-161",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/extension_packages_router.py:237-327",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ExtensionPackagesPanel.tsx:34-121"
+    ],
+    "assessment": "Marketplace CRUD/update 与 package validate 存在；诊断/配置未贯通。"
+  },
+  {
+    "id": "C020",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/extension_packages_router.py:237-327",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ExtensionPackagesPanel.tsx:55-121"
+    ],
+    "assessment": "package source 管理不是已安装扩展多 scope 覆盖；未找到覆盖/恢复 API/UI。"
+  },
+  {
+    "id": "C021",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/extension_packages_router.py:237-327",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ExtensionPackagesPanel.tsx:34-121"
+    ],
+    "assessment": "本地 source 管理；无插件远端同步协议。"
+  },
+  {
+    "id": "C022",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/extension_packages_router.py:1-25,237-327",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ExtensionCatalogPanel.tsx:132-180"
+    ],
+    "assessment": "仅 metadata 目录；无动态 GUI/palette/slash/keybind registry。"
+  },
+  {
+    "id": "C023",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/extension_packages_router.py:1-25,237-327",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ExtensionCatalogPanel.tsx:132-180"
+    ],
+    "assessment": "无插件 UI host/widget/service/确认 follow-up 调用链。"
+  },
+  {
+    "id": "C024",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/skills_router.py:73-121,195-249,428-460,896-922",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/skills_market_router.py:146-228,269-303"
+    ],
+    "assessment": "技能发现/搜索/安装更新移除 API 存在；统一诊断/UI不完整。"
+  },
+  {
+    "id": "C025",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/agent_skills_router.py:144-176",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/skills_router.py:956-1006",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/skills_market_router.py:176-217"
+    ],
+    "assessment": "per-agent skills/trust/pin/source 存在；frontmatter/权限/远端同步不完整。"
+  },
+  {
+    "id": "C026",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/CustomCommandsPanel.tsx:33-104,116-140",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/plugins_router.py:215-235"
+    ],
+    "assessment": "slash 搜索/CRUD 存在；无 slash 专属导入。"
+  },
+  {
+    "id": "C027",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/pages/HooksPanel.tsx:52-70,138-170",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/hook_trust_router.py:28-52",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/runtime/hooks.py:1-80"
+    ],
+    "assessment": "Hook CRUD/测试存在；未确认 HTTP/MCP schema 和导入。"
+  },
+  {
+    "id": "C028",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/hook_trust_router.py:28-52",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/workspace_trust_settings_router.py:36-50",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/pages/HooksPanel.tsx:52-70"
+    ],
+    "assessment": "trust API存在；缺 fail-closed 来源及逐项审查UI闭环。"
+  },
+  {
+    "id": "C029",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/services/shortcuts.ts:38-71,94-128",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:28,103-130"
+    ],
+    "assessment": "快捷键存储/搜索/过滤/拒绝存在；绑定有限，未确认全量录制取消清除重置。"
+  },
+  {
+    "id": "C030",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/services/shortcuts.ts:94-161",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:28,103-130"
+    ],
+    "assessment": "signature/保留键拒绝/冲突重复检测存在；多绑定确认UI未闭环。"
+  },
+  {
+    "id": "C031",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:206,958-1000,1422-1436",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/services/shortcuts.ts:12-36",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/CustomCommandsPanel.tsx:33-104"
+    ],
+    "assessment": "palette/slash/keybind各自存在，未共用registry。"
+  },
+  {
+    "id": "C032",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/themes.ts:1-12,27-140",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/AppearanceNotificationsPanel.tsx:28-35,118-171"
+    ],
+    "assessment": "内置主题/自定义色板存在；缺导入复制分享及完整字体。"
+  },
+  {
+    "id": "C033",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/OnboardingDialog.tsx:19-76",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:206-231,440-475",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/PlatformSettingsPanel.tsx:118-156"
+    ],
+    "assessment": "局部语义/桌面/语音入口存在；缺全应用读屏、语音偏好、输入适配。"
+  },
+  {
+    "id": "C034",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/services/notificationsSettings.ts:1-20,30-58,72-83 (categories completion/failure/approval/question/background, persistence, focus/quiet-hours gating and sound decision)",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/AppearanceNotificationsPanel.tsx:16-24,176-195 (category toggles, sound, focus mode, quiet hours controls)",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:278-289 (notification event handler calls shouldNotify and passes silent preference)"
+    ],
+    "assessment": "通知类别（含失败/审批/问题）、独立声音、专注模式和静默时段均有设置并进入桌面通知调用；缺按 agent 单独配置，因此部分。"
+  },
+  {
+    "id": "C035",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:231,440-447",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/OnboardingDialog.tsx:9-19,66-100"
+    ],
+    "assessment": "首次称呼/模型/目录引导存在；无重开向导/迁移复核。"
+  },
+  {
+    "id": "C036",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/plugins_router.py:215-249",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ConfigTransferPanel.tsx:44-110"
+    ],
+    "assessment": "外部Agent扫描导入/Atlas配置包导入导出存在；会话历史/范围选择有限。"
+  },
+  {
+    "id": "C037",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/settings_export_router.py:180-244",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ConfigTransferPanel.tsx:44-110"
+    ],
+    "assessment": "配置包导出/预览/确认/恢复贯通。"
+  },
+  {
+    "id": "C038",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/device_router.py:348-396,431-505",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/pages/DevicesPage.tsx:22-113"
+    ],
+    "assessment": "设备登记/takeover/handoff/能力状态存在；无QR配对/通用状态同步。"
+  },
+  {
+    "id": "C039",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/device_router.py:240-311,348-396",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/pages/DevicesPage.tsx:50-113"
+    ],
+    "assessment": "设备登记/节点能力审批存在；未证实远端命令执行适配器。"
+  },
+  {
+    "id": "C040",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/channel_router.py:55-75,120-197",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/automation_router.py:136-268",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/application.py:98-130"
+    ],
+    "assessment": "channels registry/策略/凭据/测试投递和automation存在；适配器/平台工具策略不全。"
+  },
+  {
+    "id": "C041",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/RecipeManagerPanel.tsx:13-63,180-212",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/recipes_router.py:21-90"
+    ],
+    "assessment": "参数/provider/model/按钮/扩展ID/结构化输出/嵌套元数据存在；child launcher闭环未完全证实。"
+  },
+  {
+    "id": "C042",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/extension_packages_router.py:1-25,237-327",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ExtensionPackagesPanel.tsx:34-121"
+    ],
+    "assessment": "有extension/skill/prompt/theme kind；prompt/theme仅metadata，不可执行安装。"
+  },
+  {
+    "id": "C043",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ExtensionCatalogPanel.tsx:44,132-180",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/extension_packages_router.py:25,237-327"
+    ],
+    "assessment": "支持kind/search/filter；未核实plugin/skill/MCP单条目安装及资源字段全呈现。"
+  },
+  {
+    "id": "C044",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/DiagnosticsPanel.tsx:26-56",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/diagnostics_router.py:68-110"
+    ],
+    "assessment": "本地诊断存在；无远端反馈/截图/工单服务。"
+  },
+  {
+    "id": "C045",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/health_router.py:38-80",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/diagnostics_router.py:68-110",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/DiagnosticsPanel.tsx:26-56"
+    ],
+    "assessment": "本地health/diagnostics/报告存在；无配置校验/日志导出/版本一站式页。"
+  },
+  {
+    "id": "C046",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:103-130,1422-1436",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/OnboardingDialog.tsx:19-76"
+    ],
+    "assessment": "文案硬编码中文；renderer未发现目标文案i18n体系。"
+  },
+  {
+    "id": "C047",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/workspace_trust_settings_router.py:36-50",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/hook_trust_router.py:28-52"
+    ],
+    "assessment": "workspace/per-hook trust存在；无AGENTS/CLAUDE文件级信任审查。"
+  },
+  {
+    "id": "C048",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/WorkspaceSecurityPanel.tsx:8-20",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/conversations_router.py:399-448",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_node.py:200-223,297-339"
+    ],
+    "assessment": "permission mode/Docker sandbox/network及executor策略存在；细粒度规则有限。"
+  },
+  {
+    "id": "C049",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/deferred_startup.py:491-507",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/application.py:98-130"
+    ],
+    "assessment": "运行时注册/init；无AGENTS/CLAUDE项目指令生成/编辑UI。"
+  },
+  {
+    "id": "C050",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/OutputStyleSettingsPanel.tsx:7-16,90-120",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/output_style_settings_router.py:18-50",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/run_phases.py:106-115"
+    ],
+    "assessment": "输出风格/persona保存并进入agent prompt。"
+  }
+]
+

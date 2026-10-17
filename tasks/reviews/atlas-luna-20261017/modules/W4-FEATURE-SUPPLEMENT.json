@@ -1,0 +1,714 @@
+[
+  {
+    "id": "D065",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:78-102",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-217",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2308-2337",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:581-591"
+    ],
+    "assessment": "Android applicationId/activity 启动入口、model schema、kernel 审批调度及 adb 启动 handler 存在；未连接设备实测。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D066",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:103-105",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-217",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2308-2337",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:592-595"
+    ],
+    "assessment": "Android terminate schema 与 force-stop handler 存在；运行设备未实测。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D067",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:106-108",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-217",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2308-2337",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:596-605"
+    ],
+    "assessment": "Android open_url schema 与 adb VIEW intent handler 存在；未实际打开 URL。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D068",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:109-111",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-217",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2308-2337",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:606-612",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:218-225"
+    ],
+    "assessment": "截屏写入 workspace 并返回不超过 8 MiB 的 PNG data URL（218-225）；有图像数据，但结果是 text content + data 字段而非 MCP image content block，故对 MCP 图像回传仅部分确认。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D069",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:112-115",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-217",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2308-2337",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:613-626"
+    ],
+    "assessment": "logcat 查询支持行数限制和可选 applicationId/pid 过滤。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D070",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:116-120",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-217",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2308-2337",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:541-544"
+    ],
+    "assessment": "UI status 返回 adb 可用性作为 adb-uiautomator backend 状态，不能单独证明目标设备上 UIAutomator 服务已启动；设备 UI 操作另有实现。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D071",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:117-120",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-217",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2308-2337",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:627-631"
+    ],
+    "assessment": "Android UI dump 解析元素树并返回可见元素；有调用路径，设备环境未运行。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D072",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:118-120",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-217",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2308-2337",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:627-636"
+    ],
+    "assessment": "resolve 按 text/contentDescription/resourceId/className 匹配可见元素并回传 bounds 坐标。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D073",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:121-123",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-217",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2308-2337",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:637-640"
+    ],
+    "assessment": "tap schema 经审批 dispatch 至 adb shell input tap。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D074",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:124-127",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-217",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2308-2337",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:641-645"
+    ],
+    "assessment": "swipe schema 经审批 dispatch 至 adb shell input swipe。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D075",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:128-130",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-217",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2308-2337",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:646-652"
+    ],
+    "assessment": "type_text schema 经审批 dispatch 至 adb shell input text，并限制 1000 字符。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D076",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:131-134",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-217",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2308-2337",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:653-660"
+    ],
+    "assessment": "keyevent enum 限制 BACK/HOME/ENTER/APP_SWITCH/MENU/SEARCH，handler 映射为受限 Android keycode。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D077",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:135-136",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:836-855"
+    ],
+    "assessment": "iOS preflight 探测 macOS/Xcode/simctl/idb；调用只在 macOS 有效且 schemas 在其他平台过滤。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D078",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:136-137",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:857-858"
+    ],
+    "assessment": "iOS simulator list 源码存在，但只在 macOS 注册/执行；未枚举本机 simulator。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D079",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:137-139",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:895-897"
+    ],
+    "assessment": "iOS boot simulator 源码存在且需要 macOS/xcrun，平台门控已确认；未启动。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D080",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:140-141",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:888-894"
+    ],
+    "assessment": "iOS show simulator 调用 open -a Simulator 并可指定 UDID，仅 macOS 可执行。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D081",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:141-142",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:859-869"
+    ],
+    "assessment": "遍历 workspace 中 xcodeproj/xcworkspace 并列 schemes；macOS-only，未扫描项目。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D082",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:142-145",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:804-833"
+    ],
+    "assessment": "iOS SwiftUI scaffold 可生成；目标目录非空会拒绝，没有 overwrite 参数/确认流程。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D083",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:146-147",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:772-803"
+    ],
+    "assessment": "xcodebuild 项目构建 handler 已实现；受 macOS/Xcode host 限制，未构建。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D084",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:147-149",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:872-887"
+    ],
+    "assessment": "build_and_run 路径含 build/install/launch，可选打开 Simulator；仅 macOS，未运行。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D085",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:150-152",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:902-915"
+    ],
+    "assessment": "校验 workspace 内 .app bundle 后通过 simctl install 安装；仅 macOS，未安装。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D086",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:153-155",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:916-919"
+    ],
+    "assessment": "bundleId 与 launchArgs 经 simctl launch；仅 macOS，未启动应用。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D087",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:156-158",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:920-922"
+    ],
+    "assessment": "simctl terminate handler 存在；仅 macOS，未停止 app。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D088",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:159-160",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:923-927"
+    ],
+    "assessment": "校验 URL scheme 后通过 simctl openurl；仅 macOS，未调用。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D089",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:160-162",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:928-932"
+    ],
+    "assessment": "simctl screenshot 保存 workspace 文件并返回图像数据；仅 macOS，未截屏。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D090",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:163-166",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:933-946"
+    ],
+    "assessment": "iOS unified log 查询可按秒数、行数、bundleId 过滤；仅 macOS，未查询。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D091",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:167-168",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:898-901",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:947-952"
+    ],
+    "assessment": "UI status 检查 idb 是否安装；仅 macOS 且 idb 是可选依赖。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D092",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:168-170",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:947-959",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:947-952"
+    ],
+    "assessment": "idb UI tap handler 存在；无 idb 会明确失败，平台仅 macOS，未发送输入。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D093",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:171-174",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:960-967",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:947-952"
+    ],
+    "assessment": "idb UI swipe handler 存在；受 macOS/idb 条件限制，未发送输入。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D094",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:175-177",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:968-973",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:947-952"
+    ],
+    "assessment": "idb UI text handler 限制 1000 字符；受 macOS/idb 条件限制，未发送输入。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D095",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:178-181",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:974-980",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:947-952"
+    ],
+    "assessment": "idb button enum 限定设备按键；受 macOS/idb 条件限制，未按键。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D096",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:182-183",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-203",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:197-207",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:984-992",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:950-952",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:947-952"
+    ],
+    "assessment": "idb describe-all 可回传 UI 描述；仅 macOS 且依赖 idb。 所有状态均为源码确认，未在真实模拟器/设备运行。"
+  },
+  {
+    "id": "D097",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/browser.py:386-420",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/browser.py:558-580"
+    ],
+    "assessment": "Atlas 暴露当前 X2 Browser tools 与单一 call_tool runtime；本轮未发现 runtime/provider 选择 schema，不能证明 runtime select/persistence/provider switching。源码入口存在，动态可调用性未运行验证。"
+  },
+  {
+    "id": "D098",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:124-129",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:440-448"
+    ],
+    "assessment": "Browser tab 操作部分接入；descriptor 明确不支持 user.openTabs/user.claimTab 和 tabs.finalize，缺 host user-tab ownership/claim lifecycle。"
+  },
+  {
+    "id": "D099",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/browser.py:386-420",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/browser.py:432-440",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:126-132",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:452-480"
+    ],
+    "assessment": "Browser 有 navigation/snapshot schema 与 action map；compat 映射 goto/back/forward/reload/close/url/title，goto 后等待 DOMContentLoaded。静态确认，未开浏览器。"
+  },
+  {
+    "id": "D100",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:128-140",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:375-393",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:630-650"
+    ],
+    "assessment": "locator/press/selectOption/fill_form 有 compat dispatch；本轮未核验 upstream ARIA evidence 兼容，故保留部分。"
+  },
+  {
+    "id": "D101",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:130-134",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:452-486"
+    ],
+    "assessment": "frame/evaluate/wait capability 在 compat descriptor/dispatch 存在，但 wait 有条件能力且 evaluate 走 Atlas browser_console policy；未实测 supervisor 缺失/策略拒绝时的一致性。"
+  },
+  {
+    "id": "D102",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:230-236",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:134-137",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:532-533",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:810-844",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:525-630"
+    ],
+    "assessment": "模型侧 browser_use schema 以 operation/arguments 注入；compat 有坐标 CUA 操作和调用链，但需要活跃 browser supervisor/tab，本轮未做浏览器交互。"
+  },
+  {
+    "id": "D103",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:230-236",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:138-140",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:452-455",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:496-505",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:844-855"
+    ],
+    "assessment": "基于 Atlas snapshot/ref 的 DOM click/keypress/type 与部分 double-click/scroll 有映射；支持范围及运行时 UI 状态未实测。"
+  },
+  {
+    "id": "D104",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/BrowserPanel.tsx:12,45,467-471",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:760-782"
+    ],
+    "assessment": "BrowserPanel viewport presets and capturePage connect to backend viewport handling; source wiring only."
+  },
+  {
+    "id": "D105",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:148-149"
+    ],
+    "assessment": "get/respond JS dialog 仅在活动 CDP supervisor 条件满足时暴露，未见统一 pane/runtime 管理证据。"
+  },
+  {
+    "id": "D106",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:150-151",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:445-455"
+    ],
+    "assessment": "markHandoff 映射至 Atlas browser_handoff；markDeliverable 明确不支持且无 pane/deliverable owner。"
+  },
+  {
+    "id": "D107",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:152-155",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/browser.py:463-464",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/browser.py:566-567"
+    ],
+    "assessment": "step recording start/status/cancel 和 browser_replay 入口存在；compat 明确不产 WebM，且本轮未执行录制/回放。"
+  },
+  {
+    "id": "D108",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:160-163",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/browser_use_compat.py:424-434"
+    ],
+    "assessment": "Browser compatibility descriptor 明确将 visibility/headless 标为 unsupported，相关 toggle/action parser 也返回 unsupported；功能面板有 Browser 工具不能替代这两个缺失能力。"
+  },
+  {
+    "id": "D109",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mobile_simulator.py:77-183",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:215-217",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:2308-2337",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/mcp_client.py:442-450"
+    ],
+    "assessment": "Atlas 提供 Android/iOS 的 kernel function callables 并受平台/审批约束，但它们不作为 Atlas 内置 MCP server tools 注册；通用 MCP client 只代理用户配置的外部服务器。故功能相似、MCP 插件形态未达成。"
+  },
+  {
+    "id": "D110",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:41-230",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/media_generation_search.py:1-180",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/tools_router.py:358-414"
+    ],
+    "assessment": "当前 kernel 与媒体搜索 callable schemas 包含 image_generate/edit 和通用外部 MCP server 管理，但未发现内置 image_search schema/handler；配置外部 MCP 不等于 Atlas 提供 image_search 插件。"
+  },
+  {
+    "id": "D111",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:240-297",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:132-153",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_node.py:960-1038"
+    ],
+    "assessment": "有 create_document/create_spreadsheet/create_presentation/read_office callable，但本轮未发现这些文件类型对应的内置 skill/插件工作流，不能将裸工具等同于 skills。"
+  },
+  {
+    "id": "D112",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/computer_use.py:48-64",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/computer_use.py:379-404",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/computer_use.py:379-408",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/computer.py:608-625"
+    ],
+    "assessment": "Computer Use 有 request_access/stop 和 grant_id gate，legacy schemas 注册到共享 X2 handler；未实测后台窗口能力或授权生命周期。"
+  },
+  {
+    "id": "D113",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/browser.py:415-420",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/browser.py:566-568",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/recording.py:194-225",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/x2/recording.py:293-380"
+    ],
+    "assessment": "Browser 有步骤录制、skill 导出/回放及 ReplayEngine；该路径只录 browser steps，不提供通用桌面录制→参数化 skill lifecycle。"
+  },
+  {
+    "id": "D114",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/media_generation_search.py:169-178",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:224-226",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1750-1770",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/media_generation_search.py:673-712"
+    ],
+    "assessment": "security_scan 已注册并经 kernel dispatch；仅扫描显式 workspace 文件，model review 单独审批；没有 repo/branch 选择、Codex Security findings/repository 生命周期。"
+  },
+  {
+    "id": "D115",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:147-157",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1684-1685",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/lifecycle_tools.py:16-80"
+    ],
+    "assessment": "CronCreate/List/Update/Delete callable schema与统一dispatch已接入持久化lifecycle执行。"
+  },
+  {
+    "id": "D116",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:147-176",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/lifecycle_tools.py:16-21"
+    ],
+    "assessment": "kernel callable 有本地 Cron CRUD 与 ScheduleWakeup；lifecycle dispatcher 接受名列表不含 OffPeakCreate/List，未发现独立离峰任务队列 callable。"
+  },
+  {
+    "id": "D117",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:147-180",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/lifecycle_tools.py:16-21",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:30-50"
+    ],
+    "assessment": "检查当前 kernel 生命周期工具与模型目录，未发现 RemoteTrigger 或 routine trigger callable；现有定时任务/后台自动化不等于远程触发 Routine。"
+  },
+  {
+    "id": "D118",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:160-163",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1684-1685",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/lifecycle_tools.py:60-80"
+    ],
+    "assessment": "ScheduleWakeup schema通过lifecycle dispatch执行。"
+  },
+  {
+    "id": "D119",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:184-205",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:178-180",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/local_execution.py:180-208"
+    ],
+    "assessment": "已注册 shell/process/managed execution 工具，但未发现有状态 Node.js/JavaScript REPL schema 与持久 interpreter backend；运行 Python 或浏览器 JS 不是 Node REPL。"
+  },
+  {
+    "id": "D120",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:144-146",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1010-1031,2161-2167",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/integrations_router.py:116-149",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/channels/adapters/telegram.py:295-314"
+    ],
+    "assessment": "kernel_tool_schemas 将 send_message_to_user_async 暴露给当前 run 模型，其 dispatch 只向当前 run event_queue 写 chunk 并返回 sent=true；Telegram API 路由只读/更新设置与测试 token，Telegram adapter 虽有 sendMessage backend，但本轮未发现 reply_to_channel 的模型 schema→dispatch→channel adapter 调用链或 delivery receipt，因此按未做判定。"
+  },
+  {
+    "id": "D121",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/workspace_workflows.py:128-161",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:227-236",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/workspace_workflows.py:1041-1056"
+    ],
+    "assessment": "workspace workflow 有本地 visualization/artifact 生成与 dispatch，但未发现向 hosted artifact service 发布 HTML/Markdown 并返回公网/托管引用的 callable。"
+  },
+  {
+    "id": "D122",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:164-166",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1684-1685",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/lifecycle_tools.py:70-80"
+    ],
+    "assessment": "EndConversation工具已提供并分发。"
+  },
+  {
+    "id": "D123",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:194-205",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/tools/local_execution.py:589-619",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/run_drive.py:2051-2072",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/run_drive.py:2120-2135"
+    ],
+    "assessment": "后台 process 可产生 completed/notification 事件，run websocket 能增量发送事件；未发现独立模型 callable 订阅后台事件源并管理订阅生命周期。"
+  },
+  {
+    "id": "D124",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/integrations_router.py:93-103",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/integrations_router.py:253-299",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:144-146"
+    ],
+    "assessment": "通知服务/API 配置和 test send 存在，kernel 也能向当前 run 用户发异步消息；未发现要求用户授权并回报送达状态的桌面/移动推送 callable。"
+  },
+  {
+    "id": "D125",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:188",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_node.py:1039-1045"
+    ],
+    "assessment": "ReportFindings schema和处理分支存在；本条只能确认代码接线，实际审查卡呈现另待运行验证。"
+  },
+  {
+    "id": "D126",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:188-202",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:144-146",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:30-50"
+    ],
+    "assessment": "ReportFindings 是审查 findings 接口，send_message_to_user_async 是 run 消息；未发现 SendFeedback 草稿 schema、审核/状态回执调用链。"
+  },
+  {
+    "id": "D127",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:30-50",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_node.py:1380-1405",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:41-230"
+    ],
+    "assessment": "工具结果/附件可以形成 run artifact 输出，但未发现单独的、经授权的 send_user_file callable 与明确客户端送达回执。"
+  },
+  {
+    "id": "D128",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:164-180",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:132-153",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/agent/tool_catalog.py:30-50"
+    ],
+    "assessment": "已核 schema registry 与常用 agent catalogue，未发现 ShareOnboardingGuide 选择指南并回报分享结果的 callable；plugin install/skill search 不能替代分享动作。"
+  },
+  {
+    "id": "D129",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:1-250",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1-180",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/tools.py:167-169",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1010-1031"
+    ],
+    "assessment": "kernel schema 有 wait_for_environment（等待 workspace path），未发现 WaitForMcpServers 对应 schema/dispatch；该结论是限定于本次 kernel callable registry 的源码搜索。"
+  }
+]
+

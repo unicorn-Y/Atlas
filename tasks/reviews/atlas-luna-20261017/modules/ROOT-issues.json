@@ -1,0 +1,15 @@
+[
+  {
+    "local_id": "ROOT-001",
+    "priority": "P2",
+    "domain": "语音/资源生命周期",
+    "symptom": "语音界面先关闭、getUserMedia后返回时，返回的麦克风流及AudioContext绕过effect清理",
+    "runtime_affected": "当前分支代码受影响；本机触发未复现",
+    "evidence": "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/VoiceOverlay.tsx:153-159,179-188 VoiceOverlay useEffect",
+    "classification": "代码确认",
+    "minimal_fix": "effect卸载标记；晚返回流立即stop tracks，挂载时才创建AudioContext",
+    "reuse": "现有React effect cleanup与MediaStreamTrack.stop",
+    "complexity": "S",
+    "worker": "主执行者"
+  }
+]

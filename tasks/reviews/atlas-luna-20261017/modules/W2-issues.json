@@ -1,0 +1,129 @@
+[
+  {
+    "local_id": "W2-001",
+    "priority": "P1",
+    "domain": "run cancellation / long-running tools",
+    "symptom": "A stop request sets the run cancel event, but AtlasKernel waits for an in-flight tool batch using only the tool task and event queue. If a tool is still awaiting work and emits no event, the API cannot observe cancellation until that tool returns; long or stuck calls may keep the run alive after the user requests stop.",
+    "runtime_affected": "主执行者确认 Atlas 进程源码根为 D:\\Atlas；实际加载字节未知。若加载 ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f，代码路径受影响。主目录 dirty/untracked 的 deep_research overlay 同样缺少 run cancel_event 传递。",
+    "evidence": [
+      {
+        "branch": "ui-redesign",
+        "full_sha": "0b1ba4114e25643369c95bfac85d37563788444f",
+        "path": "core/atlas/kernel/loop.py",
+        "lines": "1496-1505",
+        "function": "AtlasKernel.run"
+      },
+      {
+        "branch": "ui-redesign",
+        "full_sha": "0b1ba4114e25643369c95bfac85d37563788444f",
+        "path": "core/atlas/kernel/loop.py",
+        "lines": "2394-2423",
+        "function": "AtlasKernel._dispatch"
+      },
+      {
+        "branch": "ui-redesign",
+        "full_sha": "0b1ba4114e25643369c95bfac85d37563788444f",
+        "path": "core/atlas/api/run_drive.py",
+        "lines": "166,2268-2278,2707-2710",
+        "function": "stop command / check_pause_cancel / _execute_run event consumer"
+      },
+      {
+        "branch": "ui-redesign host overlay (untracked file, not in commit)",
+        "full_sha": "0b1ba4114e25643369c95bfac85d37563788444f plus uncommitted overlay",
+        "path": "core/atlas/research/tool.py",
+        "lines": "57-80",
+        "function": "run_deep_research_tool"
+      },
+      {
+        "branch": "codex/desktop-repair-20261013",
+        "full_sha": "b177a6a94a7f1a9adb2891955a37cd4d4490054d",
+        "path": "core/atlas/kernel/loop.py",
+        "lines": "1435-1443",
+        "function": "AtlasKernel.run tool batch wait"
+      }
+    ],
+    "classification": "代码确认；隔离运行复现未执行；进程源码根已确认 D:\\Atlas，加载字节待核实；desktop-repair 分支亦未修复",
+    "minimal_fix": "Race the kernel tool batch against the run cancel event. Signal cancellable child operations and stop launching new calls; await and record settled results, preserve partial output, then finish as cancelled/interrupted. Never restart a cancelled side-effecting call.",
+    "reuse": "Reuse the existing model-stream cancel_waiter in kernel/loop.py and workflow cancellation watcher in kernel/workflow_tool.py.",
+    "complexity": "M",
+    "worker": "W2"
+  },
+  {
+    "local_id": "W2-002",
+    "priority": "P2",
+    "domain": "truthful completion / post-edit verification",
+    "symptom": "The current kernel path can finish after the model emits a final answer following code-changing tools without a mechanical prompt to run a relevant check. Verification is left to model behavior, so unverified edits can end in a normal completed turn.",
+    "runtime_affected": "主执行者确认 Atlas 进程源码根为 D:\\Atlas；实际加载字节未知。若加载 ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f，kernel 结束路径受影响；desktop-repair 默认 AtlasKernel 路径仍未接入 nudge。",
+    "evidence": [
+      {
+        "branch": "ui-redesign",
+        "full_sha": "0b1ba4114e25643369c95bfac85d37563788444f",
+        "path": "core/atlas/engine/hermes_runtime.py",
+        "lines": "864-867,967,985",
+        "function": "HermesRuntime.run_turn"
+      },
+      {
+        "branch": "ui-redesign",
+        "full_sha": "0b1ba4114e25643369c95bfac85d37563788444f",
+        "path": "core/atlas/kernel/loop.py",
+        "lines": "1593-1604",
+        "function": "AtlasKernel.run"
+      },
+      {
+        "branch": "ui-redesign",
+        "full_sha": "0b1ba4114e25643369c95bfac85d37563788444f",
+        "path": "core/atlas/agent/run_phases.py",
+        "lines": "929-949",
+        "function": "_phase_finalize"
+      },
+      {
+        "branch": "codex/desktop-repair-20261013",
+        "full_sha": "b177a6a94a7f1a9adb2891955a37cd4d4490054d",
+        "path": "core/atlas/agent/run_phases.py",
+        "lines": "1467-1474",
+        "function": "_pump_events / verification nudge"
+      }
+    ],
+    "classification": "代码确认；本机复现未执行；desktop-repair 的默认 AtlasKernel 路径仍有缺口",
+    "minimal_fix": "Wire the existing changed-path and successful-check evidence into kernel finalization and emit the existing bounded verification nudge when code changes remain unverified. Keep run completion as a turn-terminal status unless goal success is separately defined.",
+    "reuse": "Reuse agent/verification_stop.py, changed-path tracking in agent/tool_node.py, and the existing soft nudge in agent/run_phases.py.",
+    "complexity": "S-M",
+    "worker": "W2"
+  },
+  {
+    "local_id": "W2-003",
+    "priority": "P2",
+    "domain": "独有分支集成风险 / 工具流去重",
+    "symptom": "codex/desktop-repair-20261013 移除了 kernel 对已从事件队列转发的 tool_result call id 的去重记录；tool_node 仍将 tool_result 写入事件队列，而 batch 聚合结束时 kernel 又为 settled result 发出 tool_result，可能向 UI 或流消费者重复报告同一工具调用结果。该分支也移除了 tool_preparing 增量进度事件，长参数流期间不再显示准备进度。",
+    "runtime_affected": "仅该分支候选集成风险，非 ui-redesign 基线缺陷；尚未合入当前运行源码。",
+    "evidence": [
+      {
+        "branch": "codex/desktop-repair-20261013",
+        "full_sha": "b177a6a94a7f1a9adb2891955a37cd4d4490054d",
+        "path": "core/atlas/kernel/loop.py",
+        "lines": "1410-1452",
+        "function": "AtlasKernel.run / consume_tool_results 与 tool event queue"
+      },
+      {
+        "branch": "codex/desktop-repair-20261013",
+        "full_sha": "b177a6a94a7f1a9adb2891955a37cd4d4490054d",
+        "path": "core/atlas/agent/tool_node.py",
+        "lines": "203-208,315-319,1409-1419",
+        "function": "execute_tools_node tool_result event emission"
+      },
+      {
+        "branch": "ui-redesign",
+        "full_sha": "0b1ba4114e25643369c95bfac85d37563788444f",
+        "path": "core/atlas/kernel/loop.py",
+        "lines": "519-524,1115-1120,1483-1516",
+        "function": "AtlasKernel.run existing forwarded result de-dup and streaming progress"
+      }
+    ],
+    "classification": "分支差异确认；重复 UI 事件影响由调用链推断，未做 UI/流消费者复现；集成前需保留基线去重/进度语义或证明替代实现等价",
+    "minimal_fix": "合并候选改动时恢复基线的 forwarded_results/tool result 去重及 tool_preparing 进度语义；若分支有新事件路由方案，需确保每个 call_id 只产生一个最终结果事件，并补定向的本地隔离验证。",
+    "reuse": "复用 ui-redesign 基线的 forwarded_results、tool_started_at 及参数增量节流实现。",
+    "complexity": "S",
+    "worker": "W2"
+  }
+]
+

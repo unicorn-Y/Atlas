@@ -1,0 +1,437 @@
+[
+  {
+    "id": "B100",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/BrowserPanel.tsx:10",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:50"
+    ],
+    "assessment": "persist:atlas-browser分区存在，BrowserPanel/main/preload/shared范围未见逐站点cookie清除和持久化状态UI；不能把持久分区等同完整站点数据管理。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B101",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/BrowserPanel.tsx:494",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:50"
+    ],
+    "assessment": "审查BrowserPanel、Electron主进程/preload/shared IPC，未见逐域允许一次/总是允许/拒绝决策面板；现有地址导航不是逐域审批。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B102",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/ChangesPanel.tsx:43",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/ChangesPanel.tsx:48",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/ChangesPanel.tsx:202",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/ChangesPanel.tsx:424"
+    ],
+    "assessment": "多行评论汇入comments并一次onAsk发送；失败保留，输入法合成和焦点路径有处理；这里只确认源码UI/发送调用，未实测。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B103",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:88",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ReviewFindingsCard.tsx:47",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ReviewFindingsCard.tsx:60",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ReviewFindingsCard.tsx:111"
+    ],
+    "assessment": "结构化finding卡挂载，Fix和Apply fixes调用store.sendMessage，Dismiss用本地状态隐藏；不声称点击后修复必然成功或Dismiss跨重启持久。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B104",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/FilesPanel.tsx:81",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/FilesPanel.tsx:447",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f backend-adapter/src/client.ts:253",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/workspace_router.py:444",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/workspace_router.py:464"
+    ],
+    "assessment": "文件编辑保存传expected_sha256，后端比较当前及最终文件hash，UI有冲突提示；未执行真实文件保存。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B105",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/BrowserPanel.tsx:206",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/BrowserPanel.tsx:301",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/BrowserPanel.tsx:521"
+    ],
+    "assessment": "浏览器本地file选择接受HTML/PDF/image/video，创建ObjectURL并按类型预览。先前只查看FilesPanel导致的部分判断已纠正；不包含站点权限能力。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B106",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/TerminalPanel.tsx:17",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/TerminalPanel.tsx:54",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/TerminalPanel.tsx:101",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/TerminalPanel.tsx:165"
+    ],
+    "assessment": "按conversation保存终端容器，每会话可增关切换PowerShell tabs，TerminalSession连backend.terminalUrl；未开真实终端。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B107",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/FilesPanel.tsx:13",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/workspace_router.py:338",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f backend-adapter/src/client.ts:247"
+    ],
+    "assessment": "工作区树API提供Git状态，FilesPanel映射后展示；不是猜测状态。仅源码链，未对当前用户仓库文件树作交互验证。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B108",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/FilesPanel.tsx:119",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/FilesPanel.tsx:356"
+    ],
+    "assessment": "名称搜索与独立刷新按钮存在；刷新重载根和expanded目录，运行结束/目录改变也刷新；旧账未确认刷新入口已过时。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B109",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/BrowserPanel.tsx:494",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/BrowserPanel.tsx:513"
+    ],
+    "assessment": "多标签、地址导航、切换关闭及webview导航接线存在；未操作当前真实浏览器。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B110",
+    "current_status": "原有",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/BrowserPanel.tsx:12",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/BrowserPanel.tsx:105"
+    ],
+    "assessment": "已有viewport预设及按viewport比例处理页面截图的UI；仍需桌面交互实测，不能据静态渲染确认目标页面响应式效果。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B111",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/BrowserPanel.tsx:494",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/main/electron.ts:50"
+    ],
+    "assessment": "检查浏览器面板和Electron/preload/shared边界，未见Atlas自有逐网站权限请求卡；不把Chromium原生弹窗作为实现。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B112",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/VoiceOverlay.tsx:78",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/VoiceOverlay.tsx:153",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/BrowserPanel.tsx:494"
+    ],
+    "assessment": "语音getUserMedia及错误处理存在，但在frontend/src与core/atlas(不含移植engine_core)未找到摄像头/麦克风/屏幕/定位统一结果卡与真实授权状态汇报。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B113",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Inspector.tsx:240",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/GitWorkspacePanel.tsx:77",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/GitWorkspacePanel.tsx:107",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/workspace_router.py:1060",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/workspace_router.py:1078"
+    ],
+    "assessment": "Git菜单挂载，选定路径提交、推送和已提交但推送失败的分开提示存在；权限后端检查由相应路由负责。未运行真实git写操作。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B114",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/GitWorkspacePanel.tsx:62",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/GitWorkspacePanel.tsx:140",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/workspace_router.py:1034"
+    ],
+    "assessment": "分支创建/切换请求携root及可选conversation_id，当前分支重载反馈；不宣称覆盖所有冲突状态的真实交互。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B115",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/GitWorkspacePanel.tsx:32",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/GitWorkspacePanel.tsx:186",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/workspace_router.py:1088"
+    ],
+    "assessment": "后端真实Git history graph/parents输入，UI显示ASCII拓扑和commit/parent明细；非仅旧i18n线索。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B116",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:142",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:195",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:1115"
+    ],
+    "assessment": "run.usage提供按模型请求/token/推理token统计及工具步骤；未见专门逐轮HTTP请求/响应网络日志工作台，不把用量统计当完整网络轨迹。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B117",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/FilesPanel.tsx:430",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/FilesPanel.tsx:499",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/FilesPanel.tsx:505"
+    ],
+    "assessment": "源码/预览切换，代码字体字号及自动换行控制存在，SVG可图像预览和源文查看；源码控制不等于SVG画布元素编辑。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B118",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/Composer.tsx:10",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/DrawingPad.tsx:38",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/DrawingPad.tsx:128",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/DrawingPad.tsx:108"
+    ],
+    "assessment": "Composer挂载DrawingPad，canvas导出PNG经onAttach进入附件发送链；未绘制真实附件。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B119",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationMessage.tsx:360",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/FilesPanel.tsx:502"
+    ],
+    "assessment": "当前frontend/src未发现GenUI协议/组件宿主；已有Markdown和沙箱HTML预览不等同模型生成交互卡微调协议。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B120",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/plugins_router.py:40",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/ExtensionCatalogPanel.tsx:40"
+    ],
+    "assessment": "插件安装/启用管理存在；检查plugins运行时及frontend扩展面板未见插件自定义UI侧栏协议和受控渲染宿主。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B121",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:100",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/pages/WorkbenchPage.tsx:20",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/pages/workbench/AgentChat.tsx:103"
+    ],
+    "assessment": "已有任务活动卡和外部Agent工作台；未找到跨主会话原生子代理活动/历史目录API+独立侧栏，不能将workbench外部Agent列表当成原生子任务目录。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B122",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:46",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:100"
+    ],
+    "assessment": "真实run活动时间线有检查/任务事件；frontend/src未找到动态并行工作流拓扑图宿主及事件驱动图布局，不把时间线当图。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B123",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:913",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ReviewFindingsCard.tsx:29"
+    ],
+    "assessment": "命令明示auto-review兼容入口只调用/review；结构化审查卡存在，但独立自动审查策略/授权面板未实现。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B124",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/timeline.ts:409",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:46",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:273"
+    ],
+    "assessment": "运行时显式reasoning文本被分类并呈现可展开内容；不会用effort或token反推思考文字；是否提供文本取决模型上游。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B125",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ThreadPresentation.tsx:36",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ThreadPresentation.tsx:182",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:478"
+    ],
+    "assessment": "Normal/Thinking/Verbose三档定义和UI选择已接入，其各自展开/过滤语义明确；旧状态部分已经过时，不要求逐像素复刻竞品。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B126",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/pages/ShortcutsPanel.tsx:24",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/services/shortcuts.ts:19",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:1482",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/MessageThread.tsx:495"
+    ],
+    "assessment": "全局快捷键设置/列表面板已挂载，线程还提供Ctrl+O/PageUp/PageDown帮助；尚未证实一个帮助层汇总所有局部组件键位，保留部分而非笼统未做。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B127",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Inspector.tsx:180",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/TerminalPanel.tsx:223",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/TerminalPanel.tsx:232",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/ProcessesPanel.tsx:14",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/tools_router.py:46"
+    ],
+    "assessment": "Atlas后台进程侧栏/终端区提供列表、输出读取/轮询、停止；本机Shell是PowerShell而非Bash。不等同跨会话Agent后台任务管理。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B128",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/message-actions/CodeBlock.tsx:127",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/message-actions/CodeBlock.tsx:144",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/message-actions/CodeBlock.tsx:238"
+    ],
+    "assessment": "Markdown table渲染绑定CsvMarkdownTable，转义字段、UTF8 BOM和下载ObjectURL存在；未在真实UI下载。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B129",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/FilesPanel.tsx:22",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/FilesPanel.tsx:468",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/office.py:176"
+    ],
+    "assessment": "PPTX经Office转换静态预览；未见页缩略图/元素选择/导出富交互，PDF页码缩放不冒充PPTX编辑器。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B130",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/conversations_router.py:1006",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/conversations_router.py:1044"
+    ],
+    "assessment": "现有fork创建新会话元数据/复制session，不是同一个session内节点式树分支与摘要切换；检查conversations_router与store未见该节点持久化机制。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B131",
+    "current_status": "已做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:1543",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/SideChat.tsx:31",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/run_drive.py:1792",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/run_drive.py:1802",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/api/run_drive.py:2946"
+    ],
+    "assessment": "SideChat发送ephemeral run并带源conversation，后端复制源session到临时会话，强制read_only，结束删除临时元数据；上下文共享和临时生命周期代码已接通。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B132",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/Composer.tsx:204",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:913"
+    ],
+    "assessment": "检查App/Composer/store/消息组件未见会话终态后生成并呈现下一步prompt推荐链；输入补全、slash命令和手工SideChat不算该能力。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B133",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/Inspector.tsx:180",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/ProcessesPanel.tsx:7",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/store/useAtlasStore.ts:670"
+    ],
+    "assessment": "全局后台进程列表及停止已存在，普通run状态可显示；ProcessesPanel没有conversation_id参数，未形成当前会话关联后台Agent任务专用面板。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B134",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/conversation-search/ConversationSearch.tsx:95",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:195"
+    ],
+    "assessment": "有普通对话搜索和模型用量卡；检查frontend/src搜索/活动/时间线未见按模型调用/轮次检索HTTP轨迹的独立功能。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B135",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/shell/panels/ProcessesPanel.tsx:24",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/settings/DiagnosticsPanel.tsx:38"
+    ],
+    "assessment": "可看已管理进程命令/状态/输出以及诊断报告；未见会话内持续CPU/内存/全机资源监控数据图，不能把进程列表当完整资源监控。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B136",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/DrawingPad.tsx:38",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/styles/app.css:279"
+    ],
+    "assessment": "当前frontend/src存在pointer绘图和响应样式，但没有覆盖触屏的全应用长按/拖放/命中区专门设计；仅通用pointer支持不足以判该完整能力已做。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B137",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/cli.py:66",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/Composer.tsx:450"
+    ],
+    "assessment": "现有Atlas CLI chat入口及React textarea输入；检查cli与frontend输入/快捷键实现未见终端TUI Vim编辑状态机。自用桌面低优先级。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B138",
+    "current_status": "未做",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/cli.py:66",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/App.tsx:1"
+    ],
+    "assessment": "检查CLI入口和frontend组件目录未见终端宠物渲染/状态协议；非桌面核心能力，不提高优先级。",
+    "worker": "ROOT"
+  },
+  {
+    "id": "B139",
+    "current_status": "部分",
+    "evidence": [
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f core/atlas/kernel/loop.py:1753",
+      "ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f frontend/src/renderer/components/ConversationActivity.tsx:100"
+    ],
+    "assessment": "security_scan工具可经现有工具调用/结果卡链处理；未见repository/branch/scan模式创建、Findings/coverage/报告完整扫描工作台。",
+    "worker": "ROOT"
+  }
+]

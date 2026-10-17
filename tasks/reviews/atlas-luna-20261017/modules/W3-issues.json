@@ -1,0 +1,68 @@
+{
+  "findings": [
+    {
+      "local_id": "W3-001",
+      "priority": "P1",
+      "domain": "会话队列 / 运行状态",
+      "symptom": "run.failed 与 run.completed、run.cancelled 共用终态处理并调用 dispatchQueue；失败没有设置 queuePaused。存在排队消息时，失败终止可能直接取出并执行下一条消息，无法按用户要求在模型故障后暂停队列。",
+      "runtime_affected": "父进程与监听端口核实实际源码根为 D:\\Atlas、HEAD为ui-redesign 0b1ba4114e25643369c95bfac85d37563788444f；useAtlasStore.ts在该dirty工作区未修改。进程内加载文件精确字节仍待核实。",
+      "evidence": [
+        {
+          "branch": "ui-redesign",
+          "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f",
+          "path": "frontend/src/renderer/store/useAtlasStore.ts",
+          "line": 670,
+          "function": "applyRuntimeEvent/store runtime event terminal handler"
+        },
+        {
+          "branch": "ui-redesign",
+          "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f",
+          "path": "frontend/src/renderer/store/useAtlasStore.ts",
+          "line": 1161,
+          "function": "dispatchQueue"
+        }
+      ],
+      "classification": "代码确认",
+      "minimal_fix": "在 run.failed 分支调用 dispatchQueue 前设置 conversation queuePaused=true，并保留队列项；仅由用户显式 resumeQueue 或重试动作恢复。",
+      "reuse": "复用现有 queuePaused、resumeQueue 和 ConversationQueuePanel 行为，不新增队列抽象。",
+      "complexity": "S",
+      "worker": "W1"
+    },
+    {
+      "local_id": "W3-002",
+      "priority": "P1",
+      "domain": "模型故障 / 错误详情 UI",
+      "symptom": "run.failed 到时间线卡片的投影仅取 data.detail 或 data.code；错误卡只显示该字符串，没有显示可用的 provider/model/status/request_id/attempts/retryability 结构化信息。独立的手动重试按钮已存在。",
+      "runtime_affected": "父进程与监听端口核实实际源码根为 D:\\Atlas、HEAD为ui-redesign 0b1ba4114e25643369c95bfac85d37563788444f；timeline.ts有dirty编辑但仅新增deep_research工具标签（该差异行116），不影响run.failed投影。进程启动前后磁盘编辑时间与进程内加载字节仍待核实；若事件未提供结构化字段，亦涉及W1事件契约。",
+      "evidence": [
+        {
+          "branch": "ui-redesign",
+          "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f",
+          "path": "frontend/src/renderer/components/timeline.ts",
+          "line": 713,
+          "function": "buildTimeline run.failed case"
+        },
+        {
+          "branch": "ui-redesign",
+          "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f",
+          "path": "frontend/src/renderer/components/ConversationActivity.tsx",
+          "line": 93,
+          "function": "ConversationActivity failed item renderer"
+        },
+        {
+          "branch": "ui-redesign",
+          "fullSHA": "0b1ba4114e25643369c95bfac85d37563788444f",
+          "path": "frontend/src/renderer/App.tsx",
+          "line": 1253,
+          "function": "retryNote manual retry affordance"
+        }
+      ],
+      "classification": "代码确认",
+      "minimal_fix": "让 run.failed event-to-timeline mapping保留已脱敏的结构化错误字段，并在错误卡展示分类、model/provider、HTTP状态、原始说明、request ID、尝试次数及手动重试状态；与W1事件字段契约对齐。",
+      "reuse": "复用现有 run.failed event、错误卡和 store.retryRun；不增加新错误框架。",
+      "complexity": "S",
+      "worker": "W1"
+    }
+  ]
+}
+

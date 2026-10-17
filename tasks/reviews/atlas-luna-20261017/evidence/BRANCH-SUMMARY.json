@@ -1,0 +1,617 @@
+{
+  "baseline": "0b1ba4114e25643369c95bfac85d37563788444f",
+  "remote_branch_refs": 74,
+  "tip_sha_groups": 72,
+  "tip_tree_groups": 72,
+  "exact_tree_duplicate_groups": [
+    {
+      "branches": [
+        "main",
+        "docs/atlas-memory-research-20261016"
+      ],
+      "tree": "3dd8eb22d14cdb1d2057691d320f9c32f1c07cd1"
+    },
+    {
+      "branches": [
+        "memory-v1",
+        "memory-w1"
+      ],
+      "tree": "d6014790fba279b5e30a10382cc84298f3dbe6d0"
+    }
+  ],
+  "ancestor_ref_count": 37,
+  "divergent_ref_count": 36,
+  "descendant_ref_count": 1,
+  "code_delta_ref_count": 25,
+  "docs_only_delta_ref_count": 10,
+  "tests_only_delta_ref_count": 2,
+  "maximal_tip_sha_groups": 22,
+  "maximal_tip_branch_refs": 23,
+  "maximal_code_tip_groups": 14,
+  "maximal_code_tip_candidates": [
+    {
+      "branches": [
+        "card-b-tc-10"
+      ],
+      "sha": "0dfc918c7bbc481f6fa99d4f697dd5fccbd7a20f",
+      "tree_hash": "2d30da69276896fc9bd1a17f4e21276652c9a8d3",
+      "merge_base": "e9be4b4b176eae332c82cd124ec669b4b7612969",
+      "ahead": 2,
+      "behind": 117,
+      "modules": [
+        "backend-adapter/src",
+        "core/atlas",
+        "docs/parity",
+        "frontend/src"
+      ],
+      "unique_paths": [
+        "backend-adapter/src/client.ts",
+        "core/atlas/api/app_services.py",
+        "core/atlas/api/application.py",
+        "core/atlas/api/background_jobs_router.py",
+        "core/atlas/api/model_trajectory_router.py",
+        "core/atlas/api/network_diagnostics_router.py",
+        "core/atlas/api/run_drive.py",
+        "core/atlas/model_trajectory.py",
+        "core/atlas/models/http_diagnostics.py",
+        "core/atlas/models/network_transport.py",
+        "core/atlas/server.py",
+        "docs/parity/cards/B-TC-10.md",
+        "frontend/src/renderer/App.tsx",
+        "frontend/src/renderer/components/ModelCallDiagnostics.tsx",
+        "frontend/src/renderer/components/ShortcutHelpDialog.tsx",
+        "frontend/src/renderer/services/shortcuts.ts",
+        "frontend/src/renderer/shell/Inspector.tsx",
+        "frontend/src/renderer/shell/panels/BackgroundJobsPanel.tsx",
+        "frontend/src/renderer/shell/panels/ModelTrajectoryPanel.tsx",
+        "frontend/src/renderer/store/useAtlasStore.ts"
+      ]
+    },
+    {
+      "branches": [
+        "memory-w2-ui"
+      ],
+      "sha": "11153a028feace09e952e23544e0adf1d155887c",
+      "tree_hash": "128d4bdc7442e1eabc4fae7705dccea5d44e8c1e",
+      "merge_base": "0e989795622538dfaa300db76c792d1710b71d75",
+      "ahead": 2,
+      "behind": 14,
+      "modules": [
+        "docs/memory",
+        "frontend/src"
+      ],
+      "unique_paths": [
+        "docs/memory/prototype-memory-browser.html",
+        "docs/memory/TASKBOOK-W2.md",
+        "docs/memory/W2-UI-RESULT.md",
+        "frontend/src/renderer/components/memory/LibraryPages.tsx",
+        "frontend/src/renderer/components/memory/MemlibBrowser.tsx",
+        "frontend/src/renderer/components/memory/mockMemlib.ts",
+        "frontend/src/renderer/pages/MemoryPage.tsx"
+      ]
+    },
+    {
+      "branches": [
+        "f2-c"
+      ],
+      "sha": "132a95d88606defa79421d15523427a592bd0053",
+      "tree_hash": "637af84f4eef494a8e4cd21685cc54aeabd75abe",
+      "merge_base": "5450a35af461af5743afff283e9ba4b6be162492",
+      "ahead": 1,
+      "behind": 153,
+      "modules": [
+        "backend-adapter/src",
+        "core/atlas",
+        "docs/parity",
+        "frontend/src"
+      ],
+      "unique_paths": [
+        "backend-adapter/src/client.ts",
+        "backend-adapter/src/types.ts",
+        "core/atlas/api/application.py",
+        "core/atlas/api/claude_settings_keys.json",
+        "core/atlas/api/mcp_oauth.py",
+        "core/atlas/api/mcp_settings_router.py",
+        "core/atlas/api/settings_audit_router.py",
+        "core/atlas/models/__init__.py",
+        "core/atlas/models/network_transport.py",
+        "core/atlas/models/routes.py",
+        "core/atlas/tools/mcp_client.py",
+        "docs/parity/F1-C.md",
+        "frontend/src/main/configuredSourceUpdate.ts",
+        "frontend/src/main/electron.ts",
+        "frontend/src/main/localCrashReports.ts",
+        "frontend/src/preload/index.cts",
+        "frontend/src/renderer/App.tsx",
+        "frontend/src/renderer/components/settings/McpResourcesPanel.tsx",
+        "frontend/src/renderer/components/settings/McpServersPanel.tsx",
+        "frontend/src/renderer/components/settings/PlatformSettingsPanel.tsx",
+        "frontend/src/renderer/components/settings/SettingsAuditPanel.tsx",
+        "frontend/src/renderer/components/settings/SettingsIntegrationsPanel.tsx",
+        "frontend/src/renderer/pages/models/KeyManager.tsx",
+        "frontend/src/renderer/pages/SettingsPage.tsx",
+        "frontend/src/renderer/store/useAtlasStore.ts",
+        "frontend/src/shared/ipc.ts"
+      ]
+    },
+    {
+      "branches": [
+        "mem-integrate"
+      ],
+      "sha": "4046764fbabda187a4b329c830a4b9cab9631951",
+      "tree_hash": "a8b49a07ac59938894cf213bbe862e9a8c19b256",
+      "merge_base": "0e989795622538dfaa300db76c792d1710b71d75",
+      "ahead": 46,
+      "behind": 14,
+      "modules": [
+        ".gitignore",
+        "core",
+        "core/atlas",
+        "core/tests",
+        "docs/memory",
+        "scripts"
+      ],
+      "unique_paths": [
+        ".gitignore",
+        "core/atlas/agent/__init__.py",
+        "core/atlas/agent/delegation_memory.py",
+        "core/atlas/agent/enrichment.py",
+        "core/atlas/agent/results.py",
+        "core/atlas/agent/run_phases.py",
+        "core/atlas/agent/tool_node.py",
+        "core/atlas/api/health_router.py",
+        "core/atlas/api/memory_library_router.py",
+        "core/atlas/evolution/skill_candidate.py",
+        "core/atlas/evolution/skill_sleep.py",
+        "core/atlas/evolution/skill_staging.py",
+        "core/atlas/kernel/context.py",
+        "core/atlas/kernel/loop.py",
+        "core/atlas/kernel/plan.py",
+        "core/atlas/kernel/subagents.py",
+        "core/atlas/kernel/tools.py",
+        "core/atlas/memory/library/__init__.py",
+        "core/atlas/memory/library/association.py",
+        "core/atlas/memory/library/claim_resolution.py",
+        "core/atlas/memory/library/consolidation.py",
+        "core/atlas/memory/library/dream.py",
+        "core/atlas/memory/library/embed.py",
+        "core/atlas/memory/library/extract.py",
+        "core/atlas/memory/library/forget.py",
+        "core/atlas/memory/library/hybrid.py",
+        "core/atlas/memory/library/index.py",
+        "core/atlas/memory/library/lifecycle.py",
+        "core/atlas/memory/library/queue.py",
+        "core/atlas/memory/library/recall.py",
+        "core/atlas/memory/library/source_ref.py",
+        "core/atlas/memory/library/sources.py",
+        "core/atlas/memory/library/store.py",
+        "core/pyproject.toml",
+        "core/tests/test_c1_lifecycle_subtask.py",
+        "core/tests/test_kernel_memory_recheck.py",
+        "core/tests/test_memory_integration_tools.py",
+        "core/tests/test_memory_library_m4.py",
+        "core/tests/test_memory_library_w2.py",
+        "docs/memory/build/CONTRACT-M2.md",
+        "docs/memory/build/M1-RESULT.md",
+        "docs/memory/build/M2-RESULT.md",
+        "docs/memory/build/M3-RESULT.md",
+        "docs/memory/build/M4-RESULT.md",
+        "docs/memory/build/M5-RESULT.md",
+        "docs/memory/build/M6-RESULT.md",
+        "docs/memory/build/M7-RESULT.md",
+        "docs/memory/build/M8-RESULT.md",
+        "docs/memory/build/M9-RESULT.md",
+        "docs/memory/build/S3-RESULT.md",
+        "docs/memory/prototype-memory-browser.html",
+        "docs/memory/TASKBOOK-W2.md",
+        "docs/memory/W2-API-RESULT.md",
+        "scripts/verify_m1_real.py",
+        "scripts/verify_m3_real.py",
+        "scripts/verify_m4_real.py",
+        "scripts/verify_m5_real.py"
+      ]
+    },
+    {
+      "branches": [
+        "fix-p1-audit"
+      ],
+      "sha": "56615d0f21b39c4cf30a6d14972e65174461c32c",
+      "tree_hash": "756227adb4ee392e13db5d3fc6e9bf8585e2fa76",
+      "merge_base": "fd5efb1afbdad253ed27e0f96ae35e991c179e4a",
+      "ahead": 7,
+      "behind": 20,
+      "modules": [
+        "config",
+        "core/atlas",
+        "frontend",
+        "frontend/scripts",
+        "frontend/src",
+        "package-lock.json"
+      ],
+      "unique_paths": [
+        "config/atlas.example.toml",
+        "core/atlas/api/run_drive.py",
+        "core/atlas/api/workspace_router.py",
+        "core/atlas/kernel/exec.py",
+        "core/atlas/kernel/loop.py",
+        "core/atlas/kernel/model_call.py",
+        "core/atlas/models/router.py",
+        "core/atlas/tools/local_execution.py",
+        "frontend/package.json",
+        "frontend/scripts/package-sqlite.mjs",
+        "frontend/scripts/SQLITE-RUNTIME.md",
+        "frontend/scripts/test-preload-bundle.mjs",
+        "frontend/src/renderer/components/ConversationActivity.tsx",
+        "frontend/src/renderer/components/MessageThread.tsx",
+        "frontend/src/renderer/components/timeline.test.ts",
+        "frontend/src/renderer/components/timeline.ts",
+        "frontend/src/renderer/services/runtimeEvents.test.ts",
+        "frontend/src/renderer/services/runtimeEvents.ts",
+        "frontend/src/types/runtime.ts",
+        "package-lock.json"
+      ]
+    },
+    {
+      "branches": [
+        "memory-w2-fix"
+      ],
+      "sha": "6c5240e41381a1eda4f0c8d74687c47476f95721",
+      "tree_hash": "80fd480cfd586f39148dc85cf1dc5d7f230c36ef",
+      "merge_base": "0e989795622538dfaa300db76c792d1710b71d75",
+      "ahead": 3,
+      "behind": 14,
+      "modules": [
+        "core",
+        "core/atlas",
+        "core/tests",
+        "docs/memory"
+      ],
+      "unique_paths": [
+        "core/atlas/agent/run_phases.py",
+        "core/atlas/api/memory_library_router.py",
+        "core/atlas/kernel/loop.py",
+        "core/atlas/kernel/tools.py",
+        "core/atlas/memory/library/__init__.py",
+        "core/atlas/memory/library/dream.py",
+        "core/atlas/memory/library/embed.py",
+        "core/atlas/memory/library/extract.py",
+        "core/atlas/memory/library/hybrid.py",
+        "core/atlas/memory/library/index.py",
+        "core/atlas/memory/library/queue.py",
+        "core/atlas/memory/library/sources.py",
+        "core/atlas/memory/library/store.py",
+        "core/pyproject.toml",
+        "core/tests/test_memory_library_w2.py",
+        "docs/memory/prototype-memory-browser.html",
+        "docs/memory/TASKBOOK-W2-FIX.md",
+        "docs/memory/TASKBOOK-W2.md",
+        "docs/memory/W2-API-RESULT.md"
+      ]
+    },
+    {
+      "branches": [
+        "wip/kernel-deep-research-20261015"
+      ],
+      "sha": "7f0ee93293786f8d884cdf45650f1fb8aa7e29c4",
+      "tree_hash": "df9104b28a78e224da1c97e0c8f93e8eb719b9e0",
+      "merge_base": "0e989795622538dfaa300db76c792d1710b71d75",
+      "ahead": 1,
+      "behind": 14,
+      "modules": [
+        "core/atlas"
+      ],
+      "unique_paths": [
+        "core/atlas/kernel/loop.py",
+        "core/atlas/kernel/tools.py"
+      ]
+    },
+    {
+      "branches": [
+        "absorb-all"
+      ],
+      "sha": "8d7b01d829f1332e9305fe8ee56758a6294139f7",
+      "tree_hash": "1dda5876c66ec24df97e274f33551c77ca832c73",
+      "merge_base": "6bb3e10c6263e796783c11297344a7b64544a122",
+      "ahead": 20,
+      "behind": 17,
+      "modules": [
+        "core/atlas",
+        "core/tests",
+        "docs/parity",
+        "docs/research",
+        "frontend/src",
+        "tasks/taskbooks"
+      ],
+      "unique_paths": [
+        "core/atlas/agent/__init__.py",
+        "core/atlas/api/application.py",
+        "core/atlas/api/evolution_router.py",
+        "core/atlas/api/runtime.py",
+        "core/atlas/api/sessions_router.py",
+        "core/atlas/engine_core/PORTED.md",
+        "core/atlas/evolution/discovery/__init__.py",
+        "core/atlas/evolution/discovery/judge.py",
+        "core/atlas/evolution/discovery/service.py",
+        "core/atlas/evolution/discovery/sources.py",
+        "core/atlas/runtime/hooks.py",
+        "core/atlas/server.py",
+        "core/atlas/sessions/__init__.py",
+        "core/atlas/sessions/hub.py",
+        "core/atlas/sessions/idle_compaction.py",
+        "core/atlas/sessions/store.py",
+        "core/atlas/sessions/tools.py",
+        "core/tests/snapshots/routes.json",
+        "core/tests/test_absorb_sessions_hooks.py",
+        "docs/parity/ABSORB-2026-10.md",
+        "docs/parity/DISCOVERY.md",
+        "docs/research/discovery/2026-10-15.md",
+        "frontend/src/main/electron.ts",
+        "frontend/src/preload/index.cts",
+        "frontend/src/renderer/App.tsx",
+        "frontend/src/renderer/components/ConversationActivity.tsx",
+        "frontend/src/renderer/components/ConversationMessage.tsx",
+        "frontend/src/renderer/components/evolution/DiscoveryPanel.tsx",
+        "frontend/src/renderer/components/MessageThread.tsx",
+        "frontend/src/renderer/components/sessions/LinkedSessions.tsx",
+        "frontend/src/renderer/components/sessions/SessionEventCard.tsx",
+        "frontend/src/renderer/components/sessions/sessionsApi.ts",
+        "frontend/src/renderer/components/sessions/SideSessionNote.tsx",
+        "frontend/src/renderer/components/timeline.ts",
+        "frontend/src/renderer/pages/EvolutionPage.tsx",
+        "frontend/src/renderer/services/runtimeEvents.ts",
+        "frontend/src/renderer/shell/Sidebar.tsx",
+        "frontend/src/renderer/store/useAtlasStore.ts",
+        "frontend/src/shared/ipc.ts",
+        "frontend/src/types/runtime.ts",
+        "tasks/taskbooks/ATLAS-AUTO-20261015-disc-anthropics-claude-code-v2-1-299.draft.md",
+        "tasks/taskbooks/ATLAS-AUTO-20261015-disc-atoll92-agent-standup.draft.md",
+        "tasks/taskbooks/ATLAS-AUTO-20261015-disc-claude-code-changelog-claude-code-docs.draft.md",
+        "tasks/taskbooks/ATLAS-AUTO-20261015-disc-claude-code-changelog-october-2026.draft.md",
+        "tasks/taskbooks/ATLAS-AUTO-20261015-disc-cline-cline-desktop-v0-0-46.draft.md",
+        "tasks/taskbooks/ATLAS-AUTO-20261015-disc-liyupi-ai-promo-video-maker.draft.md"
+      ]
+    },
+    {
+      "branches": [
+        "memory-v1",
+        "memory-w1"
+      ],
+      "sha": "9ace88c5731ed8be6dd7406d758161236938e2de",
+      "tree_hash": "d6014790fba279b5e30a10382cc84298f3dbe6d0",
+      "merge_base": "c8a78db8da93a25623e4faa30c067e61d32c846d",
+      "ahead": 5,
+      "behind": 23,
+      "modules": [
+        "core/atlas",
+        "core/tests",
+        "docs/memory",
+        "frontend/src"
+      ],
+      "unique_paths": [
+        "core/atlas/agent/run_phases.py",
+        "core/atlas/api/application.py",
+        "core/atlas/api/search_settings_router.py",
+        "core/atlas/memory/library/__init__.py",
+        "core/atlas/memory/library/cleanup.py",
+        "core/atlas/memory/library/extract.py",
+        "core/atlas/memory/library/index.py",
+        "core/atlas/memory/library/queue.py",
+        "core/atlas/memory/library/store.py",
+        "core/atlas/server.py",
+        "core/atlas/tools/search_api.py",
+        "core/atlas/tools/web.py",
+        "core/tests/snapshots/routes.json",
+        "core/tests/test_memory_library_w1.py",
+        "core/tests/test_search_api.py",
+        "core/tests/test_web_tools.py",
+        "docs/memory/TASKBOOK-W1.md",
+        "docs/memory/W1-RESULT.md",
+        "frontend/src/renderer/App.tsx",
+        "frontend/src/renderer/components/memory/LibraryPages.tsx",
+        "frontend/src/renderer/components/settings/SearchSettingsPanel.tsx"
+      ]
+    },
+    {
+      "branches": [
+        "wip/c3-frontend-from-laptop"
+      ],
+      "sha": "a451723b38be3e01b886811f16e6f0cca8d0ef33",
+      "tree_hash": "bb436a0dc6922681d1a3c30f48d906132af5afa5",
+      "merge_base": "08c1a581a548ed9a52f188e7e74bf044a8f8c0b2",
+      "ahead": 1,
+      "behind": 584,
+      "modules": [
+        "backend-adapter/src",
+        "core/atlas",
+        "core/tests",
+        "frontend/src"
+      ],
+      "unique_paths": [
+        "backend-adapter/src/client.ts",
+        "backend-adapter/src/types.ts",
+        "core/atlas/config.py",
+        "core/atlas/server.py",
+        "core/tests/test_server.py",
+        "frontend/src/renderer/App.tsx",
+        "frontend/src/renderer/components/ConversationActivity.tsx",
+        "frontend/src/renderer/components/orchestration.test.ts",
+        "frontend/src/renderer/components/RunSetupMenu.tsx",
+        "frontend/src/renderer/components/timeline.ts",
+        "frontend/src/renderer/components/TodoStrip.tsx",
+        "frontend/src/renderer/pages/BoardPage.tsx",
+        "frontend/src/renderer/pages/SubAgentsPanel.tsx",
+        "frontend/src/renderer/pages/TeamBoard.tsx",
+        "frontend/src/renderer/services/processNotifications.test.ts",
+        "frontend/src/renderer/services/runtimeEvents.ts",
+        "frontend/src/renderer/shell/Inspector.tsx",
+        "frontend/src/renderer/shell/panels/ProjectNotesSection.tsx",
+        "frontend/src/renderer/shell/panels/PullRequestSection.tsx",
+        "frontend/src/renderer/store/useAtlasStore.ts",
+        "frontend/src/renderer/ui/Menu.tsx",
+        "frontend/src/types/runtime.ts"
+      ]
+    },
+    {
+      "branches": [
+        "ctx-opt"
+      ],
+      "sha": "bddafde3ce6f76fb953085b89c096b68188e1ea0",
+      "tree_hash": "df824a138e158f9c8aa7d9e920cfbcb0b318aabe",
+      "merge_base": "7826e91c6c71dfc180f6fad6136b5eb53a9dab52",
+      "ahead": 1,
+      "behind": 46,
+      "modules": [
+        "backend-adapter/src",
+        "core/atlas",
+        "core/tests",
+        "engine",
+        "frontend/src",
+        "scripts/diag",
+        "tasks/reviews"
+      ],
+      "unique_paths": [
+        "backend-adapter/src/client.ts",
+        "backend-adapter/src/types.ts",
+        "core/atlas/agent/tool_catalog.py",
+        "core/atlas/agent/tool_node.py",
+        "core/atlas/api/conversations_router.py",
+        "core/atlas/api/handoff_metadata.py",
+        "core/atlas/engine/compact_restore.py",
+        "core/atlas/engine/read_dedupe.py",
+        "core/atlas/engine/tool_registry.py",
+        "core/atlas/kernel/context.py",
+        "core/atlas/kernel/loop.py",
+        "core/atlas/kernel/model_call.py",
+        "core/tests/test_context_compaction_v3.py",
+        "core/tests/test_context_stats.py",
+        "core/tests/test_handoff_metadata.py",
+        "core/tests/test_read_dedupe.py",
+        "engine/config.yaml",
+        "frontend/src/renderer/App.tsx",
+        "frontend/src/renderer/components/ConversationActivity.tsx",
+        "frontend/src/renderer/components/HandoffProposalCard.tsx",
+        "frontend/src/renderer/components/HandoffSuggestion.tsx",
+        "frontend/src/renderer/components/MessageThread.compaction.test.tsx",
+        "frontend/src/renderer/components/MessageThread.tsx",
+        "frontend/src/renderer/components/timeline.ts",
+        "frontend/src/renderer/components/TokenUsage.tsx",
+        "frontend/src/renderer/services/runtimeEvents.ts",
+        "frontend/src/renderer/store/useAtlasStore.ts",
+        "frontend/src/types/runtime.ts",
+        "scripts/diag/context_stats.py",
+        "tasks/reviews/CTX-1.result.md"
+      ]
+    },
+    {
+      "branches": [
+        "wip/f4-bc-20261009"
+      ],
+      "sha": "bfea9fbfa69df15a5240d721be60c6a9d100e867",
+      "tree_hash": "95d5d86ba846b6c98bb9db875d639a5a86b24fb5",
+      "merge_base": "1c13826f9f05c04e5a7564ae18c89a82091fc727",
+      "ahead": 2,
+      "behind": 265,
+      "modules": [
+        "core/atlas",
+        "core/tests",
+        "docs/plan",
+        "scripts/memory_v1"
+      ],
+      "unique_paths": [
+        "core/atlas/agent/run_phases.py",
+        "core/atlas/agent/tool_node.py",
+        "core/atlas/api/run_drive.py",
+        "core/atlas/automation/reminders.py",
+        "core/atlas/automation/store.py",
+        "core/atlas/memory/capture.py",
+        "core/atlas/memory/intent_bridge.py",
+        "core/atlas/memory/observer.py",
+        "core/atlas/memory/reflector.py",
+        "core/atlas/time_context.py",
+        "core/tests/test_automation_store.py",
+        "core/tests/unified_memory/test_behavioral_use.py",
+        "core/tests/unified_memory/test_capture_lifecycle.py",
+        "core/tests/unified_memory/test_reminder_automation.py",
+        "core/tests/unified_memory/test_test_clock_gate.py",
+        "docs/plan/MEMORY-V1/progress/F4.md",
+        "scripts/memory_v1/eval_scenarios.py",
+        "scripts/memory_v1/f2_enable_rehearsal.py",
+        "scripts/memory_v1/longmemeval_observation_cache.py",
+        "scripts/memory_v1/run_longmemeval_f1.py",
+        "scripts/memory_v1/run_longmemeval_f2.py",
+        "scripts/memory_v1/scenario_actions.py",
+        "scripts/memory_v1/test_eval_scenarios_runner.py",
+        "scripts/memory_v1/test_f2_enable_rehearsal.py",
+        "scripts/memory_v1/test_longmemeval_f1_runner.py",
+        "scripts/memory_v1/test_scenario_actions.py"
+      ]
+    },
+    {
+      "branches": [
+        "feat/personal-todos"
+      ],
+      "sha": "f1b20f6eca3f91f514b4fb6c48aa82c183bf0339",
+      "tree_hash": "c2ea85ede1779dd291ffaa3295eaa9fdc9247cb2",
+      "merge_base": "66d26367b4c6040d7fdd5f51fdd9e3a9f2b2458f",
+      "ahead": 1,
+      "behind": 54,
+      "modules": [
+        ".gitignore",
+        "core/atlas",
+        "frontend/src"
+      ],
+      "unique_paths": [
+        ".gitignore",
+        "core/atlas/api/application.py",
+        "core/atlas/api/personal_todos_router.py",
+        "frontend/src/renderer/App.tsx",
+        "frontend/src/renderer/components/PersonalTodos.tsx"
+      ]
+    },
+    {
+      "branches": [
+        "card-c-tc-04"
+      ],
+      "sha": "fba530af68422556c98d489ebe242203c3343f49",
+      "tree_hash": "bf608e169d3e3cbb1c70cd0640dfa7b088a96b2b",
+      "merge_base": "e9be4b4b176eae332c82cd124ec669b4b7612969",
+      "ahead": 2,
+      "behind": 117,
+      "modules": [
+        "core/atlas",
+        "docs/parity",
+        "frontend/src"
+      ],
+      "unique_paths": [
+        "core/atlas/api/application.py",
+        "core/atlas/api/computer_router.py",
+        "core/atlas/api/extension_packages_router.py",
+        "core/atlas/api/hook_trust_router.py",
+        "core/atlas/api/mcp_resources_router.py",
+        "core/atlas/api/plugin_host_router.py",
+        "core/atlas/api/plugins_router.py",
+        "core/atlas/plugins/runtime.py",
+        "core/atlas/runtime/hooks.py",
+        "core/atlas/tools/mcp_client.py",
+        "docs/parity/cards/C-TC-04.md",
+        "frontend/src/renderer/App.tsx",
+        "frontend/src/renderer/components/settings/ComputerUseSettingsPanel.tsx",
+        "frontend/src/renderer/components/settings/ExtensionCatalogPanel.tsx",
+        "frontend/src/renderer/components/settings/ExtensionPackagesPanel.tsx",
+        "frontend/src/renderer/components/settings/McpServersPanel.tsx",
+        "frontend/src/renderer/components/settings/PluginHostPanel.tsx",
+        "frontend/src/renderer/components/settings/PluginMarketplacePanel.tsx",
+        "frontend/src/renderer/pages/HooksPanel.tsx",
+        "frontend/src/renderer/services/mcpSettingsApi.ts",
+        "frontend/src/renderer/services/pluginHost.ts"
+      ]
+    }
+  ],
+  "definitions": {
+    "code_candidate": "maximal tip with at least one source path under the code roots; candidate count is not the number requiring integration",
+    "maximal_tip": "no other remote branch tip has this tip SHA in its commit ancestry",
+    "ahead": "branch-only commits from merge-base to tip",
+    "behind": "baseline-only commits from merge-base to baseline"
+  }
+}
+
