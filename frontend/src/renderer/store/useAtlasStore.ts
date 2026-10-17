@@ -50,6 +50,7 @@ interface AtlasState extends PersistentSlice {
   /** 原始报错（多为英文），错误横幅的「详细信息」里展开；没有原始报错时为 null。 */
   errorDetail: string | null;
   model: string;
+  conversationModels: Record<string, string>;
   models: ModelListResponse['models'];
   /** Supported model services (catalog + this installation's keys and endpoints). */
   providers: ProviderState[];
@@ -259,6 +260,7 @@ function readFollowUpMode(): FollowUpMode {
 const LEGACY_PINNED = 'atlas.conversations.pinned';
 const LEGACY_ARCHIVED = 'atlas.conversations.archived';
 const DRAFT_WORKSPACE = 'atlas.conversations.draft-workspace';
+const CONVERSATION_MODELS = 'atlas.conversations.models';
 
 const flags = (conversations: ConversationSummary[]) => ({
   pinned: conversations.filter((item) => item.pinned && !item.archived).map((item) => item.id),
@@ -317,7 +319,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     ...createPersistentSlice(set as unknown as SetPersistent, get as () => AtlasState),
     apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, compressionModel: '', subagentsEnabled: true, subagentDefaultModel: '', configLoaded: false, settingsBusy: false, connectionTest: null,
     mode: 'mock', connected: false, backendStarting: false, startupDetail: null, busy: false, paused: false, error: null, errorDetail: null,
-    model: '', models: [], providers: [], reasoningStages: { enabled: false, planning: 'high', execution: 'medium', verification: 'high' }, tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, draftWorkspace: storageGet(DRAFT_WORKSPACE), conversationMessages: {}, messagesHasEarlier: {}, loadingEarlierConversationId: null, activeConversationId: '',
+    model: '', models: [], providers: [], reasoningStages: { enabled: false, planning: 'high', execution: 'medium', verification: 'high' }, tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, draftWorkspace: storageGet(DRAFT_WORKSPACE), conversationMessages: {}, messagesHasEarlier: {}, loadingEarlierConversationId: null, activeConversationId: '', conversationModels: (() => { try { const v = JSON.parse(storageGet(CONVERSATION_MODELS) ?? '{}'); return v && typeof v === 'object' ? v as Record<string, string> : {}; } catch { return {}; } })(),
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
     queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: readFollowUpMode(), nextRunMode: 'act', pendingRunOverrides: null, answers: {},
     unread: [], pinned: [], archived: [], runPrompts: {},
@@ -398,7 +400,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         void backend.summarizeConversationBranch(previousId).catch(() => undefined);
       }
       const run = [...get().runs].reverse().find((item) => item.conversationId === conversation.id);
-      set((state) => ({ activeConversationId: conversation.id, activeRunId: run?.id ?? null, loadingMessagesConversationId: null, error: null, errorDetail: null, paused: run?.status === 'paused', unread: state.unread.filter((id) => id !== conversation.id) }));
+      set((state) => ({ activeConversationId: conversation.id, activeRunId: run?.id ?? null, loadingMessagesConversationId: null, error: null, errorDetail: null, paused: run?.status === 'paused', unread: state.unread.filter((id) => id !== conversation.id), model: state.conversationModels[conversation.id] ?? state.model }));
       if (run && !terminal.has(run.status)) return;
       // 缓存过的会话先立刻显示上次的内容，刷新在后台进行，不再闪「正在载入」。
       if (!get().conversationMessages[conversation.id]) set({ loadingMessagesConversationId: conversation.id });
@@ -474,7 +476,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     },
 
     selectModel: async (model) => {
-      try { await backend.selectModel(model); storageSet('atlas.preference.model', model); set({ model }); }
+      try { await backend.selectModel(model); storageSet('atlas.preference.model', model); set((state) => { const id = state.activeConversationId; if (!id) return { model }; const conversationModels = { ...state.conversationModels, [id]: model }; storageSet(CONVERSATION_MODELS, JSON.stringify(conversationModels)); return { model, conversationModels }; }); }
       catch (error) { fail(error, '切换模型失败'); }
     },
 
@@ -1126,7 +1128,7 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   // gains an optional agent_id/group_id). The adapter's RunStartRequest type predates
   // W1, so the extra field is attached via an assertion at this one call site.
   const request = {
-    type: 'run.start', run_id: run.id, content, conversation_id: run.conversationId, model: overrides?.model ?? state.model, attachments, active_skills: state.activeSkills,
+    type: 'run.start', run_id: run.id, content, conversation_id: run.conversationId, model: overrides?.model ?? state.conversationModels[run.conversationId] ?? state.model, attachments, active_skills: state.activeSkills,
     ...(item.messageSkills?.length ? { message_skills: item.messageSkills } : {}),
     ...(files.length ? { files } : {}), ...(mode === 'plan' ? { mode } : {}), ...(workspace ? { workspace } : {}),
     ...((item.profileId ?? state.profileId) !== 'default' ? { profile_id: item.profileId ?? state.profileId } : {}),
