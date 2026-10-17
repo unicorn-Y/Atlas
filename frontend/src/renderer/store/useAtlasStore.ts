@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { todoEditMessage, type TodoItem } from '../components/runInsights';
 import { BackendAdapter, BackendError } from '@atlas/backend-adapter';
 import type { BackendStartupProgress } from '../../shared/ipc';
-import type { AgentCapabilityInfo, AgentProfile, CustomCommandInfo, CustomModelUpdateRequest, InitProposal, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ModelListResponse, ProviderState, ReasoningEffort, ReasoningStagesConfig, Recipe, RewindResult, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
+import type { AgentCapabilityInfo, AgentProfile, CustomCommandInfo, CustomModelUpdateRequest, HandoffRequest, HandoffResponse, InitProposal, PermissionMode, ConfigurationResponse, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, ModelListResponse, ProviderState, ReasoningEffort, ReasoningStagesConfig, Recipe, RewindResult, RunFile, RuntimeEventEnvelope, SkillInfo, ToolListResponse } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun, AgentRunStatus } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
 import { applyRuntimeEvent, isRuntimeEvent, normalizeRuntimeEvent } from '../services/runtimeEvents';
@@ -113,6 +113,7 @@ interface AtlasState extends PersistentSlice {
   /** 向上翻页：把当前已载入最早一条之前的一页历史拼到前面（滚动到顶部时调用）。 */
   loadEarlier: (conversationId: string) => Promise<void>;
   createConversation: (title?: string) => Promise<void>;
+  createHandoff: (conversationId: string, request: HandoffRequest) => Promise<HandoffResponse>;
   beginConversationDraft: (workspace?: string | null) => void;
   setDraftWorkspace: (workspace: string | null) => void;
   selectModel: (model: string) => Promise<void>;
@@ -471,6 +472,23 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       } finally {
         set({ creatingConversation: false });
       }
+    },
+
+    createHandoff: async (conversationId, request) => {
+      const result = await backend.handoffConversation(conversationId, request);
+      const conversation = result.conversation;
+      set((state) => ({
+        conversations: [conversation, ...state.conversations.filter((item) => item.id !== conversation.id)],
+        conversationMessages: { ...state.conversationMessages, [conversation.id]: [] },
+        activeConversationId: conversation.id,
+        activeRunId: null,
+        loadingMessagesConversationId: null,
+        paused: false,
+        error: null,
+        errorDetail: null,
+        draftWorkspace: null,
+      }));
+      return result;
     },
 
     selectModel: async (model) => {

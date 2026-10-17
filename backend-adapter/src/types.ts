@@ -163,6 +163,8 @@ export interface ConversationSummary {
   worktree_branch?: string | null;
   base_branch?: string | null;
   parent_conversation_id?: string | null;
+  handoff_from?: string;
+  handoff_goal?: string;
   permission_mode?: PermissionMode | null;
   fork_message_id?: string | null;
   /** Extra absolute directories the Agent may touch besides the workspace. */
@@ -175,6 +177,13 @@ export interface ConversationSummary {
   /** Where the conversation came from, e.g. `telegram` for tasks sent from the phone. */
   source?: string | null;
   [key: string]: unknown;
+}
+
+export interface HandoffRequest { goal: string }
+export interface HandoffResponse {
+  conversation: ConversationSummary;
+  parent_title: string;
+  prompt_draft: string;
 }
 
 export interface ConversationUpdate {
