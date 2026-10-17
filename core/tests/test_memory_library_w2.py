@@ -505,12 +505,14 @@ async def test_search_filters_and_paginates_beyond_first_thousand(monkeypatch):
             return None
     class Library:
         index = Index()
-        def search(self, _q, limit, _history, _kinds):
-            assert limit == 100000
-            return candidates
+        def browse_search(self, _q, **kwargs):
+            assert kwargs["offset"] == 1180
+            assert kwargs["limit"] == 20
+            assert kwargs["sources"] == {"你说的"}
+            return {"total": len(candidates), "items": candidates[1180:1200]}
     monkeypatch.setattr(router, "_lib", lambda: Library())
-    async def run(fn, *args):
-        return fn(*args)
+    async def run(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
     monkeypatch.setattr(router, "_run", run)
     result = await router.search(q="match", src="你说的", from_="", to="", project="Atlas",
                                  kinds="memory", limit=20, offset=1180)

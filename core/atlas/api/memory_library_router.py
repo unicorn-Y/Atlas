@@ -38,9 +38,9 @@ def _lib() -> MemoryLibrary:
     return library
 
 
-async def _run(fn: Any, *args: Any) -> Any:
+async def _run(fn: Any, *args: Any, **kwargs: Any) -> Any:
     try:
-        return await asyncio.to_thread(fn, *args)
+        return await asyncio.to_thread(fn, *args, **kwargs)
     except KeyError as exc:
         raise HTTPException(404, "找不到这条记忆，可能已经被改过。") from exc
     except ValueError as exc:
@@ -113,25 +113,15 @@ async def search(
     normalized = ("fact", "dream", "episode", "diary") if "memory" in requested else ()
     if "raw" in requested:
         normalized += ("raw",)
-    # Filtering and total calculation happen below, so gather the full bounded
-    # candidate set before applying offset/limit. The index caps this at 100k.
-    rows = await _run(_lib().search, q, 100000, history, normalized)
+    rows = await _run(
+        _lib().browse_search, q, offset=max(0, offset), limit=max(1, min(100, limit)),
+        include_history=history, kinds=normalized,
+        sources={x.strip() for x in src.split(",") if x.strip()},
+        from_date=from_, to_date=to, project=project,
+    )
     _lib().index._schedule_embeddings()
-    sources = {x.strip() for x in src.split(",") if x.strip()}
-    filtered = []
-    for row in rows:
-        path, text = str(row.get("path") or ""), str(row.get("text") or "")
-        if sources and row.get("src") not in sources:
-            continue
-        if from_ and str(row.get("at") or "")[:10] < from_:
-            continue
-        if to and str(row.get("at") or "")[:10] > to:
-            continue
-        if project and project.casefold() not in (path + text).casefold():
-            continue
-        filtered.append(row)
     items = []
-    for row in filtered[max(0, offset) : max(0, offset) + max(1, min(100, limit))]:
+    for row in rows["items"]:
         path = str(row.get("path") or "")
         items.append(
             {
@@ -148,7 +138,7 @@ async def search(
                 "project": Path(path).stem if path.startswith("事/") else "",
             }
         )
-    return {"total": len(filtered), "items": items}
+    return {"total": rows["total"], "items": items}
 
 
 @router.get("/timeline")

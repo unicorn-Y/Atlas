@@ -176,48 +176,49 @@ def _parse_at(message: dict[str, Any]) -> datetime | None:
         return None
 
 
-def search_raw(query: str, limit: int = 10) -> list[dict[str, Any]]:
+def iter_search_raw(query: str):
     from atlas.config import DATA_ROOT
     from atlas.engine.session_sync import search_session_messages
 
-    found = []
     page_size = 50
-    requested = max(1, min(100, limit))
-    for offset in range(0, requested, page_size):
+    offset = 0
+    while True:
         try:
-            batch = search_session_messages(
-                DATA_ROOT / "engine", query, limit=min(page_size, requested - offset), offset=offset,
-            )
+            batch = search_session_messages(DATA_ROOT / "engine", query, limit=page_size, offset=offset)
         except (OSError, RuntimeError, ValueError):
+            return
+        yield from batch
+        offset += len(batch)
+        if len(batch) < page_size:
             break
-        found.extend(batch)
-        if len(batch) < min(page_size, requested - offset):
-            break
+
+
+def _raw_result(row: dict[str, Any]) -> dict[str, Any] | None:
     from .source_ref import SourceRef
 
+    try:
+        ref = SourceRef(str(row.get("conversation_id") or ""), str(row.get("id") or "")).to_ref()
+    except ValueError:
+        return None
+    return {
+        "id": str(row.get("id") or ""), "kind": "raw", "path": "原对话",
+        "title": str(row.get("conversation_id") or ""),
+        "text": str(row.get("content") or ""),
+        "snippet": str(row.get("snippet") or row.get("content") or ""),
+        "src": "原对话", "at": str(row.get("created_at") or ""), "ref": ref,
+        "precision": "exact", "score": 1.0, "project": "",
+    }
+
+
+def search_raw(query: str, limit: int = 10) -> list[dict[str, Any]]:
     results = []
-    for row in found:
-        conversation_id = str(row.get("conversation_id") or "")
-        message_uid = str(row.get("id") or "")
-        try:
-            ref = SourceRef(conversation_id, message_uid).to_ref()
-        except ValueError:
-            continue
-        results.append({
-            "id": str(row.get("id") or ""),
-            "kind": "raw",
-            "path": "原对话",
-            "title": str(row.get("conversation_id") or ""),
-            "text": str(row.get("content") or ""),
-            "snippet": str(row.get("snippet") or row.get("content") or ""),
-            "src": "原对话",
-            "at": str(row.get("created_at") or ""),
-            "ref": ref,
-            "precision": "exact",
-            "score": 1.0,
-            "project": "",
-        })
+    for row in iter_search_raw(query):
+        result = _raw_result(row)
+        if result is not None:
+            results.append(result)
+            if len(results) >= max(1, limit):
+                break
     return results
 
 
-__all__ = ["open_ref", "search_raw"]
+__all__ = ["open_ref", "search_raw", "iter_search_raw", "_raw_result"]
