@@ -9,12 +9,12 @@
 - 真实源码根：D:\Atlas，ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f，12个tracked dirty文件及研究untracked内容原样保留。
 - 运行归因：Electron55644 → Python1800 → Python53140；8765后端、9335 CDP。实时默认deepseek-v4.1-flash、记忆gemini-3.8-flash；逐会话模型和进程加载的精确源码字节未核实。
 - W1代码分支：fix/atlas-model-retry-policy-20261017；最终commit：e259978420f944ef57bdb15ed22a8890486c018e。
-- 文档分支：review/atlas-luna-global-audit-20261017。最终文档commit由主执行者push后在聊天交付；本文件随该commit发布，无自引用SHA。
+- 文档分支：review/atlas-luna-global-audit-20261017。首次交付commit：`f69f8b212d3c004c98bfb9c288610709ae49c18b`；文件内不自引用自身 tip SHA，分支最终 tip 由聊天交付给出。
 - 代码分支只实施W1；文档分支只包含tasks/reviews/atlas-luna-20261017下审查产物。
 
 ## 覆盖结果
 
-74个远程refs为审查开始快照：37祖先、36分叉、1后继；72个tip SHA/tree组。谱系收敛22个最大SHA组/23 refs，其中14个代码独有候选组。另核本地独有分支、worktree dirty源文件和本机真实进程。新增本轮交付分支不倒灌进74快照。
+74个远程refs为审查开始快照：37个标记absorbed（36个tip是基准祖先、1个为`ui-redesign`自身）、36个分叉、1个基准后继；72个tip SHA/tree组。谱系收敛22个最大SHA组/23 refs，其中14个代码独有候选组。另核本地独有分支、worktree dirty源文件和本机真实进程。新增本轮交付分支不倒灌进74快照。
 
 405项canonical ID逐一重新判定：已做107、部分218、未做67、原有13。这里的“已做”表示当前基线源码的入口/调用链已实现，不能解释为405项实机验收。ABSORB 17项全部列出，同义映射去重后另有5个独立议题。未把装饰性或云端商业能力提升为本轮P0；旧ledger_priority单独保存，不计入问题优先级。
 
