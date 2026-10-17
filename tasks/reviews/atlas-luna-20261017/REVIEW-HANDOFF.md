@@ -7,7 +7,7 @@
 - 仓库：unicorn-Y/Atlas。
 - 任务书：task/luna-audit-model-policy-20261017@1557f612604a634ebad28728c2787a8085cfa946。
 - 真实源码根：D:\Atlas，ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f，12个tracked dirty文件及研究untracked内容原样保留。
-- 运行归因（第二轮更正）：Electron55644（14:58:21）→ Python51284（16:54:17）→ Python50140（16:54:17）；8765后端、9335 CDP。工作进程 `cwd` 实测 `D:\Atlas\core`，**运行内容已核定为 `0b1ba411` + 12 处未提交修改的工作区快照**（相关文件 mtime 均早于后端启动）。实时默认deepseek-v4.1-flash、记忆gemini-3.8-flash。另有一条 `D:\atlas-mem-integrate` 实例跑 9459，不在本轮范围。
+- 运行归因（第二轮更正）：审查期间观测到三代：Electron55644 → Python1800/53140（早期）→ Python51284/50140（16:54:17）→ **Python33572/70348（17:36:05 收尾时，属正常使用重启）**；8765后端、9335 CDP。命令行与 cwd 始终 `D:\Atlas\core`。工作进程 `cwd` 实测 `D:\Atlas\core`，**运行内容已核定为 `0b1ba411` + 12 处未提交修改的工作区快照**（相关文件 mtime 均早于后端启动）。实时默认deepseek-v4.1-flash、记忆gemini-3.8-flash。另有一条 `D:\atlas-mem-integrate` 实例跑 9459，不在本轮范围。
 - W1代码分支：fix/atlas-model-retry-policy-20261017；最终commit：e259978420f944ef57bdb15ed22a8890486c018e。
 - 文档分支：review/atlas-luna-global-audit-20261017。首次交付commit：`f69f8b212d3c004c98bfb9c288610709ae49c18b`；文件内不自引用自身 tip SHA，分支最终 tip 由聊天交付给出。
 - 代码分支只实施W1；文档分支只包含tasks/reviews/atlas-luna-20261017下审查产物。
