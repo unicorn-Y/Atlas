@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 from types import SimpleNamespace
 
 import pytest
+from websockets.asyncio.client import connect
 
 from atlas.kernel.loop import _cleanup_tool_waiters, _unverified_code_paths
 from atlas.kernel.tools import ToolScheduler
@@ -56,21 +58,36 @@ async def test_api_stop_cancels_slow_atlas_kernel_tool(k1_backend):
         "clock.sleep", {"seconds": 30},
     )
     stop_sent = False
-
-    async def stop_after_tool_starts(ws, event):
-        nonlocal stop_sent
-        if (event.get("event") == "tool.started"
-                and event.get("data", {}).get("name") == "clock.sleep"
-                and not stop_sent):
-            stop_sent = True
-            await ws.send(json.dumps({
-                "type": "run.cancel", "run_id": event["run_id"],
-            }))
-
-    _, events = await backend.run(
-        "Wait for thirty seconds", respond=stop_after_tool_starts,
-        expected="run.cancelled",
-    )
+    conversation = await backend.conversation()
+    run_id = uuid.uuid4().hex
+    events = []
+    url = backend.url.replace("http", "ws", 1) + "/ws/chat"
+    async with connect(
+        url, additional_headers={"x-atlas-api-token": "c1-isolated-token"},
+        max_size=8_000_000, ping_interval=None,
+    ) as ws:
+        await ws.send(json.dumps({
+            "type": "run.start", "run_id": run_id,
+            "content": "Wait for thirty seconds", "conversation_id": conversation,
+            "workspace": str(backend.root / "workspace"), "model": "fake-model",
+        }))
+        async with asyncio.timeout(90):
+            while True:
+                event = json.loads(await ws.recv())
+                events.append(event)
+                if (event.get("run_id") == run_id
+                        and event.get("event") == "tool.started"
+                        and event.get("data", {}).get("name") == "clock.sleep"
+                        and not stop_sent):
+                    stop_sent = True
+                    await ws.send(json.dumps({
+                        "type": "run.cancel", "run_id": run_id,
+                    }))
+                if (event.get("run_id") == run_id
+                        and event.get("event") in {
+                            "run.completed", "run.failed", "run.cancelled",
+                        }):
+                    break
 
     assert stop_sent
     assert any(
