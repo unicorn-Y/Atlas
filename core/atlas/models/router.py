@@ -13,6 +13,8 @@ import hashlib
 import inspect
 import json
 import time
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -48,7 +50,13 @@ def _auxiliary_retry_delay(exc: Exception, retry_index: int) -> float | None:
             try:
                 delay = float(retry_after)
             except ValueError:
-                delay = 0
+                try:
+                    retry_at = parsedate_to_datetime(retry_after)
+                    if retry_at.tzinfo is None:
+                        retry_at = retry_at.replace(tzinfo=timezone.utc)
+                    delay = (retry_at - datetime.now(timezone.utc)).total_seconds()
+                except (TypeError, ValueError, OverflowError):
+                    delay = 0
             if delay > 15:
                 return None
             if delay > 0:
