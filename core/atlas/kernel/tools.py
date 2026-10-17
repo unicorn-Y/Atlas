@@ -22,7 +22,7 @@ from atlas.kernel.state import ToolReceipt
 
 Dispatch = Callable[[str, str, dict[str, Any]], Awaitable[Any]]
 READ_ONLY_TOOLS = frozenset({
-    "read_file", "search_files", "session_search", "web_search", "web_fetch",
+    "read_file", "search_files", "session_search", "web_search", "web_fetch", "deep_research",
     "read", "glob", "grep", "list_directory", "lsp_diagnostics", "lsp_hover",
     "lsp_definition", "lsp_references", "lsp_document_symbols", "build_repo_map",
     "read_office", "coding.repo_map", "coding.ast_grep.run",

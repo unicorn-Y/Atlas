@@ -15,7 +15,7 @@ from atlas.agent.todo_state import TodoStore
 READ_ONLY_TOOLS = frozenset({
     "read_file", "search_files", "glob", "grep", "Read", "Glob", "Grep",
     "local_file",
-    "web_search", "web_fetch", "WebSearch", "WebFetch", "session_search", "clarify", "ask_user",
+    "web_search", "web_fetch", "deep_research", "WebSearch", "WebFetch", "session_search", "clarify", "ask_user",
     "android_preflight", "android_discover_project", "android_list_devices",
     "android_list_avds", "android_logs", "android_ui_status",
     "android_ui_describe", "android_ui_resolve", "ios_preflight",

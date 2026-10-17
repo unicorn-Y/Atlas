@@ -582,9 +582,34 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
 async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
     """Assemble the initial system + history messages for the engine turn."""
     request = state.request
+    # Expert mode: the operator pack rides at the HEAD of the SAME system message —
+    # the dsh-purge layout, ``system = hang + "\n\n" + system``. It is spliced into the
+    # leading message rather than appended as a second system message: a separate block
+    # is precisely what makes a model read the pack as an attachment to be weighed
+    # against the host prompt, instead of it simply being the session configuration.
+    # Returns "" when expert mode is off, so the default path stays byte-for-byte
+    # unchanged.
+    from atlas.expert_harness import operator_head
+
+    operator_text = operator_head()
+    base_prompt = _breaker_prompt() + _user_output_style_prompt()
     initial_messages: list[BaseMessage] = [
-        SystemMessage(content=_breaker_prompt() + _user_output_style_prompt())
+        SystemMessage(
+            content=(operator_text + "\n\n" + base_prompt) if operator_text else base_prompt
+        )
     ]
+    # Diagnostic only: ATLAS_DUMP_SYSTEM=<path> writes the assembled system messages
+    # so the real prompt can be inspected. Unset by default and never affects a request.
+    _dump_path = os.environ.get("ATLAS_DUMP_SYSTEM", "").strip()
+    if _dump_path:
+        try:
+            with open(_dump_path, "w", encoding="utf-8") as _fh:
+                for _i, _msg in enumerate(initial_messages):
+                    _content = str(getattr(_msg, "content", ""))
+                    _fh.write("===== %s[%d] len=%d =====\n%s\n\n"
+                              % (type(_msg).__name__, _i, len(_content), _content))
+        except Exception:  # noqa: BLE001 — diagnostics must never break a turn
+            log.debug("agent.system_dump_failed", exc_info=True)
     from atlas.time_context import now_local, timezone_name
 
     config = _agent.get_config()

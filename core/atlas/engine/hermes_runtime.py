@@ -859,7 +859,11 @@ class HermesRuntime:
         from atlas.expert_mode import instructions as expert_instructions
 
         if expert_text := expert_instructions():
-            system_message = "\n\n".join(filter(None, (system_message, expert_text)))
+            # The agent path already carried the pack at the head of the system
+            # prompt (atlas.expert_harness.operator_head); only a path that did not
+            # get it falls back to appending here, and never twice.
+            if expert_text not in (system_message or ""):
+                system_message = "\n\n".join(filter(None, (system_message, expert_text)))
         if atlas_agent is None or atlas_context is None:
             raise RuntimeError("AtlasKernel requires an Atlas agent and runtime context")
         if atlas_agent is not None and atlas_context is not None:

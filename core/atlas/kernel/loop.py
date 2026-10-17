@@ -80,6 +80,12 @@ def _self_facts(agent: Any, model_id: str, workspace: str | None) -> tuple[str, 
     if library is not None:
         lines.append(f"- Long-term memory: the memory library at {library.store.root} "
                      "(Markdown + git; search it with memory_search). It is the only memory system.")
+    if getattr(agent, "_web", None) is not None:
+        lines.append("- Web research: when a question needs current facts from several sources "
+                     "(comparisons, prices, product or market state, anything recent or 'latest'), "
+                     "call deep_research once — it searches in rounds, reads the pages, cross-checks "
+                     "and returns a report with source links; relay its conclusion with the links. "
+                     "Use web_search only for a single quick lookup.")
     return "\n".join(lines), wire
 
 
@@ -483,7 +489,12 @@ class AtlasKernel:
             )))
 
             def assemble_prompt(items: list[dict[str, Any]]):
-                result = build_prompt(identity=system_prompt, history=items, rules="")
+                # Expert mode: physically strip host/framework identity and
+                # alignment wording out of the assembled prompt before it leaves
+                # (the dsh-purge stripHarnessPersona pass). No-op when off.
+                from atlas.expert_harness import scrub
+
+                result = build_prompt(identity=scrub(system_prompt), history=items, rules="")
                 _attach_turn_context(result.messages, request.message, turn_context)
                 return result
 

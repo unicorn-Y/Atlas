@@ -1085,7 +1085,7 @@ async def execute_tools_node(
                 result = {"data": {"results": results},
                           "content": [{"type": "text", "text": summary}], "is_error": False}
             elif getattr(ctx, "sandbox_enabled", False) and (
-                fn_name.startswith("computer_") or fn_name in {"web_search", "web_fetch"}
+                fn_name.startswith("computer_") or fn_name in {"web_search", "web_fetch", "deep_research"}
             ):
                 raise PermissionError("Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。")
             elif (getattr(ctx, "sandbox_tool_callback", None) and fn_name in {
@@ -1237,6 +1237,20 @@ async def execute_tools_node(
                 if getattr(ctx, "sandbox_enabled", False):
                     raise PermissionError("Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。")
                 result = await agent._web.call_tool(fn_name, fn_args)
+            elif fn_name == "deep_research" and agent._web is not None:
+                if getattr(ctx, "sandbox_enabled", False):
+                    raise PermissionError("Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。")
+                from atlas.research import run_deep_research_tool
+
+                async def research_progress(text: str, _tc_id: str = tc_id) -> None:
+                    if ctx.event_queue is not None:
+                        await ctx.event_queue.put({
+                            "type": "tool_output", "id": _tc_id, "name": "deep_research",
+                            "execution_id": f"deep_research:{_tc_id}", "stream": "stdout",
+                            "text": text + "\n",
+                        })
+
+                result = await run_deep_research_tool(agent, fn_args, on_progress=research_progress)
             elif fn_name == "session_search" and agent._memory is not None:
                 results = await agent._memory.session_search(
                     str(fn_args.get("query", "")),
@@ -1381,6 +1395,8 @@ async def execute_tools_node(
         preview, full_output_path = externalize_tool_output(
             full_output, _agent.get_config().db_path.parent,
             getattr(ctx, "run_id", None), tc_id,
+            # A cited research report is the answer itself: keep it inline.
+            inline_bytes=64 * 1024 if fn_name == "deep_research" else 16 * 1024,
         )
         if preview != full_output:
             result["content"] = [{"type": "text", "text": preview}]

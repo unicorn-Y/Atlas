@@ -113,6 +113,7 @@ const VERBS: Array<[RegExp, string]> = [
   [/^run_checks$/, '运行检查'],
   [/^delegate_parallel$/, '分派并行任务'],
   [/^delegate_task$/, '分派子任务'],
+  [/^deep_research$/, '深度调研'],
   [/^external:/, '外部 Agent'],
   [/screenshot|screen_?shot|capture/, '截取屏幕'],
   [/click|type_text|keyboard|mouse|computer|pywinauto|cua/, '操作电脑'],

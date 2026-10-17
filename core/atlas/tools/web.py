@@ -118,7 +118,9 @@ WEB_TOOLS = [
             "name": "web_search",
             "description": (
                 "Search the live web and return ranked results (title, url, snippet, publish date). "
-                "Chinese queries are routed to a Chinese index automatically. Use web_fetch to read a result."
+                "Chinese queries are routed to a Chinese index automatically. Use web_fetch to read a result. "
+                "For questions that need several searches and cross-checked sources (comparisons, prices, "
+                "market or product state, 'latest' anything), call deep_research once instead of many web_search calls."
             ),
             "parameters": {"type": "object", "properties": {
                 "query": {"type": "string",

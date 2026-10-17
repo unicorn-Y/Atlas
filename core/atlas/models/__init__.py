@@ -118,6 +118,16 @@ class ModelManager:
             if custom.get("id") and not any(model["id"] == custom["id"] for model in self._models):
                 self.add_model(custom, persist=False)
 
+        # settings["hidden_models"]: 用户隐藏的内置模型（内置条目硬编码在 DEFAULT_MODELS，
+        # 无法删除，只能从列表里过滤；用于「这张密钥只给某一个模型用」的部署）。
+        hidden = settings.get("hidden_models")
+        if isinstance(hidden, list):
+            hidden_ids = {str(item).strip() for item in hidden if str(item).strip()}
+            if hidden_ids:
+                self._models = [m for m in self._models if m["id"] not in hidden_ids]
+                if self._current in hidden_ids:
+                    self._current = self._models[0]["id"] if self._models else self._current
+
         log.info("model_manager.init", default=self._current, api_base=self._api_base,
                  source=self._gateway_source)
 

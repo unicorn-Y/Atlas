@@ -13,8 +13,9 @@ from atlas.tools.output_truncate import truncate_head_tail
 
 def externalize_tool_output(
     output: str, data_root: Path, run_id: str | None, call_id: str,
+    inline_bytes: int = 16 * 1024,
 ) -> tuple[str, str | None]:
-    if len(output.encode("utf-8")) <= 16 * 1024:
+    if len(output.encode("utf-8")) <= inline_bytes:
         return output, None
     if not run_id:
         return truncate_head_tail(output, get_max_bytes(), label="TOOL OUTPUT"), None

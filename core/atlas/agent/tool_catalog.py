@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from atlas.research.tool import DEEP_RESEARCH_TOOL as _DEEP_RESEARCH_TOOL
 from atlas.tools.web import WEB_TOOLS as _WEB_TOOLS
 
 _WEB_EXTRACT_TOOL = {"type": "function", "function": {
@@ -38,7 +39,7 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
     if agent._computer_use:
         tools = [*tools, *agent._computer_use.get_tools_for_llm()]
     if agent._web is not None:
-        tools = [*tools, *_WEB_TOOLS, _WEB_EXTRACT_TOOL]
+        tools = [*tools, *_WEB_TOOLS, _WEB_EXTRACT_TOOL, _DEEP_RESEARCH_TOOL]
         from atlas.tools.x2.browser import get_browser_tool_schemas
 
         tools.extend(get_browser_tool_schemas())
