@@ -249,6 +249,60 @@ async def test_complete_for_stops_on_long_retry_after_and_releases_one_budget_re
     assert budget.released == 1
 
 
+async def test_complete_for_stops_on_http_date_retry_after_over_15_seconds(monkeypatch) -> None:
+    from datetime import datetime, timedelta, timezone
+    from email.utils import format_datetime
+    import httpx
+    import atlas.models.router as router_module
+
+    retry_after = format_datetime(datetime.now(timezone.utc) + timedelta(seconds=30), usegmt=True)
+    attempts = 0
+
+    def post(*_args):
+        nonlocal attempts
+        attempts += 1
+        request = httpx.Request("POST", "https://example.test")
+        response = httpx.Response(429, headers={"Retry-After": retry_after}, request=request)
+        raise httpx.HTTPStatusError("rate limited", request=request, response=response)
+
+    monkeypatch.setattr(router_module, "_post_completion", post)
+    router = ModelRouter(FakeModelManager("native_only"))
+    with pytest.raises(httpx.HTTPStatusError):
+        await router.complete_for("claude-sonnet-4", "title", [{"role": "user", "content": "x"}])
+    assert attempts == 1
+
+
+async def test_complete_for_observes_short_http_date_retry_after(monkeypatch) -> None:
+    from datetime import datetime, timedelta, timezone
+    from email.utils import format_datetime
+    import httpx
+    import atlas.models.router as router_module
+
+    retry_after = format_datetime(datetime.now(timezone.utc) + timedelta(seconds=8), usegmt=True)
+    delays: list[float] = []
+    attempts = 0
+
+    async def record_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    def post(*_args):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            request = httpx.Request("POST", "https://example.test")
+            response = httpx.Response(429, headers={"Retry-After": retry_after}, request=request)
+            raise httpx.HTTPStatusError("rate limited", request=request, response=response)
+        return {"choices": [{"message": {"content": "done"}}]}
+
+    monkeypatch.setattr(router_module, "_post_completion", post)
+    monkeypatch.setattr(router_module.asyncio, "sleep", record_sleep)
+    router = ModelRouter(FakeModelManager("native_only"))
+    result = await router.complete_for("claude-sonnet-4", "title", [{"role": "user", "content": "x"}])
+    assert result.text == "done"
+    assert attempts == 2
+    assert len(delays) == 1 and 0 < delays[0] <= 8
+
+
 def _raise_long_retry_after(*_args):
     import httpx
 
