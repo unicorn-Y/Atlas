@@ -148,6 +148,14 @@ def _unverified_code_paths(runtime: Any) -> list[str]:
             if isinstance(path, str) and requires_verification(path)][:8]
 
 
+async def _cleanup_tool_waiters(*waiters: asyncio.Task[Any] | None) -> None:
+    pending = [waiter for waiter in waiters if waiter is not None]
+    for waiter in pending:
+        waiter.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+
+
 def _compaction_payload(
     messages: list[dict[str, Any]], held: list[dict[str, Any]], *,
     synthetic_system_prompt: str, method: str,
@@ -1555,10 +1563,7 @@ class AtlasKernel:
                                    name=queued_event.get("name"))
                     raise
                 finally:
-                    queue_get.cancel()
-                    if cancel_waiter is not None:
-                        cancel_waiter.cancel()
-                    await asyncio.gather(queue_get, cancel_waiter, return_exceptions=True)
+                    await _cleanup_tool_waiters(queue_get, cancel_waiter)
 
                 transition(RunPhase.AGGREGATING_RESULTS)
                 for result_event in await consume_tool_results(results):

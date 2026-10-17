@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from atlas.kernel.loop import _unverified_code_paths
+from atlas.kernel.loop import _cleanup_tool_waiters, _unverified_code_paths
 from atlas.kernel.tools import ToolScheduler
 
 
@@ -35,6 +35,15 @@ async def test_cancelled_tool_batch_keeps_partial_result_and_does_not_dispatch_l
     assert results[0].receipt.state == "cancelled"
     assert results[1].receipt.state == "cancelled"
     assert dispatched == ["local_file"]
+
+
+@pytest.mark.asyncio
+async def test_tool_batch_waiter_cleanup_allows_missing_cancel_event():
+    queue_get = asyncio.create_task(asyncio.Event().wait())
+
+    await _cleanup_tool_waiters(queue_get, None)
+
+    assert queue_get.cancelled()
 
 
 def test_unverified_code_paths_only_returns_unchecked_code_changes_once_bounded():
