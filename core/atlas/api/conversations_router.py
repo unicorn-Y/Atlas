@@ -57,6 +57,10 @@ class ConversationCreateRequest(BaseModel):
     title: str = "New Conversation"
 
 
+class HandoffRequest(BaseModel):
+    goal: str
+
+
 class ConversationGoalCommandRequest(BaseModel):
     command: str
 
@@ -92,6 +96,15 @@ async def list_conversations(
     summaries = [
         {**item, "preview": previews.get(str(item["id"]), "")}
         for item in conversations
+    ]
+    from atlas.api.handoff_metadata import load_handoff_metadata
+
+    handoff_metadata = await asyncio.to_thread(
+        load_handoff_metadata, DATA_ROOT / "engine" / "handoff_metadata.sqlite3",
+        [str(item["id"]) for item in summaries],
+    )
+    summaries = [
+        {**item, **handoff_metadata.get(str(item["id"]), {})} for item in summaries
     ]
     if archived is not None:
         summaries = [item for item in summaries if item.get("archived") is archived]
@@ -157,6 +170,85 @@ async def get_conversation_messages(
         read_session_messages, DATA_ROOT / "engine", conversation_id,
         limit=limit, before_id=before_id,
     )
+
+
+@router.post("/api/conversations/{conversation_id}/handoff", status_code=201)
+async def handoff_conversation(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str,
+    req: HandoffRequest,
+) -> dict[str, Any]:
+    """Create a linked child conversation and return an unsent, editable prompt."""
+    goal = req.goal.strip()
+    if not goal:
+        raise HTTPException(status_code=422, detail="接力目标不能为空")
+    memory = services.memory
+    model_mgr = services.model_mgr
+    if memory is None or model_mgr is None:
+        from atlas import server as _atlas_server
+
+        memory = memory or _atlas_server.memory
+        model_mgr = model_mgr or _atlas_server.model_mgr
+    if memory is None or model_mgr is None or model_mgr.model_router is None:
+        raise HTTPException(status_code=503, detail="接力需要可用的会话存储和当前模型")
+    source = await memory.get_conversation(conversation_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_all_messages
+
+    messages = await asyncio.to_thread(
+        read_session_all_messages, DATA_ROOT / "engine", conversation_id,
+    )
+    transcript = "\n".join(
+        f"{str(item.get('role') or 'unknown')}: {str(item.get('content') or '')[:5000]}"
+        for item in messages[-40:]
+        if str(item.get("content") or "").strip()
+    )[-40_000:]
+    try:
+        route = await model_mgr.model_router.resolve(model_mgr.current_model, "handoff_summary")
+        result = await model_mgr.model_router.complete(
+            route,
+            messages=[
+                {"role": "system", "content": (
+                    "Prepare a self-contained prompt to transfer work into a new conversation. "
+                    "Use the supplied conversation and user's next-step goal. Preserve decisions, "
+                    "constraints, unresolved questions, and relevant file paths. Do not claim work "
+                    "or tests not shown. Return concise Context, Relevant files, and Task sections."
+                )},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Next-step goal:\n{goal}\n\nConversation:\n"
+                        f"{transcript or '(No saved messages yet.)'}"
+                    ),
+                },
+            ],
+            max_tokens=4096, temperature=0.2, timeout=45,
+        )
+    except Exception as exc:  # noqa: BLE001 — don't create a child without a usable draft.
+        raise HTTPException(status_code=502, detail=f"接力提示生成失败：{exc}") from exc
+    prompt_draft = str(getattr(result, "text", "") or "").strip()
+    if not prompt_draft:
+        raise HTTPException(status_code=502, detail="当前模型没有生成接力提示")
+
+    child = await memory.fork_conversation_metadata(conversation_id, title=f"接力：{goal}"[:80])
+    if child is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    child_id = str(child["id"])
+    from atlas.api.handoff_metadata import save_handoff_metadata
+
+    await asyncio.to_thread(
+        save_handoff_metadata, DATA_ROOT / "engine" / "handoff_metadata.sqlite3",
+        child_id, conversation_id, goal,
+    )
+    child = {**child, "handoff_from": conversation_id, "handoff_goal": goal}
+    return {
+        "conversation": child,
+        "parent_title": source.get("title", ""),
+        "prompt_draft": prompt_draft,
+    }
 
 
 @router.get("/api/conversations/{conversation_id}/search")
@@ -1145,6 +1237,12 @@ async def delete_conversation(
     ok = await memory.delete_conversation(conversation_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    from atlas.api.handoff_metadata import delete_handoff_metadata
+    from atlas.config import DATA_ROOT
+
+    await asyncio.to_thread(
+        delete_handoff_metadata, DATA_ROOT / "engine" / "handoff_metadata.sqlite3", conversation_id,
+    )
     # Real session destruction point: fire SessionEnd after the delete succeeded.
     await _server()._hook_store().execute("SessionEnd", {
         "conversation_id": conversation_id, "reason": "delete",
