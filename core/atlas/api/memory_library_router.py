@@ -154,12 +154,17 @@ async def timeline(before: str = "", limit: int = 50, src: str = "") -> dict[str
         if not rel.startswith("经历/"):
             continue
         for entry in library.store.read(rel).current:
-            if before and entry.at >= before:
-                continue
+            if before:
+                cursor_at, sep, cursor_id = before.partition("|")
+                if sep:
+                    if (entry.at, entry.id) >= (cursor_at, cursor_id):
+                        continue
+                elif entry.at >= cursor_at:
+                    continue
             if src and entry.src != src:
                 continue
             entries.append(entry)
-    entries.sort(key=lambda e: e.at, reverse=True)
+    entries.sort(key=lambda e: (e.at, e.id), reverse=True)
     size = max(1, min(100, limit))
     page = entries[:size]
     return {
@@ -183,7 +188,7 @@ async def timeline(before: str = "", limit: int = 50, src: str = "") -> dict[str
             }
             for e in page
         ],
-        "next": page[-1].at if len(entries) > size and page else None,
+        "next": f"{page[-1].at}|{page[-1].id}" if len(entries) > size and page else None,
     }
 
 

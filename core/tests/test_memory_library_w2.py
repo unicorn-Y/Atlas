@@ -394,3 +394,28 @@ async def test_dream_preserves_owner_edit_made_during_model_call(tmp_path, monke
     report = await dream.run_dream(library, model_mgr=object())
     assert report["ok"] is True
     assert "人工刚添加的决定" in project_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_timeline_compound_cursor_pages_equal_timestamps_without_gaps(monkeypatch):
+    from atlas.api import memory_library_router as router
+
+    entries = [Entry(id=f"id-{i}", text=f"经历 {i}", src="经历", at="2026-10-15T10:00:00+08:00")
+               for i in range(4)]
+    page = Page(path="经历/2026-10-15.md", title="episodes", current=entries)
+    class Store:
+        def pages(self):
+            return [page.path]
+        def read(self, _path):
+            return page
+    class Library:
+        store = Store()
+        def ready(self):
+            return None
+    monkeypatch.setattr(router, "_lib", lambda: Library())
+    monkeypatch.setattr(router, "_run", lambda fn, *args: asyncio.sleep(0, result=fn(*args)))
+    first = await router.timeline(limit=2)
+    second = await router.timeline(before=first["next"], limit=2)
+    ids = [row["id"] for row in first["items"] + second["items"]]
+    assert len(ids) == len(set(ids)) == 4
+    assert second["next"] is None
