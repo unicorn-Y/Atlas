@@ -524,18 +524,25 @@ class MemoryLibrary:
                 raise KeyError(entry_id)
             page, entry, bucket = found
             getattr(page, bucket).remove(entry)
-            self.store.add_tombstones(tombstone_hashes(entry.key, entry.value, entry.text), "用户要求忘掉")
+            exact_source = self.store.add_source_tombstone(entry.ref, "用户要求不再将此来源作为记忆使用")
+            if not exact_source:
+                self.store.add_tombstones(tombstone_hashes(entry.key, entry.value, entry.text), "用户要求忘掉")
             self.store.write(page)
             # No topic words, and no short halves ("直接回答"): they would wipe unrelated diary lines.
             needles = [entry.quote, entry.text, entry.value, entry.outcome]
             if entry.src == SRC_EPISODE and "：" in entry.text:
                 needles.extend(part for part in entry.text.split("：", 1) if len(part.strip()) >= 6)
-            diary_pages = self.store.redact_diary(needles)
+            diary_pages = 0 if exact_source else self.store.redact_diary(needles)
             self.store.commit("按你的要求忘掉了一条记忆")
-            history = self._purge([entry.text, entry.quote, entry.value])
+            history = (self._purge([entry.text, entry.quote, entry.value]) if not exact_source
+                       else {"rewritten": False, "commits": 0,
+                             "reason": "精确来源排除已保存；为保留其他 UID 的同文内容，不按文本改写历史"})
         self.index.sync()
+        not_covered = ["原始聊天记录仍保留，可在原对话中手动查看", "你自己做的备份或同步副本"]
+        if not exact_source:
+            not_covered.insert(0, "此条记忆没有可用的精确消息 UID；来源级排除未覆盖，仅派生记忆文本已加入遗忘标记")
         return {"ok": True, "pages": [page.path], "diary_pages": diary_pages, "history": history,
-                "not_covered": ["Atlas 的原始聊天记录（engine 会话库）", "你自己做的备份或同步副本"]}
+                "source_excluded": exact_source, "not_covered": not_covered}
 
     def _purge(self, needles: list[str]) -> dict[str, Any]:
         # The entry is already gone from the pages; a failed history rewrite must not

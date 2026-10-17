@@ -211,10 +211,13 @@ def _raw_result(row: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def search_raw(query: str, limit: int = 10) -> list[dict[str, Any]]:
+    from . import get_library
+
+    library = get_library()
     results = []
     for row in iter_search_raw(query):
         result = _raw_result(row)
-        if result is not None:
+        if result is not None and not (library and library.store.source_tombstoned(result["ref"])):
             results.append(result)
             if len(results) >= max(1, limit):
                 break

@@ -248,6 +248,8 @@ def apply_episode(store: MemoryStore, episode: Episode | None, steps: list[dict]
                   session: str, now: datetime, mode: str = "", ref: str = "") -> bool:
     if episode is None or episode.skip or not episode.title:
         return False
+    if store.source_tombstoned(ref):
+        return False
     did = episode.did or "直接回答"
     text = f"{episode.title}：{did}"[:120]
     if contains_secret(text + episode.outcome + json.dumps(steps, ensure_ascii=False)):
@@ -315,6 +317,8 @@ def apply(store: MemoryStore, proposals: list[Proposal], *, user_text: str, sess
           mode: str, now: datetime, ref: str = "") -> ApplyResult:
     """Apply proposals to the Markdown pages. Caller holds ``store.lock`` and commits."""
     result = ApplyResult()
+    if store.source_tombstoned(ref):
+        return result
     stamp = now.isoformat(timespec="seconds")
     today = now.date().isoformat()
     for p in proposals:

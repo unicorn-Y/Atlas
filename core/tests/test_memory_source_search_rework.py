@@ -40,6 +40,62 @@ def test_raw_search_pages_past_first_sessiondb_page(monkeypatch, tmp_path):
     assert hits[59]["ref"].endswith("uid-59")
 
 
+def test_forget_excludes_exact_source_from_memory_but_preserves_raw_and_other_uid(monkeypatch, tmp_path):
+    from atlas.memory.library import MemoryLibrary
+    from atlas.memory.library.extract import Episode, apply_episode
+    from atlas.memory.library.store import Entry, Page
+
+    monkeypatch.setattr("atlas.memory.library.embed.embed_texts", lambda _texts: None)
+    library = MemoryLibrary(tmp_path)
+    library.ready()
+    ref1 = SourceRef("session", "turn-1").to_ref()
+    ref2 = SourceRef("session", "turn-2").to_ref()
+    page = Page(path="事/Atlas.md", title="Atlas",
+                current=[Entry(id="forgotten", text="same words", ref=ref1),
+                         Entry(id="other-source", text="same words", ref=ref2)])
+    library.store.write(page)
+    library.index.sync()
+    monkeypatch.setattr("atlas.memory.library._SINGLETON", library)
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr("atlas.engine.session_sync.search_session_messages", lambda *_a, **_kw: [
+        {"id": "turn-1", "conversation_id": "session", "content": "same words"},
+        {"id": "turn-2", "conversation_id": "session", "content": "same words"},
+    ])
+
+    report = library.forget_entry("forgotten")
+    assert report["source_excluded"] is True
+    recall = library.index.search("same words", kinds=("fact",), limit=10)
+    assert "forgotten" not in {row["id"] for row in recall}
+    assert "other-source" in {row["id"] for row in recall}
+    assert len(sources.search_raw("same words", limit=10)) == 1
+    assert sources.search_raw("same words", limit=10)[0]["ref"] == ref2
+    from atlas.engine import session_sync
+    monkeypatch.setattr(session_sync, "read_session_all_messages", lambda *_: [
+        {"id": "turn-1", "role": "user", "text": "same words"},
+    ])
+    monkeypatch.setattr(session_sync, "list_session_previews", lambda *_a, **_kw: {})
+    assert sources.open_ref(ref1, root=tmp_path)["ok"] is True
+
+    episode = Episode(title="same words", did="same words")
+    now = datetime.now().astimezone()
+    assert not apply_episode(library.store, episode, [], False, "session", now, ref=ref1)
+    assert apply_episode(library.store, episode, [], False, "session", now, ref=ref2)
+    assert "session" in ref1 and library.store.source_tombstoned(ref1)
+
+
+def test_forget_without_exact_source_reports_source_exclusion_gap(tmp_path):
+    from atlas.memory.library import MemoryLibrary
+    from atlas.memory.library.store import Entry, Page
+
+    library = MemoryLibrary(tmp_path)
+    library.ready()
+    page = Page(path="事/Atlas.md", title="Atlas", current=[Entry(id="no-ref", text="derived only")])
+    library.store.write(page)
+    report = library.forget_entry("no-ref")
+    assert report["source_excluded"] is False
+    assert any("UID" in item for item in report["not_covered"])
+
+
 @pytest.mark.asyncio
 async def test_browse_search_uses_exact_paged_index_contract(monkeypatch):
     from atlas.api import memory_library_router as router

@@ -86,7 +86,7 @@ function MemoryActions({ entry, apiBaseUrl, onToast, onChanged }: { entry: Entry
     finally { setBusy(false); }
   };
   const forget = async () => {
-    if (!window.confirm('忘掉这条记忆？')) return;
+    if (!window.confirm('不再把这条来源用于记忆？原始聊天记录仍可在原对话中手动查看。')) return;
     setBusy(true);
     try { await api(apiBaseUrl, '/api/memlib/forget', { method: 'POST', json: { id: entry.id } }); onToast('已忘掉'); onChanged(); }
     catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
