@@ -496,6 +496,187 @@ class MemoryIndex:
             results = results[:limit]
         return results
 
+    def browse_search(self, query: str, *, offset: int, limit: int,
+                      kinds: tuple[str, ...], include_history: bool,
+                      sources: set[str], from_date: str, to_date: str, project: str,
+                      now: datetime) -> dict[str, Any]:
+        """Scan every matching browse candidate with disk-backed staging and bounded batches.
+
+        This endpoint needs an exact filtered total and arbitrary page offsets. Candidate rows
+        therefore live in a temporary SQLite table while Python retains only one scan batch and
+        the requested result page. The score uses the same keyword/vector weights and decay as
+        hybrid memory search; raw transcript matches retain their established score of 1.0.
+        """
+        from .hybrid import temporal_decay
+
+        page_size = max(1, min(100, limit))
+        page_offset = max(0, offset)
+        requested = tuple(kind for kind in kinds if kind != "raw")
+        with self._lock:
+            db = self._conn()
+            db.execute("DROP TABLE IF EXISTS temp.browse_candidates")
+            db.execute("DROP TABLE IF EXISTS temp.browse_rowids")
+            db.execute("CREATE TEMP TABLE browse_rowids(rowid INTEGER PRIMARY KEY)")
+            db.execute("""CREATE TEMP TABLE browse_candidates(
+                id TEXT PRIMARY KEY, path TEXT, kind TEXT, bucket TEXT, text TEXT, src TEXT,
+                at TEXT, ref TEXT, until TEXT, quote TEXT, keyword REAL NOT NULL DEFAULT 0,
+                vector REAL NOT NULL DEFAULT 0, raw INTEGER NOT NULL DEFAULT 0, score REAL NOT NULL DEFAULT 0
+            )""")
+
+            def eligible(row: dict[str, Any]) -> bool:
+                if sources and str(row.get("src") or "") not in sources:
+                    return False
+                stamp = str(row.get("at") or "")[:10]
+                if from_date and stamp < from_date:
+                    return False
+                if to_date and stamp > to_date:
+                    return False
+                return not project or project.casefold() in (
+                    str(row.get("path") or "") + str(row.get("text") or "")
+                ).casefold()
+
+            def stage(row: dict[str, Any], *, keyword: float = 0.0,
+                      vector: float = 0.0, raw: bool = False) -> None:
+                if not eligible(row):
+                    return
+                db.execute(
+                    "INSERT INTO temp.browse_candidates(id,path,kind,bucket,text,src,at,ref,until,quote,"
+                    "keyword,vector,raw) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT(id) DO UPDATE SET keyword=max(keyword,excluded.keyword),"
+                    "vector=max(vector,excluded.vector),raw=max(raw,excluded.raw)",
+                    (str(row.get("id") or ""), str(row.get("path") or ""), str(row.get("kind") or ""),
+                     str(row.get("bucket") or ""), str(row.get("text") or ""), str(row.get("src") or ""),
+                     str(row.get("at") or ""), str(row.get("ref") or ""), str(row.get("until") or ""),
+                     str(row.get("quote") or ""), keyword, vector, int(raw)),
+                )
+
+            try:
+                q_tokens = tokenize(query)
+                idf = self._idf(db)
+                useful = {token for token in q_tokens if token in idf}
+                long_terms = [token for token in useful if len(token) >= 3]
+                short_terms = [token for token in useful if len(token) < 3]
+                if requested and useful:
+                    for kind in requested:
+                        if long_terms:
+                            match = " OR ".join('"' + term.replace('"', '""') + '"'
+                                                 for term in long_terms)
+                            cursor = db.execute(
+                                "SELECT rowid FROM items_fts WHERE items_fts MATCH ?", (match,)
+                            )
+                            while batch := cursor.fetchmany(128):
+                                db.executemany("INSERT OR IGNORE INTO temp.browse_rowids VALUES(?)",
+                                               [(row[0],) for row in batch])
+                        for term in short_terms:
+                            cursor = db.execute(
+                                "SELECT rowid FROM items WHERE kind=? AND (' '||tokens||' ') LIKE ?",
+                                (kind, f"% {term} %"),
+                            )
+                            while batch := cursor.fetchmany(128):
+                                db.executemany("INSERT OR IGNORE INTO temp.browse_rowids VALUES(?)",
+                                               [(row[0],) for row in batch])
+                    cursor = db.execute(
+                        "SELECT i.* FROM items i JOIN temp.browse_rowids b ON b.rowid=i.rowid "
+                        "ORDER BY i.rowid"
+                    )
+                    q_weight = sum(idf[token] for token in useful) or 1.0
+                    while batch := cursor.fetchmany(128):
+                        for source in batch:
+                            row = dict(source)
+                            if row["kind"] not in requested or row["path"] == "" or (
+                                row["bucket"] == "history" and not include_history
+                            ) or (is_expired(row["until"], now) and not include_history):
+                                continue
+                            item_tokens = set(row["tokens"].split())
+                            hit = useful & item_tokens
+                            if not hit:
+                                continue
+                            item_weight = sum(idf.get(token, 0.0) for token in item_tokens) or 1.0
+                            matched = sum(idf[token] for token in hit)
+                            q_cov, i_cov = matched / q_weight, matched / item_weight
+                            relevance = 2 * q_cov * i_cov / (q_cov + i_cov)
+                            relevance *= 1.0 + (int(row["importance"] or 5) - 5) / 10.0
+                            row.pop("tokens", None)
+                            stage(row, keyword=relevance)
+                        db.commit()
+
+                if requested:
+                    try:
+                        from .embed import embed_texts
+                        vectors = embed_texts([query])
+                    except Exception:
+                        vectors = None
+                    if vectors:
+                        import numpy as np
+
+                        q = np.asarray(vectors[0], dtype=np.float32)
+                        qnorm = float(np.linalg.norm(q))
+                        if qnorm:
+                            marks = ",".join("?" for _ in requested)
+                            cursor = db.execute(
+                                f"SELECT i.*,v.dim,v.vec FROM items i JOIN vectors v ON i.id=v.id "
+                                f"WHERE i.kind IN ({marks}) ORDER BY i.rowid", requested,
+                            )
+                            while batch := cursor.fetchmany(128):
+                                grouped: dict[int, list[tuple[dict[str, Any], Any]]] = {}
+                                for source in batch:
+                                    row = dict(source)
+                                    if int(row["dim"]) == q.size:
+                                        grouped.setdefault(int(row["dim"]), []).append(
+                                            (row, np.frombuffer(row["vec"], dtype=np.float32))
+                                        )
+                                for candidates in grouped.values():
+                                    matrix = np.stack([item[1] for item in candidates])
+                                    norms = np.linalg.norm(matrix, axis=1)
+                                    scores = np.divide(matrix @ q, norms * qnorm,
+                                                       out=np.zeros(len(candidates), dtype=np.float32),
+                                                       where=norms > 0)
+                                    for (row, _vector), score in zip(candidates, scores):
+                                        if row["bucket"] == "history" and not include_history:
+                                            continue
+                                        if is_expired(row["until"], now) and not include_history:
+                                            continue
+                                        row.pop("tokens", None)
+                                        row.pop("vec", None)
+                                        row.pop("dim", None)
+                                        stage(row, vector=max(0.0, float(score)))
+                                db.commit()
+
+                if "raw" in kinds and query.strip():
+                    from .sources import _raw_result, iter_search_raw
+                    for raw_row in iter_search_raw(query):
+                        row = _raw_result(raw_row)
+                        if row is not None:
+                            stage(row, raw=True)
+                        if db.total_changes % 128 == 0:
+                            db.commit()
+
+                max_keyword = db.execute(
+                    "SELECT COALESCE(MAX(keyword),0) FROM temp.browse_candidates"
+                ).fetchone()[0] or 1.0
+                cursor = db.execute(
+                    "SELECT id,path,at,keyword,vector,raw FROM temp.browse_candidates"
+                )
+                while batch := cursor.fetchmany(128):
+                    for row_id, path, at, keyword, vector, raw in batch:
+                        score = 1.0 if raw else (
+                            0.7 * float(vector) + 0.3 * min(1.0, float(keyword) / max_keyword)
+                        ) * temporal_decay(path, at, now)
+                        db.execute("UPDATE temp.browse_candidates SET score=? WHERE id=?", (score, row_id))
+                    db.commit()
+                total = int(db.execute("SELECT COUNT(*) FROM temp.browse_candidates").fetchone()[0])
+                cursor = db.execute(
+                    "SELECT id,path,kind,bucket,text,src,at,ref,until,quote,score "
+                    "FROM temp.browse_candidates ORDER BY score DESC,id LIMIT ? OFFSET ?",
+                    (page_size, page_offset),
+                )
+                items = [dict(row) for row in cursor.fetchall()]
+                return {"total": total, "items": items}
+            finally:
+                db.execute("DROP TABLE IF EXISTS temp.browse_candidates")
+                db.execute("DROP TABLE IF EXISTS temp.browse_rowids")
+                db.commit()
+
     def facts(self, paths: list[str] | None = None) -> list[dict[str, Any]]:
         with self._lock:
             db = self._conn()

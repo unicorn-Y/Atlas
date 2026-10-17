@@ -298,6 +298,17 @@ class MemoryLibrary:
                 for h in self.index.search(query, limit=limit, include_history=include_history,
                                            kinds=kinds, now=_now(self.config))]
 
+    def browse_search(self, query: str, *, offset: int, limit: int,
+                      include_history: bool, kinds: tuple[str, ...], sources: set[str],
+                      from_date: str, to_date: str, project: str) -> dict[str, Any]:
+        self.ready()
+        self.index.sync()
+        return self.index.browse_search(
+            query, offset=offset, limit=limit, include_history=include_history, kinds=kinds,
+            sources=sources, from_date=from_date, to_date=to_date, project=project,
+            now=_now(self.config),
+        )
+
     # ---------- write (after the reply, in the background) ----------
     def schedule_turn(self, **kwargs: Any) -> None:
         user_text = (kwargs.get("user_text") or "").strip()
