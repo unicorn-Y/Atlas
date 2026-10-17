@@ -287,15 +287,21 @@ class MemoryIndex:
             if long_terms:
                 match = " OR ".join('"' + t.replace('"', '""') + '"' for t in long_terms)
                 rowids.update(r[0] for r in db.execute(
-                    "SELECT rowid FROM items_fts WHERE items_fts MATCH ? LIMIT 400", (match,)))
+                    "SELECT rowid FROM items_fts WHERE items_fts MATCH ? LIMIT ?", (match, limit)))
             for term in short_terms:
                 rowids.update(r[0] for r in db.execute(
-                    "SELECT rowid FROM items WHERE (' ' || tokens || ' ') LIKE ? LIMIT 400",
-                    (f"% {term} %",)))
+                    "SELECT rowid FROM items WHERE (' ' || tokens || ' ') LIKE ? LIMIT ?",
+                    (f"% {term} %", limit)))
             if not rowids:
                 return []
-            marks = ",".join("?" * len(rowids))
-            rows = [dict(r) for r in db.execute(f"SELECT * FROM items WHERE rowid IN ({marks})", list(rowids))]
+            rows = []
+            rowid_list = list(rowids)
+            for start in range(0, len(rowid_list), 900):
+                batch = rowid_list[start : start + 900]
+                marks = ",".join("?" * len(batch))
+                rows.extend(dict(r) for r in db.execute(
+                    f"SELECT * FROM items WHERE rowid IN ({marks})", batch
+                ))
         now = now or datetime.now().astimezone()
         excluded = set(exclude_paths)
         q_weight = sum(idf[t] for t in useful) or 1.0
@@ -450,7 +456,7 @@ class MemoryIndex:
                     continue
                 scores = np.divide(matrix @ q, norms * qnorm,
                                    out=np.zeros(len(candidates), dtype=np.float32), where=norms > 0)
-                size = min(400, len(candidates))
+                size = min(100000, len(candidates))
                 top = np.argpartition(scores, -size)[-size:]
                 top = top[np.argsort(scores[top])[::-1]]
                 for index in top:
@@ -465,7 +471,7 @@ class MemoryIndex:
         results = [row for row in rows if row["kind"] in kinds and row["path"] not in excluded
                    and (include_history or (row["bucket"] != "history" and not is_expired(row["until"], now)))]
         results.sort(key=lambda row: row["vector_score"], reverse=True)
-        return results[:400]
+        return results[:100000]
 
     def search(self, query: str, *, limit: int = 8, kinds: tuple[str, ...] = ("fact", "diary"),
                include_history: bool = False, now: datetime | None = None,
@@ -474,13 +480,14 @@ class MemoryIndex:
 
         now = now or datetime.now().astimezone()
         requested = tuple(k for k in kinds if k != "raw")
-        keyword = self._keyword_search(query, limit=400, kinds=requested,
+        keyword = self._keyword_search(query, limit=min(100000, max(400, limit)), kinds=requested,
                                        include_history=include_history, now=now,
                                        exclude_paths=exclude_paths) if requested else []
         vector = self._vector_search(query, kinds=requested, include_history=include_history,
                                      now=now, exclude_paths=exclude_paths) if requested else []
         include_raw = "raw" in kinds
-        results = merge_scores(keyword, vector, now=now, limit=400 if include_raw else limit)
+        results = merge_scores(keyword, vector, now=now,
+                               limit=min(100000, max(400, limit)) if include_raw else limit)
         if include_raw:
             from .sources import search_raw
 

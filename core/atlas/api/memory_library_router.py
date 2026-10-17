@@ -113,7 +113,9 @@ async def search(
     normalized = ("fact", "dream", "episode", "diary") if "memory" in requested else ()
     if "raw" in requested:
         normalized += ("raw",)
-    rows = await _run(_lib().search, q, 1000, history, normalized)
+    # Filtering and total calculation happen below, so gather the full bounded
+    # candidate set before applying offset/limit. The index caps this at 100k.
+    rows = await _run(_lib().search, q, 100000, history, normalized)
     _lib().index._schedule_embeddings()
     sources = {x.strip() for x in src.split(",") if x.strip()}
     filtered = []
