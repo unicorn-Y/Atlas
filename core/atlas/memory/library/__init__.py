@@ -167,7 +167,8 @@ class MemoryLibrary:
         selected: list[list[str]] = []
         used = 0
         for rel, title in ((ME, "关于你"), (NOW, "现状 / 进行中"), (SELF, "Atlas 自己")):
-            entries = [e for e in self.store.read(rel).current if not is_expired(e, now)]
+            entries = [e for e in self.store.read(rel).current
+                       if not is_expired(e, now) and not self.store.source_tombstoned(e.ref)]
             entries.sort(key=lambda e: e.at, reverse=True)
             entries.sort(key=lambda e: -int(e.importance or 5))
             if rel == NOW:
@@ -219,7 +220,7 @@ class MemoryLibrary:
                     continue
             except ValueError:
                 continue
-            entries.extend(self.store.read(rel).current)
+        entries.extend(e for e in self.store.read(rel).current if not self.store.source_tombstoned(e.ref))
         entries.sort(key=lambda e: e.at, reverse=True)
         return entries[:limit]
 
@@ -234,7 +235,8 @@ class MemoryLibrary:
                 cue_pages.append(rel)
         for rel in cue_pages[:MAX_CUE_PAGES]:
             page = self.store.read(rel)
-            current = [e for e in page.current if not is_expired(e, now)]
+            current = [e for e in page.current
+                       if not is_expired(e, now) and not self.store.source_tombstoned(e.ref)]
             lines = [f"- {e.text}{_label(e.src, e.at)}" for e in current[-MAX_CUE_LINES:]]
             if lines:
                 alias = f"（也叫 {'、'.join(page.aliases)}）" if page.aliases else ""
