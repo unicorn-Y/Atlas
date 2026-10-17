@@ -354,6 +354,8 @@ try {
   status({ ok: false, error: detail });
   process.exitCode = 1;
 }
-// A failed update can leave source or dependencies newer than the last successful build.
-// Do not launch that mixed state; retain the exact failure in update-status.json/log.
-if (!flag('--no-launch') && process.exitCode !== 1 && (flag('--relaunch') || flag('--launch-only'))) launch();
+// Candidate-update failures leave the active checkout, dependencies and build untouched,
+// so --relaunch can reopen that previous version. A direct launch-only rebuild failure
+// may have changed the active source and must remain stopped.
+if (!flag('--no-launch') && ((process.exitCode !== 1 && (flag('--relaunch') || flag('--launch-only')))
+  || (process.exitCode === 1 && flag('--relaunch')))) launch();
