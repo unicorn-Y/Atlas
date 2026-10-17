@@ -154,7 +154,8 @@ function launch() {
   const debugPort = process.env.ATLAS_DEBUG_PORT || '9335';
   const electronArgs = [];
   if (debugPort && debugPort !== '0') {
-    electronArgs.push(`--remote-debugging-port=${debugPort}`, '--remote-allow-origins=*');
+    // Keep the full local CDP control surface, but do not expose it to arbitrary origins or interfaces.
+    electronArgs.push('--remote-debugging-address=127.0.0.1', `--remote-debugging-port=${debugPort}`);
   }
   electronArgs.push(path.join(root, 'frontend'));
   const child = spawn(electron, electronArgs, {
