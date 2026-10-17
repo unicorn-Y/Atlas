@@ -13,6 +13,7 @@ from atlas.memory.library.embed import embed_texts
 from atlas.memory.library.hybrid import merge_scores, mmr_select, temporal_decay
 from atlas.memory.library.sources import open_ref
 from atlas.memory.library.store import EPISODES, Entry, MemoryStore, Page
+from atlas.memory.library.queue import TurnQueue
 
 
 def test_episode_lists_merge_deduplicated_and_keep_last_five(tmp_path):
@@ -58,6 +59,20 @@ def test_episode_lists_merge_deduplicated_and_keep_last_five(tmp_path):
     assert entry.commands == ["pytest -q", "ruff check"]
     assert entry.facts == ["Python 3.14", "20000 条"]
     assert entry.open_items == ["补充 API", "跑主机实测"]
+
+
+def test_failed_turn_queue_exposes_detail_and_explicit_retry(tmp_path):
+    queue = TurnQueue(tmp_path)
+    row_id = queue.insert(created="2026-10-17T10:00:00+08:00", session="s", mode="",
+                          user_text="用户输入", assistant_text="回复")
+    for attempt in range(3):
+        queue.fail(row_id, f"model failure {attempt + 1}")
+    assert queue.pending() == []
+    failed = queue.failed()
+    assert failed[0]["id"] == row_id and failed[0]["last_error"] == "model failure 3"
+    assert queue.retry_failed(row_id) == 1
+    assert queue.pending()[0]["attempts"] == 0
+    assert queue.pending()[0]["last_error"] is None
 
 
 def test_hybrid_decay_and_mmr_are_deterministic():

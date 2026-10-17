@@ -59,6 +59,10 @@ class EntryAdd(BaseModel):
     text: str
 
 
+class QueueRetry(BaseModel):
+    id: int | None = None
+
+
 class EntryRef(BaseModel):
     id: str
 
@@ -317,6 +321,24 @@ async def run_dream_now() -> dict[str, Any]:
     return await run_dream(_lib(), getattr(server, "model_mgr", None))
 
 
+@router.get("/queue/failed")
+async def failed_queue(limit: int = 100) -> dict[str, Any]:
+    return {"items": await _run(_lib().queue.failed, limit)}
+
+
+@router.post("/queue/retry")
+async def retry_failed_queue(body: QueueRetry) -> dict[str, Any]:
+    from atlas import server
+
+    library = _lib()
+    retried = await _run(library.queue.retry_failed, body.id)
+    if retried:
+        task = asyncio.create_task(library._drain(getattr(server, "model_mgr", None)))
+        library._tasks.add(task)
+        task.add_done_callback(library._tasks.discard)
+    return {"retried": retried}
+
+
 async def _dream_scheduler() -> None:
     while True:
         now = datetime.now().astimezone()
@@ -340,6 +362,17 @@ async def start_dream_scheduler() -> None:
     global _dream_task
     if _dream_task is None or _dream_task.done():
         _dream_task = asyncio.create_task(_dream_scheduler())
+    library = get_library()
+    if library and library.queue.count():
+        from atlas import server
+
+        async def drain_pending() -> None:
+            await asyncio.sleep(1)
+            await library._drain(getattr(server, "model_mgr", None))
+
+        task = asyncio.create_task(drain_pending())
+        library._tasks.add(task)
+        task.add_done_callback(library._tasks.discard)
 
 
 @router.on_event("shutdown")

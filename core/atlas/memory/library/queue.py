@@ -57,10 +57,30 @@ class TurnQueue:
             )
             return int(cursor.lastrowid)
 
-    def pending(self) -> list[dict[str, Any]]:
+    def pending(self, limit: int = 50) -> list[dict[str, Any]]:
         with self._connection() as db:
-            rows = db.execute("SELECT * FROM pending WHERE attempts < 3 ORDER BY id").fetchall()
+            rows = db.execute("SELECT * FROM pending WHERE attempts < 3 ORDER BY id LIMIT ?",
+                              (max(1, min(500, limit)),)).fetchall()
             return [dict(row) for row in rows]
+
+    def failed(self, limit: int = 100) -> list[dict[str, Any]]:
+        with self._connection() as db:
+            rows = db.execute(
+                "SELECT id, created, session, stage, attempts, last_error FROM pending "
+                "WHERE attempts >= 3 ORDER BY id LIMIT ?", (max(1, min(500, limit)),)
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def retry_failed(self, row_id: int | None = None) -> int:
+        with self._connection() as db:
+            if row_id is None:
+                cursor = db.execute("UPDATE pending SET attempts=0,last_error=NULL WHERE attempts>=3")
+            else:
+                cursor = db.execute(
+                    "UPDATE pending SET attempts=0,last_error=NULL WHERE id=? AND attempts>=3",
+                    (row_id,),
+                )
+            return int(cursor.rowcount)
 
     def stage_diary_done(self, row_id: int) -> None:
         with self._connection() as db:
