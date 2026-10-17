@@ -448,6 +448,16 @@ async def test_dream_does_not_checkpoint_unqualified_episode_and_rechecks_late_i
     assert report["ok"] is True
     assert "Project" in report["projects"]
 
+    late = Entry(id="late-after-checkpoint", text="Project late arrival", src="经历",
+                 at="2001-01-01T00:00:00+00:00", trigger=["Project"])
+    library.store.write(Page(path="经历/2001-01-01.md", title="episodes", current=[late]))
+    restarted = MemoryLibrary(tmp_path)
+    restarted.ready()
+    report = await dream.run_dream(restarted, model_mgr=object())
+    assert report["ok"] is True and "Project" in report["projects"]
+    saved = json.loads(state.read_text(encoding="utf-8"))
+    assert "Project\x1flate-after-checkpoint" in saved["processed_ids"]
+
 
 @pytest.mark.asyncio
 async def test_dream_preserves_owner_edit_made_during_model_call(tmp_path, monkeypatch):
