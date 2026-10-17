@@ -1,7 +1,8 @@
 # Atlas closeout implementation
 
-Status: `AWAITING_GPT6_WINDOWS_REVIEW`  
-Integration branch: `integration/atlas-fixes-20261017`  
+Status: `AWAITING_GPT6_WINDOWS_REVIEW`
+
+Integration branch: `integration/atlas-fixes-20261017`
 Integration tip: `6b5da15adaa32e495c7285b36eb9a50e575e739d`
 
 ## Delivered source batches
