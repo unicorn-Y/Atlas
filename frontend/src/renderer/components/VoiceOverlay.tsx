@@ -146,11 +146,16 @@ export default function VoiceOverlay({ onClose, onSend, runId, reply, runDone, m
     listen();
     const timer = window.setInterval(() => setSeconds((value) => value + 1), 1000);
     let frame = 0;
+    let disposed = false;
     let stream: MediaStream | null = null;
     let context: AudioContext | null = null;
     let analyser: AnalyserNode | null = null;
     const samples = new Uint8Array(256);
     navigator.mediaDevices?.getUserMedia({ audio: true }).then((media) => {
+      if (disposed) {
+        media.getTracks().forEach((track) => track.stop());
+        return;
+      }
       stream = media;
       context = new AudioContext();
       analyser = context.createAnalyser();
@@ -177,6 +182,7 @@ export default function VoiceOverlay({ onClose, onSend, runId, reply, runDone, m
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(false); };
     window.addEventListener('keydown', onKey);
     return () => {
+      disposed = true;
       window.clearInterval(timer);
       cancelAnimationFrame(frame);
       window.removeEventListener('keydown', onKey);
