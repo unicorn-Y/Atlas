@@ -553,6 +553,7 @@ class MemoryIndex:
             try:
                 q_tokens = tokenize(query)
                 idf = self._idf(db)
+                max_keyword = 0.0
                 useful = {token for token in q_tokens if token in idf}
                 long_terms = [token for token in useful if len(token) >= 3]
                 short_terms = [token for token in useful if len(token) < 3]
@@ -596,6 +597,8 @@ class MemoryIndex:
                             q_cov, i_cov = matched / q_weight, matched / item_weight
                             relevance = 2 * q_cov * i_cov / (q_cov + i_cov)
                             relevance *= 1.0 + (int(row["importance"] or 5) - 5) / 10.0
+                            relevance = round(relevance, 4)
+                            max_keyword = max(max_keyword, relevance)
                             row.pop("tokens", None)
                             stage(row, keyword=relevance)
                         db.commit()
@@ -639,7 +642,7 @@ class MemoryIndex:
                                         row.pop("tokens", None)
                                         row.pop("vec", None)
                                         row.pop("dim", None)
-                                        stage(row, vector=max(0.0, float(score)))
+                                        stage(row, vector=max(0.0, min(1.0, float(score))))
                                 db.commit()
 
                 if "raw" in kinds and query.strip():
@@ -651,9 +654,7 @@ class MemoryIndex:
                         if db.total_changes % 128 == 0:
                             db.commit()
 
-                max_keyword = db.execute(
-                    "SELECT COALESCE(MAX(keyword),0) FROM temp.browse_candidates"
-                ).fetchone()[0] or 1.0
+                max_keyword = max_keyword or 1.0
                 cursor = db.execute(
                     "SELECT id,path,at,keyword,vector,raw FROM temp.browse_candidates"
                 )
