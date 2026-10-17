@@ -54,6 +54,10 @@ def test_forget_excludes_exact_source_from_memory_but_preserves_raw_and_other_ui
                 current=[Entry(id="forgotten", text="same words", ref=ref1),
                          Entry(id="other-source", text="same words", ref=ref2)])
     library.store.write(page)
+    library.store.write(Page(path="我.md", title="关于你", current=[
+        Entry(id="resident-forgotten", text="resident fact", ref=ref1),
+        Entry(id="resident-other", text="other UID fact", ref=ref2),
+    ]))
     library.index.sync()
     monkeypatch.setattr("atlas.memory.library._SINGLETON", library)
     monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
@@ -67,6 +71,9 @@ def test_forget_excludes_exact_source_from_memory_but_preserves_raw_and_other_ui
     recall = library.index.search("same words", kinds=("fact",), limit=10)
     assert "forgotten" not in {row["id"] for row in recall}
     assert "other-source" in {row["id"] for row in recall}
+    resident = library._resident_block()
+    assert "resident fact" not in resident
+    assert "other UID fact" in resident
     assert len(sources.search_raw("same words", limit=10)) == 1
     assert sources.search_raw("same words", limit=10)[0]["ref"] == ref2
     from atlas.engine import session_sync
