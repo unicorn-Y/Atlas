@@ -33,9 +33,7 @@ def _episode_groups(
         if not rel.startswith("经历/"):
             continue
         for entry in library.store.read(rel).current:
-            if not entry.at or (
-                entry.at <= checkpoint and entry.id in (processed_ids or set())
-            ):
+            if not entry.at:
                 continue
             candidates = [*entry.trigger]
             if not candidates:
@@ -49,6 +47,8 @@ def _episode_groups(
                 if len(name) < 2 or name.casefold() in seen:
                     continue
                 seen.add(name.casefold())
+                if f"{name}\x1f{entry.id}" in (processed_ids or set()):
+                    continue
                 groups.setdefault(name, []).append(entry)
     output = {}
     for name, entries in groups.items():
@@ -221,7 +221,9 @@ async def run_dream(library: Any, model_mgr: Any = None) -> dict[str, Any]:
             library.store.commit("整理：" + "、".join(written))
         if prepared:
             processed_ids.update(
-                entry.id for _sections, _existing, entries in prepared.values() for entry in entries
+                f"{name}\x1f{entry.id}"
+                for name, (_sections, _existing, entries) in prepared.items()
+                for entry in entries
             )
             state_path.write_text(
                 json.dumps({"checkpoint": now.isoformat(timespec="seconds"),
