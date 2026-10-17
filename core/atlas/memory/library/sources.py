@@ -29,7 +29,19 @@ def open_ref(
     engine_root: str | Path | None = None,
     root: str | Path | None = None,
 ) -> dict[str, Any]:
-    session, sep, stamp = str(ref or "").rpartition("@")
+    from .source_ref import SourceRef
+
+    exact = None
+    raw_ref = str(ref or "")
+    if raw_ref.startswith("atlas://"):
+        try:
+            exact = SourceRef.from_ref(raw_ref)
+        except (TypeError, ValueError):
+            return {"ok": False, "reason": "出处格式无效", "precision": "exact"}
+        session, stamp = exact.conversation_id, ""
+        sep = "@"
+    else:
+        session, sep, stamp = raw_ref.rpartition("@")
     if not sep or not session:
         try:
             from atlas.memory.library import get_library
@@ -58,22 +70,34 @@ def open_ref(
     users = [i for i, message in enumerate(messages) if message.get("role") == "user"]
     if not users:
         return {"ok": False, "reason": "原对话已删除"}
-    try:
-        target = datetime.fromisoformat(stamp)
-        def distance(index: int) -> float:
-            message_time = _parse_at(messages[index])
-            if message_time is None:
-                return float("inf")
-            if message_time.tzinfo is None and target.tzinfo is not None:
-                message_time = message_time.replace(tzinfo=target.tzinfo)
-            elif target.tzinfo is None and message_time.tzinfo is not None:
-                message_time = message_time.replace(tzinfo=None)
-            return abs((message_time - target).total_seconds())
+    if exact is not None:
+        selected = next((i for i, message in enumerate(messages)
+                         if str(message.get("id") or "") == exact.message_uid), None)
+        if selected is None:
+            return {"ok": False, "reason": "原消息已删除或不存在", "precision": "exact",
+                    "conversation_id": session, "message_uid": exact.message_uid}
+        user_pos = max((position for position, message_index in enumerate(users)
+                        if message_index <= selected), default=-1)
+        if user_pos < 0:
+            return {"ok": False, "reason": "出处消息之前没有用户轮次", "precision": "exact",
+                    "conversation_id": session, "message_uid": exact.message_uid}
+    else:
+        try:
+            target = datetime.fromisoformat(stamp)
+            def distance(index: int) -> float:
+                message_time = _parse_at(messages[index])
+                if message_time is None:
+                    return float("inf")
+                if message_time.tzinfo is None and target.tzinfo is not None:
+                    message_time = message_time.replace(tzinfo=target.tzinfo)
+                elif target.tzinfo is None and message_time.tzinfo is not None:
+                    message_time = message_time.replace(tzinfo=None)
+                return abs((message_time - target).total_seconds())
 
-        selected = min(users, key=distance)
-    except (TypeError, ValueError):
-        selected = users[-1]
-    user_pos = users.index(selected)
+            selected = min(users, key=distance)
+        except (TypeError, ValueError):
+            selected = users[-1]
+        user_pos = users.index(selected)
     radius = 1 if window >= 2 else 0
     start = users[max(0, user_pos - radius)]
     end = (
@@ -136,6 +160,8 @@ def open_ref(
     return {
         "ok": True,
         "session": session,
+        "precision": "exact" if exact is not None else "approximate",
+        **({"conversation_id": session, "message_uid": exact.message_uid} if exact else {}),
         "title": title,
         "messages": result,
         "truncated": truncated,
@@ -158,8 +184,17 @@ def search_raw(query: str, limit: int = 10) -> list[dict[str, Any]]:
         found = search_session_messages(DATA_ROOT / "engine", query, limit=max(1, min(50, limit)))
     except (OSError, RuntimeError, ValueError):
         return []
-    return [
-        {
+    from .source_ref import SourceRef
+
+    results = []
+    for row in found:
+        conversation_id = str(row.get("conversation_id") or "")
+        message_uid = str(row.get("id") or "")
+        try:
+            ref = SourceRef(conversation_id, message_uid).to_ref()
+        except ValueError:
+            continue
+        results.append({
             "id": str(row.get("id") or ""),
             "kind": "raw",
             "path": "原对话",
@@ -168,12 +203,12 @@ def search_raw(query: str, limit: int = 10) -> list[dict[str, Any]]:
             "snippet": str(row.get("snippet") or row.get("content") or ""),
             "src": "原对话",
             "at": str(row.get("created_at") or ""),
-            "ref": f"{row.get('conversation_id', '')}@{row.get('created_at', '')}",
+            "ref": ref,
+            "precision": "exact",
             "score": 1.0,
             "project": "",
-        }
-        for row in found
-    ]
+        })
+    return results
 
 
 __all__ = ["open_ref", "search_raw"]

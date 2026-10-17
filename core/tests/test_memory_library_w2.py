@@ -5,6 +5,7 @@ import json
 import threading
 from types import SimpleNamespace
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -75,6 +76,27 @@ def test_failed_turn_queue_exposes_detail_and_explicit_retry(tmp_path):
     assert queue.pending()[0]["last_error"] is None
 
 
+def test_turn_queue_persists_exact_source_ref_precision(tmp_path):
+    queue = TurnQueue(tmp_path)
+    row_id = queue.insert(created="2026-10-17T10:00:00+08:00", session="s", mode="",
+                          user_text="用户输入", assistant_text="回复", source_ref="atlas://source/v1?x",
+                          source_precision="exact")
+    row = queue.pending()[0]
+    assert row["id"] == row_id
+    assert row["source_ref"] == "atlas://source/v1?x"
+    assert row["source_precision"] == "exact"
+
+
+def test_diary_append_is_idempotent_for_pending_queue_row(tmp_path):
+    library = MemoryLibrary(tmp_path)
+    stamp = datetime(2026, 10, 17, 10, 0, tzinfo=datetime.now().astimezone().tzinfo)
+    library._write_diary(stamp, "原话", "回复", "s", "", "", "queue-7")
+    library._write_diary(stamp, "原话", "回复", "s", "", "", "queue-7")
+    text = (tmp_path / "日记" / "2026-10-17.md").read_text(encoding="utf-8")
+    assert text.count("turn_id") == 1
+    assert text.count("原话") == 1
+
+
 def test_hybrid_decay_and_mmr_are_deterministic():
     now = datetime(2026, 10, 16, tzinfo=datetime.now().astimezone().tzinfo)
     assert temporal_decay("日记/2026-09-16.md", now - timedelta(days=30), now) == pytest.approx(0.5)
@@ -120,6 +142,7 @@ def test_turn_without_ready_model_keeps_diary_and_pending_queue(tmp_path, monkey
         library = MemoryLibrary(tmp_path)
         monkeypatch.setattr(library.index, "_schedule_embeddings", lambda: None)
         monkeypatch.setattr(library, "_write_diary", lambda *args: None)
+        monkeypatch.setattr("atlas.memory.library._source_ref_for_turn", lambda *_args: "")
         library.schedule_turn(
             user_text="记住这件事",
             assistant_text="收到",
@@ -208,12 +231,49 @@ def test_open_ref_returns_nearest_user_turn_with_tools_and_truncates(tmp_path, m
         {"role": "user", "text": "另一个问题", "at": "2026-10-16T10:03:00+08:00"},
     ]
     monkeypatch.setattr(session_sync, "read_session_all_messages", lambda *_: messages)
+    monkeypatch.setattr(session_sync, "list_session_previews", lambda *_args, **_kwargs: {})
     result = open_ref("session-1@2026-10-16T10:00:00+08:00", root=tmp_path)
     assert result["ok"] is True
     assert [m["role"] for m in result["messages"]] == ["user", "assistant", "tool", "assistant"]
     assert result["truncated"] is True
     assert len(result["messages"][2]["text"]) <= 2000
     assert sum(len(m["text"]) for m in result["messages"]) <= 12000
+    assert result["precision"] == "approximate"
+
+
+def test_open_ref_binds_exact_message_uid_and_missing_uid_never_guesses(tmp_path, monkeypatch):
+    from atlas.engine import session_sync
+    from atlas.memory.library.source_ref import SourceRef
+
+    messages = [
+        {"id": "uid-1", "role": "user", "text": "第一轮", "at": "2026-10-16T10:00:00+08:00"},
+        {"id": "uid-assistant", "role": "assistant", "text": "回答", "at": "2026-10-16T10:00:01+08:00"},
+        {"id": "uid-2", "role": "user", "text": "第二轮", "at": "2026-10-16T10:00:02+08:00"},
+    ]
+    monkeypatch.setattr(session_sync, "read_session_all_messages", lambda *_: messages)
+    monkeypatch.setattr(session_sync, "list_session_previews", lambda *_args, **_kwargs: {})
+    ref = SourceRef("session-1", "uid-2").to_ref()
+    opened = open_ref(ref, root=tmp_path)
+    assert opened["ok"] and opened["precision"] == "exact"
+    assert opened["message_uid"] == "uid-2"
+    assert opened["messages"][0]["text"] == "第二轮"
+    missing = open_ref(SourceRef("session-1", "deleted-uid").to_ref(), root=tmp_path)
+    assert missing["ok"] is False and missing["precision"] == "exact"
+
+
+def test_schedule_source_ref_requires_matching_sessiondb_user_text(monkeypatch):
+    from atlas.engine import session_sync
+    from atlas import config
+    from atlas.memory.library import _source_ref_for_turn
+    from atlas.memory.library.source_ref import SourceRef
+
+    def latest(home, *_args, **_kwargs):
+        assert home == config.DATA_ROOT / "engine"
+        return {"id": "stable-uid", "content": "本轮原话", "role": "user"}
+    monkeypatch.setattr(config, "DATA_ROOT", Path("isolated-atlas-data"))
+    monkeypatch.setattr(session_sync, "latest_session_message", latest)
+    assert _source_ref_for_turn("session", "本轮原话") == SourceRef("session", "stable-uid").to_ref()
+    assert _source_ref_for_turn("session", "另一个时间接近的原话") == ""
 
 
 def test_search_adds_ref_and_raw_only_when_requested(tmp_path, monkeypatch):
