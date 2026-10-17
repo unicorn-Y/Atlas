@@ -13,6 +13,7 @@
 // Log: data/logs/update.log   Status: data/update-status.json
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -132,6 +133,12 @@ function mergePending() {
 // first switch to source mode, a failed build or a manual pull are all caught up.
 const stampFile = path.join(root, 'data', 'build-stamp.json');
 const readStamp = () => { try { return JSON.parse(fs.readFileSync(stampFile, 'utf8')).commit; } catch { return null; } };
+const requiredBuildFiles = [
+  path.join(root, 'frontend', 'dist', 'index.html'),
+  path.join(root, 'frontend', 'dist-electron', 'main', 'electron.js'),
+  path.join(root, 'frontend', 'dist-electron', 'preload', 'index.cjs'),
+];
+const missingBuildFiles = () => requiredBuildFiles.filter((file) => !fs.existsSync(file));
 
 function rebuild() {
   const head = sh('git', ['rev-parse', 'HEAD']);
@@ -142,12 +149,14 @@ function rebuild() {
   }
   const touched = (prefix) => changed === null || changed.some((file) => file === prefix || file.startsWith(prefix));
   const steps = [];
-  if (touched('core/pyproject.toml') || !fs.existsSync(python)) {
+  const missingPython = !fs.existsSync(python);
+  if (touched('core/pyproject.toml') || missingPython) {
     sh(python, ['-m', 'pip', 'install', '-q', '--no-cache-dir', '-e', 'core']);
     steps.push('python');
   }
   // Exact third-party versions verified by Atlas 追新; keeps both machines identical.
-  if (changed !== null && touched('core/requirements.lock') && fs.existsSync(path.join(root, 'core', 'requirements.lock'))) {
+  const requirementsLock = path.join(root, 'core', 'requirements.lock');
+  if ((missingPython || changed === null || touched('core/requirements.lock')) && fs.existsSync(requirementsLock)) {
     sh(python, ['-m', 'pip', 'install', '-q', '--disable-pip-version-check', '--no-cache-dir', '-r', 'core/requirements.lock']);
     steps.push('python-lock');
   }
@@ -166,12 +175,33 @@ function rebuild() {
     });
     steps.push('electron');
   }
-  const built = fs.existsSync(path.join(root, 'frontend', 'dist', 'index.html'))
-    && fs.existsSync(path.join(root, 'frontend', 'dist-electron', 'preload', 'index.cjs'));
+  const built = missingBuildFiles().length === 0;
   if (!built || touched('frontend/') || touched('backend-adapter/')) {
-    sh(npm, ['--prefix', 'frontend', 'run', 'build']);
+    const backup = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-build-'));
+    const outputs = ['dist', 'dist-electron'];
+    for (const output of outputs) {
+      const source = path.join(root, 'frontend', output);
+      if (fs.existsSync(source)) fs.cpSync(source, path.join(backup, output), { recursive: true });
+    }
+    try {
+      sh(npm, ['--prefix', 'frontend', 'run', 'build']);
+      const missing = missingBuildFiles();
+      if (missing.length) throw new Error(`Build incomplete; missing: ${missing.map((file) => path.relative(root, file)).join(', ')}`);
+    } catch (error) {
+      for (const output of outputs) {
+        const target = path.join(root, 'frontend', output);
+        fs.rmSync(target, { recursive: true, force: true });
+        const saved = path.join(backup, output);
+        if (fs.existsSync(saved)) fs.cpSync(saved, target, { recursive: true });
+      }
+      throw error;
+    } finally {
+      fs.rmSync(backup, { recursive: true, force: true });
+    }
     steps.push('frontend');
   }
+  const missing = missingBuildFiles();
+  if (missing.length) throw new Error(`Build incomplete; missing: ${missing.map((file) => path.relative(root, file)).join(', ')}`);
   fs.writeFileSync(stampFile, JSON.stringify({ commit: head, at: new Date().toISOString(), steps }, null, 2), 'utf8');
   return steps;
 }
@@ -203,10 +233,9 @@ function launch() {
   log(`launched Atlas (pid ${child.pid}) debug-port=${debugPort}`);
 }
 
-// The desktop must become visible before any dependency or build work starts: when the
-// last build matches HEAD (the usual case) launch right away; UpdateBanner checks for
-// updates in the background. Only a stale/missing build (manual pull, merge) rebuilds first.
-if (flag('--launch-only') && readStamp() === sh('git', ['rev-parse', 'HEAD'])) {
+// The desktop may skip rebuilding only when the stamp and every required bundle agree.
+const completeBuild = () => missingBuildFiles().length === 0;
+if (flag('--launch-only') && readStamp() === sh('git', ['rev-parse', 'HEAD']) && completeBuild()) {
   launch();
   process.exit(0);
 }
@@ -251,9 +280,11 @@ try {
   }
 } catch (error) {
   const detail = String(error?.stderr || error?.message || error).trim().split('\n').slice(-20).join('\n');
+  console.error(`Atlas update failed:\n${detail}`);
   log(`FAILED: ${detail}`);
   status({ ok: false, error: detail });
   process.exitCode = 1;
 }
-// Relaunch even after a failed update: the previous build is still in place.
-if (flag('--relaunch') || flag('--launch-only')) launch();
+// A failed update can leave source or dependencies newer than the last successful build.
+// Do not launch that mixed state; retain the exact failure in update-status.json/log.
+if (process.exitCode !== 1 && (flag('--relaunch') || flag('--launch-only'))) launch();
