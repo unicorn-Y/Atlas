@@ -56,78 +56,10 @@ function changedFiles(before, after) {
   return before === after ? [] : sh('git', ['diff', '--name-only', before, after]).split('\n').filter(Boolean);
 }
 
-// Pop an auto-stash, keeping the pulled tree if the local change now conflicts
-// (e.g. upstream also touched that file): the update still lands and the local
-// change is preserved in `git stash list` for the user to reconcile.
-function restoreAutoStash() {
-  try {
-    sh('git', ['stash', 'pop', '--quiet']);
-  } catch {
-    // Conflicted pop leaves unmerged paths; the tree was clean (just pulled)
-    // before the pop, so hard-resetting to HEAD drops only the half-applied
-    // conflict and keeps the pulled version. The stash is retained on conflict,
-    // so the local change survives in `git stash list` for the user.
-    try { sh('git', ['reset', '--hard', 'HEAD']); } catch { /* best effort */ }
-    log('auto-stash pop conflicted; local changes kept in `git stash list` (stash@{0})');
-  }
-}
-
-function pull() {
-  const branch = sh('git', ['rev-parse', '--abbrev-ref', 'HEAD']);
-  // A fast-forward only rewrites files that changed between before/after, so a
-  // dirty tree no longer blocks the update outright (the Hermes engine rewrites
-  // engine/config.yaml on every launch, which used to make updates silently
-  // skip). Only stash when the incoming change actually collides with a locally
-  // modified file.
-  const dirty = Boolean(sh('git', ['status', '--porcelain', '--untracked-files=no']));
-  const before = sh('git', ['rev-parse', 'HEAD']);
-  let stashed = false;
-  try {
-    sh('git', ['fetch', '--quiet', 'origin', branch]);
-    try {
-      sh('git', ['merge', '--ff-only', `origin/${branch}`]);
-    } catch (ffError) {
-      // A genuine non-fast-forward can't be auto-resolved; only retry when the
-      // blocker is local changes to an incoming file, which stashing clears.
-      if (!dirty) throw ffError;
-      sh('git', ['stash', 'push', '--quiet', '--message', 'atlas-update auto-stash']);
-      stashed = true;
-      sh('git', ['merge', '--ff-only', `origin/${branch}`]);
-    }
-  } catch (error) {
-    // Offline or a local-only branch: an upstream-tracking result can still be merged below.
-    if (!readPending()) { if (stashed) restoreAutoStash(); throw error; }
-    log(`fetch/ff from origin skipped: ${String(error?.message || error).split('\n')[0]}`);
-  }
-  mergePending();
-  if (stashed) restoreAutoStash();
-  const after = sh('git', ['rev-parse', 'HEAD']);
-  return { pulled: before !== after, before, after, changed: changedFiles(before, after) };
-}
-
 // Atlas 追新 (core/atlas/upstream) leaves a verified commit in data/upstream/pending-merge.json
 // when it could not push it; merge it here so a restart picks it up.
 const pendingFile = path.join(root, 'data', 'upstream', 'pending-merge.json');
 const readPending = () => { try { return JSON.parse(fs.readFileSync(pendingFile, 'utf8')); } catch { return null; } };
-
-function mergePending() {
-  const pending = readPending();
-  if (!pending?.commit) return;
-  try {
-    sh('git', ['merge-base', '--is-ancestor', pending.commit, 'HEAD']);
-    return; // already in
-  } catch { /* not merged yet */ }
-  try {
-    sh('git', ['merge', '--ff-only', pending.commit]);
-  } catch {
-    try {
-      sh('git', ['merge', '--no-edit', '-m', 'merge: Atlas 追新结果', pending.commit]);
-    } catch (error) {
-      try { sh('git', ['merge', '--abort']); } catch { /* nothing to abort */ }
-      throw new Error(`追新结果和本地改动冲突，没有合并：${pending.commit.slice(0, 8)}`);
-    }
-  }
-}
 
 // What the last successful rebuild was built from; changes are measured against it, so a
 // first switch to source mode, a failed build or a manual pull are all caught up.
@@ -233,9 +165,144 @@ function launch() {
   log(`launched Atlas (pid ${child.pid}) debug-port=${debugPort}`);
 }
 
+function runAt(workRoot, command, commandArgs, options = {}) {
+  return execFileSync(command, commandArgs, {
+    cwd: workRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+    shell: isWin && command.endsWith('.cmd'), maxBuffer: 64 * 1024 * 1024, ...options,
+  }).trim();
+}
+
+function replaceDirectory(source, target, backup) {
+  if (fs.existsSync(target)) fs.renameSync(target, backup);
+  fs.renameSync(source, target);
+}
+
+function stagedUpdate() {
+  const before = sh('git', ['rev-parse', 'HEAD']);
+  if (sh('git', ['status', '--porcelain', '--untracked-files=no'])) {
+    throw new Error('Update cancelled: tracked local changes must be committed or stashed first.');
+  }
+  const branch = sh('git', ['rev-parse', '--abbrev-ref', 'HEAD']);
+  const stage = path.join(path.dirname(root), `.atlas-update-stage-${process.pid}`);
+  const candidate = path.join(stage, 'candidate');
+  const backups = path.join(stage, 'backups');
+  if (fs.existsSync(stage)) throw new Error(`Update staging path already exists: ${stage}`);
+  fs.mkdirSync(stage, { recursive: true });
+  let worktreeAdded = false;
+  const changed = [];
+  let committed = false;
+  try {
+    runAt(root, 'git', ['worktree', 'add', '--detach', candidate, before]);
+    worktreeAdded = true;
+    fs.mkdirSync(backups, { recursive: true });
+    try {
+      runAt(candidate, 'git', ['fetch', '--quiet', 'origin', branch]);
+      runAt(candidate, 'git', ['merge', '--ff-only', `origin/${branch}`]);
+    } catch (error) {
+      if (!readPending()) throw new Error(`fetch/fast-forward failed: ${String(error?.stderr || error?.message || error).trim()}`);
+      log(`fetch/fast-forward skipped; applying verified pending commit instead: ${String(error?.message || error).split('\n')[0]}`);
+    }
+    const pending = readPending();
+    if (pending?.commit) {
+      try { runAt(candidate, 'git', ['merge-base', '--is-ancestor', pending.commit, 'HEAD']); }
+      catch { runAt(candidate, 'git', ['merge', '--ff-only', pending.commit]); }
+    }
+    const candidateHead = runAt(candidate, 'git', ['rev-parse', 'HEAD']);
+    changed.push(...runAt(candidate, 'git', ['diff', '--name-only', before, candidateHead]).split('\n').filter(Boolean));
+
+    const stagePython = path.join(candidate, 'core', '.venv', isWin ? 'Scripts/python.exe' : 'bin/python');
+    if (!fs.existsSync(stagePython)) runAt(candidate, isWin ? 'py' : 'python', isWin
+      ? ['-3.14', '-m', 'venv', path.join(candidate, 'core', '.venv')]
+      : ['-m', 'venv', path.join(candidate, 'core', '.venv')]);
+    const candidateStamp = path.join(candidate, 'data', 'build-stamp.json');
+    if (!fs.existsSync(path.dirname(candidateStamp))) fs.mkdirSync(path.dirname(candidateStamp), { recursive: true });
+    runAt(candidate, process.execPath, [path.join(candidate, 'scripts', 'atlas-update.mjs'), '--launch-only', '--no-launch']);
+    const candidateBuildStamp = path.join(candidate, 'data', 'build-stamp.json');
+    const candidateMissing = requiredBuildFiles.map((file) => path.join(candidate, path.relative(root, file)))
+      .filter((file) => !fs.existsSync(file));
+    if (candidateMissing.length) throw new Error(`Candidate build incomplete; missing: ${candidateMissing.map((file) => path.relative(candidate, file)).join(', ')}`);
+
+    runAt(root, 'git', ['merge', '--ff-only', candidateHead]);
+    committed = true;
+    const names = ['dist', 'dist-electron'];
+    for (const name of names) replaceDirectory(path.join(candidate, 'frontend', name), path.join(root, 'frontend', name), path.join(backups, name));
+
+    const pythonChanged = changed.includes('core/pyproject.toml') || changed.includes('core/requirements.lock')
+      || !fs.existsSync(python);
+    if (pythonChanged) {
+      const envBackup = path.join(backups, 'core-venv');
+      const envPath = path.join(root, 'core', '.venv');
+      if (fs.existsSync(envPath)) fs.renameSync(envPath, envBackup);
+      try {
+        runAt(root, isWin ? 'py' : 'python', isWin
+          ? ['-3.14', '-m', 'venv', envPath]
+          : ['-m', 'venv', envPath]);
+        const activePython = path.join(envPath, isWin ? 'Scripts/python.exe' : 'bin/python');
+        runAt(root, activePython, ['-m', 'pip', 'install', '-q', '--no-cache-dir', '-e', 'core']);
+        runAt(root, activePython, ['-m', 'pip', 'install', '-q', '--disable-pip-version-check', '--no-cache-dir', '-r', 'core/requirements.lock']);
+      } catch (error) {
+        fs.rmSync(envPath, { recursive: true, force: true });
+        if (fs.existsSync(envBackup)) fs.renameSync(envBackup, envPath);
+        throw error;
+      }
+    }
+    const activeElectron = path.join(root, 'node_modules', 'electron', 'dist', isWin ? 'electron.exe' : 'electron');
+    const npmChanged = changed.some((file) => ['package.json', 'package-lock.json', 'frontend/package.json'].includes(file))
+      || !fs.existsSync(activeElectron);
+    if (npmChanged) {
+      const modulesPath = path.join(root, 'node_modules');
+      const modulesBackup = path.join(backups, 'node_modules');
+      if (fs.existsSync(modulesPath)) fs.renameSync(modulesPath, modulesBackup);
+      try { runAt(root, npm, ['ci', '--no-audit', '--no-fund']); }
+      catch (error) {
+        fs.rmSync(modulesPath, { recursive: true, force: true });
+        if (fs.existsSync(modulesBackup)) fs.renameSync(modulesBackup, modulesPath);
+        throw error;
+      }
+    }
+    const newStamp = path.join(root, 'data', 'build-stamp.json.new');
+    if (fs.existsSync(stampFile)) fs.renameSync(stampFile, path.join(backups, 'build-stamp.json'));
+    fs.copyFileSync(candidateBuildStamp, newStamp);
+    fs.renameSync(newStamp, stampFile);
+    fs.rmSync(backups, { recursive: true, force: true });
+    return { pulled: before !== candidateHead, before, after: candidateHead, changed };
+  } catch (error) {
+    if (committed) {
+      for (const name of ['dist', 'dist-electron']) {
+        const target = path.join(root, 'frontend', name);
+        const saved = path.join(backups, name);
+        if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
+        if (fs.existsSync(saved)) fs.renameSync(saved, target);
+      }
+      const envPath = path.join(root, 'core', '.venv');
+      const envBackup = path.join(backups, 'core-venv');
+      if (fs.existsSync(envBackup)) {
+        if (fs.existsSync(envPath)) fs.rmSync(envPath, { recursive: true, force: true });
+        fs.renameSync(envBackup, envPath);
+      }
+      const modulesPath = path.join(root, 'node_modules');
+      const modulesBackup = path.join(backups, 'node_modules');
+      if (fs.existsSync(modulesBackup)) {
+        if (fs.existsSync(modulesPath)) fs.rmSync(modulesPath, { recursive: true, force: true });
+        fs.renameSync(modulesBackup, modulesPath);
+      }
+      const oldStamp = path.join(backups, 'build-stamp.json');
+      try { fs.rmSync(path.join(root, 'data', 'build-stamp.json.new'), { force: true }); } catch { /* best effort */ }
+      if (fs.existsSync(oldStamp)) fs.renameSync(oldStamp, stampFile);
+      runAt(root, 'git', ['reset', '--hard', before]);
+    }
+    throw error;
+  } finally {
+    if (worktreeAdded) {
+      try { runAt(root, 'git', ['worktree', 'remove', '--force', candidate]); } catch { /* retain error result; stale worktree can be repaired */ }
+    }
+    try { fs.rmSync(stage, { recursive: true, force: true }); } catch { /* best-effort temporary cleanup */ }
+  }
+}
+
 // The desktop may skip rebuilding only when the stamp and every required bundle agree.
 const completeBuild = () => missingBuildFiles().length === 0;
-if (flag('--launch-only') && readStamp() === sh('git', ['rev-parse', 'HEAD']) && completeBuild()) {
+if (flag('--launch-only') && !flag('--no-launch') && readStamp() === sh('git', ['rev-parse', 'HEAD']) && completeBuild()) {
   launch();
   process.exit(0);
 }
@@ -268,10 +335,12 @@ process.on('exit', () => {
 const waitPid = Number(option('--wait-pid'));
 try {
   if (waitPid) await waitForExit(waitPid);
-  if (flag('--launch-only')) {
+  if (flag('--no-launch')) {
+    rebuild();
+  } else if (flag('--launch-only')) {
     rebuild();
   } else {
-    const result = pull();
+    const result = stagedUpdate();
     log(result.pulled ? `pulled ${result.before?.slice(0, 7)}..${result.after?.slice(0, 7)} (${result.changed.length} files)`
       : (result.reason ?? 'already up to date'));
     const steps = rebuild();
@@ -287,4 +356,4 @@ try {
 }
 // A failed update can leave source or dependencies newer than the last successful build.
 // Do not launch that mixed state; retain the exact failure in update-status.json/log.
-if (process.exitCode !== 1 && (flag('--relaunch') || flag('--launch-only'))) launch();
+if (!flag('--no-launch') && process.exitCode !== 1 && (flag('--relaunch') || flag('--launch-only'))) launch();
