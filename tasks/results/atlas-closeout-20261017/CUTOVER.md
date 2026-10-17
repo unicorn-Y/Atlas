@@ -4,7 +4,7 @@ State: `READY_FOR_CUTOVER`; `NOT_DEPLOYED`.
 
 ## Protected starting point
 
-At baseline, `D:\Atlas` was on `ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f` with 12 tracked modified paths and 41 untracked top-level paths. None were edited, reset, stashed, removed, or replaced during this task. The running Atlas desktop/backend were left running. The only request made to its API was a read-only health probe after an initial launcher inherited the default API port; no conversation, memory, configuration, or write endpoint was used.
+At baseline, `D:\Atlas` was on `ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f` with 12 tracked modified paths and 41 untracked top-level paths. None were edited, reset, stashed, removed, or replaced during this task. The running Atlas desktop/backend were left running. An initial isolated Electron launch inherited the default API port and could reach the running API. I observed this before any chat action, made a read-only health probe, and inspected the initial page; the renderer may also have performed startup reads that were not captured. No chat or write action was sent until the isolated Electron was stopped and restarted against port 18765.
 
 An isolated backup is at `D:\atlas-closeout-backup-20261017`:
 

@@ -18,7 +18,7 @@
 
 Playwright attached to the loopback CDP endpoint, observed the Atlas window, submitted `请只回复 ok`, and observed the fake model response `ok` with UI state `完成`. The screenshot is [windows-fake-chat.png](evidence/windows-fake-chat.png); its SHA-256 is `DC6223D0C1F19C91144DBB2084D354B95ACC05628A80C052739435214BA1C9EC`.
 
-The initial launch inherited no `ATLAS_PORT`, so the app probed the normal default port and observed the running user's Atlas health endpoint. This was discovered before any chat action. Only a read-only `/api/health` request reached that endpoint. The isolated Electron was stopped and relaunched with `ATLAS_PORT=18765`, after which the chat smoke used the isolated API, data root, profile, and fake provider.
+The initial launch inherited no `ATLAS_PORT`, so the app probed the normal default port and could reach the running user's Atlas API. I observed this before any chat action, made a read-only `/api/health` request, and inspected the initial page. The renderer may also have issued startup reads that were not captured. No chat or write action was sent until after I stopped that isolated Electron and relaunched with `ATLAS_PORT=18765`; the chat smoke then used the isolated API, data root, profile, and fake provider.
 
 ## Computer Use preservation and Origin test
 
