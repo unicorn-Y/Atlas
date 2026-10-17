@@ -9,7 +9,7 @@
 - 真实源码根：D:\Atlas，ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f，12个tracked dirty文件及研究untracked内容原样保留。
 - 运行归因（第二轮更正）：审查期间观测到三代：Electron55644 → Python1800/53140（早期）→ Python51284/50140（16:54:17）→ **Python33572/70348（17:36:05 收尾时，属正常使用重启）**；8765后端、9335 CDP。命令行与 cwd 始终 `D:\Atlas\core`。工作进程 `cwd` 实测 `D:\Atlas\core`，**运行内容已核定为 `0b1ba411` + 12 处未提交修改的工作区快照**（相关文件 mtime 均早于后端启动）。实时默认deepseek-v4.1-flash、记忆gemini-3.8-flash。另有一条 `D:\atlas-mem-integrate` 实例跑 9459，不在本轮范围。
 - W1代码分支：fix/atlas-model-retry-policy-20261017；最终commit：e259978420f944ef57bdb15ed22a8890486c018e。
-- 文档分支：review/atlas-luna-global-audit-20261017。首次交付commit：`f69f8b212d3c004c98bfb9c288610709ae49c18b`；文件内不自引用自身 tip SHA，分支最终 tip 由聊天交付给出。
+- 文档分支：**review/atlas-luna-global-audit-20261017**。首次交付 commit `f69f8b212d3c004c98bfb9c288610709ae49c18b`；后续追加 `87aed27c`（absorbed 口径校正）、`a2e548e2`（进程归因+W1 实测）、`07d4fbce`（分支卫生登记）、**`444a2a18`（并入两个子代理增量审计 + 更正路径注入坑根因 + 收录真 socket 复验）＝ 当前 tip**。
 - 代码分支只实施W1；文档分支只包含tasks/reviews/atlas-luna-20261017下审查产物。
 
 ## 覆盖结果
@@ -39,7 +39,7 @@
 
 1. [00-LOCAL-BASELINE.md](00-LOCAL-BASELINE.md)：真实运行与主目录保护证据。
 2. [01-ALL-BRANCHES.md](01-ALL-BRANCHES.md)：74分支、local refs与独有候选；原始索引在evidence。
-3. [02-ISSUES.md](02-ISSUES.md)：21项完整问题字段与最小建议。
+3. [02-ISSUES.md](02-ISSUES.md)：**25项**完整问题字段与最小建议（P0=0/P1=14/P2=11）。
 4. [03-FEATURE-405.md](03-FEATURE-405.md)：405项及17项ABSORB；可机读总表在modules/W7-FEATURES.json。
 5. [04-LOCAL-VERIFY.md](04-LOCAL-VERIFY.md)：实测结果、已有失败与未测边界。
 6. [05-INTEGRATION-PLAN.md](05-INTEGRATION-PLAN.md)：14代码候选组按能力吸收方案，未授权施工。
@@ -64,7 +64,7 @@ W1最终后端定向整文件 38 passed、5 warnings；timeline17 passed；失�
 
 1. 用户当前运行的**不是**干净的 `0b1ba411`，而是该 commit 加 12 处未提交修改的工作区快照；其中 `expert_harness.py` 会改变 `content_filter` 的处理语义（改写措辞重发而非报错）。
 2. W1 七条策略：W1 分支 **9/9 通过**；用户运行版 **6/9**。运行版最刺眼的是「流式已输出部分文本后重发导致文本重复」（实测 `'half answerduplicate'`），以及默认配置下 503 会打 **11 次**请求（任务书允许 3 次）。
-3. W1 可以落到运行态，但需要一次语义裁量：`model_call.py` 的 content_filter 块冲突。按任务书取 W1 一侧后，`ast.parse` 通过、定向测试 38 passed。补丁：`D:/Temp/luna-audit-20261017/w1-runtime-integration.patch`。
+3. W1 可以落到运行态，但需要一次语义裁量：`model_call.py` 的 content_filter 块冲突。按任务书取 W1 一侧后，`ast.parse` 通过、定向测试 38 passed。补丁：**`evidence/harness/w1-runtime-integration.patch`**（已入库，仓库内可直接取）。
 4. `models/router.py::complete_for` 的硬编码 DeepSeek 追加确认**运行期可达**，覆盖规划/反思/MoA/压缩/摘要，失败时用户完全无感。
 5. 分支数 74 → 77；`task/hermes-atlas-implementation-20261017` 已补审：3 个 commit 全为文档，**Atlas 源码改动 0 行**，其任务书承诺的代码施工与 `tasks/results/` 全部缺失。
 
