@@ -486,18 +486,26 @@ class ModelManager:
         return dict(target)
 
     def delete_model(self, model_id: str) -> None:
-        """删除自定义模型；若删除的是当前选中模型则自动切到列表第一个。"""
+        """删除模型。自定义模型直接移除；内置模型（DEFAULT_MODELS 硬编码、无法真正删除）
+        改为写入 settings["hidden_models"] 永久隐藏，下次启动初始化时过滤掉。"""
         target = self._find_model(model_id)
         if target is None:
             raise ValueError(f"未知模型: {model_id}")
-        if not target.get("custom"):
-            raise ValueError("仅支持删除自定义模型")
+        builtin = not target.get("custom")
         self._models.remove(target)
+        if builtin:
+            settings = load_user_settings()
+            raw = settings.get("hidden_models")
+            hidden = [str(x).strip() for x in raw if str(x).strip()] if isinstance(raw, list) else []
+            if model_id not in hidden:
+                hidden.append(model_id)
+            settings["hidden_models"] = hidden
+            save_user_settings(settings)
         if self._current == model_id and self._models:
             self._current = self._models[0]["id"]
             log.info("model_manager.selection_reset", model=self._current)
         self._persist_settings()
-        log.info("model_manager.delete_model", model_id=model_id)
+        log.info("model_manager.delete_model", model_id=model_id, builtin=builtin)
 
     # ------------------------------------------------------------------
     # list_models 附加元数据（capabilities / reasoning_efforts）

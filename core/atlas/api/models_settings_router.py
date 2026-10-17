@@ -291,6 +291,32 @@ async def add_custom_model(
     return _configuration_payload(_resolved_model_mgr(services))
 
 
+@router.put("/api/models/custom/{model_id}")
+async def update_custom_model(
+    model_id: str,
+    patch: dict[str, Any],
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    model_mgr = _resolved_model_mgr(services)
+    try:
+        return model_mgr.update_model(model_id, patch)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.delete("/api/models/custom/{model_id}")
+async def delete_custom_model(
+    model_id: str,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    model_mgr = _resolved_model_mgr(services)
+    try:
+        model_mgr.delete_model(model_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _configuration_payload(model_mgr)
+
+
 @router.post("/api/settings/test-connection")
 async def test_connection(
     services: Annotated[AppServices, Depends(get_app_services)],
