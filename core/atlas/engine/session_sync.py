@@ -258,10 +258,10 @@ def list_session_previews(home: str | Path, *, limit: int = 1000) -> dict[str, s
 
 
 def search_session_messages(
-    home: str | Path, query: str, *, limit: int = 20,
+    home: str | Path, query: str, *, limit: int = 20, offset: int = 0,
 ) -> list[dict[str, Any]]:
     with _open_db(home) as db:
-        matches = db.search_messages(query, limit=limit)
+        matches = db.search_messages(query, limit=limit, offset=offset)
         output = []
         for item in matches:
             row = db._read_one(

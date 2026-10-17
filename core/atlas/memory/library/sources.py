@@ -180,10 +180,19 @@ def search_raw(query: str, limit: int = 10) -> list[dict[str, Any]]:
     from atlas.config import DATA_ROOT
     from atlas.engine.session_sync import search_session_messages
 
-    try:
-        found = search_session_messages(DATA_ROOT / "engine", query, limit=max(1, min(50, limit)))
-    except (OSError, RuntimeError, ValueError):
-        return []
+    found = []
+    page_size = 50
+    requested = max(1, min(100, limit))
+    for offset in range(0, requested, page_size):
+        try:
+            batch = search_session_messages(
+                DATA_ROOT / "engine", query, limit=min(page_size, requested - offset), offset=offset,
+            )
+        except (OSError, RuntimeError, ValueError):
+            break
+        found.extend(batch)
+        if len(batch) < min(page_size, requested - offset):
+            break
     from .source_ref import SourceRef
 
     results = []

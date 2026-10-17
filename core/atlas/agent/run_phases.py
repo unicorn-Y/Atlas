@@ -138,6 +138,7 @@ class RunRequest:
 
     message: str
     conversation_id: str
+    message_uid: str = ""
     model: str | None = None
     plan_state: dict[str, Any] | None = None
     force_plan: bool = False
@@ -489,6 +490,7 @@ def _schedule_library_write(agent: Any, state: _RunState, full_response: Any) ->
             workspace=str(state.request.workspace or ""),
             steps=state.tool_steps,
             verified=bool(getattr(state.runtime, "verification_passed", False)),
+            message_uid=state.request.message_uid,
             turn_started=(getattr(state.runtime, "started_at", None).isoformat()
                           if hasattr(getattr(state.runtime, "started_at", None), "isoformat")
                           else str(getattr(state.runtime, "started_at", "") or "")),

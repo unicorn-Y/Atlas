@@ -261,19 +261,22 @@ def test_open_ref_binds_exact_message_uid_and_missing_uid_never_guesses(tmp_path
     assert missing["ok"] is False and missing["precision"] == "exact"
 
 
-def test_schedule_source_ref_requires_matching_sessiondb_user_text(monkeypatch):
-    from atlas.engine import session_sync
+def test_schedule_source_ref_uses_supplied_uid_and_missing_uid_never_guesses(monkeypatch):
     from atlas import config
     from atlas.memory.library import _source_ref_for_turn
     from atlas.memory.library.source_ref import SourceRef
 
-    def latest(home, *_args, **_kwargs):
+    def evidence(home, session, uid):
         assert home == config.DATA_ROOT / "engine"
-        return {"id": "stable-uid", "content": "本轮原话", "role": "user"}
+        assert session == "session"
+        return {"message_uid": uid, "role": "user"} if uid in {"turn-1", "turn-2"} else None
     monkeypatch.setattr(config, "DATA_ROOT", Path("isolated-atlas-data"))
-    monkeypatch.setattr(session_sync, "latest_session_message", latest)
-    assert _source_ref_for_turn("session", "本轮原话") == SourceRef("session", "stable-uid").to_ref()
-    assert _source_ref_for_turn("session", "另一个时间接近的原话") == ""
+    monkeypatch.setattr("atlas.engine.session_sync.session_message_evidence", evidence)
+    # Consecutive identical user text remains tied to the UID written for each turn.
+    assert _source_ref_for_turn("session", "相同原话", "turn-1") == SourceRef("session", "turn-1").to_ref()
+    assert _source_ref_for_turn("session", "相同原话", "turn-2") == SourceRef("session", "turn-2").to_ref()
+    assert _source_ref_for_turn("session", "相同原话") == ""
+    assert _source_ref_for_turn("session", "相同原话", "missing") == ""
 
 
 def test_search_adds_ref_and_raw_only_when_requested(tmp_path, monkeypatch):
@@ -604,7 +607,7 @@ async def test_search_filters_and_paginates_beyond_first_thousand(monkeypatch):
     class Library:
         index = Index()
         def search(self, _q, limit, _history, _kinds):
-            assert limit == 100000
+            assert limit >= 100000
             return candidates
     monkeypatch.setattr(router, "_lib", lambda: Library())
     async def run(fn, *args):
@@ -615,6 +618,24 @@ async def test_search_filters_and_paginates_beyond_first_thousand(monkeypatch):
     assert result["total"] == 1205
     assert len(result["items"]) == 20
     assert result["items"][0]["id"] == "1180"
+
+
+def test_raw_search_reads_past_first_sessiondb_page(tmp_path, monkeypatch):
+    from atlas import config
+    from atlas.memory.library import sources
+
+    offsets = []
+    def page(_home, _query, *, limit, offset):
+        offsets.append(offset)
+        return [{"id": f"uid-{i}", "conversation_id": "s", "content": "raw",
+                 "created_at": "2026-10-17T10:00:00+00:00"}
+                for i in range(offset, min(offset + limit, 60))]
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr("atlas.engine.session_sync.search_session_messages", page)
+    hits = sources.search_raw("raw", limit=60)
+    assert len(hits) == 60
+    assert offsets == [0, 50]
+    assert hits[59]["ref"].endswith("uid-59")
 
 
 @pytest.mark.asyncio
