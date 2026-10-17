@@ -345,3 +345,52 @@ async def test_dream_writes_project_sections_and_advances_checkpoint_after_succe
     assert '"src":"整理"' in project
     assert json.loads(state.read_text(encoding="utf-8"))["checkpoint"] > "2000"
     assert any(e.until == "2026-10-20" for e in library.store.read("现状.md").current)
+
+
+@pytest.mark.asyncio
+async def test_dream_does_not_checkpoint_unqualified_episode_and_rechecks_late_ids(tmp_path, monkeypatch):
+    from atlas.memory.library import dream
+
+    library = MemoryLibrary(tmp_path)
+    library.ready()
+    stamp = "2026-10-15T10:00:00+08:00"
+    episode = Entry(id="late", text="活动摘要", src="经历", at=stamp, trigger=["Project"])
+    library.store.write(Page(path="经历/2026-10-15.md", title="episodes", current=[episode]))
+    state = tmp_path / ".dream-state.json"
+    state.write_text(json.dumps({"checkpoint": "2000-01-01T00:00:00+00:00"}), encoding="utf-8")
+    report = await dream.run_dream(library, model_mgr=object())
+    assert report["ok"] is True
+    saved = json.loads(state.read_text(encoding="utf-8"))
+    assert saved["checkpoint"] == "2000-01-01T00:00:00+00:00"
+    assert "late" not in saved.get("processed_ids", [])
+
+    episode.text = "Project 项目明确提及，补充为可归类经历"
+    library.store.write(Page(path="经历/2026-10-15.md", title="episodes", current=[episode]))
+    async def write(*_args, **_kwargs):
+        return ({"现在状态": ["已识别"], "定下的决定": [], "没做完": [], "来龙去脉": []}, "")
+    monkeypatch.setattr(dream, "_write_project", write)
+    report = await dream.run_dream(library, model_mgr=object())
+    assert report["ok"] is True
+    assert "Project" in report["projects"]
+
+
+@pytest.mark.asyncio
+async def test_dream_preserves_owner_edit_made_during_model_call(tmp_path, monkeypatch):
+    from atlas.memory.library import dream
+
+    library = MemoryLibrary(tmp_path)
+    library.ready()
+    now = datetime.now().astimezone()
+    episode = Entry(id="e", text="Atlas 项目明确提及", src="经历", at=now.isoformat(), trigger=["Atlas"])
+    library.store.write(Page(path=f"经历/{now.date().isoformat()}.md", title="episodes", current=[episode]))
+    project_path = tmp_path / "事" / "Atlas.md"
+    async def write(*_args, **_kwargs):
+        project_path.write_text(
+            "# Atlas\n\n## 现在状态\n" + Entry(text="人工刚添加的决定", src="你改的").line() + "\n",
+            encoding="utf-8",
+        )
+        return ({"现在状态": ["模型摘要"], "定下的决定": [], "没做完": [], "来龙去脉": []}, "")
+    monkeypatch.setattr(dream, "_write_project", write)
+    report = await dream.run_dream(library, model_mgr=object())
+    assert report["ok"] is True
+    assert "人工刚添加的决定" in project_path.read_text(encoding="utf-8")
