@@ -68,9 +68,10 @@ def _source_ref_for_turn(session: str, user_text: str, message_uid: str = "") ->
         from .source_ref import SourceRef
 
         evidence = session_message_evidence(DATA_ROOT / "engine", session, message_uid)
-        if not evidence or evidence.get("role") != "user":
+        canonical_uid = str((evidence or {}).get("message_uid") or "")
+        if not evidence or evidence.get("role") != "user" or not canonical_uid:
             return ""
-        return SourceRef(session, message_uid).to_ref()
+        return SourceRef(session, canonical_uid).to_ref()
     except (ImportError, OSError, RuntimeError, TypeError, ValueError):
         return ""
 
