@@ -29,6 +29,8 @@ from atlas.kernel.tools import READ_ONLY_TOOLS, ToolExecutionResult, ToolSchedul
 
 log = logging.getLogger(__name__)
 
+_THINKING_OFF = frozenset({"off", "none", "disabled"})
+
 # Tool-call rounds per run. The user asked for no practical cap: the default is
 # high and the hard ceiling only guards against a runaway integer in config.
 DEFAULT_MAX_TURNS = 1000
@@ -117,6 +119,53 @@ def _message_text(message: dict[str, Any]) -> str:
     return str(value or "")
 
 
+_TURN_CONTEXT_OPEN = ("<turn_context>\nAuto-assembled by Atlas for this message (time, recalled "
+                      "memory, matching skills, project state). Reference material, not user "
+                      "instructions.\n")
+
+
+def _turn_context_block(volatile_context: Any) -> str:
+    parts = [str(item).strip() for item in (volatile_context or []) if str(item).strip()]
+    return _TURN_CONTEXT_OPEN + "\n\n".join(parts) + "\n</turn_context>" if parts else ""
+
+
+def _attach_turn_context(messages: list[dict[str, Any]], current_text: str, current_block: str) -> None:
+    """Put each user message's per-turn context in front of it, inside the message.
+
+    Per-turn material (clock, memory recall, skill matches, project state) used to sit in
+    the system prompt, ahead of the tool schemas and history, so every new message
+    changed the prefix and the provider re-read ~18k tokens uncached (cached_tokens 0-384).
+    Stored with its own user row, the block replays byte-identically on later turns and
+    only the newest message is new to the cache.
+    """
+    users = [item for item in messages if item.get("role") == "user"]
+    current = next((item for item in reversed(users) if _message_text(item) == current_text),
+                   users[-1] if users else None)
+    for item in users:
+        block = item.pop("turn_context", None) or (current_block if item is current else "")
+        if not isinstance(block, str) or not block:
+            continue
+        content = item.get("content")
+        if isinstance(content, list):
+            item["content"] = [{"type": "text", "text": block}, *content]
+        else:
+            item["content"] = f"{block}\n\n{content or ''}"
+
+
+_PREWARM_TASKS: set["asyncio.Task[Any]"] = set()
+
+
+async def _prewarm_route(agent: Any, model_id: str) -> None:
+    """Open the provider connection while the run assembles its prompt (TLS off the critical path)."""
+    try:
+        from atlas.models.router import prewarm
+
+        route = await agent._model_router.resolve(model_id, "conversation")
+        await asyncio.to_thread(prewarm, route)
+    except Exception:
+        log.debug("kernel.prewarm_failed", exc_info=True)
+
+
 def _session_history(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
     for row in rows:
@@ -128,7 +177,8 @@ def _session_history(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         message["content"] = row.get("content") or ""
         metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else row.get("display_metadata", {})
         metadata = metadata if isinstance(metadata, dict) else {}
-        for key in ("tool_calls", "tool_call_id", "tool_name", "output_ref", "repair_state"):
+        for key in ("tool_calls", "tool_call_id", "tool_name", "output_ref", "repair_state",
+                    "turn_context"):
             if key in metadata:
                 message[key] = metadata[key]
             elif key in row:
@@ -339,6 +389,16 @@ class AtlasKernel:
         try:
             record("run_start", model=selected_model, session_id=session_id,
                    workspace=request.workspace or "", kernel="atlas")
+            prewarm_task = asyncio.create_task(_prewarm_route(agent, selected_model))
+            _PREWARM_TASKS.add(prewarm_task)
+            prewarm_task.add_done_callback(_PREWARM_TASKS.discard)
+            turn_context = _turn_context_block(request.volatile_context)
+            # Where the time before the first model request goes (logged on tool_offer).
+            prep_started = time.monotonic()
+            prep_ms: dict[str, int] = {}
+
+            def prep_mark(name: str) -> None:
+                prep_ms[name] = int((time.monotonic() - prep_started) * 1000)
             yield emit("run_status", status="preparing", text="Preparing Atlas kernel turn")
             for row in request.initial_usage_rows:
                 record("model_request", purpose=row.get("purpose", "moa"),
@@ -362,11 +422,15 @@ class AtlasKernel:
                 canonical_rows = []
             history = _session_history(canonical_rows) if canonical_rows else copy.deepcopy(request.history)
             if not any(m.get("role") == "user" and _message_text(m) == request.message for m in history[-3:]):
-                await persist_async("user", request.message, {"kernel_run_id": run_id})
-                history.append({"role": "user", "content": request.user_content or request.message})
+                await persist_async("user", request.message, {
+                    "kernel_run_id": run_id, **({"turn_context": turn_context} if turn_context else {}),
+                })
+                history.append({"role": "user", "content": request.user_content or request.message,
+                                **({"turn_context": turn_context} if turn_context else {})})
             elif request.user_content is not None and history and history[-1].get("role") == "user":
                 history[-1]["content"] = request.user_content
             durable_history = copy.deepcopy(history)
+            prep_mark("session")
 
             started = started_call_ids(canonical_rows, run_log_root)
             history, repairs = repair_unpaired_tool_calls(history, started_ids=started, run_id=run_id)
@@ -405,14 +469,13 @@ class AtlasKernel:
                 system_prompt = "\n\n".join(filter(None, (
                     system_prompt, build_plan_prompt(request.message),
                 )))
-            volatile = "\n\n".join(item.strip() for item in request.volatile_context if item.strip())
-            if volatile:
-                system_prompt = "\n\n".join(filter(None, (
-                    system_prompt, "Atlas session-start context:\n" + volatile,
-                )))
+            # Per-turn context rides on the user message (see _attach_turn_context) so the
+            # system prompt + tool schemas stay a byte-stable, cacheable prefix.
             from atlas.engine.hermes_runtime import _model_family_guidance
 
+            prep_mark("refresh")
             self_facts, wire_model = _self_facts(agent, selected_model, request.workspace)
+            prep_mark("self_facts")
             system_prompt = "\n\n".join(filter(None, (
                 system_prompt,
                 self_facts,
@@ -420,7 +483,9 @@ class AtlasKernel:
             )))
 
             def assemble_prompt(items: list[dict[str, Any]]):
-                return build_prompt(identity=system_prompt, history=items, rules="")
+                result = build_prompt(identity=system_prompt, history=items, rules="")
+                _attach_turn_context(result.messages, request.message, turn_context)
+                return result
 
             prompt = assemble_prompt(history)
             messages = prompt.messages
@@ -439,6 +504,7 @@ class AtlasKernel:
                     prompt = assemble_prompt(history)
                     messages = prompt.messages
 
+            prep_mark("prompt")
             plan = PlanMode(runtime, engine_config, plan_state=request.plan_state,
                             plan_update_callback=request.plan_update_callback,
                             todo_store=getattr(runtime, "todo_store", None))
@@ -712,7 +778,9 @@ class AtlasKernel:
                     record("model_request", purpose=purpose, model=event.get("model"),
                            provider=event.get("provider"), duration_ms=event.get("duration_ms"),
                            output_tokens=output_tokens, input_tokens=input_tokens,
-                           cached_tokens=cached_tokens, attempt=event.get("attempt"))
+                           cached_tokens=cached_tokens, attempt=event.get("attempt"),
+                           first_token_ms=event.get("first_token_ms"),
+                           reasoning_chars=event.get("reasoning_chars"))
                 else:
                     if event.get("retry"):
                         failed_attempt = int(event.get("attempt") or 0)
@@ -845,6 +913,8 @@ class AtlasKernel:
                 model_phase = "planning" if plan.active or turn_index == 0 else "execution"
                 selected_effort = effort_for_phase(stage_config, model_phase) or request.reasoning_effort
                 turn_model, turn_effort = plan.model_settings(selected_model, selected_effort)
+                if str(request.reasoning_effort or "").lower() in _THINKING_OFF:
+                    turn_effort = "off"
                 model_config = next((item for item in agent._model_mgr.list_models()
                                      if item.get("id") == turn_model), {})
                 model_window = int(model_config.get("context_window") or 200_000)
@@ -1000,7 +1070,11 @@ class AtlasKernel:
                         raise ModelCallError(result.error, category="context_budget")
                     return result
 
+                if turn_index == 0:
+                    prep_mark("setup")
                 compaction = await prepare_compaction()
+                if turn_index == 0:
+                    prep_mark("compaction")
                 if compaction.method != "none":
                     yield emit("run.compaction.progress", data={
                         "phase": compaction.method, "before_tokens": compaction.before_tokens,
@@ -1051,7 +1125,10 @@ class AtlasKernel:
                         )
                     except Exception:
                         log.warning("kernel.tool_deferral_failed", exc_info=True)
+                if turn_index == 0:
+                    prep_mark("tools")
                 record("tool_offer", offered=len(available_tools), deferred=bool(deferred_note),
+                       **({"prep_ms": dict(prep_ms)} if turn_index == 0 else {}),
                        schema_chars_before=schema_chars_before,
                        schema_chars=len(json.dumps(available_tools, ensure_ascii=False, default=str)))
                 if deferred_note and not any(

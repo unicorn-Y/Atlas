@@ -154,9 +154,10 @@ LOCAL_TOOLS = [
             "Run a shell command on this machine and return its output.\n"
             "- shell: on Windows prefer \"bash\" (Git Bash, POSIX syntax: forward slashes, $VAR, &&). "
             "Use \"powershell\" only for PowerShell cmdlets, and then write PowerShell syntax only.\n"
-            "- Never pass multi-line code inline (python -c, node -e, heredocs inside quotes). Write the "
-            "script to a file with write, then run the file. Inline code with nested quotes is the most "
-            "common cause of failures here.\n"
+            "- Never pass multi-line code inline (python -c, node -e, heredocs inside quotes): nested "
+            "quotes are the most common cause of failures here. Run it in one call instead: local_exec "
+            "with executable=\"python\", args=[\"-\"], stdin=<the code> (node: args=[\"-\"]). Write a "
+            "script file only when you will run it again.\n"
             "- Quote paths that contain spaces. Don't nest one shell's quoting inside another's.\n"
             "- For a program with many or complex arguments use local_exec (argv array, no quoting).\n"
             "- Set cwd instead of chaining cd. Use detached or local_process for servers and anything "
@@ -185,7 +186,9 @@ LOCAL_TOOLS = [
             "argument is passed as-is, so there is no quoting or escaping to get wrong. Prefer this "
             "over local_shell when arguments contain spaces, quotes or JSON (e.g. executable=\"python\", "
             "args=[\"script.py\", \"--name\", \"a b\"]). Works for python, node, npm, npx, git and any "
-            "other executable on PATH. Shell features (pipes, redirects, globs, &&) are not available."
+            "other executable on PATH. Shell features (pipes, redirects, globs, &&) are not available.\n"
+            "- One-off multi-line code: executable=\"python\" (or \"node\"), args=[\"-\"], stdin=<the "
+            "code>. It runs in this single call with no quoting and no file to write first."
         ),
         {
             "executable": {"type": "string"},
@@ -552,9 +555,9 @@ class LocalExecutionRuntime:
             # shell syntax and quoting failures. Refuse it with the fix instead of running it.
             raise ValueError(
                 "Inline multi-line code is refused (python -c / node -e with several lines breaks "
-                "on shell quoting). Write the code to a file with the write tool, e.g. "
-                f"{Path(tempfile.gettempdir()) / 'atlas-scripts' / 'task.py'}, then run that file "
-                "(or use local_exec with the file path)."
+                "on shell quoting). Run it in one call with local_exec: executable=\"python\" (or "
+                "\"node\"), args=[\"-\"], stdin=<the code>. To keep it for reuse, write it to a "
+                f"file such as {Path(tempfile.gettempdir()) / 'atlas-scripts' / 'task.py'} and run that."
             )
         patterns = args.get("watch_patterns", [])
         if patterns is not None and (

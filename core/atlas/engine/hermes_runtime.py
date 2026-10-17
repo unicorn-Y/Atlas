@@ -980,6 +980,68 @@ class HermesRuntime:
                 initial_usage_rows=moa_usage_rows, usage_budget=usage_budget,
                 runtime_config=atlas_config.raw,
             )
+            # The title depends only on the user's message: generate it alongside the model
+            # call instead of after the reply (it used to hold run.completed for up to 5s).
+            title_task: asyncio.Task[Any] | None = None
+            user_turn_count = sum(1 for item in history if item.get("role") == "user")
+            if user_turn_count <= 3:
+                title_callbacks: list[Any] = []
+                title_events: list[dict[str, str]] = []
+                title_loop = asyncio.get_running_loop()
+
+                def publish_title(title: str, source: str) -> None:
+                    if title_callback is None:
+                        title_events.append({"title": title, "title_source": source})
+                        return
+                    try:
+                        result = title_callback(str(title), str(source))
+                        if asyncio.iscoroutine(result):
+                            future = asyncio.run_coroutine_threadsafe(result, title_loop)
+                            title_callbacks.append(future)
+                    except Exception:
+                        logger.warning("Atlas kernel title callback failed", exc_info=True)
+
+                def generate_title() -> None:
+                    from atlas.engine_core.agent.title_generator import (
+                        _auto_title_enabled, _model_title_upgrade_enabled,
+                        apply_instant_title, auto_title_session, is_titleable_user_message,
+                    )
+                    from atlas.engine_core.state.hermes_state import SessionDB
+
+                    if not _auto_title_enabled() or not is_titleable_user_message(message):
+                        return
+                    with SessionDB(db_path=self.home / "state.db") as db:
+                        apply_instant_title(db, conversation_id, message, publish_title)
+                        if _model_title_upgrade_enabled():
+                            async def model_call(prompt: str) -> str:
+                                result = await self.model_manager.model_router.complete_for(
+                                    self.model_manager.current_model, "title",
+                                    [{"role": "user", "content": prompt}], max_tokens=128,
+                                    # A title never needs thinking; DeepSeek-family models
+                                    # think by default unless told otherwise.
+                                    reasoning_config={"effort": "off"},
+                                )
+                                return result.text
+
+                            auto_title_session(db, conversation_id, message,
+                                               title_callback=publish_title,
+                                               model_call=model_call)
+
+                title_task = asyncio.create_task(asyncio.to_thread(generate_title))
+                _ATLAS_TITLE_TASKS.add(title_task)
+
+                def title_task_done(done: asyncio.Task[Any]) -> None:
+                    _ATLAS_TITLE_TASKS.discard(done)
+                    if done.cancelled():
+                        return
+                    try:
+                        error = done.exception()
+                    except Exception:
+                        return
+                    if error is not None:
+                        logger.warning("Atlas kernel automatic title failed: %s", error)
+
+                title_task.add_done_callback(title_task_done)
             try:
                 with use_run_usage_budget(usage_budget):
                     async for event in kernel.run(request):
@@ -994,64 +1056,13 @@ class HermesRuntime:
                         "used": str(usage_budget.used_cost_usd) if usage_budget.cost_limit_usd is not None else usage_budget.used,
                     }}
 
-                user_turn_count = sum(1 for item in history if item.get("role") == "user")
-                if user_turn_count <= 3:
-                    title_callbacks: list[Any] = []
-                    title_events: list[dict[str, str]] = []
-                    title_loop = asyncio.get_running_loop()
-
-                    def publish_title(title: str, source: str) -> None:
-                        if title_callback is None:
-                            title_events.append({"title": title, "title_source": source})
-                            return
-                        try:
-                            result = title_callback(str(title), str(source))
-                            if asyncio.iscoroutine(result):
-                                future = asyncio.run_coroutine_threadsafe(result, title_loop)
-                                title_callbacks.append(future)
-                        except Exception:
-                            logger.warning("Atlas kernel title callback failed", exc_info=True)
-
-                    def generate_title() -> None:
-                        from atlas.engine_core.agent.title_generator import (
-                            _auto_title_enabled, _model_title_upgrade_enabled,
-                            apply_instant_title, auto_title_session, is_titleable_user_message,
-                        )
-                        from atlas.engine_core.state.hermes_state import SessionDB
-
-                        if not _auto_title_enabled() or not is_titleable_user_message(message):
-                            return
-                        with SessionDB(db_path=self.home / "state.db") as db:
-                            apply_instant_title(db, conversation_id, message, publish_title)
-                            if _model_title_upgrade_enabled():
-                                async def model_call(prompt: str) -> str:
-                                    result = await self.model_manager.model_router.complete_for(
-                                        self.model_manager.current_model, "title",
-                                        [{"role": "user", "content": prompt}], max_tokens=128,
-                                    )
-                                    return result.text
-
-                                auto_title_session(db, conversation_id, message,
-                                                   title_callback=publish_title,
-                                                   model_call=model_call)
-
-                    title_task = asyncio.create_task(asyncio.to_thread(generate_title))
-                    _ATLAS_TITLE_TASKS.add(title_task)
-
-                    def title_task_done(done: asyncio.Task[Any]) -> None:
-                        _ATLAS_TITLE_TASKS.discard(done)
-                        if done.cancelled():
-                            return
-                        try:
-                            error = done.exception()
-                        except Exception:
-                            return
-                        if error is not None:
-                            logger.warning("Atlas kernel automatic title failed: %s", error)
-
-                    title_task.add_done_callback(title_task_done)
+                if title_task is not None:
                     try:
-                        await asyncio.wait_for(asyncio.shield(title_task), timeout=5.0)
+                        # The instant title went out when the run started; a model title
+                        # still pending finishes in the background (it updates the
+                        # conversation through the title callback), so never hold
+                        # run.completed for it.
+                        await asyncio.wait_for(asyncio.shield(title_task), timeout=0.1)
                     except asyncio.TimeoutError:
                         pass
                     except Exception:

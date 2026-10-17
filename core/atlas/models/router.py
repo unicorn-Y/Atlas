@@ -12,6 +12,7 @@ import asyncio
 import hashlib
 import inspect
 import json
+import threading
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -507,6 +508,37 @@ def _anthropic_payload(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
     return payload
 
 
+THINKING_OFF = frozenset({"off", "none", "disabled", "false", "0"})
+
+
+def _reasoning_wire(route: RouteSpec, reasoning: Any) -> dict[str, Any]:
+    """Map Atlas' effort onto the switch an OpenAI-compatible endpoint actually honours.
+
+    "off" is not an OpenAI effort value: relays drop or 400 it, and DeepSeek-family
+    models then think by default (measured on a relay: reasoning_effort="off" still
+    produced reasoning on about half the requests). Each family has its own off switch.
+    """
+    if not isinstance(reasoning, dict):
+        return {}
+    effort = str(reasoning.get("effort") or "").strip().lower()
+    if reasoning.get("enabled") is False:
+        effort = "off"
+    if not effort:
+        return {}
+    if effort not in THINKING_OFF:
+        return {"reasoning_effort": effort}
+    model = str(route.wire_model or route.model or "").lower()
+    if any(tag in model for tag in ("deepseek", "kimi", "moonshot", "glm", "zhipu")):
+        return {"thinking": {"type": "disabled"}}
+    if "qwen" in model or "qwq" in model:
+        return {"enable_thinking": False}
+    if model.rsplit("/", 1)[-1].startswith(("gpt-5", "o1", "o3", "o4")):
+        return {"reasoning_effort": "minimal"}
+    if "gemini" in model:
+        return {"reasoning_effort": "none"}
+    return {}
+
+
 def _openai_payload(route: RouteSpec, messages: list[dict[str, Any]], kwargs: dict[str, Any]) -> dict[str, Any]:
     if route.api_mode not in {"openai", "chat_completions"}:
         raise NotImplementedError(f"Atlas direct transport does not support API mode {route.api_mode!r}")
@@ -523,9 +555,7 @@ def _openai_payload(route: RouteSpec, messages: list[dict[str, Any]], kwargs: di
     for key in ("max_tokens", "max_completion_tokens", "temperature", "top_p", "stop", "stream_options", "tools", "tool_choice", "parallel_tool_calls"):
         if kwargs.get(key) is not None:
             payload[key] = kwargs[key]
-    reasoning = kwargs.get("reasoning_config")
-    if isinstance(reasoning, dict) and reasoning.get("effort"):
-        payload["reasoning_effort"] = reasoning["effort"]
+    payload.update(_reasoning_wire(route, kwargs.get("reasoning_config")))
     extra = kwargs.get("extra_body")
     if isinstance(extra, dict):
         payload.update(extra)
@@ -554,12 +584,103 @@ def _request_details(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
     return url, headers, payload
 
 
-def _client(route: RouteSpec, network: ModelNetworkSettings, timeout: Any) -> httpx.Client:
-    if network.enabled:
-        return build_model_httpx_client(network, base_url=str(route.base_url or ""), async_mode=False, timeout=timeout)
+# One keep-alive pool per transport configuration. A fresh client per request paid a
+# TCP + TLS handshake to the relay on every model step (hundreds of ms each).
+_POOLS: dict[tuple[Any, ...], httpx.Client] = {}
+_POOL_LAST_USE: dict[tuple[Any, ...], float] = {}
+_POOLS_LOCK = threading.Lock()
+# Below common server idle limits (nginx 60-75s), so a pooled socket is rarely stale.
+_POOL_KEEPALIVE_S = 50.0
+# Pooled sockets the server already closed fail on send; one immediate resend covers that.
+_STALE_SOCKET_ERRORS = (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)
+
+
+def _pool_key(route: RouteSpec, network: ModelNetworkSettings) -> tuple[Any, ...]:
     from atlas.engine_core.agent.proxy_bypass import loopback_request_kwargs
 
-    return httpx.Client(timeout=timeout, **loopback_request_kwargs(str(route.base_url or "")))
+    base = str(route.base_url or "")
+    return (network.enabled, network.proxy_url, network.ca_bundle_path,
+            bool(loopback_request_kwargs(base)))
+
+
+def _shared_client(route: RouteSpec, network: ModelNetworkSettings) -> tuple[httpx.Client, tuple[Any, ...]]:
+    key = _pool_key(route, network)
+    with _POOLS_LOCK:
+        client = _POOLS.get(key)
+        if client is None or client.is_closed:
+            limits = httpx.Limits(max_keepalive_connections=20, max_connections=100,
+                                  keepalive_expiry=_POOL_KEEPALIVE_S)
+            if network.enabled:
+                client = build_model_httpx_client(network, base_url=str(route.base_url or ""),
+                                                  async_mode=False)
+            else:
+                from atlas.engine_core.agent.proxy_bypass import loopback_request_kwargs
+
+                client = httpx.Client(limits=limits, **loopback_request_kwargs(str(route.base_url or "")))
+            _POOLS[key] = client
+    return client, key
+
+
+class _PooledClient:
+    """Per-request view of a shared pool: carries the timeout, never closes the pool."""
+
+    def __init__(self, route: RouteSpec, network: ModelNetworkSettings, timeout: Any) -> None:
+        self._client, self._key = _shared_client(route, network)
+        self._timeout = timeout
+
+    def __enter__(self) -> "_PooledClient":
+        return self
+
+    def __exit__(self, *exc: Any) -> bool:
+        _POOL_LAST_USE[self._key] = time.monotonic()
+        return False
+
+    def post(self, url: str, **kwargs: Any) -> httpx.Response:
+        kwargs.setdefault("timeout", self._timeout)
+        try:
+            return self._client.post(url, **kwargs)
+        except _STALE_SOCKET_ERRORS:
+            return self._client.post(url, **kwargs)
+
+    def open_stream(self, url: str, **kwargs: Any) -> httpx.Response:
+        request = self._client.build_request("POST", url, timeout=self._timeout, **kwargs)
+        try:
+            response = self._client.send(request, stream=True)
+        except _STALE_SOCKET_ERRORS:
+            response = self._client.send(request, stream=True)
+        if response.is_error:
+            # Read the body so error classification (context length, quota...) sees it.
+            try:
+                response.read()
+            finally:
+                response.close()
+            response.raise_for_status()
+        return response
+
+
+def _client(route: RouteSpec, network: ModelNetworkSettings, timeout: Any) -> _PooledClient:
+    return _PooledClient(route, network, timeout)
+
+
+def prewarm(route: RouteSpec) -> None:
+    """Open the pooled TLS connection ahead of the first model request of a run.
+
+    Skipped when the pool was used within its keep-alive window (a live socket is
+    already there). Errors are ignored: the real request reports them.
+    """
+    if route.api_mode not in {"openai", "chat_completions", "anthropic_messages"} or not route.base_url:
+        return
+    network = ModelNetworkSettings(proxy_url=route.network_proxy_url,
+                                   ca_bundle_path=route.network_ca_bundle_path)
+    key = _pool_key(route, network)
+    if time.monotonic() - _POOL_LAST_USE.get(key, -1e9) < _POOL_KEEPALIVE_S - 5:
+        return
+    try:
+        client, key = _shared_client(route, network)
+        client.head(str(route.base_url), timeout=httpx.Timeout(10.0))
+        _POOL_LAST_USE[key] = time.monotonic()
+    except Exception:
+        pass
 
 
 def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: dict[str, Any], network: ModelNetworkSettings) -> dict[str, Any]:
@@ -649,14 +770,37 @@ def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
     return data
 
 
+def _dump_payload(payload: dict[str, Any]) -> None:
+    """ATLAS_DUMP_MODEL_PAYLOAD=<dir>: keep each conversation request body (no headers, so
+    no key) for diagnosing prompt-cache misses by diffing consecutive requests. Off by default."""
+    import os
+
+    target = os.environ.get("ATLAS_DUMP_MODEL_PAYLOAD")
+    if not target:
+        return
+    try:
+        from pathlib import Path
+
+        folder = Path(target)
+        folder.mkdir(parents=True, exist_ok=True)
+        name = f"{time.strftime('%Y%m%d-%H%M%S')}-{int(time.time() * 1000) % 1000:03d}.json"
+        (folder / name).write_text(json.dumps(payload, ensure_ascii=False, indent=1, default=str),
+                                   encoding="utf-8")
+    except Exception:
+        pass
+
+
 def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: dict[str, Any], network: ModelNetworkSettings):
-    timeout = kwargs.get("timeout") or httpx.Timeout(connect=15.0, read=None, write=30.0, pool=10.0)
+    # read is only a backstop for a socket that went silent; the kernel's stream watchdog
+    # (first-chunk / idle limits) gives up and retries well before it.
+    timeout = kwargs.get("timeout") or httpx.Timeout(connect=15.0, read=300.0, write=30.0, pool=10.0)
     url, headers, payload = _request_details(route, messages, {**kwargs, "stream": True})
     if route.api_mode == "anthropic_messages":
         payload["stream"] = True
+    _dump_payload(payload)
     with _client(route, network, timeout) as client:
-        with client.stream("POST", url, headers=headers, json=payload) as response:
-            response.raise_for_status()
+        response = client.open_stream(url, headers=headers, json=payload)
+        try:
             if route.api_mode == "anthropic_messages":
                 tool_indexes: dict[int, int] = {}
                 next_tool_index = 0
@@ -703,11 +847,15 @@ def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
                         yield {"choices": [{"delta": {}, "finish_reason": item.get("delta", {}).get("stop_reason")}], "usage": shaped_usage}
             else:
                 for raw in response.iter_lines():
-                    if not raw.startswith("data: "):
+                    # SSE allows "data:" without the space; some relays send it that way.
+                    if not raw.startswith("data:"):
                         continue
-                    if raw[6:] == "[DONE]":
+                    data = raw[5:].lstrip()
+                    if data == "[DONE]":
                         break
                     try:
-                        yield json.loads(raw[6:])
+                        yield json.loads(data)
                     except ValueError:
                         continue
+        finally:
+            response.close()

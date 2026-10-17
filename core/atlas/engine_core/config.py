@@ -6,6 +6,7 @@ configuration files, import Hermes, or expose Hermes credentials and setup.
 
 from __future__ import annotations
 
+import copy
 import getpass
 import json
 import os
@@ -108,6 +109,19 @@ def load_config(path: str | os.PathLike[str] | None = None) -> dict[str, Any]:
     return load_config_readonly(path)
 
 
+# Every SessionDB open read this ~8k-node YAML (three times) with the pure-Python
+# parser: ~150ms each, ~95% of a session read and ~0.3-0.5s before each model turn.
+# Keyed on mtime + size, so an edited config.yaml is picked up on the next read.
+_LEGACY_HOME_CONFIG_CACHE: dict[str, tuple[tuple[int, int], Any]] = {}
+try:
+    from yaml import CSafeLoader as _YAML_LOADER
+except ImportError:  # libyaml (or PyYAML) missing: same parser as yaml.safe_load
+    try:
+        from yaml import SafeLoader as _YAML_LOADER  # type: ignore[assignment]
+    except ImportError:
+        _YAML_LOADER = None  # type: ignore[assignment]
+
+
 def load_legacy_home_config() -> dict[str, Any]:
     """Read legacy engine settings from ATLAS_HOME or HERMES_HOME without writes.
 
@@ -122,13 +136,22 @@ def load_legacy_home_config() -> dict[str, Any]:
     for home in dict.fromkeys(value for value in homes if value):
         path = Path(home) / "config.yaml"
         try:
-            value = yaml.safe_load(path.read_text(encoding="utf-8"))
+            stamp = path.stat()
         except OSError:
             continue
-        except yaml.YAMLError:
-            return {}
-        if isinstance(value, dict):
-            return value
+        key = (stamp.st_mtime_ns, stamp.st_size)
+        cached = _LEGACY_HOME_CONFIG_CACHE.get(str(path))
+        if cached is None or cached[0] != key:
+            try:
+                value = yaml.load(path.read_text(encoding="utf-8"), Loader=_YAML_LOADER)
+            except OSError:
+                continue
+            except yaml.YAMLError:
+                return {}
+            cached = (key, value)
+            _LEGACY_HOME_CONFIG_CACHE[str(path)] = cached
+        if isinstance(cached[1], dict):
+            return copy.deepcopy(cached[1])
     return {}
 
 

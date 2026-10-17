@@ -1374,7 +1374,7 @@ async def _handle_run_start(
             "category": "validation", "detail": "invalid permission_mode or allowed_paths",
         }))
         return
-    if reasoning_effort not in {None, "minimal", "low", "medium", "high"}:
+    if reasoning_effort not in {None, "off", "minimal", "low", "medium", "high"}:
         invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
         await manager.send(conn_id, invalid.next_envelope("run.failed", {
             "category": "validation", "detail": "invalid reasoning_effort",
@@ -2089,11 +2089,19 @@ def _effective_reasoning_effort(model_mgr: Any, model_id: str, requested: str | 
             config = next((item for item in model_mgr.list_models()
                            if item.get("id") == model_id or item.get("litellm_model") == model_id), {})
     capabilities = config.get("capabilities") if isinstance(config.get("capabilities"), dict) else {}
+    if requested:
+        return requested
+    # The model's own setting (atlas.toml / user settings) applies when the run picks none.
+    # "off" must reach the wire as an explicit switch: DeepSeek-family models think when
+    # nothing is sent, so dropping to None (or the old "medium" default) left it on.
+    configured = str(config.get("reasoning_effort") or capabilities.get("reasoning_effort") or "").strip().lower()
+    if configured in {"off", "none", "disabled"} or config.get("supports_reasoning") is False:
+        return "off"
     supported = bool(capabilities.get("supports_reasoning")) or _model_supports_reasoning(
         config or {"litellm_model": model_id})
     if not supported:
         return None
-    return requested or "medium"
+    return configured or "medium"
 
 
 def _map_tool_runtime_event(

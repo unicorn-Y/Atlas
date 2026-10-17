@@ -458,10 +458,12 @@ async def _merge_library_recall(context: Any, message: str) -> Any:
     except Exception as exc:
         log.warning("memory.library.recall_failed", error=str(exc), error_type=type(exc).__name__)
         return context
-    block = "\n\n".join(part for part in (recall["system_block"], recall["relevant"]) if part)
-    if not block or not isinstance(context, dict):
+    if not (recall["system_block"] or recall["relevant"]) or not isinstance(context, dict):
         return context
-    return {**context, "system_prompt_prefix": block, "library_refs": recall["refs"]}
+    # Resident pages change rarely and stay in the cacheable system prompt; this turn's
+    # cued memories change every message and travel with it as turn context.
+    return {**context, "system_prompt_prefix": recall["system_block"],
+            "turn_recall": recall["relevant"], "library_refs": recall["refs"]}
 
 
 def _schedule_library_write(agent: Any, state: _RunState, full_response: Any) -> None:
@@ -588,12 +590,14 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
     config = _agent.get_config()
     initial_messages.append(SystemMessage(content=(
         "Current user-local date and time: "
-        f"{now_local(config).isoformat()} ({timezone_name(config)}). "
+        f"{now_local(config).isoformat(timespec='minutes')} ({timezone_name(config)}). "
         "Use this timezone when interpreting relative dates and times."
     )))
-    # Memory library recall (resident pages + this turn's cues).
+    # Memory library recall: resident pages, then this turn's cues.
     if isinstance(state.context, dict) and state.context.get("system_prompt_prefix"):
         initial_messages.append(SystemMessage(content=state.context["system_prompt_prefix"]))
+    if isinstance(state.context, dict) and state.context.get("turn_recall"):
+        initial_messages.append(SystemMessage(content=state.context["turn_recall"]))
     if request.mode == "plan":
         initial_messages.append(SystemMessage(content=(
             "You are in read-only Plan mode. Inspect as needed, then return a concrete "
@@ -699,7 +703,10 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
         from atlas.config import DATA_ROOT
         from atlas.engine import HermesRuntime
 
-        volatile_prefixes = ("Atlas Skill index ", "Project context ", "【本轮相关记忆】")
+        volatile_prefixes = (
+            "Atlas Skill index ", "Project context ", "【本轮相关记忆】",
+            "Current user-local date and time", "Follow this structured task plan",
+        )
         prompt_sections = [
             str(item.content) for item in state.initial_messages
             if isinstance(item, SystemMessage) and isinstance(item.content, str)

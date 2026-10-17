@@ -236,6 +236,9 @@ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
         "connection", "connecterror", "incompleteread", "streamclosed", "remoteprotocol",
         "network", "unexpected eof", "server disconnected", "connection reset", "broken pipe",
         "incomplete chunked read", "streamerror", "response stream",
+        # A TLS stream cut mid-response (relay dropped it): httpx.ReadError with
+        # "[SSL: RECORD_LAYER_FAILURE]" / "EOF occurred in violation of protocol".
+        "readerror", "writeerror", "[ssl", "record layer", "eof occurred",
     )):
         return "connection", True, status
     if status in {400, 422}:
@@ -378,6 +381,29 @@ def _choice_auxiliary_delta(chunk: Any) -> tuple[str, str]:
         reasoning = ""
     refusal = _get(delta, "refusal") or ""
     return reasoning, refusal if isinstance(refusal, str) else ""
+
+
+def _env_seconds(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return value if math.isfinite(value) and value > 0 else default
+
+
+def _stream_limits() -> tuple[float, float]:
+    """(first chunk, idle between chunks) seconds before a silent stream is abandoned and retried.
+
+    The first limit covers prefill of a long uncached prompt; the idle limit catches a
+    relay that stops sending mid-response (seen: 297s of silence, then a TLS error).
+    """
+    return (_env_seconds("ATLAS_MODEL_FIRST_CHUNK_TIMEOUT", 180.0),
+            _env_seconds("ATLAS_MODEL_STREAM_IDLE_TIMEOUT", 90.0))
+
+
+def _discard_task(task: "asyncio.Task[Any]") -> None:
+    """Let an abandoned stream read finish in its thread without an unretrieved-exception warning."""
+    task.add_done_callback(lambda done: done.cancelled() or done.exception())
 
 
 def _stream_next(stream: Any) -> tuple[bool, Any]:
@@ -631,6 +657,9 @@ async def complete_stream(
             attempt_usage: dict[str, Any] = {}
             finish_reason: str | None = None
             attempt_started = time.monotonic()
+            first_token_ms: int | None = None
+            got_chunk = False
+            first_chunk_limit, idle_limit = _stream_limits()
             try:
                 kwargs: dict[str, Any] = {
                     "tools": tools or None, "stream": True,
@@ -651,23 +680,37 @@ async def complete_stream(
                     if cancel_event is not None and cancel_event.is_set():
                         raise asyncio.CancelledError
                     next_task = asyncio.create_task(asyncio.to_thread(_stream_next, chunks))
-                    if cancel_event is None:
-                        has_chunk, chunk = await next_task
-                    else:
+                    waiters: set[asyncio.Task[Any]] = {next_task}
+                    cancel_task = None
+                    if cancel_event is not None:
                         cancel_task = asyncio.create_task(cancel_event.wait())
-                        done, _ = await asyncio.wait(
-                            {next_task, cancel_task}, return_when=asyncio.FIRST_COMPLETED,
-                        )
-                        if cancel_task in done and cancel_event.is_set():
-                            close = getattr(stream, "close", None)
-                            if callable(close):
-                                await asyncio.to_thread(close)
-                            next_task.cancel()
-                            await asyncio.gather(next_task, return_exceptions=True)
-                            raise asyncio.CancelledError
+                        waiters.add(cancel_task)
+                    limit = idle_limit if got_chunk else first_chunk_limit
+                    done, _ = await asyncio.wait(
+                        waiters, timeout=limit, return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if cancel_task is not None and cancel_task in done and cancel_event.is_set():
+                        close = getattr(stream, "close", None)
+                        if callable(close):
+                            await asyncio.to_thread(close)
+                        next_task.cancel()
+                        await asyncio.gather(next_task, return_exceptions=True)
+                        raise asyncio.CancelledError
+                    if cancel_task is not None:
                         cancel_task.cancel()
                         await asyncio.gather(cancel_task, return_exceptions=True)
-                        has_chunk, chunk = await next_task
+                    if next_task not in done:
+                        # The read is blocked in a worker thread; leave it to the socket's own
+                        # backstop timeout and retry now instead of waiting on a dead stream.
+                        _discard_task(next_task)
+                        stream = None
+                        raise ModelCallError(
+                            f"Model stream stalled: no data for {int(limit)}s "
+                            f"({'before the first chunk' if not got_chunk else 'mid-response'})",
+                            category="timeout", retryable=True,
+                        )
+                    has_chunk, chunk = next_task.result()
+                    got_chunk = True
                     if not has_chunk:
                         break
                     choices = _get(chunk, "choices") or []
@@ -677,6 +720,8 @@ async def complete_stream(
                             finish_reason = str(terminal_reason).lower()
                     text_delta, tool_deltas, usage = _choice_delta(chunk)
                     reasoning_delta, refusal_delta = _choice_auxiliary_delta(chunk)
+                    if first_token_ms is None and (text_delta or reasoning_delta or tool_deltas):
+                        first_token_ms = int((time.monotonic() - attempt_started) * 1000)
                     if usage is not None:
                         attempt_usage = _usage_dict(usage)
                     if text_delta is not None:
@@ -776,6 +821,8 @@ async def complete_stream(
                              "model": route.model_id or candidate,
                              "provider": route.provider,
                              "duration_ms": int((time.monotonic() - attempt_started) * 1000),
+                             "first_token_ms": first_token_ms,
+                             "reasoning_chars": len(attempt_reasoning),
                              "usage": last_usage}
                     published = on_attempt(event)
                     if asyncio.iscoroutine(published):
