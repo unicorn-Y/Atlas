@@ -58,25 +58,19 @@ class ModelUnavailable(RuntimeError):
     """The turn is durable but cannot be extracted until a writer model is ready."""
 
 
-def _source_ref_for_turn(session: str, user_text: str) -> str:
-    """Bind a turn only when SessionDB confirms the exact latest user message."""
-    if not session or not user_text:
+def _source_ref_for_turn(session: str, user_text: str, message_uid: str = "") -> str:
+    """Bind a turn only to its supplied, verified SessionDB message UID."""
+    if not session or not user_text or not message_uid:
         return ""
     try:
         from atlas.config import DATA_ROOT
-        from atlas.engine.session_sync import latest_session_message
+        from atlas.engine.session_sync import session_message_evidence
         from .source_ref import SourceRef
 
-        message = latest_session_message(DATA_ROOT / "engine", session, role="user")
-        if not message:
+        evidence = session_message_evidence(DATA_ROOT / "engine", session, message_uid)
+        if not evidence or evidence.get("role") != "user":
             return ""
-        content = message.get("content")
-        if isinstance(content, list):
-            content = "\n".join(str(item.get("text") or "") if isinstance(item, dict) else str(item)
-                                 for item in content)
-        if " ".join(str(content or "").split()) != " ".join(user_text.split()):
-            return ""
-        return SourceRef(session, str(message.get("id") or "")).to_ref()
+        return SourceRef(session, message_uid).to_ref()
     except (ImportError, OSError, RuntimeError, TypeError, ValueError):
         return ""
 
@@ -318,7 +312,8 @@ class MemoryLibrary:
         except RuntimeError:
             pass
         self.ready()
-        source_ref = _source_ref_for_turn(str(kwargs.get("session") or ""), user_text)
+        message_uid = str(kwargs.get("message_uid") or "")
+        source_ref = _source_ref_for_turn(str(kwargs.get("session") or ""), user_text, message_uid)
         self.queue.insert(created=_now(self.config).isoformat(timespec="seconds"),
                           session=kwargs.get("session", ""), mode=kwargs.get("mode", ""),
                           user_text=user_text, assistant_text=kwargs.get("assistant_text") or "",
