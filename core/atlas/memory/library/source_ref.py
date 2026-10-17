@@ -28,7 +28,9 @@ class SourceRef:
         if (parsed.scheme, parsed.netloc, parsed.path) != ("atlas", "source", "/v1"):
             raise ValueError("unsupported SourceRef format")
         values = parse_qs(parsed.query, keep_blank_values=False, strict_parsing=True)
-        if set(values) != {"conversation_id", "message_uid"} or any(len(v) != 1 for v in values.values()):
+        invalid = set(values) != {"conversation_id", "message_uid"}
+        invalid |= any(len(items) != 1 for items in values.values())
+        if invalid:
             raise ValueError("invalid SourceRef fields")
         return cls(values["conversation_id"][0], values["message_uid"][0])
 
