@@ -11,4 +11,6 @@ All implementation batches were cherry-picked from isolated worker branches and 
 - Candidate-worktree update activation and rollback/relaunch handling.
 - Late microphone stream cleanup and explicit context handoff.
 
-No whole-branch merges were used. The canonical `tasks/CURRENT.md` was left unchanged. The startup build-stage failure remains unverified as described in `TEST-EVIDENCE.md`; ATL-017 stayed unchanged under its high-authority workflow boundary.
+GPT-6 rework commits add Dream latest-owner concurrency behavior, transactional update rollback/no-op handling, streamed SQLite-backed complete browse pagination and explicit SourceRef UID handling, plus the isolated Atlas API Stop path test. FIND-5 normal-run UID propagation is partial because no UID-bearing user append result is exposed at the current scheduler entry point; absent UIDs now stay missing instead of being guessed.
+
+No whole-branch merges were used. The canonical `tasks/CURRENT.md` was left unchanged. Windows power-loss/process-termination timing was not simulated; ATL-017 stayed unchanged under its high-authority workflow boundary.
