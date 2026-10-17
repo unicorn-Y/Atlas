@@ -750,5 +750,61 @@
     "complexity": "S",
     "worker": "主执行者",
     "id": "ATL-021"
+  },
+  {
+    "local_id": "INCR-01",
+    "priority": "P1",
+    "domain": "模型故障策略",
+    "id": "ATL-022",
+    "symptom": "content_filter 被判为可重试，且运行工作区会插入引导消息改写措辞重发，与任务书“过滤命中即终止”冲突",
+    "runtime_affected": "当前运行工作区受影响（expert_mode=true 时 expert_harness 提供 CONTINUE_FILTER_GUIDANCE）；本机未注入过滤响应，未复现",
+    "evidence": "D:/atlas-luna-w1-20261017/core/atlas/kernel/model_call.py:207 classify_error 返回 (\"content_filter\", True, status)；同文件 :858 content_filter_guidance_added 重试前插引导；D:/Atlas/core/atlas/expert_harness.py:112-119,206",
+    "classification": "代码确认（HEAD=True / 运行版=True / W1=False 三份对照）",
+    "minimal_fix": "classify_error 的 content_filter 置 retryable=False；删除 :858 重发引导分支",
+    "reuse": "沿用现有 ModelCallError 与事件链",
+    "complexity": "S",
+    "worker": "W1"
+  },
+  {
+    "local_id": "INCR-02",
+    "priority": "P1",
+    "domain": "模型故障策略",
+    "id": "ATL-023",
+    "symptom": "默认配置下 503 持续失败实际发起 11 次请求（任务书允许 3 次），连接类错误还可无上限重试",
+    "runtime_affected": "当前运行进程即受影响（D:/Atlas/core，0b1ba411 + 工作区修改）；已用独立假网关实测",
+    "evidence": "evidence/W1-VERIFY.json 与 04b-W1-VERIFY.md：运行版 requests=11 / 传 fallback 候选时 84，W1 均为 3；运行版 model_call.py unbounded_connection_retries=True 且默认 max_retries=10",
+    "classification": "代码确认 + 独立脚本实测（不耗 token）",
+    "minimal_fix": "max_retries=min(2,...)；unbounded_connection_retries 默认 False",
+    "reuse": "W1 e2599784 已实现",
+    "complexity": "S",
+    "worker": "W1"
+  },
+  {
+    "local_id": "INCR-03",
+    "priority": "P1",
+    "domain": "模型路由",
+    "id": "ATL-024",
+    "symptom": "辅助调用失败时静默改发硬编码 deepseek-v4.1-flash / deepseek-v3，用户无任何提示",
+    "runtime_affected": "运行期可达；覆盖规划/反思/MoA/压缩/摘要等 6 处调用点；不受用户 fallback 配置控制",
+    "evidence": "D:/Atlas/core/atlas/models/router.py:378-381 无条件遍历两个写死候选，:383-389 try/except continue；调用点在 core/atlas/agent/__init__.py:645/706/909/927/938/970、engine/branch_summaries.py:72、api/run_drive.py:416、engine/hermes_runtime.py:503",
+    "classification": "代码确认（调用链逐一核对）",
+    "minimal_fix": "complete_for 不隐式追加候选，失败即抛",
+    "reuse": "W1 已改",
+    "complexity": "S",
+    "worker": "W1"
+  },
+  {
+    "local_id": "INCR-04",
+    "priority": "P1",
+    "domain": "集成风险",
+    "id": "ATL-025",
+    "symptom": "W1 无法快进落到当前运行工作区：cherry-pick 在 model_call.py 的 content_filter 块冲突 1 处",
+    "runtime_affected": "仅影响“把 W1 装到当前工作区”这一步，非运行期故障",
+    "evidence": "隔离 worktree /d/Temp/integ-probe/base：9481b507 cherry-pick e2599784 → CONFLICT (content) core/atlas/kernel/model_call.py，仅此 1 处；按 W1 语义消解后 --continue 成功，ast.parse 通过，定向测试 38 passed；补丁 evidence/harness/w1-runtime-integration.patch",
+    "classification": "实测（隔离环境）",
+    "minimal_fix": "按任务书取 W1 一侧（删重发引导），expert 的“换措辞继续”需用户裁决",
+    "reuse": "已有可应用补丁",
+    "complexity": "S",
+    "worker": "主执行者"
   }
 ]

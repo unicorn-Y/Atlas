@@ -1,0 +1,162 @@
+{
+  "meta": {
+    "generated": "2026-10-17",
+    "method": "independent FakeGateway harness, no network, no provider tokens",
+    "harness": "evidence/harness/run_verify.py + verify_w1.py",
+    "critical_caveat": "D:/Atlas/core/.venv/.../_editable_impl_atlas_core.pth pins D:/Atlas/core into sys.meta_path, OUTRANKING PYTHONPATH. Using PYTHONPATH alone silently measures the baseline. run_verify.py strips other Atlas roots and asserts the loaded model_call.__file__.",
+    "targets": {
+      "w1": {
+        "root": "D:/atlas-luna-w1-20261017/core",
+        "branch": "fix/atlas-model-retry-policy-20261017",
+        "commit": "e2599784"
+      },
+      "runtime": {
+        "root": "D:/Atlas/core",
+        "commit": "0b1ba411",
+        "dirty": "12 tracked files modified"
+      }
+    },
+    "loaded_assertion": {
+      "w1": "D:\\atlas-luna-w1-20261017\\core\\atlas\\kernel\\model_call.py",
+      "runtime": "D:\\Atlas\\core\\atlas\\kernel\\model_call.py"
+    }
+  },
+  "summary": {
+    "w1_passed": 9,
+    "w1_total": 9,
+    "runtime_passed": 6,
+    "runtime_total": 9
+  },
+  "cases": [
+    {
+      "id": 1,
+      "spec": "transient once then same model succeeds",
+      "w1": {
+        "pass": true,
+        "requests": 2,
+        "models": [
+          "model-a",
+          "model-a"
+        ],
+        "text": "recovered"
+      },
+      "runtime": {
+        "pass": true,
+        "requests": 2,
+        "models": [
+          "model-a",
+          "model-a"
+        ],
+        "text": "recovered"
+      }
+    },
+    {
+      "id": 2,
+      "spec": "persistent 503 capped at 3 with full reason (default config, no max_retries kwarg)",
+      "w1": {
+        "pass": true,
+        "requests": 3,
+        "attempts": 3,
+        "model": "model-a",
+        "provider": "provider-model-a"
+      },
+      "runtime": {
+        "pass": false,
+        "requests": 11,
+        "attempts": null,
+        "model": null,
+        "provider": null,
+        "note": "ModelCallError lacks attempts/model/provider fields"
+      }
+    },
+    {
+      "id": 3,
+      "spec": "401/402/404 no retry",
+      "w1": {
+        "pass": true,
+        "requests": 1
+      },
+      "runtime": {
+        "pass": true,
+        "requests": 1
+      }
+    },
+    {
+      "id": 4,
+      "spec": "no model switching on failure (fallback_models supplied)",
+      "w1": {
+        "pass": true,
+        "requests": 3,
+        "distinct_models": [
+          "model-a"
+        ]
+      },
+      "runtime": {
+        "pass": true,
+        "requests": 84,
+        "distinct_models": [
+          "model-a"
+        ],
+        "note": "does not switch models, but retries 84 times"
+      }
+    },
+    {
+      "id": 5,
+      "spec": "429 Retry-After vs threshold",
+      "w1": {
+        "pass": true,
+        "short_2s": {
+          "requests": 2,
+          "ok": true
+        },
+        "long_60s": {
+          "requests": 1,
+          "retry_after_s": 60.0,
+          "raised": true
+        }
+      },
+      "runtime": {
+        "pass": false,
+        "short_2s": {
+          "requests": 2,
+          "ok": true
+        },
+        "long_60s": {
+          "requests": 2,
+          "raised": false,
+          "note": "ignores 60s, retries again, no retry_after_s"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "spec": "no re-issue after partial text emitted",
+      "w1": {
+        "pass": true,
+        "requests": 1,
+        "emitted": "half answer"
+      },
+      "runtime": {
+        "pass": false,
+        "requests": 2,
+        "emitted": "half answerduplicate"
+      }
+    },
+    {
+      "id": 7,
+      "spec": "no re-issue after tool delta",
+      "w1": {
+        "pass": true,
+        "requests": 1
+      },
+      "runtime": {
+        "pass": true,
+        "requests": 1
+      }
+    }
+  ],
+  "repo_test_crosscheck": {
+    "cmd": "pytest core/tests/test_kernel_tool_error_regressions.py (W1 worktree)",
+    "result": "38 passed, 5 warnings"
+  }
+}

@@ -1,0 +1,1127 @@
+diff --git a/core/atlas/agent/run_phases.py b/core/atlas/agent/run_phases.py
+index a1895a51..9d590cbe 100644
+--- a/core/atlas/agent/run_phases.py
++++ b/core/atlas/agent/run_phases.py
+@@ -298,7 +298,11 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
+     if request.model and not selected_config:
+         yield {
+             "type": "error", "category": "model",
+-            "detail": f"Model selection failed: Unknown model: {request.model}",
++            "detail": "找不到所选模型。已保留本轮已完成内容。",
++            "error_category": "model_not_found",
++            "raw_detail": f"Unknown model: {request.model}",
++            "model_id": request.model, "attempts": 0,
++            "manual_retry_allowed": True,
+         }
+         state.abort = True
+         return
+@@ -308,14 +312,16 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
+     if isinstance(agent._model_mgr, ModelManager):
+         credential_error = agent._model_mgr.missing_model_credentials(runtime.model)
+         if credential_error:
+-            yield {"type": "error", "category": "model", "detail": credential_error,
+-                   "code": "MODEL_CREDENTIALS_MISSING"}
++            yield {"type": "error", "category": "model",
++                   "detail": "模型凭据缺失或无效。已保留本轮已完成内容。",
++                   "error_category": "authentication", "raw_detail": credential_error,
++                   "code": "MODEL_CREDENTIALS_MISSING", "model_id": runtime.model,
++                   "provider": selected_config.get("provider", ""), "attempts": 0,
++                   "manual_retry_allowed": True}
+             state.abort = True
+             return
+-    runtime.fallback_models = list(
+-        selected_config.get("fallback")
+-        or _agent.get_config().get("models.fallback", []) or []
+-    )
++    # A run remains pinned to its selected model; fallbacks require a user choice.
++    runtime.fallback_models = []
+     state.litellm_model = str(selected_config.get("litellm_model") or runtime.model)
+ 
+     log.info(
+diff --git a/core/atlas/api/run_drive.py b/core/atlas/api/run_drive.py
+index 9b856755..076baf7c 100644
+--- a/core/atlas/api/run_drive.py
++++ b/core/atlas/api/run_drive.py
+@@ -2878,6 +2878,10 @@ async def _execute_run(
+                 await emit("run.failed", {
+                     "category": category,
+                     "detail": event.get("detail", "Unknown error"),
++                    **{key: event[key] for key in (
++                        "model_id", "provider", "status", "error_category", "raw_detail", "request_id",
++                        "attempts", "manual_retry_allowed", "retry_after_s",
++                    ) if key in event},
+                 })
+                 return
+ 
+diff --git a/core/atlas/kernel/loop.py b/core/atlas/kernel/loop.py
+index 91d4ff6f..ec7f3483 100644
+--- a/core/atlas/kernel/loop.py
++++ b/core/atlas/kernel/loop.py
+@@ -19,7 +19,7 @@ from pathlib import Path
+ from typing import Any, AsyncIterator, Callable
+ 
+ from atlas.kernel.context import CompactionResult, ContextManager, estimate_tokens
+-from atlas.kernel.model_call import ModelCallError, ModelCallResult, complete_stream
++from atlas.kernel.model_call import ModelCallError, ModelCallResult, _safe_error_detail, complete_stream
+ from atlas.kernel.plan import PlanMode
+ from atlas.kernel.prompt import build_prompt
+ from atlas.kernel.repair import repair_unpaired_tool_calls, started_call_ids
+@@ -1638,7 +1638,8 @@ class AtlasKernel:
+                     await exec_manager.shutdown()
+             raise
+         except Exception as exc:
+-            failure = f"{type(exc).__name__}: {exc}"
++            failure = (_safe_error_detail(exc) if isinstance(exc, ModelCallError)
++                       else f"{type(exc).__name__}: {exc}")
+             if state.phase not in {RunPhase.DONE, RunPhase.FAILED, RunPhase.INTERRUPTED}:
+                 state.error = failure
+                 transition(RunPhase.FAILED)
+@@ -1659,8 +1660,31 @@ class AtlasKernel:
+             except Exception:
+                 log.exception("kernel.stop_failure_hook_failed", extra={"run_id": run_id})
+             log_detail = f"{failure} (run log: {log_path})" if log_path else failure
+-            yield emit("error", category="model" if isinstance(exc, ModelCallError) else "runtime",
+-                       detail=log_detail, log_path=str(log_path or ""))
++            event_data: dict[str, Any] = {
++                "category": "model" if isinstance(exc, ModelCallError) else "runtime",
++                "detail": log_detail, "log_path": str(log_path or ""),
++            }
++            if isinstance(exc, ModelCallError):
++                categories = {
++                    "authentication": "模型身份验证失败", "billing": "模型额度不足",
++                    "model_not_found": "找不到所选模型", "invalid_request": "模型请求参数无效",
++                    "context_window_exceeded": "输入超出模型上下文限制",
++                    "content_filter": "模型内容过滤器拒绝了请求", "rate_limit": "模型服务限流",
++                    "connection": "模型服务连接失败", "timeout": "模型请求超时",
++                    "overloaded": "模型服务暂时过载", "provider": "模型服务暂时错误",
++                    "route": "模型路由或凭据配置错误", "budget": "运行额度限制已达到",
++                }
++                event_data.update({
++                    "model_id": exc.model, "provider": exc.provider,
++                    "status": exc.status, "request_id": exc.request_id,
++                    "error_category": exc.category,
++                    "attempts": exc.attempts, "retry_after_s": exc.retry_after_s,
++                    "raw_detail": _safe_error_detail(exc), "manual_retry_allowed": True,
++                })
++                event_data["detail"] = (
++                    f"{categories.get(exc.category, '模型请求失败')}。已保留本轮已完成内容。"
++                )
++            yield emit("error", **event_data)
+         finally:
+             if exec_manager is not None and state.phase in {RunPhase.FAILED, RunPhase.INTERRUPTED}:
+                 await exec_manager.shutdown()
+diff --git a/core/atlas/kernel/model_call.py b/core/atlas/kernel/model_call.py
+index d31a69e0..0151e032 100644
+--- a/core/atlas/kernel/model_call.py
++++ b/core/atlas/kernel/model_call.py
+@@ -9,7 +9,6 @@ import asyncio
+ import json
+ import math
+ import os
+-import random
+ import re
+ import time
+ import uuid
+@@ -39,11 +38,18 @@ class _ToolDelta:
+ 
+ class ModelCallError(RuntimeError):
+     def __init__(self, detail: str, *, category: str, status: int | None = None,
+-                 retryable: bool = False) -> None:
++                 retryable: bool = False, model: str = "", provider: str = "",
++                 attempts: int = 0, request_id: str | None = None,
++                 retry_after_s: float | None = None) -> None:
+         super().__init__(detail)
+         self.category = category
+         self.status = status
+         self.retryable = retryable
++        self.model = model
++        self.provider = provider
++        self.attempts = attempts
++        self.request_id = request_id
++        self.retry_after_s = retry_after_s
+ 
+ 
+ _RATE_LIMIT_RETRY_RE = re.compile(
+@@ -168,6 +174,9 @@ def _error_text(exc: BaseException) -> str:
+             break
+         seen.add(id(current))
+         parts.append(type(current).__name__)
++        captured_body = _get(current, "_atlas_response_body")
++        if captured_body:
++            parts.append(str(captured_body))
+         for key in ("message", "body", "code", "type", "error", "detail"):
+             try:
+                 value = _get(current, key)
+@@ -190,6 +199,51 @@ def _error_text(exc: BaseException) -> str:
+     return " ".join(parts).lower()
+ 
+ 
++def _safe_error_detail(exc: BaseException) -> str:
++    """Keep provider wording while applying Atlas's shared secret redactor."""
++    parts: list[str] = [str(exc).strip()]
++    current: Any = exc
++    seen: set[int] = set()
++    for _ in range(4):
++        if current is None or id(current) in seen:
++            break
++        seen.add(id(current))
++        captured_body = _get(current, "_atlas_response_body")
++        if captured_body:
++            parts.append(str(captured_body))
++        response = _get(current, "response")
++        try:
++            response_text = _get(response, "text")
++            if response_text:
++                parts.append(str(response_text))
++        except Exception:
++            pass
++        current = _get(current, "__cause__") or _get(current, "__context__")
++    detail = " ".join(part for part in parts if part) or type(exc).__name__
++    from atlas.engine_core.agent.redact import redact_sensitive_text
++
++    return redact_sensitive_text(detail, force=True)[:1000]
++
++
++def _request_id(exc: BaseException) -> str | None:
++    current: Any = exc
++    seen: set[int] = set()
++    for _ in range(4):
++        if current is None or id(current) in seen:
++            break
++        seen.add(id(current))
++        response = _get(current, "response")
++        headers = _get(response, "headers")
++        for value in (
++            _get(current, "request_id"), _get(current, "requestId"),
++            _get(headers, "x-request-id"), _get(headers, "request-id"),
++        ):
++            if value:
++                return str(value)[:200]
++        current = _get(current, "__cause__") or _get(current, "__context__")
++    return None
++
++
+ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
+     status = _status(exc)
+     text = _error_text(exc)
+@@ -204,7 +258,7 @@ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
+         "content_filter", "content filter", "safety filter", "content was blocked",
+         "content policy", "moderation_blocked", "blocked by policy",
+     )):
+-        return "content_filter", True, status
++        return "content_filter", False, status
+     if status == 402 or any(marker in text for marker in (
+         "insufficient_quota", "credit_balance_exhausted", "spend_limit_exceeded",
+         "usage_limit_reached", "billing_error", "billing limit", "spend limit",
+@@ -221,6 +275,12 @@ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
+         "model_not_found", "model not found", "unknown model",
+     )):
+         return "model_not_found", False, status
++    # Provider error prose can contain words like "timeout" or "connection";
++    # explicit permanent HTTP request statuses take precedence over that wording.
++    if status in {400, 422}:
++        return "invalid_request", False, status
++    if status is not None and status not in {408, 429, 500, 502, 503, 504, 529}:
++        return "provider", False, status
+     if status == 429 or any(marker in text for marker in (
+         "rate_limit_error", "rate_limit_exceeded", "rate limit", "too many requests",
+         "slow_down", "http 429", "(429)", "429",
+@@ -228,9 +288,9 @@ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
+         return "rate_limit", True, status or 429
+     if status == 529 or "overload" in text or "server_is_overloaded" in text:
+         return "overloaded", True, status
+-    if status in {408, 425, 504} or "timeout" in name or "timed out" in text:
++    if status == 408 or "timeout" in name or "timed out" in text:
+         return "timeout", True, status
+-    if status is not None and (status >= 500 or status == 409):
++    if status in {500, 502, 503, 504}:
+         return "provider", True, status
+     if any(marker in name or marker in text for marker in (
+         "connection", "connecterror", "incompleteread", "streamclosed", "remoteprotocol",
+@@ -238,8 +298,6 @@ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
+         "incomplete chunked read", "streamerror", "response stream",
+     )):
+         return "connection", True, status
+-    if status in {400, 422}:
+-        return "invalid_request", False, status
+     return "model", False, status
+ 
+ 
+@@ -337,15 +395,15 @@ def _retry_after(exc: BaseException) -> float | None:
+     return None
+ 
+ 
+-def _backoff(retry_index: int) -> float:
+-    """Codex's shared 200 ms exponential backoff with up to 10% jitter."""
+-    base = 0.2 * (2 ** max(0, retry_index))
+-    return base * random.uniform(0.9, 1.1)
+-
+-
+-def _overloaded_backoff(retry_index: int, base_delay_s: float) -> float:
+-    """Claude Code's documented 500 ms exponential start for 529 responses."""
+-    return min(300.0, base_delay_s * (2 ** min(max(0, retry_index), 16)))
++async def _wait_for_retry(delay: float, cancel_event: asyncio.Event | None) -> None:
++    if cancel_event is None:
++        await asyncio.sleep(delay)
++        return
++    try:
++        await asyncio.wait_for(cancel_event.wait(), timeout=delay)
++        raise asyncio.CancelledError
++    except asyncio.TimeoutError:
++        return
+ 
+ 
+ async def _publish(
+@@ -561,54 +619,57 @@ async def complete_stream(
+     on_text: Callable[[str], Awaitable[None] | None] | None = None,
+     on_attempt: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
+     on_event: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
+-    unbounded_connection_retries: bool = True,
++    unbounded_connection_retries: bool = False,
+     retry_watchdog: bool | None = None,
+     retry_watchdog_max_wait_s: float | None = None,
+     overloaded_retry_base_delay_s: float | None = None,
+     usage_budget: Any = None,
+ ) -> ModelCallResult:
+     """Stream one model response through Atlas ModelRouter and HTTPX transport."""
+-    from atlas.agent.fallback_cooldown import cool, is_cooling
+     from atlas.models.tokens import estimate_tokens
+ 
+     router = agent._model_router
+-    candidates = [model_id, *(fallback_models or [])]
+-    candidates = list(dict.fromkeys(str(item) for item in candidates if item))
+-    max_retries, retry_watchdog, retry_watchdog_max_wait_s, overloaded_retry_base_delay_s = (
+-        _retry_environment(
++    # A conversation turn is pinned to the selected model. Auxiliary tasks may
++    # choose their own model explicitly, but never retry through another model.
++    candidates = [str(model_id)] if model_id else []
++    max_retries = _retry_environment(
+             max_retries, retry_watchdog, retry_watchdog_max_wait_s,
+             overloaded_retry_base_delay_s,
+-        )
+-    )
++        )[0]
++    max_retries = min(2, max_retries)
+     combined_text = ""
+     combined_reasoning = ""
+     combined_refusal = ""
+     request_messages = list(messages)
+-    content_filter_guidance_added = False
+     last_error: ModelCallError | None = None
+     total_attempts = 0
+     overall_started = time.monotonic()
+     last_route: Any = None
+     last_usage: dict[str, Any] = {}
+ 
+-    for candidate_index, candidate in enumerate(candidates):
+-        if candidate_index and is_cooling(candidate):
+-            continue
++    if not candidates:
++        raise ModelCallError("未选择可用模型", category="route", model="", attempts=0)
++
++    for candidate in candidates:
+         try:
+             route = await router.resolve(candidate, "conversation")
+         except Exception as exc:
+-            last_error = ModelCallError(str(exc), category="route", retryable=False)
+-            if candidate_index + 1 < len(candidates):
+-                continue
++            category, _, status = classify_error(exc)
++            model_mgr = getattr(agent, "_model_mgr", None)
++            list_models = getattr(model_mgr, "list_models", None)
++            model_config = next((item for item in list_models()
++                                 if item.get("id") == candidate), {}) if callable(list_models) else {}
++            last_error = ModelCallError(
++                _safe_error_detail(exc), category=category if category != "model" else "route",
++                status=status, retryable=False, model=candidate,
++                provider=str(model_config.get("provider") or getattr(exc, "provider", "")),
++                attempts=0, request_id=_request_id(exc),
++            )
+             raise last_error from exc
+         last_route = route
+         wire_model = route.wire_model or route.model
+         route_started = time.monotonic()
+         retry_index = 0
+-        connection_retry_count = 0
+-        connection_retry_delay = 5.0
+-        overloaded_retry_count = 0
+-        watchdog_capacity_wait_s = 0.0
+ 
+         while True:
+             if cancel_event is not None and cancel_event.is_set():
+@@ -622,12 +683,15 @@ async def complete_stream(
+                 request_id, estimated, purpose="conversation",
+                 model=route.model_id or candidate, wire_model=wire_model,
+             ):
+-                raise ModelCallError("Run input-token budget reached", category="budget")
++                raise ModelCallError("Run input-token budget reached", category="budget",
++                                     model=route.model_id or candidate, provider=route.provider,
++                                     attempts=0, request_id=request_id)
+             stream = None
+             attempt_text = ""
+             attempt_reasoning = ""
+             attempt_refusal = ""
+             attempt_tools: dict[int, _ToolDelta] = {}
++            attempt_had_delta = False
+             attempt_usage: dict[str, Any] = {}
+             finish_reason: str | None = None
+             attempt_started = time.monotonic()
+@@ -681,6 +745,7 @@ async def complete_stream(
+                         attempt_usage = _usage_dict(usage)
+                     if text_delta is not None:
+                         piece = str(text_delta)
++                        attempt_had_delta = attempt_had_delta or bool(piece)
+                         attempt_text += piece
+                         merged = _merge_delta(combined_text, attempt_text)
+                         if merged.startswith(combined_text) and len(merged) > len(combined_text):
+@@ -694,6 +759,7 @@ async def complete_stream(
+                                 "type": "text_delta", "delta": delta, "attempt": total_attempts,
+                             })
+                     if reasoning_delta:
++                        attempt_had_delta = True
+                         attempt_reasoning += reasoning_delta
+                         merged = _merge_delta(combined_reasoning, attempt_reasoning)
+                         if merged.startswith(combined_reasoning) and len(merged) > len(combined_reasoning):
+@@ -703,6 +769,7 @@ async def complete_stream(
+                                 "type": "reasoning_delta", "delta": delta, "attempt": total_attempts,
+                             })
+                     if refusal_delta:
++                        attempt_had_delta = True
+                         attempt_refusal += refusal_delta
+                         merged = _merge_delta(combined_refusal, attempt_refusal)
+                         if merged.startswith(combined_refusal) and len(merged) > len(combined_refusal):
+@@ -718,7 +785,7 @@ async def complete_stream(
+                             except (TypeError, ValueError) as exc:
+                                 raise ModelCallError(
+                                     "Model returned an invalid tool-call index",
+-                                    category="malformed_response", retryable=True,
++                                    category="malformed_response", retryable=False,
+                                 ) from exc
+                             current = attempt_tools.setdefault(index, _ToolDelta())
+                             function = _get(delta, "function") or {}
+@@ -737,6 +804,7 @@ async def complete_stream(
+                             current.name += name
+                             current.arguments += arguments
+                             if call_id or name or arguments:
++                                attempt_had_delta = True
+                                 await _publish(on_event, {
+                                     "type": "tool_call_delta", "attempt": total_attempts,
+                                     "index": index,
+@@ -747,7 +815,7 @@ async def complete_stream(
+                 if finish_reason == "content_filter":
+                     raise ModelCallError(
+                         "Model response stopped by the content filter",
+-                        category="content_filter", retryable=True,
++                        category="content_filter", retryable=False,
+                     )
+                 if finish_reason is None:
+                     raise ModelCallError(
+@@ -793,52 +861,30 @@ async def complete_stream(
+                         "usage_available": False, "input_tokens": None,
+                     })
+                 category, retryable, status = classify_error(exc)
++                retry_after = _retry_after(exc)
+                 error = exc if isinstance(exc, ModelCallError) else ModelCallError(
+-                    str(exc), category=category, status=status, retryable=retryable,
++                    _safe_error_detail(exc), category=category, status=status, retryable=retryable,
++                    model=route.model_id or candidate, provider=route.provider,
++                    request_id=_request_id(exc) or request_id,
+                 )
++                if isinstance(error, ModelCallError):
++                    error.model = route.model_id or candidate
++                    error.provider = route.provider
++                    error.status = error.status if error.status is not None else status
++                    error.attempts = total_attempts
++                    error.request_id = error.request_id or _request_id(exc) or request_id
++                    error.retry_after_s = retry_after
+                 last_error = error
+-                if status in {429, 529}:
+-                    cool(route.model_id or candidate, 60.0)
+-                retry_after = _retry_after(exc)
+-                connection_retry = bool(
+-                    error.retryable and error.category == "connection"
+-                    and unbounded_connection_retries
+-                    and "bedrock" not in str(route.provider).lower()
+-                )
+-                watchdog_capacity_retry = bool(
+-                    error.retryable and retry_watchdog and status in {429, 529}
+-                    and error.category in {"rate_limit", "overloaded"}
+-                )
+-                will_retry = connection_retry or watchdog_capacity_retry or bool(
+-                    error.retryable and retry_index < max_retries
+-                )
+-                if watchdog_capacity_retry and retry_watchdog_max_wait_s is not None:
+-                    remaining_wait = retry_watchdog_max_wait_s - watchdog_capacity_wait_s
+-                    if remaining_wait <= 0:
+-                        will_retry = False
+-
+-                delay = connection_retry_delay if connection_retry else retry_after
++                will_retry = bool(error.retryable and retry_index < max_retries and not attempt_had_delta)
++                if retry_after is not None and retry_after > 15:
++                    will_retry = False
++                delay = retry_after
+                 if will_retry and delay is None:
+-                    if status == 529 or error.category == "overloaded":
+-                        delay = _overloaded_backoff(
+-                            overloaded_retry_count, overloaded_retry_base_delay_s,
+-                        )
+-                    else:
+-                        delay = _backoff(retry_index)
+-                if watchdog_capacity_retry and will_retry and retry_watchdog_max_wait_s is not None:
+-                    remaining_wait = max(0.0, retry_watchdog_max_wait_s - watchdog_capacity_wait_s)
+-                    delay = min(delay or 0.0, remaining_wait)
+-                retry_kind = (
+-                    "connection" if connection_retry else
+-                    "watchdog_capacity" if watchdog_capacity_retry and will_retry else
+-                    "overloaded" if status == 529 or error.category == "overloaded" else
+-                    "standard" if will_retry else None
+-                )
+-                retry_number = (
+-                    connection_retry_count + 1 if connection_retry else
+-                    overloaded_retry_count + 1 if status == 529 or error.category == "overloaded" else
+-                    retry_index + 1
+-                )
++                    delay = (0.5, 1.5)[min(retry_index, 1)]
++                if will_retry and status == 429 and delay is not None:
++                    delay = max(delay, 0.5)
++                retry_kind = "rate_limit" if status == 429 else "transient" if will_retry else None
++                retry_number = retry_index + 1 if will_retry else None
+                 if on_attempt is not None:
+                     event = {"ok": False, "attempt": total_attempts,
+                              "model": route.model_id or candidate,
+@@ -849,42 +895,18 @@ async def complete_stream(
+                              "retry_kind": retry_kind,
+                              "retry_number": retry_number if will_retry else None,
+                              "retry_delay_s": delay,
+-                             "retry_after_s": retry_after}
++                             "retry_after_s": retry_after,
++                             "detail": _safe_error_detail(exc),
++                             "request_id": error.request_id,
++                             "attempts": total_attempts}
+                     published = on_attempt(event)
+                     if asyncio.iscoroutine(published):
+                         await published
+                 if not will_retry:
+                     break
+-                if error.category == "content_filter" and not content_filter_guidance_added:
+-                    # Expert mode hands back "reissue it and continue"; the stock
+-                    # Atlas path keeps its original wording.
+-                    from atlas.expert_harness import filter_guidance
+-
+-                    request_messages.insert(0, {
+-                        "role": "system",
+-                        "content": filter_guidance(),
+-                    })
+-                    content_filter_guidance_added = True
+                 assert delay is not None
+-                if cancel_event is not None:
+-                    try:
+-                        await asyncio.wait_for(cancel_event.wait(), timeout=delay)
+-                        raise asyncio.CancelledError
+-                    except asyncio.TimeoutError:
+-                        pass
+-                else:
+-                    await asyncio.sleep(delay)
+-                if connection_retry:
+-                    connection_retry_count += 1
+-                    connection_retry_delay = min(60.0, connection_retry_delay * 2)
+-                elif watchdog_capacity_retry:
+-                    watchdog_capacity_wait_s += delay
+-                    if status == 529 or error.category == "overloaded":
+-                        overloaded_retry_count += 1
+-                else:
+-                    retry_index += 1
+-                    if status == 529 or error.category == "overloaded":
+-                        overloaded_retry_count += 1
++                await _wait_for_retry(delay, cancel_event)
++                retry_index += 1
+             finally:
+                 if stream is not None:
+                     close = getattr(stream, "close", None)
+@@ -893,9 +915,6 @@ async def complete_stream(
+                             await asyncio.to_thread(close)
+                         except Exception:
+                             pass
+-        if last_error and last_error.status not in {429, 529} and candidate_index + 1 >= len(candidates):
+-            break
+-
+     if last_error is not None:
+         raise last_error
+     raise ModelCallError("No available model route", category="route")
+diff --git a/core/atlas/models/router.py b/core/atlas/models/router.py
+index 1844e5b8..e292324f 100644
+--- a/core/atlas/models/router.py
++++ b/core/atlas/models/router.py
+@@ -375,21 +375,10 @@ class ModelRouter:
+         self, model_id: str, purpose: str, messages: list[dict[str, Any]],
+         fallbacks: list[str] | None = None, **kwargs: Any,
+     ) -> CompletionResult:
+-        candidates = [model_id, *(fallbacks or [])]
+-        for alt in ("deepseek-v4.1-flash", "deepseek-v3"):
+-            if alt not in candidates:
+-                candidates.append(alt)
+-        last_error = None
+-        for candidate in candidates:
+-            try:
+-                route = await self.resolve(candidate, purpose)
+-                return await self.complete(route, messages, **kwargs)
+-            except Exception as exc:
+-                last_error = exc
+-                continue
+-        if last_error is not None:
+-            raise last_error
+-        raise RuntimeError("No model candidates available")
++        # ``fallbacks`` is accepted for compatibility but never used to silently
++        # switch models. Each auxiliary operation has its own explicitly chosen id.
++        route = await self.resolve(model_id, purpose)
++        return await self.complete(route, messages, **kwargs)
+ 
+     @staticmethod
+     def hermes_agent_kwargs(route: RouteSpec) -> dict[str, Any]:
+@@ -649,6 +638,27 @@ def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
+     return data
+ 
+ 
++_ERROR_BODY_MAX_BYTES = 16 * 1024
++
++
++def _raise_for_status_with_body(response: httpx.Response) -> None:
++    try:
++        response.raise_for_status()
++    except httpx.HTTPStatusError as exc:
++        body = bytearray()
++        try:
++            for chunk in response.iter_bytes(chunk_size=4096):
++                body.extend(chunk[:_ERROR_BODY_MAX_BYTES - len(body)])
++                if len(body) >= _ERROR_BODY_MAX_BYTES:
++                    break
++        except Exception:
++            pass
++        if body:
++            encoding = response.encoding or "utf-8"
++            setattr(exc, "_atlas_response_body", bytes(body).decode(encoding, errors="replace"))
++        raise
++
++
+ def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: dict[str, Any], network: ModelNetworkSettings):
+     timeout = kwargs.get("timeout") or httpx.Timeout(connect=15.0, read=None, write=30.0, pool=10.0)
+     url, headers, payload = _request_details(route, messages, {**kwargs, "stream": True})
+@@ -656,7 +666,7 @@ def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
+         payload["stream"] = True
+     with _client(route, network, timeout) as client:
+         with client.stream("POST", url, headers=headers, json=payload) as response:
+-            response.raise_for_status()
++            _raise_for_status_with_body(response)
+             if route.api_mode == "anthropic_messages":
+                 tool_indexes: dict[int, int] = {}
+                 next_tool_index = 0
+diff --git a/core/tests/test_kernel_tool_error_regressions.py b/core/tests/test_kernel_tool_error_regressions.py
+index ca1acf07..7731f54a 100644
+--- a/core/tests/test_kernel_tool_error_regressions.py
++++ b/core/tests/test_kernel_tool_error_regressions.py
+@@ -1,8 +1,8 @@
+ from __future__ import annotations
+ 
+ import json
+-import sys
+-from types import ModuleType, SimpleNamespace
++import asyncio
++from types import SimpleNamespace
+ from unittest.mock import AsyncMock
+ 
+ import pytest
+@@ -32,13 +32,12 @@ async def test_stream_preserves_tool_arguments_and_repeated_characters(monkeypat
+             "function": {"name": "local_shell" if index == 0 else "", "arguments": piece},
+         }], "reasoning_content": " "}, "finish_reason": None}]})
+     chunks.append({"choices": [{"delta": {}, "finish_reason": "tool_calls"}]})
+-    auxiliary = ModuleType("agent.auxiliary_client")
+-    auxiliary.call_llm = lambda **kwargs: iter(chunks)
+-    monkeypatch.setitem(sys.modules, "agent.auxiliary_client", auxiliary)
+     route = SimpleNamespace(provider="openai", wire_model="test", model="test", key="",
+                             base_url="http://isolated.invalid", api_mode="chat_completions",
+                             model_id="test")
+-    agent = SimpleNamespace(_model_router=SimpleNamespace(resolve=AsyncMock(return_value=route)))
++    agent = SimpleNamespace(_model_router=SimpleNamespace(
++        resolve=AsyncMock(return_value=route), stream=lambda *_args, **_kwargs: iter(chunks),
++    ))
+     events = []
+     result = await complete_stream(agent, "test", [], [], max_retries=0, on_event=events.append)
+     assert result.tool_calls == [{"id": "call-1", "name": "local_shell", "args": arguments}]
+@@ -134,13 +133,12 @@ async def test_incomplete_arguments_become_a_call_error_without_a_retry(monkeypa
+         [chunk("Hello ", '{"command":', True)],
+         [chunk("Hello world", '{"command":"taskkill /?"}', True)],
+     ])
+-    auxiliary = ModuleType("agent.auxiliary_client")
+-    auxiliary.call_llm = lambda **kwargs: iter(next(attempts))
+-    monkeypatch.setitem(sys.modules, "agent.auxiliary_client", auxiliary)
+     route = SimpleNamespace(provider="openai", wire_model="test", model="test", key="",
+                             base_url="http://isolated.invalid", api_mode="chat_completions",
+                             model_id="test")
+-    agent = SimpleNamespace(_model_router=SimpleNamespace(resolve=AsyncMock(return_value=route)))
++    agent = SimpleNamespace(_model_router=SimpleNamespace(
++        resolve=AsyncMock(return_value=route), stream=lambda *_args, **_kwargs: iter(next(attempts)),
++    ))
+     text = []
+     result = await complete_stream(agent, "test", [], [], max_retries=1, on_text=text.append)
+     assert result.attempts == 1
+@@ -150,6 +148,248 @@ async def test_incomplete_arguments_become_a_call_error_without_a_retry(monkeypa
+     assert result.text == "Hello "
+ 
+ 
++def _model_call_fixture(streams):
++    from unittest.mock import AsyncMock
++
++    route = SimpleNamespace(provider="provider-a", wire_model="wire-a", model="wire-a", key="",
++                            base_url="http://127.0.0.1", api_mode="chat_completions",
++                            model_id="model-a")
++    router = SimpleNamespace(resolve=AsyncMock(return_value=route), calls=0)
++
++    def stream(*_args, **_kwargs):
++        index = router.calls
++        router.calls += 1
++        item = streams[index]
++        if isinstance(item, BaseException):
++            raise item
++        def chunks():
++            for chunk in item:
++                if isinstance(chunk, BaseException):
++                    raise chunk
++                yield chunk
++        return chunks()
++
++    router.stream = stream
++    return SimpleNamespace(_model_router=router), router
++
++
++def _finished(text="ok"):
++    return [{"choices": [{"delta": {"content": text}, "finish_reason": None}]},
++            {"choices": [{"delta": {}, "finish_reason": "stop"}]}]
++
++
++def _http_error(status, message="provider error", headers=None):
++    error = RuntimeError(message)
++    error.response = SimpleNamespace(status_code=status, headers=headers or {})
++    return error
++
++
++@pytest.mark.asyncio
++async def test_model_call_retries_one_connection_failure_on_the_same_model(monkeypatch):
++    from atlas.kernel import model_call
++
++    monkeypatch.setattr(model_call, "_wait_for_retry", AsyncMock())
++    agent, router = _model_call_fixture([RuntimeError("connection reset"), _finished()])
++    result = await complete_stream(agent, "model-a", [], [], max_retries=20)
++    assert result.model == "model-a" and result.attempts == 2
++    assert router.calls == 2
++
++
++@pytest.mark.asyncio
++async def test_model_call_caps_503_at_three_requests_and_preserves_error_fields(monkeypatch):
++    from atlas.kernel import model_call
++
++    monkeypatch.setattr(model_call, "_wait_for_retry", AsyncMock())
++    agent, router = _model_call_fixture([_http_error(503, "upstream unavailable") for _ in range(3)])
++    with pytest.raises(model_call.ModelCallError) as raised:
++        await complete_stream(agent, "model-a", [], [], max_retries=20)
++    assert router.calls == 3
++    assert raised.value.model == "model-a" and raised.value.provider == "provider-a"
++    assert raised.value.status == 503 and raised.value.attempts == 3
++    assert "upstream unavailable" in str(raised.value)
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize("status", [400, 401, 402, 403, 404, 409, 413, 422, 425, 501, 505])
++async def test_permanent_model_errors_are_not_retried(monkeypatch, status):
++    from atlas.kernel import model_call
++
++    message = "connection timeout" if status in {400, 409, 422, 425, 501, 505} else "provider error"
++    agent, router = _model_call_fixture([_http_error(status, message), _finished()])
++    with pytest.raises(model_call.ModelCallError):
++        await complete_stream(agent, "model-a", [], [], max_retries=2,
++                              fallback_models=["model-b", "deepseek-v4.1-flash"])
++    assert router.calls == 1
++    assert [call.args[0] for call in agent._model_router.resolve.await_args_list] == ["model-a"]
++
++
++@pytest.mark.asyncio
++async def test_route_failure_reports_selected_model_without_sending_request():
++    from atlas.kernel.model_call import ModelCallError
++
++    router = SimpleNamespace(resolve=AsyncMock(side_effect=RuntimeError("unknown model")))
++    agent = SimpleNamespace(_model_router=router)
++    with pytest.raises(ModelCallError) as raised:
++        await complete_stream(agent, "model-a", [], [], max_retries=2)
++    assert raised.value.model == "model-a"
++    assert raised.value.category == "model_not_found" and raised.value.attempts == 0
++
++
++@pytest.mark.asyncio
++async def test_route_authentication_failure_preserves_provider_and_status():
++    from atlas.kernel.model_call import ModelCallError
++
++    error = _http_error(401, "invalid credential")
++    error.provider = "provider-a"
++    router = SimpleNamespace(resolve=AsyncMock(side_effect=error))
++    agent = SimpleNamespace(_model_router=router)
++    with pytest.raises(ModelCallError) as raised:
++        await complete_stream(agent, "model-a", [], [], max_retries=2)
++    assert raised.value.model == "model-a" and raised.value.provider == "provider-a"
++    assert raised.value.category == "authentication" and raised.value.status == 401
++    assert raised.value.attempts == 0
++
++
++@pytest.mark.asyncio
++async def test_invalid_tool_call_index_is_not_retried(monkeypatch):
++    from atlas.kernel import model_call
++
++    monkeypatch.setattr(model_call, "_wait_for_retry", AsyncMock())
++    malformed = [{"choices": [{"delta": {"tool_calls": [{"index": "invalid"}]},
++                               "finish_reason": None}]}]
++    agent, router = _model_call_fixture([malformed, _finished()])
++    with pytest.raises(model_call.ModelCallError) as raised:
++        await complete_stream(agent, "model-a", [], [], max_retries=2)
++    assert raised.value.category == "malformed_response"
++    assert router.calls == 1
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize("status", [503, 529])
++async def test_long_retry_after_on_server_errors_stops_without_waiting(monkeypatch, status):
++    from atlas.kernel import model_call
++
++    wait = AsyncMock()
++    monkeypatch.setattr(model_call, "_wait_for_retry", wait)
++    agent, router = _model_call_fixture([_http_error(status, headers={"Retry-After": "30"}), _finished()])
++    with pytest.raises(model_call.ModelCallError) as raised:
++        await complete_stream(agent, "model-a", [], [], max_retries=2)
++    assert router.calls == 1 and wait.await_count == 0
++    assert raised.value.retry_after_s == 30
++
++
++@pytest.mark.asyncio
++async def test_error_card_detail_keeps_response_reason_and_redacts_secrets():
++    from atlas.kernel import model_call
++
++    error = _http_error(503, "HTTP 503")
++    error.response.text = '{"error":{"message":"upstream maintenance","api_key":"superSecretToken123"}}'
++    detail = model_call._safe_error_detail(error)
++    assert "upstream maintenance" in detail
++    assert "superSecretToken123" not in detail
++
++
++def test_httpx_stream_error_captures_only_bounded_response_body():
++    import httpx
++    from atlas.models.router import _ERROR_BODY_MAX_BYTES, _raise_for_status_with_body
++
++    body = b'{"error":"upstream maintenance"}' + (b"x" * (_ERROR_BODY_MAX_BYTES * 2))
++    response = httpx.Response(503, request=httpx.Request("POST", "https://example.invalid"),
++                              stream=httpx.ByteStream(body))
++    with pytest.raises(httpx.HTTPStatusError) as raised:
++        _raise_for_status_with_body(response)
++    captured = raised.value._atlas_response_body
++    assert "upstream maintenance" in captured
++    assert len(captured.encode("utf-8")) <= _ERROR_BODY_MAX_BYTES
++    from atlas.kernel.model_call import _safe_error_detail, classify_error
++    assert classify_error(raised.value) == ("provider", True, 503)
++    assert "upstream maintenance" in _safe_error_detail(raised.value)
++
++
++@pytest.mark.asyncio
++async def test_empty_model_selection_fails_without_resolving_a_route():
++    from atlas.kernel.model_call import ModelCallError
++
++    router = SimpleNamespace(resolve=AsyncMock())
++    with pytest.raises(ModelCallError) as raised:
++        await complete_stream(SimpleNamespace(_model_router=router), "", [], [])
++    assert raised.value.category == "route" and raised.value.model == ""
++    assert raised.value.attempts == 0 and router.resolve.await_count == 0
++
++
++@pytest.mark.asyncio
++async def test_rate_limit_retry_respects_retry_after_cutoff(monkeypatch):
++    from atlas.kernel import model_call
++
++    monkeypatch.setattr(model_call, "_wait_for_retry", AsyncMock())
++    small, small_router = _model_call_fixture([
++        _http_error(429, headers={"Retry-After": "2", "x-request-id": "provider-req-1"}), _finished(),
++    ])
++    result = await complete_stream(small, "model-a", [], [], max_retries=2)
++    assert result.attempts == 2 and small_router.calls == 2
++
++    large, large_router = _model_call_fixture([_http_error(429, headers={
++        "Retry-After": "16", "x-request-id": "provider-req-16",
++    }), _finished()])
++    with pytest.raises(model_call.ModelCallError) as raised:
++        await complete_stream(large, "model-a", [], [], max_retries=2)
++    assert large_router.calls == 1
++    assert raised.value.retry_after_s == 16
++    assert raised.value.request_id == "provider-req-16"
++
++
++@pytest.mark.asyncio
++async def test_partial_stream_failure_is_not_reissued(monkeypatch):
++    from atlas.kernel import model_call
++
++    monkeypatch.setattr(model_call, "_wait_for_retry", AsyncMock())
++    partial = [{"choices": [{"delta": {"content": "seen"}, "finish_reason": None}]},
++               RuntimeError("connection reset")]
++    agent, router = _model_call_fixture([partial, _finished("duplicate")])
++    received = []
++    with pytest.raises(model_call.ModelCallError) as raised:
++        await complete_stream(agent, "model-a", [], [], max_retries=2, on_text=received.append)
++    assert router.calls == 1 and "".join(received) == "seen"
++    assert raised.value.attempts == 1
++
++
++@pytest.mark.asyncio
++async def test_tool_delta_failure_is_not_reissued(monkeypatch):
++    from atlas.kernel import model_call
++
++    monkeypatch.setattr(model_call, "_wait_for_retry", AsyncMock())
++    partial = [{"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "call-1",
++        "function": {"name": "write_file", "arguments": "{\"path\":"}}]}, "finish_reason": None}]},
++        RuntimeError("connection reset")]
++    agent, router = _model_call_fixture([partial, _finished()])
++    with pytest.raises(model_call.ModelCallError):
++        await complete_stream(agent, "model-a", [], [], max_retries=2)
++    assert router.calls == 1
++
++
++@pytest.mark.asyncio
++async def test_cancel_interrupts_retry_wait():
++    from atlas.kernel.model_call import _wait_for_retry
++
++    cancel = asyncio.Event()
++    cancel.set()
++    with pytest.raises(asyncio.CancelledError):
++        await _wait_for_retry(15, cancel)
++
++
++@pytest.mark.asyncio
++async def test_auxiliary_router_does_not_try_fallback_or_implicit_models():
++    from atlas.models.router import ModelRouter
++
++    route = object()
++    router = SimpleNamespace(
++        resolve=AsyncMock(return_value=route), complete=AsyncMock(return_value="ok"),
++    )
++    result = await ModelRouter.complete_for(router, "model-a", "memory", [], fallbacks=["model-b"])
++    assert result == "ok"
++    assert [call.args[0] for call in router.resolve.await_args_list] == ["model-a"]
++
++
+ def test_tool_call_arguments_repair_only_closed_objects():
+     from atlas.kernel.model_call import _ToolDelta, _tool_calls
+ 
+diff --git a/frontend/src/renderer/components/ConversationActivity.tsx b/frontend/src/renderer/components/ConversationActivity.tsx
+index 9e38bc4a..ab075cae 100644
+--- a/frontend/src/renderer/components/ConversationActivity.tsx
++++ b/frontend/src/renderer/components/ConversationActivity.tsx
+@@ -17,6 +17,15 @@ import type { InspectorTab } from '../shell/Inspector';
+ import { TokenUsageCard, TokenUsageToggle } from './TokenUsage';
+ import { usageSummary } from './runInsights';
+ 
++const MODEL_ERROR_LABEL: Record<string, string> = {
++  authentication: '模型身份验证失败', billing: '模型额度不足',
++  model_not_found: '找不到所选模型', invalid_request: '模型请求参数无效',
++  context_window_exceeded: '输入超出模型上下文限制', content_filter: '模型内容过滤器拒绝了请求',
++  rate_limit: '模型服务限流', connection: '模型服务连接失败', timeout: '模型请求超时',
++  overloaded: '模型服务暂时过载', provider: '模型服务暂时错误',
++  route: '模型路由或凭据配置错误', budget: '运行额度限制已达到',
++};
++
+ interface ConversationActivityProps {
+   events: AgentEvent[];
+   store: ReturnType<typeof useAtlasStore.getState>;
+@@ -91,7 +100,14 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
+     </div>;
+     case 'done': return <DoneLine key={item.id} item={item} events={events} store={store} setTab={setTab} />;
+     case 'failed': return <div key={item.id} role="alert" className="my-4 rounded-xl bg-danger-soft px-4 py-3 text-[13px] text-danger">
+-      没能完成：{item.detail}
++      <div>没能完成：{item.detail}</div>
++      {item.category === 'model' && <div className="mt-2 space-y-1 text-[12px] text-fg-2">
++        <div>{MODEL_ERROR_LABEL[item.errorCategory ?? ''] ?? '模型请求失败'}{item.modelId ? ` · ${item.modelId}` : ''}{item.provider ? ` · ${item.provider}` : ''}{item.status ? ` · HTTP ${item.status}` : ''}</div>
++        {item.retryAfterSeconds !== undefined && item.retryAfterSeconds > 15 && <div>预计恢复：约 {Math.ceil(item.retryAfterSeconds)} 秒后</div>}
++        {item.rawDetail && <div className="break-words">上游说明：{item.rawDetail}</div>}
++        {item.requestId && <div>请求 ID：{item.requestId}</div>}
++        {item.attempts !== undefined && <div>请求次数：{item.attempts} · 可手动重试：{item.manualRetryAllowed ? '是' : '否'}</div>}
++      </div>}
+     </div>;
+     default: return null;
+   }
+diff --git a/frontend/src/renderer/components/timeline.test.ts b/frontend/src/renderer/components/timeline.test.ts
+index 3baa6342..b1257275 100644
+--- a/frontend/src/renderer/components/timeline.test.ts
++++ b/frontend/src/renderer/components/timeline.test.ts
+@@ -23,6 +23,17 @@ describe('describeTool', () => {
+ });
+ 
+ describe('buildTimeline', () => {
++  it('retains structured model failure details for the error card', () => {
++    const [failure] = buildTimeline([ev('run.failed', {
++      category: 'model', error_category: 'overloaded', model_id: 'model-a', provider: 'provider-a', status: 503,
++      raw_detail: 'upstream unavailable', request_id: 'req-1', attempts: 3,
++      manual_retry_allowed: true, detail: '模型请求失败',
++    })]);
++    expect(failure).toMatchObject({ kind: 'failed', category: 'model', errorCategory: 'overloaded', modelId: 'model-a',
++      provider: 'provider-a', status: 503, rawDetail: 'upstream unavailable', requestId: 'req-1',
++      attempts: 3, manualRetryAllowed: true });
++  });
++
+   it('pairs tool start and finish by tool_call_id and never shows bookkeeping events', () => {
+     seq = 0;
+     const items = buildTimeline([
+diff --git a/frontend/src/renderer/components/timeline.ts b/frontend/src/renderer/components/timeline.ts
+index 53c7519c..eed221f2 100644
+--- a/frontend/src/renderer/components/timeline.ts
++++ b/frontend/src/renderer/components/timeline.ts
+@@ -94,7 +94,7 @@ export type TimelineItem =
+   | { kind: 'review'; id: string; scope: string; scopeLabel: string; workspace: string; findings: ReviewFinding[] }
+   | { kind: 'artifact'; id: string; name: string; summary: string }
+   | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
+-  | { kind: 'failed'; id: string; detail: string };
++  | { kind: 'failed'; id: string; detail: string; category?: string; errorCategory?: string; modelId?: string; provider?: string; status?: number; rawDetail?: string; requestId?: string; attempts?: number; retryAfterSeconds?: number; manualRetryAllowed?: boolean };
+ 
+ const TARGET_KEYS = ['path', 'file_path', 'filepath', 'file', 'command', 'cmd', 'query', 'pattern', 'url', 'q', 'target', 'name'];
+ 
+@@ -712,7 +712,18 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
+         break;
+       case 'run.failed':
+         dropPreparing();
+-        items.push({ kind: 'failed', id: event.id, detail: text(data.detail ?? data.code) || '未知错误' });
++        items.push({
++          kind: 'failed', id: event.id, detail: text(data.detail ?? data.code) || '未知错误',
++          category: text(data.category) || undefined, modelId: text(data.model_id) || undefined,
++          errorCategory: text(data.error_category) || undefined,
++          provider: text(data.provider) || undefined,
++          status: typeof data.status === 'number' ? data.status : undefined,
++          rawDetail: text(data.raw_detail) || undefined,
++          requestId: text(data.request_id) || undefined,
++          attempts: typeof data.attempts === 'number' ? data.attempts : undefined,
++          retryAfterSeconds: typeof data.retry_after_s === 'number' ? data.retry_after_s : undefined,
++          manualRetryAllowed: typeof data.manual_retry_allowed === 'boolean' ? data.manual_retry_allowed : undefined,
++        });
+         break;
+       default:
+         break;
+diff --git a/frontend/src/renderer/store/useAtlasStore.test.ts b/frontend/src/renderer/store/useAtlasStore.test.ts
+index bd67272c..d4473f9c 100644
+--- a/frontend/src/renderer/store/useAtlasStore.test.ts
++++ b/frontend/src/renderer/store/useAtlasStore.test.ts
+@@ -233,6 +233,22 @@ describe('follow-up queue', () => {
+     expect(state.queue['c-done'].map((item) => item.content)).toEqual(['second follow-up']);
+     expect(state.runs.filter((run) => run.conversationId === 'c-done')).toHaveLength(2);
+   });
++
++  it('pauses queued follow-ups after a model failure and keeps them queued', async () => {
++    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 } as Response));
++    await useAtlasStore.getState().initialize();
++    useAtlasStore.setState({ activeConversationId: 'c-model-fail', activeRunId: 'r-model-fail',
++      conversations: [], runs: [running('r-model-fail', 'c-model-fail')], queue: {}, queuePaused: {} });
++    await useAtlasStore.getState().sendMessage('continue after recovery');
++
++    useAtlasStore.getState().appendEvent({ id: 'e-model-fail', runId: 'r-model-fail', sequence: 2,
++      type: 'run.failed', timestamp: new Date().toISOString(), data: { category: 'model', attempts: 3 } });
++
++    const state = useAtlasStore.getState();
++    expect(state.queuePaused['c-model-fail']).toBe(true);
++    expect(state.queue['c-model-fail'].map((item) => item.content)).toEqual(['continue after recovery']);
++    expect(state.runs.filter((run) => run.conversationId === 'c-model-fail')).toHaveLength(1);
++  });
+ });
+ 
+ describe('steering a running run', () => {
+diff --git a/frontend/src/renderer/store/useAtlasStore.ts b/frontend/src/renderer/store/useAtlasStore.ts
+index 33feec10..94b099f1 100644
+--- a/frontend/src/renderer/store/useAtlasStore.ts
++++ b/frontend/src/renderer/store/useAtlasStore.ts
+@@ -683,6 +683,10 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
+             return { pendingSteers, queue: { ...state.queue, [run.conversationId]: [...unconfirmed, ...(state.queue[run.conversationId] ?? [])] } };
+           });
+         }
++        if (event.type === 'run.failed' && event.data.category === 'model'
++            && (get().queue[run.conversationId]?.length ?? 0) > 0) {
++          set((state) => ({ queuePaused: { ...state.queuePaused, [run.conversationId]: true } }));
++        }
+         dispatchQueue(run.conversationId);
+         void reloadMessages(run.conversationId).catch((error) => fail(error, '无法读取对话历史'));
+         // The run may have created a worktree or remembered a directory for the conversation.
+diff --git a/tasks/reviews/atlas-luna-20261017/06-MODEL-RETRY-FIX.md b/tasks/reviews/atlas-luna-20261017/06-MODEL-RETRY-FIX.md
+new file mode 100644
+index 00000000..f5a8ca0c
+--- /dev/null
++++ b/tasks/reviews/atlas-luna-20261017/06-MODEL-RETRY-FIX.md
+@@ -0,0 +1,73 @@
++# W1 模型故障策略修复
++
++## 基线与调用链
++
++- 基于 `ui-redesign` / `0b1ba4114e25643369c95bfac85d37563788444f` 的独立 worktree `D:\atlas-luna-w1-20261017`。
++- `D:\Atlas` 工作区原有未提交改动。只读比较确认其中 `model_call.py`、`loop.py`、`run_phases.py`、`hermes_runtime.py` 的 diff 属于 expert prompt、web research、content-filter 指令，不是本次策略依赖；未复制或覆盖。
++- 主会话链：`agent/run_phases.py::_phase_init` 解析所选模型 → `kernel/loop.py` 调用 `kernel/model_call.py::complete_stream` → `ModelRouter.stream`。
++- 辅助调用链：`engine/hermes_runtime.py` → `ModelRouter.complete_for` → `ModelRouter.complete`。
++
++## 修改
++
++- `model_call.py` 将每次调用的重试硬限制为最多 2 次（同模型总 HTTP 请求最多 3 次）；默认短退避 0.5 秒、1.5 秒。环境变量和旧 watchdog 参数不能扩大上限。
++- 显式 HTTP 状态只允许 408、429、500、502、503、504、529 进入重试判断；其他状态（包含 409、425、501、505）即使正文包含 timeout/connection 也不重试。没有 HTTP 状态的连接失败或超时可有限重试。内容过滤、额度、模型不存在、上下文和参数错误立即结束。`Retry-After` 超过 15 秒终止，并把恢复秒数传给错误卡。
++- 当前流尝试一旦已产生文本、reasoning、refusal 或 tool-call delta，失败后不重发，保留已发布/持久化部分结果。等待期间取消事件可立即取消重试。
++- 单轮只解析并请求明确选定的 model id；忽略旧 `fallback_models` 兼容参数。`run_phases.py` 不再读取主会话 fallback。`ModelRouter.complete_for` 不追加配置候选或硬编码 DeepSeek 候选。
++- 错误事件包含中文分类、model id、provider、HTTP status、脱敏上游说明、request id、请求数、手动重试标志；长 `Retry-After` 会停止重试并显示预计恢复时间。HTTPX streaming status 错误在响应关闭前仅读取最多 16 KiB body，以保留 provider 原因。路由失败以 0 次请求、预算拒绝以 0 次 HTTP 请求上报。
++- `run.failed(category=model)` 到达前端时暂停队列；dispatch 在暂停后不会移除队首，排队消息保留到用户手动恢复。
++- 现有 HTTP 传输没有发现嵌套自动重试：`models/router.py::_client` 构造普通 `httpx.Client`，`_stream_completion` 每次 `client.stream` 单发；辅助请求 `_post_completion` 每次 `client.post` 单发。当前凭据池仅在 `ModelRouter.resolve` 通过 `pool.select(model=...)` 选择一次凭据，没有请求内轮换重发。Hermes `AIAgent` 不在当前对话链中；`HermesRuntime._agent_factory` 已明确移除该入口。
++
++## 错误卡示例
++
++> 模型服务暂时错误。已保留本轮已完成内容。
++> model-a · provider-a · HTTP 503
++> 上游说明：upstream unavailable
++> 请求 ID：provider-req-16
++> 请求次数：3 · 可手动重试：是
++
++长 `Retry-After` 时卡片显示预计恢复秒数。上游异常说明同时读取 HTTP response body，并复用 `redact_sensitive_text(..., force=True)` 做秘密脱敏。
++
++## 验证
++
++Python 使用指定的 `D:\Atlas\core\.venv\Scripts\python.exe`，`PYTHONPATH=D:\atlas-luna-w1-20261017\core`。测试数据与 pytest 临时目录位于本 worktree 的 `.tmp`；没有启动 Atlas、连接模型服务或消耗真实 token。
++
++命令：
++
++```powershell
++$env:PYTHONPATH='D:\atlas-luna-w1-20261017\core'
++$env:ATLAS_DATA_DIR='D:\atlas-luna-w1-20261017\.tmp\model-retry-data'
++rtk D:\Atlas\core\.venv\Scripts\python.exe -m pytest D:\atlas-luna-w1-20261017\core\tests\test_kernel_tool_error_regressions.py -vv -p no:cacheprovider --basetemp D:\atlas-luna-w1-20261017\.tmp\pytest-model-retry-final5
++```
++
++stdout 结论：
++
++```text
++======================= 38 passed, 5 warnings in 3.01s ========================
++```
++
++5 条 warning 是已有 Pydantic/FastAPI deprecated API 提示。
++
++新增/调整的针对性覆盖包括：瞬断后同模型重试成功；503 最多 3 次并保留完整字段；400/401/402/403/404/409/413/422/425/501/505 不重试（400/409/422/425/501/505 的错误文本含 connection/timeout）；malformed tool-call index 不重发；503/529 长 Retry-After 不等待重试；HTTPX 未读stream body最多读16KiB、保留provider原因并经共用redactor脱敏；响应 JSON 原因被保留且 API key 被脱敏；路由身份验证失败返回 model/provider/status/attempts=0；未知或空模型在发送请求前返回完整模型路由错误；429 Retry-After 2 秒重试、16 秒停止并保留 provider request id；流式文本或 tool delta 后不重发；取消中断重试等待；主会话与辅助调用均不尝试 fallback model。
++
++前端：
++
++```text
++vitest useAtlasStore.test.ts -t 'pauses queued follow-ups after a model failure'
++1 passed, 24 skipped
++
++vitest timeline.test.ts
++17 passed
++
++tsc -p frontend/tsconfig.renderer.json --noEmit
++exit 0, no diagnostics
++```
++
++当前分支的队列定向用例命令为 `rtk node_modules\\.bin\\vitest run frontend/src/renderer/store/useAtlasStore.test.ts -t 'pauses queued follow-ups after a model failure'`，结果 `1 passed, 24 skipped`；timeline 文件 `17 passed`，renderer `tsc` 无诊断。
++
++为核对基线失败，在干净 worktree `D:\\atlas-luna-w1-cleanbase-20261017`（HEAD `0b1ba4114e25643369c95bfac85d37563788444f`）使用 `rtk node_modules\\.bin\\vitest run frontend/src/renderer/store/useAtlasStore.test.ts --reporter=verbose` 执行完整 store 文件。结果 `3 failed | 21 passed`，失败项均存在于基线：`conversation creation > loads history and selects each opened conversation`（history mock 未初始化，断言处 `useAtlasStore.test.ts:99`）、`settings configuration > loads and saves subagent enablement and default model together`（`SettingsPage` 中 React 未定义）、`message pagination and bounded cache > defaults to the latest page and prepends an earlier one on loadEarlier`（profiles mock 为 undefined，`useAtlasStore.ts:362`）。干净基线工作树仅用于只读复核，随后删除。未运行全套后端或前端测试。
++
++## 未验证边界
++
++- 使用本地模拟异常，不连接真实 provider；没有测 provider 特有的所有错误体格式或真实限流恢复时间。
++- 前端通过 Zustand/event 单测和 renderer TypeScript 检查，没有启动 Electron 做手工 UI 检查。
++- 本提交尚待 GPT-6 独立审查；当前状态 `AWAITING_GPT6_REVIEW`。

@@ -17,9 +17,13 @@
 | 层级 | PID / 父 PID | 启动与绑定 | 判定 |
 |---|---|---|---|
 | Electron 主进程 | 55644 / 71604 | `D:\Atlas\node_modules\electron\dist\electron.exe --remote-debugging-port=9335 --remote-allow-origins=* D:\Atlas\frontend` | 确认桌面来自该源码工作区 |
-| Python 启动器 | 1800 / 55644 | `D:\Atlas\core\.venv\Scripts\python.exe -m atlas.desktop_entry` | Electron 子进程 |
-| Python 后端 | 53140 / 1800 | 同上；实际解释器 `C:\Users\25011\AppData\Local\Programs\Python\Python314\python.exe` | `127.0.0.1:8765` 监听归属此 PID |
+| Python 启动器 | **51284** / 55644 | `D:\Atlas\core\.venv\Scripts\python.exe -m atlas.desktop_entry`，2026-10-17 16:54:17 启动 | Electron 子进程 |
+| Python 后端 | **50140** / 51284 | 同上；cwd 实测 `D:\Atlas\core`，2026-10-17 16:54:17 启动 | `127.0.0.1:8765` 监听归属此 PID |
 | CDP | 55644 | `127.0.0.1:9335` | 与上述 Electron 相符 |
+
+> **第二轮更正（2026-10-17）**：上表原记 PID 1800 / 53140，复核时该两个进程已退出，现进程为 51284 / 50140（16:54:17 启动）。用 psutil 读取工作进程 `cwd` 得 `D:\Atlas\core`，确认 8765 这条用户日常链路源码根为 `D:\Atlas`。另有一条独立实例 `D:\atlas-mem-integrate\core` 跑在 9459（PID 37200 / 46164，16:09 启动），不在本轮范围。详见 `07-INCREMENT-RECHECK.md §1`。
+>
+> **运行内容是 HEAD 还是工作区**：已收口为「`0b1ba411` + 12 处未提交修改的工作区快照」。判据：`expert_harness.py`(12:16:39)、`model_call.py`(01:05:41)、`run_phases.py`(02:53:40)、`loop.py`(01:05:21) 的 mtime 全部早于后端启动 16:54:17；且 `cwd=D:\Atlas\core` 使 `atlas` 包解析到该目录。
 
 只读 HTTP 观察：`GET /api/health` 返回 200，`status=ok, version=0.1.0`；`GET /v1/ready` 返回 404；CDP `/json/version` 返回 200（Chrome/152.0.7977.130，协议 1.3）。这些只证明相应端点的状态，不证明聊天、工具、记忆或生命周期端到端成功。`/v1/ready` 404 亦不单独定为缺陷，须结合当前版本就绪接口设计。
 

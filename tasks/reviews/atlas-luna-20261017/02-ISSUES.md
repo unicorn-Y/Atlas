@@ -4,7 +4,7 @@
 
 ## 统计与去重规则
 
-共 21 个不同问题（P1 10、P2 11）；没有本轮确认的P0。W3的队列/错误卡分别对应W1修复的两个前端环节，保留独立症状、不重复计算为其他模块发现。W1重试与fallback合并为一个策略问题。W2-003仅为候选分支集成风险；W5-008为已披露功能缺口；W5-009待验证，不列为已复现故障。优先级表示处理建议，不代表已获施工授权。
+共 25 个不同问题（P1 14、P2 11）；没有本轮确认的P0。ATL-022～025 为第二轮增量复核新增（content_filter 误判可重试、运行版无界/超限重试、辅助调用静默换硬编码 DeepSeek、W1 与运行态合并冲突），详见 07-INCREMENT-RECHECK.md。W3的队列/错误卡分别对应W1修复的两个前端环节，保留独立症状、不重复计算为其他模块发现。W1重试与fallback合并为一个策略问题。W2-003仅为候选分支集成风险；W5-008为已披露功能缺口；W5-009待验证，不列为已复现故障。优先级表示处理建议，不代表已获施工授权。
 
 | ID | 来源 | 优先级 | 领域 | 处置 |
 |---|---|---|---|---|
@@ -29,6 +29,10 @@
 | ATL-019 | W6-003 | P2 | 依赖pin/Python启动 | 仅审查，待授权 |
 | ATL-020 | W6-004 | P2 | 源码/构建产物一致性 | 仅审查，待授权 |
 | ATL-021 | ROOT-001 | P2 | 语音/资源生命周期 | 仅审查，待授权 |
+| ATL-022 | 增量-01 | P1 | content_filter 被判可重试（运行版还主动改写绕过） | W1 修复，待落地 |
+| ATL-023 | 增量-02 | P1 | 运行版无界连接重试 + 默认 10 次（实测最多 11 次请求） | W1 修复，待落地 |
+| ATL-024 | 增量-03 | P1 | 辅助调用失败静默换硬编码 deepseek-v4.1-flash / deepseek-v3 | W1 修复，待落地 |
+| ATL-025 | 增量-04 | P1 | W1 与运行态工作区存在 1 处合并冲突（需语义裁量） | 已给补丁与验证 |
 
 ## 逐项证据与最小处理建议
 
@@ -46,9 +50,9 @@
 ### ATL-002 — run cancellation / long-running tools（P1 / W2-001）
 
 - **症状**：A stop request sets the run cancel event, but AtlasKernel waits for an in-flight tool batch using only the tool task and event queue. If a tool is still awaiting work and emits no event, the API cannot observe cancellation until that tool returns; long or stuck calls may keep the run alive after the user requests stop.
-- **真实运行影响边界**：主执行者确认 Atlas 进程源码根为 D:\Atlas；实际加载字节未知。若加载 ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f，代码路径受影响。主目录 dirty/untracked 的 deep_research overlay 同样缺少 run cancel_event 传递。
+- **真实运行影响边界**：主执行者确认 Atlas 进程源码根为 D:\Atlas；**已核实运行的是 ui-redesign@0b1ba411 加 12 处未提交修改的工作区快照**（进程 cwd=D:\Atlas\core，且 expert_harness.py 等文件 mtime 12:16 早于后端启动 16:54，见 07-INCREMENT-RECHECK §1），代码路径受影响。主目录 dirty/untracked 的 deep_research overlay 同样缺少 run cancel_event 传递。
 - **证据/函数**：[{"branch":"ui-redesign","full_sha":"0b1ba4114e25643369c95bfac85d37563788444f","path":"core/atlas/kernel/loop.py","lines":"1496-1505","function":"AtlasKernel.run"},{"branch":"ui-redesign","full_sha":"0b1ba4114e25643369c95bfac85d37563788444f","path":"core/atlas/kernel/loop.py","lines":"2394-2423","function":"AtlasKernel._dispatch"},{"branch":"ui-redesign","full_sha":"0b1ba4114e25643369c95bfac85d37563788444f","path":"core/atlas/api/run_drive.py","lines":"166,2268-2278,2707-2710","function":"stop command / check_pause_cancel / _execute_run event consumer"},{"branch":"ui-redesign host overlay (untracked file, not in commit)","full_sha":"0b1ba4114e25643369c95bfac85d37563788444f plus uncommitted overlay","path":"core/atlas/research/tool.py","lines":"57-80","function":"run_deep_research_tool"},{"branch":"codex/desktop-repair-20261013","full_sha":"b177a6a94a7f1a9adb2891955a37cd4d4490054d","path":"core/atlas/kernel/loop.py","lines":"1435-1443","function":"AtlasKernel.run tool batch wait"}]
-- **结论类别**：代码确认；隔离运行复现未执行；进程源码根已确认 D:\Atlas，加载字节待核实；desktop-repair 分支亦未修复
+- **结论类别**：代码确认；隔离运行复现未执行；进程源码根已确认 D:\Atlas，加载内容已核定为 0b1ba411 + 工作区未提交修改；desktop-repair 分支亦未修复
 - **最小处理**：Race the kernel tool batch against the run cancel event. Signal cancellable child operations and stop launching new calls; await and record settled results, preserve partial output, then finish as cancelled/interrupted. Never restart a cancelled side-effecting call.
 - **复用方向**：Reuse the existing model-stream cancel_waiter in kernel/loop.py and workflow cancellation watcher in kernel/workflow_tool.py.
 - **复杂度 / 执行者**：M / W2
@@ -57,7 +61,7 @@
 ### ATL-003 — truthful completion / post-edit verification（P2 / W2-002）
 
 - **症状**：The current kernel path can finish after the model emits a final answer following code-changing tools without a mechanical prompt to run a relevant check. Verification is left to model behavior, so unverified edits can end in a normal completed turn.
-- **真实运行影响边界**：主执行者确认 Atlas 进程源码根为 D:\Atlas；实际加载字节未知。若加载 ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f，kernel 结束路径受影响；desktop-repair 默认 AtlasKernel 路径仍未接入 nudge。
+- **真实运行影响边界**：主执行者确认 Atlas 进程源码根为 D:\Atlas；**已核实运行的是 ui-redesign@0b1ba411 加 12 处未提交修改的工作区快照**（进程 cwd=D:\Atlas\core，且 expert_harness.py 等文件 mtime 12:16 早于后端启动 16:54，见 07-INCREMENT-RECHECK §1），kernel 结束路径受影响；desktop-repair 默认 AtlasKernel 路径仍未接入 nudge。
 - **证据/函数**：[{"branch":"ui-redesign","full_sha":"0b1ba4114e25643369c95bfac85d37563788444f","path":"core/atlas/engine/hermes_runtime.py","lines":"864-867,967,985","function":"HermesRuntime.run_turn"},{"branch":"ui-redesign","full_sha":"0b1ba4114e25643369c95bfac85d37563788444f","path":"core/atlas/kernel/loop.py","lines":"1593-1604","function":"AtlasKernel.run"},{"branch":"ui-redesign","full_sha":"0b1ba4114e25643369c95bfac85d37563788444f","path":"core/atlas/agent/run_phases.py","lines":"929-949","function":"_phase_finalize"},{"branch":"codex/desktop-repair-20261013","full_sha":"b177a6a94a7f1a9adb2891955a37cd4d4490054d","path":"core/atlas/agent/run_phases.py","lines":"1467-1474","function":"_pump_events / verification nudge"}]
 - **结论类别**：代码确认；本机复现未执行；desktop-repair 的默认 AtlasKernel 路径仍有缺口
 - **最小处理**：Wire the existing changed-path and successful-check evidence into kernel finalization and emit the existing bounded verification nudge when code changes remain unverified. Keep run completion as a turn-terminal status unless goal success is separately defined.
@@ -112,7 +116,7 @@
 ### ATL-008 — Dream / checkpoint / recovery（P1 / W5-001）
 
 - **症状**：run_dream 扫描 checkpoint 之后的经历，并在全部生成完成后把全局 checkpoint 推到运行时 now。若在扫描完成、checkpoint 写入前到达的经历具有早于 now 的 entry.at（例如重启后处理迟到队列），下次 _episode_groups 会因 entry.at <= checkpoint 永久跳过它；全局时间水位也无法表达逐 source 的处理状态。
-- **真实运行影响边界**：ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f 源码符合该条件；是否发生于当前实际运行进程未核实。
+- **真实运行影响边界**：ui-redesign@0b1ba4114e25643369c95bfac85d37563788444f 源码符合该条件；当前运行进程即该 commit 加工作区修改（07 §1），故代码路径受影响，但该故障本身未复现。
 - **证据/函数**：[{"branch":"ui-redesign","fullSHA":"0b1ba4114e25643369c95bfac85d37563788444f","path":"core/atlas/memory/library/dream.py","line":28,"function":"_episode_groups"},{"branch":"ui-redesign","fullSHA":"0b1ba4114e25643369c95bfac85d37563788444f","path":"core/atlas/memory/library/dream.py","line":154,"function":"run_dream"},{"branch":"ui-redesign","fullSHA":"0b1ba4114e25643369c95bfac85d37563788444f","path":"core/tests/test_memory_library_w2.py","line":274,"function":"test_dream_checkpoint_advances_only_after_all_projects_succeed (does not cover late/concurrent sources)"}]
 - **结论类别**：代码确认
 - **最小处理**：以 entry/source ID + extractor version 保存已成功处理游标；只有该 source 的结果持久化后才推进它的状态。至少复核扫描期间新增的 source，避免以运行时间覆盖尚未看见的条目。
@@ -269,3 +273,47 @@ Android/tap/swipe/type并非缺失：kernel tools和loop已桥接mobile_simulato
 
 模块完整调用链、搜索边界及独有分支说明见[W2](modules/W2-KERNEL.md)、[W3](modules/W3-FRONTEND.md)、[W4](modules/W4-TOOLS.md)、[W5](modules/W5-MEMORY.md)、[W6](modules/W6-STARTUP.md)、[补充](modules/ROOT-ADDITIONAL.md)。
 
+
+
+## 第二轮增量补录（详证见 07-INCREMENT-RECHECK.md / evidence/W1-VERIFY.json）
+
+### ATL-022 — content_filter 被判为可重试，与任务书策略冲突（P1）
+
+- **症状**：内容过滤命中后不被视为终止条件，而是进入重试；当前运行版还叠加 expert 注入，按 `CONTINUE_FILTER_GUIDANCE` 改写措辞重发。
+- **真实运行影响边界**：基线 `0b1ba411` 与运行工作区均受影响；本机未注入过滤响应，未复现。
+- **证据/函数**：`ui-redesign@0b1ba411` `core/atlas/kernel/model_call.py:207` `classify_error` 返回 `("content_filter", True, status)`；同文件 `:858` `content_filter_guidance_added` 分支重试前插引导消息；运行工作区 `expert_harness.py:112-119,206` 提供 `CONTINUE_FILTER_GUIDANCE`（`data/user-settings.json` 实测 `expert_mode: true`）。
+- **结论类别**：代码确认（三份代码对照：HEAD=True、运行版=True、W1=False）。
+- **最小处理**：`classify_error` 的 content_filter 置 `retryable=False`，删除 `:858` 重发引导分支（W1 `e2599784` 已如此）。
+- **复用方向**：沿用现有 `ModelCallError` 与事件链，无新框架。
+- **复杂度 / 执行者**：S / W1。
+- **施工状态**：W1 分支已修；落地时与 expert_harness 注入冲突（见 ATL-025）。
+
+### ATL-023 — 运行版无界连接重试 + 默认 10 次（P1）
+
+- **症状**：瞬时故障不是最多 3 次，用户实际会等 11 次请求，连接类错误还可无上限重试。
+- **真实运行影响边界**：用户当前进程即受影响（07 §1）。实测矩阵见 `evidence/W1-VERIFY.json`（同配置下运行版 11 次、W1 3 次；传 fallback 候选时运行版 84 次、W1 3 次）。
+- **证据/函数**：运行版 `core/atlas/kernel/model_call.py:564` `unbounded_connection_retries: bool = True`；`:803-812` 该分支无视 `max_retries`；`:608-609` 5.0s 起始退避、`:879` 每次 ×2 上限 60s；`_retry_environment` `:71-78` 无配置时 `retries = 300 if watchdog else 10`。`engine/config.yaml` 与 `data/user-settings.json` 均无 `model_retries` 键，故走 10。
+- **结论类别**：代码确认 + 独立脚本实测（假网关，不耗 token；W1 9/9、运行版 6/9，且已用引导断言排除 `.pth` 把 `D:/Atlas` 抢先加载的测量污染）。
+- **最小处理**：`max_retries = min(2, ...)`，`unbounded_connection_retries` 默认 `False`（W1 已如此）。
+- **复杂度 / 执行者**：S / W1。
+- **施工状态**：W1 已修；未部署到 `D:\Atlas`。
+
+### ATL-024 — 辅助调用失败静默切换到硬编码 DeepSeek（P1）
+
+- **症状**：规划、反思、MoA 汇总、压缩、标题等辅助调用失败时，用户无任何提示，请求被改发到 `deepseek-v4.1-flash` 或 `deepseek-v3`。
+- **真实运行影响边界**：调用链完整、运行版可达；本机 `fallback` 配置为空，但硬编码追加不受配置控制。
+- **证据/函数**：运行版 `core/atlas/models/router.py:378-381` 无条件 `for alt in ("deepseek-v4.1-flash","deepseek-v3")`，`:383-389` 逐个 `try/except continue`。调用点：`core/atlas/agent/__init__.py:645/706/909/927/938/970`、`core/atlas/engine/branch_summaries.py:72`、`core/atlas/api/run_drive.py:416`、`core/atlas/engine/hermes_runtime.py:503`。
+- **结论类别**：代码确认（调用链已逐一核对）。
+- **最小处理**：`complete_for` 不隐式追加候选（W1 已如此）。
+- **复杂度 / 执行者**：S / W1。
+- **施工状态**：W1 已修；未部署。
+
+### ATL-025 — W1 与运行态工作区存在 1 处合并冲突（P1，集成风险）
+
+- **症状**：W1 不能以快进方式落到用户正在运行的代码上；`cherry-pick` 会在 `model_call.py` 的 content_filter 块冲突。
+- **真实运行影响边界**：仅影响「把 W1 装到当前工作区」这一步，不是运行期故障。
+- **证据/函数**：独立 worktree `/d/Temp/integ-probe/base`：`9481b507`（运行态快照）cherry-pick `e2599784` → `CONFLICT (content) core/atlas/kernel/model_call.py`，仅此 1 处，其余 11 文件自动合并；按任务书语义取 W1 侧（删重发分支）后 `--continue` 成功 → `4e7a87e7`；`ast.parse` 通过；定向测试 38 passed。补丁：`D:/Temp/luna-audit-20261017/w1-runtime-integration.patch`。
+- **结论类别**：实测（隔离环境）。
+- **最小处理**：按 W1 语义消解该冲突；是否保留 expert「换措辞继续」需用户点头。
+- **复杂度 / 执行者**：S / 主执行者。
+- **施工状态**：已产出可应用补丁与验证；未改动 `D:\Atlas`。

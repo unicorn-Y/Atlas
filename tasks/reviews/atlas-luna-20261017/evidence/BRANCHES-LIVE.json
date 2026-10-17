@@ -1,0 +1,314 @@
+{
+  "captured_at": "2026-10-17",
+  "count": 77,
+  "heads": [
+    {
+      "name": "absorb-all",
+      "sha": "8d7b01d829f1332e9305fe8ee56758a6294139f7"
+    },
+    {
+      "name": "boot-1-core",
+      "sha": "efcc0cb832799d07c2c952de9d4850062c4e1cba"
+    },
+    {
+      "name": "boot-1-int",
+      "sha": "67807c3aa66ea794edcc6b1f265ac70d584d64d8"
+    },
+    {
+      "name": "boot-1-shell",
+      "sha": "a157c7e2623b25db0d124ea49b087ee5648ce785"
+    },
+    {
+      "name": "card-a-tc-01",
+      "sha": "40589104058e74c5dd8a3b04974f75dd4083a5cb"
+    },
+    {
+      "name": "card-b-tc-02",
+      "sha": "07317edf817de33f4ffdbb0f1d5bd9f50c0b0c00"
+    },
+    {
+      "name": "card-b-tc-03",
+      "sha": "b643e8d656406b36bb46f4c88a547358627dc2ef"
+    },
+    {
+      "name": "card-b-tc-04",
+      "sha": "b9140952f765734f0638790b787718afb627af2c"
+    },
+    {
+      "name": "card-b-tc-05",
+      "sha": "fec9552ae88cb2a753c363c4502e0c58e431356f"
+    },
+    {
+      "name": "card-b-tc-06",
+      "sha": "076a1e5210ab76e06e8f364589b1ed2dc4766a99"
+    },
+    {
+      "name": "card-b-tc-08",
+      "sha": "99d9b7747f0819dc9a6a84ab096d7098a5c2866f"
+    },
+    {
+      "name": "card-b-tc-10",
+      "sha": "0dfc918c7bbc481f6fa99d4f697dd5fccbd7a20f"
+    },
+    {
+      "name": "card-c-tc-04",
+      "sha": "fba530af68422556c98d489ebe242203c3343f49"
+    },
+    {
+      "name": "card-d-tc-01",
+      "sha": "8c8d3b7b72fd7c9a6146df63572e017863e5e854"
+    },
+    {
+      "name": "card-d-tc-02",
+      "sha": "3442fb508742f3e68e736bb76ab4d0657007f704"
+    },
+    {
+      "name": "card-d-tc-04",
+      "sha": "acc972d67f0718c36db448e9384b224fa7db6aba"
+    },
+    {
+      "name": "ctx-opt",
+      "sha": "bddafde3ce6f76fb953085b89c096b68188e1ea0"
+    },
+    {
+      "name": "docs/atlas-memory-research-20261016",
+      "sha": "aa6196f550098cc46081dc6db2c376cb87ddffa5"
+    },
+    {
+      "name": "engine-v1",
+      "sha": "cbd1dc2d487e324844a60da29280c8782ef3133a"
+    },
+    {
+      "name": "engine-v2",
+      "sha": "3c5e6ac5142331c7b7e6c5bd38459a7e17a3b67d"
+    },
+    {
+      "name": "engine-v2b",
+      "sha": "9a1d0feeef4ee49d2fb4b37f67f35ed227d023d8"
+    },
+    {
+      "name": "engine-v3",
+      "sha": "140eece4cd8765b88604b75876795214889a5744"
+    },
+    {
+      "name": "f1-a",
+      "sha": "8b2a61f929faa1bee2d5d061df4eff5ba8a825b6"
+    },
+    {
+      "name": "f1-b",
+      "sha": "7ae6e1187e66ed536809caed3df888060cf03c7c"
+    },
+    {
+      "name": "f1-c",
+      "sha": "baa9a61a632935667e3b524ea95b0beb43bad019"
+    },
+    {
+      "name": "f1-d",
+      "sha": "2ef6580bfd5b4c45018c2e4003751826f65cdcf9"
+    },
+    {
+      "name": "f2-c",
+      "sha": "132a95d88606defa79421d15523427a592bd0053"
+    },
+    {
+      "name": "f2-d",
+      "sha": "96520ce0a3f78733dab4be53939d1b8e3ecb8cad"
+    },
+    {
+      "name": "feat/personal-todos",
+      "sha": "f1b20f6eca3f91f514b4fb6c48aa82c183bf0339"
+    },
+    {
+      "name": "fix-p1-audit",
+      "sha": "56615d0f21b39c4cf30a6d14972e65174461c32c"
+    },
+    {
+      "name": "fix/atlas-model-retry-policy-20261017",
+      "sha": "e259978420f944ef57bdb15ed22a8890486c018e"
+    },
+    {
+      "name": "fix/core-papercuts",
+      "sha": "01ecfe1e23f46a30854cdc71101a63ab554731b0"
+    },
+    {
+      "name": "frontend-parity",
+      "sha": "02fb0f032938c0a32a5c38f30ad51768f2123713"
+    },
+    {
+      "name": "h1-core-hardening",
+      "sha": "2db55ac263fcb24ef23f679cbcea089b6140b9e7"
+    },
+    {
+      "name": "main",
+      "sha": "aa6196f550098cc46081dc6db2c376cb87ddffa5"
+    },
+    {
+      "name": "mem-acceptance",
+      "sha": "07ca0fa8a53b08bf30f7d6edffab9a5824cfe56a"
+    },
+    {
+      "name": "mem-integrate",
+      "sha": "4046764fbabda187a4b329c830a4b9cab9631951"
+    },
+    {
+      "name": "mem-m1",
+      "sha": "11b6eddf7f55fb3ef3f56bb2f032ec46d298c5cb"
+    },
+    {
+      "name": "mem-m2",
+      "sha": "5ffb1a16e7bdf73733198beefe8d2f581e04a3b0"
+    },
+    {
+      "name": "mem-m3",
+      "sha": "211962cd8dd0a459c730a9b5ee4a73e34dbf44b6"
+    },
+    {
+      "name": "mem-m4",
+      "sha": "a0acc44de98a4df72239e267f823d3697b2d21c2"
+    },
+    {
+      "name": "mem-m5",
+      "sha": "720de7110f6f1e2db733b709575f5150c64fb0ad"
+    },
+    {
+      "name": "mem-m6",
+      "sha": "b8eec99ec5a60c9292764dc4e5ba15c20e4e0d29"
+    },
+    {
+      "name": "mem-m7",
+      "sha": "ba38782b871aff468737ef5d54387de462b79597"
+    },
+    {
+      "name": "mem-m8",
+      "sha": "0cc5fff4ecf4ecbc3fa4e95b118da990579e09c7"
+    },
+    {
+      "name": "mem-m9",
+      "sha": "65a7776370691d37d65f026af4d08efe1c8e19f5"
+    },
+    {
+      "name": "memory-purge",
+      "sha": "7826e91c6c71dfc180f6fad6136b5eb53a9dab52"
+    },
+    {
+      "name": "memory-survey",
+      "sha": "57712d33652f8d14af372cca062dec8b1d21ad4b"
+    },
+    {
+      "name": "memory-survey-a",
+      "sha": "a029ca6abfabf51f7d6bf6469358d23b3f879e8b"
+    },
+    {
+      "name": "memory-survey-b",
+      "sha": "af1971c8a3878dba08683c75c5750d0018d697e2"
+    },
+    {
+      "name": "memory-survey-c",
+      "sha": "f92b8998d6b91b135861600bf7b1415e0e20b445"
+    },
+    {
+      "name": "memory-v1",
+      "sha": "9ace88c5731ed8be6dd7406d758161236938e2de"
+    },
+    {
+      "name": "memory-w0",
+      "sha": "3a5e41c5c47767361d979deb2f00b09cbf1866ff"
+    },
+    {
+      "name": "memory-w1",
+      "sha": "9ace88c5731ed8be6dd7406d758161236938e2de"
+    },
+    {
+      "name": "memory-w2-api",
+      "sha": "aa14c3173392d0fc60ec3e401e4495a2d3357cb7"
+    },
+    {
+      "name": "memory-w2-fix",
+      "sha": "6c5240e41381a1eda4f0c8d74687c47476f95721"
+    },
+    {
+      "name": "memory-w2-plan",
+      "sha": "9e70bf33abcf93301987c943eb3cd15bf2ab6530"
+    },
+    {
+      "name": "memory-w2-ui",
+      "sha": "11153a028feace09e952e23544e0adf1d155887c"
+    },
+    {
+      "name": "research/atlas-memory-2026-10-16-handoff",
+      "sha": "bc42b5091563d3f8ee5d25ffc3266ea1c72f6af8"
+    },
+    {
+      "name": "review/atlas-luna-global-audit-20261017",
+      "sha": "87aed27c96498321572f324a511f88afeda154ff"
+    },
+    {
+      "name": "sol/t1-prep",
+      "sha": "0e37af241463d4ed3a71a25de60f3dad0def97bb"
+    },
+    {
+      "name": "sol/x-prep",
+      "sha": "9972813e4dfcd7d5fdf99dde63400312b7cdfd3d"
+    },
+    {
+      "name": "sol/x-prep-wip-2026-10-05",
+      "sha": "447982a7fbee426d23826392174f2cdd9c8812e4"
+    },
+    {
+      "name": "task/hermes-atlas-implementation-20261017",
+      "sha": "56e2b7b3ad1954928fed87efe5421563a8312ab8"
+    },
+    {
+      "name": "task/luna-audit-model-policy-20261017",
+      "sha": "1557f612604a634ebad28728c2787a8085cfa946"
+    },
+    {
+      "name": "track-upstream",
+      "sha": "aef275ed649f49bd3396f4ffca65cb1a1a7d4c48"
+    },
+    {
+      "name": "ui-redesign",
+      "sha": "0b1ba4114e25643369c95bfac85d37563788444f"
+    },
+    {
+      "name": "ui/reasoning-zcode",
+      "sha": "5e2ec97c55a530d9c944d184a070ed60417d00c6"
+    },
+    {
+      "name": "ui/streamdown",
+      "sha": "66d26367b4c6040d7fdd5f51fdd9e3a9f2b2458f"
+    },
+    {
+      "name": "unified-memory/waves",
+      "sha": "931ef643126dc79a6e7fa820517d0253e07128cc"
+    },
+    {
+      "name": "websearch",
+      "sha": "1581b4f84ca7dd9f3ef0b35eff0127026f9b2bde"
+    },
+    {
+      "name": "wip/c3-frontend-from-laptop",
+      "sha": "a451723b38be3e01b886811f16e6f0cca8d0ef33"
+    },
+    {
+      "name": "wip/f4-bc-20261009",
+      "sha": "bfea9fbfa69df15a5240d721be60c6a9d100e867"
+    },
+    {
+      "name": "wip/host-uncommitted-2026-10-04",
+      "sha": "a2c200c8f4668a0bf24800cc09add7d0e99766fd"
+    },
+    {
+      "name": "wip/kernel-deep-research-20261015",
+      "sha": "7f0ee93293786f8d884cdf45650f1fb8aa7e29c4"
+    },
+    {
+      "name": "zcode/c5-models-parallel",
+      "sha": "4b3083430d659f8aa71db5defa9bc6c802a948b6"
+    },
+    {
+      "name": "zcode/c6a-lsp-parallel",
+      "sha": "fe3ecd498e5361163ee864cc70ce04b8cdb66ecd"
+    }
+  ]
+}

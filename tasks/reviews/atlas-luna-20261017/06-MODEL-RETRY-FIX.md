@@ -17,6 +17,8 @@
 - `run.failed(category=model)` 到达前端时暂停队列；dispatch 在暂停后不会移除队首，排队消息保留到用户手动恢复。
 - 现有 HTTP 传输没有发现嵌套自动重试：`models/router.py::_client` 构造普通 `httpx.Client`，`_stream_completion` 每次 `client.stream` 单发；辅助请求 `_post_completion` 每次 `client.post` 单发。当前凭据池仅在 `ModelRouter.resolve` 通过 `pool.select(model=...)` 选择一次凭据，没有请求内轮换重发。Hermes `AIAgent` 不在当前对话链中；`HermesRuntime._agent_factory` 已明确移除该入口。
 
+  **第二轮独立核实（追加）**：确认上述结论成立。`run_phases.py::_turn` → `_hermes_turn` → `HermesRuntime.run_turn`，而 `run_turn` 内部 `:866` `from atlas.kernel.loop import AtlasKernel, KernelRequest`，即对话轮次最终由 `AtlasKernel` 走 `kernel/model_call.py::complete_stream`，与本文实测的是同一条路径。`_agent_factory`（`hermes_runtime.py:519-522`）直接 `raise RuntimeError("Hermes AIAgent was removed; AtlasKernel owns conversation turns")`，且全仓无其他调用点。因此不存在「Atlas 3 次 × Hermes 自带重试」的乘算。凭据池 `core/atlas/models/credentials.py` 实测为同 provider 内多 key 轮换（`select` / `mark_exhausted_and_rotate` / `reclaim`），不更换模型，符合任务书「凭据管理不算自动换模型」。
+
 ## 错误卡示例
 
 > 模型服务暂时错误。已保留本轮已完成内容。
