@@ -26,6 +26,7 @@ from atlas.kernel.repair import repair_unpaired_tool_calls, started_call_ids
 from atlas.kernel.state import KernelEvent, RunPhase, RunState
 from atlas.kernel.stuck import StuckDetector
 from atlas.kernel.tools import READ_ONLY_TOOLS, ToolExecutionResult, ToolScheduler
+from atlas.agent.verification_stop import requires_verification
 
 log = logging.getLogger(__name__)
 
@@ -137,6 +138,14 @@ def _session_history(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             message["tool_calls"] = message["tool_calls"]
         messages.append(message)
     return messages
+
+
+def _unverified_code_paths(runtime: Any) -> list[str]:
+    if getattr(runtime, "verification_passed", False):
+        return []
+    changed_paths = getattr(runtime, "changed_paths", set()) or set()
+    return [path for path in changed_paths
+            if isinstance(path, str) and requires_verification(path)][:8]
 
 
 def _compaction_payload(
@@ -1495,11 +1504,22 @@ class AtlasKernel:
 
                 tool_task = asyncio.create_task(scheduler.run(tool_calls_wire))
                 queue_get = asyncio.create_task(event_queue.get())
+                cancel_waiter = (
+                    asyncio.create_task(request.cancel_event.wait())
+                    if request.cancel_event is not None else None
+                )
                 try:
                     while not tool_task.done() or not event_queue.empty():
+                        waiters = {tool_task, queue_get}
+                        if cancel_waiter is not None:
+                            waiters.add(cancel_waiter)
                         done, _ = await asyncio.wait(
-                            {tool_task, queue_get}, return_when=asyncio.FIRST_COMPLETED,
+                            waiters, return_when=asyncio.FIRST_COMPLETED,
                         )
+                        if cancel_waiter is not None and cancel_waiter in done:
+                            if not tool_task.done():
+                                tool_task.cancel()
+                            raise asyncio.CancelledError
                         if queue_get in done:
                             queued_event = queue_get.result()
                             if (isinstance(queued_event, dict)
@@ -1523,7 +1543,8 @@ class AtlasKernel:
                     results = settled[0] if settled and isinstance(settled[0], list) else []
                     if state.phase in {RunPhase.TOOLS, RunPhase.WAITING_APPROVAL}:
                         transition(RunPhase.AGGREGATING_RESULTS)
-                    await consume_tool_results(results)
+                    for result_event in await consume_tool_results(results):
+                        yield result_event
                     record("tool_batch_cancelled", call_count=len(tool_calls_wire),
                            settled_count=len(results))
                     while not event_queue.empty():
@@ -1535,7 +1556,9 @@ class AtlasKernel:
                     raise
                 finally:
                     queue_get.cancel()
-                    await asyncio.gather(queue_get, return_exceptions=True)
+                    if cancel_waiter is not None:
+                        cancel_waiter.cancel()
+                    await asyncio.gather(queue_get, cancel_waiter, return_exceptions=True)
 
                 transition(RunPhase.AGGREGATING_RESULTS)
                 for result_event in await consume_tool_results(results):
@@ -1590,6 +1613,9 @@ class AtlasKernel:
             else:
                 raise RuntimeError(f"Kernel reached its {max_turns}-turn limit")
 
+            code_paths = _unverified_code_paths(proxy_runtime)
+            if code_paths:
+                yield emit("run_verify_nudge", data={"changed_paths": code_paths})
             transition(RunPhase.DONE)
             elapsed = int((time.monotonic() - started_at) * 1000)
             record("run_end", status="completed",
