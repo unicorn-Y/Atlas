@@ -32,6 +32,31 @@ _MEMORY_AUXILIARY_TIMEOUT_SECONDS = 120.0
 _MEMORY_AUXILIARY_PURPOSES = frozenset({"memory_library"})
 _MEMORY_LOW_REASONING_MODELS = frozenset({"gemini-3.8-flash"})
 _OLLAMA_LOCAL_BASE_URL = "http://127.0.0.1:11434/v1"
+_AUXILIARY_RETRYABLE_STATUSES = frozenset({408, 429, 500, 502, 503, 504, 529})
+
+
+def _auxiliary_retry_delay(exc: Exception, retry_index: int) -> float | None:
+    """Return a bounded delay for a retryable auxiliary request failure."""
+    if retry_index >= 2:
+        return None
+    if isinstance(exc, httpx.HTTPStatusError):
+        response = exc.response
+        if response.status_code not in _AUXILIARY_RETRYABLE_STATUSES:
+            return None
+        retry_after = response.headers.get("Retry-After")
+        if retry_after is not None:
+            try:
+                delay = float(retry_after)
+            except ValueError:
+                delay = 0
+            if delay > 15:
+                return None
+            if delay > 0:
+                return delay
+        return (0.5, 1.5)[retry_index]
+    if isinstance(exc, (httpx.TimeoutException, httpx.NetworkError)):
+        return (0.5, 1.5)[retry_index]
+    return None
 
 
 @dataclass(frozen=True)
@@ -297,6 +322,7 @@ class ModelRouter:
 
     async def complete(self, route: RouteSpec, messages: list[dict[str, Any]], **kwargs: Any) -> CompletionResult:
         """Run one auxiliary request over the same Atlas-owned HTTP transport."""
+        retry_auxiliary = bool(kwargs.pop("_retry_auxiliary", False))
         wire_model = route.wire_model or route.model
         usage_callback = kwargs.pop("usage_callback", None) or _USAGE_CALLBACK.get()
         from atlas.usage import env_run_usage_budget
@@ -333,7 +359,15 @@ class ModelRouter:
             )
             raise RuntimeError(f"{reason}; the auxiliary model request was not sent.")
         try:
-            response = await asyncio.to_thread(_post_completion, route, messages, kwargs, network)
+            for attempt in range(3 if retry_auxiliary else 1):
+                try:
+                    response = await asyncio.to_thread(_post_completion, route, messages, kwargs, network)
+                    break
+                except Exception as exc:
+                    delay = _auxiliary_retry_delay(exc, attempt)
+                    if delay is None or attempt == 2:
+                        raise
+                    await asyncio.sleep(delay)
         except BaseException:
             if budget is not None:
                 budget.release(request_id)
@@ -378,7 +412,7 @@ class ModelRouter:
         # ``fallbacks`` is accepted for compatibility but never used to silently
         # switch models. Each auxiliary operation has its own explicitly chosen id.
         route = await self.resolve(model_id, purpose)
-        return await self.complete(route, messages, **kwargs)
+        return await self.complete(route, messages, _retry_auxiliary=True, **kwargs)
 
     @staticmethod
     def hermes_agent_kwargs(route: RouteSpec) -> dict[str, Any]:

@@ -156,6 +156,107 @@ async def test_native_anthropic_route_completes_over_fake_http_endpoint(purpose)
         assert request["body"]["model"] == "claude-sonnet-4"
 
 
+async def test_complete_for_retries_retryable_failure_on_same_auxiliary_model(monkeypatch) -> None:
+    import httpx
+    import atlas.models.router as router_module
+
+    router = ModelRouter(FakeModelManager("native_only"))
+    route = await router.resolve("claude-sonnet-4", "title")
+    resolved: list[str] = []
+    original_resolve = router.resolve
+
+    async def record_resolve(model_id, purpose):
+        resolved.append(model_id)
+        return await original_resolve(model_id, purpose)
+
+    monkeypatch.setattr(router, "resolve", record_resolve)
+    attempts = 0
+
+    def post(_route, _messages, _kwargs, _network):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise httpx.ConnectError("temporary connection reset")
+        if attempts == 2:
+            request = httpx.Request("POST", "https://example.test")
+            response = httpx.Response(503, request=request)
+            raise httpx.HTTPStatusError("unavailable", request=request, response=response)
+        return {"choices": [{"message": {"content": "done"}}]}
+
+    monkeypatch.setattr(router_module, "_post_completion", post)
+    monkeypatch.setattr(router_module.asyncio, "sleep", lambda _delay: _immediate())
+
+    result = await router.complete_for(route.model_id, "title", [{"role": "user", "content": "x"}], fallbacks=["other"])
+    assert result.text == "done"
+    assert attempts == 3
+    assert resolved == [route.model_id]
+
+
+async def _immediate() -> None:
+    return None
+
+
+@pytest.mark.parametrize("status", [401, 402, 403, 404, 400])
+async def test_complete_for_does_not_retry_permanent_http_failures(monkeypatch, status) -> None:
+    import httpx
+    import atlas.models.router as router_module
+
+    router = ModelRouter(FakeModelManager("native_only"))
+    route = await router.resolve("claude-sonnet-4", "title")
+    attempts = 0
+
+    def post(*_args):
+        nonlocal attempts
+        attempts += 1
+        request = httpx.Request("POST", "https://example.test")
+        response = httpx.Response(status, request=request)
+        raise httpx.HTTPStatusError("rejected", request=request, response=response)
+
+    monkeypatch.setattr(router_module, "_post_completion", post)
+    with pytest.raises(httpx.HTTPStatusError):
+        await router.complete_for(route.model_id, "title", [{"role": "user", "content": "x"}])
+    assert attempts == 1
+
+
+async def test_complete_for_stops_on_long_retry_after_and_releases_one_budget_reservation(monkeypatch) -> None:
+    import httpx
+    import atlas.models.router as router_module
+
+    class Budget:
+        cost_limit_usd = None
+
+        def __init__(self):
+            self.reserved = 0
+            self.released = 0
+
+        def reserve(self, *_args, **_kwargs):
+            self.reserved += 1
+            return True
+
+        def release(self, _request_id):
+            self.released += 1
+
+    budget = Budget()
+    monkeypatch.setattr(router_module, "_post_completion", _raise_long_retry_after)
+    import atlas.usage
+    monkeypatch.setattr(atlas.usage, "env_run_usage_budget", lambda: budget)
+    monkeypatch.setattr(router_module.asyncio, "sleep", lambda _delay: _immediate())
+    router = ModelRouter(FakeModelManager("native_only"))
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await router.complete_for("claude-sonnet-4", "title", [{"role": "user", "content": "x"}])
+    assert budget.reserved == 1
+    assert budget.released == 1
+
+
+def _raise_long_retry_after(*_args):
+    import httpx
+
+    request = httpx.Request("POST", "https://example.test")
+    response = httpx.Response(429, headers={"Retry-After": "16"}, request=request)
+    raise httpx.HTTPStatusError("rate limited", request=request, response=response)
+
+
 async def test_native_anthropic_route_preserves_cache_thinking_signature_and_tool_blocks(
 ) -> None:
     """Round 1 returns a signed thinking block + tool_use; round 2 replays both verbatim.
