@@ -98,3 +98,41 @@ def test_browse_index_scans_past_100k_and_counts_filtered_rows(tmp_path, monkeyp
     assert [row["id"] for row in result["items"]] == [
         "item-100000", "item-100001", "item-100002", "item-100003", "item-100004",
     ]
+
+
+def test_browse_keyword_normalization_uses_unfiltered_candidates(tmp_path, monkeypatch):
+    from atlas.memory.library import MemoryLibrary
+    from atlas.memory.library.hybrid import merge_scores
+
+    monkeypatch.setattr("atlas.memory.library.embed.embed_texts", lambda _texts: None)
+    library = MemoryLibrary(tmp_path)
+    library.ready()
+    with library.index._lock:
+        db = library.index._conn()
+        rows = [
+            {"id": "included", "path": "事/Atlas.md", "kind": "fact", "bucket": "current",
+             "text": "needle", "key": "", "src": "你说的", "at": "2026-10-17", "until": "",
+             "quote": "", "mode": "", "ref": "", "importance": 5, "trigger": "",
+             "origin_class": "owner", "observed_at": ""},
+            {"id": "filtered-high-score", "path": "事/Other.md", "kind": "fact",
+             "bucket": "current", "text": "needle alpha beta", "key": "", "src": "它自己",
+             "at": "2026-10-17", "until": "", "quote": "", "mode": "", "ref": "",
+             "importance": 10, "trigger": "", "origin_class": "agent", "observed_at": ""},
+        ]
+        for row in rows:
+            library.index._insert(db, row)
+        db.commit()
+
+    keyword = library.index._keyword_search(
+        "needle alpha beta", limit=10, kinds=("fact",), now=datetime(2026, 10, 17, tzinfo=UTC),
+    )
+    baseline = merge_scores(keyword, [], now=datetime(2026, 10, 17, tzinfo=UTC), limit=10)
+    expected = next(row["score"] for row in baseline if row["id"] == "included")
+    result = library.index.browse_search(
+        "needle alpha beta", offset=0, limit=10, kinds=("fact",), include_history=False,
+        sources={"你说的"}, from_date="", to_date="", project="Atlas",
+        now=datetime(2026, 10, 17, tzinfo=UTC),
+    )
+    assert result["total"] == 1
+    assert result["items"][0]["id"] == "included"
+    assert result["items"][0]["score"] == pytest.approx(expected)
