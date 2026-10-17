@@ -22,7 +22,7 @@ from atlas.kernel.context import CompactionResult, ContextManager, estimate_toke
 from atlas.kernel.model_call import ModelCallError, ModelCallResult, complete_stream
 from atlas.kernel.plan import PlanMode
 from atlas.kernel.prompt import build_prompt
-from atlas.kernel.repair import repair_unpaired_tool_calls, started_call_ids
+from atlas.kernel.repair import ToolHistoryError, repair_unpaired_tool_calls, started_call_ids
 from atlas.kernel.state import KernelEvent, RunPhase, RunState
 from atlas.kernel.stuck import StuckDetector
 from atlas.kernel.tools import READ_ONLY_TOOLS, ToolExecutionResult, ToolScheduler
@@ -423,6 +423,8 @@ class AtlasKernel:
                 canonical_rows = await asyncio.to_thread(
                     read_session_model_messages, self.data_dir / "engine", session_id,
                 )
+            except ToolHistoryError as exc:
+                raise ModelCallError(str(exc), category="invalid_history") from exc
             except Exception:
                 log.exception("kernel.session_read_failed", extra={"session_id": session_id})
                 canonical_rows = []
@@ -442,10 +444,8 @@ class AtlasKernel:
             history, repairs = repair_unpaired_tool_calls(history, started_ids=started, run_id=run_id)
             for repair in repairs:
                 record("repair", **repair)
-                await persist_async("tool", next(
-                    message["content"] for message in history
-                    if message.get("role") == "tool" and message.get("tool_call_id") == repair["tool_call_id"]
-                ), {"tool_call_id": repair["tool_call_id"], "tool_name": repair["name"],
+                await persist_async("tool", repair["content"], {
+                    "tool_call_id": repair["tool_call_id"], "tool_name": repair["name"],
                     "repair_state": repair["state"], "kernel_run_id": run_id})
                 yield emit("run.recovery.notice", data={
                     "message": "已修复上次中断时未配对的工具调用。",
@@ -805,7 +805,8 @@ class AtlasKernel:
                            retry_delay_s=event.get("retry_delay_s"),
                            retry_after_s=event.get("retry_after_s"),
                            retry_kind=event.get("retry_kind"),
-                           retry_number=event.get("retry_number"))
+                           retry_number=event.get("retry_number"),
+                           detail=event.get("detail"))
 
             async def on_summary_attempt(event: dict[str, Any]) -> None:
                 await record_model_attempt(event, purpose="compaction")
@@ -1691,15 +1692,12 @@ class AtlasKernel:
             try:
                 await preserve_partial_output("interrupted")
                 if open_call_ids:
-                    repaired, repairs = repair_unpaired_tool_calls(
+                    _, repairs = repair_unpaired_tool_calls(
                         messages, started_ids=active_call_ids, run_id=run_id,
                     )
                     for repair in repairs:
                         record("repair", **repair)
-                        tool_message = next(item for item in repaired
-                                            if item.get("role") == "tool"
-                                            and item.get("tool_call_id") == repair["tool_call_id"])
-                        await persist_async("tool", tool_message["content"], {
+                        await persist_async("tool", repair["content"], {
                             "tool_call_id": repair["tool_call_id"],
                             "tool_name": repair["name"], "repair_state": repair["state"],
                             "kernel_run_id": run_id,

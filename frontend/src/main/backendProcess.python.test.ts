@@ -8,7 +8,15 @@ const { spawnMock } = vi.hoisted(() => ({ spawnMock: vi.fn() }));
 vi.mock('node:child_process', async (importOriginal) => ({
   ...await importOriginal<typeof import('node:child_process')>(),
   spawn: spawnMock,
+  execFileSync: vi.fn(() => ''),
 }));
+
+function isolateBackendData() {
+  const scratch = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../.tmp');
+  fs.mkdirSync(scratch, { recursive: true });
+  vi.stubEnv('ATLAS_DATA_DIR', fs.mkdtempSync(path.join(scratch, 'backend-python-')));
+  vi.stubEnv('ATLAS_PORT', '28998');
+}
 
 function fakeChild() {
   const child = new EventEmitter() as EventEmitter & {
@@ -38,6 +46,7 @@ describe('source backend Python selection', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.useFakeTimers();
+    isolateBackendData();
     vi.stubEnv('ATLAS_ROOT', path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..'));
     vi.stubEnv('ATLAS_PYTHON', '');
     vi.stubEnv('ATLAS_BACKEND_EXECUTABLE', '');
@@ -119,6 +128,7 @@ describe('external backend already starting', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.useFakeTimers();
+    isolateBackendData();
     vi.stubEnv('ATLAS_ROOT', path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..'));
     spawnMock.mockReset();
   });

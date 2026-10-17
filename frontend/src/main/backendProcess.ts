@@ -33,6 +33,7 @@ const PORT = Number(process.env.ATLAS_PORT ?? '8765');
 
 let managedChild: ChildProcess | null = null;
 let stopPromise: Promise<void> | null = null;
+const stopReasons = new WeakMap<ChildProcess, string>();
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 
 function dataRootDir(): string {
@@ -49,6 +50,17 @@ function runtimeDir(): string {
 
 export function getBackendLogPath(): string {
   return path.join(dataRootDir(), 'data', 'logs', 'backend-stdio.log');
+}
+
+function recordBackendLifecycle(event: string, fields: Record<string, unknown>): void {
+  try {
+    const logPath = getBackendLogPath();
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fs.appendFileSync(logPath, `${JSON.stringify({ timestamp: new Date().toISOString(), event, ...fields })}\n`);
+  } catch (error) {
+    // An unavailable diagnostic sink must not prevent shutdown or mask an exit.
+    console.error('Atlas backend lifecycle log unavailable', (error as NodeJS.ErrnoException).code);
+  }
 }
 
 function loadSharedApiToken(): void {
@@ -203,6 +215,9 @@ async function startCandidate(
     closeLog();
     throw error;
   }
+  recordBackendLifecycle('backend.process_spawn', {
+    pid: child.pid ?? null, parent_pid: process.pid, executable: command,
+  });
   // 'close' follows draining stdout/stderr; 'exit' may precede their last chunk.
   child.once('close', closeLog);
 
@@ -219,8 +234,19 @@ async function startCandidate(
   });
 
   const outcome = new Promise<ProcessOutcome>((resolve) => {
-    child.once('error', (error: NodeJS.ErrnoException) => resolve({ kind: 'error', error }));
-    child.once('exit', (code, signal) => resolve({ kind: 'exit', code, signal }));
+    child.once('error', (error: NodeJS.ErrnoException) => {
+      recordBackendLifecycle('backend.process_error', {
+        pid: child.pid ?? null, parent_pid: process.pid, code: error.code ?? null,
+      });
+      resolve({ kind: 'error', error });
+    });
+    child.once('exit', (code, signal) => {
+      recordBackendLifecycle('backend.process_exit', {
+        pid: child.pid ?? null, parent_pid: process.pid, code, signal,
+        stop_reason: stopReasons.get(child) ?? null,
+      });
+      resolve({ kind: 'exit', code, signal });
+    });
   });
   return { child, stderr: () => stderrTail, outcome };
 }
@@ -299,6 +325,8 @@ async function terminate(child: ChildProcess): Promise<void> {
     clearTimeout(timeout);
   }
   if (process.platform === 'win32' && child.pid) {
+    recordBackendLifecycle('backend.force_stop', { pid: child.pid, method: 'taskkill',
+      reason: stopReasons.get(child) ?? null });
     await new Promise<void>((resolve) => {
       const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
         windowsHide: true,
@@ -309,6 +337,8 @@ async function terminate(child: ChildProcess): Promise<void> {
     });
     return;
   }
+  recordBackendLifecycle('backend.force_stop', { pid: child.pid ?? null, method: 'SIGTERM',
+    reason: stopReasons.get(child) ?? null });
   child.kill('SIGTERM');
 }
 
@@ -402,6 +432,9 @@ async function stopPreviousBackend(pid: number): Promise<void> {
     throw new Error(`data/runtime/backend.pid 指向 PID ${pid}，但无法确认它是 Atlas 后端；为避免结束无关进程，未执行 taskkill。`);
   }
   if (process.platform === 'win32') {
+    recordBackendLifecycle('backend.force_stop', {
+      pid, method: 'taskkill', reason: 'previous_backend_replacement',
+    });
     await new Promise<void>((resolve) => {
       const killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
         windowsHide: true, stdio: 'ignore',
@@ -573,7 +606,7 @@ async function ensureBackendRunningImpl(options?: EnsureBackendOptions): Promise
       await waitUntilReady(started.child, started.stderr, started.outcome, onProgress);
       return { ready: true, managed: true, pid: started.child.pid };
     } catch (error) {
-      if (started) await stopManagedBackend();
+      if (started) await stopManagedBackend('startup_failed');
       const spawnError = error as NodeJS.ErrnoException;
       if (spawnError.code === 'ENOENT') {
         lastNotFound = spawnError;
@@ -613,11 +646,13 @@ export async function ensureBackendRunning(options?: EnsureBackendOptions): Prom
   }
 }
 
-export function stopManagedBackend(): Promise<void> {
+export function stopManagedBackend(reason = 'app_quit'): Promise<void> {
   if (stopPromise) return stopPromise;
   const child = managedChild;
   managedChild = null;
   if (!child) return Promise.resolve();
+  stopReasons.set(child, reason);
+  recordBackendLifecycle('backend.stop_requested', { pid: child.pid ?? null, reason });
   stopPromise = terminate(child).finally(() => { stopPromise = null; });
   return stopPromise;
 }

@@ -117,10 +117,9 @@ def read_session_model_messages(home: str | Path, conversation_id: str) -> list[
                     "codex_reasoning_items", "codex_message_items", "_compressed_summary"):
             if key in metadata and key not in message:
                 message[key] = metadata[key]
-    from atlas.engine_core.agent.agent_runtime_helpers import repair_message_sequence
+    from atlas.kernel.repair import normalize_tool_results
 
-    repair_message_sequence(None, model_history)
-    return model_history
+    return normalize_tool_results(model_history, require_complete=False)
 
 
 def begin_session_compaction(

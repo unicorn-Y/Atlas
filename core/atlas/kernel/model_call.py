@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Awaitable, Callable
 
+from atlas.kernel.repair import normalize_tool_results
+
 
 @dataclass(slots=True)
 class ModelCallResult:
@@ -188,6 +190,41 @@ def _error_text(exc: BaseException) -> str:
             pass
         current = _get(current, "__cause__") or _get(current, "__context__")
     return " ".join(parts).lower()
+
+
+def _provider_error_detail(exc: BaseException, *, secret: str = "") -> str:
+    """Keep a bounded provider reason, never raw response documents or headers."""
+    response = _get(exc, "response")
+    details: list[str] = []
+    try:
+        body = response.json() if response is not None else None
+        error = body.get("error", body) if isinstance(body, dict) else None
+        if isinstance(error, dict):
+            for key in ("message", "type", "code", "request_id"):
+                value = error.get(key)
+                if isinstance(value, (str, int)):
+                    details.append(f"{key}: {value}")
+            if isinstance(body.get("request_id"), str):
+                details.append(f"request_id: {body['request_id']}")
+        if response is not None:
+            request_id = response.headers.get("x-request-id") or response.headers.get("request-id")
+            if request_id:
+                details.insert(0, f"request_id: {request_id}")
+    except (AttributeError, ValueError, RuntimeError):
+        pass
+    # Redact before truncating so a credential straddling the limit cannot leak.
+    detail = str(exc) + ("; " + "; ".join(details) if details else "")
+    if secret:
+        detail = detail.replace(secret, "[REDACTED]")
+    detail = re.sub(r"\bsk-[\w-]+", "[REDACTED]", detail, flags=re.IGNORECASE)
+    detail = re.sub(r"\bBearer\s+[^\s,;\"']+", "Bearer [REDACTED]", detail,
+                    flags=re.IGNORECASE)
+    detail = re.sub(
+        r"(\b(?:api[_-]?key|access[_-]?token|token|password|secret)[\"']?\s*[=:]\s*)"
+        r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s&;,\"'}\]]+)",
+        r"\1[REDACTED]", detail, flags=re.IGNORECASE,
+    )
+    return " ".join(detail.split())[:1500]
 
 
 def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
@@ -609,7 +646,10 @@ async def complete_stream(
     combined_text = ""
     combined_reasoning = ""
     combined_refusal = ""
-    request_messages = list(messages)
+    try:
+        request_messages = normalize_tool_results(messages)
+    except ValueError as exc:
+        raise ModelCallError(str(exc), category="invalid_history", retryable=False) from exc
     content_filter_guidance_added = False
     last_error: ModelCallError | None = None
     total_attempts = 0
@@ -841,7 +881,8 @@ async def complete_stream(
                     })
                 category, retryable, status = classify_error(exc)
                 error = exc if isinstance(exc, ModelCallError) else ModelCallError(
-                    str(exc), category=category, status=status, retryable=retryable,
+                    _provider_error_detail(exc, secret=str(_get(route, "key") or "")),
+                    category=category, status=status, retryable=retryable,
                 )
                 last_error = error
                 if status in {429, 529}:
@@ -890,7 +931,7 @@ async def complete_stream(
                     event = {"ok": False, "attempt": total_attempts,
                              "model": route.model_id or candidate,
                              "provider": route.provider, "category": error.category,
-                             "status": error.status,
+                              "status": error.status, "detail": str(error),
                              "duration_ms": int((time.monotonic() - attempt_started) * 1000),
                              "retry": will_retry,
                              "retry_kind": retry_kind,

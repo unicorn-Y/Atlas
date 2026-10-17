@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import json
-import sys
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -32,13 +31,12 @@ async def test_stream_preserves_tool_arguments_and_repeated_characters(monkeypat
             "function": {"name": "local_shell" if index == 0 else "", "arguments": piece},
         }], "reasoning_content": " "}, "finish_reason": None}]})
     chunks.append({"choices": [{"delta": {}, "finish_reason": "tool_calls"}]})
-    auxiliary = ModuleType("agent.auxiliary_client")
-    auxiliary.call_llm = lambda **kwargs: iter(chunks)
-    monkeypatch.setitem(sys.modules, "agent.auxiliary_client", auxiliary)
     route = SimpleNamespace(provider="openai", wire_model="test", model="test", key="",
                             base_url="http://isolated.invalid", api_mode="chat_completions",
                             model_id="test")
-    agent = SimpleNamespace(_model_router=SimpleNamespace(resolve=AsyncMock(return_value=route)))
+    agent = SimpleNamespace(_model_router=SimpleNamespace(
+        resolve=AsyncMock(return_value=route), stream=lambda *_args, **_kwargs: iter(chunks),
+    ))
     events = []
     result = await complete_stream(agent, "test", [], [], max_retries=0, on_event=events.append)
     assert result.tool_calls == [{"id": "call-1", "name": "local_shell", "args": arguments}]
@@ -134,13 +132,12 @@ async def test_incomplete_arguments_become_a_call_error_without_a_retry(monkeypa
         [chunk("Hello ", '{"command":', True)],
         [chunk("Hello world", '{"command":"taskkill /?"}', True)],
     ])
-    auxiliary = ModuleType("agent.auxiliary_client")
-    auxiliary.call_llm = lambda **kwargs: iter(next(attempts))
-    monkeypatch.setitem(sys.modules, "agent.auxiliary_client", auxiliary)
     route = SimpleNamespace(provider="openai", wire_model="test", model="test", key="",
                             base_url="http://isolated.invalid", api_mode="chat_completions",
                             model_id="test")
-    agent = SimpleNamespace(_model_router=SimpleNamespace(resolve=AsyncMock(return_value=route)))
+    agent = SimpleNamespace(_model_router=SimpleNamespace(
+        resolve=AsyncMock(return_value=route), stream=lambda *_args, **_kwargs: iter(next(attempts)),
+    ))
     text = []
     result = await complete_stream(agent, "test", [], [], max_retries=1, on_text=text.append)
     assert result.attempts == 1

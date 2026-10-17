@@ -11,9 +11,17 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
+class ToolHistoryError(ValueError):
+    """Canonical history cannot be paired without guessing or losing evidence."""
+
+
 def _metadata(message: dict[str, Any]) -> dict[str, Any]:
-    metadata = message.get("metadata")
-    return metadata if isinstance(metadata, dict) else {}
+    values: dict[str, Any] = {}
+    for key in ("display_metadata", "metadata"):
+        metadata = message.get(key)
+        if isinstance(metadata, dict):
+            values.update(metadata)
+    return values
 
 
 def _calls(message: dict[str, Any]) -> list[dict[str, Any]]:
@@ -56,23 +64,84 @@ def started_call_ids(messages: Iterable[dict[str, Any]], log_root: str | Path) -
                         row = json.loads(line)
                     except ValueError:
                         continue
-                    if row.get("event") == "tool_start" and row.get("tool_call_id"):
+                    if (isinstance(row, dict) and row.get("event") == "tool_start"
+                            and row.get("tool_call_id")):
                         result.add(str(row["tool_call_id"]))
-        except OSError:
+        except (OSError, UnicodeError):
             continue
     return result
+
+
+def normalize_tool_results(
+    messages: Iterable[dict[str, Any]], *, require_complete: bool = True,
+) -> list[dict[str, Any]]:
+    """Build a provider view, keeping results next to their owning call group.
+
+    Durable chronology and message identities stay untouched. Call IDs may be
+    reused in later completed rounds, but ambiguous or orphan results fail closed.
+    Missing results are allowed only while loading history for recovery.
+    """
+    history = copy.deepcopy(list(messages))
+    owners: dict[str, int] = {}
+    groups: dict[int, list[str]] = {}
+    results: dict[tuple[int, str], dict[str, Any]] = {}
+    for index, message in enumerate(history):
+        if message.get("role") == "assistant" and _calls(message):
+            ids = [_call_id(call) for call in _calls(message)]
+            if not all(ids) or len(set(ids)) != len(ids):
+                raise ToolHistoryError("Invalid tool history: missing or duplicate tool call ID")
+            for call_id in ids:
+                previous = owners.get(call_id)
+                if previous is not None and (previous, call_id) not in results:
+                    raise ToolHistoryError("Invalid tool history: overlapping tool call ID")
+                owners[call_id] = index
+            groups[index] = ids
+        elif message.get("role") in {"tool", "tool_result"}:
+            call_id = _message_call_id(message)
+            owner = owners.get(call_id)
+            if owner is None:
+                raise ToolHistoryError("Invalid tool history: orphan tool result")
+            identity = (owner, call_id)
+            if identity in results:
+                raise ToolHistoryError("Invalid tool history: duplicate tool result")
+            message["role"] = "tool"
+            message["tool_call_id"] = call_id
+            if (message.get("repair_state") or _metadata(message).get("repair_state")) == "not_started":
+                # Older recovery code mistook lost provenance for proof of no
+                # dispatch. Correct the provider view without rewriting the audit.
+                message["repair_state"] = "unknown"
+                message["content"] = (
+                    "The previous turn stopped without a confirmed result for this tool call. "
+                    "Its outcome is unknown; inspect the current state before deciding what to do next."
+                )
+                for key in ("metadata", "display_metadata"):
+                    if isinstance(message.get(key), dict):
+                        message[key]["repair_state"] = "unknown"
+            results[identity] = message
+    normalized: list[dict[str, Any]] = []
+    for index, message in enumerate(history):
+        if message.get("role") in {"tool", "tool_result"}:
+            continue
+        normalized.append(message)
+        for call_id in groups.get(index, []):
+            result = results.get((index, call_id))
+            if result is not None:
+                normalized.append(result)
+            elif require_complete:
+                raise ToolHistoryError("Invalid tool history: missing tool result")
+    return normalized
 
 
 def repair_unpaired_tool_calls(
     messages: Iterable[dict[str, Any]], *, started_ids: set[str] | None = None,
     run_id: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
-    """Append one synthetic result per open call and return its recovery receipt.
+    """Pair existing results and fill missing results without replaying tools.
 
-    Calls with no durable ``tool_start`` are safe to retry. Once dispatch began,
-    the side effect may have happened and the model must inspect current state.
+    Absence of a dispatch record is not proof a tool never ran: a crash can lose
+    the receipt. Unknown outcomes must be inspected before any decision to retry.
     """
-    repaired = copy.deepcopy(list(messages))
+    repaired = normalize_tool_results(messages, require_complete=False)
     started = started_ids or set()
     pending: dict[str, tuple[str, int]] = {}
     for index, message in enumerate(repaired):
@@ -86,17 +155,18 @@ def repair_unpaired_tool_calls(
                 pending[call_id] = (_call_name(call), index)
     receipts: list[dict[str, str]] = []
     for call_id, (name, _index) in pending.items():
-        outcome = "unknown" if call_id in started else "not_started"
+        outcome = "unknown"
         detail = (
             "The previous turn stopped after this tool call began. Its outcome is unknown; "
             "inspect the current state before deciding what to do next."
-            if outcome == "unknown" else
-            "The previous turn stopped before this tool call started. It is safe to retry."
+            if call_id in started else
+            "The previous turn stopped without a durable result for this tool call. "
+            "Its outcome is unknown; inspect the current state before deciding what to do next."
         )
         repaired.append({
             "role": "tool", "tool_call_id": call_id, "name": name,
             "content": detail, "is_error": True, "repair_state": outcome,
             "kernel_run_id": run_id or "",
         })
-        receipts.append({"tool_call_id": call_id, "name": name, "state": outcome})
-    return repaired, receipts
+        receipts.append({"tool_call_id": call_id, "name": name, "state": outcome, "content": detail})
+    return normalize_tool_results(repaired), receipts
