@@ -25,13 +25,17 @@ def _checkpoint(path: Path) -> str:
         return ""
 
 
-def _episode_groups(library: Any, checkpoint: str) -> dict[str, list[Entry]]:
+def _episode_groups(
+    library: Any, checkpoint: str, processed_ids: set[str] | None = None
+) -> dict[str, list[Entry]]:
     groups: dict[str, list[Entry]] = {}
     for rel in library.store.pages():
         if not rel.startswith("经历/"):
             continue
         for entry in library.store.read(rel).current:
-            if not entry.at or entry.at <= checkpoint:
+            if not entry.at or (
+                entry.at <= checkpoint and entry.id in (processed_ids or set())
+            ):
                 continue
             candidates = [*entry.trigger]
             if not candidates:
@@ -156,7 +160,11 @@ async def run_dream(library: Any, model_mgr: Any = None) -> dict[str, Any]:
     state_path = library.store.root / ".dream-state.json"
     checkpoint = _checkpoint(state_path)
     now = datetime.now().astimezone()
-    groups = _episode_groups(library, checkpoint)
+    try:
+        processed_ids = set(json.loads(state_path.read_text(encoding="utf-8")).get("processed_ids", []))
+    except (OSError, ValueError, TypeError):
+        processed_ids = set()
+    groups = _episode_groups(library, checkpoint, processed_ids)
     prepared: dict[str, tuple[dict[str, list[str]], str, list[Entry]]] = {}
     try:
         for name, entries in groups.items():
@@ -167,6 +175,13 @@ async def run_dream(library: Any, model_mgr: Any = None) -> dict[str, Any]:
         with library.store.lock:
             for name, (sections, existing, entries) in prepared.items():
                 source_lines = _old_owner_lines(existing)
+                # Model completion may take long enough for a user to edit the page.
+                # Merge owner-authored lines from the latest disk version before writing.
+                path = f"{THINGS}/{safe_name(name)}.md"
+                disk_path = library.store.root / path
+                current = disk_path.read_text(encoding="utf-8") if disk_path.exists() else ""
+                for heading, lines in _old_owner_lines(current).items():
+                    source_lines[heading] = list(dict.fromkeys([*source_lines[heading], *lines]))
                 refs = ",".join(dict.fromkeys(e.id for e in entries))
                 output = [f"# {name}"]
                 for heading in _SECTIONS:
@@ -184,9 +199,8 @@ async def run_dream(library: Any, model_mgr: Any = None) -> dict[str, Any]:
                         output.append(line)
                         added += 1
                     changed += len(sections[heading]) > 0
-                path = library.store.root / THINGS / f"{safe_name(name)}.md"
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("\n".join(output).rstrip() + "\n", encoding="utf-8")
+                disk_path.parent.mkdir(parents=True, exist_ok=True)
+                disk_path.write_text("\n".join(output).rstrip() + "\n", encoding="utf-8")
                 written.append(name)
                 for item in sections["没做完"]:
                     deadline = _DEADLINE.search(item)
@@ -205,10 +219,15 @@ async def run_dream(library: Any, model_mgr: Any = None) -> dict[str, Any]:
                             )
                             library.store.write(page)
             library.store.commit("整理：" + "、".join(written))
-        state_path.write_text(
-            json.dumps({"checkpoint": now.isoformat(timespec="seconds")}, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        if prepared:
+            processed_ids.update(
+                entry.id for _sections, _existing, entries in prepared.values() for entry in entries
+            )
+            state_path.write_text(
+                json.dumps({"checkpoint": now.isoformat(timespec="seconds"),
+                            "processed_ids": sorted(processed_ids)}, ensure_ascii=False),
+                encoding="utf-8",
+            )
         library.index.sync()
         return {"ok": True, "projects": written, "added": added, "changed": changed, "error": None}
     except Exception as exc:  # noqa: BLE001 - any failed phase must leave the checkpoint unchanged.
