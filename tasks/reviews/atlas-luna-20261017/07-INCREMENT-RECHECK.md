@@ -140,3 +140,9 @@
 - 未修改用户 `D:\Atlas` 工作区、未重启正在运行的 Atlas 进程、未触碰 `data/` 真实记忆与会话。
 - 未审查 `D:\atlas-mem-integrate` 那条 9459 实例的内部状态（不在本轮范围）。
 - ATL-022 的最终处置（保留 expert 改写行为 or 按任务书删除）需用户决定，本轮只给证据与冲突位置。
+
+## §5 交付前的分支卫生核对
+
+- `origin/fix/atlas-model-retry-policy-20261017` @ `e2599784` 已确认在远端，与 `origin/ui-redesign` 的关系是 **1 个 commit**（`ui-redesign..W1` 仅 `e2599784`），无其他分支混入。
+- **一处不纯**：该 commit 里包含 `tasks/reviews/atlas-luna-20261017/06-MODEL-RETRY-FIX.md`（73 行，W1 作者自己的工作说明，mtime 15:24，早于审查分支首提交 16:32，**不是我污染的**）。按「代码分支只放代码」的口径，它更适合落在审查分支；但该 commit 已推送且可能被验收引用，改写历史会破坏 SHA 可追溯性。**本轮不动它**，在此登记，交由 GPT-6 决定是否要求 W1 后续 commit 移除。
+- 审查分支 `origin/review/atlas-luna-global-audit-20261017` @ `a2e548e2` 只包含 `tasks/reviews/atlas-luna-20261017/` 下的产物，无 `core/` 或 `frontend/` 改动（`git diff --stat origin/ui-redesign...HEAD` 仅审查目录）。
