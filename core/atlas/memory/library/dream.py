@@ -173,15 +173,14 @@ async def run_dream(library: Any, model_mgr: Any = None) -> dict[str, Any]:
         written: list[str] = []
         added = changed = 0
         with library.store.lock:
-            for name, (sections, existing, entries) in prepared.items():
-                source_lines = _old_owner_lines(existing)
+            for name, (sections, _existing, entries) in prepared.items():
                 # Model completion may take long enough for a user to edit the page.
-                # Merge owner-authored lines from the latest disk version before writing.
+                # The current page is authoritative: carrying lines from the old
+                # snapshot would resurrect owner edits that were deleted or replaced.
                 path = f"{THINGS}/{safe_name(name)}.md"
                 disk_path = library.store.root / path
                 current = disk_path.read_text(encoding="utf-8") if disk_path.exists() else ""
-                for heading, lines in _old_owner_lines(current).items():
-                    source_lines[heading] = list(dict.fromkeys([*source_lines[heading], *lines]))
+                source_lines = _old_owner_lines(current)
                 refs = ",".join(dict.fromkeys(e.id for e in entries))
                 output = [f"# {name}"]
                 for heading in _SECTIONS:
