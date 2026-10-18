@@ -37,3 +37,7 @@
 ## 研究边界
 
 不修改 Atlas 正式业务代码、不向 main 或其他产品分支写入；不进行无意义大测试。权限/安全逻辑仅记录上游真实机制，不强加给 Atlas 的产品决策。 
+
+## 第二轮主动反向发现
+
+新增的 CODEX_CLI-028—033 确认 Agent durable graph、Message Board 多后端、PendingSpawn 失败清理、Daemon 后台冷恢复、MCP 取消重刷新及 retained-context checkpoint 线性化。见 [BACKEND-EXTRA-DISCOVERIES.md](BACKEND-EXTRA-DISCOVERIES.md)。总账现在为 **31 项 S 级机制证据**，另外 026 为入口/待闭环、027 为 U 线索。没有 Windows EXE 运行级 R 证据。

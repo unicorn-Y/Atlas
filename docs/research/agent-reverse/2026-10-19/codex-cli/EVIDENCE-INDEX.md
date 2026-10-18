@@ -67,3 +67,12 @@ Atlas main 检查 SHA：`aa6196f550098cc46081dc6db2c376cb87ddffa5`； https://gi
 - **未穷尽**：CLI commands 各分支、TUI 子界面所有行为、App-server JSON-RPC 事件全谱、voice/realtime/guardian/message-board/graph-store 全面闭环、Source ZIP/EXE 编译一致性，以及性能数值对照。
 
 后续无需重复搜索旧文档；以这些原始证据文件继续补链路即可。
+
+## 新增固定 tag 实证文件（028—033）
+
+- 028: `codex-rs/agent-graph-store/src/store.rs:13-61`; `codex-rs/agent-graph-store/src/local.rs:10-112`; `codex-rs/core/src/agent/control/spawn_guard.rs:80-99`. AgentGraphStore + SQLite local impl; child edge status, BFS descendants; cancelled spawn closes edge. (S; no runtime verification.)
+- 029: `codex-rs/core/src/agent_message_board.rs:38-121`. Requires MultiAgentV2 and AgentMessageBoard feature flags or explicit connection; remote board supports token. (S; no runtime verification.)
+- 030: `codex-rs/core/src/agent/control/spawn_guard.rs:1-105`. Drop removes child runtime and persistence, waits for Open edge write, then writes Closed. (S; no runtime verification.)
+- 031: `codex-rs/app-server/src/daemon_thread_recovery.rs:1-51`. snapshot uses dedicated OS thread; start_recovery reads+removes snapshot, spawns restore_daemon_threads without blocking readiness. (S; no runtime verification.)
+- 032: `codex-rs/core/src/session/mcp_refresh.rs:1-57`. AtomicBool pending + Semaphore gate; unpublished cancelled refresh guard re-invalidates. (S; no runtime verification.)
+- 033: `codex-rs/core/src/session/retained_context.rs:145-205`. persistence lock aligns retained context with checkpoint suffix; TaskTracker waits for cell-generated message recording. (S; no runtime verification.)

@@ -32,6 +32,13 @@
 | CODEX_CLI-026 | 可供宿主消费的 App-server 层，不只是 TUI 本地调用 | `codex-rs/app-server/src/{message_processor.rs,thread_state.rs,turn_admission.rs,daemon_thread_recovery.rs}` | S/U | 文件和模块存在；本轮尚未沿完整 JSON-RPC / WebSocket 请求追到终态，不当成已验证远程任务功能。 |
 | CODEX_CLI-027 | **额外潜在扩展**：message-board、graph-store、hooks、voice、realtime | `codex-rs/{agent-graph-store,agent-message-board-client,voice-host,realtime-webrtc,hooks}/` | U | 固定 tag 有独立 crate；尚不能证明默认 CLI 功能已启用。留下后续逐 crate 取证线索。 |
 
+| CODEX_CLI-028 | **持久化父子 Agent 图及生命周期边** | `agent-graph-store/src/store.rs:13-61; agent-graph-store/src/local.rs:10-112; core/src/agent/control/spawn_guard.rs:80-99` | S | AgentGraphStore + SQLite local impl; child edge status, BFS descendants; cancelled spawn closes edge。 |
+| CODEX_CLI-029 | **可插拔 Agent Message Board（SQLite / in-memory / remote）** | `core/src/agent_message_board.rs:38-121` | S | Requires MultiAgentV2 and AgentMessageBoard feature flags or explicit connection; remote board supports token。 |
+| CODEX_CLI-030 | **PendingSpawn 半创建取消清理守卫** | `core/src/agent/control/spawn_guard.rs:1-105` | S | Drop removes child runtime and persistence, waits for Open edge write, then writes Closed。 |
+| CODEX_CLI-031 | **Daemon 快照消费及后台 cold resume** | `app-server/src/daemon_thread_recovery.rs:1-51` | S | snapshot uses dedicated OS thread; start_recovery reads+removes snapshot, spawns restore_daemon_threads without blocking readiness。 |
+| CODEX_CLI-032 | **MCP 刷新并发门控与取消恢复** | `core/src/session/mcp_refresh.rs:1-57` | S | AtomicBool pending + Semaphore gate; unpublished cancelled refresh guard re-invalidates。 |
+| CODEX_CLI-033 | **Retained Context checkpoint 顺序和异步 Code Mode 消息排空** | `core/src/session/retained_context.rs:145-205` | S | persistence lock aligns retained context with checkpoint suffix; TaskTracker waits for cell-generated message recording。 |
+
 ## 非穷尽说明
 
-前 25 项有明确文件/方法级证据；026 仅实现入口/未闭环；027 为主动发现的待证线索。用户未列出的新重点是 007、008、012、013、017、018、019、021、023。任何源代码路径不代表该能力在 Windows Release 的默认配置已开启。
+001—025 及 028—033 共 31 项有明确文件/方法级证据；026 仅实现入口/未闭环；027 为主动发现的待证线索。用户未列出的新重点是 007、008、012、013、017、018、019、021、023。任何源代码路径不代表该能力在 Windows Release 的默认配置已开启。

@@ -40,3 +40,12 @@
 - P2：Tool Search + 增量目录变更、统一 trace 展示。建议源：engine/tool_registry.py、tools/mcp_client.py、api/runtime.py。
 
 此表对 Atlas 有利和不利的证据均保留。未跑回归，不虚报“错误已修复”。
+
+## 补充差距 028—033
+
+- **028:** Codex 子 Agent topology graph 已有 SQLite-backed 实现和 spawn-guard 关闭边写路径。Atlas session_sync.py 的 branch tree 不能直接代替 child-thread parent/child 边；对 Atlas persistent_agents、groups 模块还需另查。
+- **029:** Codex message board 可以走 SQLite、in-memory、remote 并受明确 feature gating；Atlas steer queue 并不是自动等价的 agent offline shared board，不能在未检查其 group/persistent-agent 实现前判定缺失。
+- **030:** Codex PendingSpawn 对取消中的 child 不只是停止任务，还保证 Open 写完成后再写 Closed，避免 orphan edge。Atlas _run_atlas_subtask finally 有真实清理，但未证实半创建 child 的拓扑原子性。
+- **031:** Codex daemon 在背景 cold-resume，不阻塞服务就绪。Atlas 有 RuntimeManager 和 session_sync，却不能仅凭它们断言等价；特别要单独处理 external_process.resume 明确 NotImplementedError。
+- **032:** Codex MCP refresh cancelled-before-publish 可 re-invalidate；Atlas MCP client 实现重启，尚未验证同类事件门控。
+- **033:** Codex retained context 和 checkpoint/suffix 共用 persistence lock，Code Mode message recording drain 后退出；Atlas scoped file checkpoint 的 manifest-last 是另一种机制，不能混同。
