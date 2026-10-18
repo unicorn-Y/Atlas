@@ -43,10 +43,15 @@ OpenAI Codex CLI | Source snapshot | 0.163.0 | x64
 BLOCKED / NOT ACQUIRED
 Claude Desktop | Consumer setup installer | blocked
   metadata: metadata/claude-desktop-setup-x64.json
-  note: Official setup redirect returned HTTP 403 during collection. Official enterprise MSIX x64 was obtained separately.
+  official page: https://claude.com/download
+  direct URL: https://claude.ai/api/desktop/win32/x64/setup/latest/redirect
+  note: Ordinary unauthenticated GET and HEAD on 2026-10-19 returned HTTP 403; no redirect target, installer, or version obtained. Official enterprise MSIX x64 2.42304.0 is separate.
 OpenAI Codex Desktop | Microsoft Store package | blocked
   metadata: metadata/openai-codex-desktop-store.json
-  note: Read-only current-user AppX query found Store-signed package OpenAI.Codex_26.1013.4894.0_x64__2p2nqsd0c76g0; source tree 3,650 files / 2,346,401,834 bytes. Read-only tree index saved. Ordinary per-file Copy-Item was attempted for every source file: all 3,650 carry Encrypted attributes and all failed with IOException cannot encrypt specified file. cipher /c identifies Application Protected. Skipped path/error log retained; zero files copied, so no partial archive was created. No access-control workaround, decryption, elevation, Store auth, or DRM bypass attempted.
+  official product page: https://openai.com/index/introducing-the-codex-app/
+  official Store listing: https://apps.microsoft.com/detail/9plm9xgg6vks
+  official download URL: https://get.microsoft.com/installer/download/9PLM9XGG6VKS?cid=website_cta_psi
+  note: WinGet download for product 9PLM9XGG6VKS was cancelled because package agreements were not accepted; no file/current version obtained. Read-only current-user AppX query found Store-signed package OpenAI.Codex_26.1013.4894.0_x64__2p2nqsd0c76g0; source tree 3,650 files / 2,346,401,834 bytes. Ordinary per-file copy failed for every file due to Encrypted attributes; cipher /c identifies Application Protected. No agreement acceptance, access-control workaround, decryption, elevation, Store authentication, or DRM bypass attempted.
 
 Downloaded archive total: 647660368 bytes (617.66 MiB).
 Full staging tree: 2326936819 bytes across 13702 files (includes extracted files and metadata).

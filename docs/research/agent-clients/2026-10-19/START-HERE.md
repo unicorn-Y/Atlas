@@ -15,5 +15,7 @@ P0：5 个产品族中 4 个完整覆盖；OpenAI Codex Desktop 受阻，因为 
 
 P1：任务书列出的 9 个产品族均已取得适用 Windows 包或源码；两个 Windsurf 插件/catalog 形态仍未检查。另收 Zed、OpenHands Agent Canvas、Squad、ccusage 和 Claude HUD。
 
+2026-10-19 recovery pass: Claude Consumer Setup still returns HTTP 403. Codex Desktop’s official Microsoft Store download did not proceed because package agreements were not accepted; the installed package remains Application Protected. No new asset was acquired or uploaded; the Release still contains 54 assets / 4,908,552,923 bytes. See DOWNLOAD-LOG.md for official URLs and evidence.
+
 原安装器、VSIX、npm tarball、CLI ZIP 和源码快照均为独立 GitHub Release assets。索引列出包内路径和入口文件，原归档保持可下载。
 

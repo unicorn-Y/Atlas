@@ -4,6 +4,8 @@ Mechanical inventory only; no package was run and no functional analysis was per
 
 Release assets: 54 files, 4908552923 bytes. Full URLs and SHA-256 values are in manifest.json and SHA256SUMS.txt.
 
+2026-10-19 recovery pass: no additional files were acquired, so Release assets and SHA256SUMS are unchanged. Claude Consumer Setup remains blocked by HTTP 403. Codex Desktop remains blocked after the official Store download required package agreement acceptance; see DOWNLOAD-LOG.md and indexes/claude-codex-index.txt for official URLs and attempts.
+
 | Product | Component | Version | Platform / arch | Status | Release asset | Bytes | SHA-256 |
 |---|---|---|---|---|---|---:|---|
 | Zed | Windows desktop installer | v1.24.2 | Windows / x86_64 | downloaded | [Zed-Windows-desktop-installer-v1.24.2-a419297cab.exe](https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/Zed-Windows-desktop-installer-v1.24.2-a419297cab.exe) | 84235440 | a419297cabe7… |
