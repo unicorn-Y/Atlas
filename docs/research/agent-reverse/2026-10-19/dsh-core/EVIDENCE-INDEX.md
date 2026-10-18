@@ -1,0 +1,69 @@
+# 证据索引：原始材料、源码锚点与覆盖边界
+
+## 身份与来源
+
+官方上游：`https://github.com/deepseek-ai/deepseek-harness`；固定提交 `687f282e8625c6b8d11ff58211a90524be2e4317`。GitHub Tree API 返回 **18,758** tracked paths 且 `truncated=false`，本次主动识别 `packages/core`、`packages/subagent`、`packages/api`、`packages/client`、`packages/session`、`packages/compaction`、`packages/llm`、`packages/experimental`、`packages/mcp`、`packages/boot`、`apps/cli`、`apps/web`；**不代表逐文件读取所有 18,758 文件**。审查内容来自 GitHub API 对固定提交的直接源码读取（S），不是第三方博客摘要。
+
+Atlas：`unicorn-Y/Atlas` `main@aa6196f550098cc46081dc6db2c376cb87ddffa5`，树 **1,412** paths，`truncated=false`；已读其中若干关键 Python 文件，未读完全部。派工分支 `research/agent-reverse-dispatch-20261019` 有 `docs/research/agent-clients/2026-10-19/manifest.json` 和 `indexes/dsh-index.txt`，原收集报告明确静态机械清单不代表功能验收。
+
+归档三项：
+| 发行品 | 提取对象 | SHA256 | 状态 |
+|---|---|---|---|
+| CLI npm 0.2.0-rc.2 | `deepseek-harness-npm-cli-bd27847c44.tgz` | `bd27847c445cd68a565ac1f91c06bbbcc7639ef93071f678bb59c5ebaff38859` | U：本会话未二进制解包 |
+| 固定源码 ZIP root 0.2.1-rc.2 | `deepseek-harness-source-dcc4cf8df9.zip` | `dcc4cf8df9c3cbb3d57726b7a1ad5a52c16a754dcdbc2c0a0836788976090d9f` | 固定提交源码逐文件读取；ZIP 原文件二进制未本地校验 |
+| Web npm 0.0.1-rc.5 | `deepseek-harness-web-frontend-ccadad6dcb.tgz` | `ccadad6dcbb6f9a3c7a57802c3c2bb5958c2104ca33e9fb88135634b6d7b1516` | U：本会话未二进制解包 |
+
+## 官方源码关键可复核锚点（S）
+
+所有链接指向固定 SHA，不是会变化的 main：
+
+| 证据范围 | 路径与符号 / 相关 ID |
+|---|---|
+| React loop phase + durable turn | [`packages/core/agent-loop/src/agent.ts#L97-L150`](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/core/agent-loop/src/agent.ts#L97-L150), `turn/step` 298-395，`prepareRequest` 563-684；001-003、006 |
+| assistant stream | `packages/core/agent-loop/src/assistant-stream.ts:18-107`；004 |
+| inbox projection | `packages/core/agent-loop/src/inbox.ts:20-55`；002 |
+| bounded rolling pool | [`packages/core/agent-loop/src/tool-calls.ts#L122-L246`](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/core/agent-loop/src/tool-calls.ts#L122-L246)；005 |
+| child manager | [`packages/subagent/subagent/src/manager.ts#L373-L465`](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/subagent/subagent/src/manager.ts#L373-L465)、533-628，739-761；007-012 |
+| child meta/depth | `packages/subagent/subagent/src/child-agent.ts:49-118,135-160`；011 |
+| lifecycle + stop reason | `packages/subagent/subagent/src/lifecycle.ts:63-170`；010 |
+| delegate tool/control | `packages/subagent/tool-subagent/src/index.ts:193-379`、`packages/subagent/tool-subagent-control/src/index.ts:27-111`；007、009 |
+| browser child Remote | `packages/subagent/subagent/src/index.ts:425-527`，`control.ts:16-28`；012 |
+| Session RPC | `packages/api/session-controller/src/index.ts:118-176,275-603`、`history.ts:120-220`、`control.ts:17-79`；014 |
+| Web mux | `packages/api/gateway/src/stream-protocol.ts:6-19`、`stream-server.ts:44-127`、`client/stream-client.ts:52-105,241-380`；015 |
+| child UI | [`packages/client/ui-subagent/src/client/index.ts#L52-L101`](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/client/ui-subagent/src/client/index.ts#L52-L101)、`SubagentHeaderLineage.tsx:196-395`、`sidebar-chat/index.tsx:18-201`；013 |
+| child client mutation | `packages/api/session-controller/src/client/sessions/session.ts:240-357`；013-014 |
+| transient/durable event model | `packages/api/session-controller/src/client/contract/events.ts:6-35,97-120`；014 |
+| Session JSONL and writer lease | `packages/session/session-persistence-jsonl/src/storage.ts:35-60,186-224,270-339`、`lease.ts:1-28`、`format.ts:1-43`；016 |
+| token meter | `packages/llm/token-meter/src/turn-usage.ts:6-35,81-139,170-275`；017 |
+| compaction | `packages/compaction/compaction-basic/src/index.ts:148-233`、`summarizer.ts:110-179`、`compaction-tool-result-pruner/src/index.ts:128-170`；018 |
+| MCP hot tools | `packages/mcp/mcp-client/src/index.ts:154-192`、`tools.ts:81-158`；019 |
+| agent team DAG | `packages/experimental/agent-team/src/index.ts:55-109,129-211`、`task-board.ts:28-255`、`task-graph.ts:20-70`、`journal.ts:55-70`；020 |
+| jobs nonconsuming follow | `packages/api/job-controller/src/index.ts:75-115`、`packages/jobs/jobs-local/src/pump.ts:53-86`；021 |
+| trajectory | `packages/client/ui-trajectory/src/client/TrajectoryView.tsx:132-380`、`TrajectoryTable.tsx:2080-2257,3170-3194`；022 |
+| CLI profiles | `apps/cli/src/args.ts:1-14,143-210`、`apps/cli/src/bin.ts:26-79`；023 |
+| schedule/goal/PTC | `packages/schedule/schedule/src/index.ts:90-118`、`packages/goal/goal-round-driver/src/index.ts:77-103,173-255`、`packages/ptc-runtime/ptc-runtime-node/src/index.ts:36-105`；024-025 |
+| dynamic plugin lifecycle | `packages/boot/plugin-manager/src/operations.ts:285-450`；026 |
+| License | [`LICENSE`](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/LICENSE) 为 MIT，Copyright 2026 DeepSeek |
+
+## Atlas 实际源码锚点（main SHA）
+
+- `core/atlas/agent/run_phases.py:1-24,146-174,698-920`：单执行路径/异步事件桥。
+- `core/atlas/engine/hermes_runtime.py:1-11,869-908,1024-1040,1390-1564`：Hermes 引擎与运行事件。
+- `core/atlas/engine/tool_registry.py:43-53,290-493,586-650`：包括 `delegate_task` 的工具注册和调度入口。
+- `core/atlas/agent/planning.py:10-73`、`subagent_worktree.py:237-344`、`results.py:45-95`。
+- `core/atlas/api/runtime.py:108-146`：重启主动将运行中状态置失败（独立确认）。
+- `core/atlas/api/runtime_ws_router.py:18-60,123-150`：`/ws/chat`、resume/cancel/pause/steer。
+- `core/atlas/runtime/hub.py:1-15,119-160`：长时后台主机及 DBOS。
+- `core/atlas/engine/session_sync.py:1-14,41-145`：Hermes SessionDB 真源。
+- `core/atlas/models/router.py:1-11,53-73,254-341`：provider 路由与 token 回调。
+
+## U / 尚未调查或未验证
+
+1. 发布 CLI、Web npm 产物的实际 file tree、dist JS/source map、binary strings、版本差异。
+2. 全部 Cordis profile 的 default plugin composition、实验开关是否启动；同源码中的 `apps/desktop` 不在本次发行样本的实物验证范围。
+3. 每个 Tool/Agent provider 真实动态生命周期（包括 ACP/Claude Code/Codex/DSH SDK），功能细分、参数兼容性、OS 级 process kill。
+4. 实际启动/浏览器 UI 演练、WebSocket 丢连重建后完整日志无洞、运行中的取消/竞争、子代理冷恢复/错误恢复实测。
+5. 全命令/快捷键/菜单/文件上传以及所有 UI Slot 使用并未穷尽；许可证文件与各依赖/生成文件的第三方告知需单独对照。
+6. Atlas 未打开的核心子代理内部主循环、最新分支的改动、UI 全组件及完整权限链；本次仅限 main 上的已核文件。
+
+**不得将本索引中的静态证据改写为“二进制已解包/行为已跑通”。**
