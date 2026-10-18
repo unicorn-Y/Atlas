@@ -2075,9 +2075,165 @@ async def _handle_resume(
                 await manager.send(conn_id, env)
 
 
+def _resume_notice(run: RunState) -> str:
+    """Human wording for a resumed run, chosen by where it was interrupted."""
+    if run.resume_attempts > 1:
+        return (
+            f"后台服务再次中断了这次任务，已第 {run.resume_attempts} 次自动续跑。"
+            "已完成的步骤不会重做。"
+        )
+    return (
+        "后台服务中断，这次任务已自动续跑。已完成的步骤不会重做，"
+        "中断时未拿到结果的工具会被重新检查。"
+    )
+
+
+# The resumed turn's own user message. The original request is already in the
+# session history, so this only has to say "keep going from where it stopped" —
+# the same shape as the plan-approval continuation.
+_RESUME_INSTRUCTION = (
+    "后台服务刚刚中断了这次任务（不是你的操作导致的，也不是用户的新要求）。"
+    "请从中断处继续完成原来那件事，不要重新开始：\n"
+    "1. 先检查工作区和已完成的部分，确认中断前到底做到了哪一步；\n"
+    "2. 只做还没完成的部分，不要重复已经完成的改动；\n"
+    "3. 中断时没有拿到结果的工具调用，要重新确认它当前的实际状态，不要假设它成功或失败；\n"
+    "4. 做完后照常验证并汇报。"
+)
+
+
+async def resume_run_after_restart(
+    run: RunState, manager: RuntimeManager | None = None,
+) -> bool:
+    """Continue a run that a service restart interrupted. Returns True if taken.
+
+    The resume reuses the normal execution path (``_execute_run``) so the
+    resumed run has exactly the same tools, permissions, hooks and event
+    contract as any other run — there is no second executor to keep in sync.
+    ``continuation=True`` suppresses ``run.started``, so the client does not
+    render a duplicate bubble for a request it already shows, and the kernel's
+    per-turn repair fills in any tool call whose result was lost, so side
+    effects are never replayed.
+    """
+    manager = manager or _server().runtime_mgr
+    active = manager.runs.get(run.run_id)
+    if active is not None and active.task is not None and not active.task.done():
+        log.info("run.resume_skipped", run_id=run.run_id, reason="already_active")
+        return False
+    if not (run.conversation_id or "").strip():
+        log.info("run.resume_skipped", run_id=run.run_id, reason="no_conversation")
+        return False
+    if run.executor != "atlas":
+        # A non-Atlas executor (external agent, group turn) drives its own
+        # thread; replaying it here would run the wrong loop.
+        log.info("run.resume_skipped", run_id=run.run_id, reason="not_atlas_executor")
+        return False
+
+    context = dict(run.resume_context or {})
+    workspace = context.get("workspace") or run.workspace
+    run.workspace = workspace
+    run.mode = context.get("mode") or run.mode or "act"
+    run.permission_mode = context.get("permission_mode") or run.permission_mode
+    run.allowed_paths = context.get("allowed_paths") or run.allowed_paths
+    run.extra_roots = context.get("extra_roots") or run.extra_roots
+    run.read_only = bool(context.get("read_only"))
+    run.profile_id = context.get("profile_id") or run.profile_id
+    run.project_id = context.get("project_id") or run.project_id
+    run.reasoning_effort = context.get("reasoning_effort") or run.reasoning_effort
+
+    # Rebuild the workspace rule context the same way a fresh run does, so a
+    # resumed run is subject to the rules that exist now rather than the ones
+    # that existed before the restart. A root that is no longer trusted must
+    # NOT be replayed silently: the original turn asked the user, and asking
+    # again on their behalf is the same as answering for them.
+    run.workspace_rules = []
+    rule_roots = list(dict.fromkeys([*([workspace] if workspace else []), *run.extra_roots]))
+    untrusted_roots = []
+    for root in rule_roots:
+        from atlas.api.workspace_router import collect_workspace_rules
+
+        try:
+            rules = await collect_workspace_rules(root)
+        except Exception:
+            log.exception("run.resume_rules_failed", run_id=run.run_id, root=root)
+            continue
+        root_key = rules.get("root", root)
+        root_files = [{**item, "root": root_key} for item in rules["files"]]
+        run.workspace_rules.extend(root_files)
+        if root_files and not _server()._workspace_trust().get(root_key):
+            untrusted_roots.append(root_key)
+
+    if untrusted_roots:
+        # Hand the decision back to the user instead of resuming: leave the run
+        # failed (it is already observable) and say why.
+        log.info(
+            "run.resume_skipped", run_id=run.run_id,
+            reason="rules_need_trust", roots=untrusted_roots,
+        )
+        skipped = run.next_envelope("run.recovery.notice", {
+            "message": (
+                "这次任务的中断恢复被跳过了：工作区规则文件需要你重新确认信任后才能继续。"
+                "请重新发送这条消息。"
+            ),
+            "reason": "rules_need_trust",
+            "roots": untrusted_roots,
+        })
+        await manager.send_run(run, skipped, fallback_conn_id=f"resume:{run.run_id}")
+        return False
+
+    # A resumed run keeps the extra roots it was started with; the model needs
+    # to be told they exist, exactly as the original turn told it.
+    active_skill_instructions = None
+    if run.extra_roots:
+        roots_text = "\n".join([*([workspace] if workspace else []), *run.extra_roots])
+        active_skill_instructions = [{
+            "name": "附加工作目录",
+            "content": "当前主工作目录和附加目录如下；文件工具可以用绝对路径访问这些目录：\n" + roots_text,
+        }]
+
+    # No live WebSocket is attached to a recovered run: send_run's fallback id
+    # keeps every envelope persisted against the right conversation.
+    conn_id = f"resume:{run.run_id}"
+    manager.runs[run.run_id] = run
+    manager.conn_runs[conn_id] = run.run_id
+    run.status = "running"
+    run.waiting_for = None
+    await manager.persist_run(run)
+
+    # The shutdown persisted this run as failed. Nothing the resume emits
+    # overwrites that status on the client — a recovery notice is only a
+    # caption — so say "running" explicitly, before the notice, or the run
+    # stays failed in the UI while it is visibly working again.
+    await manager.send_run(
+        run,
+        run.next_envelope("run.status", {"status": "running"}),
+        fallback_conn_id=conn_id,
+    )
+
+    notice = run.next_envelope("run.recovery.notice", {
+        "message": _resume_notice(run),
+        "reason": "service_restart",
+        "resume_attempt": run.resume_attempts,
+    })
+    await manager.send_run(run, notice, fallback_conn_id=conn_id)
+
+    run.task = asyncio.create_task(
+        _execute_run(
+            conn_id, run, _RESUME_INSTRUCTION, None,
+            plan_state=run.plan_state,
+            active_skill_instructions=active_skill_instructions,
+            workspace=workspace,
+            workspace_rules=run.workspace_rules,
+            mode=run.mode,
+            continuation=True,
+            manager=manager,
+        ),
+        name=f"atlas-resume-{run.run_id}",
+    )
+    return True
+
+
 def _effective_reasoning_effort(model_mgr: Any, model_id: str, requested: str | None) -> str | None:
     """The effort to send for this run, or None when the model cannot reason.
-
     Aliases such as ``wb-pool`` are not litellm names, so look the model up first and trust its
     declared capabilities. "Default" means medium (OpenAI's own default): some providers
     (DeepSeek behind the WorkBuddy proxy) only think, and stream their reasoning, when an

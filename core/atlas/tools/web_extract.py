@@ -15,6 +15,14 @@ from atlas.tools.ssrf_transport import create_ssrf_safe_async_client, is_public_
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 MAX_TEXT_LENGTH = 60_000
+# trafilatura and HTMLParser are pure Python and CPU-bound: a 10 MB page holds the
+# interpreter for seconds. Running that inline froze the whole asyncio event loop, so
+# the desktop health probe timed out and Electron taskkilled a perfectly healthy
+# backend. Both stages now run in a worker thread and each one is bounded.
+EXTRACT_TIMEOUT_SECONDS = 15.0
+# Above this size trafilatura is measured to take tens of seconds (24 s at 9.9 MB), so we
+# go straight to the fast path rather than waste the budget on an attempt we know fails.
+CHEAP_PATH_BYTES = 2 * 1024 * 1024
 
 
 class _TextParser(HTMLParser):
@@ -36,6 +44,55 @@ class _TextParser(HTMLParser):
     def handle_data(self, data: str) -> None:
         if not self.skip:
             self.parts.append(data)
+
+
+def _extract_main_text(html: str) -> str:
+    """CPU-bound: caller must run this in a thread, never on the event loop."""
+    try:
+        import trafilatura
+        text = trafilatura.extract(html, include_comments=False, include_tables=True) or ""
+    except ImportError:
+        text = ""
+    # trafilatura finds nothing on short or unusual pages; fall back to plain text extraction.
+    if not text.strip():
+        parser = _TextParser()
+        parser.feed(html)
+        text = re.sub(r"[ \t]+", " ", "".join(parser.parts))
+        text = re.sub(r"\n\s*\n+", "\n", text).strip()
+    return text
+
+
+def _cheap_text(html: str) -> str:
+    """Regex tag stripping: C-level, ~150x faster than trafilatura on huge pages."""
+    text = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", html)
+    text = re.sub(r"(?s)<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+async def _extract_with_fallback(html: str) -> tuple[str, str]:
+    """Return (text, how). Degradation must be visible, never a silent empty string.
+
+    trafilatura is accurate but slow — 24 s on a 9.9 MB page. Dropping straight to ""
+    when it overruns would mean a research run silently loses the page it did fetch,
+    so instead we fall back to regex stripping (0.15 s, and it keeps more text).
+    Every CPU-bound stage runs in a worker thread: the whole point is that this
+    coroutine must never pin the event loop.
+    """
+    async def cheap() -> str:
+        return await asyncio.to_thread(_cheap_text, html)
+
+    if len(html) > CHEAP_PATH_BYTES:
+        # Known-slow input: skip the doomed attempt instead of burning the whole budget.
+        return await cheap(), "cheap_large_page"
+    try:
+        text = await asyncio.wait_for(
+            asyncio.to_thread(_extract_main_text, html), timeout=EXTRACT_TIMEOUT_SECONDS,
+        )
+    except (asyncio.TimeoutError, TimeoutError):
+        return await cheap(), "cheap_timeout"
+    if text.strip():
+        return text, "full"
+    return await cheap(), "cheap_empty"
 
 
 def _validate_url(url: str, allow_local: bool) -> str:
@@ -221,19 +278,12 @@ async def extract_web(url: str, *, allow_local: bool = False,
             html = bytes(body).decode(response.encoding or "utf-8", errors="replace")
             title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
             title = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else current
-            try:
-                import trafilatura
-                text = trafilatura.extract(html, include_comments=False, include_tables=True) or ""
-            except ImportError:
-                text = ""
-            # trafilatura finds nothing on short or unusual pages; fall back to plain text extraction.
-            if not text.strip():
-                parser = _TextParser()
-                parser.feed(html)
-                text = re.sub(r"[ \t]+", " ", "".join(parser.parts))
-                text = re.sub(r"\n\s*\n+", "\n", text).strip()
+            # Off the event loop: see EXTRACT_TIMEOUT_SECONDS. wait_for keeps a pathological
+            # page from pinning a worker thread forever.
+            text, degraded = await _extract_with_fallback(html)
             clipped = text[:MAX_TEXT_LENGTH]
             return {"url": current, "title": title[:500], "kind": "page", "text": clipped,
-                    "length": len(clipped), "truncated": len(text) > MAX_TEXT_LENGTH}
+                    "length": len(clipped), "truncated": len(text) > MAX_TEXT_LENGTH,
+                    "extraction": degraded}
 
     return await asyncio.wait_for(fetch_page(), timeout=20.0)

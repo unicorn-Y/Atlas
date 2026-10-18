@@ -4,14 +4,23 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import aiosqlite
+import structlog
 from fastapi import WebSocket, WebSocketDisconnect
 
 from atlas.config import get_config
+
+log = structlog.get_logger(__name__)
+
+# How many times a single run may be resumed after a restart. A crash that
+# repeats would otherwise restart the same work on every boot; after this the
+# run stays failed and the user decides.
+MAX_RESUME_ATTEMPTS = 3
 
 
 class RunState:
@@ -35,6 +44,7 @@ class RunState:
         "updated_at", "waiting_for", "persisted_sequence",
         "dynamic_plan_mode", "plan_approval_callback", "plan_mode_callback", "end_conversation_reason",
         "end_conversation_callback",
+        "resume_attempts", "resume_context",
     )
 
     def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
@@ -76,6 +86,11 @@ class RunState:
         self.active_skills: list[str] = []
         self.profile_id: str | None = None
         self.user_input = ""
+        # Auto-resume bookkeeping (restart recovery). ``resume_attempts`` is
+        # persisted so a run that keeps getting interrupted is never resumed
+        # in an endless loop.
+        self.resume_attempts = 0
+        self.resume_context: dict[str, Any] = {}
         self.permission_mode = "full_access"
         self.allowed_paths: list[str] = []
         self.trust_future: asyncio.Future[bool] | None = None
@@ -119,6 +134,33 @@ class RunState:
             self.waiting_for = None
         return envelope
 
+
+def _resume_context(run: "RunState") -> dict[str, Any]:
+    """The minimum a restart needs to rebuild this run, or an empty dict.
+
+    Only what the execution path cannot re-derive is stored: the original
+    request, its workspace/mode/model, and the read-only + ephemeral flags
+    that change tool permissions. Rules, skills and trust state are rebuilt
+    from the workspace on replay, so persisting them would only let them go
+    stale.
+    """
+    context = {
+        "workspace": run.workspace,
+        "mode": run.mode,
+        "model": run.model,
+        "permission_mode": run.permission_mode,
+        "allowed_paths": run.allowed_paths,
+        "extra_roots": run.extra_roots,
+        "read_only": run.read_only,
+        "ephemeral": run.ephemeral,
+        "ephemeral_source": run.ephemeral_source,
+        "profile_id": run.profile_id,
+        "project_id": run.project_id,
+        "reasoning_effort": run.reasoning_effort,
+    }
+    return {key: value for key, value in context.items() if value not in (None, "", [], False)}
+
+
 class RuntimeManager:
     """Manages active WebSocket connections and agent runs."""
 
@@ -130,6 +172,9 @@ class RuntimeManager:
         self._db: aiosqlite.Connection | None = None
         self._persist_lock = asyncio.Lock()
         self.services: Any = None
+        # run_ids interrupted by a restart that may be resumed automatically.
+        # Populated by init(), consumed once by resume_interrupted_runs().
+        self.pending_resumes: list[str] = []
 
     async def init(self, db_path: Path | None = None) -> None:
         """Load persisted lifecycle metadata and fail runs interrupted by restart."""
@@ -151,16 +196,23 @@ class RuntimeManager:
                 plan_state TEXT,
                 started_at TEXT,
                 updated_at TEXT,
-                waiting_for TEXT
+                waiting_for TEXT,
+                user_input TEXT,
+                resume_context TEXT,
+                resume_attempts INTEGER NOT NULL DEFAULT 0
             )
         """)
         async with self._db.execute("PRAGMA table_info(runtime_runs)") as cursor:
             columns = {row["name"] for row in await cursor.fetchall()}
         if "plan_state" not in columns:
             await self._db.execute("ALTER TABLE runtime_runs ADD COLUMN plan_state TEXT")
-        for name in ("started_at", "updated_at", "waiting_for"):
+        for name in ("started_at", "updated_at", "waiting_for", "user_input", "resume_context"):
             if name not in columns:
                 await self._db.execute(f"ALTER TABLE runtime_runs ADD COLUMN {name} TEXT")
+        if "resume_attempts" not in columns:
+            await self._db.execute(
+                "ALTER TABLE runtime_runs ADD COLUMN resume_attempts INTEGER NOT NULL DEFAULT 0"
+            )
         await self._db.execute("""
             CREATE TABLE IF NOT EXISTS runtime_activity (
                 run_id TEXT NOT NULL,
@@ -192,21 +244,107 @@ class RuntimeManager:
             run.updated_at = row["updated_at"] or ""
             run.waiting_for = row["waiting_for"]
             run.plan_state = json.loads(row["plan_state"]) if row["plan_state"] else None
+            run.user_input = row["user_input"] or ""
+            run.resume_attempts = row["resume_attempts"] or 0
+            run.resume_context = (
+                json.loads(row["resume_context"]) if row["resume_context"] else {}
+            )
             if run.status in ("running", "paused", "waiting"):
+                # A restart is an interruption, not a verdict. Runs that were
+                # mid-flight become ``failed`` so nothing in the sidebar
+                # claims to still be working, but they are queued for an
+                # explicit resume (``pending_resumes``) that the server
+                # triggers once the rest of startup is wired.
+                interrupted_from = run.status
                 run.status = "failed"
                 run.waiting_for = None
+                detail = (
+                    "The service restarted while this run was active; "
+                    "execution was not resumed."
+                )
                 recovery = run.next_envelope("run.failed", {
                     "category": "interrupted",
-                    "detail": (
-                        "The service restarted while this run was active; "
-                        "execution was not resumed."
-                    ),
+                    "detail": detail,
                     "recoverable": True,
                 })
                 await self.persist_run(run, recovery_event=recovery)
+                if self._resumable(run, interrupted_from):
+                    self.pending_resumes.append(run.run_id)
             elif row["recovery_event"]:
                 run.events.append(json.loads(row["recovery_event"]))
             self.runs[run.run_id] = run
+
+    @staticmethod
+    def _resumable(run: RunState, interrupted_from: str) -> bool:
+        """Whether an interrupted run may be continued automatically.
+
+        A run only resumes when nothing external was blocking it: a run that
+        was ``waiting`` (approval, plan, input, rule trust) is *not* resumed,
+        because continuing it would silently answer a question the user was
+        asked. Ephemeral side chats and runs without a stored request are
+        skipped for the same reason: there is nothing faithful to replay.
+        """
+        if interrupted_from != "running":
+            return False
+        if not (run.user_input or "").strip():
+            return False
+        if run.ephemeral or run.read_only:
+            return False
+        return run.resume_attempts < MAX_RESUME_ATTEMPTS
+    async def resume_interrupted_runs(
+        self, resume: Callable[[RunState], Awaitable[bool]],
+    ) -> list[str]:
+        """Continue runs interrupted by the previous shutdown.
+
+        ``resume`` performs the actual continuation; it returns True when the
+        run was taken over. This method owns the bookkeeping so the caller
+        never has to: one attempt is recorded per run *before* handing it
+        off, which is what bounds a crash-loop that would otherwise re-run
+        the same work on every boot.
+        """
+        resumed: list[str] = []
+        pending, self.pending_resumes = self.pending_resumes, []
+        for run_id in pending:
+            run = self.runs.get(run_id)
+            if run is None:
+                continue
+            # Only the run that was actually interrupted may continue: a
+            # newer turn in the same conversation supersedes it, and
+            # continuing would talk over what the user asked for since.
+            newer = self._newer_run_in_conversation(run)
+            if newer is not None:
+                log.info(
+                    "run.resume_skipped", run_id=run_id, reason="superseded",
+                    newer_run_id=newer,
+                )
+                continue
+            run.resume_attempts += 1
+            await self.persist_run(run)
+            try:
+                taken = await resume(run)
+            except Exception:
+                log.exception("run.resume_failed", run_id=run_id)
+                continue
+            if taken:
+                resumed.append(run_id)
+                log.info("run.resumed_after_restart", run_id=run_id)
+        return resumed
+
+    def _newer_run_in_conversation(self, run: RunState) -> str | None:
+        """Run id of a newer non-resumed run in the same conversation."""
+        latest: tuple[str, str] | None = None
+        for other in self.runs.values():
+            if other.run_id == run.run_id:
+                continue
+            if other.conversation_id != run.conversation_id:
+                continue
+            stamp = other.updated_at or other.started_at or ""
+            if latest is None or stamp > latest[1]:
+                latest = (other.run_id, stamp)
+        if latest is None:
+            return None
+        mine = run.updated_at or run.started_at or ""
+        return latest[0] if latest[1] > mine else None
 
     async def close(self) -> None:
         if self._db is not None:
@@ -230,9 +368,10 @@ class RuntimeManager:
         await self._db.execute("""
             INSERT INTO runtime_runs (
                 run_id, conversation_id, model, status, sequence, recovery_event,
-                plan_state, started_at, updated_at, waiting_for
+                plan_state, started_at, updated_at, waiting_for, user_input,
+                resume_context, resume_attempts
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(run_id) DO UPDATE SET
                 conversation_id=excluded.conversation_id,
                 model=excluded.model,
@@ -242,12 +381,21 @@ class RuntimeManager:
                 plan_state=COALESCE(excluded.plan_state, runtime_runs.plan_state),
                 started_at=COALESCE(runtime_runs.started_at, excluded.started_at),
                 updated_at=excluded.updated_at,
-                waiting_for=excluded.waiting_for
+                waiting_for=excluded.waiting_for,
+                -- Resume context is written once, by the turn that owns it.
+                -- COALESCE keeps later turns (steering, approvals, retries)
+                -- from erasing or rewording the original request.
+                user_input=COALESCE(runtime_runs.user_input, excluded.user_input),
+                resume_context=COALESCE(runtime_runs.resume_context, excluded.resume_context),
+                resume_attempts=excluded.resume_attempts
         """, (
             run.run_id, run.conversation_id, run.model, run.status, run.sequence,
             json.dumps(recovery_event) if recovery_event else None,
             json.dumps(run.plan_state, ensure_ascii=False) if run.plan_state else None,
             run.started_at, run.updated_at, run.waiting_for,
+            run.user_input or None,
+            json.dumps(_resume_context(run), ensure_ascii=False),
+            run.resume_attempts,
         ))
         activity_events = {
             "run.started": "running",

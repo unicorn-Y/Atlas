@@ -1,11 +1,11 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, session, shell, Tray } from 'electron';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { setImmediate } from 'node:timers';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ensureBackendRunning, stopManagedBackend } from './backendProcess.js';
+import { ensureBackendRunning, readRunningBackendPid, stopManagedBackend, terminateBackendPid } from './backendProcess.js';
 import { checkSourceUpdate, launchSourceUpdater, sourceRoot } from './sourceUpdate.js';
 import {
   BACKEND_STARTUP_CHANNEL,
@@ -45,6 +45,7 @@ let explicitQuit = false;
 let lastProgress: BackendStartupProgress = { phase: 'probing', managed: false, elapsedMs: 0 };
 let componentStatuses: Record<string, string> = {};
 let consecutiveBackendHealthFailures = 0;
+let backendAvailability: BackendAvailability = 'unknown';
 
 /** Session for pages shown in the browser panel. Separate from the app's, so they never get the backend token. */
 export const BROWSER_PARTITION = 'persist:atlas-browser';
@@ -151,7 +152,8 @@ function setOpenAtLogin(enabled: boolean): void {
 
 function buildTrayMenu(): void {
   if (!trayRef) return;
-  const statusText = lastProgress.phase === 'ready' ? '后台：可用'
+  const busyNote = backendAvailability === 'degraded' ? '（响应慢，仍在运行）' : '';
+  const statusText = lastProgress.phase === 'ready' ? `后台：可用${busyNote}`
     : lastProgress.phase === 'failed' ? `后台：启动失败${lastProgress.detail ? `（${lastProgress.detail.slice(0, 60)}）` : ''}`
       : `后台：${lastProgress.detail || '正在启动'}`;
   trayRef.setContextMenu(Menu.buildFromTemplate([
@@ -160,7 +162,7 @@ function buildTrayMenu(): void {
     { label: '后台组件', submenu: Object.entries(componentStatuses).length
       ? Object.entries(componentStatuses).map(([name, state]) => ({ label: `${name}：${state}`, enabled: false }))
       : [{ label: '等待状态', enabled: false }] },
-    { label: '重启后台', click: () => { void stopManagedBackend().then(() => startBackend(true)); } },
+    { label: '重启后台', click: () => { void restartBackendNow('tray_menu'); } },
     { label: '查看日志', click: () => { void shell.openPath(backendLogPath()); } },
     { type: 'separator' },
     { label: '开机自启', type: 'checkbox', checked: platformPreferences.openAtLogin, click: (item) => setOpenAtLogin(item.checked) },
@@ -184,11 +186,24 @@ function backendLogPath(): string {
   return path.resolve(app.getAppPath(), '..', 'data', 'logs', 'backend-stdio.log');
 }
 
+type BackendAvailability = 'unknown' | 'ok' | 'degraded';
+
+/** Diagnostic trail for probe/restart decisions: "why was it killed" must be answerable. */
+function recordDesktopLifecycle(event: string, fields: Record<string, unknown>): void {
+  try {
+    appendFileSync(backendLogPath(), `${JSON.stringify({ timestamp: new Date().toISOString(), event, ...fields })}\n`);
+  } catch {
+    // A diagnostic sink must never break the tray.
+  }
+}
+
 async function refreshTrayBackendStatus(): Promise<void> {
   try {
     const response = await fetch(`http://127.0.0.1:${process.env.ATLAS_PORT ?? '8765'}/api/health`, { signal: AbortSignal.timeout(1_500) });
     if (!response.ok) { componentStatuses = {}; recordBackendHealthFailure(); buildTrayMenu(); return; }
     consecutiveBackendHealthFailures = 0;
+    backendAvailability = 'ok';
+    buildTrayMenu();
     const body = await response.json() as { components?: Record<string, string | { status?: string }> };
     componentStatuses = Object.fromEntries(Object.entries(body.components ?? {}).map(([name, item]) => [
       name, typeof item === 'string' ? item : item?.status ?? 'unknown',
@@ -197,11 +212,40 @@ async function refreshTrayBackendStatus(): Promise<void> {
   } catch { componentStatuses = {}; recordBackendHealthFailure(); buildTrayMenu(); }
 }
 
+/**
+ * A missed probe means "busy or degraded", never "dead". Killing a slow backend aborted
+ * whatever the user was running, so a restart is left to the user or to real process
+ * exit; the tray only reports the degraded state.
+ */
 function recordBackendHealthFailure(): void {
   consecutiveBackendHealthFailures += 1;
-  if (lastProgress.phase === 'ready' && consecutiveBackendHealthFailures >= 2 && !pendingRetry) {
-    publishProgress({ phase: 'failed', managed: false, elapsedMs: lastProgress.elapsedMs, detail: '后台连接中断，正在重新启动', message: '后台连接中断，正在重新启动', logPath: backendLogPath() });
-    startBackend();
+  // A slow answer is not evidence of death, but a vanished pid is. Verifying the pid is
+  // expensive (netstat + PowerShell), so only ask once a probe has failed twice - and
+  // this is the only signal allowed to trigger an automatic restart.
+  if (consecutiveBackendHealthFailures >= 2 && lastProgress.phase === 'ready') {
+    const pid = readRunningBackendPid();
+    if (pid === null) {
+      if (backendAvailability !== 'degraded') {
+        backendAvailability = 'degraded';
+        recordDesktopLifecycle('backend.health_degraded', {
+          consecutive_failures: consecutiveBackendHealthFailures,
+          action: 'restart',
+          note: 'process is gone, not slow; restarting',
+        });
+      }
+      startBackend();
+      return;
+    }
+    // Alive and ours: report it, never end it.
+    if (backendAvailability !== 'degraded') {
+      backendAvailability = 'degraded';
+      recordDesktopLifecycle('backend.health_degraded', {
+        consecutive_failures: consecutiveBackendHealthFailures,
+        action: 'none',
+        note: 'left running deliberately: a slow backend is not a dead backend',
+        pid,
+      });
+    }
   }
 }
 
@@ -632,9 +676,21 @@ ipcMain.handle('platform:set-open-at-login', (event, enabled: unknown) => {
   setOpenAtLogin(enabled);
   return platformSettingsSnapshot();
 });
+/**
+ * The only path that ends a running backend. It is user-initiated (tray menu, explicit
+ * restart IPC), never a probe result: a slow answer is not a reason to abort the user's
+ * work. A backend we did not spawn is only replaced when the user asked for it here.
+ */
+async function restartBackendNow(reason: string): Promise<void> {
+  await stopManagedBackend(reason);
+  const pid = readRunningBackendPid();
+  if (pid !== null) await terminateBackendPid(pid, reason);
+  startBackend(true);
+}
+
 ipcMain.handle('backend:retry', (event) => {
   assertTrustedAppSender(event);
-  startBackend(true);
+  void restartBackendNow('user_retry');
 });
 ipcMain.handle('backend:open-log', async (event) => {
   assertTrustedAppSender(event);

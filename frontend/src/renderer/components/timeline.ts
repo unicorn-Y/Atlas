@@ -632,6 +632,12 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
       }
       case 'run.recovery.notice': {
         closeReply(); closeBlocks();
+        // A restart-resumed run was persisted as failed, so replaying it puts a
+        // "没能完成" row right here. The run is continuing, not finished: drop
+        // that row and let the notice below carry the interruption instead.
+        if (data.reason === 'service_restart') {
+          while (items.length && items[items.length - 1].kind === 'failed') items.pop();
+        }
         items.push({ kind: 'notice', id: event.id, tone: 'switch',
           text: String(data.message ?? data.detail ?? '模型遇到问题，正在尝试恢复并继续。') });
         break;

@@ -6,7 +6,7 @@ import asyncio
 import os
 import subprocess  # noqa: F401 — compat: tests patch ``atlas.server.subprocess.run``
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -197,6 +197,36 @@ heartbeat_service: HeartbeatService | None = None
 
 
 # ---------------------------------------------------------------------------
+# Restart recovery
+# ---------------------------------------------------------------------------
+
+async def _resume_interrupted_runs(manager: Any) -> None:
+    """Continue the runs a previous shutdown interrupted, if any.
+
+    Runs after the core is wired, so a resumed run gets the same tools,
+    orchestrator and model manager a live turn would. Bounded and non-fatal:
+    the MCP component is given a short grace period (a resumed run without
+    MCP tools is degraded, not blocked), and any failure here is logged
+    without touching the rest of startup.
+    """
+    from atlas.api.run_drive import resume_run_after_restart
+
+    startup = getattr(manager.services, "startup", None) if manager.services else None
+    if startup is not None:
+        with suppress(Exception):
+            await startup.wait_ready("mcp", timeout=15.0)
+    try:
+        resumed = await manager.resume_interrupted_runs(resume_run_after_restart)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        log.exception("run.resume_batch_failed")
+        return
+    if resumed:
+        log.info("run.resume_batch_done", resumed=resumed, count=len(resumed))
+
+
+# ---------------------------------------------------------------------------
 # Lifespan (replaces deprecated @app.on_event)
 # ---------------------------------------------------------------------------
 
@@ -244,6 +274,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     deferred_startup: asyncio.Task[None] | None = None
     routes_before_lifespan_extensions = len(app.routes)
     startup_aborted = False
+    resume_task: asyncio.Task[None] | None = None
     cancelled = False
     try:
         model_mgr = ModelManager()
@@ -650,11 +681,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             app, services, startup,
         )
 
+        # Runs a previous shutdown interrupted resume here: after the core is
+        # wired (models, orchestrator, tools) but off the lifespan critical
+        # path, so a slow resume never delays /api/health or the first turn.
+        resume_task = asyncio.create_task(
+            _resume_interrupted_runs(manager),
+            name="atlas-resume-interrupted-runs",
+        )
+
         yield  # app is running
     except BaseException:
         startup_aborted = True
         raise
     finally:
+        if resume_task is not None:
+            resume_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await resume_task
         if deferred_startup is not None:
             # Let deferred startup settle before reverse teardown; a stuck step is bounded.
             try:

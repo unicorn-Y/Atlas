@@ -220,3 +220,31 @@ describe('runtime notices', () => {
     expect(cacheShare(undefined)).toBeNull();
   });
 });
+
+describe('restart recovery', () => {
+  it('replaces the failure row a resumed run was persisted with, instead of stacking both', () => {
+    // A restart marks the run failed; the resume then continues it under the
+    // same run id. Showing "没能完成" above the resumed work would contradict it.
+    seq = 0;
+    const items = buildTimeline([
+      ev('run.started', { content: '把这个页面做完' }, 0),
+      ev('run.failed', { category: 'interrupted', detail: '服务重启了' }, 1),
+      ev('run.status', { status: 'running' }, 2),
+      ev('run.recovery.notice', { message: '已从中断处接着做', reason: 'service_restart', resume_attempt: 1 }, 3),
+      ev('run.completed', {}, 4),
+    ]);
+    expect(items.map((item) => item.kind)).toEqual(['user', 'notice', 'done']);
+    expect(items[1]).toMatchObject({ tone: 'switch', text: '已从中断处接着做' });
+  });
+
+  it('keeps a genuine failure when the notice is about something else', () => {
+    // Only a restart resume supersedes the failure; every other recovery
+    // notice follows a failure that really did end the run.
+    seq = 0;
+    const items = buildTimeline([
+      ev('run.failed', { category: 'interrupted', detail: '服务重启了' }, 1),
+      ev('run.recovery.notice', { message: '工作区需要一个新目录', reason: 'workspace_root' }, 2),
+    ]);
+    expect(items.map((item) => item.kind)).toEqual(['failed', 'notice']);
+  });
+});

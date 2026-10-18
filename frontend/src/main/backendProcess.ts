@@ -17,8 +17,14 @@ export interface EnsureBackendOptions {
 }
 
 const HEALTH_URL = `http://127.0.0.1:${process.env.ATLAS_PORT ?? '8765'}/api/health`;
-const PROBE_TIMEOUT_MS = 700;
+// A backend busy in a long tool call (page extraction, deep research) answers late, not
+// never. A too-short probe turned "busy" into "dead" and got healthy backends killed.
+const PROBE_TIMEOUT_MS = 1_500;
 const PROBE_INTERVAL_MS = 250;
+// Reuse handshake: several consecutive misses spread over ~12 s before a running backend
+// is considered unresponsive. Even then it is waited for, never killed.
+const REUSE_ATTEMPTS = 6;
+const REUSE_BACKOFF_MS = 2_000;
 // H8 §10.3: the old fixed 15-second timeout killed slow-but-healthy backends. Now the
 // wait continues while the process is alive and health makes progress; STARTUP_MAX_WAIT_MS
 // is only the total upper bound. Real failures (process exit / spawn error) surface
@@ -424,32 +430,13 @@ function pidIsRunning(pid: number): boolean {
   }
 }
 
-async function stopPreviousBackend(pid: number): Promise<void> {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline && pidIsRunning(pid)) await sleep(250);
-  if (!pidIsRunning(pid)) return;
-  if (!isAtlasBackendProcess(pid)) {
-    throw new Error(`data/runtime/backend.pid 指向 PID ${pid}，但无法确认它是 Atlas 后端；为避免结束无关进程，未执行 taskkill。`);
-  }
-  if (process.platform === 'win32') {
-    recordBackendLifecycle('backend.force_stop', {
-      pid, method: 'taskkill', reason: 'previous_backend_replacement',
-    });
-    await new Promise<void>((resolve) => {
-      const killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
-        windowsHide: true, stdio: 'ignore',
-      });
-      killer.once('error', () => resolve());
-      killer.once('close', () => resolve());
-    });
-    const killedDeadline = Date.now() + 5_000;
-    while (Date.now() < killedDeadline && pidIsRunning(pid)) await sleep(100);
-  } else {
-    try { process.kill(pid, 'SIGKILL'); } catch { /* The process may have exited between checks. */ }
-  }
-}
+// A previous backend is never killed to make room for a new one. "Slow to answer" and
+// "gone" are different states: a busy backend that misses probes is left alone and
+// waited for, because killing it aborts whatever the user is running. Only a pid that
+// is already gone lets startup continue to the spawn path.
+export type PreviousBackendVerdict = 'reuse' | 'wait' | 'none';
 
-async function preparePreviousBackend(onProgress?: (progress: BackendStartupProgress) => void): Promise<boolean> {
+async function preparePreviousBackend(onProgress?: (progress: BackendStartupProgress) => void): Promise<PreviousBackendVerdict> {
   const pid = readBackendPid();
   const ownerPid = findListeningPid();
   if (ownerPid !== null && ownerPid !== pid) {
@@ -460,25 +447,30 @@ async function preparePreviousBackend(onProgress?: (progress: BackendStartupProg
       throw new Error(`端口 ${PORT} 已被 ${processName(ownerPid)} (PID ${ownerPid}) 占用。请关闭该程序后重试。`);
     }
   }
-  if (pid === null || !pidIsRunning(pid)) return false;
+  if (pid === null || !pidIsRunning(pid)) return 'none';
   if (!isAtlasBackendProcess(pid)) {
     if (ownerPid === pid) {
       throw new Error(`端口 ${PORT} 由 ${processName(pid)} (PID ${pid}) 占用，backend.pid 指向的进程无法确认为 Atlas 后端。`);
     }
-    return false;
+    return 'none';
   }
 
-  if (ownerPid === pid && await externalAcceptsSessionToken()) {
-    const contact = await probeHealth();
-    if (contact?.ready) {
-      return true;
+  // The pid is alive and is ours. Give it several spaced-out chances to answer before
+  // concluding anything: a backend inside a long tool call answers late, not never.
+  let detail = '等待已运行的后端响应';
+  for (let attempt = 0; attempt < REUSE_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) {
+      onProgress?.({ phase: 'starting', managed: false, elapsedMs: 0, detail });
+      await sleep(REUSE_BACKOFF_MS);
     }
+    if (!pidIsRunning(pid)) return 'none';
+    const contact = await probeHealth();
+    if (contact?.ready && await externalAcceptsSessionToken()) return 'reuse';
+    if (contact) detail = progressDetail(contact.payload);
   }
-
-  onProgress?.({ phase: 'starting', managed: false, elapsedMs: 0, detail: '等待上次启动的后端退出' });
-  await stopPreviousBackend(pid);
-  if (pidIsRunning(pid)) throw new Error(`Atlas 后端 (PID ${pid}) 在等待及强制结束后仍未退出。`);
-  return false;
+  // Still alive but not answering: degrade and wait. Never kill.
+  onProgress?.({ phase: 'starting', managed: false, elapsedMs: 0, detail: `${detail}（进程仍在运行，继续等待，不会结束它）` });
+  return 'wait';
 }
 
 /**
@@ -487,6 +479,32 @@ async function preparePreviousBackend(onProgress?: (progress: BackendStartupProg
  * dev backend (or another Atlas) on the port answers /api/health but rejects every
  * real request, which used to surface only as "cannot reach the backend".
  */
+/** Pid + port recorded by the backend on its last successful boot (see backend.pid). */
+export function readRunningBackendPid(): number | null {
+  const pid = readBackendPid();
+  if (pid === null || !pidIsRunning(pid)) return null;
+  return isAtlasBackendProcess(pid) ? pid : null;
+}
+
+/** Last resort, only ever reached on an explicit user restart request. */
+export async function terminateBackendPid(pid: number, reason: string): Promise<boolean> {
+  if (!pidIsRunning(pid)) return true;
+  if (!isAtlasBackendProcess(pid)) return false;
+  recordBackendLifecycle('backend.force_stop', { pid, method: 'taskkill', reason });
+  if (process.platform === 'win32') {
+    await new Promise<void>((resolve) => {
+      const killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+      killer.once('error', () => resolve());
+      killer.once('close', () => resolve());
+    });
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline && pidIsRunning(pid)) await sleep(100);
+  } else {
+    try { process.kill(pid, 'SIGKILL'); } catch { /* Exited between checks. */ }
+  }
+  return !pidIsRunning(pid);
+}
+
 async function externalAcceptsSessionToken(): Promise<boolean> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3_000);
@@ -515,6 +533,42 @@ async function attachExternal(): Promise<BackendLaunchResult> {
 
 export { BACKEND_STARTUP_CHANNEL };
 
+/**
+ * Wait for a live-but-unresponsive backend to answer. Deliberately has no kill path.
+ *
+ * Liveness comes from the probe itself, never from `netstat`: a fast refusal means nothing
+ * is listening (so the caller may spawn), while a timeout means something holds the port
+ * and is merely busy. Treating "no listening pid yet" as death would abort the wait for a
+ * backend that is still booting.
+ */
+async function waitForRunningBackend(
+  onProgress: EnsureBackendOptions['onProgress'],
+  deadline: number,
+): Promise<BackendLaunchResult> {
+  while (Date.now() < deadline) {
+    const probeStartedAt = Date.now();
+    const contact = await probeHealth();
+    if (contact?.ready) {
+      const attached = await attachExternal();
+      onProgress?.({ phase: 'ready', managed: false, elapsedMs: 0 });
+      return attached;
+    }
+    if (contact === null && Date.now() - probeStartedAt < PROBE_TIMEOUT_MS) {
+      // Refused connection, not a slow answer: the port really is free now.
+      throw new Error('__backend_gone__');
+    }
+    onProgress?.({
+      phase: 'starting', managed: false, elapsedMs: 0,
+      detail: contact ? progressDetail(contact.payload) : '已运行的后端正忙（仍在运行，继续等待）',
+    });
+    await sleep(PROBE_INTERVAL_MS);
+  }
+  throw new Error(
+    `An Atlas backend is already running but did not answer within ${STARTUP_MAX_WAIT_MS / 1000} seconds. `
+    + 'It was left running: restart Atlas manually if you want it replaced.',
+  );
+}
+
 async function ensureBackendRunningImpl(options?: EnsureBackendOptions): Promise<BackendLaunchResult> {
   const onProgress = options?.onProgress;
   const startedAt = Date.now();
@@ -524,6 +578,9 @@ async function ensureBackendRunningImpl(options?: EnsureBackendOptions): Promise
 
   try {
     loadSharedApiToken();
+    // The window reports "probing" as soon as it starts looking, before it knows whether
+    // it will attach to a resident backend or spawn one.
+    emit('probing', false);
     // Fast path (resident backend): a healthy Atlas that accepts our token is attached
     // without the netstat/PowerShell process checks below, which cost seconds on Windows.
     const live = await probeHealth();
@@ -531,9 +588,22 @@ async function ensureBackendRunningImpl(options?: EnsureBackendOptions): Promise
       emit('ready', false, '复用已运行的 Atlas 后端');
       return { ready: true, managed: false, pid: readBackendPid() ?? undefined };
     }
-    if (await preparePreviousBackend(onProgress)) {
+    const verdict = await preparePreviousBackend(onProgress);
+    if (verdict === 'reuse') {
       emit('ready', false, '复用已运行的 Atlas 后端');
       return { ready: true, managed: false, pid: readBackendPid() ?? undefined };
+    }
+    if (verdict === 'wait') {
+      // Alive and ours, just slow. Wait it out; never take it down.
+      try {
+        return await waitForRunningBackend(onProgress, startedAt + STARTUP_MAX_WAIT_MS);
+      } catch (error) {
+        if (error instanceof Error && error.message === '__backend_gone__') {
+          // Fall through to the spawn path below.
+        } else {
+          throw error;
+        }
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -541,13 +611,11 @@ async function ensureBackendRunningImpl(options?: EnsureBackendOptions): Promise
     throw new Error(`${message}\n日志文件：${getBackendLogPath()}`);
   }
 
-  emit('probing', false);
   // A busy backend (mid model-switch engine rebuild, heartbeat/automation tick
   // burst) can miss one probe, and an external backend may still be starting
   // its deferred components. Spawning a second backend then dies on the occupied
   // port and takes the window down with it, so: re-probe a few times, and once
   // an external backend answers at all, wait for it instead of spawning.
-  let externalContact = false;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const probeStartedAt = Date.now();
     const contact = await probeHealth();
@@ -557,31 +625,20 @@ async function ensureBackendRunningImpl(options?: EnsureBackendOptions): Promise
       return attached;
     }
     if (contact && isAtlasHealthPayload(contact.payload)) {
-      externalContact = true;
-      break;
+      // Something Atlas-shaped owns the port; wait for it rather than race it.
+      try {
+        return await waitForRunningBackend(onProgress, startedAt + STARTUP_MAX_WAIT_MS);
+      } catch (error) {
+        // It exited while we waited; the port is free, so spawn normally.
+        if (!(error instanceof Error && error.message === '__backend_gone__')) throw error;
+        break;
+      }
     }
     // Only a probe that ran into its timeout suggests a busy backend worth re-probing;
     // a refused connection means nothing is listening, so spawn right away.
     const timedOut = contact === null && Date.now() - probeStartedAt >= PROBE_TIMEOUT_MS;
     if (!timedOut) break;
     if (attempt < 2) await sleep(600);
-  }
-  if (externalContact) {
-    const deadline = startedAt + STARTUP_MAX_WAIT_MS;
-    while (Date.now() < deadline) {
-      const contact = await probeHealth();
-      if (contact?.ready) {
-        const attached = await attachExternal();
-        emit('ready', false);
-        return attached;
-      }
-      emit('starting', false, contact ? progressDetail(contact.payload) : '等待已运行的后端响应');
-      await sleep(PROBE_INTERVAL_MS);
-    }
-    emit('failed', false, `external backend not healthy within ${STARTUP_MAX_WAIT_MS / 1000}s\n日志文件：${getBackendLogPath()}`);
-    throw new Error(
-      `An Atlas backend is already running but did not become healthy within ${STARTUP_MAX_WAIT_MS / 1000} seconds.`,
-    );
   }
 
   const packagedBackend = process.env.ATLAS_BACKEND_EXECUTABLE;
