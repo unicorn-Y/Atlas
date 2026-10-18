@@ -1,0 +1,16 @@
+DSH collection index
+Captured at 2026-10-18T19:32:53Z UTC
+Source archives are tracked-tree snapshots generated from pinned commits and omit .git metadata.
+Community entries are independent third-party projects, not official DeepSeek products.
+Archive/tarball total: 273728793 bytes across 5 items.
+Extracted content total: 377471873 bytes across 5 items.
+
+- OFFICIAL | DeepSeek Harness CLI | 0.2.0-rc.2 | npm/deepseek-ai-dsh-0.2.0-rc.2.tgz | 24265 bytes | SHA256 bd27847c445cd68a565ac1f91c06bbbcc7639ef93071f678bb59c5ebaff38859
+- OFFICIAL | DeepSeek Harness Web UI build artifact | 0.0.1-rc.5 | npm/deepseek-ai-dsh-web-frontend-0.0.1-rc.5.tgz | 1428754 bytes | SHA256 ccadad6dcbb6f9a3c7a57802c3c2bb5958c2104ca33e9fb88135634b6d7b1516
+- OFFICIAL | DeepSeek Harness source snapshot | 0.2.1-rc.2 (repository root package version at pinned commit) | deepseek-harness-687f282e.zip | 44386184 bytes | SHA256 dcc4cf8df9c3cbb3d57726b7a1ad5a52c16a754dcdbc2c0a0836788976090d9f
+- COMMUNITY | DSH-Desktop (dongdong-agent) | 0.1.15 | DSH-Desktop-dongdong-agent-0aea85f0.zip | 5400611 bytes | SHA256 1dd3b7ded3646abf5245f46b76e214d33908ac563d1c796d1a9baf592a9f5dc6
+- COMMUNITY | DSH Desktop (anywhere-labs) | 2.0.19-next (dsh-desktop-next; workspace root is unversioned) | dsh-desktop-anywhere-labs-6a63b973.zip | 222488979 bytes | SHA256 03d18d13bb4a5bbfe79e3cd340d465d415a24f69968828c045efb5ea234b0a31
+
+Per-item machine-readable metadata: metadata/*.json
+All npm tarballs are extracted under npm/extract-*/package.
+All ZIP source snapshots are extracted under the matching *-extracted directory.

@@ -1,0 +1,34 @@
+product | version | platform/arch | filename | sizeBytes | sha256 | status
+Hermes Agent | 0.22.2 | null/null | hermes-agent-v0.22.2.tar | 230072320 bytes | 82936606083b560144310b9ea57526e7cb3c7ac4f24b3eb0374be9dfec8f1949 | captured
+Goose | 1.55.0 | null/null | goose-v1.55.0.tar | 364318720 bytes | 8a709e22492d410ec56cc6f789452854ea7a675b9b53b2965474945a2ef97c2d | captured
+Pi | 1.3.0 | null/null | pi-v1.3.0.tar | 26408960 bytes | c12c784383c18d63732b089d556a5273e2b760a1e6ed59f9f7f547d77f585a72 | captured
+Model Context Protocol Servers | unversioned | null/null | mcp-servers-main.tar | 4034560 bytes | de30cc035c1650a00ff5322150af28e995834d674c13900b1fc3943daf8d4726 | captured
+Agent Skills | unversioned | null/null | anthropic-skills-main.tar | 12400640 bytes | 32d26f17a3fe6e7b858ed9716e49d9612098e6b927f6c172aabeba41e4fd8a0f | captured
+Windsurf Visual Studio Plugin | unversioned | Visual Studio/null | windsurf-visual-studio-plugin-main.tar | 21565440 bytes | 2ba56c1e675f9d11706d04c3128425d0665236ec61a9762dc7716eed24b1e258 | captured
+Hermes Agent | unversioned | null/null | hermes-agent-main.tar | 243916800 bytes | c65c854e500d9530835b2dc2f5562f5989d4f6bea5e5f46ca8198e681613d070 | captured
+Goose | unversioned | null/null | goose-main.tar | 364544000 bytes | 4d3331d78151fb0b04001c622fa19f66bb0f277f05424221747eca08b1f7c8cb | captured
+Pi | unversioned | null/null | pi-main.tar | 26675200 bytes | 79e75d86fcc79d681c678f732f1871be530afe8ebc73acb3905c812e0ddd47a4 | captured
+Goose | 1.55.0 | windows/x64 | Goose-win32-x64.zip | 246032962 bytes | 4a10e547730832afc2fb13d1c3c4e60b0332ce3e49fd3793cb04259206054c0c | captured
+Pi | 1.3.0 | windows/x64 | pi-windows-x64.zip | 45105409 bytes | daf0ef45fd08f13dbb64c62d559e332c2d3d3087f8ae022ec5a1b9b655b59894 | captured
+
+Remaining or unresolved candidates:
+Goose | partial | https://github.com/aaif-goose/goose/releases/tag/v1.55.0 | Windows x64 runtime/CLI ZIP is captured and verified as Goose-win32-x64.zip. Other release-platform assets are not included in this staging pass.
+Pi | partial | https://github.com/earendil-works/pi/releases/tag/v1.3.0 | Windows x64 CLI ZIP is captured and verified as pi-windows-x64.zip. Other release-platform assets are not included in this staging pass.
+Windsurf Plugin for VS Code and JetBrains | unchecked_candidate | https://docs.windsurf.com/plugins | Official docs identify the first-party plugin line, but the current marketplace version and exact artifact URL were not resolved in this pass.
+Windsurf-specific MCP catalog package | unchecked_candidate | https://docs.windsurf.com/windsurf/cascade/mcp | No single first-party bundled MCP package was established. Generic upstream MCP servers are captured and labeled separately.
+
+Extracted archive indexes (files were listed and hashed; no binaries were executed):
+Goose | 93 files | 688751506 bytes | Goose-win32-x64-extracted-manifest.json
+Pi | 209 files | 118561863 bytes | pi-windows-x64-extracted-manifest.json
+
+Latest-release redirects:
+https://github.com/NousResearch/hermes-agent/releases/latest -> https://github.com/NousResearch/hermes-agent/releases/tag/v0.22.2
+https://github.com/aaif-goose/goose/releases/latest -> https://github.com/aaif-goose/goose/releases/tag/v1.55.0
+https://github.com/earendil-works/pi/releases/latest -> https://github.com/earendil-works/pi/releases/tag/v1.3.0
+
+Official release API asset inventory:
+Goose v1.55.0 | 40 listed assets | catalog: GOOSE-PI-RELEASE-ASSETS.json
+Pi v1.3.0 | 10 listed assets | catalog: GOOSE-PI-RELEASE-ASSETS.json
+
+Hermes release asset availability:
+Hermes Agent v0.22.2 | 0 uploaded release assets | HERMES-RELEASE-ASSETS.json

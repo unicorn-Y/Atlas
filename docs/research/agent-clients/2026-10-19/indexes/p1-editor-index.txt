@@ -1,0 +1,79 @@
+P1 Editor Agent Client Package Index
+Capture UTC: 2026-10-18T19:34:58Z
+
+cline-cli-windows-x64-npm | npm runtime/package | @cline/cli-windows-x64 | 3.0.73 | Windows x64
+  file=cline-cli-windows-x64-npm/cline-cli-windows-x64-3.0.73.tgz format=npm tar.gz bytes=47664377 sha256=bca9c4be2dcacae2886b27a2426dbed324ca1f54644ead519e00a680c3575234
+  source=https://registry.npmjs.org/@cline/cli-windows-x64/-/cli-windows-x64-3.0.73.tgz
+  resolved=https://registry.npmjs.org/@cline/cli-windows-x64/-/cli-windows-x64-3.0.73.tgz
+  extracted=cline-cli-windows-x64-npm/extracted files=142 index=cline-cli-windows-x64-npm/CONTENTS.txt method=tar -xzf
+
+cline-npm | npm runtime/package | Cline Bot Inc. | 3.0.73 | Cross-platform npm package
+  file=cline-npm/cline-3.0.73.tgz format=npm tar.gz bytes=17694 sha256=f8c8b3a701ca10563f2928ed307d2a7ef15aeca8de8e1c58da8799b4b9890f95
+  source=https://registry.npmjs.org/cline/-/cline-3.0.73.tgz
+  resolved=https://registry.npmjs.org/cline/-/cline-3.0.73.tgz
+  extracted=cline-npm/extracted files=6 index=cline-npm/CONTENTS.txt method=tar -xzf
+
+Cline-vsix | VS Code extension | saoudrizwan | 4.1.25 | Platform-neutral VSIX
+  file=Cline-vsix/saoudrizwan.claude-dev-4.1.25.vsix format=VSIX/ZIP bytes=9580372 sha256=aac83af0513f5168372905c02a72eee3835d32a53b9d635d3b055ed4a7bd71fc
+  source=https://saoudrizwan.gallerycdn.vsassets.io/extensions/saoudrizwan/claude-dev/4.1.25/1792132756634/Microsoft.VisualStudio.Services.VSIXPackage
+  resolved=https://saoudrizwan.gallerycdn.vsassets.io/extensions/saoudrizwan/claude-dev/4.1.25/1792132756634/Microsoft.VisualStudio.Services.VSIXPackage
+  extracted=Cline-vsix/extracted files=39 index=Cline-vsix/CONTENTS.txt method=Expand-Archive
+
+Continue-open-source-AI-code-agent-vsix | VS Code extension | Continue | 2.1.0 | Platform-neutral VSIX
+  file=Continue-open-source-AI-code-agent-vsix/Continue.continue-2.1.0.vsix format=VSIX/ZIP bytes=114160586 sha256=28e1c4691f090080f9872ddbbd450e32a822759fefea6e6c12f96a45929351b9
+  source=https://Continue.gallerycdn.vsassets.io/extensions/continue/continue/2.1.0/1781829387808/Microsoft.VisualStudio.Services.VSIXPackage
+  resolved=https://Continue.gallerycdn.vsassets.io/extensions/continue/continue/2.1.0/1781829387808/Microsoft.VisualStudio.Services.VSIXPackage
+  extracted=Continue-open-source-AI-code-agent-vsix/extracted files=400 index=Continue-open-source-AI-code-agent-vsix/CONTENTS.txt method=Expand-Archive
+
+continuedev-cli-npm | npm runtime/package | @continuedev/cli | 1.5.47 | Cross-platform npm package
+  file=continuedev-cli-npm/continuedev-cli-1.5.47.tgz format=npm tar.gz bytes=17945195 sha256=bcf43fd5db041dbff4ee2eb9639a8cc732eba5d7f5ea137c0ef2025976fa3724
+  source=https://registry.npmjs.org/@continuedev/cli/-/cli-1.5.47.tgz
+  resolved=https://registry.npmjs.org/@continuedev/cli/-/cli-1.5.47.tgz
+  extracted=continuedev-cli-npm/extracted files=454 index=continuedev-cli-npm/CONTENTS.txt method=tar -xzf
+
+cursor-win-x64-system | Windows desktop installer | Anysphere, Inc. | 3.24.18 | Windows x64
+  file=cursor-win-x64-system/CursorSetup-x64-3.24.18.exe format=PE/EXE installer bytes=215224840 sha256=7b8e972ca7d055aa0fdaaf5086137e348ebb8953d1b55b8b9b54063b8610b2ea
+  source=https://api2.cursor.sh/updates/download/golden/win32-x64/cursor/3.24
+  resolved=https://downloads.cursor.com/production/be4c9e5350d77747b42cd467cbd3370a753d464b/win32/x64/system-setup/CursorSetup-x64-3.24.18.exe
+  extracted=cursor-win-x64-system/extracted files=26 index=cursor-win-x64-system/CONTENTS.txt method=7-Zip archive extraction
+  note=Official page labels 3.24 latest; final installer filename identifies build 3.24.18.
+
+cursor-win-x64-user | Windows desktop installer | Anysphere, Inc. | 3.24.18 | Windows x64
+  file=cursor-win-x64-user/CursorUserSetup-x64-3.24.18.exe format=PE/EXE installer bytes=215228800 sha256=be9e5c53b9dbd8b08bd719ef57b983b12317380ee70b6bb0e02411cb491e49e2
+  source=https://api2.cursor.sh/updates/download/golden/win32-x64-user/cursor/3.24
+  resolved=https://downloads.cursor.com/production/be4c9e5350d77747b42cd467cbd3370a753d464b/win32/x64/user-setup/CursorUserSetup-x64-3.24.18.exe
+  extracted=cursor-win-x64-user/extracted files=26 index=cursor-win-x64-user/CONTENTS.txt method=7-Zip archive extraction
+  note=Official page labels 3.24 latest; final installer filename identifies build 3.24.18.
+
+Kilo-Code-AI-Coding-Agent-Copilot-and-Autocomplete-vsix | VS Code extension | kilocode | 7.8.14 | Platform-neutral VSIX
+  file=Kilo-Code-AI-Coding-Agent-Copilot-and-Autocomplete-vsix/kilocode.Kilo-Code-7.8.14.vsix format=VSIX/ZIP bytes=133137849 sha256=bcb2107d3a7cd5c2ab24c5a2fcd3a427f8038e44b265d5c3f1034982c697abb1
+  source=https://kilocode.gallerycdn.vsassets.io/extensions/kilocode/kilo-code/7.8.14/1792185319709/Microsoft.VisualStudio.Services.VSIXPackage
+  resolved=https://kilocode.gallerycdn.vsassets.io/extensions/kilocode/kilo-code/7.8.14/1792185319709/Microsoft.VisualStudio.Services.VSIXPackage
+  extracted=Kilo-Code-AI-Coding-Agent-Copilot-and-Autocomplete-vsix/extracted files=1756 index=Kilo-Code-AI-Coding-Agent-Copilot-and-Autocomplete-vsix/CONTENTS.txt method=Expand-Archive
+
+kilocode-cli-npm | npm runtime/package | @kilocode/cli | 7.8.12 | Cross-platform npm package
+  file=kilocode-cli-npm/kilocode-cli-7.8.12.tgz format=npm tar.gz bytes=6773 sha256=5e178f821d8710cefbd3924ef7db74683a06045ae433ec60db56d9d971a41b17
+  source=https://registry.npmjs.org/@kilocode/cli/-/cli-7.8.12.tgz
+  resolved=https://registry.npmjs.org/@kilocode/cli/-/cli-7.8.12.tgz
+  extracted=kilocode-cli-npm/extracted files=6 index=kilocode-cli-npm/CONTENTS.txt method=tar -xzf
+
+kilocode-cli-windows-x64-npm | npm runtime/package | @kilocode/cli-windows-x64 | 7.8.12 | Windows x64
+  file=kilocode-cli-windows-x64-npm/kilocode-cli-windows-x64-7.8.12.tgz format=npm tar.gz bytes=71666384 sha256=e237e4bb6161a5668f1a180a280c4662e9ef358e21273ea4a484f680ef897b30
+  source=https://registry.npmjs.org/@kilocode/cli-windows-x64/-/cli-windows-x64-7.8.12.tgz
+  resolved=https://registry.npmjs.org/@kilocode/cli-windows-x64/-/cli-windows-x64-7.8.12.tgz
+  extracted=kilocode-cli-windows-x64-npm/extracted files=409 index=kilocode-cli-windows-x64-npm/CONTENTS.txt method=tar -xzf
+
+Roo-Code-vsix | VS Code extension | RooVeterinaryInc | 3.54.0 | Platform-neutral VSIX
+  file=Roo-Code-vsix/RooVeterinaryInc.roo-cline-3.54.0.vsix format=VSIX/ZIP bytes=30837353 sha256=caf96d596d69cb3427f00c3ca60492693135cc6b9f621aa062202903aa652735
+  source=https://RooVeterinaryInc.gallerycdn.vsassets.io/extensions/rooveterinaryinc/roo-cline/3.54.0/1778867527984/Microsoft.VisualStudio.Services.VSIXPackage
+  resolved=https://RooVeterinaryInc.gallerycdn.vsassets.io/extensions/rooveterinaryinc/roo-cline/3.54.0/1778867527984/Microsoft.VisualStudio.Services.VSIXPackage
+  extracted=Roo-Code-vsix/extracted files=1741 index=Roo-Code-vsix/CONTENTS.txt method=Expand-Archive
+  note=Official marketplace listing states the Roo Code extension was shut down on 2026-05-15; this is the latest version still served by that official listing at capture.
+
+windsurf-devin-desktop-win-x64 | Windows desktop installer | Cognition, Inc. (Windsurf/Devin) | 3.10.67 | Windows x64
+  file=windsurf-devin-desktop-win-x64/DevinUserSetup-x64-3.10.67.exe format=PE/EXE installer bytes=249606400 sha256=1f9d06554ffda0a1e846c346af1579b73c20334b7f5cba17b56189f754fe4e9c
+  source=https://windsurf.com/api/windsurf/download-redirect?build=win32-x64-user&isNext=false
+  resolved=https://windsurf-stable.codeiumdata.com/win32-x64-user/stable/0b186d6e13a1a48a46430c51fe414dd0747d46f6/DevinUserSetup-x64-3.10.67.exe
+  extracted=windsurf-devin-desktop-win-x64/extracted files=26 index=windsurf-devin-desktop-win-x64/CONTENTS.txt method=7-Zip archive extraction
+  note=Official Windsurf download page redirects to Devin Desktop and states Devin Desktop is the new name for Windsurf; current x64 package has Devin branding.
+

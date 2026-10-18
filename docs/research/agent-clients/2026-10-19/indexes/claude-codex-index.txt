@@ -1,0 +1,54 @@
+Atlas agent-client package collection index
+Lane: Claude and OpenAI Codex only. No application was executed or installed.
+Capture timestamps are recorded in UTC per package JSON.
+
+STAGED
+Claude Code | CLI npm core package | 2.1.302 | x64
+  file: claude-code-cli\claude-code-2.1.302.tgz
+  format: npm tarball (.tgz) | bytes: 29082 | SHA256: ac1a6a3364c467392bc40a8a405490e821575e3e858d3013b11258862c01dfc8
+  hash check: local=true; upstream SHA256=null; npm integrity=true
+  extracted files: 7 | tree: metadata\claude-code-cli-core-tree.txt
+  metadata: metadata/claude-code-cli-core.json
+Claude Code | CLI native Windows x64 package | 2.1.302 | x64
+  file: claude-code-cli\claude-code-win32-x64-2.1.302.tgz
+  format: npm tarball (.tgz) | bytes: 132494857 | SHA256: cd077f50f24f5155c28800a3658a58c89b5d1ccae2f95a2e096a16ab250a544d
+  hash check: local=true; upstream SHA256=null; npm integrity=true
+  extracted files: 4 | tree: metadata\claude-code-cli-win32-x64-tree.txt
+  metadata: metadata/claude-code-cli-win32-x64.json
+Claude Desktop | Windows desktop package | 2.42304.0 | x64
+  file: claude-desktop\Claude-2.42304.0-x64.msix
+  format: MSIX | bytes: 297191037 | SHA256: 2bf309665f0de4eaa76a7e64033594e6f73ceb6413c60080f72f3ce640fa24ee
+  hash check: local=true; upstream SHA256=null; npm integrity=null
+  extracted files: 4443 | tree: metadata\claude-desktop-x64-tree.txt
+  metadata: metadata/claude-desktop-x64.json
+OpenAI Codex CLI | Windows x64 CLI release package | 0.163.0 | x64
+  file: codex-cli\codex-x86_64-pc-windows-msvc.exe.zip
+  format: ZIP | bytes: 167080091 | SHA256: dabdb4d16aaf10fea40b74811c96efddcd9138f122163b69ed604fcb3eb704c3
+  hash check: local=true; upstream SHA256=true; npm integrity=null
+  extracted files: 47 | tree: metadata\openai-codex-cli-x64-tree.txt
+  metadata: metadata/openai-codex-cli-x64.json
+OpenAI Codex CLI | Code Mode host helper | 0.163.0 | x64
+  file: codex-cli\codex-code-mode-host-x86_64-pc-windows-msvc.exe.zip
+  format: ZIP | bytes: 28217604 | SHA256: bc82fa6d8f449c818292eac35bd7400c4f7dae08908fc9bc67bfbad8c4a3de68
+  hash check: local=true; upstream SHA256=true; npm integrity=null
+  extracted files: 1 | tree: metadata\openai-codex-code-mode-host-x64-tree.txt
+  metadata: metadata/openai-codex-code-mode-host-x64.json
+OpenAI Codex CLI | Source snapshot | 0.163.0 | x64
+  file: codex-cli\openai-codex-rust-v0.163.0-source.zip
+  format: Source ZIP | bytes: 22647697 | SHA256: 36fda4e61c251d805c2d68203c3a34b0f6881a88846e12776ca02fb13d6e67c7
+  hash check: local=true; upstream SHA256=null; npm integrity=null
+  extracted files: 9176 | tree: metadata\openai-codex-source-tree.txt
+  metadata: metadata/openai-codex-source.json
+
+BLOCKED / NOT ACQUIRED
+Claude Desktop | Consumer setup installer | blocked
+  metadata: metadata/claude-desktop-setup-x64.json
+  note: Official setup redirect returned HTTP 403 during collection. Official enterprise MSIX x64 was obtained separately.
+OpenAI Codex Desktop | Microsoft Store package | blocked
+  metadata: metadata/openai-codex-desktop-store.json
+  note: Read-only current-user AppX query found Store-signed package OpenAI.Codex_26.1013.4894.0_x64__2p2nqsd0c76g0; source tree 3,650 files / 2,346,401,834 bytes. Read-only tree index saved. Ordinary per-file Copy-Item was attempted for every source file: all 3,650 carry Encrypted attributes and all failed with IOException cannot encrypt specified file. cipher /c identifies Application Protected. Skipped path/error log retained; zero files copied, so no partial archive was created. No access-control workaround, decryption, elevation, Store auth, or DRM bypass attempted.
+
+Downloaded archive total: 647660368 bytes (617.66 MiB).
+Full staging tree: 2326936819 bytes across 13702 files (includes extracted files and metadata).
+SHA256SUMS lists the six downloaded archives. Complete extracted trees, source-map/manifest paths, redirects, and attempt evidence are recorded in metadata.
+Codex Desktop per-file copy attempted all 3,650 installed files; zero were readable by ordinary copy because all have Encrypted attributes and Copy-Item returned cannot-encrypt IOExceptions. No partial archive was created. Skipped paths/errors: codex-desktop-store-installed-partial/skipped-files.txt.
