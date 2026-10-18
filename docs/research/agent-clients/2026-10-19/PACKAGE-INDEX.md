@@ -2,9 +2,9 @@
 
 Mechanical inventory only; no package was run and no functional analysis was performed.
 
-Release assets: 54 files, 4908552923 bytes. Full URLs and SHA-256 values are in manifest.json and SHA256SUMS.txt.
+Release assets: 55 files, 5857546738 bytes. Full URLs and SHA-256 values are in manifest.json and SHA256SUMS.txt.
 
-2026-10-19 recovery pass: no additional files were acquired, so Release assets and SHA256SUMS are unchanged. Claude Consumer Setup remains blocked by HTTP 403. Codex Desktop remains blocked after the official Store download required package agreement acceptance; see DOWNLOAD-LOG.md and indexes/claude-codex-index.txt for official URLs and attempts.
+2026-10-19 recovery pass: added the official OpenAI Codex Desktop x64 MSIX 26.1013.4894.0. Claude Consumer Setup remains blocked by region_unavailable; see DOWNLOAD-LOG.md and indexes/claude-codex-index.txt for URLs and evidence.
 
 | Product | Component | Version | Platform / arch | Status | Release asset | Bytes | SHA-256 |
 |---|---|---|---|---|---|---:|---|
@@ -24,7 +24,7 @@ Release assets: 54 files, 4908552923 bytes. Full URLs and SHA-256 values are in 
 | Claude Desktop | Windows desktop package | 2.42304.0 | Windows 11 x64 / x64 | staged | [claude-desktop-x64-2bf309665f.msix](https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/claude-desktop-x64-2bf309665f.msix) | 297191037 | 2bf309665f0d… |
 | OpenAI Codex CLI | Windows x64 CLI release package | 0.163.0 | Windows 11 x64 / x64 | staged | [openai-codex-cli-x64-dabdb4d16a.zip](https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/openai-codex-cli-x64-dabdb4d16a.zip) | 167080091 | dabdb4d16aaf… |
 | OpenAI Codex CLI | Code Mode host helper | 0.163.0 | Windows 11 x64 / x64 | staged | [openai-codex-code-mode-host-x64-bc82fa6d8f.zip](https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/openai-codex-code-mode-host-x64-bc82fa6d8f.zip) | 28217604 | bc82fa6d8f44… |
-| OpenAI Codex Desktop | Microsoft Store package |  | Windows 11 x64 / x64 | blocked | — | — | — |
+| OpenAI Codex Desktop | Windows x64 MSIX | 26.1013.4894.0 | Windows 11 x64 / x64 | downloaded | [ChatGPT-x64.msix](https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/ChatGPT-x64.msix) | 948993815 | e2d892e6c223… |
 | OpenAI Codex CLI | Source snapshot | 0.163.0 | Windows 11 x64 / x64 | staged | [openai-codex-source-36fda4e61c.zip](https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/openai-codex-source-36fda4e61c.zip) | 22647697 | 36fda4e61c25… |
 | OpenCode | desktop | 1.19.3 | Windows / x64 | complete | [opencode-desktop-v1.19.3-eb2554ab54.exe](https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/opencode-desktop-v1.19.3-eb2554ab54.exe) | 126269464 | eb2554ab5484… |
 | OpenCode | CLI release binary | 1.19.3 | Windows / x64 | complete | [opencode-cli-release-v1.19.3-e4ce9117f5.zip](https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/opencode-cli-release-v1.19.3-e4ce9117f5.zip) | 62204138 | e4ce9117f55f… |

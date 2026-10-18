@@ -39,21 +39,27 @@ OpenAI Codex CLI | Source snapshot | 0.163.0 | x64
   hash check: local=true; upstream SHA256=null; npm integrity=null
   extracted files: 9176 | tree: metadata\openai-codex-source-tree.txt
   metadata: metadata/openai-codex-source.json
+OpenAI Codex Desktop | Windows x64 MSIX | 26.1013.4894.0 | x64
+  file: ChatGPT-x64.msix
+  format: MSIX | bytes: 948993815 | SHA256: e2d892e6c22310e4b1a2928b0d3a29a066e0863d3a333754d6585c77cdafbe7f
+  hash check: local=true; release round-trip=true; GitHub asset digest matches
+  Authenticode: Valid; signer Microsoft Marketplace CA G 024; thumbprint 1DA78AFE445125E845477BB30EB0E7B703270FEF
+  Package Identity: OpenAI.Codex | Version 26.1013.4894.0 | Architecture x64
+  entries: app/ChatGPT.exe; app/resources/codex-command-runner.exe | archive entries: 3651
+  source: https://persistent.oaistatic.com/codex-app-prod/ChatGPT-x64.msix
+  release: https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/ChatGPT-x64.msix
 
 BLOCKED / NOT ACQUIRED
 Claude Desktop | Consumer setup installer | blocked
   metadata: metadata/claude-desktop-setup-x64.json
   official page: https://claude.com/download
   direct URL: https://claude.ai/api/desktop/win32/x64/setup/latest/redirect
-  note: Ordinary unauthenticated GET and HEAD on 2026-10-19 returned HTTP 403; no redirect target, installer, or version obtained. Official enterprise MSIX x64 2.42304.0 is separate.
-OpenAI Codex Desktop | Microsoft Store package | blocked
+  direct MSIX URL: https://claude.ai/api/desktop/win32/x64/msix/latest/redirect
+  note: Ordinary GET to both official endpoints on 2026-10-19 returned HTTP 403 / region_unavailable, 0 redirects, 0 bytes; no consumer package, version, or final URL obtained. Consumer-to-enterprise equivalence remains unknown. Official enterprise MSIX x64 2.42304.0 is separate.
+OpenAI Codex Desktop | Installed Store files | blocked for copying
   metadata: metadata/openai-codex-desktop-store.json
-  official product page: https://openai.com/index/introducing-the-codex-app/
-  official Store listing: https://apps.microsoft.com/detail/9plm9xgg6vks
-  official download URL: https://get.microsoft.com/installer/download/9PLM9XGG6VKS?cid=website_cta_psi
-  note: WinGet download for product 9PLM9XGG6VKS was cancelled because package agreements were not accepted; no file/current version obtained. Read-only current-user AppX query found Store-signed package OpenAI.Codex_26.1013.4894.0_x64__2p2nqsd0c76g0; source tree 3,650 files / 2,346,401,834 bytes. Ordinary per-file copy failed for every file due to Encrypted attributes; cipher /c identifies Application Protected. No agreement acceptance, access-control workaround, decryption, elevation, Store authentication, or DRM bypass attempted.
+  note: Read-only query found installed package OpenAI.Codex_26.1013.4894.0_x64__2p2nqsd0c76g0; its version matches the official CDN MSIX. No need to copy the protected WindowsApps directory.
 
 Downloaded archive total: 647660368 bytes (617.66 MiB).
 Full staging tree: 2326936819 bytes across 13702 files (includes extracted files and metadata).
-SHA256SUMS lists the six downloaded archives. Complete extracted trees, source-map/manifest paths, redirects, and attempt evidence are recorded in metadata.
-Codex Desktop per-file copy attempted all 3,650 installed files; zero were readable by ordinary copy because all have Encrypted attributes and Copy-Item returned cannot-encrypt IOExceptions. No partial archive was created. Skipped paths/errors: codex-desktop-store-installed-partial/skipped-files.txt.
+SHA256SUMS lists the downloaded archives and desktop packages. Complete extracted trees, source-map/manifest paths, redirects, and attempt evidence are recorded in metadata.
