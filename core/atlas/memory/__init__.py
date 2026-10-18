@@ -19,6 +19,17 @@ import structlog
 
 from atlas.config import get_config
 
+# memory.init() runs inside lifespan(), before uvicorn binds the port. These bounds turn a
+# locked or wedged database into a fast, loud failure instead of a silent hang.
+_DB_CONNECT_TIMEOUT_S = 5.0
+_DB_INIT_TIMEOUT_S = 20.0
+# Kept well under the init timeout on purpose: SQLite retries a locked database for the
+# whole busy_timeout inside a single C call, and asyncio.wait_for cannot interrupt that
+# (measured: a locked CREATE TABLE took 7.4s to return with the driver default). A short
+# value makes the failure surface before the outer timeout instead of after it.
+_DB_BUSY_TIMEOUT_MS = 2000
+_FAILED_INIT_CLOSE_S = 0.5
+
 log = structlog.get_logger()
 
 # Tables of the retired memory systems (facts/candidates/reflections/goal
@@ -49,13 +60,55 @@ class MemoryStore:
         self._db: aiosqlite.Connection | None = None
 
     async def init(self) -> None:
-        """Initialize database and create tables."""
+        """Initialize database and create tables.
+
+        Bounded on purpose: ``lifespan()`` awaits this before uvicorn binds the port, so
+        an unbounded wait here leaves the port closed and the UI reports that it cannot
+        reach the backend with no diagnostic. A locked or wedged database now fails
+        loudly and quickly instead of hanging start-up.
+        """
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._db = await aiosqlite.connect(str(self._db_path))
+        try:
+            self._db = await asyncio.wait_for(
+                aiosqlite.connect(str(self._db_path), timeout=_DB_CONNECT_TIMEOUT_S),
+                timeout=_DB_INIT_TIMEOUT_S,
+            )
+        except (asyncio.TimeoutError, TimeoutError) as exc:
+            await self._close_after_failed_init()
+            raise TimeoutError(
+                f"memory.init timed out after {_DB_INIT_TIMEOUT_S:.0f}s opening {self._db_path}; "
+                "the database may be locked by another process"
+            ) from exc
         self._db.row_factory = aiosqlite.Row
+        # Wait on a held write lock rather than failing the statement immediately.
+        await self._db.execute(f"PRAGMA busy_timeout = {_DB_BUSY_TIMEOUT_MS}")
         await self._db.execute("PRAGMA foreign_keys = ON")
-        await self._create_tables()
+        try:
+            await asyncio.wait_for(self._create_tables(), timeout=_DB_INIT_TIMEOUT_S)
+        except (asyncio.TimeoutError, TimeoutError) as exc:
+            # wait_for cancels _create_tables, but the aiosqlite worker thread stays
+            # alive mid-statement. Close it here so a failed boot does not leave a
+            # thread that dies later with "Event loop is closed".
+            await self._close_after_failed_init()
+            raise TimeoutError(
+                f"memory.init timed out after {_DB_INIT_TIMEOUT_S:.0f}s creating tables in "
+                f"{self._db_path}; the database may be locked by another process"
+            ) from exc
         log.info("memory.init", db=str(self._db_path))
+
+    async def _close_after_failed_init(self) -> None:
+        """Best-effort teardown of a half-initialised connection.
+
+        Kept short: the connection is already stuck on a locked database, so waiting on
+        close() would just add its full timeout to a boot that has already failed.
+        """
+        db, self._db = self._db, None
+        if db is None:
+            return
+        try:
+            await asyncio.wait_for(db.close(), timeout=_FAILED_INIT_CLOSE_S)
+        except Exception:
+            log.warning("memory.init_close_failed", db=str(self._db_path))
 
     async def _create_tables(self) -> None:
         assert self._db is not None

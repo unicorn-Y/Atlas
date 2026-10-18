@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import threading
@@ -16,6 +17,12 @@ from typing import Any
 import aiosqlite
 
 from atlas.usage_pricing import estimate_cost
+
+# UsageLedger.init() also runs inside lifespan(), before uvicorn binds the port, so its
+# database waits must be bounded too.
+_DB_CONNECT_TIMEOUT_S = 5.0
+_DB_INIT_TIMEOUT_S = 20.0
+_DB_BUSY_TIMEOUT_MS = 2000
 
 
 _RUN_USAGE_SUM_FIELDS = (
@@ -376,7 +383,11 @@ class UsageLedger:
 
     async def init(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._db = await aiosqlite.connect(str(self.db_path))
+        self._db = await asyncio.wait_for(
+            aiosqlite.connect(str(self.db_path), timeout=_DB_CONNECT_TIMEOUT_S),
+            timeout=_DB_INIT_TIMEOUT_S,
+        )
+        await self._db.execute(f"PRAGMA busy_timeout = {_DB_BUSY_TIMEOUT_MS}")
         await self._db.execute("""
             CREATE TABLE IF NOT EXISTS usage_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -15,7 +15,113 @@ from typing import Any
 
 _MAX_LIMIT = 2000
 _MAX_FILE_BYTES = 2 * 1024 * 1024
-_SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "dist", "build"}
+# Cap on how many candidate files one query may collect. This is a scan budget, not a
+# limit on results: files are sorted first so the truncation is deterministic instead of
+# silently dropping whichever tree the filesystem happened to yield last.
+_MAX_FILES = 20000
+# Always pruned, whatever the query looks like. Everything here is either a copy of the
+# repository or machine-local output that .gitignore already excludes -- never source the
+# agent should read twice:
+#   * .worktrees            -- full checkouts; one `include="*.py"` grep over them cost a
+#                              real run 175s and filled the context with duplicate hits.
+#   * artifacts/, _shots/   -- gitignored measurement output: 167k files, 16s of a 20s walk.
+#   * data/upstream/        -- 195k files / 6 GB of upstream source staging (.gitignore:156).
+#   * frontend/backend-release/ -- packaged backend copy (.gitignore:64).
+#   * data/pytest-tmp/, cache/  -- rebuilt test and cache output.
+_SKIP_DIRS = {
+    ".git", "node_modules", ".venv", "venv", "dist", "build",
+    ".worktrees", "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    ".tox", ".nox", "site-packages", ".next", ".turbo", "target",
+    "artifacts", "_shots", "_audit", "survey_images", "reflection_receipts",
+    "backend-release", "pytest-tmp", "windows-release", "win-unpacked",
+}
+# Matched against the whole relative path, for trees whose name is not unique enough to
+# prune globally (a real project may well have its own data/upstream).
+_SKIP_PATHS = {
+    "data/upstream", "data/pytest-tmp", "cache", "runs",
+}
+
+
+def _prune(root: Path, parent: Path, names: list[str], *, honour_skip: bool = True) -> list[str]:
+    """Drop directories that a workspace search must never descend into.
+
+    ``honour_skip=False`` is used when the caller pointed ``path`` inside a normally
+    pruned tree: an explicit request must win, otherwise the tool answers "no matches"
+    to a question it never actually asked the filesystem.
+    """
+    if not honour_skip:
+        return [name for name in names if not name.startswith(".")]
+    try:
+        rel_parent = Path(parent).relative_to(root).as_posix()
+    except ValueError:
+        rel_parent = "."
+    kept: list[str] = []
+    for name in names:
+        if name in _SKIP_DIRS or name.startswith("."):
+            continue
+        if rel_parent == ".":
+            candidate = name
+        else:
+            candidate = f"{rel_parent}/{name}"
+        if candidate in _SKIP_PATHS:
+            continue
+        kept.append(name)
+    return kept
+
+
+def _inside_skipped_tree(root: Path, base: Path) -> bool:
+    """True when ``base`` itself sits inside (or is) a tree that searches normally prune."""
+    try:
+        relative = base.relative_to(root)
+    except ValueError:
+        return False
+    if not relative.parts:
+        return False
+    return _is_skipped_relative(relative) or relative.as_posix() in _SKIP_PATHS
+
+
+def _is_skipped_relative(relative: Path) -> bool:
+    """True when a workspace-relative path lies under a pruned tree."""
+    parts = relative.parts
+    if any(part in _SKIP_DIRS for part in parts):
+        return True
+    return any(
+        "/".join(parts[: index + 1]) in _SKIP_PATHS
+        for index in range(len(parts) - 1)
+    )
+
+
+def _iter_glob(root: Path, base: Path, pattern: str, *, hidden: bool):
+    """Yield workspace-relative matches for a glob pattern without walking pruned trees.
+
+    ``Path.glob`` cannot be used directly: pruning has to happen while descending, because
+    ``**`` would otherwise traverse ``data/upstream`` and only then discard the results.
+    """
+    recursive = "**" in pattern
+    honour_skip = not _inside_skipped_tree(root, base)
+    matcher = re.compile(fnmatch.translate(pattern))
+    if not recursive:
+        for item in base.glob(pattern):
+            try:
+                yield item.resolve().relative_to(root)
+            except (OSError, ValueError):
+                continue
+        return
+    for parent, dirs, names in os.walk(base, followlinks=False):
+        kept = _prune(root, Path(parent), dirs, honour_skip=honour_skip)
+        if not hidden:
+            kept = [name for name in kept if not name.startswith(".")]
+        dirs[:] = kept
+        for name in names:
+            if not hidden and name.startswith("."):
+                continue
+            try:
+                relative = (Path(parent) / name).resolve().relative_to(root)
+            except (OSError, ValueError):
+                continue
+            tail = relative.as_posix()
+            if matcher.match(tail) or fnmatch.fnmatch(tail, pattern):
+                yield relative
 
 
 def _rooted_path(workspace: str, raw: Any) -> tuple[Path, Path]:
@@ -49,16 +155,11 @@ def glob_workspace(workspace: str, *, pattern: str, path: str | None = None,
         raise ValueError("path must point to a directory")
     maximum = _limit(limit)
     matches: list[str] = []
+    skipped_path_truncated = False
+    honour_result_skip = not _inside_skipped_tree(root, base)
     try:
-        for item in base.glob(pattern):
-            resolved = item.resolve()
-            try:
-                relative = resolved.relative_to(root)
-            except ValueError:
-                continue
-            if not hidden and any(part.startswith(".") for part in relative.parts):
-                continue
-            if any(part in _SKIP_DIRS for part in relative.parts):
+        for relative in _iter_glob(root, base, pattern, hidden=hidden):
+            if honour_result_skip and _is_skipped_relative(relative):
                 continue
             matches.append(relative.as_posix())
             if len(matches) > maximum:
@@ -87,32 +188,43 @@ def grep_workspace(workspace: str, *, pattern: str, path: str | None = None,
         files = [base] if not include or fnmatch.fnmatch(base.name, include) else []
     elif base.is_dir():
         files = []
+        # Dot-directories are pruned unconditionally. Passing `include` used to disable
+        # this guard (`include is not None or not name.startswith(".")`), so narrowing a
+        # search to *.py made it walk every hidden tree, .worktrees copies included.
+        skipped_dirs = 0
+        # An explicitly targeted path inside a normally pruned tree must be searched:
+        # answering "no matches" for a directory the user named is worse than being slow.
+        honour_skip = not _inside_skipped_tree(root, base)
         for parent, dirs, names in os.walk(base, followlinks=False):
-            dirs[:] = [name for name in dirs if name not in _SKIP_DIRS and
-                       (include is not None or not name.startswith("."))]
+            kept = _prune(root, Path(parent), dirs, honour_skip=honour_skip)
+            skipped_dirs += len(dirs) - len(kept)
+            dirs[:] = kept
             for name in names:
-                item = Path(parent) / name
-                try:
-                    relative = item.resolve().relative_to(root)
-                except (OSError, ValueError):
+                if name.startswith(".") and not include:
                     continue
-                if not include and not any(part.startswith(".") for part in relative.parts):
-                    files.append(item)
-                elif include and fnmatch.fnmatch(name, include):
-                    files.append(item)
-                if len(files) >= 10000:
-                    break
-            if len(files) >= 10000:
-                break
+                if include and not fnmatch.fnmatch(name, include):
+                    continue
+                files.append(Path(parent) / name)
+        # Deterministic order: a truncation must not depend on filesystem traversal order,
+        # and it must not silently hide a whole top-level tree. `core/` sorting after
+        # `cache/` is exactly how a real search returned zero hits for a symbol that exists.
+        files.sort(key=lambda item: item.as_posix().casefold())
     else:
         raise ValueError("path must point to a file or directory")
 
+    truncated_files = len(files) > _MAX_FILES
+    if truncated_files:
+        files = files[:_MAX_FILES]
+
     matches: list[dict[str, Any]] = []
+    honour_result_skip = not _inside_skipped_tree(root, base)
     for item in files:
         try:
             resolved = item.resolve()
             relative = resolved.relative_to(root)
-            if any(part in _SKIP_DIRS for part in relative.parts) or item.stat().st_size > _MAX_FILE_BYTES:
+            if honour_result_skip and any(part in _SKIP_DIRS for part in relative.parts):
+                continue
+            if item.stat().st_size > _MAX_FILE_BYTES:
                 continue
             raw = item.read_text(encoding="utf-8")
         except (OSError, UnicodeError, ValueError):
@@ -121,8 +233,20 @@ def grep_workspace(workspace: str, *, pattern: str, path: str | None = None,
             if expression.search(line):
                 matches.append({"path": relative.as_posix(), "line": number, "text": line})
                 if len(matches) > maximum:
-                    return {"path": str(base), "matches": matches[:maximum], "truncated": True}
-    return {"path": str(base), "matches": matches, "truncated": False}
+                    return {"path": str(base), "matches": matches[:maximum], "truncated": True,
+                            "scanned_files": len(files), "scan_truncated": truncated_files}
+    result: dict[str, Any] = {"path": str(base), "matches": matches, "truncated": False,
+                              "scanned_files": len(files)}
+    if truncated_files:
+        # Say so explicitly. Returning an empty match list for a symbol that exists is what
+        # sends an agent into a repeat-the-same-search loop; an honest "I did not look
+        # everywhere" lets it narrow the path instead.
+        result["scan_truncated"] = True
+        result["hint"] = (
+            f"Only the first {len(files)} of {len(files) + 1}+ candidate files were searched. "
+            "Narrow `path` or add `include` to cover the rest."
+        )
+    return result
 
 
 def query_tool_schemas() -> list[dict[str, Any]]:
