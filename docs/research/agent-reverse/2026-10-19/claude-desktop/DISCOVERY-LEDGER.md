@@ -18,11 +18,11 @@
 | CLAUDE_DESKTOP-012 | 电脑操作能力需要 Desktop 连接；macOS 15+ 存在后台窗口交互模式，而不是单纯夺焦截图 | 桌面 Computer Use | D 确认，Windows 路径 U | Windows UIA/CUA 工具实现和后台能力差异 |
 | CLAUDE_DESKTOP-013 | 官方文档明确云 sandbox 与本机 MCP / connector 的执行边界不同：本地 MCP 依赖 Desktop，云 connector 通过服务器 | 平台/扩展 | D 确认，包 U | MCPB/DXT 加载器、tool bridge 路由 |
 | CLAUDE_DESKTOP-014 | Enterprise/consumer MSIX 内容是否等价、2.42304.0 是否已配置新 Unified UI、哪些功能按账号 rollout | Package | U 阻塞 | 两包 SHA、feature flags 与启动配置对照 |
-| CLAUDE_DESKTOP-015 | `app.asar` 的真实入口、全部 IPC channels、UI routes、RPC schema、service life cycle | Package | U 阻塞 | 提取 ASAR 并做定义-引用图 |
-| CLAUDE_DESKTOP-016 | `cowork-svc.exe` 真实作用（桥、旧本地执行、工具代理或多合一）、持久化文件格式与进程树 | Package | U 阻塞 | exe PE 信息/字符串/导入/命令行引用、实际进程探测 |
-| CLAUDE_DESKTOP-017 | 工具输出是否产生可点击任务卡、子任务/预填任务卡、任务消息与主会话相互引用 | Renderer/agent | U 阻塞 | AST 抽取组件、按钮 handler、schema 与后端来源 |
+| CLAUDE_DESKTOP-015 | `app.asar` 真实入口、全部 IPC channels、UI routes、RPC schema、service life cycle | Package | PARTIAL S / U | 入口与部分 IPC/RPC 已得；补全动态通道定义引用、所有 routes、状态和恢复 |
+| CLAUDE_DESKTOP-016 | `cowork-svc.exe` 真实作用、持久化文件格式与进程树 | Package | PARTIAL S / U | Go/PE 与 named-pipe VM request已见；补 service 安装/启动父进程、完整调用图和持久化动态证据 |
+| CLAUDE_DESKTOP-017 | 工具输出可点击任务卡、subtask/prefill与主会话引用 | Renderer/agent | PARTIAL S / U | artifact scheduled-task点击链已闭合；继续枚举所有卡片、subtask及后端消息 schema |
 | CLAUDE_DESKTOP-018 | 启动、最小化、退出、网络断开、重新登录、后台云任务消息的正确生命周期 | Desktop/platform | U 阻塞 | 静态调用图 + 可重复操作日志 |
-| CLAUDE_DESKTOP-019 | 源码可见但 UI 未入口的实验功能、动态模块、远端下发实验 flags | Package | U 阻塞 | router/action/feature-gate exhaustive inventory |
+| CLAUDE_DESKTOP-019 | 源码可见但 UI 未入口功能、动态模块、远端实验 flags | Package | PARTIAL S / U | 多处 feature gate 已见，尚未穷举所有 gates/routes 和账号下发配置 |
 | CLAUDE_DESKTOP-020 | 权限策略的“继续执行/仅关键时确认”和本地设备逐 app 授权分离 | 平台 UI | D 确认，包 U | 许可证/配置/审批协议及后续持久化 |
 | CLAUDE_DESKTOP-021 | 按 project 汇聚文件、上下文、指令、记忆，可跨设备访问 | Claude 账号/项目 | D 确认，包 U | project metadata 与 conversation/task 关联 |
 | CLAUDE_DESKTOP-022 | 多子任务和并行工作流（官方可见），具体子 agent 数、隔离、任务结果合并未证实 | Cowork 任务 | D 确认，仅行为 | worker spawn/cancel/retry/aggregate 链路 |
@@ -31,7 +31,7 @@
 - 自 UI 入口：文件树与 routes → 页面组件 → 可点击 action → IPC / HTTP / gRPC → 状态 / backend → 持久化；枚举全部未在任务书列出的模块，而非关键词取一两处。
 - 自 service：PE imports、CLI flags、RPC constants / protobuf、进程树 → 逆查到 renderer 按钮与任务。
 - 自版本变更：云端转移与 unified UI、Design/Slides/Docs、新浏览器、旧本地 VM 等至少分成**可离线验证 vs 依赖账号/服务端验证**。
-- 当前没有足量本包文件，所以 S 和 R 不得虚增。
+- 对没有完整配对的通道、持久化与行为保持 U；S 和 R 不得虚增。
 
 ## 2026-10-19 实物静态发现（新增，不改写既有 ID）
 

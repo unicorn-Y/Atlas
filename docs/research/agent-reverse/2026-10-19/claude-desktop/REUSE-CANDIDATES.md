@@ -13,3 +13,13 @@
 | 交互式文档/可编辑工件 | 在已有 artifact 事件上引入有版本的文档对象及局部 patch（可用公开编辑器生态评估） | Claude Docs/Slides 内部数据模型未见，不声称兼容 |
 
 实施前提：先拿到包内真实组件/IPC 清单和对照证据，确认真正值得移植的机制。此文件不把概念性差异写成已经存在的成熟开源代码。
+
+## 新增实物机制候选（原则级，不复制闭源实现）
+
+| 已观察机制 | Atlas 可复用的方向 | 当前依据 / 限制 |
+|---|---|---|
+| 动态 IPC 经 schema 约束的 bridge contract；命名 pipe 有长度上限、request ID 与 success/error envelope | Atlas API/WS 可定义 versioned request envelope、明确错误联合类型与尺寸边界；保持已有协议兼容 | Claude renderer bridge与VM pipe 静态已见；不得照搬私有 channel 名 |
+| packaged service pipe 要求 OS/native system-owned identity verification，缺 connector 时 fail-closed | 若 Atlas 增加 Windows privileged helper，采用 OS 提供的对端身份验证与明确失败状态 | 这是 Claude legacy VM 本地服务连接约束；Atlas 当前不需相同 helper |
+| DXT/MCPB 验签/安装资格和 archive fd 身份重验，解包从同一 fd 读取 | Atlas 若实现 MCPB 导入，先定义签名策略/来源策略、校验与解包同文件描述符以及大小限制 | Atlas capability diff 标注 mcpb 未做；先审公开格式和签名规范 |
+| 远端只读工具可缓存，破坏性工具须独立授权，且 bridge 校验 caller artifact/gesture/task enabled | Atlas tools可区分只读与破坏性 action，再统一审计/授权；不应把 UI click 当唯一后端授权 | Claude handler 静态证据，不代表服务端也以此为唯一门禁 |
+| 后台 PTY scrollback 可选落盘并在写入时接 redactor | Atlas background terminal可评估有界滚动日志与命令输出脱敏，明确保留期/拒绝策略 | Claude默认开关与redaction覆盖率未动态验证；优先 Atlas 对敏感输出现状审查 |

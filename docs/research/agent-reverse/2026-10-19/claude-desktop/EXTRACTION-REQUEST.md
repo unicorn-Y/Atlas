@@ -1,6 +1,6 @@
-# 最小机械取证请求：交给本地 Codex（只做取证和 push）
+# 固定包取证任务书与执行状态（2026-10-19）
 
-**本会话的阻塞不是“再写调研计划”，而是缺实际包的可读代码。请执行本任务并上传证据；不要让提取 Agent 自己编功能分析报告。**
+**原始取证要求已由本 lane 执行并分阶段推送。** 任务条目保留为验收清单，当前状态以文末执行记录和 `evidence/README.md` 为准；不再处于“等待提取”的初始阻塞状态。
 
 ## 固定输入
 - 仓库 `unicorn-Y/Atlas`。
@@ -38,8 +38,8 @@
 
 ## 2026-10-19 执行状态（不删除原要求）
 
-- Stage 1：固定 MSIX、SHA/size、manifest identity、4,443 条文件树与 ASAR 路径列表已完成；asar companion 解包存在 `%40ant` 路径问题，入口清单部分完成。
-- Stage 2：全包静态解析已得到 437 个 JS、15 BrowserWindow、IPC/bridge 部分映射。**未完成** exhaustive 真实 handler/caller/params、所有 route/action/state、event union、service spawn/install/connect/stop/recover 调用链。索引中的 U/空值保持未解决。
-- Stage 3：cowork-svc PE/签名/imports/Go/Hyper-V 静态元数据完成；纯字符串项不当作执行链。app 到服务连接尚 U。
+- Stage 1：固定 MSIX、SHA/size、manifest identity、4,443 条文件树与 548 条 ASAR 路径列表完成；入口清单识别 package main、main/preload/renderer。ASAR companion 某 native addon 解包存在 `%40ant` 编码路径不匹配，但 ASAR 静态分析已直接进行。
+- Stage 2：全包静态解析得到 437 个 JS、15 BrowserWindow、1,535 IPC操作（动态通道占多数）；已闭合 Cowork artifact runScheduledTask/MCP tool handler 与 legacy VM client 的部分协议链。仍未完成 exhaustive handler/caller/params、所有 routes/state、event union 与跨会话恢复。索引中的 U/空值保持未解决。
+- Stage 3：cowork-svc PE/签名/imports/Go/Hyper-V 静态元数据完成；main bundle 已追到命名管道协议和 fail-closed native connector gate。service 安装/启动父进程、Go handler 完整 body/call graph 尚 U。纯字符串项不当作执行链。
 - Stage 4：未运行应用或服务，R=0；没有采用用户账号或私人配置。
 - 禁止把本 checkpoint 视作 COMPLETE。后续继续从 IPC handler pairing、worker/runtime、service function call graph、Atlas 同主题源码对照推进。

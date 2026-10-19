@@ -5,7 +5,7 @@
 ## 固定样本
 - 仓库：`unicorn-Y/Atlas`，基线分支 `research/agent-reverse-dispatch-20261019`。
 - Claude Desktop enterprise Windows x64 MSIX **2.42304.0**，Release 文件 `claude-desktop-x64-2bf309665f.msix`，297,191,037 bytes，SHA256 `2bf309665f0de4eaa76a7e64033594e6f73ceb6413c60080f72f3ce640fa24ee`。
-- 归档：<https://github.com/unicorn-Y/Atlas/releases/tag/agent-client-packages-20261019>。源索引：`docs/research/agent-clients/2026-10-19/manifest.json`、`indexes/claude-codex-index.txt`。采集记录声称 MSIX 展开 4,443 个文件，但完整树文本仍在**采集机器本地 staging**，目前未上传。
+- 归档：<https://github.com/unicorn-Y/Atlas/releases/tag/agent-client-packages-20261019>。源索引：`docs/research/agent-clients/2026-10-19/manifest.json`、`indexes/claude-codex-index.txt`。MSIX 已核对并展开 4,443 个文件，清单已上传为 [evidence/msix-tree.tsv](./evidence/msix-tree.tsv)，共 4,443 个文件条目。
 - Consumer Setup **未取得**，`region_unavailable`；企业版与 consumer 二进制等价性 UNKNOWN。不要假定企业版包完整承载 2026 年新版云 Cowork。
 - Atlas `main` 固定于 `aa6196f550098cc46081dc6db2c376cb87ddffa5`（读取时的 HEAD）。
 
@@ -26,8 +26,8 @@
 - [REUSE-CANDIDATES.md](./REUSE-CANDIDATES.md)：可合法吸收的设计、接口或开源实现方向
 
 ## 阻塞与验收状态
-- **未完成**：MSIX 实体结构独立 hash、asar 展开、打包 JS 的精确调用链、Cowork exe 静态符号/协议、RPC 流/状态库、UI 路由真实枚举、启动运行/断网重启实验、云端服务器内部实现。
-- **已完成**：真实性标注、Atlas 明确缺口核实、官方架构差异识别、可执行机械取证任务。
-- **下一验收门**：本地 Codex 仅提取经过脱敏的代码片段、符号、文件树并上传本独立分支；此会话再根据实物证据增补 S 类 ID，后才可声称“深度逆向”。
+- **已实证（S）**：固定包/核心文件哈希、manifest/文件树、ASAR入口、ClaudeVM→命名管道 RPC 协议、Cowork artifact 的排程任务及 MCP tool handler、服务身份连接门禁、MCPB验签与 TOCTOU guard、PTY/file-index worker 等（见 `evidence/`）。
+- **未完成 / U**：完整动态 IPC handler 配对、所有 renderer routes/状态reducers、端到端 session/event 持久化/recovery、service 安装/启动父进程和 Go handler 全调用图、consumer 包等价性、真实应用运行及云服务内部协议。
+- **当前可继续项**：补齐 route/action 和 dynamic IPC 调用配对；用 Go-aware tooling 还原服务函数入口与调用链；若合规独立空白 Windows profile 可用，再做有限启动/关闭观察。云端实现继续标 U。
 
 研究中不修改 Atlas 正式源码，不把官方网页宣传当作 app.asar 逆向。

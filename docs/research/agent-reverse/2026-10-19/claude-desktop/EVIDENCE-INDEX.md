@@ -14,10 +14,10 @@
 - `research/agent-reverse-dispatch-20261019:docs/research/agent-clients/2026-10-19/manifest.json` 记录 `Claude Desktop | Windows desktop package | 2.42304.0 | x64`。
 - Release: <https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/claude-desktop-x64-2bf309665f.msix>
 - 上游 URL: <https://downloads.claude.ai/releases/win32/x64/2.42304.0/Claude-e7f60e658f15cfece9efa384a78a39aec3c12845.msix>
-- Hash: `2bf309665f0de4eaa76a7e64033594e6f73ceb6413c60080f72f3ce640fa24ee`；Length: `297191037`；格式 `MSIX`；归档目录索引记录 `4443` 个提取条目（采集方记录，不代表本会话解包已核验）。
-- `docs/research/agent-clients/2026-10-19/indexes/claude-codex-index.txt` 包含原采集电脑本地路径 `metadata/claude-desktop-x64-tree.txt`，**该本地树文件没有作为可读 GitHub 文件提供**。
+- Hash: `2bf309665f0de4eaa76a7e64033594e6f73ceb6413c60080f72f3ce640fa24ee`；Length: `297191037`；格式 `MSIX`；归档实物重新解包并逐文件 SHA256，上传 `evidence/msix-tree.tsv`；确认 4,443 个文件。
+- `docs/research/agent-clients/2026-10-19/indexes/claude-codex-index.txt` 包含原采集电脑本地路径 `metadata/claude-desktop-x64-tree.txt`，原本未随 release 上传，现由本 lane 核验版 `evidence/msix-tree.tsv` 替代。
 - `docs/research/agent-clients/2026-10-19/DOWNLOAD-LOG.md` 记录 consumer Setup/MSIX 403 `region_unavailable`，消费版与 Enterprise 一致性未知。
-- 包内 `app/resources/app.asar`、`cowork-svc.exe` 的名称来自任务书；**未在可下载文本中检验这两个文件的实际 hash、导入、字节内容或完整路径**。
+- 实物确认 `app/resources/app.asar` 与 `app/resources/cowork-svc.exe` 的真实路径、hash、PE导入和 ASAR 入口，详见 README。
 
 ## Anthropic 官方行为证据（D，不是包源码 S）
 - 2026-09-16 Chat/Cowork Unified: <https://claude.com/blog/cowork-is-now-claude> → ID 001, 010, 011, 020。
