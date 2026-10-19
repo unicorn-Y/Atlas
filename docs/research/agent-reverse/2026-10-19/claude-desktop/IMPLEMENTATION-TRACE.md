@@ -73,7 +73,7 @@ frontend/src/renderer/App.tsx
 - `mcp-runtime/nodeHost.js` 禁止 built-in Node runtime 服务通过 `fork`/`process.execPath` 派生 Node 子进程，返回专用错误并提示设置变更。这是 MCP server host 的限制，不能概括所有 MCP server。
 - pty-host 将可选 `scrollbackLogDir` 和 `scrollbackRedact` 传到 worker；worker 支持 append/redact/read-scrollback。默认启用状态与实际覆盖率未从本轮调用点证实。
 - file-index-worker 通过 MessagePort 接收 init 文件清单，建索引并用 requestId 返回响应，属于进程隔离索引通路。
-- 一个命令决策 bundle 中 `remote || cloudRun` 分支不求本地 `managed` 命令配置；任务遥测读取 `migratedToRemoteAt` 与 revert 时间戳。这说明静态包存在 remote/local 切换模型，但具体 cloud RPC 不在证据范围内。
+- Claude Code org-managed launcher helper 在 `remote || cloudRun` 会跳过本地 CLI wrapper；Scheduled Task 数据另保存 `migratedToRemoteAt` 与 revert 时间戳。该证据仅限 Code process-wrapper 与 scheduled-task migration，不代表泛化的 Cowork remote/local 执行模型；具体 cloud RPC 不在证据范围内。
 - 路径、哈希和偏移记录见 `evidence/module-traces.md`。Atlas 对照见 ATLAS-GAP 增补。
 
 
@@ -106,9 +106,14 @@ renderer ClaudeVM.startVM(options)
  -> async event subscription: stdout/stderr/exit/error/networkStatus/apiReachability/startupStep
 ```
 
-`spawn`, `kill`, `writeStdin`, `configure`, `stopVM`, `isRunning` and `isGuestConnected` are also app-side methods. The service binary's help string independently says the desktop sends its appName through this pipe and obtains the profile directory from a verified connection. VM lifecycle status is sent to renderer stores/events. This proves a real legacy local VM integration. The actual service process installation/launch path and full Go handler call graph have not been established. Static `remote || cloudRun` command selection is a separate branch and does not resolve its remote protocol.
+`spawn`, `kill`, `writeStdin`, `configure`, `stopVM`, `isRunning` and `isGuestConnected` are also app-side methods. The service binary's help string independently says the desktop sends its appName through this pipe and obtains the profile directory from a verified connection. VM lifecycle status is sent to renderer stores/events. This proves a real legacy local VM integration. The actual service process installation/launch path and full Go handler call graph have not been established. A different helper for Claude Code organization-managed launcher selection skips that CLI wrapper for `remote || cloudRun`; this does not resolve Cowork task execution ownership or its remote protocol.
 
 
 ### Service pipe trust gate
 
 Packaged desktop calls `@ant/claude-native.connectNamedPipeSystemOwned`; if it is absent, the main process fails closed and tells the user to reinstall. Only dev/unpackaged builds fall back to `net.createConnection`, with a warning that this skips pipe-server identity verification and the impersonation-level cap. The app also frames JSON RPC with a 4-byte big-endian length (max 10 MiB), correlates request IDs, and routes event subscription separately. This is a stronger local trust contract than “named pipe exists”; runtime enforcement by the native addon remains unobserved.
+
+
+### Scheduled Task host/migration boundary
+
+The package has source-adjacent instructions refusing scheduled-task creation from an SSH-host session because tasks run on the user computer. Treat this as agent guidance until backend enforcement is independently matched. Scheduled-task records include remote/local migration timestamps, origin, trigger ID, and revert metadata; this is a task-level migration ledger, not evidence of generic conversation copying.

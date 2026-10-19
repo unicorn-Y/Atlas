@@ -33,7 +33,7 @@ P0：复盘 interactive run 的 restart/replay 链路以及 Hub 接管边界；P
 - **built-in Node self-spawn guard**：Claude 有明确错误类型限制内置 Node host 的二次 Node 派生。Atlas 在本次相关源码中采用后端进程管理 MCP servers（`core/atlas/tools/mcp_client.py`）；没有发现与 Electron embedded Node host 等价的设置或拒绝保护。只判定未找到等价机制，不推断安全影响。
 - **终端 scrollback**：Atlas UI 的 `TerminalPanel.tsx:39` 设置 xterm in-memory `scrollback: 5000`，`TerminalPanel.tsx:53-66` 用 `/ws/terminal` 收发 resize/input；`core/atlas/api/tools_router.py:92-130` 管 WebSocket terminal 生命周期。查阅范围内未见等价的独立滚动日志落盘/脱敏读取 API。属于机制差异；Atlas 仍有交互终端功能。
 - **文件索引 worker**：本轮查阅 Atlas `frontend/src` 与 `core/atlas` 未找到按 MessagePort worker 构建本地文件索引的同类模块；workspace 文件浏览路径需另行核对，不将搜索无命中升级为全功能缺失结论。
-- **云/本地任务迁移**：Claude bundle 有 `remote || cloudRun` 命令解析分支与 `migratedToRemoteAt`/revert telemetry。Atlas `runtime_ws_router.py` 与 `run_drive.py` 显示本地 WS run/显式 `resume_from` 路径；已阅范围未发现 cloud-copy handoff 等价链。判为未证实/机制差异，不能推断 Claude 云端实现细节。
+- **云/本地任务迁移**：Claude Code managed launcher helper 有 `remote || cloudRun` 分支（跳过组织配置的本地 CLI wrapper）；Scheduled Task schema另有 `migratedToRemoteAt`/revert telemetry。Atlas `runtime_ws_router.py` 与 `run_drive.py` 显示本地 WS run/显式 `resume_from` 路径；已阅范围未发现 cloud-copy handoff 等价链。判为未证实/机制差异，不能推断 Claude 云端实现细节。
 
 
 ### VM/worker and local-vs-remote execution refinements
