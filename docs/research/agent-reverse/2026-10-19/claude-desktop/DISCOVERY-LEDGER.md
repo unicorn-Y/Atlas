@@ -41,3 +41,8 @@
 - **CLAUDE_DESKTOP-026 — cowork-svc 是 Go/Hyper-V VM 管理服务**：S (identity/help/strings/imports)；包内可见 HCS/HCN、Plan9、HvSocket、gvisor tap-vsock 相关标识。真实 call graph 与 app 安装/连接/停止关系仍 U。
 - **CLAUDE_DESKTOP-027 — node-pty integrity 声明与提取字节 hash 不同**：S observation；未证明根因，不推断包损坏、篡改或打包错误。
 - **CLAUDE_DESKTOP-028 — MSIX 声明企业包身份**：S；consumer 安装包未取得，版本/功能等价仍 U。
+
+- **CLAUDE_DESKTOP-029 — Cowork artifact task run has explicit safety gates**：S；具体 artifact 可见、feature/run permission enabled、task exists/enabled、user gesture 检查后才调用 `runNow(personStarted:true)`；静态直连链已闭合。
+- **CLAUDE_DESKTOP-030 — artifact MCP call carries per-tool policy and destructive approval**：S；有 visibility/args/server validation、managed policy、disabled gate、destructive prompt/remembered allow；read-only remote call 可有缓存分支。
+- **CLAUDE_DESKTOP-031 — extension trust lifecycle includes signed-update check + same-fd archive validation**：S；覆盖缓存更新和重校验后解包路径，策略范围须按具体分支理解。
+- **CLAUDE_DESKTOP-032 — `remote || cloudRun` omits local managed-command configuration branch**：S；只证明本地解析路径选择，不能证明远端通信内容。

@@ -67,3 +67,27 @@ frontend/src/renderer/App.tsx
 7. 从后台服务的所有 command/tool registrations 反推界面隐藏入口和不可见能力。
 
 在采集前上述都维持 U，不填写猜测性的模块名、事件名或 storage schema。
+## 2026-10-19 新增的包内模块链（S，静态）
+
+- DXT/MCPB registry cache 路径在企业策略要求签名时拒绝 unsigned 更新，并通过 `checkCanInstall` 检查 capability；包暂存下载并 hash/验签。heavy-work-worker 解包路径用已打开 fd 的 device/inode/size/mtime 与此前校验快照比较，拒绝变化后再从同一 fd 解包。这是明确实现的签名策略与 TOCTOU 防护代码，不代表所有扩展来源都必须签名。
+- `mcp-runtime/nodeHost.js` 禁止 built-in Node runtime 服务通过 `fork`/`process.execPath` 派生 Node 子进程，返回专用错误并提示设置变更。这是 MCP server host 的限制，不能概括所有 MCP server。
+- pty-host 将可选 `scrollbackLogDir` 和 `scrollbackRedact` 传到 worker；worker 支持 append/redact/read-scrollback。默认启用状态与实际覆盖率未从本轮调用点证实。
+- file-index-worker 通过 MessagePort 接收 init 文件清单，建索引并用 requestId 返回响应，属于进程隔离索引通路。
+- 一个命令决策 bundle 中 `remote || cloudRun` 分支不求本地 `managed` 命令配置；任务遥测读取 `migratedToRemoteAt` 与 revert 时间戳。这说明静态包存在 remote/local 切换模型，但具体 cloud RPC 不在证据范围内。
+- 路径、哈希和偏移记录见 `evidence/module-traces.md`。Atlas 对照见 ATLAS-GAP 增补。
+
+
+## Cowork artifact task/MCP path (S — package source)
+
+```text
+artifact renderer window.cowork.runScheduledTask(taskId, preloadContext)
+ -> generated IPC channel CoworkArtifactBridge_$_runScheduledTask
+ -> main sender check: top-level cowork-artifact: frame
+ -> rollout enabled + run permissions + artifact still shown
+ -> validate recent user gesture
+ -> scheduled task exists and imported task is enabled
+ -> schedule.runNow(id, { personStarted: true })
+ -> sessionId result / audited outcome
+```
+
+For `window.cowork.callMcpTool`, main validates artifact visibility/args, maps MCP server/tool, checks managed policy and disabled state, prompts on destructive operations unless a remembered allow exists, and dispatches. A limited read-only remote-call cache exists. This evidence proves bridge-level enforcement and wiring for artifact calls, not that generic Cowork tasks run in the desktop or reveals the cloud API. Exact file hashes/offsets in `evidence/module-traces.md`.

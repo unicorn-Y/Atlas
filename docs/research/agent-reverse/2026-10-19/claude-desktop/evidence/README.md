@@ -37,3 +37,10 @@ The ASAR integrity metadata declares SHA256 `e83669e99a699d6bea4de15a3914b3279c1
 - The exact consumer package was not available; enterprise/consumer equivalence remains U.
 - App-level service lifecycle, complete dynamic IPC channel names, exhaustive route-action-state joins, and durable state/recovery behavior remain incomplete.
 - Atlas comparison baseline: `origin/main` `aa6196f550098cc46081dc6db2c376cb87ddffa5`. Existing Atlas source-backed conclusions remain limited to cited main source paths; this checkpoint does not modify Atlas code.
+
+
+## Additional module evidence (second static pass)
+
+`module-traces.md` adds exact file hashes and character offsets for extension signature/capability checks, MCPB same-fd archive identity recheck, built-in Node self-spawn refusal, PTY scrollback redaction plumbing, file-index worker initialization, remote/cloud local-command bypass and migration timestamps, and Computer Use preview bridge. The Cowork artifact scheduled-task path is now traced from renderer method through guarded main IPC to schedule `runNow`; the MCP tool bridge is traced through per-tool managed policy/destructive approval. The artifact call chain is S/static and does not establish cloud server internals or generic task ownership.
+
+**Atlas main source SHA at comparison:** `aa6196f550098cc46081dc6db2c376cb87ddffa5`. Atlas comparison findings are narrow and cite the matching files/lines in `ATLAS-GAP.md`.

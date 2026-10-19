@@ -3,3 +3,4 @@ IPC event channels	dynamic/generated; exhaustive names unavailable	main/renderer
 pty output	PTY data/output handlers	pty-host worker	terminal renderer/log redaction paths	scrollback/logging mechanism strings/code observed; format incomplete	ASAR JS analysis	PARTIAL
 Cowork artifact method	callMcpTool / askClaude / runScheduledTask / navigateHost / openExternalUrl	artifact renderer	CoworkArtifactBridge	unresolved	coworkArtifact.js + main bundle	PARTIAL
 Agent event schema	No exhaustive discriminated union extracted	unresolved	unresolved	unresolved	Analyzer coverage does not resolve remote service schema	U
+artifact bridge outcome	success/error/rejected_disabled/rejected_gesture/rejected_policy (audit outcome labels)	CoworkArtifactBridge handler	method result to artifact renderer	No full session event union inferred	unresolved	index.chunk-lzaSYO3Q.js around chars 5860203-5865200	S partial

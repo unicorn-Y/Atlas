@@ -59,3 +59,6 @@ Pinned HEAD: `aa6196f550098cc46081dc6db2c376cb87ddffa5`。
 - Atlas 工程全域自动审计：只抽查本次需求相关文件及实际链路，不将未审查路径等同功能缺失。
 
 验收数字：本包 S 0 / R 0；官方公开 D 条目 15+；Atlas S 18 文件/链路锚点（有限覆盖）。下一步根据 `EXTRACTION-REQUEST.md` 取得代码片段后更新。
+- vidence/module-traces.md: exact bundle hashes/offsets and bounded static traces for DXT/MCPB trust, Node host, PTY logging, file indexing, cloud/local branch, migration telemetry, Computer Use preview; all source-only.
+
+- `evidence/module-traces.md`: includes the closed artifact scheduled-task IPC/handler chain and per-tool policy/approval path; still static-only.

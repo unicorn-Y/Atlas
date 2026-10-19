@@ -5,3 +5,5 @@ artifact	Cowork artifact bridge	call MCP tool / ask Claude / schedule task / hos
 quick_window	quick renderer	unresolved	unresolved	unresolved	ASAR path listing only	U
 about_window	about renderer	unresolved	unresolved	unresolved	ASAR path listing only	U
 design_window	design renderer	unresolved	unresolved	unresolved	ASAR path listing only	U
+artifact page	artifact JS API	run scheduled task	CoworkArtifactBridge_$_runScheduledTask	Scheduler runNow(personStarted=true)	index.chunk-lzaSYO3Q.js chars 5836915, 5863754+; module-traces.md	S
+artifact page	artifact JS API	call MCP tool	CoworkArtifactBridge_$_callMcpTool	policy/approval/cache gates; target run not fully followed	index.chunk-lzaSYO3Q.js chars 5836915, 5860203+; module-traces.md	S/partial
