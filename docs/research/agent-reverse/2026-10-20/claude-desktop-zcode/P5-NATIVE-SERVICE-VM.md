@@ -85,12 +85,75 @@ acceptLoop                  handleConnection        edrAnswer / edrNotAnswered /
 
 | # | 旧声明 | 结论 | 证据 |
 |---|---|---|---|
-| 1 | 管道 `\\.\pipe\cowork-vm-service` | **VERIFIED** | AppxManifest `desktop6:StringData Value="\pipe\cowork-vm-service"`；`pipe.(*Server)` 包存在 |
-| 2 | 4-byte big-endian JSON 帧 | **PARTIALLY VERIFIED** | 存在 `RPCServer.writeFrameUnless` / `handleMessage` / `handleResponse` 帧层；分帧字节序需指令级确认（`writeFrameUnless` 反汇编未逐条展开） |
-| 3 | 10 MiB 上限 | **UNRESOLVED** | 未在已提取字符串中找到确切的 10 MiB 常量；需对 `handleMessage` 做常量扫描 |
-| 4 | 方法 configure / startVM / stopVM / isRunning / isGuestConnected / spawn / kill / writeStdin | **大部分 VERIFIED，两个改名** | `handleConfigure`、`handleStartVM`、`handleStopVM`、`handleIsRunning`、`handleWriteStdin` 均存在；**未找到 `spawn` / `kill` / `isGuestConnected`**，对应能力由 `handlePassthrough` + `RPCServer.IsConnected` 承担 |
-| 5 | 事件 stdout / stderr / exit / error / networkStatus / apiReachability / startupStep | **PARTIALLY VERIFIED** | `RPCServer.handleEvent` + `SendNotification` 存在；`fetchPACScript`、`proxyAttempts` 对应 networkStatus/apiReachability 语义；具体事件名需在 `handleEvent` 的字符串引用点确认 |
+| 1 | 管道 `\\.\pipe\cowork-vm-service` | **VERIFIED** | 三源独立确认：`go:string` 常量头 @ file `0xcae7c0`（`{ptr=0x14072fc03, len=26}`）；AppxManifest `DataItem`；`pipe.(*Server).Start` @ `0x1405140c0` 调用 `go-winio.ListenPipe` 并在失败时输出 `failed to create named pipe: %w`（LEA @ `0x14051404c`）。邻近还有 `\\.\pipe\cowork-daemon-console`（guest 串口控制台）与两个 `-store` 变体 |
+| 2 | 4-byte big-endian JSON 帧 | **VERIFIED（两条通道都是）** | `pipe.ReadMessage` @ `0x14050faa0`：`0x14050faf4 call encoding/binary.Read` → `0x14050fb40 cmp ecx,0xa00000` → `io.ReadAtLeast` → `encoding/json.Unmarshal`。大端由传入的 itab 证明：`0x140829fb0` 的槽位解析为 `(*bigEndian).PutUint16/PutUint32/PutUint64/String/Uint16/Uint32/Uint64`。写侧 `pipe.WriteMessage` @ `0x14050f920` 用 `0x14050f9ce bswap esi` 手工写大端前缀。guest vsock 通道 `vm.ReadMessage` @ `0x1404f0dc0` / `vm.WriteMessage` @ `0x1404f0c60` 同构，`0x1404f0ebc bswap edx` |
+| 3 | 10 MiB 上限 | **VERIFIED（仅管道通道）** | `0x14050fb40 cmp ecx, 0xa00000` = 10,485,760。越界报错原文：`message too large: %d bytes (header=0x%08x) — framing desync, closing connection`。**guest vsock 通道是另一个上限**：`0x1404f0ec0 cmp edx, 0x6400000` = **100 MiB** |
+| 4 | 方法 configure / startVM / stopVM / isRunning / isGuestConnected / spawn / kill / writeStdin | **VERIFIED，但 `spawn`/`kill` 被 REFUTED** | 字符串 switch 全表已恢复（见 §5.1）。`isGuestConnected` **存在**（→ `vm.(*WindowsVMManager).IsGuestConnected` @ `0x1404fd580`）。**`spawn` 与 `kill` 不是管道方法**：它们只出现在 `pipe.map.init.0` @ `0x140509100` 的 map 字面量里，那是 `handlePassthrough` 的**放行名单**（`spawn`/`kill`/`mountPath`/`readFile`/`getMemoryInfo`/`getSessionsDiskInfo`/`deleteSessionDirs`/`pruneSessionCaches`/`installSdk`/`addApprovedOauthToken`），经 vsock 转发给 guest agent |
+| 5 | 事件 stdout / stderr / exit / error / networkStatus / apiReachability / startupStep | **PARTIALLY VERIFIED，`startupStep` 被 REFUTED** | `vm.(*RPCServer).handleEvent` @ `0x140501420` 恢复出 7 个事件：`exit`(cmp `0x14050149b`)、`error`(`0x14050184a`)、`ready`(`0x140501c97`，**旧文档漏了**)、`stderr`(`0x140501efd`)、`stdout`(`0x140502045`)、`networkStatus`(`0x1405021a0`)、`apiReachability`(`0x140502425`，逐段 `memequal`：`apiReach`+`abil`+`it`+`y`)。**`startupStep` 不是事件名**：它是结构体字段标签 `json:"step,omitempty"` 与内部回调 `vm.(*EventCallbacks).emitStartupStep` @ `0x140506e60` |
 | 6 | 宿主服务由 MSIX 注册为 localSystem | **VERIFIED** | AppxManifest `desktop6:Service Name="CoworkVMService" StartupType="auto" StartAccount="localSystem"` |
+
+### 5.1 管道方法分发表（指令级，全部带 cmp 站点与 handler 入口）
+
+`dispatch` @ `0x140518fc0` → `dispatchVerified` @ `0x1405192a0` → `dispatchWithSession` @ `0x140519840`。
+
+| 方法字面量 | cmp 站点 | handler | 入口 VA |
+|---|---|---|---|
+| `isRunning` | `0x1405198a0` | `handleIsRunning` | `0x14051da20` |
+| `runEdrExtension` | `0x140519944` | `handleRunEdrExtension` | `0x14050d100` |
+| `subscribeEvents` | `0x140519a14` | `handleSubscription`（body @ `0x140517a00`） | — |
+| `isGuestConnected` | `0x140519ab4` | `vm.(*WindowsVMManager).IsGuestConnected` | `0x1404fd580` |
+| `stopVM` | `0x140519bd4` | `handleStopVM` | `0x14051d7e0` |
+| `startVM` | `0x140519c8a` | `handleStartVM` | `0x14051d3c0` |
+| `writeStdin` | `0x140519d65` | `handleWriteStdin` | `0x14051e0e0` |
+| `setDebugLogging` | `0x140519e40` | `handleSetDebugLogging` | `0x14051e4c0` |
+| `getNetworkDrives` | `0x140519f20` | `handleGetNetworkDrives` | `0x14051dce0` |
+| `isProcessRunning` | `0x140519fd0` | `handleIsProcessRunning` | `0x14051e2c0` |
+| `isDebugLoggingEnabled` | memequal `0x14051a0aa` | `handleIsDebugLoggingEnabled` | `0x14051e660` |
+| `refreshGuestProxy` | memequal `0x14051a14e` | `handleRefreshGuestProxy` | `0x14051d940` |
+| `sendGuestResponse` | memequal `0x14051a16d` | `handleSendGuestResponse` | `0x14051dec0` |
+| `configure` | `dispatchVerified` `0x140519330` | `handleConfigure` | `0x14051a5e0` |
+
+无匹配路径：`0x14051a1bd` 构造 `unknown method: %s`。
+**顺序约束**：`dispatchVerified` 在 `configure` 之前对其它方法返回 `not configured: call 'configure' first`（guard @ `0x1405196a8`）。
+
+### 5.2 消息封包结构（从类型元数据恢复）
+
+类型名：`*pipe.Request`、`*pipe.Response`、`*pipe.ConfigureParams`、`*pipe.StartVMParams`、`*pipe.WriteStdinParams`、`*pipe.SubscribeEventsParams`、`*pipe.SetDebugLoggingParams`、`*pipe.IsProcessRunningParams`、`*pipe.Event`。
+
+JSON 字段标签（91 组，节选）：`method`、`params,omitempty`、`result,omitempty`、`error,omitempty`、`data,omitempty`、`event,omitempty`、`id`、`connected`、`running`、`enabled`、`step,omitempty`、`stage,omitempty`。
+
+### 5.3 StartVM 的真实进度步骤（`emitStartupStep` 的 step 字面量）
+
+```
+create_network    started / completed
+create_vm_config  started / completed
+vm_boot           completed
+add_plan9_shares  started
+guest_ready
+failed
+```
+
+这解释了旧文档"`startupStep` 事件"的来源：**它是 `step` 字段的一条条进度记录，不是独立事件名**。
+
+### 5.4 宿主 API 全部动态解析（无静态导入）
+
+`cowork-svc.exe` 的 PE 导入表**只有 `kernel32.dll` 的 46 个函数**，没有 `vmcompute.dll` / `computecore.dll` / `virtdisk.dll` / `hcsapi` 的静态导入。
+
+`vm.InitHCS` @ `0x1404e4120`（2,464 B）在运行期用 `LazyDLL` + `GetProcAddress` 解析：
+
+```
+vmcompute.dll  → HcsCreateComputeSystem / HcsOpenComputeSystem / HcsCloseComputeSystem
+                 HcsStartComputeSystem / HcsGetOperationResult / HcsShutDownComputeSystem
+                 HcsTerminateComputeSystem / HcsWaitForOperationResult
+                 HcsGetComputeSystemProperties / HcsGetServiceProperties
+                 HcsEnumerateComputeSystems / HcsCreateOperation / HcsCloseOperation
+                 HcsModifyComputeSystem
+computecore.dll
+```
+
+`vm.InitHCN` @ `0x1404e29c0` 同样动态解析 HCN（Host Compute Network）API。加载失败非致命：`[HCS] Warning: Failed to load vmcompute.dll: %v`。
+
+**这是一条重要的安全/兼容性事实**：服务可以在没有 Hyper-V 的机器上启动（只是 VM 功能不可用），这也解释了为什么 `ClaudeVM.checkVirtualMachinePlatform` 是一个独立的 RPC。
 
 ## 6. VM 的实现技术栈（由依赖树反推，非猜测）
 

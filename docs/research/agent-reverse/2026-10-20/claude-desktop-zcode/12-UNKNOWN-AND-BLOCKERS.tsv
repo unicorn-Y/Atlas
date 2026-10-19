@@ -4,13 +4,13 @@ U-002	cloud	1P 模式下的聊天 UI 组件树	CLOUD-UNAVAILABLE	U	1P 从 claude
 U-003	cloud	模型目录（catalog.json）实际内容	U	U	仅见下载 URL，包内无缓存	该文件由服务端下发；形状可从 schema.json URL 推断但未取得
 U-004	code	Simulator 服务（54 方法）的业务目标	PARTIAL	S/U	方法名全部已知，但"模拟什么"未从代码定位到具体注释/常量	继续在 index.chunk 中追踪 attach/detach 调用点
 U-005	code	GrandPrix / ForgeState / Gorse / ViolinFret / WebBuild / Baku 代号含义	UNKNOWN	S/U	仅能从方法名推断领域，无内部注释	需结合调用方（远程 UI 不可得）或后续版本对比
-U-006	code	handleEvent 的完整事件名枚举	PARTIAL	S/U	函数已定位（RPCServer.handleEvent），事件名由枚举常量生成	定位其数据段或在 handleEvent 内追踪字符串引用点
-U-007	code	cowork-svc 帧协议字节序与 10 MiB 上限	PARTIAL/U	U	writeFrameUnless 已定位但未逐指令反汇编；10 MiB 常量未找到	对 writeFrameUnless 与 handleMessage 做指令级分析
-U-008	code	handlePassthrough 的转发目标	PARTIAL	S/U	函数存在且大小已知	追踪其参数来源与下游调用
+U-006	code	handleEvent 的完整事件名枚举	RESOLVED	S	7 个事件已从指令级 cmp/memequal 恢复：exit / error / ready / stderr / stdout / networkStatus / apiReachability；startupStep 已被证伪（实为 step 字段）	—
+U-007	code	cowork-svc 帧协议字节序与 10 MiB 上限	RESOLVED	S	大端已由 bigEndian itab 证明；管道上限 0xa00000=10MiB；guest vsock 上限 0x6400000=100MiB；越界报错文本已定位	—
+U-008	code	handlePassthrough 的转发目标	RESOLVED	S	转发到 guest agent；放行名单 10 项：spawn/kill/mountPath/readFile/getMemoryInfo/getSessionsDiskInfo/deleteSessionDirs/pruneSessionCaches/installSdk/addApprovedOauthToken	—
 U-009	code	edrgate 协议细节	PARTIAL	S/U	包与 handler 存在（handleRunEdrExtension 等）	追踪 edrpolicy 的数据结构
 U-010	code	ion-dist 3,588 个 SPA 文件的逐组件展开	PARTIAL	S	已完成模块级索引（imports/functions/classes/routes），未展开 React 组件树	对 assets/v1/*.js 做更细粒度 AST（JSX/组件名/状态 hooks）
 U-011	code	3 个 WASM 的用途	RESOLVED	S	已确定：clarkdown_editor（Rust 编辑器内核，1.36MB）、tree-sitter 解析器（205KB，wasi_snapshot_preview1）、c2pa 内容溯源签名（8.25MB，747 个 c2pa 相关符号）	—
-U-012	code	nodeHost 与 directMcpHost 的运行时差异	PARTIAL	S	两文件尺寸不同（613,700 vs 5,907 B），未逐行对比	diff 两文件的导出与主流程
+U-012	code	nodeHost 与 directMcpHost 的运行时差异	RESOLVED	S	nodeHost=本地 stdio shim（每服务器一个 utilityProcess，MessagePort 转发 stdin/stdout，self-exec 防护）；directMcpHost=远程 HTTP/SSE 客户端（所有远程服务器共用单例进程）	—
 U-013	code	Claude Code CLI 的完整参数集	U	U	参数在主进程运行期组装，CLI 本体不在包内（由 downloads.claude.ai 分发）	需取得对应版本 CLI 包（claude-code-releases）
 U-014	code	store 镜像（getState/update<X>Store）的主从方向	PARTIAL	S/U	已知是双向镜像（getDispatcher(e).for(...).setImplementation）	指令级追踪 setImplementation 的注册顺序
 U-015	runtime	各状态迁移的真实触发时序	U	U	按新规不做动态观测	已归类为 out-of-scope，不影响静态验收

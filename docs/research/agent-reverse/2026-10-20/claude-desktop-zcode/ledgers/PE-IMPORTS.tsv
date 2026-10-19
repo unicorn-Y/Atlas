@@ -1,0 +1,38 @@
+binary	dll	import_count	sample_imports
+cowork-svc	kernel32.dll	46	WriteFile, WriteConsoleW, WerSetFlags, WerGetFlags, WaitForMultipleObjects, WaitForSingleObject, VirtualQuery, VirtualFree, VirtualAlloc, TlsAlloc, SwitchToThread, SuspendThread, SetWaitableTimer, SetProcessPriorityBoost, SetEvent, SetErrorMode, SetConsoleCtrlHandler, RtlVirtualUnwind, RtlLookupFunctionEntry, ResumeThread, RaiseFailFastException, PostQueuedCompletionStatus, LoadLibraryW, LoadLibraryExW, SetThreadContext
+claude-ssh-broker	kernel32.dll	46	WriteFile, WriteConsoleW, WerSetFlags, WerGetFlags, WaitForMultipleObjects, WaitForSingleObject, VirtualQuery, VirtualFree, VirtualAlloc, TlsAlloc, SwitchToThread, SuspendThread, SetWaitableTimer, SetProcessPriorityBoost, SetEvent, SetErrorMode, SetConsoleCtrlHandler, RtlVirtualUnwind, RtlLookupFunctionEntry, ResumeThread, RaiseFailFastException, PostQueuedCompletionStatus, LoadLibraryW, LoadLibraryExW, SetThreadContext
+claude-ssh-proxy	kernel32.dll	46	WriteFile, WriteConsoleW, WerSetFlags, WerGetFlags, WaitForMultipleObjects, WaitForSingleObject, VirtualQuery, VirtualFree, VirtualAlloc, TlsAlloc, SwitchToThread, SuspendThread, SetWaitableTimer, SetProcessPriorityBoost, SetEvent, SetErrorMode, SetConsoleCtrlHandler, RtlVirtualUnwind, RtlLookupFunctionEntry, ResumeThread, RaiseFailFastException, PostQueuedCompletionStatus, LoadLibraryW, LoadLibraryExW, SetThreadContext
+claude-ssh-askpass	kernel32.dll	46	WriteFile, WriteConsoleW, WerSetFlags, WerGetFlags, WaitForMultipleObjects, WaitForSingleObject, VirtualQuery, VirtualFree, VirtualAlloc, TlsAlloc, SwitchToThread, SuspendThread, SetWaitableTimer, SetProcessPriorityBoost, SetEvent, SetErrorMode, SetConsoleCtrlHandler, RtlVirtualUnwind, RtlLookupFunctionEntry, ResumeThread, RaiseFailFastException, PostQueuedCompletionStatus, LoadLibraryW, LoadLibraryExW, SetThreadContext
+claude-native-binding.node	KERNEL32.dll	124	GetProcessHeap, HeapFree, HeapReAlloc, GetLastError, CreateEventA, CloseHandle, GetModuleHandleA, GetProcAddress, CreateEventW, SetEvent, WaitForSingleObject, CreateJobObjectW, GetCurrentProcess, AssignProcessToJobObject, OpenProcess, GetExitCodeProcess, IsProcessInJob, GetCurrentThreadId, GetModuleHandleW, GetCurrentProcessId, CreateFileW, VirtualQueryEx, LocalFree, GetProcessTimes, PrefetchVirtualMemory
+claude-native-binding.node	OLEAUT32.dll	7	#6, #35, #9, #7, #200, #16, #4
+claude-native-binding.node	user32.dll	51	MonitorFromWindow, GetIconInfo, SendInput, GetWindowTextLengthW, SendMessageTimeoutW, GetWindow, DestroyIcon, GetGUIThreadInfo, EnumDisplayMonitors, GetWindowTextW, GetWindowLongPtrW, EnumChildWindows, GetSystemMetrics, GetWindowRect, ShowWindow, IsIconic, IsWindowVisible, GetAncestor, ReleaseDC, SetActiveWindow, SetWindowPos, SetForegroundWindow, GetKeyState, GetClassNameW, SetWindowsHookExW
+claude-native-binding.node	api-ms-win-shcore-scaling-l1-1-1.dll	2	GetDpiForMonitor, SetProcessDpiAwareness
+claude-native-binding.node	ntdll.dll	7	NtQueryInformationProcess, RtlNtStatusToDosError, NtSetInformationFile, NtReadFile, NtCreateFile, NtQueryInformationFile, NtWriteFile
+claude-native-binding.node	ole32.dll	8	RoGetAgileReference, PropVariantClear, CoTaskMemFree, CoUninitialize, CoInitializeEx, CoCreateInstance, CLSIDFromProgID, CoIncrementMTAUsage
+claude-native-binding.node	api-ms-win-core-winrt-l1-1-0.dll	1	RoGetActivationFactory
+claude-native-binding.node	api-ms-win-core-synch-l1-2-0.dll	3	WakeByAddressSingle, WaitOnAddress, WakeByAddressAll
+claude-native-binding.node	bcryptprimitives.dll	1	ProcessPrng
+claude-native-binding.node	dwmapi.dll	3	DwmSetWindowAttribute, DwmGetWindowAttribute, DwmFlush
+claude-native-binding.node	shell32.dll	4	SHGetKnownFolderPath, SHGetKnownFolderItem, ShellExecuteExW, SHGetFileInfoW
+claude-native-binding.node	powrprof.dll	4	PowerGetActiveScheme, PowerReadACValueIndex, PowerReadDCValueIndex, GetPwrCapabilities
+claude-native-binding.node	crypt32.dll	2	CryptUnprotectData, CryptProtectData
+claude-native-binding.node	iphlpapi.dll	1	GetExtendedTcpTable
+claude-native-binding.node	gdi32.dll	3	GetObjectW, GetDIBits, DeleteObject
+claude-native-binding.node	advapi32.dll	19	IsWellKnownSid, EqualSid, ConvertSidToStringSidW, OpenSCManagerW, OpenServiceW, CloseServiceHandle, GetTokenInformation, RegDeleteKeyW, GetSecurityInfo, RegOpenKeyExW, QueryServiceStatus, StartServiceW, RegEnumKeyExW, RegSetValueExW, RegCreateKeyExW, RegQueryValueExW, RegCloseKey, RegEnumValueW, OpenProcessToken
+claude-native-binding.node	shlwapi.dll	1	AssocCreate
+claude-native-binding.node	mpr.dll	3	WNetOpenEnumW, WNetEnumResourceW, WNetCloseEnum
+claude-native-binding.node	ncrypt.dll	7	NCryptExportKey, NCryptOpenStorageProvider, NCryptCreatePersistedKey, NCryptFinalizeKey, NCryptOpenKey, NCryptSignHash, NCryptFreeObject
+claude-native-binding.node	userenv.dll	2	CreateEnvironmentBlock, DestroyEnvironmentBlock
+claude-native-binding.node	propsys.dll	3	PropVariantToBSTR, VariantToPropVariant, VariantToBoolean
+claude-native-binding.node	kernel32.dll	8	WakeConditionVariable, InitializeConditionVariable, InitializeCriticalSection, SleepConditionVariableCS, WakeAllConditionVariable, DeleteCriticalSection, LeaveCriticalSection, EnterCriticalSection
+chrome-native-host.exe	bcryptprimitives.dll	1	ProcessPrng
+chrome-native-host.exe	kernel32.dll	70	GetConsoleMode, GetConsoleOutputCP, FormatMessageW, WaitForSingleObject, MultiByteToWideChar, WriteConsoleW, FlsAlloc, GetModuleHandleW, FlsFree, FlsSetValue, HeapAlloc, IsThreadAFiber, GetEnvironmentVariableW, QueryPerformanceFrequency, QueryPerformanceCounter, GetFullPathNameW, CreateFileW, SetFileTime, SetFileInformationByHandle, FindFirstFileExW, FindClose, GetFileInformationByHandle, GetFileInformationByHandleEx, ReleaseMutex, ReadConsoleW
+chrome-native-host.exe	api-ms-win-core-synch-l1-2-0.dll	3	WakeByAddressSingle, WaitOnAddress, WakeByAddressAll
+chrome-native-host.exe	advapi32.dll	4	ConvertSidToStringSidW, GetTokenInformation, OpenProcessToken, ConvertStringSecurityDescriptorToSecurityDescriptorW
+chrome-native-host.exe	ntdll.dll	5	NtCancelIoFileEx, RtlNtStatusToDosError, NtDeviceIoControlFile, NtWriteFile, NtReadFile
+chrome-native-host.exe	VCRUNTIME140.dll	9	memset, __current_exception_context, __CxxFrameHandler3, __current_exception, __C_specific_handler, _CxxThrowException, memmove, memcmp, memcpy
+chrome-native-host.exe	api-ms-win-crt-math-l1-1-0.dll	2	pow, __setusermatherr
+chrome-native-host.exe	api-ms-win-crt-runtime-l1-1-0.dll	18	_crt_atexit, _register_onexit_function, _initialize_onexit_table, _initialize_narrow_environment, _configure_narrow_argv, _seh_filter_exe, _set_app_type, _get_initial_narrow_environment, _initterm, _initterm_e, exit, _exit, terminate, __p___argc, __p___argv, _c_exit, _register_thread_local_exe_atexit_callback, _cexit
+chrome-native-host.exe	api-ms-win-crt-stdio-l1-1-0.dll	2	_set_fmode, __p__commode
+chrome-native-host.exe	api-ms-win-crt-locale-l1-1-0.dll	1	_configthreadlocale
+chrome-native-host.exe	api-ms-win-crt-heap-l1-1-0.dll	2	_set_new_mode, free

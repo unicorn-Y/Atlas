@@ -129,6 +129,40 @@ CLAUDE_CODE_ENHANCED_TELEMETRY_BETA
 相关文件：`installed_plugins.json`、`known_marketplaces.json`、`plugin.json`、`marketplace.json`、`.claude-plugin/`（16 处引用）。
 签名开关：`isDesktopExtensionSignatureRequired`。
 
+
+### 4.3 MCP 工具的真实数量（从二进制恢复，不是估计）
+
+`MCP-TOOLS.tsv` 共 **200 个工具声明**：
+
+| 服务器 | 工具数 | 来源 |
+|---|---:|---|
+| `github`（`github-mcp-server.exe`） | **137** | 从 20.5 MB 二进制中恢复的工具名与 schema |
+| `office365`（`office365-mcp-stdio.mjs`） | **60** | 从 7.28 MB bundle 中恢复 |
+| `runtime`（内置 runtime 工具） | 3 | 来自 mcp-runtime |
+
+这是"打包存在"升级为"已声明工具面"的实证，但仍不等于"账号下已启用"。
+
+### 4.4 两个 MCP host 的真实分工（已完全查清）
+
+| 维度 | `nodeHost.js`（5,907 B） | `directMcpHost.js`（613,700 B） |
+|---|---|---|
+| 角色 | **stdio shim / Node polyfill 运行器**，用于*本地* MCP 服务器 | **远程 MCP 客户端**（HTTP/SSE） |
+| 包装什么 | `node <serverEntryPoint> <args>`，用 `import(pathToFileURL(resolve(w)))` 启动 | 不包装子进程，它自己就是客户端 |
+| 传输 | **仅 stdio**（stdin/stdout JSON-RPC 经 MessagePort 转发） | **Streamable HTTP**（默认）与 **SSE**（`transport:"sse"`） |
+| 进程模型 | 每个本地 MCP 服务器一个 utilityProcess | **所有**远程 direct-MCP 服务器共用一个 utilityProcess（`Jb` 单例） |
+| 特殊防护 | 拒绝以自身可执行文件为子进程（`ERR_MCP_NODE_HOST_NOT_NODE`；写 `.built-in-node-refused` 哨兵；monkey-patch `ChildProcess.prototype.spawn`） | — |
+| 消息协议 | `{type:"init"}` 带 `ports[0]`；`{type:"stdin",data}` / 回发 `{type:"stdout"|"stderr",content}` | — |
+
+关键安全设计：`nodeHost` 会**阻止内置 Node 运行时把自己当子进程再拉一遍**，并提示用户"Install Node.js and turn off 'Use built-in Node.js for MCP'"。
+
+### 4.5 Worker 的真实职责（从代码恢复，不靠文件名）
+
+`WORKERS-DETAIL.tsv` 记录了每个 worker 的 spawn 机制与协议：
+
+- **`pty-host`**：承载全部 `node-pty`(ConPTY) 终端，流式数据、退出跟踪、**分段 scrollback**（ANSI-VT 剥离、grep、窗口化读取），退出时 `taskkill /T /F` 清理。经 `utilityProcess.fork` 启动。
+- **`file-index-worker`**：工作区**文件名索引 + 内容搜索**。支持 `set-entries`、git 列表暂存（`git ls-files`）、`search`（trigram/bitap 索引）、`content-search`（`ripgrep --json`，git-grep 兜底）、`list`。
+- **`heavy-work-worker`**：主线程外的重活，**30 个任务处理器**（`claudeJsonProjection`、`ppkConvert`、`terminalScreen`、`codeStats`、`directoryUsage`、`dxtExtract` 等）。
+
 ## 5. Worker 全表（8 个目录，`WORKERS.tsv`）
 
 | worker | 文件数 | 字节 | 用途（依据文件名 + 引用上下文） |
