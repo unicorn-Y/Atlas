@@ -23,13 +23,15 @@
    "note": "协议/工具/crate/前端 chunk 100%，原生函数 0%"
   },
   "mechanism_explanation": {
-   "ratio": 0.45
+   "ratio": 0.55,
+   "note": "新增：系统提示全文、插件/hook、二进制函数边界"
   },
   "ui_visualization": {
    "ratio": 0.15
   },
   "e2e_verification": {
-   "ratio": 0.2
+   "ratio": 0.35,
+   "note": "CLI 全部 + app-server 实测（initialize/thread/start/turn/start 状态机）+ 解包副本启动；模型调用与工具往返仍未验证"
   },
   "native_functions": {
    "note": "Ghidra 完成 1/5 关键二进制的函数边界导出",
@@ -52,7 +54,9 @@
   "statsig_named_gates": 10,
   "statsig_numeric_gates": 74,
   "ui_chunks": 2176,
-  "native_functions_exported": 23289
+  "native_functions_exported": 23289,
+  "bundled_plugins": 10,
+  "system_prompt_chars": 18037
  },
  "unknowns": [
   "codex.exe 函数级反编译未完成（341MB stripped Rust）",
@@ -62,5 +66,17 @@
   "Remote Control / Realtime / Agent Jobs 未端到端验证",
   "服务端实现不可得（U 级）",
   "codex.exe/code-mode-host/sandbox-service 未做 Ghidra 函数导出"
+ ],
+ "verified_runtime": [
+  "codex --version",
+  "codex --help x25",
+  "codex features list",
+  "codex doctor",
+  "codex debug models",
+  "codex app-server generate-json-schema",
+  "codex app-server JSON-RPC 22 methods",
+  "thread/start + turn/start 状态机",
+  "解包副本启动到登录页",
+  "Play Snake 彩蛋"
  ]
 }

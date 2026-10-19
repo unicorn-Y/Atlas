@@ -83,13 +83,18 @@ const NAV=[
  ['ui','前端组件',2176],
  ['flags','功能开关',185],
  ['models','模型目录',11],
+ ['prompt','系统提示全文',''],
+ ['plugins','内置插件与技能',10],
  ['shots','界面截图',''],
  ['unknowns','未解与盲点',''],
 ];
+window.addEventListener('hashchange',()=>{const h=location.hash.slice(1);if(h&&h!==VIEW){VIEW=h;renderNav();render();}});
 async function boot(){
   DATA=await (await fetch('data.json')).json();
   document.getElementById('ver').textContent =
     `Desktop ${DATA.meta.versions.desktop} · CLI ${DATA.meta.versions.cli}`;
+  const h=location.hash.slice(1);
+  if(h&&NAV.some(n=>n[0]===h)) VIEW=h;
   renderNav(); render();
   document.getElementById('q').oninput=e=>{FILTER=e.target.value.toLowerCase();render();};
   document.getElementById('export').onclick=exportSel;
@@ -99,7 +104,7 @@ function renderNav(){
   n.innerHTML=NAV.map(([id,label,cnt])=>
     `<div class="item ${VIEW===id?'active':''}" data-id="${id}">
        <span>${label}</span>${cnt?`<span class="n">${cnt}</span>`:''}</div>`).join('');
-  n.querySelectorAll('.item').forEach(el=>el.onclick=()=>{VIEW=el.dataset.id;renderNav();render();window.scrollTo(0,0);});
+  n.querySelectorAll('.item').forEach(el=>el.onclick=()=>{VIEW=el.dataset.id;location.hash=VIEW;renderNav();render();window.scrollTo(0,0);});
   document.getElementById('count').textContent = `${DATA.crates.length} crates · ${DATA.tools.length} tools · ${DATA.rpc.requests.length} RPC · ${DATA.ui.length} UI chunks`;
 }
 function m(f){return (f/1048576).toFixed(2)+' MB'}
@@ -131,6 +136,8 @@ function render(){
   if(VIEW==='ui') return viewUI(main);
   if(VIEW==='flags') return viewFlags(main);
   if(VIEW==='models') return viewModels(main);
+  if(VIEW==='prompt') return viewPrompt(main);
+  if(VIEW==='plugins') return viewPlugins(main);
   if(VIEW==='shots') return viewShots(main);
   if(VIEW==='unknowns') return viewUnknowns(main);
 }
@@ -431,6 +438,40 @@ function viewUnknowns(el){
    <li>OpenAI 内部构建流水线与签名密钥</li>
   </ul></div>
   <div class="card"><h3>统计口径</h3><p>覆盖率数字见 <code>COVERAGE.json</code>；本图鉴不宣称 100%。</p></div>`;
+}
+
+
+function viewPrompt(el){
+  const p=DATA.systemPrompt||{chars:0,lines:0,text:''};
+  el.innerHTML=H(`Codex 系统提示全文（${p.chars.toLocaleString()} 字符 / ${p.lines} 行）`,
+   '来源：本地 <code>codex app-server</code> 新建会话时写入 rollout 的 <code>base_instructions</code>，非网页摘录')+
+  `<div class="card"><h3>章节</h3><div class="kv">
+    <span>Personality</span><span>好奇、有判断、不谄媚</span>
+    <span>Writing style</span><span>禁用 AI 腔词表</span>
+    <span>Permission</span><span>先干完活再请求批准</span>
+    <span>Autonomy</span><span>不满足于"够用"</span>
+    <span>Working with user</span><span>commentary / final 双通道</span>
+    <span>Getting work done</span><span>rg 优先、批量并行</span>
+    <span>Skills / Apps / Plugins</span><span>三层扩展</span>
+   </div></div>
+   <div class="card"><h3>全文</h3><pre class="mono" style="white-space:pre-wrap;max-height:60vh;overflow:auto;line-height:1.55">${esc(p.text)}</pre></div>`;
+}
+function viewPlugins(el){
+  const rows=DATA.plugins||[];
+  el.innerHTML=H(`内置插件（${rows.length}）`,'来自 <code>app/resources/plugins/openai-bundled/.agents/plugins/marketplace.json</code>')+
+  `<table><tr><th>插件</th><th>版本</th><th>分类</th><th>技能</th><th>Hooks</th><th>说明</th></tr>`+
+  rows.map(r=>`<tr><td><code>${esc(r.name)}</code></td><td>${esc(r.version||'')}</td><td>${esc(r.category||'')}</td>
+   <td class="mono">${esc((r.skills||[]).join(', '))||'—'}</td>
+   <td class="mono">${esc((r.hooks||[]).join(', '))||'—'}</td>
+   <td>${esc(r.description||'')}</td></tr>`).join('')+`</table>
+   <div class="card" style="margin-top:16px"><h3>Hook 结构</h3>
+   <pre class="mono">"hooks": { "hooks": {
+  "Interrupt":    [ { "hooks": [ { "type":"mcp_tool", "server":"node_repl",
+                                    "tool":"turn_ended", "input":{ "session_id":"${session_id}" } } ] } ],
+  "SubagentStop": [ { ... "input": { "session_id":"${agent_id}" } } ],
+  "Stop":         [ ... ]
+} }</pre>
+   <p class="note">4 个插件（browser/chrome/computer-use/unified-computer-use）共用同一组 hook；hook 可调用 MCP 工具；SubagentStop 传入 agent_id。</p></div>`;
 }
 
 function bindStars(el){
