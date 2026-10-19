@@ -1,0 +1,13 @@
+surface\tpath\tstatic evidence now\tcoverage status\n
+main JSON-RPC client\t.vite/build/main-C4DYk222.js\tthread/start, resume, fork; queue/list and wakeQueuedThread(resume); SHA in EVIDENCE-INDEX\tstrings + AST parse, semantic heap exhausted\n
+runtime path/version\t.vite/build/application-network-startup-DB1VeU3v.js\tapp-server 0.141.0 literal and executable path map (prior checkpoint)\t35-module prior partial + literal scan\n
+preload bridge\t.vite/build/preload.js\tcontextBridge electronBridge; sendMessageFromView invokes ipcRenderer.invoke; worker and chunk-ack anchors (prior checkpoint)\tJS AST parsed; semantic graph partial, 385 unknowns\n
+chat app shell\twebview/assets/app-initial-5851df3f6cb1.js\tthread/turn mutation classifier; static bridge reference\tliteral scan; AST facts constrained by parent budget\n
+chat runtime client\twebview/assets/app-primary-fe8a450b3b04.js\tturn/started subscription; thread event anchors\tliteral scan; parser failed\n
+shared renderer\twebview/assets/app-shared-bbfeca5e5737.js\tbridge and thread/turn anchors\tliteral scan; AST facts constrained by parent budget\n
+task surface\twebview/assets/tasks-e5a6331c5cca.js\tbridge sendMessageFromView reference; task-related path\tJS AST scanned in 7-file batch; semantic follows partial\n
+subagent UI\twebview/assets/chatgpt-subagents-panel-74a42f22ac75.js; chatgpt-subagent-final-response-query-a09eb28a8adf.js\tsubagent lexical anchors present in corpus; exact handlers not yet traced\tJS literal inventory only\n
+agent activity UI\twebview/assets/agent-activity-item-1be092f0c744.js\tapproval-related lexical anchor; activity UI chunk named by ASAR path\tJS literal inventory only\n
+MCP widget/resource UI\twebview/assets/sites-end-resource-fa77a923096d.js; app-initial chunk\tmcpAppUi anchors present\tJS literal inventory only\n
+computer-use host\t.vite/build/main-C4DYk222.js; companion helper binaries\tprior package static host lifecycle anchors\tstatic partial; no process lineage/action observation\n
+Atlas current baseline\torigin/main\tmain SHA aa6196f550098cc46081dc6db2c376cb87ddffa5\trefetched in this continuation\n
