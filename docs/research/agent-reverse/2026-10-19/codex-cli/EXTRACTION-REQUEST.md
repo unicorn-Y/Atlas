@@ -1,5 +1,11 @@
 # Codex CLI / Code Mode Host Windows 二进制最小机械取证请求
 
+## 2026-10-19 接管续工状态
+
+**状态：EXACT_ASSETS_RESOLVED。** 原请求中的 CLI ZIP、Code Mode Host ZIP 与固定源码 ZIP 均从本机既有归档缓存读取，并逐一重算大小和 SHA-256，三者与 `manifest.json` 完全匹配。两个程序包已真实展开；安全执行的仅是 CLI `--version`、CLI `--help` 和 Host `--help`，完整结果、二进制清单、逐文件 tree/hash、导入库和字符串偏移分别见同级 `extractions/`。原请求下列不可执行/待观察项已更新：没有 `dumpbin`，以局部只读 PE parser 读取导入表；未发现 voice/CLI 私人数据，也未做会话登录或发起 Agent turn。**运行时 RPC/gRPC 交互、认证后行为、断线/取消和恢复仍为 U；本状态不是端到端运行验收。**
+
+本次运行记录：Windows 11 Pro 10.0.26200 x64，2026-10-19 Asia/Hong_Kong。可复核报告：`extractions/ARCHIVE-HASHES.json`、`EXTRACTED-TREE.txt`、`BINARIES.json`、`CLI-HELP.txt`、`HOST-HELP.txt`、`PE-IMPORTS.txt`、`SYMBOL-STRINGS.txt`、`EXTRACTION-STATUS.md`。
+
 **触发原因**：本 ChatGPT 会话通过 GitHub 接口读取了固定版本 Rust 源码，但 GitHub 连接器只返回有限 UTF-8 文本，无法下载/解包 EXE ZIP 的真实二进制字节或在 Windows 启动。以下任务只让本机 Codex **提取并上传证据**；由本 ChatGPT 继续判断机制。禁止 Codex 自行脑补研究结论或重写主报告。
 
 ## 执行人、分支、目录

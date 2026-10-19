@@ -56,4 +56,12 @@ UI 可能先接到「开始」，之后才有真正结束或 yield。用单条�
 
 ## 6. 未完成的交互证据
 
-未跑 EXE；未确认快捷键 Windows ANSI/vt 模式和屏幕截图；未跟踪所有 SlashCommand 的 app.rs dispatch 分支；未做从 CLI 到独立 app-server 的完整 RPC trace；未测队列消息、logout、模型切换、联网故障、恢复与动态 UI 渲染。**这些不是已实现结论**。最小补采见 EXTRACTION-REQUEST.md。Codex Desktop GUI 归其他会话。
+未观察真实 TUI 交互与屏幕截图；未确认快捷键 Windows ANSI/vt 模式；未跟踪所有 SlashCommand 的 app.rs dispatch 分支；未做从 CLI 到独立 app-server 的完整 RPC trace；未测队列消息、logout、模型切换、联网故障、恢复与动态 UI 渲染。**这些不是已实现结论**。最小补采见 EXTRACTION-REQUEST.md。Codex Desktop GUI 归其他会话。
+
+## 7. 已观察到的真实 CLI/Host 命令行表面
+
+发行包的 CLI `--version` 输出 `codex-cli 0.163.0`；CLI `--help` 和独立 Code Mode Host `--help` 均退出 0。完整输出分别存于 `extractions/CLI-HELP.txt`、`extractions/HOST-HELP.txt`。CLI help 暴露 `--remote` (`ws://`, `wss://`, `unix://`)、remote token 环境变量、默认共享本地 app-server daemon、`--no-daemon`、`agents` 管理入口。Host help 暴露 `--listen` 支持 stdio/grpc+stdio/grpc://IP:PORT，以及 WebSocket OTEL trace listener 和 OTLP/HTTP exporter。此处 R 仅限启动并读取 help/version；没有凭据、无 RPC/Host transport 建连，不可推断远端连接/agent/task 成功。
+
+## 8. Realtime voice 生命周期（源码 S，未实际启动）
+
+CLI TUI 的 `/voice` 候选实际连接独立打包 voice helper。UI Starting 状态与 attempt ID 防止过期启动结果复活；客户端验证 helper protocol/build commit，完成 SDP answer 与 ordered channel 后才开启音频设备，停止时关闭 session 并恢复未送达的语音文本。音频媒体走 WebRTC，管道仅传控制/SDP。源码位置见 IMPLEMENTATION-TRACE §H。Windows helper 仅通过 Authenticode/文件/静态依赖确认存在；未启动语音权限、设备、网络或服务端，所以动态过程均未观察。

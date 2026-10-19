@@ -72,3 +72,17 @@ Model emits code-mode execute source
 ## F. 潜在新发现但尚未闭环
 
 `codex-rs/agent-graph-store`、`agent-message-board-client`、`voice-host`、`realtime-webrtc`、`hooks`、`app-server/daemon_thread_recovery.rs` 均在固定版本源码存在。并未逐个验证 feature flag、默认启用、每个 handler 最终挂载和运行入口；不能凭目录存在断言 CLI Windows 全部提供。待机械补采/第二阶段源链路取证。
+
+## G. app-server request admission → scope queue → handler dispatch（CODEX_CLI-026/034/035）
+
+`app-server-protocol/src/protocol/common.rs:128-139,208-287` 定义 serialization scope，并通过宏生成 typed request、wire name、scope 查找与 JSON-RPC 转换。`app-server/src/message_processor.rs:966-1067` 将 JSON-RPC 转为 typed request、检查初始化/实验能力，取得 turn admission 与 scope；thread/turn 改变与请求 scope 共同决定能否立即执行、排队或并行。
+
+`app-server/src/request_serialization.rs:24-108` 计算 Global、GlobalSharedRead、Thread、ThreadPath、Process 等 queue key；`:160-230` 对相同独占 key FIFO 调度，共享读操作进入并发集合；`:233-306` drain queue，并在连接关闭时丢弃尚未执行的工作。`turn_admission.rs:1-83` 用 drain gate 原子拒绝新 turn、计数已准入 turn 并通知 shutdown 等待。边界：这里只核过源码和 CLI help；未动态发 RPC 测量排队公平性、并发或 close 行为。
+
+CLI 入口方面，`cli/src/main.rs:131-190` 定义 remote/no-daemon/command wiring；真实 `CLI-HELP.txt` 显示 remote URI schemes、remote token env、默认本地 shared app-server daemon、`--no-daemon` 与 `agents` 命令。`app-server-daemon/src/client.rs:63-92` 描述本地 daemon WebSocket/Unix stream initialize 与 shutdown 通道。help 是对入口字符串的 R 观察，不代表这些 RPC 连接成功。
+
+## H. TUI voice → helper → WebRTC → app-server session（CODEX_CLI-037）
+
+`tui/src/chatwidget/realtime.rs:301-357` 记录 Starting/attempt ID，后台启动 realtime session，成功后以事件回交 offer；`:360-395` 停止、恢复未投递语音、关闭本地 session，并忽略晚到的旧 attempt。`realtime-webrtc/src/client.rs:130-159` 启动 transport，SDP answer 必须应用成功且 ordered event channel 打开才得 `TransportReady`，超时关 helper；`:173-228` 只从打包资源目录解析 voice host，筛选子进程环境，hello 校验 protocol/build_commit。`protocol.rs:1-10,52-120` 将音频媒体留在 WebRTC、控制/SDP 留在 bounded framed pipe；最大帧 128 KiB、SDP 最大 64 KiB。
+
+`session.rs:140-175,274-326` 发 offer 后等 answer，成功后才开设备并下发 mute controls；音频轮询约 50ms，controls 优先于 audio。`tui/src/app_server_session/realtime.rs:19-93` 通过 typed `thread.realtime.start/stop` 连接 app-server；`app-server/src/request_processors/turn_processor.rs:1212-1306` 映射 SDP/transport 到 conversation start params 并提交后端。外部 realtime backend 的实现语义、语音/音频真实传输与账号权限仍属 U。

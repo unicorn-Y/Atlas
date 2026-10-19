@@ -1,0 +1,80 @@
+{
+  "observed_on": "Windows 11 Pro 10.0.26200 x64",
+  "archive_hashes": {
+    "cli": "dabdb4d16aaf10fea40b74811c96efddcd9138f122163b69ed604fcb3eb704c3",
+    "host": "bc82fa6d8f449c818292eac35bd7400c4f7dae08908fc9bc67bfbad8c4a3de68"
+  },
+  "package_manifest": {
+    "file": "cli/codex-package.json",
+    "sha256": "7265bf74d368ee1aec0b35cb5a9c257280c41a45c7b415c043bd80cc63cead58",
+    "layoutVersion": 1,
+    "version": "0.163.0",
+    "target": "x86_64-pc-windows-msvc",
+    "variant": "codex",
+    "entrypoint": "codex-x86_64-pc-windows-msvc.exe",
+    "resourcesDir": "codex-resources",
+    "pathDir": "codex-path"
+  },
+  "executables": [
+    {
+      "path": "cli/codex-x86_64-pc-windows-msvc.exe",
+      "bytes": 341270320,
+      "sha256": "2692c8c7bb2cf8b0aefe638741fc90236f4b824c59578ce84994f9de58200993",
+      "pe": "PE32+ AMD64 x86-64, console subsystem",
+      "coff_timestamp_utc": "2026-10-15T19:43:40Z",
+      "authenticode": "Valid",
+      "signer": "CN=OpenAI OpCo, LLC, O=OpenAI OpCo, LLC, L=San Francisco, S=California, C=US",
+      "version_resource": null,
+      "observed_version_command": "codex-cli 0.163.0"
+    },
+    {
+      "path": "cli/codex-code-mode-host.exe",
+      "bytes": 74921264,
+      "sha256": "07f3869f0849cd54b31cec1f86ec796f004501bd3a215135c1facc883a2b9988",
+      "authenticode": "Valid",
+      "signer": "CN=OpenAI OpCo, LLC, O=OpenAI OpCo, LLC, L=San Francisco, S=California, C=US",
+      "version_resource": null
+    },
+    {
+      "path": "host/codex-code-mode-host-x86_64-pc-windows-msvc.exe",
+      "bytes": 74921264,
+      "sha256": "07f3869f0849cd54b31cec1f86ec796f004501bd3a215135c1facc883a2b9988",
+      "authenticode": "Valid",
+      "signer": "CN=OpenAI OpCo, LLC, O=OpenAI OpCo, LLC, L=San Francisco, S=California, C=US",
+      "version_resource": null,
+      "identity_with_cli_copy": "Exact size and SHA-256 match"
+    },
+    {
+      "path": "cli/codex-command-runner.exe",
+      "bytes": 8217904,
+      "sha256": "fc89dc66c806f25675b9be1e7dafb226807d22761e9741a3bb24b667b803d46c",
+      "authenticode": "Valid",
+      "signer": "CN=OpenAI OpCo, LLC, O=OpenAI OpCo, LLC, L=San Francisco, S=California, C=US",
+      "duplicate": "Identical bytes at cli/codex-resources/codex-command-runner.exe"
+    },
+    {
+      "path": "cli/codex-windows-sandbox-setup.exe",
+      "bytes": 17700144,
+      "sha256": "2efc67f77de2658667c1481e00a1c4c964d3e8f6d4f39b638620d80b9d0f6d8a",
+      "authenticode": "Valid",
+      "signer": "CN=OpenAI OpCo, LLC, O=OpenAI OpCo, LLC, L=San Francisco, S=California, C=US",
+      "no_start": true
+    },
+    {
+      "path": "cli/codex-resources/voice/bin/codex-voice-host.exe",
+      "bytes": 9031984,
+      "sha256": "26d1d04ed865dfb630a0a3b8d826f7e85d5b3d4c3de86efeaf5d02c2dd57c680",
+      "authenticode": "Valid",
+      "signer": "CN=OpenAI OpCo, LLC, O=OpenAI OpCo, LLC, L=San Francisco, S=California, C=US",
+      "voice_manifest": "codex-resources/voice/manifest.json"
+    }
+  ],
+  "source_linkage": {
+    "voice_manifest_sha256": "3cc97a308604b8c881364c64ea0de24d875e4e408e6f7f6596255eabed786414",
+    "manifest_app_version": "0.163.0",
+    "manifest_app_target": "x86_64-pc-windows-msvc",
+    "manifest_voice_target": "x86_64-pc-windows-msvc",
+    "manifest_build_commit": "83086188ae0614bd882818ff1aa23f3194962012",
+    "qualification": "The bundled voice manifest explicitly attributes this package to the pinned source commit; reproducible binary/source equivalence was not established."
+  }
+}

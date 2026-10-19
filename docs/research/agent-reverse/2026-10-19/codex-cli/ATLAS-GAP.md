@@ -49,3 +49,8 @@
 - **031:** Codex daemon 在背景 cold-resume，不阻塞服务就绪。Atlas 有 RuntimeManager 和 session_sync，却不能仅凭它们断言等价；特别要单独处理 external_process.resume 明确 NotImplementedError。
 - **032:** Codex MCP refresh cancelled-before-publish 可 re-invalidate；Atlas MCP client 实现重启，尚未验证同类事件门控。
 - **033:** Codex retained context 和 checkpoint/suffix 共用 persistence lock，Code Mode message recording drain 后退出；Atlas scoped file checkpoint 的 manifest-last 是另一种机制，不能混同。
+
+## 新增对照：app-server 并发控制与语音架构
+
+- Codex app-server 使用 typed JSON-RPC scope 对请求排队：同一 Thread/Process 等独占域串行，共享只读域可并发；shutdown drain 会拒绝新 turn 并等待已准入工作。**Atlas gap：** 已查的 Atlas `api/runtime.py` 是 WS RunState / RPC persistence，`engine/hermes_runtime.py` 管 turn；在这些文件未发现相同的按资源域 RPC serialization queue + drain admission 组合。定级为“本次检查范围内未发现等价”，不是全仓缺失。后续应从 Atlas 多会话并发与关闭路径追实，而不是仅新增一层锁。
+- Codex Realtime voice 是 CLI 自有 helper 进程、版本绑定 handshake、控制帧管道、WebRTC SDP/音频媒体面，设备只在协商成功后打开。Atlas main **已有浏览器语音外壳与真实基本语音链路**：`frontend/src/renderer/App.tsx:350-355,1108-1115` 打开 VoiceOverlay 并把识别文本送进正常 `store.sendMessage`；`frontend/src/renderer/components/VoiceOverlay.tsx:63-142` 用浏览器 SpeechRecognition 输入、SpeechSynthesis 输出，`:144-190` 用 getUserMedia/AudioContext 画音量波形。故 Atlas 已有浏览器 STT→普通文本 Agent run→浏览器 TTS，不是“无语音”；本次在 `core/atlas` 与 renderer 搜索范围内**未发现**与 Codex native helper + full-duplex WebRTC/Opus 协商相同的机制。归类为“已实装基础浏览器语音 / 架构不同，native realtime 机制本次未发现”；浏览器权限、网络服务与实时行为未在本研究动态实测。

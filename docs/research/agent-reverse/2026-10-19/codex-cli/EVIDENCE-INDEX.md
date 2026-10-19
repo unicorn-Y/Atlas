@@ -49,7 +49,7 @@ Atlas main 检查 SHA：`aa6196f550098cc46081dc6db2c376cb87ddffa5`； https://gi
 | Thread history | `core/src/thread_manager.rs:184-250`; `session/session.rs:950-967` | 020 |
 | Recovery | `core/src/session/daemon_recovery.rs:1-57`; `session/turn_input.rs:90-230,328-689` | 021,022 |
 | TUI | `tui/src/slash_command.rs:12-321`; `tui/src/multi_agents.rs:1-189,287-460`; `tui/src/session_queue_commands.rs:1-130` | 023,024 |
-| App server leads | `app-server/src/{thread_state.rs,daemon_thread_recovery.rs,turn_admission.rs}` 目录确认，调用链未完整追踪 | 026/U |
+| App-server typed RPC | `app-server-protocol/src/protocol/common.rs:128-139,208-287`; `app-server/src/message_processor.rs:966-1067`; `request_serialization.rs:24-108,160-306`; `turn_admission.rs:1-83` | 026,034 |
 
 ## Atlas main 实证文件
 
@@ -60,8 +60,8 @@ Atlas main 检查 SHA：`aa6196f550098cc46081dc6db2c376cb87ddffa5`； https://gi
 
 ## 无法确认、具体需要什么
 
-- **没有 R 证据**：Windows EXE 没在当前环境运行；进程启动、TUI 截图、代码单元行为、重连/故障恢复、外部调用权限均未观测。补采见 EXTRACTION-REQUEST。
-- **固定包 SHA 的独立复核尚缺**：manifest 声明本机 hash check，但本轮无法下载二进制自行验算；补采应提交重算哈希输出。
+- **受限 R 证据**：只启动 CLI `--version`、CLI `--help` 和 Host `--help`。没有登录后 turn、TUI 交互、代码单元、RPC/gRPC transport、重连/故障恢复、实时语音或外部调用权限观察。
+- **固定包 SHA 已独立复核**：三份原始归档均匹配 manifest，记录见 `extractions/ARCHIVE-HASHES.json`；EXE 发布字节与 source tag 的可重复构建关系仍未知。
 - **运行功能可用性**：不少源码功能依配置、feature flag、平台、认证、服务端协议开关；本轮只是 S，绝不冒称 Windows CLI 0.163.0 全部默认开放。
 - **代码路径 vs 服务端**：本轮没有接入 OpenAI 服务端，也不解读远程模型调度/服务端内部。OpenAI 后台实现为 U。
 - **未穷尽**：CLI commands 各分支、TUI 子界面所有行为、App-server JSON-RPC 事件全谱、voice/realtime/guardian/message-board/graph-store 全面闭环、Source ZIP/EXE 编译一致性，以及性能数值对照。
@@ -76,3 +76,10 @@ Atlas main 检查 SHA：`aa6196f550098cc46081dc6db2c376cb87ddffa5`； https://gi
 - 031: `codex-rs/app-server/src/daemon_thread_recovery.rs:1-51`. snapshot uses dedicated OS thread; start_recovery reads+removes snapshot, spawns restore_daemon_threads without blocking readiness. (S; no runtime verification.)
 - 032: `codex-rs/core/src/session/mcp_refresh.rs:1-57`. AtomicBool pending + Semaphore gate; unpublished cancelled refresh guard re-invalidates. (S; no runtime verification.)
 - 033: `codex-rs/core/src/session/retained_context.rs:145-205`. persistence lock aligns retained context with checkpoint suffix; TaskTracker waits for cell-generated message recording. (S; no runtime verification.)
+
+- Codex main x64 CLI EXE SHA-256: `2692c8c7bb2cf8b0aefe638741fc90236f4b824c59578ce84994f9de58200993`, 341,270,320 bytes, PE32+ AMD64; COFF timestamp 2026-10-15T19:43:40Z. Main CLI `--version` and CLI/Host `--help` are bounded R observations only; exact stdout is preserved in `extractions/`.
+- Package component linkage: CLI ZIP root `codex-code-mode-host.exe` and standalone Host ZIP contain identical SHA-256 `07f3869f0849cd54b31cec1f86ec796f004501bd3a215135c1facc883a2b9988`; bundled `codex-command-runner.exe` copies share SHA `fc89dc66c806f25675b9be1e7dafb226807d22761e9741a3bb24b667b803d46c`. Voice manifest build commit equals pinned tag target. These are exact packaged byte/metadata links, not reproducible-build proof.
+- Code Mode Host help enumerates stdio, grpc+stdio, grpc://IP:PORT and OTEL listener/exporter options. This proves accepted CLI syntax in help output, not a successful transport session.
+- App-server static sources: `app-server-protocol/src/protocol/common.rs:128-139,208-287`; `app-server/src/message_processor.rs:966-1067`; `app-server/src/request_serialization.rs:24-108,160-306`; `app-server/src/turn_admission.rs:1-83`; daemon client `app-server-daemon/src/client.rs:63-92`.
+- Voice static sources: `realtime-webrtc/src/client.rs:130-245`; `protocol.rs:1-120`; `session.rs:140-175,274-326`; `voice-host/src/main.rs:43-180`; TUI `tui/src/chatwidget/realtime.rs:301-395`; app-server route `app-server/src/request_processors/turn_processor.rs:1212-1306`. Audio media and service-side semantics not dynamically observed.
+- Atlas voice comparison at exact main SHA: `frontend/src/renderer/App.tsx:350-355,1108-1115`; `frontend/src/renderer/components/VoiceOverlay.tsx:63-190`. Browser SpeechRecognition feeds regular `store.sendMessage`; browser SpeechSynthesis speaks streamed text; microphone stream is used for visualization. This is an existing browser voice path, not Codex's native full-duplex WebRTC helper architecture.

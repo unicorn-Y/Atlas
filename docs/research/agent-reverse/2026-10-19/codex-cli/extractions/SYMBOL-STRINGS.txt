@@ -1,0 +1,27 @@
+Raw-file-offset string observations from the shipped x64 EXEs. Offsets are file offsets in the named artifact, not function addresses or source line locations. Compiler path strings and feature/config names are static evidence, not proof that all corresponding features are enabled.
+
+CLI `codex-x86_64-pc-windows-msvc.exe` (SHA256 2692c8c7bb2cf8b0aefe638741fc90236f4b824c59578ce84994f9de58200993):
+- 0x0fb489a8 `core\\src\\session\\mcp_refresh.rs`
+- 0x0fb5c8f8 `app-server\\src\\thread_state.rs`
+- 0x0fb5cee1 `app-server event:`
+- 0x0fb6ac98 `remote app-server worker channel is closedremote app-server request channel is closed`
+- 0x0fb6af58 `unsupported remote app-server request`
+- 0x0fb824b0 `app-server event consumer lagged; dropping ignored events&app-server event stream disconnected:`
+- 0x0fb9e1e0 `message_board_resubagent_development_text`
+- 0x0fbc8e92 `app-server daemon bootstrap...` (aggregated CLI help/command literals; exact visible strings are preserved in CLI-HELP.txt)
+- 0x0fbc94f4 `datatable_environment_toolscode_mode_tool_searchcode_mode_buffered_execcode_mode_host...`
+- 0x0fbc99a4 `multi_agent...agent_message_board...`
+
+Host `codex-code-mode-host-x86_64-pc-windows-msvc.exe` (SHA256 07f3869f0849cd54b31cec1f86ec796f004501bd3a215135c1facc883a2b9988):
+- 0x0290fdca `open_sessionexecutewaitterminateshutdown_sessionevent`
+- 0x02910448 `code-mode host is shutting down`
+- 0x029104b0 `code-mode host has too many in-flight requests`
+- 0x029106a0 `code-mode host has too many active cells`
+- 0x029140b8 `code-mode runtime reused an active cell IDcode-mode execution was abandonedcode-mode host has too many pending delegate calls`
+- 0x02915708 `code-mode host outgoing queue is fullcode-mode client connection closedcell forwarding`
+- 0x02915b2b transport error lists `grpc://IP:PORT`, `grpc+stdio://`, `stdio`, and `stdio://`
+- 0x02917291 includes `LiveCell`, `MissingCell`, `Yielded`, `TerminatedResult`, `error_text`
+- 0x02918dc0 `codex-code-mode-host listening on http://`
+- 0x029288d8 `OTEL_TRACE_LISTEN` / WebSocket trace help is present in the Host (full observed help in HOST-HELP.txt)
+- 0x04300da8 `codex_code_mode_host.pdb` (debug path string; no PDB file was in either ZIP)
+

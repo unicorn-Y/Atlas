@@ -1,6 +1,6 @@
 # DISCOVERY LEDGER — 固定版本源码发现总账
 
-证据定义：**S**=固定 tag 0.163.0 真实源码（不等于执行验证）；**R**=实测（本轮 0 项）；**D**=外部声明/清单；**I**=有限推断；**U**=未确认。所有 S 均锚到 `openai/codex@83086188ae0614bd882818ff1aa23f3194962012`。文件与行号详细见 EVIDENCE-INDEX。第一手抽查覆盖的模块不是全仓库穷尽。
+证据定义：**S**=固定 tag 0.163.0 真实源码（不等于执行验证）；**R**=实测（受限 version/help 共 3 项）；**D**=外部声明/清单；**I**=有限推断；**U**=未确认。所有 S 均锚到 `openai/codex@83086188ae0614bd882818ff1aa23f3194962012`。文件与行号详细见 EVIDENCE-INDEX。第一手抽查覆盖的模块不是全仓库穷尽。
 
 | ID | 主动发现/能力，不止表面名称 | 源码锚点 | 等级 | 机制结论与边界 |
 |---|---|---|---|---|
@@ -29,7 +29,7 @@
 | CODEX_CLI-023 | TUI 多 Agent 可视状态/快捷切换 | `tui/src/multi_agents.rs:1-189,287-460` | S | agent picker、状态点、spawn/wait/close/resume history cells 与 shortcuts；仅源代码未跑 UI。 |
 | CODEX_CLI-024 | TUI 大量实装命令入口（含 queue、rollout、agents、voice） | `tui/src/slash_command.rs:12-321`; `tui/src/session_queue_commands.rs:1-130` | S | enum/command available/visible filter；注册 ≠ 各命令在 Windows/账户可用。 |
 | CODEX_CLI-025 | 结构化事件跨协议桥接/追踪 | `core/src/agent/control.rs:140-193`; `tools/parallel.rs:385-484`; `code-mode-host/src/grpc/mod.rs:45-289` | S | ItemStarted/ItemCompleted 兼容 legacy，Tool timing 分 Dispatch/Handler，Code cell OTEL。 |
-| CODEX_CLI-026 | 可供宿主消费的 App-server 层，不只是 TUI 本地调用 | `codex-rs/app-server/src/{message_processor.rs,thread_state.rs,turn_admission.rs,daemon_thread_recovery.rs}` | S/U | 文件和模块存在；本轮尚未沿完整 JSON-RPC / WebSocket 请求追到终态，不当成已验证远程任务功能。 |
+| CODEX_CLI-026 | 可供宿主消费的 App-server typed JSON-RPC 控制面 | `app-server-protocol/src/protocol/common.rs:128-139,208-287`; `app-server/src/message_processor.rs:966-1067` | S | 类型化请求反序列化、实验 API/初始化门控、turn admission 与按 serialization scope 排队/并发处理均已源码闭环；CLI help 确认 daemon/remote 入口。实际 RPC turn/终态未动态观察，服务端仍 U。 |
 | CODEX_CLI-027 | **额外潜在扩展**：message-board、graph-store、hooks、voice、realtime | `codex-rs/{agent-graph-store,agent-message-board-client,voice-host,realtime-webrtc,hooks}/` | U | 固定 tag 有独立 crate；尚不能证明默认 CLI 功能已启用。留下后续逐 crate 取证线索。 |
 
 | CODEX_CLI-028 | **持久化父子 Agent 图及生命周期边** | `agent-graph-store/src/store.rs:13-61; agent-graph-store/src/local.rs:10-112; core/src/agent/control/spawn_guard.rs:80-99` | S | AgentGraphStore + SQLite local impl; child edge status, BFS descendants; cancelled spawn closes edge。 |
@@ -38,7 +38,11 @@
 | CODEX_CLI-031 | **Daemon 快照消费及后台 cold resume** | `app-server/src/daemon_thread_recovery.rs:1-51` | S | snapshot uses dedicated OS thread; start_recovery reads+removes snapshot, spawns restore_daemon_threads without blocking readiness。 |
 | CODEX_CLI-032 | **MCP 刷新并发门控与取消恢复** | `core/src/session/mcp_refresh.rs:1-57` | S | AtomicBool pending + Semaphore gate; unpublished cancelled refresh guard re-invalidates。 |
 | CODEX_CLI-033 | **Retained Context checkpoint 顺序和异步 Code Mode 消息排空** | `core/src/session/retained_context.rs:145-205` | S | persistence lock aligns retained context with checkpoint suffix; TaskTracker waits for cell-generated message recording。 |
+| CODEX_CLI-034 | **typed RPC 按资源域串行化与共享读并发** | `app-server/src/request_serialization.rs:24-108,160-306`; `app-server/src/turn_admission.rs:1-83` | S | Scope key 分 Global/SharedRead/Thread/Process 等；相同独占 key FIFO 串行，共享读并发；连接关闭时丢弃排队请求。turn drain 关闭新 admission 并等待已准入任务。静态机制，未实测公平性/竞态。 |
+| CODEX_CLI-035 | **CLI daemon、remote app-server 与 agents 控制入口** | `cli/src/main.rs:131-190`; shipped CLI/Host help | S/R | 源码有 `--remote`、token env、`--no-daemon` 与 agents 子命令；真实 CLI help 显示本地共享 daemon 及 remote URI 形式。入口被观察，不代表认证或 remote 操作成功。 |
+| CODEX_CLI-036 | **发行包多 helper 组件与固定源身份线索** | `extractions/ARCHIVE-HASHES.json`; `extractions/BINARIES.json`; `codex-resources/voice/manifest.json` | S/D | 三个归档 SHA/字节数与采集 manifest 一致；CLI 包内 Host 与单独 Host ZIP 字节相同；voice manifest 的 build_commit 与固定 tag commit 一致。它不是可重复构建证明。签名/PE/import 静态资料只描述样本。 |
+| CODEX_CLI-037 | **Realtime voice 独立进程、WebRTC 协商与设备启用时序** | `realtime-webrtc/src/{client.rs,protocol.rs,session.rs}`; `voice-host/src/main.rs:43-180`; `tui/src/chatwidget/realtime.rs:301-395`; `app-server/src/request_processors/turn_processor.rs:1212-1306` | S | 同 build helper handshake 后初始化 runtime、交换 SDP、TransportReady 后才打开设备；音频帧走 WebRTC，控制走限长 framed stdin/stdout；关闭/超时会停子进程。服务端会话及动态音频未观察，不能标 R。 |
 
 ## 非穷尽说明
 
-001—025 及 028—033 共 31 项有明确文件/方法级证据；026 仅实现入口/未闭环；027 为主动发现的待证线索。用户未列出的新重点是 007、008、012、013、017、018、019、021、023。任何源代码路径不代表该能力在 Windows Release 的默认配置已开启。
+001—026 及 028—037 共 36 项有明确文件/方法/包级证据；027 为主动发现的待证线索。另有 3 个受限 R 操作（版本与两份 help）；没有真实 Agent turn、RPC 请求或实时语音动态记录。任何源代码路径不代表该能力在 Windows Release 的默认配置已开启。

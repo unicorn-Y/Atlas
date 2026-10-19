@@ -1,0 +1,20 @@
+PE import evidence from the exact extracted EXEs. `dumpbin.exe` / `llvm-readobj` were not installed. A bounded read-only PE32+ parser over the stable extracted files enumerated import descriptors and name tables; the complete imported DLL map is recorded below, with selected symbol names. Import presence proves a static dependency only, not that a code path ran.
+
+CLI entrypoint SHA256 2692c8c7bb2cf8b0aefe638741fc90236f4b824c59578ce84994f9de58200993
+25 imported libraries:
+kernel32.dll (259), combase.dll (2), advapi32.dll (62), shell32.dll (3), ws2_32.dll (28), shlwapi.dll (2), ole32.dll (3), userenv.dll (5), api-ms-win-security-base-l1-2-2.dll (1), oleaut32.dll (4), api-ms-win-core-apiquery-l2-1-0.dll (1), ntdll.dll (9), tdh.dll (1), api-ms-win-core-synch-l1-2-0.dll (3), api-ms-win-core-winrt-l1-1-0.dll (1), user32.dll (17), secur32.dll (14), bcrypt.dll (1), crypt32.dll (19), fwpuclnt.dll (8), iphlpapi.dll (2), netapi32.dll (5), bcryptprimitives.dll (1), wtsapi32.dll (2), winhttp.dll (4).
+
+Selected CLI imports, grouped only as static affordances:
+- Process, pipe and terminal APIs: `CreateProcessW`, `CreateProcessAsUserW`, `CreateProcessWithLogonW`, `CreateNamedPipeW`, `ConnectNamedPipe`, `CreateJobObjectW`, `AssignProcessToJobObject`, `TerminateJobObject`, `ResizePseudoConsole`, `ReadFile`, `WriteFile`.
+- Token/network policy APIs: `CreateRestrictedToken`, `SetTokenInformation`, `FwpmEngineOpen0`, `FwpmTransactionBegin0`, `FwpmTransactionCommit0`.
+- Network/proxy APIs: `WSAStartup`, socket API family, `WinHttpOpen`, `WinHttpGetProxyForUrl`, `WinHttpGetIEProxyConfigForCurrentUser`.
+- Also imported: `CredReadW` / `CredWriteW`, certificate store and verification APIs, Windows tracing (`OpenTraceW`, `ProcessTrace`, `TdhGetEventInformation`). These imports do not prove which operations run or what data is sent.
+
+Code Mode Host SHA256 07f3869f0849cd54b31cec1f86ec796f004501bd3a215135c1facc883a2b9988
+15 imported libraries: `kernel32.dll` (186), `advapi32.dll` (12), `secur32.dll` (10), `bcrypt.dll` (1), `crypt32.dll` (15), `combase.dll` (1), `user32.dll` (1), `ntdll.dll` (6), `bcryptprimitives.dll` (1), `shell32.dll` (1), `ws2_32.dll` (22), `api-ms-win-core-synch-l1-2-0.dll` (3), `winhttp.dll` (4), `WINMM.dll` (1), `dbghelp.dll` (9).
+Selected Host imports: `ReadFile`, `WriteFile`, `WSAStartup`, `WinHttpOpen`, `WinHttpGetProxyForUrl`. Combined with the actual `--listen grpc+stdio://` help output and source, this is consistent with pipe-based gRPC transport; actual gRPC traffic was not captured.
+
+Bundled voice host SHA256 26d1d04ed865dfb630a0a3b8d826f7e85d5b3d4c3de86efeaf5d02c2dd57c680
+20 imported libraries include `gio-2.0-0.dll`, `glib-2.0-0.dll`, `gobject-2.0-0.dll`, `gstapp-1.0-0.dll`, `gstaudio-1.0-0.dll`, `gstbase-1.0-0.dll`, `gstreamer-1.0-0.dll`, `gstopus.dll`, `opus.dll`, plus Windows COM/audio (`mmdevapi.dll`, `combase.dll`, `ole32.dll`). Selected symbols: `gst_app_src_push_buffer`, `gst_app_src_set_callbacks`, `gst_pipeline_new`, `gst_element_set_state`, `opus_encoder_create`, `opus_encode_float`.
+
+Source ZIP archive SHA256 36fda4e61c251d805c2d68203c3a34b0f6881a88846e12776ca02fb13d6e67c7; extracted source files are not PE images.
