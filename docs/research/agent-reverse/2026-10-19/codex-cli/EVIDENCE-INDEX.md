@@ -83,3 +83,12 @@ Atlas main 检查 SHA：`aa6196f550098cc46081dc6db2c376cb87ddffa5`； https://gi
 - App-server static sources: `app-server-protocol/src/protocol/common.rs:128-139,208-287`; `app-server/src/message_processor.rs:966-1067`; `app-server/src/request_serialization.rs:24-108,160-306`; `app-server/src/turn_admission.rs:1-83`; daemon client `app-server-daemon/src/client.rs:63-92`.
 - Voice static sources: `realtime-webrtc/src/client.rs:130-245`; `protocol.rs:1-120`; `session.rs:140-175,274-326`; `voice-host/src/main.rs:43-180`; TUI `tui/src/chatwidget/realtime.rs:301-395`; app-server route `app-server/src/request_processors/turn_processor.rs:1212-1306`. Audio media and service-side semantics not dynamically observed.
 - Atlas voice comparison at exact main SHA: `frontend/src/renderer/App.tsx:350-355,1108-1115`; `frontend/src/renderer/components/VoiceOverlay.tsx:63-190`. Browser SpeechRecognition feeds regular `store.sendMessage`; browser SpeechSynthesis speaks streamed text; microphone stream is used for visualization. This is an existing browser voice path, not Codex's native full-duplex WebRTC helper architecture.
+
+## G0–G7 continuation evidence
+
+- `COVERAGE.md`: scoped executable crate inventory (file counts and bytes) and explicit uncovered modules/registration surfaces; counts do not imply semantic coverage.
+- `SURFACE-MAP.tsv`: CLI/TUI/action-to-JSON-RPC/Host protocol-to-handler/state/event chain. Unknown or not dynamically observed endpoints are labeled.
+- `END-TO-END-TRACES.md` R1: actual package app-server over stdio JSON-RPC; isolated home/workspace, successful initialize/thread/start, turn admission plus user-message streaming/persistence; no assistant/model/tool completion.
+- `END-TO-END-TRACES.md` R2: actual release Host framed stdio handshake request/response. This uses legacy transport and is not Core gRPC transport verification.
+- `ATLAS-IMPLEMENTATION-BACKLOG.md`: read-only comparison at Atlas main SHA `990d0ccdeed9604b027e74ef152cb0004c4d9375` with candidate implementation paths and unresolved traces.
+- `FINISH-GATES.md`: G0 package identity PASS only; G1–G6 remain PARTIAL and G7 unmet.

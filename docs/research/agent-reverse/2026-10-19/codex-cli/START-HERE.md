@@ -46,3 +46,7 @@
 ## 发行包续工增补
 
 本次对照真实 CLI/Host/source ZIP 新增 CODEX_CLI-034—037：发行包组件身份/签名/版本关联、app-server RPC 序列化队列与 drain admission、CLI 同机 daemon/remote 控制入口、以及独立 realtime voice host 的 WebRTC/音频控制链。Host 的独立 transport/OTEL flags 另以真实 `--help` 记录。现有 app-server 026 提升为“源码链闭合、help 确认入口；方法行为未动态 R”，027 仍为可选/默认启用未知。账本含 36 项 S 级机制/包证据；另有 3 个受限 R 操作（version、CLI help、Host help），没有登录后 Agent R。
+
+## G0–G7 续工增补（2026-10-19）
+
+新增 [COVERAGE.md](COVERAGE.md)、[SURFACE-MAP.tsv](SURFACE-MAP.tsv)、[END-TO-END-TRACES.md](END-TO-END-TRACES.md)、[ATLAS-IMPLEMENTATION-BACKLOG.md](ATLAS-IMPLEMENTATION-BACKLOG.md)、[FINISH-GATES.md](FINISH-GATES.md)。发布版真实运行进一步观察了隔离 CODEX_HOME 下 app-server JSON-RPC `initialize`、`thread/start`、同连接 `turn/start` admission 和 user-message events；没有 assistant/model/tool result 或 `turn/completed`。同一发布版 Code Mode Host 也完成 legacy framed stdio hello。新增 R 不等于完整 Agent R；G1–G7 仍未通过，状态 WORK IN PROGRESS。

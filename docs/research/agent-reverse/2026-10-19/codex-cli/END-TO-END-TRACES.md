@@ -1,0 +1,37 @@
+# CLI and Code Mode Host traces
+
+Fixed source identity, release archives and composition: see `COVERAGE.md` and `extractions/ARCHIVE-HASHES.json`. Static source claims below are S; runtime observations are R. Trace capture did not include credentials, existing sessions, or user workspaces.
+
+## R1 — release CLI app-server protocol in synthetic workspace (partial)
+
+**Setup:** release `codex-x86_64-pc-windows-msvc.exe` from the already verified CLI archive, command `app-server --listen stdio://`; isolated `CODEX_HOME=D:\agent-client-staging\codex-cli-deep\protocol-smoke\empty-codex-home`, empty synthetic cwd under same staging root. Process environment omitted `OPENAI_API_KEY`, `CODEX_API_KEY`, `CODEX_AUTH_JSON`, and `OPENAI_BASE_URL`; no user auth file was copied. The server reported CLI version 0.163.0 and Windows/x64.
+
+**Observed:** JSON-RPC `initialize` -> successful version/home response; `initialized`; `thread/start` -> concrete non-ephemeral synthetic thread, default `readOnly` sandbox with network false, and rollout file path. On the same stdio connection, `turn/start` -> successful `inProgress` turn response and emitted `thread/started`, `thread/status/changed`, `turn/started`, `item/started` and `item/completed` for the synthetic user message. No assistant/model output, tool item, `turn/completed`, or successful model result was observed. We stopped the bounded attempt and closed the isolated process. This proves real binary admission and event streaming through user-message persistence, not an Agent/model/tool turn. The lack of auth file is verified in the fresh home; account/keychain behavior and remote model availability are not asserted.
+
+**Recovery observation:** a separate process could not resume an earlier thread created by `thread/start` without a completed turn/rollout and returned `no rollout found` / `thread not found`; do not treat that as a general durable-thread failure. Within the same-process trace, the emitted rollout path became an actual file (8,365 bytes in the turn-start run). Crash recovery of an active turn remains untested.
+
+## R2 — exact release Code Mode Host legacy framed stdio handshake
+
+**Setup:** release Host executable from the CLI package. Its SHA `07f3869f0849cd54b31cec1f86ec796f004501bd3a215135c1facc883a2b9988` matches both the standalone Host package entry and CLI bundled entry. Command `codex-code-mode-host-x86_64-pc-windows-msvc.exe --listen stdio://`. Sent one length-prefixed JSON `connection/hello` frame: little-endian u32 payload length, JSON `{type, supportedVersions:[1], requiredCapabilities:[], optionalCapabilities:[]}`. Then closed stdin.
+
+**Observed:** exact frame response `{type:"connection/ready",selectedVersion:1,capabilities:[]}`, empty stderr, exit 0. This is R for the shipped legacy framed stdio handshake only. It is not a gRPC request, Core-to-Host run, code-cell execution, nested tool call, cancellation, backpressure, or model result. Raw synthetic response retained outside the research repo at `D:\agent-client-staging\codex-cli-deep\protocol-smoke\host-handshake.json`.
+
+## Static Host and agent execution order
+
+`core/src/tools/code_mode/execute_handler.rs::execute` parses Code Mode source and requests mapped definitions, then calls the lazy/shared process provider in `core/src/code_mode_host.rs`. Core launches the byte-identical Host with `grpc+stdio://`; this is HTTP/2 gRPC framing across child stdin/stdout, separate from Host's legacy four-byte-length-prefixed JSON stdio protocol. Host `grpc::execute_request` creates an execution/cell in a leased session; V8 module evaluation can request a nested tool; `grpc::routing` distributes a call among matching subscriptions, tracks sequence/trace context and pending invocation; Core's `CodeModeDispatchBroker` gates readiness and delegates through the turn's `ToolCallRuntime`/registry; the result callback returns to the Host; initial/yield/wait/terminate outcome becomes model-visible tool output and rollout/cell trace. Refs: `core/src/code_mode_host.rs:23-154`, `code-mode-host/src/grpc/{mod,session,routing}.rs`, `code-mode-runtime/src/{service.rs,runtime/module_loader.rs}`, `core/src/tools/code_mode/{execute_handler,delegate}.rs`.
+
+Host failure/recovery detail: session lease closes with event-stream/channel loss; active requests and subscriptions are tracked separately. Host constants cap requests/cells/recent IDs; cancellation and yield are distinct operations. `code-mode-host/tests/grpc/session_recovery_tests.rs`, `src/grpc/robustness_tests.rs` and `tests/grpc.rs` contain focused recovery, concurrency, subscription-drop and slow/fast invocation cases in fixed source. These are source tests, not executed in this lane and not proof of a live process surviving restart.
+
+## Static thread/daemon recovery order
+
+App-server request path: JSON-RPC parse/initialization and feature admission -> turn admission gate -> serialization-scope queue (same exclusive Thread/Process keys FIFO; shared reads concurrent) -> processor -> Core `start_or_steer_turn` -> turn/user input persisted -> `run_turn` sampling/tool loop -> typed item/turn notifications -> rollout and thread index. On shutdown, turn admission drain rejects new turns and waits for admitted work; connection close drops queued but not started work. `app-server/src/{message_processor.rs,request_serialization.rs,turn_admission.rs}` and `core/src/session/{turn_input.rs,turn.rs}`.
+
+Daemon restart path is separate: recovery snapshot writer only records input after rollout flush; `app-server/src/daemon_thread_recovery.rs::start_recovery` reads then removes the snapshot and schedules `restore_daemon_threads` off the readiness path; Core reloads eligible recorded turns/threads. This reconstructs selected interrupted threads from persisted input; it is not evidence that an in-flight model stream, V8 isolate, or tool process resumes at its prior instruction. No release-binary crash/restart scenario was attempted.
+
+## Multi-agent graph and mailbox static chain
+
+MAv2 spawn constructs child thread/runtime with fork policy and a pending-spawn guard. The guard reconciles partial graph persistence/runtime state on cancellation (remove child, wait for outstanding Open-edge write, write Closed). Graph-store uses SQLite-backed parent-child edges and descendant traversal. Child runtime residency is independently reserved/pinned/touched/evicted; persistent thread identity is not the resident Rust task. Messages for eligible unloaded children can enter mailbox and wake delivery; terminal child state is relayed to parent through completion handling. Message board is a distinct shared communication service (SQLite/in-memory/remote implementations) and requires feature/dependency activation. Source: `core/src/agent/control/{spawn,spawn_guard,residency,mailbox,completion,runtime}.rs`, `agent-graph-store/src/{store,local}.rs`, `core/src/agent_message_board.rs`, `agent-message-board-client/src/*`. No synthetic child-Agent model turn was run.
+
+## Current R boundary
+
+R1 confirms CLI JSON-RPC initialization, thread creation, turn admission and user-message event persistence; it does not establish model/tool completion. R2 confirms only the Host legacy protocol hello. G4 stays PARTIAL until a safe model+tool or no-account Host execute callback loop and child-agent lifecycle run can be proven, or a concrete external account/runtime boundary is established.

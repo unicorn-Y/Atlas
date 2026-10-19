@@ -65,3 +65,9 @@ UI 可能先接到「开始」，之后才有真正结束或 yield。用单条�
 ## 8. Realtime voice 生命周期（源码 S，未实际启动）
 
 CLI TUI 的 `/voice` 候选实际连接独立打包 voice helper。UI Starting 状态与 attempt ID 防止过期启动结果复活；客户端验证 helper protocol/build commit，完成 SDP answer 与 ordered channel 后才开启音频设备，停止时关闭 session 并恢复未送达的语音文本。音频媒体走 WebRTC，管道仅传控制/SDP。源码位置见 IMPLEMENTATION-TRACE §H。Windows helper 仅通过 Authenticode/文件/静态依赖确认存在；未启动语音权限、设备、网络或服务端，所以动态过程均未观察。
+
+## 9. G0–G7 supplement: app-server and Host protocol surface
+
+This CLI lane has no desktop renderer UI; relevant user surface is CLI/TUI and app-server protocol. The release binary ran isolated app-server `initialize` → `thread/start` → `turn/start`: the client received `thread/started`, `turn/started`, and user-message item events. The input was persisted to a synthetic rollout. No assistant text/tool result/terminal turn event was observed. A separate-process `thread/resume` against a no-turn prior thread failed with `no rollout found` / `thread not found`; that only establishes this earlier no-turn case was not recoverable, not a general daemon restart result.
+
+The exact release Host accepted a legacy stdio frame and returned protocol V1 ready. It did not exercise the Core default gRPC-over-stdio transport. See machine-readable `SURFACE-MAP.tsv` and evidence bounds in `END-TO-END-TRACES.md`.

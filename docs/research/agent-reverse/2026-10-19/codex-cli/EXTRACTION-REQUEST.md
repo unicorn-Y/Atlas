@@ -50,3 +50,7 @@ SHA256：36fda4e61c251d805c2d68203c3a34b0f6881a88846e12776ca02fb13d6e67c7。
 - 如果 Windows EXE 需要账户才能运行 agent，不做登录或执行来“补齐”，保持 U 状态。
 
 本机 Codex 是**机械采集者**，研究判定由本会话后续做。此请求本身属于提交成果的一部分。
+
+## 二次续工附注（G0–G7）
+
+已按新完工门槛继续做 release runtime smoke，而非重复下载/help：隔离 CODEX_HOME 下真实 CLI app-server JSON-RPC initialize/thread/start/turn-start；以及真实 Host legacy framed stdio V1 hello。观测范围和未通过部分见 `END-TO-END-TRACES.md` / `FINISH-GATES.md`。没有模型/工具完整结果，没有账户凭据，也没有运行已有用户会话。

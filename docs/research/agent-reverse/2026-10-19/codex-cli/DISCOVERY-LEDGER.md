@@ -42,7 +42,10 @@
 | CODEX_CLI-035 | **CLI daemon、remote app-server 与 agents 控制入口** | `cli/src/main.rs:131-190`; shipped CLI/Host help | S/R | 源码有 `--remote`、token env、`--no-daemon` 与 agents 子命令；真实 CLI help 显示本地共享 daemon 及 remote URI 形式。入口被观察，不代表认证或 remote 操作成功。 |
 | CODEX_CLI-036 | **发行包多 helper 组件与固定源身份线索** | `extractions/ARCHIVE-HASHES.json`; `extractions/BINARIES.json`; `codex-resources/voice/manifest.json` | S/D | 三个归档 SHA/字节数与采集 manifest 一致；CLI 包内 Host 与单独 Host ZIP 字节相同；voice manifest 的 build_commit 与固定 tag commit 一致。它不是可重复构建证明。签名/PE/import 静态资料只描述样本。 |
 | CODEX_CLI-037 | **Realtime voice 独立进程、WebRTC 协商与设备启用时序** | `realtime-webrtc/src/{client.rs,protocol.rs,session.rs}`; `voice-host/src/main.rs:43-180`; `tui/src/chatwidget/realtime.rs:301-395`; `app-server/src/request_processors/turn_processor.rs:1212-1306` | S | 同 build helper handshake 后初始化 runtime、交换 SDP、TransportReady 后才打开设备；音频帧走 WebRTC，控制走限长 framed stdin/stdout；关闭/超时会停子进程。服务端会话及动态音频未观察，不能标 R。 |
+| CODEX_CLI-038 | **发布版 app-server JSON-RPC admission 与 rollout 写入** | Real CLI 0.163.0 isolated app-server `initialize` + `thread/start` + `turn/start`; `END-TO-END-TRACES.md` R1 | R (partial) | 同一进程下 turn/start 返回 inProgress，并真实发 thread/turn/user-message events；没有观察到 assistant/model/tool 输出或 turn/completed，只证明协议 admission 与用户输入项事件。 |
+| CODEX_CLI-039 | **发布版 Code Mode Host legacy framed stdio handshake** | release Host SHA `07f3869f...b9988`; `END-TO-END-TRACES.md` R2 | R | 发 4-byte LE length + JSON `connection/hello` 得 `connection/ready`, selectedVersion 1；未发送 cell operation，不涉及 Core 的 gRPC+stdio 路径。 |
+| CODEX_CLI-040 | **独立 crate 与注入点：graph-store / message-board / hooks / dynamic registries** | `core/src/agent_message_board.rs:38-121`; `agent-graph-store/src/store.rs:13-61`; `core/src/tools/registry.rs:305-465`; `core/src/session/mcp_refresh.rs:1-57` | S | 多种扩展由 trait / dependency / feature/config injection 挂接；crate 存在不代表该发布版默认启用。全量注册表未穷尽，状态部分开放。 |
 
 ## 非穷尽说明
 
-001—026 及 028—037 共 36 项有明确文件/方法/包级证据；027 为主动发现的待证线索。另有 3 个受限 R 操作（版本与两份 help）；没有真实 Agent turn、RPC 请求或实时语音动态记录。任何源代码路径不代表该能力在 Windows Release 的默认配置已开启。
+001—026 及 028—040 是已锚定的机制/包/受限运行项目；027 为主动发现的待证线索。运行级证据仍有限：CLI version/help/Host help、partial app-server protocol admission 和 Host legacy hello。没有完整模型/工具结果或 child Agent turn。完整覆盖和未决门槛见 `COVERAGE.md` 与 `FINISH-GATES.md`。任何源代码路径不代表该能力在 Windows Release 的默认配置已开启。

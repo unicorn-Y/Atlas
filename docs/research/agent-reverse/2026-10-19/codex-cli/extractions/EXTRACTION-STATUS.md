@@ -16,3 +16,7 @@
 The package and matching source snapshot are verified and unpacked. Dynamic turn execution, event ordering in an actual session, gRPC/stdio frames, audio capture/playback, cancellation, daemon recovery and server-side services remain unobserved. No PE disassembly or function-level binary/source equivalence claim is made.
 
 - REA `binary_overview` against the 341 MB CLI PE did not complete within the bounded analysis window and was terminated. No result from that operation is used. PE header/import/string observations come from the separate bounded read-only parser documented in `PE-IMPORTS.txt` and `SYMBOL-STRINGS.txt`; no disassembly/function mapping is claimed.
+
+## Later isolated protocol observation (2026-10-19)
+
+The shipped CLI was run with a fresh `CODEX_HOME`, synthetic workspace, and key/base-URL environment variables removed. App-server JSON-RPC initialize, thread/start and turn/start were accepted, and user-message start/completion events plus a rollout file were observed. No assistant/model/tool completion event was observed before closing the bounded process. The shipped Code Mode Host was separately sent one legacy framed stdio hello and returned protocol V1 ready. These are limited runtime observations; see sibling `END-TO-END-TRACES.md`. No account/session data was read or used. Authenticated agent execution, Core's gRPC+stdio transaction, cancellation, child agent, and restart recovery remain unobserved.
