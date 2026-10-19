@@ -1,5 +1,17 @@
 # EXTRACTION REQUEST — 本机 Codex 只做机械取证，不代替研究
 
+## 状态更新（2026-10-19）
+
+原始机械包/文件树请求已在本研究会话以已有精确原始包材料完成：输入 MSIX size 和 SHA 与请求完全一致；REA 解包校验 3,651 regular files、2,346,419,207 bytes、零提取 mismatch。已静态抽取 35 个 `.vite/build` JS 模块和 41 个定向 webview chunks。**不再需要重复下载或重复解包同一资产。**
+
+仍待补采，但不是这份机械请求的已完成内容：
+
+1. 完整 `app.asar` 深析（REA 超时；观察到其外置 `better-sqlite3.node` 与 ASAR integrity manifest 不一致，需保留此状态，不应直接修补或重打包）。
+2. 组件名/交互动作覆盖全部 20,362 webview assets，并闭环一项具体 UI action → preload/main IPC → JSON-RPC → app-server 请求/通知 → renderer state。
+3. 若获准且有隔离 Windows 环境，对无真实账户/用户数据的启动与功能做 R 级运行观察，记录进程树、命令行（去敏）、pipe/socket 类型和版本握手；不要在此文档放入 token、Cookie 或私有对话。
+
+目前只可报告 S 级静态包证据，应用未启动（R=0）。`IMPLEMENTATION-TRACE.md` 与 `EVIDENCE-INDEX.md` 是后续研究分析入口，不代表本 extraction request 要求本机会话只机械上传完就结束。
+
 **重要**：本研究会话已经创建分支 research/agent-reverse-20261019-codex-desktop，并完成 App Server 源码和 Atlas main 对照。请本地 Windows Codex **只提取、机械索引、上传小体积证据**，不要总结能力/自行写研究报告/改业务代码，不要自动运行登录的用户程序、上传 Token/Cookie/对话或完整私有用户数据。
 
 ## 准确输入

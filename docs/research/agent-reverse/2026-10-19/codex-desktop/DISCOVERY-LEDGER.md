@@ -34,3 +34,16 @@
 从真实 Server 枚举 Request/Notification 反向找 UI 候选，从线程状态/transport/daemon recovery 找隐藏生命周期能力，再从 Atlas 的 renderer→adapter→ws router→runtime/SessionDB 正向查差距。没有扫描 MSIX 静态资源或网络，所以 CODEX_DESKTOP-020/021 是必须优先解锁的高价值未知，而不是遗漏后强称“没有”。
 
 按证据算：**22 条机制有源代码/存档文档锚点，2 条核心 Desktop 专属行为 U**；但**Desktop 原生 UI/RPC 运行能力“已确认”数量为 0**（排除包身份 001）。不能将 22 条按“桌面端确认功能”汇总。
+
+## MSIX 实物增补（2026-10-19；S only, not runtime validation）
+
+| ID | 新发现/核实能力 | 发行物证据 | 状态与边界 |
+|---|---|---|---|
+| CODEX_DESKTOP-025 | Electron preload exposes a host bridge with view and worker message calls, context menu, file path/drag helpers, shared-object propagation and chunk acknowledgment | MSIX app.asar `.vite/build/preload.js`, SHA `a3e622f8…e256b7`, offsets 1,819 / 3,341 / 6,599; exposed `electronBridge` | S; API existence confirmed; every main handler and caller not enumerated |
+| CODEX_DESKTOP-026 | Host chunked message framing validates marker, transfer ID, integer sequence, start/chunk/end kinds and structured tokens, with ACK channel | same preload, byte offsets 1,111 and 1,819 | S; assembled data flow, backpressure and timeout unresolved |
+| CODEX_DESKTOP-027 | Desktop main has JSON-RPC request/notification client over named app-server transport, with pending request map and mutation classification for thread and turn methods | `.vite/build/main-C4DYk222.js`, SHA `c8a2af50…a2c175`, offsets 49,098; 97,588; ~740,050; RPC URI offset 3,270,816 | S; specific renderer component → call chain not closed |
+| CODEX_DESKTOP-028 | Bundle pins app-server compatibility literal `0.141.0`, recognizes unsupported/restart-available error prefixes and gates process/spawn on experimentalApi capability | `.vite/build/application-network-startup-DB1VeU3v.js`, SHA `c338bbdd…c67578`, offsets 680 and ~2,900 | S package-observed only; successful handshake unobserved |
+| CODEX_DESKTOP-029 | Runtime path map distinguishes codex, code-mode-host, sandbox setup, command-runner and ripgrep; Windows computer-use path separately manages a native pipe host lifecycle | startup module offset ~14,070; main bundle offsets ~170,200–173,000 | S; package components/host code observed; actual process tree and feature use unobserved |
+| CODEX_DESKTOP-030 | Selected webview chunks include lazy subagent panels/activity, conversation runtime/page, MCP app new-thread helper and side-panel iframe | 41 targeted chunks from 20,362 `webview/assets`; see hashes/summary in `UI-AND-WORKFLOWS.md` and `IMPLEMENTATION-TRACE.md` | S bounded sample; not full UI inventory or proof of remote service behavior |
+
+These entries raise confirmed **static package mechanism** count, not confirmed dynamic Desktop capabilities. The old tally above described the pre-extraction checkpoint and is superseded for package-static evidence by IDs 025–030; the R-level confirmed count remains zero.

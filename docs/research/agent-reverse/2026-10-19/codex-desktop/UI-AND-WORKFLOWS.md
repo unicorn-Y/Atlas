@@ -1,5 +1,15 @@
 # UI and Workflows — 主机、组件、操作与事件
 
+## 实物 bundle 检查更新（S；不是运行观察）
+
+旧段中把客户端 UI / preload 一律标为 U 的表述已由本次有限 package extraction 收窄，但全量 UI 盘点仍未完成。ASAR 有 `webview/index.html`，CSP 默认 `default-src 'none'`，限制脚本/连接/帧来源（可见 `wss://*.api.openai.com/ws` 与 `codex-sandbox://`）；ASAR `webview/assets` 有 20,362 项。已对 41 个按 subagent / conversation / MCP app / activity 命名筛出的 chunk 做静态阅读，识别 lazy-loaded subagent panel、agent activity item、conversation page/runtime、MCP new-thread helper、thread MCP side panel iframe 组件。抽样不足以称为全组件注册表。
+
+可复核到的静态接线片段：`preload.js` 以 `contextBridge` 暴露 `electronBridge`、`codexWindowType`；bridge 有 `sendMessageFromView` IPC invoke、worker message send/subscribe、context menu、文件 path/drag API 及 chunk ack。MCP app sandbox-host channel 转为当前 origin 的 `postMessage`。`main-C4DYk222.js` app-server client 建 JSON-RPC request 并识别 thread start/resume/fork 与 turn start/steer 等 mutations。尚未找到并闭环某个具体 composer/button 调用到该 request，故不记为完整用户操作链。
+
+Windows `computerUse` feature 的 main bundle 静态代码维护 native pipe server；disable 时关闭当前 turn，runtime path changes 时重新解析并重启 helper。此处证实包内存在一类专用桌面操控 host 机制，不说明本机 feature flag 开启或实际交互成功。
+
+动态 UI 行为未观察；本版本未运行，**R=0**。hash、offset 与调用路径见 `IMPLEMENTATION-TRACE.md` §8。
+
 本文件将 **D：官方行为说明**、**S-Server：上游源码协议**、**U：Desktop 前端未经解包/运行** 严格分栏。不得因为 Server 有 widget resourceUri 就虚构某个视觉组件的存在。
 
 | 用户任务/界面入口 | 可查到的运行链条 | 反馈/状态及重要未知 | 证据 |

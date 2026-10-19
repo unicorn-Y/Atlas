@@ -79,3 +79,27 @@ main HEAD aa6196f550098cc46081dc6db2c376cb87ddffa5。已读：
 - **发行包是否包含哪一版公开 App Server**：缺二进制版本证据；CLI 0.163.0 不等于 MSIX 内 runner 0.163.0。
 
 继续取证输入与验收标准：见 EXTRACTION-REQUEST.md；先获得静态宿主证据，再小样本动态验证。**本文件是研究审计日志，不是功能大全。**
+
+## 2026-10-19 本 lane 实物复核增补
+
+原文件中“本地最小机械提取”相关缺口已部分解决。以下 hashes 均对已验证的 MSIX 提取产物/ASAR 内部文件直接计算；REA extraction evidence `ev_edbf1706dc64708c2195821e0cc8fb6b0bc817ab3e4da784a9ae5aca854c87c2` 对 3,651 files / 2,346,419,207 bytes 返回完整性通过。ASAR 文件有独立 native addon integrity mismatch（不可与 MSIX 外层解包结果混为一谈）。
+
+| Package path | Bytes | SHA-256 | 观察 |
+|---|---:|---|---|
+| `ChatGPT-x64.msix` | 948,993,815 | `e2d892e6c22310e4b1a2928b0d3a29a066e0863d3a333754d6585c77cdafbe7f` | OpenAI.Codex 26.1013.4894.0，REA package inventory `ev_5448a1c8a343570e29c1b3d0ed47cdc15d831d912a84a029941426af9473c182` |
+| `app/ChatGPT.exe` | 4,795,184 | `2f61eaeb01dcee7fd18d572fbb338c88b686c0d891427487fdd182afdd64b4f6` | manifest entry |
+| `app/resources/app.asar` | 582,072,504 | `bbec1d64e135b718a154b31655bb8ad9a39472bac1b2cabba991a9d97a339dd8` | 21,396 archive paths; full deep inspection not completed |
+| `app/resources/codex.exe` | 341,312,816 | `f6dbf48cb70f62649c645f26c87dc9bf84cc36986202dfad8e12fb5b8ca70312` | Authenticode Valid; OpenAI OpCo signer |
+| `app/resources/codex` | 296,885,960 | `70ea33b7094a4c20c007d09b83bb50e33debb9bbf99bf066709f9eb85bad524a` | no extension companion binary |
+| `app/resources/codex-code-mode-host.exe` | 74,921,776 | `3b6a9179a4da17fa5fc6948219cd61486dc3b534c683838076d8c61bd311c68e` | packaged helper; not launched in this research |
+| `app/resources/codex-code-mode-host` | 74,277,776 | `6b4de7a1a69656779c88b6e249ab976cbbc9a43e1edf65e6ec9927feb26f996b` | no extension companion binary |
+| `app/resources/codex-command-runner.exe` | 8,217,392 | `ce80b56a2f37f808815fde33cceb97ac858ceecde296425ad3860f0f37fb4877` | packaged helper; launch relation unknown |
+| `app/resources/codex-windows-sandbox-service.exe` | 55,824,688 | `d1b0c213e8aaf8ec2c7a29668e7935d996951e7b60b89402739fa0e38f8bef87` | packaged Windows sandbox component |
+| `app/resources/codex-windows-sandbox-setup.exe` | 17,700,144 | `c4da812016cbfb92d9a62791f78460c59e9662faadb0a2720d3aa5d0535b80bd` | packaged setup helper |
+| `.vite/build/main-C4DYk222.js` | 4,049,746 | `c8a2af504b21314fa6a64ad1b4ec83dbad80033ede902caf9978fd9c74a2c175` | protocol client/main process evidence; byte offsets in IMPLEMENTATION-TRACE |
+| `.vite/build/application-network-startup-DB1VeU3v.js` | 292,827 | `c338bbdde151467554d63beea59206848ca38a68abe16b0477d983a172c67578` | runtime path/version/spawn evidence |
+| `.vite/build/preload.js` | 6,909 | `a3e622f8d80a83e58fb3cfcc640fa7e14e6461cccdae9ef7d7b0c821dde256b7` | contextBridge/preload IPC evidence |
+
+REA selected-module evidence for 35 `.vite/build` JS modules: `ev_e7f5fee81b8ffba8e7fbbe53100ba3b6dec7e9ddda92dfb2f288e62adca8937b` (10,746,938 bytes parsed, 0 parse failures; semantic analysis partial/truncated). The input modules and independent hashes live under the table above for primary entry points. Webview sampling extracted 41 target chunks (947,407 bytes), not all 20,362 webview assets; examples and hashes remain in the preceding evidence table/section only where called out. This was a bounded survey, not exhaustive asset coverage.
+
+Package protocol observation: app-server version literal `0.141.0` in `application-network-startup-DB1VeU3v.js` byte offset 680. It is the client's expected/current build literal, not evidence of a successful handshake with a remote service. Main bundle JSON-RPC and method anchors are byte offsets, not original source lines: see IMPLEMENTATION-TRACE §8. Static package behavior is S only. No Codex app start, user action, remote login or R observation occurred (R=0).

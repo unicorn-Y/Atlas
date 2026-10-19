@@ -1,6 +1,12 @@
 # Codex / ChatGPT Windows Desktop — 逆向研究入口（2026-10-19）
 
-**结论：PARTIAL / DESKTOP PACKAGE EXTRACTION BLOCKED。** 已对官方 MSIX 的采集原始记录做逐项核对，阅读同版本固定快照的 Codex App Server **真实源文件与调用逻辑**，并对 Atlas main 的相关前后端实际代码进行差异追踪；**尚未亲自解包 949 MB 桌面主程序，未做 Windows 客户端运行时验证**。本阶段不能声称掌握 Codex Desktop 完整前端、IPC、动态卡片或所有隐藏能力。下一步由本地 Codex 按 EXTRACTION-REQUEST.md 做机械提取，研究者再继续解析，不将协议接口当作客户端已实现。
+## 实物取证 checkpoint（本段取代下文中“尚未亲自解包”的历史状态）
+
+**PARTIAL。** 本 lane 已亲自校验 MSIX：OpenAI.Codex `26.1013.4894.0`，948,993,815 bytes，SHA-256 `e2d892e6c22310e4b1a2928b0d3a29a066e0863d3a333754d6585c77cdafbe7f`；REA 对解包的 3,651 files / 2,346,419,207 bytes 核验通过。实际检查了 35 个 Electron build 模块和 41 个定向 webview chunks，静态确认 app-server JSON-RPC/WebSocket、`0.141.0` 协议版本常量、thread/turn mutation、contextBridge IPC 与 chunk ack、Windows computer-use pipe host 生命周期线索和 runtime executable path 映射。**静态 S；应用没启动，R=0。**
+
+完整 app.asar 深析超时；app.asar 独立 native addon integrity mismatch 已记录，不能和 MSIX 解包检查通过混为一项。ASAR 共 21,396 项、20,362 webview assets，均未全量语义扫描；当前 chunk 调查有明确抽样边界。尚未把单一具体 UI action 从 renderer 组件闭环到 RPC，也未动态证明 `codex.exe` / runner / host 实际启动次序。见 IMPLEMENTATION-TRACE §8–9 与 EVIDENCE-INDEX 的 size/hash 表。
+
+**历史 checkpoint 状态（已被本文件顶部实物取证段更新）：** 当时仅有采集记录和公开 App Server 源码，尚无 MSIX 解包。本次已完成精确发行包验证及有界 ASAR 模块静态分析；仍未做 Windows 客户端运行时验证。
 
 ## 固定事实与范围
 
@@ -37,6 +43,6 @@
 
 ## 当前阻塞与解锁
 
-连接的 GitHub 文件接口支持读取代码文本但不提供近 1 GB 的私有 Release 二进制流；本运行环境网络下载不可用、不是 Windows，也没有 Codex Desktop 运行态。故最关键缺口为 **MSIX 全目录及前端静态代码/源码映射/EXE 证据**。执行 EXTRACTION-REQUEST.md 将解锁 UI 组件和 JSON-RPC 实际桥接的进一步阅读。其后仍需真实 Desktop 的**去敏测试运行日志**才能判定 R 级行为。
+当前仍缺 **完整 ASAR/webview 资产覆盖与 Windows 运行态**；全量 ASAR 深析超时，因此已有 JS 检查是抽样静态证据。完整 UI→RPC action 链及真实 Desktop 的去敏运行日志仍需后续取得，才能判定 R 级行为。
 
 本阶段为**已实做代码追踪的研究 checkpoint**，不是研究终版，不得合并成“Codex Desktop 功能已经对齐”。

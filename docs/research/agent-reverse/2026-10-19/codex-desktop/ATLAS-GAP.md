@@ -28,3 +28,9 @@
 2. 不能拿 CODEX_DESKTOP-004 的 daemon cold-resume 冒充 Codex 已证实“恢复崩溃中的执行现场”。Codex 可证的是线程持久身份和冷恢复流程；Atlas 可证的是将原 active run 改 failed。二者概念不同，下一步用 Windows R 级实验明确比较。
 3. 固定消息类型与统一 structured event 注册机制相比的缺口是真实可见的；但**尚无 MSIX renderer 实物代码**就不能决定迁移何种 Codex UI。
 4. **禁止在本轮修改业务代码**；将可验证的机制拆成候选实施任务，等二进制/运行证据回来再下施工单。
+
+## MSIX 静态实物对照补记
+
+本次对真实 `26.1013.4894.0` 包有限抽样后，旧表 `CODEX_DESKTOP-020/021` 中“还没拆主程序”的状态已更新为 **部分有 S 证据、runtime 为 U**：preload 暴露 `electronBridge` 固定宿主 API、view/worker message API、MCP app sandbox-host message 转发和经序号/marker 校验的 chunked host ack；主 bundle 有 app-server JSON-RPC client 和 `codex-app-server` WebSocket URI；启动 bundle 有 app-server version literal `0.141.0` 与 runtime executable path 映射；`computerUse` Windows pipe host 有 enable/disable 与重解析路径。这些是 ASAR 静态代码，不等价于 Atlas 已缺失同样能力，也没有证据证明 UI 当前实际调用某一方法或哪个 EXE 在具体 run 中启动。
+
+Atlas 当前 preload 只可确认 `frontend/src/preload/index.cts:1-29` 暴露 `atlasDesktop` API；Atlas runtime stream 的可检出机制锚点是 `backend-adapter/src/client.ts:547-618` 的 version gate、local cursor、resume/replay，`frontend/src/renderer/services/runtimeEvents.ts:25-34` 的 typed event normalization。没有对 Atlas 每个 IPC handler、Codex 全量 webview bundles 或运行行为作等价覆盖。旧表因此不改成“Codex 已全面领先”，本更新只把曾未知的静态接线边界缩小到上述具体证据。

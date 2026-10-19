@@ -55,3 +55,35 @@ transport.rs:104-125 仅对启用 experimentalApi 的连接推送实验事件，
 4. 真实运行的 UI 事件和后台线程在正常/关闭/断网/重启/多窗口条件下的 R 级生命周期。
 
 以上全部作为后续取证问题，而不是已完成结论。
+
+## 8. Windows Desktop 实物复核（S；未启动，R=0）
+
+本次已直接验证原始 `ChatGPT-x64.msix`，不是仅据旧采集索引：OpenAI.Codex `26.1013.4894.0`，948,993,815 bytes，SHA-256 `e2d892e6c22310e4b1a2928b0d3a29a066e0863d3a333754d6585c77cdafbe7f`。MSIX 解包得到 3,651 regular files / 2,346,419,207 bytes，REA extraction integrity 返回 containment verified、零文件不匹配（`ev_edbf1706dc64708c2195821e0cc8fb6b0bc817ab3e4da784a9ae5aca854c87c2`；包 inventory `ev_5448a1c8a343570e29c1b3d0ed47cdc15d831d912a84a029941426af9473c182`）。
+
+ASAR 自身为 582,072,504 bytes / SHA-256 `bbec1d64e135b718a154b31655bb8ad9a39472bac1b2cabba991a9d97a339dd8`。REA 全 ASAR 深析超时；它定位到外置 `node_modules/better-sqlite3/build/Release/better_sqlite3.node` 相对 integrity manifest 不一致。MSIX 文件级抽取完整性通过与 ASAR/native unpacked addon manifest mismatch 是两项不同结果，后者没有被本研究解释为损坏或签名失败。ASAR 路径清单有 21,396 项、0 个 `.map`；其中 `webview/assets` 有 20,362 项。完整 ASAR 和全部 webview assets 未扫描，以下是 35 个 `.vite/build` 模块和 41 个命名目标 webview chunks 的有界静态分析。
+
+### 包入口到协议客户端
+
+* 外层 `app/ChatGPT.exe` 是包入口（4,795,184 bytes，SHA-256 `2f61eaeb01dcee7fd18d572fbb338c88b686c0d891427487fdd182afdd64b4f6`）。ASAR `package.json` 指定 Electron main `.vite/build/early-bootstrap.js`，内部 npm version `26.1013.40934`；MSIX 显示版本仍以外层 `26.1013.4894.0` 为准，二者保留为不同元数据。`app/resources/codex.exe` 341,312,816 bytes，SHA-256 `f6dbf48cb70f62649c645f26c87dc9bf84cc36986202dfad8e12fb5b8ca70312`，Authenticode 状态 Valid、OpenAI OpCo 签名者；`codex` 同名无扩展二进制 296,885,960 bytes / SHA-256 `70ea33b7094a4c20c007d09b83bb50e33debb9bbf99bf066709f9eb85bad524a`。本记录没有启动 app，签名和存在性不证明某次 UI 会话启动了哪个 executable。
+* `application-network-startup-DB1VeU3v.js`（292,827 bytes / SHA-256 `c338bbdde151467554d63beea59206848ca38a68abe16b0477d983a172c67578`）字节偏移 680：`x="0.141.0"`、`codex-app-server-version-unsupported:` 与 `codex-app-server-version-restart-available:`。同模块偏移 2,900 有 `process/spawn requires experimentalApi capability` 的缺能力错误；偏移约 14,070–14,200 列出候选 runtime 名称和映射 `codex.exe`→`codex`、`codex-code-mode-host.exe`→`code-mode-host`、`codex-windows-sandbox-setup.exe`→`sandbox-setup`、`codex-command-runner.exe`→`command-runner`、`rg.exe`→`ripgrep`。偏移 49,265 证实该模块封装 Node child_process `spawn`，但不能据 resolver map 推断所有映射都会随启动执行。
+* `main-C4DYk222.js`（4,049,746 bytes / SHA-256 `c8a2af504b21314fa6a64ad1b4ec83dbad80033ede902caf9978fd9c74a2c175`）偏移 3,478 标识 `codex-app-server`。偏移 49,098 起 JSON-RPC client 的 `sendNotification`、`sendRequest` 生成 `{jsonrpc:"2.0",method,params,id}` 并登记 pending request。偏移 97,588 处谓词认 `thread/start`、`thread/resume`、`thread/fork` 为 thread mutation；偏移约 740,050 的 request wrapper 对 `thread/start`, `thread/startAeon`, `thread/fork`, `turn/start`, `turn/steer`, `plugin/uninstall` 标记为 mutation。偏移 3,270,816 定义 `ws://codex-app-server/rpc` 与 16,777,216-byte 最大未分片消息限制。包还含 app-server 构建期协议版本 `0.141.0`；这是静态 bundle 观察，不是服务端版本握手成功。
+
+### UI action、状态/通知、preload IPC
+
+可证的调用链片段为：Electron 主进程启动 UI 的静态构建入口 → renderer 经注入 `electronBridge` 的 `sendMessageFromView` / `sendWorkerMessageFromView` 进入 IPC invoke → main bundle 协议 client 将 request 编为 JSON-RPC → app-server WebSocket `codex-app-server` transport。源码将 `thread/start` / `thread/resume` / `thread/fork` 分类并把 request promise 放在 pending map 中。该构建中的 thread coordinator 对 `turn/started`、`turn/completed` 等通知按 threadId/turnId 筛选；thread/start/resume/fork、turn/start/steer 和 queue mutations 字符串均出现。**没有将某个具体 UI button/action 的组件调用一路追到上述 RPC 的完整 renderer bundle；此处是 bridge-to-protocol 的静态链片段，用户交互入口还未闭环。**
+
+* `preload.js` 6,909 bytes / SHA-256 `a3e622f8d80a83e58fb3cfcc640fa7e14e6461cccdae9ef7d7b0c821dde256b7`。偏移 6,599 以 `contextBridge.exposeInMainWorld` 暴露 `codexWindowType`、`electronBridge`；偏移 3,341 的 `electronBridge` 包含 `sendMessageFromView`（IPC invoke）、`sendWorkerMessageFromView`、`subscribeToWorkerMessages`、`showContextMenu`、文件路径/拖放 API 和 chunk ack。它也转发共享对象更新和 app-host 消息；`codex_desktop:mcp-app-sandbox-host-message` 经 `window.postMessage` 连到当前非 null origin。IPC channel 常量如 `codex_desktop:chunked-message-ack` 位于偏移 1,819。此处没有将 preload 接受的消息误判为完整 IPC 权限面；main handlers 必须后续对全部通道枚举。
+* chunked host message 会先验 `marker === "codex-host-chunked-message-v1"`、transferId、整数 sequence、kind，并递归验证 token 类型（偏移 1,111 起）；`acknowledgeChunkedMessage` 回发 ack。表明存在带校验和确认的分片消息桥，但尚未追完组包端、背压/超时与所有调用者。
+* app-server notification 名称的构建证据包括 `turn/started`、`turn/completed` 和 thread 状态通知；thread mutation 集包括 `thread/queue/add`、`turn/addUserMessage`、`turn/start`、`turn/steer`（main bundle 偏移约 125k 的 mutation registry）。`thread/turn/item/agentMessage/delta`、`item/started`、`item/completed` 等 item streaming 是否来自当前 bundle 的具体 renderer action 尚未沿所有消费端逐个闭环。不得把当前 Rust 开源 tag 的通知当成此桌面构建服务端实测。
+
+### 打包的执行能力与隔离边界
+
+ASAR 主进程模块含 Windows `computerUse` native pipe server 生命周期、feature enable/disable 时关闭当前 turn、路径变化后重新解析并重启 helper 的代码（main bundle 字节偏移约 170,200–173,000）；这是从包静态代码可读的专用电脑操控 host 机制。包存在 `codex-code-mode-host.exe` / 无扩展 host、`codex-command-runner.exe`、sandbox setup 与 sandbox service；这只能确证组成与主进程存在 runtime path/feature 配置，不能确认任一用户会话实际启动顺序和父子关系。文件 SHA/字节数见 `EVIDENCE-INDEX.md`。
+
+报告行为等级：以上为 **S（静态发行包源码/资源）**；未运行应用或发起 UI 动作，所有动态验证为 **R=0**。20,362 webview assets 中仅 41 个命名目标 chunk 被提取，完整 ASAR 也未成功深析，因此“未检出”不等于功能不存在。app-server 远端/打包 Rust runtime 的服务端策略和帐号云端实现不由客户端源码证明。
+
+## 9. 对 Atlas 当前实现的垂直对照锚点
+
+唯一 Atlas 基线为 `origin/main@aa6196f550098cc46081dc6db2c376cb87ddffa5`。`backend-adapter/src/client.ts:524-618` 的 `startRunInternal` 保存 per-run `lastSequence` 到 localStorage，断开后发 `{type:"resume",run_id,after_sequence}`，按 run_id/sequence 去重并回放连接；`core/atlas/api/runtime_ws_router.py:18-153` 是服务端 socket 指令分发与审批/input/plan Future 回复。`frontend/src/renderer/services/runtimeEvents.ts:25-34` 对 renderer 事件使用显式 known Set 和 `normalizeRuntimeEvent`。`frontend/src/preload/index.cts:1-29` 暴露固定 `atlasDesktop` API；不能仅凭存在 preload 等同 Codex 的广义 view/worker/chunk/MCP sandbox message bridge。`core/atlas/api/runtime.py:108-153` 在进程重启时把 running/paused/waiting run 记录变为 failed，事件声明 recoverable 但 detail 明说 execution was not resumed；所以 Atlas 的事件重放是 stream continuity，不是引擎执行进程恢复。
+
+这些是源码机制比较，不将 Codex 的 Desktop 接线未知/包静态入口说成成功运行，也不将 Atlas websocket 恢复表述为完整 durable resume。
