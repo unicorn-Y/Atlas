@@ -28,3 +28,20 @@ The preload's generated API method `runScheduledTask(taskId, preloadContext)` re
 `callMcpTool` at ~5,860,203 checks artifact visibility and validates args; task artifacts take a separate `Rla` branch. For normal artifact calls it resolves the MCP tool/server, applies managed tool policy and disabled-state checks, prompts for destructive calls unless remembered approval exists, then dispatches through a server/tool path. Only read-only remote calls may qualify for a cache path under policy; destructive tools are not blindly cached. This is a narrow, concrete tool bridge; exact service backend and server RPC remain outside this trace.
 
 The app side of the Cowork artifact protocol sets a top-level frame origin guard (`cowork-artifact:` and no parent frame) before registering six methods: five bridge operations plus `setEditableFocused`.
+
+
+## Windows local VM service connection (S — app-side protocol trace)
+
+- Main bundle `.vite/build/index.chunk-lzaSYO3Q.js`, size 7,081,117, SHA256 `66a2071baf285aaa3d88aeace7344e7941c3df93c1ef3b21bc6cf64205c58d0d`.
+- `ClaudeVM` IPC method/store/event schema is at character offset 1,977,078. It exposes `download`, `startVM(options)`, `restartVM`, download/running status and host-loop/platform methods; events include `downloadProgress`, `downloadStatusChanged`, `runningStatusChanged`, `startupError`.
+- Main-side VM manager calls `startVM` at ~5,395,000; the boot routine configures the platform service then calls `g.startVM(bundle, memory, cpu, "gvisor", probeURL, guestProxy, ...)` (~4,341,793). It has status transitions, VM stop/error callbacks and bounded connection wait/retry handling. The task scheduler's `onNotReadyToDispatch` can request `startVM` while due scheduled tasks are waiting (~5,791,271).
+- Windows client uses named pipe `\\.\pipe\cowork-vm-service` at ~2,979,600. Frame decoder expects a 4-byte big-endian length prefix and rejects frames above 10 MiB; requests are JSON and carry IDs, responses contain success/result or error; client correlates pending requests and retries idempotent methods after a closed pipe. It has separate event-subscription connections routing stdout, stderr, exit, error, networkStatus, apiReachability and startupStep, and forwards guest-originated requests to a registered callback.
+- Methods sent through the pipe include `configure`, `startVM`, `stopVM`, `isRunning`, `isGuestConnected`, `spawn`, `kill`, and `writeStdin`. This is strong app-side service-protocol evidence. The service help string states appName arrives on named-pipe connect and the account/profile comes from a verified connection; service strings include a Go `pipe.(*Server).handleStartVM` symbol and VM manager `StartVMWithBundle`.
+- Limitation: static JS does not contain literal `cowork-svc` nor a direct install/spawn call. The Windows service's installation/launch mechanism and complete Go call graph remain unproven. We have now established pipe connection/protocol and VM start/stop request path, so do not describe the entire app-service connection as unresolved.
+
+
+## Pipe-server identity boundary (S — exact packaged-code branch)
+
+In the same `index.chunk-lzaSYO3Q.js` (SHA256 above), `uEn()` around character 2,971,178 requires the native binding's `connectNamedPipeSystemOwned` method. If the binding/method is absent in a packaged app, it throws “refusing to connect ... without server-identity verification; reinstall Claude”; it does not fall back. Only an unpackaged/dev build may use `net.createConnection`, and its own warning says that fallback lacks pipe-server identity verification and the impersonation-level cap. This is a shipped-code trust boundary, not a runtime proof that the native method successfully connected.
+
+App-side RPC details nearby: `\\.\pipe\cowork-vm-service`; 4-byte big-endian length prefix, max 10 MiB, JSON request IDs and method/params, success/result or error replies. `eA()` routes through a kill-switch feature gate and connection setup; on closed pipe, `tA()` retries an idempotent method once. Pipe waiting uses a bounded retry path and records outcome/duration/attempt counts.

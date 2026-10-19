@@ -34,3 +34,11 @@ P0：复盘 interactive run 的 restart/replay 链路以及 Hub 接管边界；P
 - **终端 scrollback**：Atlas UI 的 `TerminalPanel.tsx:39` 设置 xterm in-memory `scrollback: 5000`，`TerminalPanel.tsx:53-66` 用 `/ws/terminal` 收发 resize/input；`core/atlas/api/tools_router.py:92-130` 管 WebSocket terminal 生命周期。查阅范围内未见等价的独立滚动日志落盘/脱敏读取 API。属于机制差异；Atlas 仍有交互终端功能。
 - **文件索引 worker**：本轮查阅 Atlas `frontend/src` 与 `core/atlas` 未找到按 MessagePort worker 构建本地文件索引的同类模块；workspace 文件浏览路径需另行核对，不将搜索无命中升级为全功能缺失结论。
 - **云/本地任务迁移**：Claude bundle 有 `remote || cloudRun` 命令解析分支与 `migratedToRemoteAt`/revert telemetry。Atlas `runtime_ws_router.py` 与 `run_drive.py` 显示本地 WS run/显式 `resume_from` 路径；已阅范围未发现 cloud-copy handoff 等价链。判为未证实/机制差异，不能推断 Claude 云端实现细节。
+
+
+### VM/worker and local-vs-remote execution refinements
+
+Claude's package now provides stronger evidence than a generic local service binary: the main bundle has a `ClaudeVM` IPC schema and Windows pipe client for a legacy Hyper-V VM lifecycle and process-spawn channel (see evidence module trace). Atlas's current local terminal uses a renderer WebSocket and `pywinpty`/async process on the host (`core/atlas/api/tools_router.py:92-130`); this is functional but not an equivalent VM-isolated guest shell. Atlas has no evidence here of a Windows Hyper-V guest service, gvisor network backend, VM bundle download/snapshot lifecycle or named-pipe guest process RPC. Conversely, Claude's artifact bridge is a separate user-facing tool surface; don't equate it with the legacy VM service. Cloud execution's server internals remain unknown.
+
+
+Claude main also fail-closes packaged VM pipe connection when its native system-owned pipe connector is missing; the unauthenticated `net.createConnection` fallback is explicitly dev-only. Atlas source reviewed here has no analogous privileged Windows VM service-pipe connection contract because it launches workspace processes through its local backend. This is an architecture boundary, not a generic claim that Atlas IPC lacks authentication; Atlas WebSocket/API security needs its own comparison.

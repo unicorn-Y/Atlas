@@ -24,7 +24,7 @@ ASAR analyzer found 15 BrowserWindows across main/quick/about/design and other v
 
 The PE is x86_64 and has a valid Authenticode signature from Anthropic PBC (DigiCert Trusted G4). Static analysis identifies Go, 9 PE segments, 12,769 procedures and 38,491 strings. Only `kernel32.dll` appears as a static imported DLL (46 imported functions); dynamic API loading means this does not bound runtime API use. Help text describes a Hyper-V VM management service and install/uninstall/start/stop/status operations. Strings include HCS/HCN compute-system and network APIs, Plan 9 shares, Hyper-V sockets and gvisor tap-vsock components. These strings and symbols alone do not establish reachable call flow.
 
-Bounded scan of packaged `.vite/build/*.js` did not find literal `cowork-svc` or `@ant/cowork-win32-service` references. How the service is installed/launched/connected from the app remains U. Do not infer that the shipped service runs the current cloud agent loop.
+Bounded scan of packaged `.vite/build/*.js` did not find a literal `cowork-svc` or `@ant/cowork-win32-service` reference or direct service process spawn. However, the main bundle does implement the Windows VM service client at `\\.\pipe\cowork-vm-service`, including configure/start/stop/process methods and event subscription; this closes the app-side named-pipe RPC path. The service installation/launch parent and full Go handler call graph remain U. In packaged main code, the pipe client requires native `connectNamedPipeSystemOwned` and refuses an insecure fallback if absent; plain `net.createConnection` is only allowed in a dev/unpackaged build. This is a source-level identity-verification requirement, not a runtime test of the native binding. The service evidence concerns the legacy local Hyper-V VM lane and does not establish that current `remote || cloudRun` execution uses that service.
 
 ## Integrity and extraction limitations
 
@@ -44,3 +44,8 @@ The ASAR integrity metadata declares SHA256 `e83669e99a699d6bea4de15a3914b3279c1
 `module-traces.md` adds exact file hashes and character offsets for extension signature/capability checks, MCPB same-fd archive identity recheck, built-in Node self-spawn refusal, PTY scrollback redaction plumbing, file-index worker initialization, remote/cloud local-command bypass and migration timestamps, and Computer Use preview bridge. The Cowork artifact scheduled-task path is now traced from renderer method through guarded main IPC to schedule `runNow`; the MCP tool bridge is traced through per-tool managed policy/destructive approval. The artifact call chain is S/static and does not establish cloud server internals or generic task ownership.
 
 **Atlas main source SHA at comparison:** `aa6196f550098cc46081dc6db2c376cb87ddffa5`. Atlas comparison findings are narrow and cite the matching files/lines in `ATLAS-GAP.md`.
+
+
+The second static pass found a concrete app→VM service protocol. See `module-traces.md` for exact channels, framing, method/event names and offsets.
+
+Packaged pipe-server identity requirement and the explicit development-only fallback are recorded in `module-traces.md`.

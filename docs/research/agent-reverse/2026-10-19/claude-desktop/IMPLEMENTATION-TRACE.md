@@ -91,3 +91,24 @@ artifact renderer window.cowork.runScheduledTask(taskId, preloadContext)
 ```
 
 For `window.cowork.callMcpTool`, main validates artifact visibility/args, maps MCP server/tool, checks managed policy and disabled state, prompts on destructive operations unless a remembered allow exists, and dispatches. A limited read-only remote-call cache exists. This evidence proves bridge-level enforcement and wiring for artifact calls, not that generic Cowork tasks run in the desktop or reveals the cloud API. Exact file hashes/offsets in `evidence/module-traces.md`.
+
+
+## Legacy Windows local VM lane: app → named pipe → service (S; cloud path separate)
+
+```text
+renderer ClaudeVM.startVM(options)
+ -> generated main IPC method (ClaudeVM schema)
+ -> VM manager startVM() -> ensure platform/service configured
+ -> Windows named pipe \\.\pipe\cowork-vm-service
+ -> 4-byte big-endian length + JSON request/id/method/params (10 MiB frame ceiling)
+ -> service reply success/result or error
+ -> startVM(bundlePath, memory/cpu, gvisor, reachability probe, proxy)
+ -> async event subscription: stdout/stderr/exit/error/networkStatus/apiReachability/startupStep
+```
+
+`spawn`, `kill`, `writeStdin`, `configure`, `stopVM`, `isRunning` and `isGuestConnected` are also app-side methods. The service binary's help string independently says the desktop sends its appName through this pipe and obtains the profile directory from a verified connection. VM lifecycle status is sent to renderer stores/events. This proves a real legacy local VM integration. The actual service process installation/launch path and full Go handler call graph have not been established. Static `remote || cloudRun` command selection is a separate branch and does not resolve its remote protocol.
+
+
+### Service pipe trust gate
+
+Packaged desktop calls `@ant/claude-native.connectNamedPipeSystemOwned`; if it is absent, the main process fails closed and tells the user to reinstall. Only dev/unpackaged builds fall back to `net.createConnection`, with a warning that this skips pipe-server identity verification and the impersonation-level cap. The app also frames JSON RPC with a 4-byte big-endian length (max 10 MiB), correlates request IDs, and routes event subscription separately. This is a stronger local trust contract than “named pipe exists”; runtime enforcement by the native addon remains unobserved.

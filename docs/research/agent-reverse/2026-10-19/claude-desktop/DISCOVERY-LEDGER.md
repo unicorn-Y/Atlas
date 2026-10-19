@@ -46,3 +46,7 @@
 - **CLAUDE_DESKTOP-030 — artifact MCP call carries per-tool policy and destructive approval**：S；有 visibility/args/server validation、managed policy、disabled gate、destructive prompt/remembered allow；read-only remote call 可有缓存分支。
 - **CLAUDE_DESKTOP-031 — extension trust lifecycle includes signed-update check + same-fd archive validation**：S；覆盖缓存更新和重校验后解包路径，策略范围须按具体分支理解。
 - **CLAUDE_DESKTOP-032 — `remote || cloudRun` omits local managed-command configuration branch**：S；只证明本地解析路径选择，不能证明远端通信内容。
+
+- **CLAUDE_DESKTOP-033 — legacy Windows VM service IPC is named-pipe JSON RPC**：S；main bundle exposes ClaudeVM IPC, then `\\.\pipe\cowork-vm-service` methods configure/start/stop/spawn/kill/writeStdin and lifecycle events. Service install/launch parent remains U; cloud service internals remain U.
+
+- **CLAUDE_DESKTOP-034 — packaged Windows VM pipe requires system-owned native connect**：S；若 `connectNamedPipeSystemOwned` 缺失，packaged app 直接拒绝连接；未打包开发版本才允许不验证服务身份的 `net.createConnection` fallback。注意这是源码约束，未动态验证 native 实际行为。

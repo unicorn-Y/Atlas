@@ -62,3 +62,7 @@ Pinned HEAD: `aa6196f550098cc46081dc6db2c376cb87ddffa5`。
 - vidence/module-traces.md: exact bundle hashes/offsets and bounded static traces for DXT/MCPB trust, Node host, PTY logging, file indexing, cloud/local branch, migration telemetry, Computer Use preview; all source-only.
 
 - `evidence/module-traces.md`: includes the closed artifact scheduled-task IPC/handler chain and per-tool policy/approval path; still static-only.
+
+- `evidence/module-traces.md`: app-side `ClaudeVM` → Windows named-pipe JSON RPC → legacy VM-service request/event path; service process installation parent still unknown.
+
+- `evidence/module-traces.md`: records packaged fail-closed `connectNamedPipeSystemOwned` gate vs dev-only insecure fallback and the bounded JSON-RPC framing.
