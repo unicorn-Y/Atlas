@@ -1,0 +1,82 @@
+{
+  "package": {
+    "product": "Claude Desktop",
+    "version": "2.42304.0.0",
+    "identity": "Claude",
+    "publisher": "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\", L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US",
+    "container": "MSIX",
+    "architecture": "x64"
+  },
+  "sourceAsset": {
+    "bytes": 297191037,
+    "sha256": "2bf309665f0de4eaa76a7e64033594e6f73ceb6413c60080f72f3ce640fa24ee",
+    "name": "claude-desktop-x64-2bf309665f.msix"
+  },
+  "extractedFiles": 4443,
+  "mainExecutable": "app/Claude.exe",
+  "applications": [
+    {
+      "Id": "Claude",
+      "Executable": "app\\Claude.exe",
+      "EntryPoint": "Windows.FullTrustApplication",
+      "Extensions": [
+        {
+          "Category": "windows.startupTask",
+          "Executable": "app\\Claude.exe",
+          "EntryPoint": "Windows.FullTrustApplication"
+        },
+        {
+          "Category": "windows.protocol",
+          "Executable": "",
+          "EntryPoint": ""
+        },
+        {
+          "Category": "windows.appExecutionAlias",
+          "Executable": "app\\Claude.exe",
+          "EntryPoint": "Windows.FullTrustApplication"
+        },
+        {
+          "Category": "windows.service",
+          "Executable": "app\\resources\\cowork-svc.exe",
+          "EntryPoint": "Windows.FullTrustApplication"
+        }
+      ]
+    },
+    {
+      "Id": "SshAskpass",
+      "Executable": "app\\resources\\claude-ssh-askpass.exe",
+      "EntryPoint": "Windows.FullTrustApplication",
+      "Extensions": [
+        {
+          "Category": "windows.appExecutionAlias",
+          "Executable": "app\\resources\\claude-ssh-askpass.exe",
+          "EntryPoint": "Windows.FullTrustApplication"
+        }
+      ]
+    },
+    {
+      "Id": "SshProxy",
+      "Executable": "app\\resources\\claude-ssh-proxy.exe",
+      "EntryPoint": "Windows.FullTrustApplication",
+      "Extensions": [
+        {
+          "Category": "windows.appExecutionAlias",
+          "Executable": "app\\resources\\claude-ssh-proxy.exe",
+          "EntryPoint": "Windows.FullTrustApplication"
+        }
+      ]
+    }
+  ],
+  "keyArtifacts": [
+    {
+      "bytes": 49338428,
+      "sha256": "8f4d3dec5e4f3ddffb150321060b18807d83a40f3a65618fe4f29325379da9db",
+      "path": "app/resources/app.asar"
+    },
+    {
+      "bytes": 13761360,
+      "sha256": "934e5b671813ef3d5684c0ee0d1d18835af74e9ecfb114575e0d8fdbb663ba8f",
+      "path": "app/resources/cowork-svc.exe"
+    }
+  ]
+}

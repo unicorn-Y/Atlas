@@ -1,0 +1,8 @@
+category	name_or_string	address_or_path	interpretation	confidence
+service synopsis	Claude VM Service - Manages Hyper-V virtual machines for Claude Desktop	PE string; see Ghidra evidence record	Embedded help/description only	S string
+service command	install / uninstall / start / stop / status / help	PE help text	CLI command vocabulary; not proof each flow works	S string
+HCS APIs	HcsCreateOperation, HcsOpenComputeSystem, HcsStartComputeSystem, HcsCreateComputeSystem, HcsWaitForOperationResult	PE string table	API names embedded; call reachability not fully traced	S string
+HCN APIs	HcnOpenNetwork, HcnCloseNetwork, HcnDeleteNetwork, HcnEnumerateNetworks/query family	PE string table	API names embedded; call reachability not fully traced	S string
+VM transport	Plan9 shares, HvSocket, gvisor tap-vsock SSH/DNS/DHCP/forwarder	PE string table	Component/protocol names embedded; runtime use not dynamically observed	S string
+Go module	github.com/anthropics/cowork-win32-service	Go build/string metadata	Identifies build module	S
+launch linkage	No literal cowork-svc or @ant/cowork-win32-service in bounded .vite/build JS scan	ASAR JS bundles	App-to-service installation/connect path unresolved	U

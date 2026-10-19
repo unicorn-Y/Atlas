@@ -1,5 +1,7 @@
 # Implementation trace：分层调用链和未证实边界
 
+> **实物静态增量（S，2026-10-19）**：固定 MSIX SHA/size、包身份、ASAR 主 bundle/preload、`CoworkArtifactBridge`、IPC 统计与 cowork-svc Go/Hyper-V 字符串已核验。它们没有闭合 cloud agent、完整 IPC、状态恢复或 app→service 连接链。细节见 `evidence/README.md`、`evidence/entrypoints.md` 与结构化索引。
+
 ## A. Claude 当前产品级链路（**D，官方资料**，非本 MSIX 源码）
 ```
 用户输入（Chat / 旧版 Cowork selector）

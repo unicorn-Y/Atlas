@@ -1,0 +1,8 @@
+kind	name	producer	consumer	state_or_persistence	recovery	location	status
+IPC wrapper	MCP config/probe	mainView.js generated API	main handler not paired	unresolved	unresolved	mainView.js	PARTIAL
+IPC wrapper	WakeScheduler getStatus/openSettings	mainView.js generated API	main handler not paired	unresolved	unresolved	mainView.js	PARTIAL
+Cowork artifact bridge	callMcpTool / askClaude / runScheduledTask	artifact renderer	CoworkArtifactBridge main registration	unresolved	unresolved	index.chunk-lzaSYO3Q.js + coworkArtifact.js	PARTIAL
+worker	file index worker	main/renderer references not fully paired	worker target unresolved	unresolved	unresolved	ASAR static analysis	PARTIAL
+worker	pty-host worker	node-pty/pty-host observed	child process + scrollback/redaction paths observed	local log/scrollback mechanisms present; exact persistence incomplete	unresolved	ASAR static analysis	PARTIAL
+service	Hyper-V VM service	app launch/install parent unresolved	cowork-svc.exe	VM bundle/profile paths in binary strings	commands include start/stop/status; app connection unresolved	cowork-svc.exe; svc-symbols.tsv	PARTIAL
+cloud agent loop	server side	not in package	unavailable	unavailable	unavailable	outside shipped artifact	U

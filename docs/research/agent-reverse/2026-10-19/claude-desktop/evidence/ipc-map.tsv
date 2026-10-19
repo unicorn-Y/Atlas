@@ -1,0 +1,6 @@
+direction	channel_or_family	registerer	caller	params	response_error	location	status
+renderer_to_main	generated API family via ipcRenderer.invoke/send	Main bundle contains 3 literal handler observations	mainView.js generated wrappers	API-specific params not resolved here	unresolved	mainView.js SHA256 9fb003faa3e791af2e42870b695c7b137d6ca37576df8714f18fcc55966d728d	PARTIAL
+renderer_to_main	MCP_$_getMcpServersConfig	main handler pairing unresolved	mainView.js wrapper	unresolved	unresolved	mainView.js	PARTIAL
+renderer_to_main	Custom3pSetup_$_probeMcpServer	main handler pairing unresolved	mainView.js wrapper	unresolved	unresolved	mainView.js	PARTIAL
+renderer_to_main	WakeScheduler_$_getStatus / openSettings	main handler pairing unresolved	mainView.js wrapper	unresolved	unresolved	mainView.js	PARTIAL
+renderer_to_main	CoworkArtifactBridge.callMcpTool / askClaude / runScheduledTask / navigateHost / openExternalUrl	index.chunk-lzaSYO3Q.js handler registration	coworkArtifact.js bridge	method-specific args unresolved	resolved handler behavior partial; origin check observed	index.chunk-lzaSYO3Q.js line 1 col 5836915 approx; see trace-snippets/renderer-ipc.md	PARTIAL

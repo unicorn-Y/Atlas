@@ -35,3 +35,11 @@
 - 输出 `msix-tree.tsv`、`asar-tree.txt`、`entrypoints.md`、`ipc-map.tsv`、`ui-route-action.tsv`、`runtime-map.tsv`、`event-schema.tsv`、`svc-identity.json`、`svc-symbols.tsv`、`trace-snippets/`（不存在/失败项注明原因，不能造空白“完成”文件）。
 - 完成一个小阶段就 `git add docs/research/agent-reverse/2026-10-19/claude-desktop/evidence && git commit && git push origin research/agent-reverse-20261019-claude-desktop`。
 - 返回 **commit SHA + evidence/README.md 路径 + 真实抽取件数 + 关键阻塞**；之后由本 ChatGPT 会话进一步逐模块实证追踪，并增补前述报告。
+
+## 2026-10-19 执行状态（不删除原要求）
+
+- Stage 1：固定 MSIX、SHA/size、manifest identity、4,443 条文件树与 ASAR 路径列表已完成；asar companion 解包存在 `%40ant` 路径问题，入口清单部分完成。
+- Stage 2：全包静态解析已得到 437 个 JS、15 BrowserWindow、IPC/bridge 部分映射。**未完成** exhaustive 真实 handler/caller/params、所有 route/action/state、event union、service spawn/install/connect/stop/recover 调用链。索引中的 U/空值保持未解决。
+- Stage 3：cowork-svc PE/签名/imports/Go/Hyper-V 静态元数据完成；纯字符串项不当作执行链。app 到服务连接尚 U。
+- Stage 4：未运行应用或服务，R=0；没有采用用户账号或私人配置。
+- 禁止把本 checkpoint 视作 COMPLETE。后续继续从 IPC handler pairing、worker/runtime、service function call graph、Atlas 同主题源码对照推进。

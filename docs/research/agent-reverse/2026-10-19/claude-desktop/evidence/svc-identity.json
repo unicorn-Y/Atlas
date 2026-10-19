@@ -1,0 +1,128 @@
+{
+  "machine": "0x8664",
+  "entry_rva": "0x7cf00",
+  "sha256": "934e5b671813ef3d5684c0ee0d1d18835af74e9ecfb114575e0d8fdbb663ba8f",
+  "bytes": 13761360,
+  "path": "app/resources/cowork-svc.exe",
+  "sections": [
+    {
+      "rp": 1536,
+      "rs": 5817856,
+      "name": ".text",
+      "vs": 5817489,
+      "va": 4096
+    },
+    {
+      "rp": 5819392,
+      "rs": 7165952,
+      "name": ".rdata",
+      "vs": 7165768,
+      "va": 5824512
+    },
+    {
+      "rp": 12985344,
+      "rs": 440320,
+      "name": ".data",
+      "vs": 8329632,
+      "va": 12992512
+    },
+    {
+      "rp": 13425664,
+      "rs": 148480,
+      "name": ".pdata",
+      "vs": 148164,
+      "va": 21323776
+    },
+    {
+      "rp": 13574144,
+      "rs": 512,
+      "name": ".xdata",
+      "vs": 180,
+      "va": 21475328
+    },
+    {
+      "rp": 13574656,
+      "rs": 1536,
+      "name": ".idata",
+      "vs": 1342,
+      "va": 21479424
+    },
+    {
+      "rp": 13576192,
+      "rs": 163840,
+      "name": ".reloc",
+      "vs": 163552,
+      "va": 21483520
+    },
+    {
+      "rp": 13740032,
+      "rs": 512,
+      "name": ".symtab",
+      "vs": 4,
+      "va": 21647360
+    }
+  ],
+  "pe_magic": "0x020b",
+  "entry_va": "0x14007cf00",
+  "signature": {
+    "Status": 0,
+    "StatusMessage": "Signature verified.",
+    "Signer": "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\", L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US",
+    "Thumbprint": "60C2D9C51F09822FFF4F194DE9EEDB67451292D1"
+  },
+  "imports": [
+    {
+      "dll": "kernel32.dll",
+      "functions": [
+        "WriteFile",
+        "WriteConsoleW",
+        "WerSetFlags",
+        "WerGetFlags",
+        "WaitForMultipleObjects",
+        "WaitForSingleObject",
+        "VirtualQuery",
+        "VirtualFree",
+        "VirtualAlloc",
+        "TlsAlloc",
+        "SwitchToThread",
+        "SuspendThread",
+        "SetWaitableTimer",
+        "SetProcessPriorityBoost",
+        "SetEvent",
+        "SetErrorMode",
+        "SetConsoleCtrlHandler",
+        "RtlVirtualUnwind",
+        "RtlLookupFunctionEntry",
+        "ResumeThread",
+        "RaiseFailFastException",
+        "PostQueuedCompletionStatus",
+        "LoadLibraryW",
+        "LoadLibraryExW",
+        "SetThreadContext",
+        "GetThreadContext",
+        "GetSystemInfo",
+        "GetSystemDirectoryA",
+        "GetStdHandle",
+        "GetQueuedCompletionStatusEx",
+        "GetProcessAffinityMask",
+        "GetProcAddress",
+        "GetErrorMode",
+        "GetEnvironmentStringsW",
+        "GetCurrentThreadId",
+        "GetConsoleMode",
+        "FreeEnvironmentStringsW",
+        "ExitProcess",
+        "DuplicateHandle",
+        "CreateWaitableTimerExW",
+        "CreateThread",
+        "CreateIoCompletionPort",
+        "CreateEventA",
+        "CloseHandle",
+        "AddVectoredExceptionHandler",
+        "AddVectoredContinueHandler"
+      ]
+    }
+  ],
+  "import_directory_rva": "0x147c000",
+  "image_base": "0x140000000"
+}

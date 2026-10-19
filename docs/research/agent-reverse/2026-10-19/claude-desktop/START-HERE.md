@@ -1,6 +1,6 @@
 # Claude Desktop / Cowork — checkpoint 1（2026-10-19）
 
-**结论：PARTIAL / BLOCKED，绝非已完成安装包深度逆向。** 已核验产品归档清单、官方 2026 年架构变更，并逐文件核对 Atlas main 的进程、事件、会话、恢复与 UI 代码；但本会话的 GitHub 文本接口拒绝非 UTF-8 / 超大二进制，未实际读取 297 MB MSIX 内的 app.asar 或 cowork-svc.exe，也未运行 Claude Desktop。因此**Claude 内部 IPC、渲染器实现和本地 Cowork service 的代码级结论为零**，不能杜撰调用链。最小机械取证要求见 [EXTRACTION-REQUEST.md](./EXTRACTION-REQUEST.md)。
+**结论：PARTIAL / BLOCKED，尚非完整深度逆向。** 已真实验证并拆解固定 MSIX，静态分析 app.asar 和 cowork-svc.exe，并记录首轮 renderer/preload/IPC、VM 服务证据与完整性异常。无受控运行证据；完整 IPC/路由/状态持久化和 app→service 生命周期尚未闭环。详见 [evidence/README.md](./evidence/README.md)。
 
 ## 固定样本
 - 仓库：`unicorn-Y/Atlas`，基线分支 `research/agent-reverse-dispatch-20261019`。

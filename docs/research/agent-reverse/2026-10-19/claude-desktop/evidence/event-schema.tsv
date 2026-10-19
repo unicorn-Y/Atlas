@@ -1,0 +1,5 @@
+source	value_or_family	producer	consumer/state reducer	persistence	location	status
+IPC event channels	dynamic/generated; exhaustive names unavailable	main/renderer IPC	listeners observed, pairings partial	unresolved	ASAR JS analysis	PARTIAL
+pty output	PTY data/output handlers	pty-host worker	terminal renderer/log redaction paths	scrollback/logging mechanism strings/code observed; format incomplete	ASAR JS analysis	PARTIAL
+Cowork artifact method	callMcpTool / askClaude / runScheduledTask / navigateHost / openExternalUrl	artifact renderer	CoworkArtifactBridge	unresolved	coworkArtifact.js + main bundle	PARTIAL
+Agent event schema	No exhaustive discriminated union extracted	unresolved	unresolved	unresolved	Analyzer coverage does not resolve remote service schema	U

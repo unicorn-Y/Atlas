@@ -1,5 +1,7 @@
 # UI and workflows — 公开行为 vs 包级尚未验证
 
+> **2026-10-19 包内静态补充**：确认 15 个 BrowserWindow 构造、main/quick/about/buddy/find/local-consent renderer 资产及 `CoworkArtifactBridge` 五类 API。没有获得完整 route→action→IPC→state 链，也没有运行 UI；原有官方 D 级交互仍不能当成本包行为。部分映射见 `evidence/ui-route-action.tsv`。
+
 以下 **Claude UI 均为 D（官方文档）**。没有在 2.42304.0 中登录并录屏/抓运行日志，不称已实际遍历。所有分支和开关在不同套餐/rollout 中可能不同。
 
 | 流程 | 已确认入口/用户行为（D） | 需实包补的证据（U） |

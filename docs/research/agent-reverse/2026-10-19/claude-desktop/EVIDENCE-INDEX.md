@@ -1,5 +1,14 @@
 # Evidence index / 确认等级 / coverage
 
+## 2026-10-19 shipped-package checkpoint
+
+- `evidence/README.md`: exact hashes, identity, analyzer counts, service observations, integrity mismatch and boundaries.
+- `evidence/msix-tree.tsv`, `identity.json`, `asar-tree.txt`: verified MSIX extraction/index and manifest identity.
+- `evidence/entrypoints.md`, `ipc-map.tsv`, `ui-route-action.tsv`, `runtime-map.tsv`, `event-schema.tsv`, `summary-counts.tsv`: partial structured package map; unresolved joins are explicitly blank/U.
+- `evidence/svc-identity.json`, `svc-imports.txt`, `svc-symbols.tsv`: PE/Go/service static metadata; strings are not reachability proof.
+- `evidence/trace-snippets/renderer-ipc.md`: short, hash-bound locations, no full vendor bundle.
+- Static only: no app/service launch, no R evidence. Declared/observed node-pty hash mismatch and `%40ant` extraction path issue unresolved.
+
 ## 原始包与索引
 - `research/agent-reverse-dispatch-20261019:tasks/research/agent-reverse/2026-10-19/sessions/claude-desktop.md`、`PROTOCOL.md`。
 - `research/agent-reverse-dispatch-20261019:docs/research/agent-clients/2026-10-19/manifest.json` 记录 `Claude Desktop | Windows desktop package | 2.42304.0 | x64`。

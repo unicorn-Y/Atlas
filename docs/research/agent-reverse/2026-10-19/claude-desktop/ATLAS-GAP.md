@@ -1,5 +1,7 @@
 # Atlas main 实际对照：source-backed gap analysis
 
+> **基线复核**：`origin/main` SHA `aa6196f550098cc46081dc6db2c376cb87ddffa5`。当前新增包证据只证明客户端静态组件与部分桥 API，不证明云端/服务端行为；下表原有 Atlas 行仍按 Atlas 源码证据判定。
+
 **Atlas baseline** `aa6196f550098cc46081dc6db2c376cb87ddffa5`。**比较限制**：Claude 行为来自官方 D，不存在本安装包 S/R 对照，故每条只说明 Atlas 代码中已证实的行为与技术差异，**不能断言 Claude 私有实现细节**。严重程度基于 Atlas 目标的用户影响，而非静态功能数量。
 
 | 对照主题 | Claude 官方 D | Atlas main 真实 S | 缺口判定 / 落点 |

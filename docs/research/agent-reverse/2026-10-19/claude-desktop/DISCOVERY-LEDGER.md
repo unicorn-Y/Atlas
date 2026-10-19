@@ -1,6 +1,6 @@
 # Discovery Ledger — Claude Desktop / Cowork
 
-证据规则：**S**=本包真实源码/符号及调用链；**R**=本版本操作与日志；**D**=Anthropic 官方文档声明；**I**=有限推断；**U**=未知/待取证。**当前本包 S=0、R=0**；下表 D 的“已确认”只指官方公开产品行为，不证明 2.42304.0 MSIX 实装。
+证据规则：**S**=本包真实源码/符号及调用链；**R**=本版本操作与日志；**D**=Anthropic 官方文档声明；**I**=有限推断；**U**=未知/待取证。已获得有限包内静态 S；R=0，服务启动关联和完整端到端链仍为 U。下表 D 的“已确认”只指官方公开产品行为，不证明 2.42304.0 MSIX 实装。
 
 | ID | 新发现的行为 / 机制 | 归属 | 级别与状态 | 必须追的缺口 |
 |---|---|---|---|---|
@@ -32,3 +32,12 @@
 - 自 service：PE imports、CLI flags、RPC constants / protobuf、进程树 → 逆查到 renderer 按钮与任务。
 - 自版本变更：云端转移与 unified UI、Design/Slides/Docs、新浏览器、旧本地 VM 等至少分成**可离线验证 vs 依赖账号/服务端验证**。
 - 当前没有足量本包文件，所以 S 和 R 不得虚增。
+
+## 2026-10-19 实物静态发现（新增，不改写既有 ID）
+
+- **CLAUDE_DESKTOP-023 — 固定 MSIX 与 app.asar 已核验**：S；297,191,037 bytes 与发行 manifest SHA 匹配；实际入口 `index.pre.js`，main window preload `mainView.js`。
+- **CLAUDE_DESKTOP-024 — 动态生成 IPC API 面**：S/partial；437 个 JS 文件解析成功；统计见 `evidence/summary-counts.tsv`。多数通道动态构造，完整名称与 handler/caller 配对未完成。
+- **CLAUDE_DESKTOP-025 — 独立 Cowork artifact bridge**：S/partial；`window.cowork` 暴露五个桥方法，main 注册存在且有 `cowork-artifact:` sender-origin 检查；后续运行时/持久化语义未闭环。
+- **CLAUDE_DESKTOP-026 — cowork-svc 是 Go/Hyper-V VM 管理服务**：S (identity/help/strings/imports)；包内可见 HCS/HCN、Plan9、HvSocket、gvisor tap-vsock 相关标识。真实 call graph 与 app 安装/连接/停止关系仍 U。
+- **CLAUDE_DESKTOP-027 — node-pty integrity 声明与提取字节 hash 不同**：S observation；未证明根因，不推断包损坏、篡改或打包错误。
+- **CLAUDE_DESKTOP-028 — MSIX 声明企业包身份**：S；consumer 安装包未取得，版本/功能等价仍 U。

@@ -1,0 +1,12 @@
+category	artifact_path	observed_count	status	notes
+extracted_msix_files	MSIX	4443	S	SHA/size individually recorded in msix-tree.tsv
+asar_paths	app.asar	548	S	Listed paths; not all companion unpacked modules extracted successfully
+parsed_js	app.asar	437	S	Static parser, 40,616,215 text bytes, 0 parse failures
+BrowserWindow	.vite/build/*.js	15	S	Static constructions; not runtime count
+contextBridge_exposures	.vite/build/*.js	52	S	Exposed API surface analysis
+renderer_ipc_transmit	.vite/build/*.js	1301	S	Mostly dynamic/generated channels
+renderer_ipc_listen	.vite/build/*.js	231	S	Mostly dynamic/generated channels
+main_ipc_handler	.vite/build/*.js	3	S	Analyzer literal/paired coverage incomplete
+utility_process	.vite/build/*.js	3	S	Entry points unresolved
+CoworkArtifactBridge	coworkArtifact.js + index.chunk-lzaSYO3Q.js	5 methods	S	Sender origin check observed; backend chain partial
+cowork_service_launch	app.asar JS bundles	0 matches	U	Bounded literal scan; launch mechanism unresolved

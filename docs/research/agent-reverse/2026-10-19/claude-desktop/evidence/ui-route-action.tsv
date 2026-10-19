@@ -1,0 +1,7 @@
+route_or_view	component	action	callback_or_ipc	state_write	location	status
+main_window	main renderer shell	MCP server settings/probe	MCP_$_getMcpServersConfig; Custom3pSetup_$_probeMcpServer	unresolved	mainView.js wrappers; see trace-snippets/renderer-ipc.md	PARTIAL
+main_window	main renderer shell	Wake scheduler status/settings	WakeScheduler_$_getStatus; WakeScheduler_$_openSettings	unresolved	mainView.js wrappers; see trace-snippets/renderer-ipc.md	PARTIAL
+artifact	Cowork artifact bridge	call MCP tool / ask Claude / schedule task / host navigation / open external URL	CoworkArtifactBridge methods	unresolved	coworkArtifact.js; main registration in index.chunk-lzaSYO3Q.js	PARTIAL
+quick_window	quick renderer	unresolved	unresolved	unresolved	ASAR path listing only	U
+about_window	about renderer	unresolved	unresolved	unresolved	ASAR path listing only	U
+design_window	design renderer	unresolved	unresolved	unresolved	ASAR path listing only	U
