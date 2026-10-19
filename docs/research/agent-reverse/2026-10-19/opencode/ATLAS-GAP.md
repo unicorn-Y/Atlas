@@ -28,3 +28,7 @@
 基线保持 Atlas main SHA aa6196f550098cc46081dc6db2c376cb87ddffa5。Atlas 已存在 Playwright MCP 依赖/初始化（frontend/src/main/electron.ts:194-200）、BrowserUseAdapter（core/atlas/capabilities/browser/browser_use.py:9-113）、X2 浏览器工具执行与 Hermes backend mapping（core/atlas/tools/x2/browser.py:313-357,448-590,761-791），以及 BrowserPanel 人工检查工作流（frontend/src/renderer/shell/panels/BrowserPanel.tsx:138-155）。BrowserPanel 描述的浏览上下文是独立 session，供人检查 Agent 构建结果并把选中元素传给 composer；这与 OpenCode Browser pane 作为 browser.* Agent 工具 target 的模式不同。
 
 OpenCode v2.0.32 的新增/更具体机制是桌面内嵌 browser pane → BrowserPlugin session attach → 临时 browser 权限 lease → browser command/result RPC → CDP Target auto-attach + TCP tunnel；Atlas 当前源中未找到该同一 session Desktop pane attach lease / browser RPC / CDP tunnel 链。分类应为“相关能力存在；共享 session 的桌面浏览器 Agent 接线未找到”，不是“Atlas 无浏览器”。Atlas X2 已覆盖常用自动化动作，但 OpenCode Browser tool 面向 Chromium 深度诊断的 trace/CPU/heap/Lighthouse 与 files/console/network 工具集是否有 Atlas 等价实现需单项检查，不因功能名推断缺失。
+# Completion-gate continuation
+
+The lane now maintains `ATLAS-IMPLEMENTATION-BACKLOG.md` as the mechanism-level research backlog required by G5. It remains provisional until rechecked against fresh `origin/main`; this continuation did not modify Atlas code. G5 is still PARTIAL. Do not turn the gap statement that Atlas already has browser automation into a claim of same-session live browser attach parity; OpenCode’s Browser pane attach/tunnel remains a specific mechanism and is not dynamically verified here.
+

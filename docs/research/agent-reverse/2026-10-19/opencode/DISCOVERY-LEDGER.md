@@ -38,3 +38,7 @@
 - **OPENCODE-022 — Browser tool / CDP tunnel。** plugin-browser/src/tools.ts:11-58 注册 44 个 browser 工具，每项 permission=browser、codemode=true；rpc.ts:404-494 包括 trace、CPU、heap、Lighthouse。tunnel.ts:9-25,36-64,67-100,102-125 为 attachment 私有 TCP sockets，最多 64、connect 10 秒超时、单 read、块大小受 Browser.TUNNEL_CHUNK_BYTES 限制且 socket buffers 提供 backpressure；connection.ts:137-155 转发 tunnel RPC；gui-extensions/src/browser/chromium.ts:469,541 设置 CDP Target.setAutoAttach。S/P；实际 CDP traffic U。
 
 - **OPENCODE-023 — Browser 工具显式避免断连后的危险重放。** connection.ts:159-162 在 session.deleted/session.moved 时关闭 attachment；:165-178 要求 tool action 指向当前 attached session 的精确 tabID；:231-250 若 attach 在结果返回前断开，错误明确表示 action 可能已执行，要求先观察页面而不得盲目重复点击/提交/上传，单请求 timeout 60s 同样标记 outcome unknown，interrupt 则发 cancel control event。S；这是协议/副作用语义，尚未动态运行验证。
+# Completion-gate continuation
+
+New R evidence is summarized in `END-TO-END-TRACES.md`: visible desktop window (IPC unobserved) and local synthetic session/inbox surviving server restart (no execution). Existing OPENCODE-001..019 IDs are preserved. Add new ledger IDs only after the module and UI enumeration closes; do not promote the synthetic queue admission to an Agent execution discovery. The completion gate tracking is in `FINISH-GATES.md`.
+

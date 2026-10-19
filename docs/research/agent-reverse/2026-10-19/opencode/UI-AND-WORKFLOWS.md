@@ -26,3 +26,7 @@
 源码列出的桌面内置 GUI extensions 为 context、btw、debug、terminal、file、review、details、browser、pairing、updater、ssh、wsl、microsoft-office（gui-extensions/src/main.ts:1-33）。桌面 host 按需 demand IPC provider、管理启用/禁用/失败/重载；renderer 通过 ExtensionCall/Subscribe 及 ExtensionState/Event/Available 接收状态和事件。此 GUI host 不等于 Agent plugin hooks。
 
 Browser pane 在 session tab 生命周期内保持打开；工具侧 BrowserPlugin 的 44 个 browser 操作覆盖 tabs/page interaction, upload/drop, console/network, trace/CPU/heap profiling 与 Lighthouse（plugin-browser/src/tools.ts:11-58; rpc.ts:404-494）。Agent browser 工具需在同 session 的桌面 attachment online 时使用：默认权限 deny，attach 后为目标 session 临时 allow，分离/替换后撤销。Browser pane 通过 typed IPC 和控制事件工作，CDP attachment 与 bounded TCP tunnel 提供操作和网络数据通道。仅源码与发行 bundle 字符串静态确认；桌面 UI 与真实 Browser tool call 未运行。
+# Completion-gate continuation
+
+G4 adds only a real visible window observation: OpenCode title, `oc://renderer/index.html`, visible after 12 seconds; REA instrumentation conflicted and captured zero IPC. No desktop click/action is claimed. For the exact UI-to-RPC source transport and user composer→server prompt→inbox path, use `END-TO-END-TRACES.md` and `SURFACE-MAP.tsv`. The inbox/API test was synthetic and deliberately used `resume:false`; there is no model/tool workflow R claim. Full UI menu/command/route enumeration remains open per `COVERAGE.md`.
+

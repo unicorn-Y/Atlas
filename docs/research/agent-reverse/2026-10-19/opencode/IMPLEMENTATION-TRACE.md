@@ -59,3 +59,7 @@ Browser 执行链（源码静态 S，包内路径存在 P）：内置 core plugi
 桌面 GUI Extensions 的 typed IPC/store/event lifecycle 不是 Agent plugin API。后者由 packages/plugin hooks 注入 tools/agents/providers/MCP 等；前者是 Electron main/renderer 的应用 UI 功能面。不能混为同一种插件机制。
 
 Browser 失败与副作用边界也在协议中编码：session deleted/moved 会关闭连接 (connection.ts:159-162)；命令仅可使用已 attach session 中浏览器当前公布的 tabID (:165-178)；60 秒超时与断连均把结果标为未知，要求重新检查目标而不是重放潜在副作用，取消会发 cancel control event (:231-250)。
+# Completion-gate continuation
+
+The source path and R evidence added for G0-G4 now live in `END-TO-END-TRACES.md`; package inventory and exact executable-file coverage totals are in `COVERAGE.md`. A real local API session and queue inbox survive server process restart, but the R path set `resume:false`, so it did not test agent dispatch or execution recovery. Renderer RPC source is now explicitly traced through transferred `MessagePort`, structured-clone `Request/Interrupt/Ack/Chunk/Exit/Defect` messages, main-side RPC server and WebContents-bound event stream; see `SURFACE-MAP.tsv` S-002. Keep the earlier module traces as static evidence only.
+

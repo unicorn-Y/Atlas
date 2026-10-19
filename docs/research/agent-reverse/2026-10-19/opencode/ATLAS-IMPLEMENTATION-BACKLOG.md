@@ -1,0 +1,13 @@
+# Atlas implementation backlog (research only)
+
+Baseline: Atlas `main@aa6196f550098cc46081dc6db2c376cb87ddffa5` as recorded in `ATLAS-GAP.md`. No Atlas business source is changed by this lane. Suggested priorities remain provisional until the listed Atlas source chains are rechecked against current `origin/main`.
+
+| Priority | OpenCode mechanism to borrow | Atlas existing path / classification | Atlas work implied | License / cost |
+|---|---|---|---|---|
+| P1 | durable session inbox with queue/steer/cancel as atomic lifecycle, idempotent message IDs, explicit delivery boundary | `frontend/src/renderer/store/useAtlasStore.ts` queue + `core/atlas/engine/session_sync.py`; mechanism differs; verify current backend persistence semantics | reconcile queued drafts with durable backend admission and event updates; maintain single source of truth in SessionDB | OpenCode MIT; inspect each dependency before code reuse; medium engine/API change |
+| P1 | durable execution claim and at-least-once restart recovery with bounded per-turn attempts | `core/atlas/engine/hermes_runtime.py`, `core/atlas/agent/checkpoints.py`; partial mechanism | define interrupted turn vs session-reopen states and durable attempt accounting; prevent silent replay assumptions | MIT; medium-high runtime/persistence change |
+| P1 | child sessions plus background Job recovery and parent notification | Atlas agent/run phases and session graph (`core/atlas/agent/run_phases.py`, runtime/session store anchors in `ATLAS-GAP.md`); equivalent primitive uncertain | keep child transcript/ownership distinct; connect background completion to parent event, handle restart orphan | MIT; high session/runtime integration |
+| P2 | explicit IPC RPC schema over transferable MessagePort with stream chunks, Ack, Interrupt, Defect | Atlas Electron `frontend/src/main/backendProcess.ts` and renderer runtime services; transport differs | assess whether current bridge needs typed per-request interruption and stream acknowledgement; do not add parallel RPC stack without measured need | MIT; medium desktop shell change |
+| P2 | browser pane attach lease scoped to session and bounded CDP tunnel | Atlas Playwright/X2 automation and terminal/panel UI already exist; equivalent to agent-accessible live UI not confirmed | verify whether same-session browser attach is a real product requirement; if so add lease and observable lifecycle around existing automation | MIT; medium-high browser host change |
+
+Prioritize only after matching the rows to current main and customer/product need. This document is design research, not an implementation mandate.
