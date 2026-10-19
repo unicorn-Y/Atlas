@@ -56,3 +56,9 @@
 ## 后续验证用最短路径
 
 本地机械抽取先锁定三条动态调用路径并追包内同版代码：Desktop 按 CreateWorkflow→run/start→子进程 ask→journal→事件→UI；Task(agent)→spawn→background→parent command→新 model request；MCP App resource→sandbox register→MessagePort→AppBridge→UI。对于任一环找不到，记录包内搜索证据和 U，不要用 3.15.1 的同名函数顶替。提取的 AST/片段、路径、sha 和调用者写进独立分支，不上传会话、密钥。
+
+### G0–G7 continuation
+
+New same-version links and unknown transitions are recorded in [END-TO-END-TRACES.md](END-TO-END-TRACES.md) and [SURFACE-MAP.tsv](SURFACE-MAP.tsv). Host `openMcpUiInstance` now reaches the typed `mcp/uiOpenInstance` contract and the main provenance-bound registry; app-tool register/claim/resolve route schemas are matched to the main route table; renderer `pluginUi.appToolCall` dispatch reaches MCP Apps `notifyAppToolCall`. The service producer, renderer mount/forwarding, model-visible tool registration and result return remain unclosed.
+
+ASAR and role-based Acorn/REA coverage is in [COVERAGE.md](COVERAGE.md). A bounded startup observation reached the actual 3.15.3 page, but child processes ignored the requested worktree user-data path. No Agent task ran; this is not G4 acceptance.

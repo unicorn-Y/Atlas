@@ -114,3 +114,11 @@ Exact snippets and parser/hash metadata are in extracted-3153/CJS-SLICES.md and 
 5. **部分外围代码仍未展开到调用者和被调用者**：内置浏览器、UI 全菜单、隐性实验开关、语音/远程平台、native helper，需要机械枚举补全。
 
 发布说明（仅 D）：https://zcode.z.ai/en/changelog ; 安装说明：https://zcode.z.ai/en/docs/install 。ZCode root LICENSE 是 Apache-2.0，具体复用还需核对 NOTICE、具体子包 third-party headers；许可证不是 3.15.3 闭源二进制可自由复制的证明。
+
+## G0–G7 continuation evidence (2026-10-19)
+
+* **S — static identity/inventory:** `COVERAGE.md` records installer, ASAR and CJS SHA/size; ASAR entry counts; Acorn parse results and parser failures; two aliases; and two unpacked node-pty companion mismatches. ASAR SHA-256: `3fb4104ddcd79e9808eede75192299a22057bd9c336e15b9c2bb1825b4120283`.
+* **S — grouped REA:** `out/main` `ev_b48ea35577ef69b96dec6ae5d732e98e72abd9c097e22cea6e9b9c2855129e7c`; `out/host` `ev_7f0b59b9fbb70743ecaa18d8dc8c6de7e408180b77dadc7a17a0fd7bea35799f`; `out/scheduler` `ev_d89be61cdcd988ea604688441526ccf4d64a5d0b5df0580406ed7395dafcc221`; `out/plugin-sandbox` `ev_420285686f1ecb83efb2e40f3fd7e143cee3d1ca323d51aaa2c8c6d71f767c10`. Each selected directory's JS parsed; semantic relation graphs are partial/truncated.
+* **S — cross-boundary anchors:** `END-TO-END-TRACES.md`, `SURFACE-MAP.tsv`, and `extracted-3153/DESKTOP-IPC-ANCHORS.md` give named bundles, byte offsets and hashes for host routes, main registry, renderer event consumer and sandbox SDK.
+* **R — startup/page only:** `ev_49e6e6ea5689b868e98358ce0348ca05ec529fb74d25a2ad8391cf86c235c0d2` lists a local `ZCode` page with the 3.15.3/Electron 41.0.3 user agent; `ev_dc5735b0dfdda2f1527d9551626b2ed373b9d12085b6a5b4ce9474316277f966` passively inspected it. Process args, profile mismatch, stop action, and lack of task interaction are in `END-TO-END-TRACES.md`.
+* **U:** actual app mount/consent/message bridge, app-tool producer/model result, per-entry integrity across all files, exhaustive renderer actions, safe isolated full task run, and cold execution recovery remain unknown/open.

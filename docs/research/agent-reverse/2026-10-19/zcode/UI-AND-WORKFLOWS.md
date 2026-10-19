@@ -49,3 +49,9 @@
 | Cron 到时无 Host → 恢复 Host 后成功派发 | desktopCronScheduler、automationService、HostProcess | 否 |
 
 将来从 3.15.3 真包核验这些操作时，应把每一次的操作时间、模型、会话和进程 PID、对应事件类型、journal 状态、重启前后快照与版本/哈希记录到实测附卷；不能把官方 changelog 当运行截图。
+
+### G0–G7 renderer continuation
+
+Passive CDP on the real 3.15.3 page observed 1,491 DOM nodes and 307 loaded scripts; it supplies no screenshot or interaction evidence. Screenshot and `analyze_web_bundle` rejected this local file page with `target_not_allowed`. The launch child processes used the default ZCode user-data path, so the app was stopped without sending a prompt or clicking a task action. See [END-TO-END-TRACES.md](END-TO-END-TRACES.md).
+
+New static renderer evidence: `pluginUi.appToolCall` is accepted by the event schema and dispatched to MCP Apps `notifyAppToolCall` (`assets/parts-1PK4PulD.js` @5,622; `assets/styles-CSpM3qgc.js` @1,044,668). This adds the renderer event consumer edge to the prior host→main registry→sandbox path, but not the producer or result loop. Full current surface rows are in [SURFACE-MAP.tsv](SURFACE-MAP.tsv); renderer actions remain unenumerated.

@@ -49,3 +49,19 @@
 除了多 Agent，本轮源代码还揭示了：二进制/SEA 模式的 workflow 子进程重入、工作流模型绑定与 hole 填补、workflow 产物和图表预设、UI 插件沙箱隔离、MCP 动态 tool revision、跨插件生态的 manifest 兼容、模型请求级 usage 以及后台 Cron 与 off-peak 分通道。它们不是可单独复制的“按钮”；对应依赖、失败策略和主机数据职责见 IMPLEMENTATION-TRACE。
 
 未覆盖完整数千文件的逐文件代码审计。尤其服务器端外部服务、商用登录许可、Native helper、可选实验开关、运行协议边界与 3.15.3 发行包均须另证。不得将“发现路径/静态有代码”转换为“已运行通过”。
+
+## 3.15.3 static and runtime continuation (2026-10-19)
+
+| ID | Finding | Exact evidence | Class | Limit |
+|---|---|---|---|---|
+| ZCODE-040 | Complete ASAR header inventory has 27,856 files and 22,902 JS/TS/HTML-family files (274,190,048 bytes). Acorn parsed 18,936 JS/CJS/MJS entries; 7 parser failures and 2 directory/link aliases are listed. All 2,794 `out/` code files parse. | `COVERAGE.md`; ASAR SHA `3fb4104ddcd79e9808eede75192299a22057bd9c336e15b9c2bb1825b4120283` | S | TS/HTML inventory not fully parsed; routes/actions/registrations not exhausted |
+| ZCODE-041 | Retained 3.15.3 app starts to local Electron page; CDP identifies ZCode 3.15.3/Electron 41.0.3. Six child processes used default ZCode user profile, so process tree was stopped. | REA `ev_49e6e6ea5689b868e98358ce0348ca05ec529fb74d25a2ad8391cf86c235c0d2`, `ev_dc5735b0dfdda2f1527d9551626b2ed373b9d12085b6a5b4ce9474316277f966`; `END-TO-END-TRACES.md` | R | No message/tool/child/restart action; unsafe/inconclusive G4 probe |
+| ZCODE-042 | Renderer decodes `pluginUi.appToolCall` and dispatches to MCP Apps `notifyAppToolCall`. | `out/renderer/assets/parts-1PK4PulD.js` byte 5,622; `out/renderer/assets/styles-CSpM3qgc.js` bytes 1,044,668 and 1,122,039 | S | Producer, app attachment, host delivery and model result return remain U |
+| ZCODE-043 | Host `openMcpUiInstance` and typed app-tool register/claim/resolve routes are correlated with main provenance-bound registry/schema. | `out/host/index.js` byte 343,993 and ~347,156; `out/host/chunk-OUCOFHX4.js` byte 682,652 onward; `out/main/index.js` bytes 417,930–420,500; `out/main/chunk-OW6EUS2G.js` bytes 717,781–721,431 | S | Host provider and renderer caller remain unlinked |
+| ZCODE-044 | MCP Apps sandbox packages `ui/initialize`, `ui/resource`, teardown handlers and `window.postMessage` transport. | `out/plugin-sandbox/gen-ui.js` bytes 595,913, 603,656, 612,362, 619,917 | S | Not equivalent to Electron IPC/MessagePort; renderer forwarder and runtime origin validation U |
+| ZCODE-045 | ASAR header declares two unpacked node-pty binaries whose retained files differ by bytes and SHA. | `COVERAGE.md` exact entry/file digests | S | Native terminal companion integrity unresolved; packed JS findings remain bounded to their own verified bytes |
+| ZCODE-046 | 3.15.1 source and 3.15.3 package share selected tool schedule, journal and MCP App names/contracts; no complete function equivalence is inferred. | `RUNTIME-DIFF-ANCHORS.md`, `END-TO-END-TRACES.md` | S/I | Only named anchors compared; unmatched/changed code remains U |
+| ZCODE-047 | Main forks the Host utility, transfers a MessageChannel port to Host and its peer to renderer ServicePort; window reload reattaches with AttachServicePort (`desktop-continuous`, local scope). | `out/main/index.js` UTF-8 offsets 516,642, 524,824, 588,765; `END-TO-END-TRACES.md` | S | Confirms service transport and renderer reattachment only; does not prove Agent/task cold recovery |
+| ZCODE-048 | Same-version Host facade exposes `openMcpUiInstance`, app-tool register, claim, resolve via typed service client. | `out/host/index.js` UTF-8 offsets 343,993, 347,156, 347,644, 347,895, 1,527,677; schemas/routes in `host/chunk-OUCOFHX4.js` and `main/chunk-OW6EUS2G.js` | S | Host provider implementation, renderer mount/forwarder and model-visible result remain U |
+
+Gate details are in `FINISH-GATES.md`; lane remains **WIP**.

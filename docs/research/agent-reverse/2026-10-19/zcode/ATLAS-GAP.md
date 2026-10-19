@@ -56,4 +56,10 @@ core/atlas/agents/backends/zcode.py L22-105 当前只把每个 prompt 交给独�
 
 ## 研究限制
 
-本次只做研究与代码审阅，**没有改 Atlas 正式业务源码，没有执行 smoke/e2e**。状态“部分”和“未找到同构”均有扫描/已读路径范围；不能根据源码文件名作全仓断言。3.15.3 真包与 v3.15.1 的功能兼容性仍需实物取证。
+本次只做研究与代码审阅，**没有改 Atlas 正式业务源码**。原阶段没有 smoke/e2e；后续只做了一个隔离启动探针，因 child process 使用默认用户目录而停掉，未执行 Agent turn。状态“部分”和“未找到同构”均有扫描/已读路径范围；不能根据源码文件名作全仓断言。
+
+### 2026-10-19 G0–G7 comparison continuation
+
+Atlas comparison baseline remains `origin/main` at `aa6196f550098cc46081dc6db2c376cb87ddffa5`. [ATLAS-IMPLEMENTATION-BACKLOG.md](ATLAS-IMPLEMENTATION-BACKLOG.md) distinguishes Atlas mechanisms that exist (Agent phases/tool execution, event-backed message timeline, durable session state, subagent worktrees, Hub/scheduler, MCP and plugins) from the ZCode-specific journal/MCP App contracts that remain unconfirmed. No Atlas source changed; this remains a static, bounded comparison, not live Atlas behavior.
+
+ZCode 3.15.3 adds a real renderer-side `pluginUi.appToolCall` consumer → MCP Apps client notification, along with same-version typed host open/register/claim/resolve contracts and a main-side sandbox registry. Atlas has MCP tools/plugins and a message/event timeline, but a sandboxed interactive app, result correlation, and DWF replay journal were **not confirmed** in the inspected main files. Do not describe this as “Atlas has no Agent” or as a verified global absence.
