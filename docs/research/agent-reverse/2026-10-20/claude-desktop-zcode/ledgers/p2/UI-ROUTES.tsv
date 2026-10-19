@@ -1,0 +1,65 @@
+route_path	owner	source_file	offset	evidence
+/new	remote	.vite/build/index.chunk-lzaSYO3Q.js	838561	S: Dl enum e.New; deep-link table be requires claude:claude.ai/new?q=
+/chat/:uuid	remote	.vite/build/index.chunk-lzaSYO3Q.js	838640	S: Dl.OpenConversation; deep-link UUID regex _e
+/project/:uuid	remote	.vite/build/index.chunk-lzaSYO3Q.js	838666	S: Dl.OpenProject; deep-link UUID regex
+/recents	remote	.vite/build/index.chunk-lzaSYO3Q.js	3298820	S: claudeURLHandler fallback
+/projects	remote	.vite/build/index.chunk-lzaSYO3Q.js	3299100	S: claudeURLHandler fallback
+/settings	remote	.vite/build/index.chunk-lzaSYO3Q.js	838690	S: Dl.Settings; j2n() normalizes settings deep links
+/settings/desktop	remote	.vite/build/index.chunk-lzaSYO3Q.js	2003911	S: dispatchNavigate from mic permission prompt and File>Settings
+/settings/claude-code	remote	.vite/build/index.chunk-lzaSYO3Q.js	3885680	S: dispatchNavigate from File>Settings and folder-list
+/settings/connectors	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985617	S: IPC handler navigates the main view
+/settings/mcp/auth_mismatch	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985664	S: sensitive-route list dLt
+/settings/billing	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985571	S: sensitive-route list dLt
+/settings/claude-approvals/github/finish	remote	.vite/build/index.chunk-lzaSYO3Q.js	1987711	S: guard wLt
+/admin-settings	remote	.vite/build/index.chunk-lzaSYO3Q.js	838712	S: Dl.AdminSettings
+/admin-settings/billing	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985591	S: sensitive-route list dLt
+/customize	remote	.vite/build/index.chunk-lzaSYO3Q.js	838745	S: Dl.Customize
+/customize/plugins/<id>	remote	.vite/build/index.chunk-lzaSYO3Q.js	3288197	S: regex N2n; hash form #settings/customize-plugins/
+/plugins	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985652	S: sensitive-route list dLt and Developer plugin routes
+/directory	remote	.vite/build/index.chunk-lzaSYO3Q.js	838769	S: Dl.Directory
+/create/<...>	remote	.vite/build/index.chunk-lzaSYO3Q.js	838793	S: Dl.Create; /create/team/invites, /create/team/billing, /create/enterprise/review, /create/team/pending
+/tasks	remote	.vite/build/index.chunk-lzaSYO3Q.js	838811	S: Dl.Tasks
+/task/new	remote	.vite/build/index.chunk-lzaSYO3Q.js	3293102	S: literal path
+/space/<id>	remote	.vite/build/index.chunk-lzaSYO3Q.js	838841	S: Dl.Space
+/cowork/<sessionId>	remote	.vite/build/index.chunk-lzaSYO3Q.js	838359	S: Dl.Cowork; notification handlers navigate /cowork/${id}
+/cowork	remote	.vite/build/index.chunk-lzaSYO3Q.js	3033941	S: literal
+/code	remote	.vite/build/index.chunk-lzaSYO3Q.js	838377	S: Dl.Code; popup guard ZLr
+/code/new	remote	.vite/build/index.chunk-lzaSYO3Q.js	3805628	S: Zxr() NewCode action
+/code/continue	remote	.vite/build/index.chunk-lzaSYO3Q.js	3805785	S: Zxr() ContinueLast action
+/code/needs-input	remote	.vite/build/index.chunk-lzaSYO3Q.js	3805949	S: Zxr() NeedsInput action
+/claude-code-desktop	remote	.vite/build/index.chunk-lzaSYO3Q.js	838857	S: Dl.ClaudeCodeDesktop
+/local_sessions	remote	.vite/build/index.chunk-lzaSYO3Q.js	838987	S: Dl.LocalSessions
+/epitaxy	remote	.vite/build/index.chunk-lzaSYO3Q.js	838913	S: Dl.Epitaxy
+/design	remote	.vite/build/index.chunk-lzaSYO3Q.js	838933	S: Dl.Design; dedicated W-DESIGN window
+/resume?session=	remote	.vite/build/index.chunk-lzaSYO3Q.js	838951	S: Dl.Resume deep link (imports CLI session)
+/magic-link	remote	.vite/build/index.chunk-lzaSYO3Q.js	838536	S: Dl.MagicLink auth callback
+/sso-callback	remote	.vite/build/index.chunk-lzaSYO3Q.js	838573	S: Dl.SSOCallback
+/mcp-auth-callback/	remote	.vite/build/index.chunk-lzaSYO3Q.js	838602	S: Dl.McpAuthCallback
+/login	remote	.vite/build/index.chunk-lzaSYO3Q.js	838300	S: El.Login pre-auth host
+/gift/redeem	remote	.vite/build/index.chunk-lzaSYO3Q.js	3291332	S: $2n set membership
+/device-code-verify	local	.vite/build/index.chunk-Crjx4ZVt.js	1481	S: device-code window loadURL(`${ql}/device-code-verify`), ql=app://localhost
+/setup-desktop-3p	local	.vite/build/index.chunk-lzaSYO3Q.js	6348866	S: setup window loadURL(`${ql}${KMa}`)
+/desktop-design	remote	.vite/build/index.chunk-lzaSYO3Q.js	6777350	S: KPn path predicate for design routes
+/health	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985295	S: navigate-forbidden list uLt
+/oauth	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985178	S: navigate-forbidden list uLt
+/onboarding	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985352	S: navigate-forbidden list uLt
+/connect	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985366	S: navigate-forbidden list uLt
+/upgrade	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985383	S: sensitive list dLt
+/invites	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985394	S: sensitive list dLt
+/join	remote	.vite/build/index.chunk-lzaSYO3Q.js	908022	S: route table kqe + pv() guard
+/setup-2fa	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985413	S: sensitive list dLt
+/age-verification	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985426	S: sensitive list dLt
+/labs-verification/email	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985520	S: sensitive list dLt
+/certification	remote	.vite/build/index.chunk-lzaSYO3Q.js	1987400	S: guard xLt
+/enterprise/order	remote	.vite/build/index.chunk-lzaSYO3Q.js	1987499	S: guard SLt
+/connector-consent	remote	.vite/build/index.chunk-lzaSYO3Q.js	1987604	S: guard CLt
+/partner-callback	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985217	S: navigate-forbidden list uLt
+/partner-onboarding	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985237	S: navigate-forbidden list uLt
+/partner-setup	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985259	S: navigate-forbidden list uLt
+/cai	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985276	S: navigate-forbidden list uLt
+/redirect	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985283	S: navigate-forbidden list uLt
+/lti	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985305	S: navigate-forbidden list uLt
+/api/lti	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985312	S: navigate-forbidden list uLt
+/edge-api/preview-redirect	remote	.vite/build/index.chunk-lzaSYO3Q.js	1985323	S: navigate-forbidden list uLt
+/oauth/code	remote	.vite/build/index.chunk-lzaSYO3Q.js	1993386	S: OAuth helper route literal
+/oauth/device	remote	.vite/build/index.chunk-lzaSYO3Q.js	1993400	S: OAuth helper route literal

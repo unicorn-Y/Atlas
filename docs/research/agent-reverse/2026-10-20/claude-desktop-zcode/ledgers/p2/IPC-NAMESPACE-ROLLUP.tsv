@@ -1,0 +1,16 @@
+eipc_namespace	method_count	service_count	consumed_by
+claude.web	900	56	W-MAINVIEW (mainView.js)
+claude.settings	126	17	W-MAINVIEW (mainView.js)
+claude.simulator	54	1	W-MAINVIEW (mainView.js)
+claude.engineSurface	19	1	W-MAINVIEW (mainView.js)
+claude.buddy	15	2	W-BUDDY (buddy.js) + W-MAINVIEW (buddyBle world key)
+claude.internal.computerUse	12	3	W-CU-TEACH / W-CU-GLOW / W-WATCH-* (computerUseTeach.js et al.)
+claude.internal.ui	11	3	W-MAIN / W-QUICK / W-ABOUT
+claude.internal.sableOtter	9	1	W-SABLEOTTER-HUD (computerUseTeach.js)
+claude.officeAddin	9	1	W-MAINVIEW (mainView.js)
+claude.coworkArtifact	6	1	cowork artifact pages (coworkArtifact.js)
+claude.internal.findInPage	3	1	V-FINDINPAGE (findInPage.js)
+claude.hybrid	2	1	W-MAIN / W-QUICK / W-ABOUT / W-BUDDY (DesktopIntl)
+claude.telemetry	2	2	W-MAINVIEW (mainView.js)
+claude.internal.localExecConsent	1	1	W-LOCALEXEC-CONSENT
+claude.designPdf	1	1	W-DESIGN (designWindow.js)
