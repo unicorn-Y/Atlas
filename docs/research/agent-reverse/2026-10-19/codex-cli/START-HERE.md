@@ -49,4 +49,4 @@
 
 ## G0–G7 续工增补（2026-10-19）
 
-新增 [COVERAGE.md](COVERAGE.md)、[SURFACE-MAP.tsv](SURFACE-MAP.tsv)、[END-TO-END-TRACES.md](END-TO-END-TRACES.md)、[ATLAS-IMPLEMENTATION-BACKLOG.md](ATLAS-IMPLEMENTATION-BACKLOG.md)、[FINISH-GATES.md](FINISH-GATES.md)。发布版真实运行进一步观察了隔离 CODEX_HOME 下 app-server JSON-RPC `initialize`、`thread/start`、同连接 `turn/start` admission 和 user-message events；没有 assistant/model/tool result 或 `turn/completed`。同一发布版 Code Mode Host 也完成 legacy framed stdio hello。新增 R 不等于完整 Agent R；G1–G7 仍未通过，状态 WORK IN PROGRESS。
+新增 [COVERAGE.md](COVERAGE.md)、[SURFACE-MAP.tsv](SURFACE-MAP.tsv)、[END-TO-END-TRACES.md](END-TO-END-TRACES.md)、[ATLAS-IMPLEMENTATION-BACKLOG.md](ATLAS-IMPLEMENTATION-BACKLOG.md)、[FINISH-GATES.md](FINISH-GATES.md)。发布版真实运行进一步观察了隔离 CODEX_HOME 下 app-server JSON-RPC `initialize`、`thread/start`、同连接 `turn/start` admission 和 user-message events；没有 assistant/model/tool result 或 `turn/completed`。同一发布版 Code Mode Host 完成 legacy framed stdio V8 cell 及 synthetic delegate callback 往返。新增 R 不等于完整 Agent R；G1–G7 仍未通过，状态 WORK IN PROGRESS。

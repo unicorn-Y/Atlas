@@ -89,6 +89,6 @@ Atlas main 检查 SHA：`aa6196f550098cc46081dc6db2c376cb87ddffa5`； https://gi
 - `COVERAGE.md`: scoped executable crate inventory (file counts and bytes) and explicit uncovered modules/registration surfaces; counts do not imply semantic coverage.
 - `SURFACE-MAP.tsv`: CLI/TUI/action-to-JSON-RPC/Host protocol-to-handler/state/event chain. Unknown or not dynamically observed endpoints are labeled.
 - `END-TO-END-TRACES.md` R1: actual package app-server over stdio JSON-RPC; isolated home/workspace, successful initialize/thread/start, turn admission plus user-message streaming/persistence; no assistant/model/tool completion.
-- `END-TO-END-TRACES.md` R2: actual release Host framed stdio handshake request/response. This uses legacy transport and is not Core gRPC transport verification.
+- `END-TO-END-TRACES.md` R2: actual release Host framed stdio session/open, V8 cell execute, synthetic tool callback and returned output. This uses legacy transport and is not Core gRPC transport verification.
 - `ATLAS-IMPLEMENTATION-BACKLOG.md`: read-only comparison at Atlas main SHA `990d0ccdeed9604b027e74ef152cb0004c4d9375` with candidate implementation paths and unresolved traces.
 - `FINISH-GATES.md`: G0 package identity PASS only; G1–G6 remain PARTIAL and G7 unmet.
