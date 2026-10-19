@@ -51,14 +51,21 @@ Pinned HEAD: `aa6196f550098cc46081dc6db2c376cb87ddffa5`。
 - `https://github.com/unicorn-Y/Atlas/blob/aa6196f550098cc46081dc6db2c376cb87ddffa5/core/atlas/runtime/hub_control.py#L83-L134` hub control。
 - `https://github.com/unicorn-Y/Atlas/blob/aa6196f550098cc46081dc6db2c376cb87ddffa5/frontend/src/renderer/App.tsx#L1017-L1033` separate views。
 
-## 本次未检查 / 原因
-- Claude MSIX 内文件哈希、`app.asar`、asar.unpacked、源码地图、`cowork-svc.exe` 和它关联的 dll：**二进制仅作为 297 MB Release asset，当前 GitHub connector 不支持二进制返回，执行环境无法外连该官方 CDN**。
-- consumer Setup：采集日志显示 403，尚无字节。
-- Claude 实际 UI / 动态 WS / 本地文件权限 / 云 sandbox 实际行为：本会话无 Windows 实测会话/账号，未声称 R。
-- 云端服务端私有代码：未取得，官方仅给公开体系说明。
-- Atlas 工程全域自动审计：只抽查本次需求相关文件及实际链路，不将未审查路径等同功能缺失。
+## 新增固定包覆盖与门槛证据
+- `COVERAGE.md`: fixed MSIX/app.asar/service digests; 452 relevant files / 40,616,215 parsed text bytes / 437 JS-bearing files parsed / 0 syntax failures; graph partial/truncated and remaining groups.
+- `SURFACE-MAP.tsv`: artifact task, artifact MCP, legacy VM pipe, generic IPC and unknown main session rows with evidence state.
+- `END-TO-END-TRACES.md`: exact static artifact scheduling, artifact MCP, and legacy VM pipe chains; process launch, Go method bodies, Agent runtime and persistence remain unknown.
+- `ATLAS-IMPLEMENTATION-BACKLOG.md`, `FINISH-GATES.md`: evidence-bounded main comparison and current G0-G7 results.
+- REA retained evidence: full-package analysis Evidence `ev_425bdd19774deaad2d3153c77b4eaab97cc9f35d25b038b396f0b706383afb3a`; summary projection reports 15 BrowserWindows, 41 preferences, 52 contextBridge exposures / 16 members, 1,535 IPC operations (1,524 dynamic channel operations), 3 main handlers, 1 paired renderer transmission, 3 utility-processes with 0 resolved entrypoints. Semantic graph hits a 100,000-node ceiling and 0-byte semantic-result budget; do not treat this as complete route/channel analysis.
 
-验收数字：本包 S 0 / R 0；官方公开 D 条目 15+；Atlas S 18 文件/链路锚点（有限覆盖）。下一步根据 `EXTRACTION-REQUEST.md` 取得代码片段后更新。
+## Still unavailable or not observed
+- Consumer Setup/consumer MSIX: acquisition log reports region unavailability/403; no bytes, so enterprise/consumer equivalence remains U.
+- Actual UI, authenticated synthetic model/tool turn, pause/close/resume and recovery: not observed; no user account/session was touched. Safe isolated runtime feasibility remains to be attempted.
+- Cloud service code and account rollout payloads: not shipped in this artifact and not obtained; package evidence cannot resolve them.
+- Cowork service install/start parent and Go handler call graph: app-side protocol is statically traced, service body remains U. `go` is not available on PATH in the current host, so next pass should use the already indexed native analysis database or other available PE/Go parsers rather than infer from strings.
+- Atlas comparison is lane-scoped, not a full project audit; do not infer absence from unsearched paths.
+
+Current authority counts: S package static evidence; D official product statements; I bounded inference; U as enumerated above; **R=0**. This checkpoint does not satisfy final acceptance.
 - vidence/module-traces.md: exact bundle hashes/offsets and bounded static traces for DXT/MCPB trust, Node host, PTY logging, file indexing, cloud/local branch, migration telemetry, Computer Use preview; all source-only.
 
 - `evidence/module-traces.md`: includes the closed artifact scheduled-task IPC/handler chain and per-tool policy/approval path; still static-only.

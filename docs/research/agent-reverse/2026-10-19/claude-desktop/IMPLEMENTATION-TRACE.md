@@ -108,6 +108,10 @@ renderer ClaudeVM.startVM(options)
 
 `spawn`, `kill`, `writeStdin`, `configure`, `stopVM`, `isRunning` and `isGuestConnected` are also app-side methods. The service binary's help string independently says the desktop sends its appName through this pipe and obtains the profile directory from a verified connection. VM lifecycle status is sent to renderer stores/events. This proves a real legacy local VM integration. The actual service process installation/launch path and full Go handler call graph have not been established. A different helper for Claude Code organization-managed launcher selection skips that CLI wrapper for `remote || cloudRun`; this does not resolve Cowork task execution ownership or its remote protocol.
 
+## G2 continuation: artifact task path
+
+The concrete artifact scheduled-task chain, including bridge API and generated IPC channel, handler gate conditions, scheduler invocation and explicit unclosed state/recovery tail, is now recorded in [END-TO-END-TRACES.md](./END-TO-END-TRACES.md) as T1. This does not close the ordinary chat send path.
+
 
 ### Service pipe trust gate
 

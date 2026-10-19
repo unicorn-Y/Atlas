@@ -44,3 +44,9 @@
 5. 启动计划任务、断网、跨设备查看 run history，抓 store/session 关联。
 6. 检查交互式 Docs/Slides/Design 的组件生成、局部编辑、刷新后存储。
 以上需要可授权测试账号和实际 Windows 环境；不能用包静态字符串冒充 R。
+
+## 已闭合的静态交互链（R 未观察）
+
+- Cowork artifact 的 scheduled-task 入口从 `window.cowork.runScheduledTask(taskId)` 进入 generated `ipcRenderer.invoke`，由 main 检查 feature rollout、run 权限、artifact visibility、task/enabled 状态和用户手势，再交给 scheduler `runNow(...,{personStarted:true})`。handler 返回 session ID/error。调用后的 Agent turn、任务落盘及恢复仍未知。
+- 同一 artifact bridge 的 MCP 调用有 server/tool 校验、managed policy、disabled gate 与 destructive approval；主聊天中的工具执行链尚未从 renderer route 完整配对。
+- 精确包的全局 parser 无 JS parse failure，但语义图被截断；详见 `COVERAGE.md`。这不等于全部 route/action 已枚举。
