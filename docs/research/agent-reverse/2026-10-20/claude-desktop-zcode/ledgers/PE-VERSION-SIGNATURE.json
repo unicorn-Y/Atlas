@@ -1,0 +1,94 @@
+[
+  {
+    "FileVersion": "2.42304.0",
+    "ProductVersion": "2.42304.0",
+    "Company": "Anthropic",
+    "Desc": "Claude",
+    "Orig": "claude.exe",
+    "Copyright": "2025 Anthropic PBC",
+    "SigStatus": "Valid",
+    "Signer": "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\", L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US",
+    "path": "app/claude.exe"
+  },
+  {
+    "FileVersion": null,
+    "ProductVersion": null,
+    "Company": null,
+    "Desc": null,
+    "Orig": null,
+    "Copyright": null,
+    "SigStatus": "Valid",
+    "Signer": "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\", L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US",
+    "path": "app/resources/cowork-svc.exe"
+  },
+  {
+    "path": "app/resources/github-mcp/github-mcp-server.exe",
+    "error": "MISSING"
+  },
+  {
+    "FileVersion": null,
+    "ProductVersion": null,
+    "Company": null,
+    "Desc": null,
+    "Orig": null,
+    "Copyright": null,
+    "SigStatus": "Valid",
+    "Signer": "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\", L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US",
+    "path": "app/resources/claude-ssh-broker.exe"
+  },
+  {
+    "FileVersion": null,
+    "ProductVersion": null,
+    "Company": null,
+    "Desc": null,
+    "Orig": null,
+    "Copyright": null,
+    "SigStatus": "Valid",
+    "Signer": "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\", L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US",
+    "path": "app/resources/claude-ssh-proxy.exe"
+  },
+  {
+    "FileVersion": null,
+    "ProductVersion": null,
+    "Company": null,
+    "Desc": null,
+    "Orig": null,
+    "Copyright": null,
+    "SigStatus": "Valid",
+    "Signer": "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\", L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US",
+    "path": "app/resources/claude-ssh-askpass.exe"
+  },
+  {
+    "FileVersion": null,
+    "ProductVersion": null,
+    "Company": null,
+    "Desc": null,
+    "Orig": null,
+    "Copyright": null,
+    "SigStatus": "Valid",
+    "Signer": "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\", L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US",
+    "path": "app/resources/chrome-native-host.exe"
+  },
+  {
+    "FileVersion": null,
+    "ProductVersion": null,
+    "Company": null,
+    "Desc": null,
+    "Orig": null,
+    "Copyright": null,
+    "SigStatus": "Valid",
+    "Signer": "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\", L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US",
+    "path": "app/resources/app.asar.unpacked/node_modules/%40ant/claude-native/claude-native-binding.node"
+  },
+  {
+    "FileVersion": null,
+    "ProductVersion": null,
+    "Company": null,
+    "Desc": null,
+    "Orig": null,
+    "Copyright": null,
+    "SigStatus": "Valid",
+    "Signer": "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\", L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US",
+    "path": "app/resources/app.asar.unpacked/node_modules/node-pty/prebuilds/win32-x64/conpty.node"
+  }
+]

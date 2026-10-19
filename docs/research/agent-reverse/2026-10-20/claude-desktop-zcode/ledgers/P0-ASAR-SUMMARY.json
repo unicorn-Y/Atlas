@@ -1,0 +1,27 @@
+{
+  "asar_sha256": "8f4d3dec5e4f3ddffb150321060b18807d83a40f3a65618fe4f29325379da9db",
+  "asar_bytes": 49338428,
+  "header_json_bytes": 136222,
+  "data_start": 136240,
+  "asar_paths_total": 548,
+  "asar_files": 506,
+  "asar_dirs": 42,
+  "asar_unpacked_entries": 6,
+  "asar_ext_hist": {
+    "js": 431,
+    "html": 6,
+    "woff2": 21,
+    "png": 1,
+    "css": 16,
+    "jsc": 3,
+    "node": 4,
+    "json": 6,
+    "(none)": 2,
+    "md": 2,
+    "ts": 2,
+    "mjs": 4,
+    "skill": 6,
+    "exe": 1,
+    "dll": 1
+  }
+}

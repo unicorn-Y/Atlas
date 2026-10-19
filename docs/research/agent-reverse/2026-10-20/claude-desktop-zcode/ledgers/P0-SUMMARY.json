@@ -1,0 +1,30 @@
+{
+  "msix_sha256": "2bf309665f0de4eaa76a7e64033594e6f73ceb6413c60080f72f3ce640fa24ee",
+  "msix_bytes_on_disk": 297191037,
+  "zip_entries_total": 4443,
+  "zip_files": 4443,
+  "zip_dirs": 0,
+  "uncompressed_bytes_sum": 728899697,
+  "by_layer": {
+    "app-shell": 72,
+    "assets": 69,
+    "resources": 4284,
+    "asar": 7,
+    "package-metadata": 10,
+    "package-other": 1
+  },
+  "by_format": {
+    "BINARY": 138,
+    "V8JSC_OR_PYC": 2,
+    "TEXT": 4052,
+    "JSON_OR_ASAR": 5,
+    "PNG": 128,
+    "WOFF2": 49,
+    "WOFF": 20,
+    "XML": 12,
+    "WASM": 3,
+    "GIF": 16,
+    "PE": 18
+  },
+  "version_claimed_from_manifest": "2.42304.0"
+}

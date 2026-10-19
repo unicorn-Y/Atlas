@@ -1,0 +1,5 @@
+id	format	path	channel	arch	platform	bytes	sha256	product_version	notes
+PKG-01	MSIX	claude-desktop-x64-2bf309665f.msix	enterprise/store	x64	windows	297191037	2bf309665f0de4eaa76a7e64033594e6f73ceb6413c60080f72f3ce640fa24ee	2.42304.0	fixed baseline; AppxManifest Identity.Version=2.42304.0.0
+PKG-02	nupkg	D:\_deliverables\claude-desktop-2.42304.2\AnthropicClaude-2.42304.2-full.nupkg	squirrel/enterprise	x64	windows	262853497	b2914715da737e79a26344eb7498ba9f287d80cf5d94e7aa3821dae1f0eae8cc	2.42304.2	local full nupkg; asar package.json says 2.42304.2
+PKG-03	setup-exe	D:\_claude_desktop\Claude-Setup-x64.exe	squirrel-bootstrapper	x64	windows	132098208	4a7fe5bcc95f29dedbfeeb45bc2c6b916343253ba0e0e392038968f5857c6aa9	0.14.10-channel	Squirrel setup; downloads RELEASES chain
+PKG-04	nupkg	D:\_claude_desktop\AnthropicClaude-0.14.10-full.nupkg	squirrel/consumer	x64	windows	131185172	0be53c645f8f7fb08ea8fe66bc8833f5af4ad3c78482a25b5f4a3e90f90683fc	0.14.10	matches official RELEASES.txt last line for nest-win-x64
