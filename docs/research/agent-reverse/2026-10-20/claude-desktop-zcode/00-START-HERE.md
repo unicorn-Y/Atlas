@@ -144,6 +144,13 @@ CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL
 | `P7-STATIC-LIFECYCLE.md` | 启动/任务/退出/恢复的代码级时序 |
 | `P7-STATIC-STATE-AND-EVENTS.md` | 状态机（127 个枚举）与事件通道 |
 | `13-COVERAGE-AND-ACCEPTANCE.md` | 覆盖率、差集、独立审计结果、验收判定 |
+| `SERVICE-RPC.md` | cowork-svc 管道 RPC 的指令级证据（帧格式、分发表、事件名） |
+| `VM-LIFECYCLE.md` | HCS/HCN 动态解析与 VM 创建/启动/停止全过程 |
+| `SSH-HELPERS.md` | 三个 SSH 辅助程序 |
+| `NATIVE-ADDON.md` | `claude-native-binding.node` 的 109 个 napi 导出 |
+| `MCP-HOSTS.md` | nodeHost（本地 stdio shim）与 directMcpHost（远程 HTTP/SSE）的分工 |
+| `SKILL-SCHEMA.md` | `manifest.json` 的字段语义 |
+| `RENDERER-ENTRIES.md` | 6 套 renderer 的逐项解剖 |
 | `12-UNKNOWN-AND-BLOCKERS.tsv` | 未解清单（逐条含原因） |
 | `PROGRESS.md` | 阶段进度与每轮新增 |
 | `viewer/index.html` | 离线浏览器（97 服务可搜索） |
