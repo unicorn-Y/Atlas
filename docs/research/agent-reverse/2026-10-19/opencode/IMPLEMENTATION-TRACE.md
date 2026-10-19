@@ -48,3 +48,14 @@
 ## 7. Code Mode 与 UI 时间线（OPENCODE-018,019）
 - `core/src/codemode/tool.ts:35-126` 暴露 `execute({code})` 给模型，受控 JS 调工具命名空间、执行 progress、输出文件；模型上下文用固定 tool 描述，变化的工具列表通过 `CodeModeCatalog` 注入指令。
 - `app/src/session/timeline/message-timeline.tsx:16-50` 使用 `@opencode/session-ui` projection 与 `createTimelineVirtualizer`；`virtualizer.tsx:93-426` 处理动态行高、滚动锚点、展开工具并导航到后台 shell ID；`session/requests/session-question-dock.tsx:260-283` 将多步提问回执提交到服务器 `session.form.reply/cancel`。
+
+
+## 实物包确认及 Browser pane → Agent → CDP 链
+
+精确 v2.0.32 ASAR 中 package.json 标示 @opencode/desktop 2.0.32，main 为 out/main/index.js；该入口 bundle SHA256 a43fc9bd7ce7e27cc215d1f1b630087a93b4e7b889075860ae6864c76429c9fc，819133 bytes。打包主进程 bootstrap 发现 CLI sidecar、确保本地服务并创建桌面 RPC。desktop-CiR2Cmvk.js 有 ExtensionSubscribe byte 23827；renderer main-CZyBNj5O.js 有 ExtensionSubscribe byte 1302996、browser.pane byte 1222691；host-R1JTLSvD.js 含 browser.pane byte 27546。
+
+Browser 执行链（源码静态 S，包内路径存在 P）：内置 core plugin 注册 BrowserPlugin → plugin-browser/src/tools.ts 把 44 个操作映射成 browser.* Agent 工具并要求 browser permission → connection.ts 默认 deny 所有 agent；GUI attach 时检查 session/location 和 connectionID，session 上临时 grant browser:*，以 requestID/pending map 与桌面 pane 往返 control command/result → gui-extensions/browser main IPC demand 加载 browser pane，session-scoped model 保持 pane/session 关联 → pane 创建 Electron BrowserWindow/WebContentsView 浏览器页面并验证服务 origin/endpoint → chromium.ts 以 CDP Target.setAutoAttach 管理页面与 target → Browser tunnel RPC 在 sidecar 服务进程建立受限 TCP socket 与 desktop page/target 之间传输 CDP/network bytes。connection lease teardown 会撤销 permission 并 dispose tunnels。Runtime attach 与协议包流未观察。
+
+桌面 GUI Extensions 的 typed IPC/store/event lifecycle 不是 Agent plugin API。后者由 packages/plugin hooks 注入 tools/agents/providers/MCP 等；前者是 Electron main/renderer 的应用 UI 功能面。不能混为同一种插件机制。
+
+Browser 失败与副作用边界也在协议中编码：session deleted/moved 会关闭连接 (connection.ts:159-162)；命令仅可使用已 attach session 中浏览器当前公布的 tabID (:165-178)；60 秒超时与断连均把结果标为未知，要求重新检查目标而不是重放潜在副作用，取消会发 cancel control event (:231-250)。

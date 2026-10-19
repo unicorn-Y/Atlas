@@ -21,3 +21,8 @@
 7. 输出 `EXTRACT-LOG.md`：工具版本、每步执行命令、哈希、失败情况、精确文件路径；提交并 push `research/agent-reverse-20261019-opencode`，回报 commit。Codex 不得改上述研究主报告，后续由本 ChatGPT 会话根据提取证据继续溯源。
 
 **合格标准**：能从证据表反查到 *真实发行包文件* / *固定版本源码符号*，不接受自动生成概述、网页抄写或“支持XX”列表。
+
+
+## 本 lane 完成回执
+
+请求列出的五个 assets 已按原始 digest/bytes 复核，桌面 installer 已解包并检查 ASAR/关键 JS bundles，npm CLI 与 desktop sidecar 的版本/help 命令已在 scratch HOME 运行。详见 [PACKAGE-ARTIFACTS.md](evidence-extracted/PACKAGE-ARTIFACTS.md)。没有导入用户配置、Cookie、key 或真实会话。REA JavaScript bundle analyzer 在 ASAR 完整性错误后 record-and-continue 重试仍超时 300 秒；桌面完整启动与 authenticated API 操作未完成。

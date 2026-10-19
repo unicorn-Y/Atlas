@@ -29,3 +29,12 @@
 - 真实 UI 菜单、所有隐藏命令/实验路由遍历覆盖率和快捷键的平台差异：U（本次仅抽样）。
 - 服务在突然断电、强杀、数据库锁竞争、断网恢复下的动态效果：U。特别是重启恢复为 **at-least-once**，不能许诺副作用不重放。
 - 各 provider 真实 retry/error 场景、所有社区插件兼容性：U。不能把扩展 API 存在等同插件功能完成。
+
+
+## 新增发行包与 Browser 机制发现（v2.0.32）
+
+- **OPENCODE-020 — GUI Extensions != Agent plugins。** 桌面 GUI 扩展由 packages/gui-extensions/src/main.ts:1-33 注册 13 个 built-ins；builtins.typecheck.ts 校验 main/renderer IPC contracts。desktop/src/main/extension/host.ts:105-108,599-660 建立 app-scoped host、启停/安装生命周期；desktop/src/main/ipc-handlers/extensions.ts:39-60 暴露 ExtensionCall/Subscribe/Enable/Install 等，desktop/src/renderer/extensions.ts:10-64 实现 renderer bridge。Agent hooks 独立于 packages/plugin 与 core plugin host。发行 ASAR 的 out/main/desktop-CiR2Cmvk.js（SHA256 a0e11ee1c666103aa5ee77b28fa9d1e89eb500918978960abf159712d3543e5b）含 ExtensionSubscribe 字符串 byte 23827；out/renderer/assets/main-CZyBNj5O.js（SHA256 1fda7588c16a4c245717c80d320b1a413c7ca0ca009e1fba9ffc15bfc457d405）含该标识 byte 1302996。P/S；runtime UI 行为 U。
+- **OPENCODE-021 — session-scoped Browser attach authorization。** packages/plugin-browser/src/connection.ts:24-53 先 append deny browser:* 到所有 agent，再以 Effect.acquireRelease grant/revoke session allow；:76-105 校验 session/location、替换旧 attach、建立 connectionID 和 version=4 attached event；:107-155 校验 connection/requestID 并提供 command/result/tunnel RPC；:203-225 建 pending request 并 emit control command。桌面 pane IPC 位于 packages/gui-extensions/src/browser/main.ts 和 ipc.ts；pane.ts:44-74 校验窗口/服务来源并按 session 注册，:480+ 创建 BrowserPage。S/P；未动态观察 attach。
+- **OPENCODE-022 — Browser tool / CDP tunnel。** plugin-browser/src/tools.ts:11-58 注册 44 个 browser 工具，每项 permission=browser、codemode=true；rpc.ts:404-494 包括 trace、CPU、heap、Lighthouse。tunnel.ts:9-25,36-64,67-100,102-125 为 attachment 私有 TCP sockets，最多 64、connect 10 秒超时、单 read、块大小受 Browser.TUNNEL_CHUNK_BYTES 限制且 socket buffers 提供 backpressure；connection.ts:137-155 转发 tunnel RPC；gui-extensions/src/browser/chromium.ts:469,541 设置 CDP Target.setAutoAttach。S/P；实际 CDP traffic U。
+
+- **OPENCODE-023 — Browser 工具显式避免断连后的危险重放。** connection.ts:159-162 在 session.deleted/session.moved 时关闭 attachment；:165-178 要求 tool action 指向当前 attached session 的精确 tabID；:231-250 若 attach 在结果返回前断开，错误明确表示 action 可能已执行，要求先观察页面而不得盲目重复点击/提交/上传，单请求 timeout 60s 同样标记 outcome unknown，interrupt 则发 cancel control event。S；这是协议/副作用语义，尚未动态运行验证。

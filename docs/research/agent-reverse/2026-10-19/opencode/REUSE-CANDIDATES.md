@@ -13,3 +13,10 @@
 | P2 | `app/src/session/timeline/virtualizer.tsx`, `session-ui` | 借虚拟化/锚点/逐组展开设计重写 React 时间线 | Solid 虚拟列表和 UI 库、许可证需单查；直接搬组件成本大 |
 
 **不建议**用 OpenCode v2 的整个 Agent Host 或 DB 覆盖 Atlas Hermes：用户已要求 Atlas 自己作为独立 Agent/记忆主体，外部引擎可随时切换。复用应以可替换模块为单位、始终保持 Atlas 单一任务与会话真相。
+
+
+## 新增可借鉴模式：GUI extension contracts 与 Browser attach
+
+- **桌面 GUI extensions：概念借鉴。** 将 desktop host（lifecycle/status/dependencies）、typed IPC provider、window/session scope、state/event stream 视作 UI capability contracts；Atlas Electron main/React renderer 可借鉴明确 scope 和可撤销 lifecycle。OpenCode 的具体 extension SDK 与 Effect 类型不直接移植；先核对 Atlas 的 IPC/security boundary。证据见 OPENCODE-020。
+- **Browser attach 与权限租约：高价值架构候选。** 将浏览器能力默认 deny，仅在明确 session attach 时 grant，附带 connection ID 和 request correlation，断连/替换时 revoke；以有界 tunnel 和 backpressure 限制网络流。适合与 Atlas 现有 BrowserUseAdapter/X2 比较后再决定，不应新建第二套 browser engine。需评估跨进程认证、租约恢复、CDP endpoint 限制和 browser target 隔离。证据见 OPENCODE-021/022。
+- **深度 Chromium diagnostics：候选，不作已验证 parity 声明。** OpenCode 源定义 trace/CPU/heap/Lighthouse 工具；Atlas 需逐个从 schema、permission、runtime backend、UI evidence 核实后才能标注缺失/实现。

@@ -19,3 +19,10 @@
 
 ## 没有在这批静态抽查中穷尽的 UI
 完整路由/command registry 枚举、所有搜索面板、TUI 动态 JSX 组件、语音/插件自定义 UI、隐藏实验开关、移动版响应式行为、窗口崩溃后的真实重新连接，均列 U 待机械导出。要求按 `EXTRACTION-REQUEST.md` 导出可检索索引与实际运行轨迹后继续。
+
+
+## v2.0.32 桌面扩展与 Browser workflow
+
+源码列出的桌面内置 GUI extensions 为 context、btw、debug、terminal、file、review、details、browser、pairing、updater、ssh、wsl、microsoft-office（gui-extensions/src/main.ts:1-33）。桌面 host 按需 demand IPC provider、管理启用/禁用/失败/重载；renderer 通过 ExtensionCall/Subscribe 及 ExtensionState/Event/Available 接收状态和事件。此 GUI host 不等于 Agent plugin hooks。
+
+Browser pane 在 session tab 生命周期内保持打开；工具侧 BrowserPlugin 的 44 个 browser 操作覆盖 tabs/page interaction, upload/drop, console/network, trace/CPU/heap profiling 与 Lighthouse（plugin-browser/src/tools.ts:11-58; rpc.ts:404-494）。Agent browser 工具需在同 session 的桌面 attachment online 时使用：默认权限 deny，attach 后为目标 session 临时 allow，分离/替换后撤销。Browser pane 通过 typed IPC 和控制事件工作，CDP attachment 与 bounded TCP tunnel 提供操作和网络数据通道。仅源码与发行 bundle 字符串静态确认；桌面 UI 与真实 Browser tool call 未运行。

@@ -34,3 +34,10 @@
 
 ## 仍未调查的区域
 二进制可执行包中的实际资源与完整 entrypoint；v1/v2 细粒度迁移 commit 归因；全量 TUI/GUI 菜单与 shortcut registry；多平台 PTY/SSH 实操；真实长会话崩溃恢复、缓存命中率、跨服务器同步和插件运行验证；特定 Windows installer 是否内置完整一致的 CLI；用户权限下实际运行行为。以上皆 U，不能假扮 S/R。
+
+
+## 发行物 / browser 扩展补证
+
+精确 asset bytes/SHA、解包根、ASAR package metadata、bundle SHA/byte anchors、CLI run scope、v1→v2 tree count 与 integrity mismatch 均见 [evidence-extracted/PACKAGE-ARTIFACTS.md](evidence-extracted/PACKAGE-ARTIFACTS.md)。关键 Browser 源码 anchors：v2.0.32 packages/plugin-browser/src/connection.ts:24-53,76-155,203-225；tools.ts:11-58；rpc.ts:404-494；tunnel.ts:9-125；packages/gui-extensions/src/browser/{main.ts,ipc.ts,model.ts,pane.ts,chromium.ts}。GUI extension host/renderer anchors：packages/gui-extensions/src/main.ts:1-33 与 builtins.typecheck.ts；packages/desktop/src/main/extension/host.ts:105-108,599-710；packages/desktop/src/main/ipc-handlers/extensions.ts:39-60；packages/desktop/src/renderer/extensions.ts:10-64。
+
+REA ASAR analyzer: first run halted on app.asar.unpacked OpenConsole.exe integrity mismatch; second run with record-and-continue timed out after 300 seconds. Observed manifest SHA256 7f68c840226505004215c0b82d4e502c24b5bc3f4b93c4baaaa19bd679c0def8 vs extracted SHA256 c2216ab94daaa4f6e6da636da7296487fe8629c29d564fa4893fe1a0ea17d2fa. Cause unknown. No desktop full-launch, authenticated API call, Browser attach, or CDP operation is marked R.
