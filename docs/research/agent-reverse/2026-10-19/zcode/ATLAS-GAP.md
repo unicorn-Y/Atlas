@@ -1,4 +1,4 @@
-# ZCode 3.15.1 vs Atlas main：逐能力真实代码差距
+# ZCode 3.15.1 source + 3.15.3 package vs Atlas main：逐能力真实代码差距
 
 证据基线：Atlas main `aa6196f550098cc46081dc6db2c376cb87ddffa5`（本轮 `git fetch origin main` 后 HEAD 未变化）；ZCode upstream source 3.15.1 `aac4755666d09fdcd70272fcf063c077a639015f`; ZCode Desktop/runtime 3.15.3 verified package hashes见 `extracted-3153/ASSET-HASHES.txt`。旧源码对照和 3.15.3 packaged CJS 均为静态 S，**没有 R 运行验收**。本轮同版 CJS 已证实底层机制确实打包；尚不能把 3.15.1 UI/IPC 源码或旧 Atlas 对照升级成 3.15.3 全链等价结论。
 
@@ -17,15 +17,15 @@
 | ZCODE-018 fork、ID remap | core/atlas/engine/session_sync.py L1-12 已用 Hermes SessionDB 为唯一写入口，支持 rewind/fork，engine/branch_summaries.py 有分支 | **等价方向**；目标仍应核对 message/part/tool/turn 的 ID 完整重映射，尤其 workflow child | P1 不再造第二套 SessionDB |
 | ZCODE-019 MCP 连接池/工具刷新 | core/atlas/tools/mcp_client.py L1-18,L171+ 真 stdio/SSE MCP 客户端 | 部分；MCP 功能已存在。OAuth、elicitation、resources/subscribe、tools/list_changed 到模型下一步是否完整接线未证 | P1 单项查缺补齐 |
 | ZCODE-020 插件及多平台 Skills | core/atlas/plugins/runtime.py L1-135 支持 Claude/Hermes 插件、Hooks/commands/skills；skills/registry.py | 部分；ZCode/Claude/Codex/Cursor manifest 跨生态兼容以及 Marketplace UI surface 是否等价待查 | P1 扩已有 loader，而非平行造独立系统 |
-| ZCODE-021/022 MCP Apps 动态 UI 沙箱 | frontend/src/renderer/components/MessageThread.tsx L47-95 有消息/事件 UI；plugins/runtime.py 聚焦插件工具/Hook | **本次未找到对等的** AppBridge + JSON-RPC MessagePort + per-app Electron partition + 资源订阅能力 | P1 主进程 guest、renderer bridge、后端 resources 完整接线后才建 UI 卡片 |
+| ZCODE-021/022 MCP Apps 动态 UI 沙箱 | 3.15.1 源码原有 UI/host 研究锚点；当前 Atlas `MessageThread` 和 plugin tool/hook 源码不提供 AppBridge 对照。3.15.3 实物另确认 main sandbox registry + partition/CSP/permissions + `mcp/ui*` RPC，见下方新行 | Atlas capability inventory 仍标 MCP Apps missing，精确静态差距已在下方复核；早先的 3.15.1 source-only判断不代表 3.15.3 打包状态 | P1 主进程 guest、renderer bridge、后端 resources 完整接线后才建 UI 卡片 |
 | ZCODE-023 Workflow 执行图/报表 | frontend/src/renderer/pages/agents/AgentsPage.tsx L21-57 有 8 个 Agent 标签页，MessageThread 真实展示事件 | 部分；Agent 页面存在不等于 workflow node/phase/actor/artifact/version 的权威投影 | P1 后端 journal/query/event contract 先行，再画 timeline |
 | ZCODE-024 定时调度独立进程 | core/atlas/scheduler/__init__.py L1-35,L310+ APScheduler 4；runtime/hub.py 真后台执行 | **等价方向**；ZCode 无 Host 的 transient 派发退避应和 Atlas Hub 状态/任务状态区分比较 | P1 不重造 scheduler |
 | ZCODE-025 群聊/远程会话 | core/atlas/api/group_router.py L1-72 真 Group REST/Orchestrator、api/channel_router.py 渠道 API | 部分；有 Group/API 不能直接推断 Feishu WebSocket 与 ZCode 的 task snapshot ETag、远程 replayable 一致 | P2 单独实证查验 |
-| ZCODE-027 同版运行差异 | Atlas 本次 HEAD 固定，ZCode 3.15.3 只有采集记录 | **U**：不许从 3.15.1 推断 3.15.3 现状 | 见 EXTRACTION-REQUEST |
-| ZCODE-030 tool scheduling / queued lifecycle | Atlas `tool_node.py` 与 `run_phases.py` 有真实工具执行，但本轮未核对 Atlas event schema 是否与 CJS 的 scheduled/tool_queued/executing 持久化逐项对应 | 基础能力在；队列状态、流式 tool call 关闭和取消投影的等价性 U | 先逐项比 event/DB 字段，不增加并行 UI 结论 |
+| ZCODE-027 同版运行差异 | Atlas 本次 HEAD 固定；ZCode 3.15.3 verified CJS 已独立解析且部分 desktop bundles 已 rehash/检查；app.asar全图和运行级仍 partial | 不能标整体 U 或 complete：CJS机制有静态S证据，ASAR完整性/UI和动态行为仍 partial/U | 见 EXTRACTION-REQUEST 与 extracted-3153/EXTRACTION-LOG.md |
+| ZCODE-030 tool scheduling / queued lifecycle | Atlas `tool_node.py`/`run_drive.py` 有真实 tool_call→tool.started→tool_result→tool.completed/output 接线；CJS 有 pending tool part、tool_queued 然后 executeTools | Atlas基础执行/event UI 已接线；未发现同构 queued/pending-part UI 状态，列为限定范围差异而非全局缺失 | 不增加独立 UI 结论；若要对齐再按事件/持久字段精确设计 |
 | ZCODE-031/032 子 Agent task registry/background parent detach | Atlas 有 subagent worktree 与 Hub；此前已定位 Atlas 外部 ZCode backend 每轮 subprocess 且 `resume()` 未实现。3.15.3 CJS 已见 registry waiter、background/detach 及 Subagent events | 部分；尚未证明 Atlas child 成果以 generation-safe model-only command 回到父下一轮，或在 detach 后跨 host 重启保持同语义 | 继续核 Atlas runtime IDs/event queue/resume 持久化实现，不将子进程后台状态等于任务恢复 |
 | ZCODE-033 dynamic-workflow journal/replay | Atlas Scheduler/checkpoints 不是 DWF `run/node/activity` schema；3.15.3 CJS 已见同版 journal migration 和 input hash/actor sequence anchors | 同构机制本轮未发现于已列 Atlas 路径；差距较可能为实质性，但须直接核 Atlas 现 main 的 scheduler/checkpoint persistence 再定范围 | 查当前 main 的 journal schemas 与 resume dispatch；不在研究阶段施工 |
-| ZCODE-034 Retry-After | Atlas fallback cooldown/model router 已覆盖部分 provider fault policy；3.15.3 CJS SDK helper 解析 Retry-After 头 | 部分/未知：header utility 不证明高并发 Agent 修复是同一算法，也不证明 Atlas lacks delay parsing | 对照 Atlas HTTP client/model runner retry handling，维持 release-note 关联为 U |
+| ZCODE-034 Retry-After | Atlas credential/model cooldown 消费 structured error_context 的 retry/reset 数据；CJS 有通用 SDK helper 和 model request parser+diagnostics | Atlas有 cooldown，但在本轮具体 model/credential链未找到读取 Retry-After response header 并记录 delay/source telemetry 的路径；release-note并发修复归因仍 U | 不把孤立 jitter helper视为活动调用链；release-note关联维持 U |
 
 ## 本轮复核：3.15.3 桌面链和 Atlas main
 
