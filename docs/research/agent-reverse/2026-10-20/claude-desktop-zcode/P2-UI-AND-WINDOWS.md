@@ -5,7 +5,7 @@
 
 ---
 
-## 1. 界面总账：27 个界面对象
+## 1. 界面总账：26 个界面对象
 
 | 类型 | 数量 |
 |---|---:|
@@ -18,6 +18,70 @@
 | **合计** | **26** |
 
 按内容来源：**LOCAL-UI 14 / REMOTE-UI 7 / NATIVE-CHROME 5**。
+
+### 1.0 精确构造点（15 个 BrowserWindow，全部带字节偏移）
+
+| # | surface | 文件 | 偏移 | 创建函数 |
+|---|---|---|---:|---|
+| 1 | **W-MAIN** 主窗口 | `index.chunk-lzaSYO3Q.js` | 6,773,292 | `V6a()` → `qSe()`（`new BrowserWindow` @538,269） |
+| 2 | W-ARTIFACTPOPUP（接管 guest 的按 URL 弹窗） | 同上 | 3,212,832 | `mXn()` |
+| 3 | W-CODEPOPUP（`/code` 弹窗） | 同上 | 4,026,209 | `qLr()` |
+| 4 | W-CU-GLOW（离屏） | 同上 | 4,082,566 | `IVr()` |
+| 5 | W-QUICK 快速输入 | 同上 | 4,408,621 | `V5r()` |
+| 6 | W-ABOUT（模态，parent=主窗） | 同上 | 4,442,725 | `J9r()` |
+| 7 | W-DESIGN | 同上 | 4,986,627 | `NTi()` |
+| 8 | W-SETUP3P（`app://localhost`） | 同上 | 6,349,391 | `ZMa()` |
+| 9 | W-CU-TEACH（离屏） | 同上 | 6,424,514 | `SLa()` |
+| 10 | W-WATCH-CHOOSER（模态） | 同上 | 6,451,210 | `TRa()` |
+| 11 | W-WATCH-PILL（离屏） | 同上 | 6,486,417 | `DBa()` |
+| 12 | W-SABLEOTTER-HUD（离屏） | `index.chunk-BN7PaJ_P.js` | 18,742 | `ne.ensureWindow()` |
+| 13 | W-BUDDY | `index.chunk-CzY1tCPL.js` | 11,417 | `fe()` |
+| 14 | W-DEVICECODE | `index.chunk-Crjx4ZVt.js` | 974 | `l()` |
+| 15 | W-LOCALEXEC-CONSENT（模态） | `index.chunk-JnLh1fOe.js` | 6,552 | `z()` |
+
+另有 **7 个被追踪的 `WebContentsView` 面板**：`W-MAINVIEW`、`V-FINDINPAGE`、2 个 Cowork 视图、preview-tabs、silent-auth、chrome-import。
+**关键**：`W-MAINVIEW` 是**独立的 WebContentsView**，不是主窗口自身的 webContents。
+
+### 1.0b 主窗口到底渲染什么（本轮最关键的一处纠正）
+
+主窗口自己的 webContents **在正常路径下什么都不渲染**：
+
+```js
+function E({isMainWindow:e, ...}) { if (e) return null; ... }
+```
+
+它只负责三件事：启动骨架、错误卡片（含两个按钮）、以及仅在错误覆盖层出现的一个幽灵 "Menu" 按钮。
+
+量化（S）：
+
+| 本地内容 | 体积 |
+|---|---:|
+| 主窗口 HTML | 9,198 B |
+| 入口 JS | 85 KB |
+| 错误组件 | 11.7 KB |
+| **懒加载离线小游戏 chunk** | **1.24 MB** |
+| CSS | 251 KB |
+| React | 183 KB |
+| react-intl | 56 KB |
+| **合计** | **约 1.84 MB，其中 1.24 MB 是彩蛋游戏** |
+
+产品界面**全部**在 `W-MAINVIEW` 这个兄弟 `WebContentsView` 里，加载 `claude.ai` / `claude.com` / `preview.*` / `app://localhost`。
+窗口边框是 `titleBarStyle:"hidden"` + `titleBarOverlay:true`，由 OS 绘制，零 HTML。
+
+64 条路由里**真正属于本地产品的只有 2 条**：`/device-code-verify` 与 `/setup-desktop-3p`。
+
+### 1.0c IPC 天花板
+
+- 索引到 97 个服务 / 1,170 个方法。
+- `mainView.js` 接通其中 **81 个服务 = 1,127 个方法**，外加外部的 `electron_window.WindowManager`（6 个方法，不在 eipc 索引内），实际 **1,133** 个。
+- 全部受 origin 门控（`claude.ai|claude.com|preview.*|localhost|*.ant.dev|app://localhost`）且要求 **top frame**。
+- 未接通的 11 个服务（43 个方法）恰好是其它窗口的私有面：`AboutWindow`、`MainWindowTitleBar`、`QuickWindow`、`FindInPage`、`LocalExecConsent`、`DesignPdf`、`CoworkArtifactBridge`、`CuTeach`、`CuWatchRecordPill`、`CuWatchRecordChooser`、`SableOtterHud`。
+
+### 1.0d 三个容易漏的细节
+
+- **离屏界面不带 HTML 文件**：SableOtter HUD、CU glow、CU teach、watch chooser、watch pill 各自在运行期把完整内联文档写入 `%TEMP%` 再 `loadFile`。
+- **`LocalExecConsent` 只有一个 RPC**（`choose`），其 HTML 原注释明确禁止 React/windowBase：「the consent surface must not run any stack the web-origin renderer could influence」。
+- **深链极窄**：严格校验器只接受 `claude:claude.ai/new?q=`、`claude:cowork/new?q=`、`claude:claude.ai/{chat,project}/<uuid>`，不接受其它 query key，也不接受 hash。
 
 ### 1.1 窗口清单（节选，完整见 `UI-SURFACES.tsv`）
 

@@ -92,6 +92,12 @@ CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL
 
 全包共 **1,062 个环境变量**（653 个 `CLAUDE_CODE_*`）。
 
+### 补充：主窗口本地部分到底有多少代码
+
+主窗口自身 webContents 在正常路径下渲染 `null`，只承担启动骨架/错误卡片。本地代码约 **1.84 MB**，其中 **1.24 MB 是一个懒加载的彩蛋小游戏**；真正的产品界面对等在兄弟 `WebContentsView`（`W-MAINVIEW`）里。
+`mainView.js` 接通 **81 个服务 / 1,127 个方法**（另加 6 个 `WindowManager` 方法 = 1,133），其余 11 个服务是其它窗口的私有面。
+详见 `P2-UI-AND-WINDOWS.md` §1.0b–§1.0d 与 `RENDERER-ENTRIES.md`。
+
 ---
 
 ## 覆盖率（可再计算）

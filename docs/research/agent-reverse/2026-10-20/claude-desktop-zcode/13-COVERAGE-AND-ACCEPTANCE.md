@@ -64,6 +64,8 @@
 | 路由（桌面外壳视角） | 64 |
 | 路由（内置 SPA 视角） | 716 |
 | 每个界面可触及的 eipc namespace | 已逐窗登记（13 个 preload 全覆盖） |
+| mainView 接通的 eipc 方法 | **1,127**（81 服务）+ 6 个 WindowManager = 1,133 |
+| 其它窗口私有服务 | 11 个服务 / 43 个方法 |
 
 **未闭合**：远程 UI（1P 模式下从 claude.ai 加载）的组件级链路，物理上不可静态获取 → `CLOUD-UNAVAILABLE`。
 
