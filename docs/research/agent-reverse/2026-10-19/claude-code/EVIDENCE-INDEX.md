@@ -66,9 +66,11 @@ Documentation can evolve independently of npm 2.1.302 and is **not native-S evid
 - `evidence/05-native-header.md` — PE structure, imports/resources; `06-native-string-index.jsonl` — selected byte-offset strings tied to executable SHA; `08-native-call-anchors.md` — symbol/module anchors and limits.
 - `evidence/07-native-registrations.md`, `11-cli-probes.md` — exact binary help and command exit/output summary.
 - `evidence/09-native-state-schema.md`, `10-unknowns.md` — bounded observed types/keys and remaining unknowns.
-- `evidence/12-native-supervisor-source.md`, `13-native-message-task-schemas.md`, `14-native-sendmessage-source.md`, `15-native-mailbox-source.md` — exact-PE static source traces with byte offsets and Atlas comparisons; no raw package/binary is included.
+- `evidence/12-native-supervisor-source.md`, `13-native-message-task-schemas.md`, `14-native-sendmessage-source.md`, `15-native-mailbox-source.md`, `16-native-task-state-events.md`, `17-bun-chunk-import-inventory.txt` — exact-PE static source traces and complete unique chunk-reference inventory; no raw package/binary is included.
 - Current package evidence totals: 2 exact archives / 11 extracted members independently hashed; 19 curated native string offsets; 11 version/help commands previously exit 0. A new isolated synthetic `--print` process emitted `system/init` and then returned repeated 401 authentication failures. Its request did not produce an Agent/tool event.
 - Static source S now covers the full locally traced SendMessage→mailbox append→read→ack path in the named helper methods. R covers startup/init and the explicit 401 only; Agent operation R remains 0.
+- `evidence/16-native-task-state-events.md` traces task registration and state transitions through terminal task-notification construction, bounded event queue, and selected CLI/event consumers. This is a source path, not evidence of event delivery or persistent parent recovery.
+- `evidence/17-bun-chunk-import-inventory.txt` enumerates 2,428 unique import/re-export chunk IDs across the complete 170,783,232-byte `.bun` range (211,512 references). This is structural inventory; semantic coverage remains partial.
 
 ## E5 — forced G0–G7 checkpoint (2026-10-19)
 

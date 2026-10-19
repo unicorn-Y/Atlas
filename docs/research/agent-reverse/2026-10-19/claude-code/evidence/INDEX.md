@@ -33,3 +33,7 @@ Coverage is partial: native package and unauthenticated CLI were analyzed, but a
 
 `15-native-mailbox-source.md` adds exact-PE byte-offset source excerpts for the inbox path, writer, reader, single/bulk acknowledgement and clear operations. See `../END-TO-END-TRACES.md` for the connected code path and isolated process attempt; the model request returned HTTP 401 before an Agent/tool event.
 
+`16-native-task-state-events.md` adds exact-PE offsets for task registration and state transitions, terminal notification construction, the bounded task-event queue, lifecycle consumers and their remaining runtime/persistence limits.
+
+`17-bun-chunk-import-inventory.txt` lists all 2,428 unique `chunk-*.js` IDs referenced in the full PE `.bun` byte range; 211,512 import references and 2,431 source marker/version headers were counted. This is structural inventory, not semantic decompilation of every chunk.
+

@@ -37,6 +37,18 @@ Observed: version `2.1.302`; first event was `system/init`, session ID `528d4e89
 
 Separate REA `capture_process_scenario` attempt failed before launch with `capability_unavailable`: Windows PTY process capture is unavailable because the adapter does not verify descendant cleanup. This is a tooling boundary; direct isolated CLI execution above was therefore used. Unlocking G4 requires a valid, properly authorized credential endpoint for this exact CLI/model configuration. No credential was requested or harvested.
 
+## E. Task state → event construction → queue → consumers
+
+This is a second source-grounded chain, not an observed runtime event trace:
+
+1. `Kn(e,n)` (PE byte offset 246,861,552) registers/updates a task and emits a `task_started` frame carrying stable task/run/tool IDs, child/parent relation, task kind, description, prompt and awaited/background state. The event schema is described at exact executable offsets in `evidence/13-native-message-task-schemas.md`.
+2. `Hn(e,n,r)` (offset 246,859,691) compares previous/new task state; it emits a wire-safe `task_updated` patch for changed status/description/timing/error/background fields. On a nonterminal→terminal transition it also calls `_a` with status, tool use, summary, failure/output/usage/resource/handback metadata.
+3. `_a` (offset 242,665,992) deduplicates terminal claims (`Dy`), builds `system/task_notification` with task/run/tool IDs and terminal payload, sanitizes via `Vgt`, and enqueues via `Ei`.
+4. Queue `Ny` (source around offset 242,662,000) is bounded at 1,000 entries, delays/coalesces full `background_tasks_changed` snapshots while level holds exist, drops stream frames under pressure, preferentially preserves task start/terminal bookends, and stamps drained events with UUID/session ID. This is an in-memory bounded queue, not proof of durable replay.
+5. Consumer `Gzr` (offset 269,514,323) replaces its task map from a snapshot, upserts background starts and removes on terminal notifications. A separate activity consumer `ut` (275,456,189) ignores `_in_process_teammate` task starts and removes task IDs on terminal/update signals. A text/history projection at 271,766,500 suppresses lifecycle frames from ordinary output; a redacted projection at 275,511,900 retains only limited task fields.
+
+The inbox chain in sections A–B and this state/event chain are not yet linked through a same-worker execution sample. The live event consumer, child transcript restore, parent notification and GUI visibility remain unknown.
+
 ## Coverage boundary
 
 UI action/key handlers, the complete stream/model loop, actual foreground/background child run, parent notification, active daemon IPC and restart recovery are still open. Do not infer these from schema, names, `system/init`, or static branch logic.

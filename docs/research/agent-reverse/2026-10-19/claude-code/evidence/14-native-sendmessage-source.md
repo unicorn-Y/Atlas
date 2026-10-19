@@ -59,8 +59,8 @@ The inspected Atlas child-worker path also explicitly deletes its transient conv
 
 ## Remaining unknowns
 
-- `Zw`'s implementation and exact mailbox path/serialization, locking, idempotency and file repair behavior.
-- The message reader/ack/replay/ordering semantics and race behavior with `retryWake`.
+- The full mailbox path and writer/read/ack implementation are source-traced in `15-native-mailbox-source.md`; runtime locking, crash durability, idempotency and file/store repair behavior remain unknown.
+- Actual reader/ack/replay/ordering behavior and race behavior with `retryWake` remain unobserved; see `15-native-mailbox-source.md` for the static code path.
 - Whether/when a teammate is woken, tool-call loop resumes, and parent receives the corresponding message/task event.
 - Runtime permissions, hook ordering, user confirmation and cross-machine service behavior.
 - Cross-machine `postInterClaudeMessage` server contract and durable delivery.
