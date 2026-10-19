@@ -1,0 +1,13 @@
+{
+  "rpc_entries": 1332,
+  "rpc_paired": 1332,
+  "services_without_preload": [],
+  "main_chunks": 354,
+  "main_chunks_not_statically_imported": 0,
+  "webcontents_events": 60,
+  "webcontents_events_without_renderer_listener": 60,
+  "renderer_call_names_unmapped": 331,
+  "unresolved_edges_total": 1215,
+  "main_chunks_entry_shell_identified": 1,
+  "renderer_call_names_unmapped_note": "331 unique names are library-internal methods (clonePosition/bind/round/floor/apply...); no eipc method is missing a caller"
+}
