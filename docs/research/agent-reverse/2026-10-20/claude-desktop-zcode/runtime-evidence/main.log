@@ -1,0 +1,335 @@
+2026-10-20 04:21:58 [error] Failed to load Claude Native Error: The specified module could not be found.
+\\?\D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar.unpacked\node_modules\@ant\claude-native\claude-native-binding.node
+    at process.func [as dlopen] (node:electron/js2c/node_init:1:3581)
+    at Object.<anonymous> (node:internal/modules/cjs/loader:2097:18)
+    at Object.func [as .node] (node:electron/js2c/node_init:1:3808)
+    at Module.load (node:internal/modules/cjs/loader:1658:32)
+    at Module._load (node:internal/modules/cjs/loader:1450:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:268:19)
+    at Module.require (node:internal/modules/cjs/loader:1681:12)
+    at require (node:internal/modules/helpers:157:16)
+    at Object.<anonymous> (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\node_modules\@ant\claude-native\index.js:11:17)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1937:14)
+    at o._compile (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.pre.js:1:903372)
+    at Object..js (node:internal/modules/cjs/loader:2070:10)
+    at Module.load (node:internal/modules/cjs/loader:1658:32)
+    at Module._load (node:internal/modules/cjs/loader:1450:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:268:19)
+    at Module.require (node:internal/modules/cjs/loader:1681:12)
+    at require (node:internal/modules/helpers:157:16)
+    at rZ (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.pre.js:1:806363)
+    at D1 (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.pre.js:1:833507)
+    at A1 (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.pre.js:1:834732) {
+  [stack]: [Getter/Setter],
+  [message]: 'The specified module could not be found.\r\n' +
+    '\\\\?\\D:\\Atlas\\_research\\claude-desktop\\2026-10-20\\extract\\app\\resources\\app.asar.unpacked\\node_modules\\@ant\\claude-native\\claude-native-binding.node',
+  code: 'ERR_DLOPEN_FAILED'
+}
+2026-10-20 04:21:58 [error] Native managed-config reader unavailable; managed tier cannot be read
+2026-10-20 04:21:58 [info] Starting app {
+  appVersion: '2.42304.0',
+  isPackaged: true,
+  platform: 'win32',
+  arch: 'x64',
+  nodeVersion: '24.21.0'
+}
+2026-10-20 04:21:58 [info] [windows-app-job] skipped: not an MSIX install
+2026-10-20 04:21:58 [info] [growthbook] next refresh due within 60 min
+2026-10-20 04:21:58 [info] [CCD] Initialized with version 2.1.299
+2026-10-20 04:21:58 [error] Failed to load Claude Native Error: The specified module could not be found.
+\\?\D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar.unpacked\node_modules\@ant\claude-native\claude-native-binding.node
+    at process.func [as dlopen] (node:electron/js2c/node_init:1:3581)
+    at Object.<anonymous> (node:internal/modules/cjs/loader:2097:18)
+    at Object.func [as .node] (node:electron/js2c/node_init:1:3808)
+    at Module.load (node:internal/modules/cjs/loader:1658:32)
+    at Module._load (node:internal/modules/cjs/loader:1450:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:268:19)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1681:12)
+    at Module.h (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.pre.js:1:104392)
+    at _require.r.require (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.pre.js:1:103371)
+    at require (node:internal/modules/helpers:157:16)
+    at Object.<anonymous> (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\node_modules\@ant\claude-native\index.js:11:17)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1937:14)
+    at o._compile (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.pre.js:1:903372)
+    at Object..js (node:internal/modules/cjs/loader:2070:10)
+    at Module.load (node:internal/modules/cjs/loader:1658:32)
+    at Module._load (node:internal/modules/cjs/loader:1450:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:268:19)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1681:12)
+    at Module.h (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.pre.js:1:104392)
+    at _require.r.require (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.pre.js:1:103371) {
+  [stack]: [Getter/Setter],
+  [message]: 'The specified module could not be found.\r\n' +
+    '\\\\?\\D:\\Atlas\\_research\\claude-desktop\\2026-10-20\\extract\\app\\resources\\app.asar.unpacked\\node_modules\\@ant\\claude-native\\claude-native-binding.node',
+  code: 'ERR_DLOPEN_FAILED'
+}
+2026-10-20 04:21:58 [error] Native managed-config reader unavailable; managed tier cannot be read
+2026-10-20 04:21:58 [info] [a11y] accessibility support disabled at startup features=none
+2026-10-20 04:21:58 [info] [CCD-autoupdate] Poll loop started (flag-gated)
+2026-10-20 04:21:58 [info] [account] Account details not yet available, waiting for IPC...
+2026-10-20 04:21:58 [warn] [CCD] Shell environment extraction failed (attempt 1), using process.env: Windows reported no PATH
+2026-10-20 04:21:58 [info] [updater] App is not installed, not enabling auto-updates
+2026-10-20 04:21:58 [warn] [window-state] failed to read saved state {
+  error: Ba [UnsafeRootError]: Root is not an accessible directory: D:\Atlas\_research\claude-desktop\2026-10-20\runtime\ud-01 (Error: @ant/claude-native is required for safe-fs containment but failed to load; refusing to fall back to a path-based open (CC-2885))
+      at e.open (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:7:78502)
+      at async e.with (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:7:79463)
+      at async $xe (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:7:91781)
+      at async Qxe (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:7:90423) {
+    code: 'ERR_SAFE_FS_ROOT',
+    cause: Error: @ant/claude-native is required for safe-fs containment but failed to load; refusing to fall back to a path-based open (CC-2885)
+        at Si (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:1:285142)
+        at pxe (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:7:71752)
+        at e.open (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:7:78480)
+        at async e.with (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:7:79463)
+        at async $xe (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:7:91781)
+        at async Qxe (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:7:90423) {
+      [cause]: [Error]
+    }
+  }
+}
+2026-10-20 04:21:58 [warn] [popout-restore] Failed to read session popouts; leaving the file untouched this run: {
+  error: Ba [UnsafeRootError]: Root is not an accessible directory: D:\Atlas\_research\claude-desktop\2026-10-20\runtime\ud-01 (Error: @ant/claude-native is required for safe-fs containment but failed to load; refusing to fall back to a path-based open (CC-2885))
+      at e.open (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:7:78502)
+      at async e.with (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:7:79463)
+      at async aAn (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:13:1751371) {
+    [stack]: [Getter/Setter],
+    [message]: 'Root is not an accessible directory: D:\\Atlas\\_research\\claude-desktop\\2026-10-20\\runtime\\ud-01 (Error: @ant/claude-native is required for safe-fs containment but failed to load; refusing to fall back to a path-based open (CC-2885))',
+    name: 'UnsafeRootError',
+    code: 'ERR_SAFE_FS_ROOT',
+    cause: Error: @ant/claude-native is required for safe-fs containment but failed to load; refusing to fall back to a path-based open (CC-2885)
+        at Si (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:1:285142)
+        at pxe (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:7:71752)
+        at e.open (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:7:78480)
+        at async e.with (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:7:79463)
+        at async aAn (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.chunk-lzaSYO3Q.js:13:1751371) {
+      [stack]: [Getter/Setter],
+      [message]: '@ant/claude-native is required for safe-fs containment but failed to load; refusing to fall back to a path-based open (CC-2885)',
+      [cause]: Error: The specified module could not be found.
+      \\?\D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar.unpacked\node_modules\@ant\claude-native\claude-native-binding.node
+          at process.func [as dlopen] (node:electron/js2c/node_init:1:3581)
+          at Object.<anonymous> (node:internal/modules/cjs/loader:2097:18)
+          at Object.func [as .node] (node:electron/js2c/node_init:1:3808)
+          at Module.load (node:internal/modules/cjs/loader:1658:32)
+          at Module._load (node:internal/modules/cjs/loader:1450:12)
+          at wrapModuleLoad (node:internal/modules/cjs/loader:268:19)
+          at Module.<anonymous> (node:internal/modules/cjs/loader:1681:12)
+          at Module.h (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.pre.js:1:104392)
+          at _require.r.require (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.pre.js:1:103371)
+          at require (node:internal/modules/helpers:157:16)
+          at Object.<anonymous> (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\node_modules\@ant\claude-native\index.js:11:17)
+          at Module.<anonymous> (node:internal/modules/cjs/loader:1937:14)
+          at o._compile (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.pre.js:1:903372)
+          at Object..js (node:internal/modules/cjs/loader:2070:10)
+          at Module.load (node:internal/modules/cjs/loader:1658:32)
+          at Module._load (node:internal/modules/cjs/loader:1450:12)
+          at wrapModuleLoad (node:internal/modules/cjs/loader:268:19)
+          at Module.<anonymous> (node:internal/modules/cjs/loader:1681:12)
+          at Module.h (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.pre.js:1:104392)
+          at _require.r.require (D:\Atlas\_research\claude-desktop\2026-10-20\extract\app\resources\app.asar\.vite\build\index.pre.js:1:103371) {
+        [stack]: [Getter/Setter],
+        [message]: 'The specified module could not be found.\r\n' +
+          '\\\\?\\D:\\Atlas\\_research\\claude-desktop\\2026-10-20\\extract\\app\\resources\\app.asar.unpacked\\node_modules\\@ant\\claude-native\\claude-native-binding.node',
+        code: 'ERR_DLOPEN_FAILED'
+      }
+    }
+  }
+}
+2026-10-20 04:21:58 [info] Config file written
+2026-10-20 04:21:58 [info] [cowork] one-time prune of never-served "/"/home grant entries: 0 removed
+2026-10-20 04:21:58 [info] [compliance] coworkHipaaRestricted at app-ready: unrestricted
+2026-10-20 04:21:58 [info] [sableOtter] claude-native has no sableOtter entry points; not starting
+2026-10-20 04:21:58 [error] [Chrome Extension MCP] Failed to sync native host in Windows registry: Claude Native is missing
+2026-10-20 04:21:58 [info] [Chrome Extension MCP] Native host sync complete
+2026-10-20 04:21:58 [info] [Chrome Extension MCP] Watching Chrome for extension changes
+2026-10-20 04:21:58 [info] [Chrome Extension MCP] Watching Edge for extension changes
+2026-10-20 04:21:58 [info] [bootPreconnect] proxy for https://claude.ai resolved in 54 ms (direct)
+2026-10-20 04:21:58 [info] [hybrid] boot: no hold { reason: 'no session' }
+2026-10-20 04:21:58 [info] [browser-live-preview] initialized (passive tap)
+2026-10-20 04:21:58 [info] [cu-live-preview] initialized
+2026-10-20 04:21:58 [info] [SessionMedia] claude-media:// protocol registered
+2026-10-20 04:21:58 [info] [cu-side-panel] initialized
+2026-10-20 04:21:58 [info] [cu-esc] initialized
+2026-10-20 04:21:58 [info] [cu-app-indicator] initialized
+2026-10-20 04:21:58 [info] [cu-glow] initialized
+2026-10-20 04:21:58 [info] [Simulator] claude-simulator:// protocol registered
+2026-10-20 04:21:58 [info] [remoteMarketplaceMigration] marketplace_migration.invoked
+2026-10-20 04:21:58 [info] [startup-sign-in] state: {
+  sign_in_cookie_present: false,
+  signed_in_at_last_exit: null,
+  previous_quit_clean: null,
+  update_relaunch_marker: 'none'
+}
+2026-10-20 04:21:58 [info] Config file written
+2026-10-20 04:21:58 [info] Config file written
+2026-10-20 04:21:58 [info] [WarmLifecycle:cowork] Initialized (arm=always)
+2026-10-20 04:21:58 [info] [cu-teach] controller initialized
+2026-10-20 04:21:58 [info] [cu-notifications] listeners registered
+2026-10-20 04:21:58 [info] [startup-warm] local-agent-mode island loaded { start_ms: 803, end_ms: 876 }
+2026-10-20 04:21:58 [warn] [growthbook] API returned status 403
+2026-10-20 04:21:58 [info] [chicago] GrowthBook chicago_config: raw=undefined → enabled=false subGates={"pixelValidation":false,"clipboardPasteMultiline":true,"mouseAnimation":true,"hideBeforeAction":true,"autoTargetDisplay":true,"clipboardGuard":true,"maskFailClosed":true,"adaptiveResolution":true} coordMode=pixels dispatchTtlMs=1800000 appScoped=false
+2026-10-20 04:21:58 [info] [remoteMarketplaceMigration] marketplace_migration.gate_check gate=claudeai_cowork_backend_marketplaces value=false
+2026-10-20 04:21:58 [info] [claude-in-chrome] local pairing flag reads off; registering once a signed-in account's flags land
+2026-10-20 04:21:59 [info] [bootPreconnect] asset warm-up ok after 804 ms
+2026-10-20 04:21:59 [info] mainView backgroundThrottling disabled (visible popouts: 0, glow: hidden, cu lock: free, boot: in progress, display capture: off)
+2026-10-20 04:22:00 [info] [startup-perf] {
+  born_hidden: false,
+  born_hidden_reason: null,
+  update_relaunch_marker: 'none',
+  process_start_epoch_ms: 1792441317990,
+  process_created_epoch_ms: 1792441317940,
+  process_created_to_node_start_ms: 50,
+  process_created_status: 'ok',
+  binary_loaded_to_node_start_ms: 14,
+  node_bootstrap_complete_ms: 8,
+  main_js_start_ms: 40,
+  main_pre_imports_loaded_ms: 64,
+  main_pre_native_addon_loaded_ms: null,
+  main_pre_managed_config_read_ms: 69,
+  main_pre_sentry_init_start_ms: 73,
+  main_bundle_start_ms: 114,
+  main_compile_cache: 'hit',
+  main_imports_loaded_ms: 215,
+  app_ready_ms: 305,
+  window_created_ms: 425,
+  main_window_loads_issued_ms: 444,
+  window_ready_to_show_ms: null,
+  window_did_finish_load_ms: 563,
+  window_visible_ms: 420,
+  http_cache_zstd_enabled: false,
+  windows_app_job: 'not_msix',
+  main_view_ready_to_show_ms: 2188,
+  main_view_dom_ready_ms: 2192,
+  main_view_request_seen_ms: 484,
+  main_view_send_headers_seen_ms: 486,
+  ready_handler_done_ms: 445,
+  island_load_start_ms: 803,
+  island_load_end_ms: 876,
+  main_view_document_request_count: 1,
+  is_first_run: true,
+  config_was_reset: false,
+  updated_since_last_launch: false,
+  hours_since_version_first_launch: 0,
+  user_data_location: 'unclassified',
+  localcache_install_id: null,
+  has_package_identity: false,
+  exe_under_windowsapps: false,
+  msix_identity_source: null,
+  user_data_move: null,
+  user_data_move_answer: null,
+  user_data_move_blocked_code: null,
+  user_data_move_blocked_launches: null,
+  user_data_move_failed_launches: null,
+  user_data_move_hosts: null,
+  msix_fs_virtualized: null,
+  other_user_data_location: null,
+  other_user_data_has_install_id: null,
+  other_user_data_has_cowork_sessions: null,
+  other_user_data_age_bucket: null,
+  own_user_data_created_bucket: null,
+  own_user_data_prior_entries_bucket: null,
+  own_user_data_untouched_entries_bucket: null,
+  own_user_data_prior_cowork_sessions: null,
+  msix_container_created_bucket: null,
+  msix_localcache_created_bucket: null,
+  msix_deploy_log_status: null,
+  msix_deploy_last_op: null,
+  msix_deploy_last_op_caller: null,
+  msix_deploy_last_op_forced: null,
+  msix_deploy_last_op_result: null,
+  msix_deploy_last_op_age_bucket: null,
+  msix_deploy_data_delete_failed_caller: null,
+  msix_deploy_data_delete_failed_step: null,
+  msix_deploy_read_reason: null,
+  msix_deploy_shape_store_made: null,
+  msix_deploy_shape_op: null,
+  msix_deploy_shape_caller: null,
+  msix_deploy_shape_result: null,
+  msix_deploy_shape_status: null,
+  msix_deploy_shape_own_account: null,
+  msix_deploy_shape_action: null,
+  msix_deploy_shape_event_ids: null,
+  msix_deploy_shape_close_wait_ms: null,
+  msix_deploy_shape_state_step_ms: null,
+  msix_deploy_shape_service_step_wait_ms: null,
+  msix_deploy_shape_options_low: null,
+  msix_deploy_shape_options_high: null,
+  msix_deploy_shape_status_set: null,
+  msix_deploy_ops_prior_10m: null,
+  msix_deploy_ops_prior_failed_10m: null,
+  msix_deploy_prior_op: null,
+  msix_deploy_prior_op_caller: null,
+  msix_deploy_prior_op_age_bucket: null,
+  msix_deploy_shape_after_boot_bucket: null,
+  msix_deploy_shape_after_sign_in_bucket: null,
+  msix_deploy_service_stop_status: null,
+  msix_deploy_service_stop_hit_deadline: null,
+  msix_deploy_system_log_status: null,
+  msix_deploy_boot_followed_unclean_shutdown: null,
+  msix_deploy_unclean_shutdowns_7d: null,
+  ignored_user_data_dir: 'none',
+  oldest_main_log_created_bucket: 'this_launch',
+  system_uptime_bucket: 'under_1d',
+  spa_nav_start_ms: 442,
+  spa_redirect_count: 0,
+  spa_fetch_start_ms: 493,
+  spa_dns_start_ms: 496,
+  spa_dns_ms: 12,
+  spa_connect_ms: 357,
+  spa_tls_ms: 181,
+  spa_request_start_ms: 864,
+  spa_conn_reused: false,
+  spa_protocol: 'h2',
+  spa_ttfb_ms: 1047,
+  spa_dcl_ms: 1750,
+  spa_nav_transfer_bytes: 84181,
+  spa_resource_count: 17,
+  spa_resource_network_count: 17,
+  spa_resource_cache_count: 0,
+  spa_resource_opaque_count: 0,
+  spa_transfer_bytes: 108145,
+  spa_encoded_bytes: 103045,
+  spa_script_count: null,
+  spa_script_first_fetch_ms: null,
+  spa_script_last_end_ms: null,
+  spa_script_network_count: null,
+  spa_script_last_from_cache: null,
+  spa_script_wait_p50_ms: null,
+  spa_script_wait_max_ms: null,
+  spa_script_queue_p50_ms: null,
+  spa_script_queue_max_ms: null,
+  spa_script_slow_wait_count: null,
+  spa_script_cache_read_max_ms: null,
+  spa_visibility_state: 'visible',
+  main_gc_minor_count: 7,
+  main_gc_major_count: 1,
+  main_gc_pause_ms: 10.2,
+  main_heap_allocated_bytes: 74339068,
+  main_gc_window_ms: 2150
+}
+2026-10-20 04:22:00 [info] [wake-scheduler] registered claim id=scheduled-tasks
+2026-10-20 04:22:00 [info] [WarmLifecycle:session] Initialized (arm=when-hidden)
+2026-10-20 04:22:00 [info] [WarmLifecycle:preview] Initialized (arm=when-hidden)
+2026-10-20 04:22:00 [info] [transcript-read] local-session reads run in the main process
+2026-10-20 04:22:00 [info] NotificationService initialized with Electron notifications
+2026-10-20 04:22:00 [warn] [growthbook] API returned status 403
+2026-10-20 04:22:03 [info] [account] IPC did not provide accountUuid, falling back to bootstrap API
+2026-10-20 04:22:03 [warn] [account] Bootstrap API returned 403
+2026-10-20 04:22:03 [warn] [LocalAgentModeSessionManager] Cannot initialize sessions: accountId=null, orgId=null. Keeping existing sessions.
+2026-10-20 04:22:03 [warn] [LocalSessionManager] Cannot initialize sessions: accountId=null, orgId=null. Keeping existing sessions.
+2026-10-20 04:22:03 [info] [account] Account details not yet available, waiting for IPC...
+2026-10-20 04:22:03 [info] mainView backgroundThrottling restored (visible popouts: 0, glow: hidden, cu lock: free, boot: done, display capture: off)
+2026-10-20 04:22:08 [info] [account] IPC did not provide accountUuid, falling back to bootstrap API
+2026-10-20 04:22:08 [warn] [account] Bootstrap API returned 403
+2026-10-20 04:22:08 [warn] [LocalAgentModeSessionManager] Cannot initialize sessions: accountId=null, orgId=null. Keeping existing sessions.
+2026-10-20 04:22:10 [info] System CA prewarm finished in 11ms
+2026-10-20 04:22:42 [info] Main webview render process gone: { reason: 'crashed', exitCode: 143 }
+2026-10-20 04:22:42 [error] Sentry caught: {
+  eventId: '6f7ded6b6c0845d4a9372ae66fd65494',
+  type: 'Unknown',
+  value: 'Main webview render process gone',
+  stack: undefined
+}
+2026-10-20 04:22:42 [info] [EventLogging] Flushing 13 events
+2026-10-20 04:22:43 [error] Network Service process gone (reason=crashed, exitCode=143) outside app quit — main-process networking is broken until relaunch
+2026-10-20 04:22:43 [info] GPU process gone: { type: 'GPU', reason: 'crashed', exitCode: 143, serviceName: 'GPU' }
+2026-10-20 04:22:43 [info] [EventLogging] Flushing 1 events
