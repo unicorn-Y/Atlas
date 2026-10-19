@@ -2,6 +2,7 @@
 
 - [START-HERE.md](START-HERE.md) — 入口、版本、结论、边界
 - [INVENTORY-SUMMARY.md](INVENTORY-SUMMARY.md) — 标本清单与哈希核对
+- [UI-INVENTORY-ZH.md](UI-INVENTORY-ZH.md) — **界面功能全清单（128 项 / 14 类，逐项说明用途）**
 - [MODULE-CATALOG.md](MODULE-CATALOG.md) — 15 个模块的中文机制说明
 - [RUNTIME-FLOWS.md](RUNTIME-FLOWS.md) — 14 条端到端链路
 - [UI-GALLERY.md](UI-GALLERY.md) — 界面图鉴与元素→源码定位表
