@@ -64,4 +64,3 @@ The inspected Atlas child-worker path also explicitly deletes its transient conv
 - Whether/when a teammate is woken, tool-call loop resumes, and parent receives the corresponding message/task event.
 - Runtime permissions, hook ordering, user confirmation and cross-machine service behavior.
 - Cross-machine `postInterClaudeMessage` server contract and durable delivery.
-
