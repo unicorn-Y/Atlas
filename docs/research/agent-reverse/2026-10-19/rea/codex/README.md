@@ -1,0 +1,22 @@
+# Codex 逆向研究成果索引
+
+- [START-HERE.md](START-HERE.md) — 入口、版本、结论、边界
+- [INVENTORY-SUMMARY.md](INVENTORY-SUMMARY.md) — 标本清单与哈希核对
+- [MODULE-CATALOG.md](MODULE-CATALOG.md) — 15 个模块的中文机制说明
+- [RUNTIME-FLOWS.md](RUNTIME-FLOWS.md) — 14 条端到端链路
+- [UI-GALLERY.md](UI-GALLERY.md) — 界面图鉴与元素→源码定位表
+- [UNKNOWNS.md](UNKNOWNS.md) — 10 项未解与盲点
+- [EVIDENCE-INDEX.md](EVIDENCE-INDEX.md) — 证据等级与来源
+- [COVERAGE.md](COVERAGE.md) / [COVERAGE.json](COVERAGE.json) — 覆盖率
+- [reports/](reports/) — 深度专题报告
+  - [01-架构总览](reports/01-架构总览.md)
+  - [02-Agent主循环与工具系统](reports/02-Agent主循环与工具系统.md)
+  - [03-前端组件目录](reports/03-前端组件目录.md)
+  - [04-桌面端前端与宿主](reports/04-桌面端前端与宿主.md)
+  - [05-CodeMode机制](reports/05-CodeMode机制.md)
+  - [06-Crate目录](reports/06-Crate目录.md)
+  - [PROTOCOL-METHODS](reports/PROTOCOL-METHODS.md) / [PROTOCOL-NOTIFICATIONS](reports/PROTOCOL-NOTIFICATIONS.md)
+  - [FUNCTION-CATALOG](FUNCTION-CATALOG.md)
+- [indexes/](indexes/) — 机器可读索引（crates / tools / rpc / gates / ui-chunks / key-types）
+- [viewer/](viewer/) — 本地可视化图鉴（用 `start-viewer.ps1` 打开）
+- [screenshots/](screenshots/) — 解包副本实拍截图（登录页 + 隐藏彩蛋）
