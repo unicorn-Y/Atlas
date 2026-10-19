@@ -1,0 +1,549 @@
+inventory_id	kind	asar_path	layer	family	semantic_verification	usage_description
+CD-GPT6-0001	directory	/.vite	package-root-or-other	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0002	directory	/.vite/build	package-root-or-other	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0003	file	/.vite/build/aboutWindow.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0004	file	/.vite/build/buddy.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0005	file	/.vite/build/claudePagePreview.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0006	file	/.vite/build/computerUseTeach.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0007	file	/.vite/build/computerUseWatchRecord.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0008	file	/.vite/build/coworkArtifact.js	electron-main-preload-worker	other-file-or-module	prior-static-trace-present_NOT_independently_source-verified	Earlier tracing exists; must verify against original bytes
+CD-GPT6-0009	file	/.vite/build/designWindow.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0010	directory	/.vite/build/file-index-worker	electron-main-preload-worker	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0011	file	/.vite/build/file-index-worker/fileIndexWorker.js	electron-main-preload-worker	worker-related	prior-static-trace-present_NOT_independently_source-verified	Earlier tracing exists; must verify against original bytes
+CD-GPT6-0012	file	/.vite/build/findInPage.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0013	directory	/.vite/build/heavy-work-worker	electron-main-preload-worker	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0014	file	/.vite/build/heavy-work-worker/dist-CI9lzb1v.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0015	file	/.vite/build/heavy-work-worker/heavyWorkWorker.js	electron-main-preload-worker	worker-related	prior-static-trace-present_NOT_independently_source-verified	Earlier tracing exists; must verify against original bytes
+CD-GPT6-0016	file	/.vite/build/heavy-work-worker/rolldown-runtime-CI_2c2Xz.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0017	file	/.vite/build/index.chunk--Ke4fVuU.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0018	file	/.vite/build/index.chunk--pR4DFWL.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0019	file	/.vite/build/index.chunk-0jb8zQWa.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0020	file	/.vite/build/index.chunk-0q54qGlJ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0021	file	/.vite/build/index.chunk-1lJXcT8c.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0022	file	/.vite/build/index.chunk-2_Kpgj9v.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0023	file	/.vite/build/index.chunk-4HAlnXqB.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0024	file	/.vite/build/index.chunk-5TaW4QRE.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0025	file	/.vite/build/index.chunk-5wlbAX53.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0026	file	/.vite/build/index.chunk-6HzFAPWT.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0027	file	/.vite/build/index.chunk-713hoB_d.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0028	file	/.vite/build/index.chunk-B-eEmKcL.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0029	file	/.vite/build/index.chunk-B-m_SPwC.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0030	file	/.vite/build/index.chunk-B08Ms-4o.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0031	file	/.vite/build/index.chunk-B0WAWLOW.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0032	file	/.vite/build/index.chunk-B17ncv_E.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0033	file	/.vite/build/index.chunk-B2Moev8O.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0034	file	/.vite/build/index.chunk-B2Rrv5Um.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0035	file	/.vite/build/index.chunk-B2Vbqvd-.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0036	file	/.vite/build/index.chunk-B3Fg7lxU.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0037	file	/.vite/build/index.chunk-B3ord9Gq.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0038	file	/.vite/build/index.chunk-B4iWTRPf.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0039	file	/.vite/build/index.chunk-B5xg_hLm.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0040	file	/.vite/build/index.chunk-B7dhjaUQ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0041	file	/.vite/build/index.chunk-B7hSi02X.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0042	file	/.vite/build/index.chunk-B8JZ7v6H.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0043	file	/.vite/build/index.chunk-B8ZKzQZo.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0044	file	/.vite/build/index.chunk-B9ueezvW.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0045	file	/.vite/build/index.chunk-BAEQpeU2.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0046	file	/.vite/build/index.chunk-BAr-M6Uk.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0047	file	/.vite/build/index.chunk-BB4dhyVR.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0048	file	/.vite/build/index.chunk-BBUs8uvY.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0049	file	/.vite/build/index.chunk-BCxvKF4p.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0050	file	/.vite/build/index.chunk-BEVeQ4eS.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0051	file	/.vite/build/index.chunk-BF0qZsid.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0052	file	/.vite/build/index.chunk-BFOvM_pR.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0053	file	/.vite/build/index.chunk-BFgHcLgq.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0054	file	/.vite/build/index.chunk-BFtu7z-n.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0055	file	/.vite/build/index.chunk-BFxRKxih.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0056	file	/.vite/build/index.chunk-BH0bRpNM.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0057	file	/.vite/build/index.chunk-BIQH9bmT.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0058	file	/.vite/build/index.chunk-BIps7hQO.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0059	file	/.vite/build/index.chunk-BK7U1e7z.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0060	file	/.vite/build/index.chunk-BKwJ0Kzl.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0061	file	/.vite/build/index.chunk-BMFhTup2.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0062	file	/.vite/build/index.chunk-BMJzdG-N.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0063	file	/.vite/build/index.chunk-BN7PaJ_P.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0064	file	/.vite/build/index.chunk-BNd-Veq8.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0065	file	/.vite/build/index.chunk-BP9wjxd9.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0066	file	/.vite/build/index.chunk-BPH2yjvG.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0067	file	/.vite/build/index.chunk-BPjIr-mn.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0068	file	/.vite/build/index.chunk-BPxbWJAH.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0069	file	/.vite/build/index.chunk-BQf2i5CR.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0070	file	/.vite/build/index.chunk-BQi7slPm.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0071	file	/.vite/build/index.chunk-BQkApOKK.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0072	file	/.vite/build/index.chunk-BSSe-7sQ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0073	file	/.vite/build/index.chunk-BTny0TLv.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0074	file	/.vite/build/index.chunk-BVerX_SL.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0075	file	/.vite/build/index.chunk-BVryDrIy.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0076	file	/.vite/build/index.chunk-BWI7goHJ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0077	file	/.vite/build/index.chunk-BWl4h9Ko.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0078	file	/.vite/build/index.chunk-BXF3MbS8.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0079	file	/.vite/build/index.chunk-BXLZazwD.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0080	file	/.vite/build/index.chunk-BXYGThVv.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0081	file	/.vite/build/index.chunk-BYMGAPtw.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0082	file	/.vite/build/index.chunk-BZ4d--Z2.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0083	file	/.vite/build/index.chunk-BZpj-Xyx.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0084	file	/.vite/build/index.chunk-BbK5vSxh.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0085	file	/.vite/build/index.chunk-BbpAC-UC.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0086	file	/.vite/build/index.chunk-BbrNXR5p.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0087	file	/.vite/build/index.chunk-BcNzSWBi.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0088	file	/.vite/build/index.chunk-BdmPP2qV.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0089	file	/.vite/build/index.chunk-Be0WbAnH.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0090	file	/.vite/build/index.chunk-BeZcR6Nl.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0091	file	/.vite/build/index.chunk-BemIcaFh.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0092	file	/.vite/build/index.chunk-Bf9o4l1C.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0093	file	/.vite/build/index.chunk-Bfz0nkIg.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0094	file	/.vite/build/index.chunk-Bg3zmPAK.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0095	file	/.vite/build/index.chunk-BgNlZkJ7.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0096	file	/.vite/build/index.chunk-BgSwqbzh.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0097	file	/.vite/build/index.chunk-Bgul06K6.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0098	file	/.vite/build/index.chunk-BhtDJrnm.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0099	file	/.vite/build/index.chunk-Bib_F17Q.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0100	file	/.vite/build/index.chunk-Bj1rMKq6.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0101	file	/.vite/build/index.chunk-BjZ3vX9r.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0102	file	/.vite/build/index.chunk-Bk2sltuX.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0103	file	/.vite/build/index.chunk-BkZ4tpDY.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0104	file	/.vite/build/index.chunk-BlEfqh4Z.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0105	file	/.vite/build/index.chunk-BlIyBYaD.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0106	file	/.vite/build/index.chunk-BlX2K52i.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0107	file	/.vite/build/index.chunk-BmfewHq3.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0108	file	/.vite/build/index.chunk-Bn6onBlX.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0109	file	/.vite/build/index.chunk-BnPPioal.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0110	file	/.vite/build/index.chunk-BnZH0cT0.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0111	file	/.vite/build/index.chunk-Bolwy5c8.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0112	file	/.vite/build/index.chunk-BopPBEgI.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0113	file	/.vite/build/index.chunk-BpoRyh_b.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0114	file	/.vite/build/index.chunk-Bq0b1KR5.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0115	file	/.vite/build/index.chunk-Bsn1VIro.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0116	file	/.vite/build/index.chunk-BtXfU220.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0117	file	/.vite/build/index.chunk-BtyBHo3K.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0118	file	/.vite/build/index.chunk-Bu0Hda6m.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0119	file	/.vite/build/index.chunk-BvMaI6NQ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0120	file	/.vite/build/index.chunk-BvUB77vv.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0121	file	/.vite/build/index.chunk-BxLuI_4U.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0122	file	/.vite/build/index.chunk-By3lrqDG.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0123	file	/.vite/build/index.chunk-ByvAMUkj.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0124	file	/.vite/build/index.chunk-C-8wcdkH.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0125	file	/.vite/build/index.chunk-C-v1WiLD.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0126	file	/.vite/build/index.chunk-C0sq-LTJ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0127	file	/.vite/build/index.chunk-C15e1VST.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0128	file	/.vite/build/index.chunk-C15iBw1-.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0129	file	/.vite/build/index.chunk-C1l855wQ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0130	file	/.vite/build/index.chunk-C2TjXBTO.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0131	file	/.vite/build/index.chunk-C5Ud-KyG.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0132	file	/.vite/build/index.chunk-C5_DUEl_.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0133	file	/.vite/build/index.chunk-C6OBlOlX.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0134	file	/.vite/build/index.chunk-C7ydsIk6.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0135	file	/.vite/build/index.chunk-CAAuh_N2.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0136	file	/.vite/build/index.chunk-CAaS9_t_.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0137	file	/.vite/build/index.chunk-CCgl5N-V.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0138	file	/.vite/build/index.chunk-CCotqg2k.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0139	file	/.vite/build/index.chunk-CCzyVBVq.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0140	file	/.vite/build/index.chunk-CDdFTMzQ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0141	file	/.vite/build/index.chunk-CDpxTd3c.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0142	file	/.vite/build/index.chunk-CELowqls.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0143	file	/.vite/build/index.chunk-CEkgISQ-.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0144	file	/.vite/build/index.chunk-CEsJ07Wf.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0145	file	/.vite/build/index.chunk-CFY-4zeK.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0146	file	/.vite/build/index.chunk-CGwsahND.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0147	file	/.vite/build/index.chunk-CIspABeP.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0148	file	/.vite/build/index.chunk-CJRhqwjr.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0149	file	/.vite/build/index.chunk-CJxqg9Un.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0150	file	/.vite/build/index.chunk-CKOX3env.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0151	file	/.vite/build/index.chunk-CLDnJbh1.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0152	file	/.vite/build/index.chunk-CLyGth5n.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0153	file	/.vite/build/index.chunk-CNXRFRP7.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0154	file	/.vite/build/index.chunk-CN_uPo6d.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0155	file	/.vite/build/index.chunk-CPEA6dKA.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0156	file	/.vite/build/index.chunk-CPUoh-Ta.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0157	file	/.vite/build/index.chunk-CPzeH_V9.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0158	file	/.vite/build/index.chunk-CQQIsj7r.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0159	file	/.vite/build/index.chunk-CQeTfNrA.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0160	file	/.vite/build/index.chunk-CQr0Ee4m.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0161	file	/.vite/build/index.chunk-CS97pYxF.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0162	file	/.vite/build/index.chunk-CTyoJC3M.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0163	file	/.vite/build/index.chunk-CU-hpQBB.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0164	file	/.vite/build/index.chunk-CU89UzUr.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0165	file	/.vite/build/index.chunk-CUMCDUNn.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0166	file	/.vite/build/index.chunk-CUNvOQN2.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0167	file	/.vite/build/index.chunk-CUXAfqTZ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0168	file	/.vite/build/index.chunk-CUYqXjqj.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0169	file	/.vite/build/index.chunk-CVOteD6E.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0170	file	/.vite/build/index.chunk-CVfpPT7d.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0171	file	/.vite/build/index.chunk-CWVQDNOx.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0172	file	/.vite/build/index.chunk-CYu8whgJ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0173	file	/.vite/build/index.chunk-CZGv8iib.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0174	file	/.vite/build/index.chunk-CZXx132H.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0175	file	/.vite/build/index.chunk-C_4pXLR0.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0176	file	/.vite/build/index.chunk-C_qk6eGw.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0177	file	/.vite/build/index.chunk-C_ze_R2E.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0178	file	/.vite/build/index.chunk-Cau1PpCq.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0179	file	/.vite/build/index.chunk-CbSbf3Tr.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0180	file	/.vite/build/index.chunk-CbfUFryd.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0181	file	/.vite/build/index.chunk-CcXrDQ0i.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0182	file	/.vite/build/index.chunk-CcveFAuE.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0183	file	/.vite/build/index.chunk-CcyCtVxN.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0184	file	/.vite/build/index.chunk-Cd8cGj4_.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0185	file	/.vite/build/index.chunk-CdsxofPO.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0186	file	/.vite/build/index.chunk-CdzcX3nr.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0187	file	/.vite/build/index.chunk-CeJGoREc.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0188	file	/.vite/build/index.chunk-CeSjtxih.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0189	file	/.vite/build/index.chunk-Ceg5Z3Ce.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0190	file	/.vite/build/index.chunk-CekorYcU.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0191	file	/.vite/build/index.chunk-CexIg5zO.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0192	file	/.vite/build/index.chunk-CfYHAcpH.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0193	file	/.vite/build/index.chunk-CgH6Cli_.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0194	file	/.vite/build/index.chunk-ChpGVBJ1.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0195	file	/.vite/build/index.chunk-Chu9Of_9.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0196	file	/.vite/build/index.chunk-CiPwBI1D.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0197	file	/.vite/build/index.chunk-CiRCUv_L.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0198	file	/.vite/build/index.chunk-CiZj5wKe.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0199	file	/.vite/build/index.chunk-Cj79nCi4.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0200	file	/.vite/build/index.chunk-Ck3ee-gJ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0201	file	/.vite/build/index.chunk-CkecUsrN.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0202	file	/.vite/build/index.chunk-ClUXMtQ7.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0203	file	/.vite/build/index.chunk-ClrUhXWp.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0204	file	/.vite/build/index.chunk-Cm-Uv1wR.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0205	file	/.vite/build/index.chunk-CmeqApNG.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0206	file	/.vite/build/index.chunk-CneElZpr.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0207	file	/.vite/build/index.chunk-CnkTpwso.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0208	file	/.vite/build/index.chunk-CpFPgE9p.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0209	file	/.vite/build/index.chunk-CpOIE1nf.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0210	file	/.vite/build/index.chunk-CrblwMDh.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0211	file	/.vite/build/index.chunk-Crjx4ZVt.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0212	file	/.vite/build/index.chunk-CuCIlj4E.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0213	file	/.vite/build/index.chunk-CuJrF8sP.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0214	file	/.vite/build/index.chunk-CvLGcrZB.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0215	file	/.vite/build/index.chunk-CwIQU-8Y.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0216	file	/.vite/build/index.chunk-CwuFYsKE.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0217	file	/.vite/build/index.chunk-CxI_2nWm.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0218	file	/.vite/build/index.chunk-CxNVpniR.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0219	file	/.vite/build/index.chunk-CxUAVDxD.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0220	file	/.vite/build/index.chunk-CxzV6l7X.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0221	file	/.vite/build/index.chunk-CzLc7P9j.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0222	file	/.vite/build/index.chunk-CzY1tCPL.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0223	file	/.vite/build/index.chunk-CziplGGF.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0224	file	/.vite/build/index.chunk-D-0924nl.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0225	file	/.vite/build/index.chunk-D-HqUGLi.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0226	file	/.vite/build/index.chunk-D-T5CYlE.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0227	file	/.vite/build/index.chunk-D1RwX_Ka.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0228	file	/.vite/build/index.chunk-D25qKEdm.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0229	file	/.vite/build/index.chunk-D2A8Ncj4.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0230	file	/.vite/build/index.chunk-D3Peov1H.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0231	file	/.vite/build/index.chunk-D4B44ehk.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0232	file	/.vite/build/index.chunk-D5gwoNxg.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0233	file	/.vite/build/index.chunk-D6ax747K.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0234	file	/.vite/build/index.chunk-D76cxAuR.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0235	file	/.vite/build/index.chunk-D7UNC1Oj.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0236	file	/.vite/build/index.chunk-D8KN2IXy.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0237	file	/.vite/build/index.chunk-D8KhDGfd.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0238	file	/.vite/build/index.chunk-D8RdLxk8.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0239	file	/.vite/build/index.chunk-D8phPbdW.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0240	file	/.vite/build/index.chunk-D8wkeL37.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0241	file	/.vite/build/index.chunk-DA534R-L.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0242	file	/.vite/build/index.chunk-DAR5x_5h.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0243	file	/.vite/build/index.chunk-DAabB_9C.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0244	file	/.vite/build/index.chunk-DAy4YstQ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0245	file	/.vite/build/index.chunk-DCgdwyFw.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0246	file	/.vite/build/index.chunk-DD2qsWbt.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0247	file	/.vite/build/index.chunk-DD9Q9sLU.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0248	file	/.vite/build/index.chunk-DDLL2EES.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0249	file	/.vite/build/index.chunk-DDW7ExCv.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0250	file	/.vite/build/index.chunk-DDsgmCu_.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0251	file	/.vite/build/index.chunk-DEvtmnQ-.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0252	file	/.vite/build/index.chunk-DEx3njUs.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0253	file	/.vite/build/index.chunk-DF2E1zuK.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0254	file	/.vite/build/index.chunk-DGLBzABn.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0255	file	/.vite/build/index.chunk-DGgKKPXU.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0256	file	/.vite/build/index.chunk-DI47cOp_.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0257	file	/.vite/build/index.chunk-DINXX5S-.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0258	file	/.vite/build/index.chunk-DJXBruhf.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0259	file	/.vite/build/index.chunk-DLcJEY_w.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0260	file	/.vite/build/index.chunk-DLkBHW-V.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0261	file	/.vite/build/index.chunk-DLqLwOmD.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0262	file	/.vite/build/index.chunk-DLvhfzmK.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0263	file	/.vite/build/index.chunk-DMEJLiDO.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0264	file	/.vite/build/index.chunk-DNxwdxw-.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0265	file	/.vite/build/index.chunk-DNyequwM.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0266	file	/.vite/build/index.chunk-DPHCUQQy.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0267	file	/.vite/build/index.chunk-DPuRWdEL.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0268	file	/.vite/build/index.chunk-DQ3698r0.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0269	file	/.vite/build/index.chunk-DRFAz7zF.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0270	file	/.vite/build/index.chunk-DRb1afDC.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0271	file	/.vite/build/index.chunk-DRlnO5CK.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0272	file	/.vite/build/index.chunk-DSNPhQKz.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0273	file	/.vite/build/index.chunk-DT4sNa4R.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0274	file	/.vite/build/index.chunk-DVKorKfz.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0275	file	/.vite/build/index.chunk-DVtfwF6X.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0276	file	/.vite/build/index.chunk-DWmvMnwU.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0277	file	/.vite/build/index.chunk-DXQssFNd.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0278	file	/.vite/build/index.chunk-DZSaR_us.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0279	file	/.vite/build/index.chunk-DZV6mBvi.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0280	file	/.vite/build/index.chunk-DaEcYOkw.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0281	file	/.vite/build/index.chunk-DajqLQbW.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0282	file	/.vite/build/index.chunk-DcO4CDAv.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0283	file	/.vite/build/index.chunk-Dd4cATog.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0284	file	/.vite/build/index.chunk-Dd9v2aGl.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0285	file	/.vite/build/index.chunk-Dgy-1Nht.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0286	file	/.vite/build/index.chunk-Dh527fpx.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0287	file	/.vite/build/index.chunk-DiIqVGe0.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0288	file	/.vite/build/index.chunk-Dig-VUnE.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0289	file	/.vite/build/index.chunk-DiuE5YRB.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0290	file	/.vite/build/index.chunk-DjgBgJOe.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0291	file	/.vite/build/index.chunk-DkUVHq8L.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0292	file	/.vite/build/index.chunk-DlE0R5Pd.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0293	file	/.vite/build/index.chunk-DlUQavGs.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0294	file	/.vite/build/index.chunk-DllGAjvd.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0295	file	/.vite/build/index.chunk-DoU0pLl3.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0296	file	/.vite/build/index.chunk-Dp-fwrC4.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0297	file	/.vite/build/index.chunk-DqAcjgt5.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0298	file	/.vite/build/index.chunk-DqGUM1Dr.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0299	file	/.vite/build/index.chunk-DuNMxYBx.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0300	file	/.vite/build/index.chunk-Dujv1em2.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0301	file	/.vite/build/index.chunk-DvQd8RR7.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0302	file	/.vite/build/index.chunk-DvdZaxqH.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0303	file	/.vite/build/index.chunk-DwhRU0hX.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0304	file	/.vite/build/index.chunk-DyGy2D-O.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0305	file	/.vite/build/index.chunk-DyYrY1NN.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0306	file	/.vite/build/index.chunk-EI2tE9_4.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0307	file	/.vite/build/index.chunk-EwbxZ6wW.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0308	file	/.vite/build/index.chunk-FiyCjals.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0309	file	/.vite/build/index.chunk-G9_mRSUx.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0310	file	/.vite/build/index.chunk-GMy-Fx2L.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0311	file	/.vite/build/index.chunk-Gxf1yHDU.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0312	file	/.vite/build/index.chunk-Hph4NgNJ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0313	file	/.vite/build/index.chunk-I9bAj080.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0314	file	/.vite/build/index.chunk-IEsexX9X.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0315	file	/.vite/build/index.chunk-JnLh1fOe.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0316	file	/.vite/build/index.chunk-KfAz_42N.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0317	file	/.vite/build/index.chunk-LPK9kWWN.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0318	file	/.vite/build/index.chunk-LqLRvaib.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0319	file	/.vite/build/index.chunk-LtG4Q0jJ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0320	file	/.vite/build/index.chunk-M4RyjaHM.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0321	file	/.vite/build/index.chunk-M6SkuaH9.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0322	file	/.vite/build/index.chunk-MT_AbdGg.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0323	file	/.vite/build/index.chunk-MijPx1d7.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0324	file	/.vite/build/index.chunk-NjFfajPS.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0325	file	/.vite/build/index.chunk-PXR81r8F.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0326	file	/.vite/build/index.chunk-QSM1kwGG.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0327	file	/.vite/build/index.chunk-QXv2aC_b.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0328	file	/.vite/build/index.chunk-RQsbjaP_.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0329	file	/.vite/build/index.chunk-Ray2aCu3.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0330	file	/.vite/build/index.chunk-S2eKuU9U.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0331	file	/.vite/build/index.chunk-TDahgEnt.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0332	file	/.vite/build/index.chunk-TIxUOzMy.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0333	file	/.vite/build/index.chunk-US5c54N2.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0334	file	/.vite/build/index.chunk-Uk7wsaDw.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0335	file	/.vite/build/index.chunk-VXoZYQbU.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0336	file	/.vite/build/index.chunk-Vdvw6mum.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0337	file	/.vite/build/index.chunk-VeAh16Bs.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0338	file	/.vite/build/index.chunk-Vi4y50hN.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0339	file	/.vite/build/index.chunk-VlHCkRyl.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0340	file	/.vite/build/index.chunk-WxlVBeEX.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0341	file	/.vite/build/index.chunk-XFjt9B7T.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0342	file	/.vite/build/index.chunk-ZvAdCieZ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0343	file	/.vite/build/index.chunk-aK0JyCY9.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0344	file	/.vite/build/index.chunk-b_nHwNir.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0345	file	/.vite/build/index.chunk-bnDZLEe6.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0346	file	/.vite/build/index.chunk-cZIsAMJH.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0347	file	/.vite/build/index.chunk-eLxLj6qe.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0348	file	/.vite/build/index.chunk-f4SiagXk.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0349	file	/.vite/build/index.chunk-hOorvWtr.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0350	file	/.vite/build/index.chunk-ilWIs3r6.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0351	file	/.vite/build/index.chunk-klfIxYlb.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0352	file	/.vite/build/index.chunk-l9SraRJO.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0353	file	/.vite/build/index.chunk-lZjBQ2C7.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0354	file	/.vite/build/index.chunk-ljgWmT8p.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0355	file	/.vite/build/index.chunk-lxiRko9r.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0356	file	/.vite/build/index.chunk-lzaSYO3Q.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0357	file	/.vite/build/index.chunk-nB1UBbHL.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0358	file	/.vite/build/index.chunk-qy0A6HAj.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0359	file	/.vite/build/index.chunk-rUSp9s65.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0360	file	/.vite/build/index.chunk-uAdDXvxb.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0361	file	/.vite/build/index.chunk-vYnAlWmT.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0362	file	/.vite/build/index.chunk-xBKHjffa.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0363	file	/.vite/build/index.chunk-xoZNrP6a.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0364	file	/.vite/build/index.chunk-y1BuSqXP.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0365	file	/.vite/build/index.chunk-yHaef_W6.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0366	file	/.vite/build/index.chunk-yKIwpGVf.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0367	file	/.vite/build/index.chunk-zDwQxd00.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0368	file	/.vite/build/index.chunk-zIoHNHnH.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0369	file	/.vite/build/index.chunk-zyVF5iEQ.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0370	file	/.vite/build/index.chunk-zzWYn-sM.js	electron-main-preload-worker	main-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0371	file	/.vite/build/index.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0372	file	/.vite/build/index.pre.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0373	file	/.vite/build/localExecConsent.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0374	file	/.vite/build/mainView.js	electron-main-preload-worker	other-file-or-module	prior-static-trace-present_NOT_independently_source-verified	Earlier tracing exists; must verify against original bytes
+CD-GPT6-0375	file	/.vite/build/mainWindow.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0376	directory	/.vite/build/mcp-runtime	electron-main-preload-worker	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0377	file	/.vite/build/mcp-runtime/directMcpHost.js	electron-main-preload-worker	mcp-runtime-host	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0378	file	/.vite/build/mcp-runtime/nodeHost.js	electron-main-preload-worker	mcp-runtime-host	prior-static-trace-present_NOT_independently_source-verified	Earlier tracing exists; must verify against original bytes
+CD-GPT6-0379	directory	/.vite/build/msal-broker-worker	electron-main-preload-worker	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0380	file	/.vite/build/msal-broker-worker/msalBrokerWorker.js	electron-main-preload-worker	worker-related	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0381	directory	/.vite/build/pty-host	electron-main-preload-worker	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0382	file	/.vite/build/pty-host/ptyHostWorker.js	electron-main-preload-worker	worker-related	prior-static-trace-present_NOT_independently_source-verified	Earlier tracing exists; must verify against original bytes
+CD-GPT6-0383	file	/.vite/build/quickWindow.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0384	directory	/.vite/build/shell-path-worker	electron-main-preload-worker	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0385	file	/.vite/build/shell-path-worker/shellPathWorker.js	electron-main-preload-worker	worker-related	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0386	directory	/.vite/build/stall-sampler-worker	electron-main-preload-worker	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0387	file	/.vite/build/stall-sampler-worker/stallSamplerWorker.js	electron-main-preload-worker	worker-related	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0388	directory	/.vite/build/transcript-search-worker	electron-main-preload-worker	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0389	file	/.vite/build/transcript-search-worker/transcriptSearchWorker.js	electron-main-preload-worker	worker-related	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0390	file	/.vite/build/watchRecordChooser.js	electron-main-preload-worker	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0391	directory	/.vite/renderer	package-root-or-other	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0392	directory	/.vite/renderer/about_window	renderer-ui	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0393	file	/.vite/renderer/about_window/about.html	renderer-ui	renderer-document	path-index-only	Renderer HTML entry present; interactions not traced
+CD-GPT6-0394	directory	/.vite/renderer/about_window/assets	renderer-ui	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0395	file	/.vite/renderer/about_window/assets/AboutWindow-DtKZougt.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0396	file	/.vite/renderer/about_window/assets/AnthropicSans-Italic-Variable-CJtkx3-S.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0397	file	/.vite/renderer/about_window/assets/AnthropicSans-Roman-Variable-DDVos-BJ.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0398	file	/.vite/renderer/about_window/assets/AnthropicSerif-Italic-Variable-Dcb-9NUS.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0399	file	/.vite/renderer/about_window/assets/AnthropicSerif-Roman-Variable-2VcCjn5t.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0400	file	/.vite/renderer/about_window/assets/icon-BhGhQuZm.png	renderer-ui	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0401	file	/.vite/renderer/about_window/assets/main-CiwjW8Wn.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0402	file	/.vite/renderer/about_window/assets/main-tJY2FsYJ.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0403	file	/.vite/renderer/about_window/window-legacy-pins.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0404	file	/.vite/renderer/about_window/window-shared.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0405	directory	/.vite/renderer/buddy_window	renderer-ui	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0406	directory	/.vite/renderer/buddy_window/assets	renderer-ui	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0407	file	/.vite/renderer/buddy_window/assets/AnthropicSans-Italic-Variable-CJtkx3-S.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0408	file	/.vite/renderer/buddy_window/assets/AnthropicSans-Roman-Variable-DDVos-BJ.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0409	file	/.vite/renderer/buddy_window/assets/AnthropicSerif-Italic-Variable-Dcb-9NUS.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0410	file	/.vite/renderer/buddy_window/assets/AnthropicSerif-Roman-Variable-2VcCjn5t.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0411	file	/.vite/renderer/buddy_window/assets/BuddyWindow-_Jgif_qX.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0412	file	/.vite/renderer/buddy_window/assets/main-DeOnnb9G.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0413	file	/.vite/renderer/buddy_window/assets/main-a4mzyXdA.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0414	file	/.vite/renderer/buddy_window/buddy.html	renderer-ui	renderer-document	path-index-only	Renderer HTML entry present; interactions not traced
+CD-GPT6-0415	file	/.vite/renderer/buddy_window/window-legacy-pins.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0416	file	/.vite/renderer/buddy_window/window-shared.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0417	directory	/.vite/renderer/find_in_page	renderer-ui	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0418	directory	/.vite/renderer/find_in_page/assets	renderer-ui	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0419	file	/.vite/renderer/find_in_page/assets/AnthropicSans-Italic-Variable-CJtkx3-S.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0420	file	/.vite/renderer/find_in_page/assets/AnthropicSans-Roman-Variable-DDVos-BJ.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0421	file	/.vite/renderer/find_in_page/assets/AnthropicSerif-Italic-Variable-Dcb-9NUS.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0422	file	/.vite/renderer/find_in_page/assets/AnthropicSerif-Roman-Variable-2VcCjn5t.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0423	file	/.vite/renderer/find_in_page/assets/CdsPortal-CNRGQfg8.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0424	file	/.vite/renderer/find_in_page/assets/FindInPage-BLyCri-A.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0425	file	/.vite/renderer/find_in_page/assets/FindInPage-CfNQSgeo.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0426	file	/.vite/renderer/find_in_page/assets/Tooltip-B9_DnyKN.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0427	file	/.vite/renderer/find_in_page/assets/anthropicons-variable-cvFTkbeX.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0428	file	/.vite/renderer/find_in_page/assets/asHTMLElement-B2Zv_iii.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0429	file	/.vite/renderer/find_in_page/assets/impl-DwLiCTEL.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0430	file	/.vite/renderer/find_in_page/assets/main-CiwjW8Wn.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0431	file	/.vite/renderer/find_in_page/assets/main-hLSpBHWq.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0432	file	/.vite/renderer/find_in_page/find-in-page.html	renderer-ui	renderer-document	path-index-only	Renderer HTML entry present; interactions not traced
+CD-GPT6-0433	file	/.vite/renderer/find_in_page/window-legacy-pins.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0434	file	/.vite/renderer/find_in_page/window-shared.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0435	directory	/.vite/renderer/local_exec_consent	renderer-ui	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0436	directory	/.vite/renderer/local_exec_consent/assets	renderer-ui	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0437	file	/.vite/renderer/local_exec_consent/assets/main-Ddc-H8_l.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0438	file	/.vite/renderer/local_exec_consent/localExecConsent.html	renderer-ui	renderer-document	path-index-only	Renderer HTML entry present; interactions not traced
+CD-GPT6-0439	directory	/.vite/renderer/main_window	renderer-ui	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0440	directory	/.vite/renderer/main_window/assets	renderer-ui	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0441	file	/.vite/renderer/main_window/assets/AnthropicSans-Italic-Variable-CJtkx3-S.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0442	file	/.vite/renderer/main_window/assets/AnthropicSans-Roman-Variable-DDVos-BJ.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0443	file	/.vite/renderer/main_window/assets/AnthropicSerif-Italic-Variable-Dcb-9NUS.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0444	file	/.vite/renderer/main_window/assets/AnthropicSerif-Roman-Variable-2VcCjn5t.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0445	file	/.vite/renderer/main_window/assets/MainWindowPage-BM1J3SeB.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0446	file	/.vite/renderer/main_window/assets/MainWindowPage-DTxMhyWF.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0447	file	/.vite/renderer/main_window/assets/attachReactWithSelector-Bf7MO2XB.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0448	file	/.vite/renderer/main_window/assets/clawdQuestEngine-C2Z1JudX.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0449	file	/.vite/renderer/main_window/assets/clawdQuestEngine-CdvdlRdl.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0450	file	/.vite/renderer/main_window/assets/main-9C0encc1.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0451	file	/.vite/renderer/main_window/assets/react-intl-CW2bLHOS.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0452	file	/.vite/renderer/main_window/index.html	renderer-ui	renderer-document	path-index-only	Renderer HTML entry present; interactions not traced
+CD-GPT6-0453	directory	/.vite/renderer/quick_window	renderer-ui	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0454	directory	/.vite/renderer/quick_window/assets	renderer-ui	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0455	file	/.vite/renderer/quick_window/assets/AnthropicSans-Italic-Variable-CJtkx3-S.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0456	file	/.vite/renderer/quick_window/assets/AnthropicSans-Roman-Variable-DDVos-BJ.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0457	file	/.vite/renderer/quick_window/assets/AnthropicSerif-Italic-Variable-Dcb-9NUS.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0458	file	/.vite/renderer/quick_window/assets/AnthropicSerif-Roman-Variable-2VcCjn5t.woff2	renderer-ui	font-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0459	file	/.vite/renderer/quick_window/assets/main-CiwjW8Wn.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0460	file	/.vite/renderer/quick_window/assets/main-DFyKxPTW.js	renderer-ui	renderer-bundle-chunk	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0461	file	/.vite/renderer/quick_window/quick-window.html	renderer-ui	renderer-document	path-index-only	Renderer HTML entry present; interactions not traced
+CD-GPT6-0462	file	/.vite/renderer/quick_window/window-legacy-pins.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0463	file	/.vite/renderer/quick_window/window-shared.css	renderer-ui	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0464	directory	/compile-cache	package-root-or-other	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0465	file	/compile-cache/index.chunk-D4B44ehk.js.x64.jsc	package-root-or-other	compiled-js-cache	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0466	file	/compile-cache/index.chunk-lzaSYO3Q.js.x64.jsc	package-root-or-other	compiled-js-cache	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0467	file	/compile-cache/index.js.x64.jsc	package-root-or-other	compiled-js-cache	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0468	directory	/node_modules	package-root-or-other	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0469	directory	/node_modules/@ant	third-party-runtime	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0470	directory	/node_modules/@ant/claude-native	third-party-runtime	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0471	file	/node_modules/@ant/claude-native/claude-native-binding.node	third-party-runtime	native-executable-or-module	path-index-only	Native file present; imports/calls not independently examined
+CD-GPT6-0472	file	/node_modules/@ant/claude-native/index.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0473	file	/node_modules/@ant/claude-native/package.json	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0474	directory	/node_modules/agent-base	third-party-runtime	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0475	file	/node_modules/agent-base/LICENSE	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0476	file	/node_modules/agent-base/README.md	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0477	directory	/node_modules/agent-base/dist	third-party-runtime	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0478	file	/node_modules/agent-base/dist/helpers.d.ts	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0479	file	/node_modules/agent-base/dist/helpers.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0480	file	/node_modules/agent-base/dist/index.d.ts	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0481	file	/node_modules/agent-base/dist/index.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0482	file	/node_modules/agent-base/package.json	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0483	directory	/node_modules/node-pty	third-party-runtime	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0484	directory	/node_modules/node-pty/lib	third-party-runtime	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0485	file	/node_modules/node-pty/lib/conpty_console_list_agent.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0486	file	/node_modules/node-pty/lib/eventEmitter2.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0487	file	/node_modules/node-pty/lib/index.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0488	file	/node_modules/node-pty/lib/interfaces.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0489	directory	/node_modules/node-pty/lib/shared	third-party-runtime	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0490	file	/node_modules/node-pty/lib/shared/conout.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0491	file	/node_modules/node-pty/lib/terminal.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0492	file	/node_modules/node-pty/lib/types.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0493	file	/node_modules/node-pty/lib/unixTerminal.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0494	file	/node_modules/node-pty/lib/utils.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0495	file	/node_modules/node-pty/lib/windowsConoutConnection.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0496	file	/node_modules/node-pty/lib/windowsPtyAgent.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0497	file	/node_modules/node-pty/lib/windowsTerminal.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0498	directory	/node_modules/node-pty/lib/worker	third-party-runtime	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0499	file	/node_modules/node-pty/lib/worker/conoutSocketWorker.js	third-party-runtime	worker-related	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0500	file	/node_modules/node-pty/package.json	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0501	directory	/node_modules/node-pty/prebuilds	third-party-runtime	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0502	directory	/node_modules/node-pty/prebuilds/win32-x64	third-party-runtime	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0503	file	/node_modules/node-pty/prebuilds/win32-x64/conpty.node	third-party-runtime	native-executable-or-module	path-index-only	Native file present; imports/calls not independently examined
+CD-GPT6-0504	file	/node_modules/node-pty/prebuilds/win32-x64/conpty_console_list.node	third-party-runtime	native-executable-or-module	path-index-only	Native file present; imports/calls not independently examined
+CD-GPT6-0505	directory	/node_modules/ws	third-party-runtime	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0506	file	/node_modules/ws/LICENSE	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0507	file	/node_modules/ws/README.md	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0508	file	/node_modules/ws/browser.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0509	file	/node_modules/ws/index.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0510	directory	/node_modules/ws/lib	third-party-runtime	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0511	file	/node_modules/ws/lib/buffer-util.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0512	file	/node_modules/ws/lib/constants.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0513	file	/node_modules/ws/lib/event-target.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0514	file	/node_modules/ws/lib/extension.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0515	file	/node_modules/ws/lib/limiter.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0516	file	/node_modules/ws/lib/permessage-deflate.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0517	file	/node_modules/ws/lib/receiver.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0518	file	/node_modules/ws/lib/sender.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0519	file	/node_modules/ws/lib/stream.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0520	file	/node_modules/ws/lib/subprotocol.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0521	file	/node_modules/ws/lib/validation.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0522	file	/node_modules/ws/lib/websocket-server.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0523	file	/node_modules/ws/lib/websocket.js	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0524	file	/node_modules/ws/package.json	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0525	file	/node_modules/ws/wrapper.mjs	third-party-runtime	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0526	file	/package.json	package-root-or-other	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0527	directory	/resources	package-root-or-other	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0528	directory	/resources/artifact-libs	bundled-resource-extension	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0529	file	/resources/artifact-libs/npm_chart.js@4.5.0_dist_chart.umd.js	bundled-resource-extension	artifact-render-library	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0530	file	/resources/artifact-libs/npm_gridjs@5.0.2_dist_gridjs.umd.js	bundled-resource-extension	artifact-render-library	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0531	file	/resources/artifact-libs/npm_gridjs@5.0.2_dist_theme_mermaid.min.css	bundled-resource-extension	style-asset	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0532	file	/resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	bundled-resource-extension	artifact-render-library	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0533	directory	/resources/bundled-skills	bundled-resource-extension	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0534	file	/resources/bundled-skills/docx.skill	bundled-resource-extension	bundled-skill	path-index-only	Bundled skill file present; action semantics not verified
+CD-GPT6-0535	file	/resources/bundled-skills/frontend-design.skill	bundled-resource-extension	bundled-skill	path-index-only	Bundled skill file present; action semantics not verified
+CD-GPT6-0536	file	/resources/bundled-skills/manifest.json	bundled-resource-extension	other-file-or-module	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0537	file	/resources/bundled-skills/pdf-reading.skill	bundled-resource-extension	bundled-skill	path-index-only	Bundled skill file present; action semantics not verified
+CD-GPT6-0538	file	/resources/bundled-skills/pdf.skill	bundled-resource-extension	bundled-skill	path-index-only	Bundled skill file present; action semantics not verified
+CD-GPT6-0539	file	/resources/bundled-skills/pptx.skill	bundled-resource-extension	bundled-skill	path-index-only	Bundled skill file present; action semantics not verified
+CD-GPT6-0540	file	/resources/bundled-skills/xlsx.skill	bundled-resource-extension	bundled-skill	path-index-only	Bundled skill file present; action semantics not verified
+CD-GPT6-0541	directory	/resources/github-mcp	bundled-resource-extension	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0542	file	/resources/github-mcp/github-mcp-server.exe	bundled-resource-extension	bundled-github-mcp-artifact	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0543	directory	/resources/office365-mcp	bundled-resource-extension	directory	path-index-only	Container path only, no executable semantics
+CD-GPT6-0544	file	/resources/office365-mcp/msal-node-runtime.node	bundled-resource-extension	bundled-office365-mcp-artifact	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0545	file	/resources/office365-mcp/msalruntime.dll	bundled-resource-extension	bundled-office365-mcp-artifact	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0546	file	/resources/office365-mcp/office365-mcp-stdio.mjs	bundled-resource-extension	bundled-office365-mcp-artifact	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0547	file	/resources/office365-mcp/pdf.worker.mjs	bundled-resource-extension	bundled-office365-mcp-artifact	path-index-only	No semantics inferred solely from file path
+CD-GPT6-0548	file	/resources/office365-mcp/pdfExtractorProcess.mjs	bundled-resource-extension	bundled-office365-mcp-artifact	path-index-only	No semantics inferred solely from file path
