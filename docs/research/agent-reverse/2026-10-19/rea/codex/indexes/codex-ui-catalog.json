@@ -1,0 +1,326 @@
+[
+ {
+  "file": "codex-app-home-beacon-announcement-2b935397f978.js",
+  "key": "beacon.multiPage.goToPage",
+  "value": "Go to page {pageNumber}",
+  "description": "Accessible label for a progress dot that jumps to a card in a backend-driven multi-page Beacon announcement dialog. {pageNumber} is the one-based card number."
+ },
+ {
+  "file": "codex-app-home-beacon-announcement-2b935397f978.js",
+  "key": "codexAppHomeBeaconAnnouncement.dismiss",
+  "value": "Dismiss {appName} beacon banner",
+  "description": "Accessible label for dismissing the backend-driven Codex app home banner"
+ },
+ {
+  "file": "codex-local-access-splash-796d7b7d21c4.js",
+  "key": "composer.codexAccessSplash.accessMessage",
+  "value": "You don’t have access to Codex yet. Contact your admin to request access.",
+  "description": "Status shown above the Codex access splash when the user's workspace has not enabled local Codex, directing them to contact their admin"
+ },
+ {
+  "file": "codex-micro-bridge-a5aa8d621054.js",
+  "key": "codexMicro.command.unavailable",
+  "value": "This action isn't available here",
+  "description": "Toast shown when a Codex Micro keycap command cannot run in the current context"
+ },
+ {
+  "file": "codex-micro-joystick-hud-8a89b8451b25.js",
+  "key": "codexMicro.joystickFeedback.gameGestureProgress",
+  "value": "Keep circling · {progress}",
+  "description": "Progress shown while circling the Codex Micro joystick to activate a mini-game"
+ },
+ {
+  "file": "codex-micro-keyboard-surface-f2d6fa0a8efb.js",
+  "key": "settings.codexMicro.agentKeyPreview.unassigned",
+  "value": "No chat or action assigned to agent key {position}",
+  "description": "Fallback title for an unassigned Codex Micro agent key"
+ },
+ {
+  "file": "codex-micro-keyboard-surface-f2d6fa0a8efb.js",
+  "key": "settings.codexMicro.agentKeyPreview.untitled",
+  "value": "#${y}",
+  "description": null
+ },
+ {
+  "file": "codex-micro-keyboard-surface-f2d6fa0a8efb.js",
+  "key": "settings.codexMicro.agentKeyPreview.assign",
+  "value": "Assign a chat, shortcut, keycap, or skill to agent key {position}",
+  "description": "Accessible label for assigning a task to a Codex Micro agent key"
+ },
+ {
+  "file": "codex-micro-onboarding-host-376afbc88fc8.js",
+  "key": "codexMicro.onboarding.animatedAgentKey",
+  "value": "Agent key {position} changing status color",
+  "description": "Accessible label for an animated agent key in Codex Micro onboarding"
+ },
+ {
+  "file": "codex-micro-onboarding-host-376afbc88fc8.js",
+  "key": "permissions.revealApp",
+  "value": "If {appName} doesn't appear in {permissionSettingsName}, reveal it in Finder, then drag the app into the open System Settings panel",
+  "description": "Instructions for dragging the app from Finder into a macOS permission settings page when it is missing"
+ },
+ {
+  "file": "codex-micro-onboarding-host-376afbc88fc8.js",
+  "key": "permissions.showAppInFinder",
+  "value": "Show {appName} in Finder",
+  "description": "Button that reveals the current app bundle in Finder"
+ },
+ {
+  "file": "codex-micro-onboarding-host-376afbc88fc8.js",
+  "key": "creatorMicro.onboarding.commandKeys.input",
+  "value": "ps. Get more from your Creator Micro with <input>Input</input>, Work Louder’s dedicated configurator for customizing controls across all your creative apps",
+  "description": "Link to Work Louder Input from Creator Micro onboarding"
+ },
+ {
+  "file": "codex-micro-onboarding-host-376afbc88fc8.js",
+  "key": "codexMicro.onboarding.commandKeys.input",
+  "value": "ps. Get more from your Codex Micro with <input>Input</input>, Work Louder’s dedicated configurator for customizing controls across all your creative apps",
+  "description": "Link to Work Louder Input from Codex Micro onboarding"
+ },
+ {
+  "file": "codex-micro-onboarding-host-376afbc88fc8.js",
+  "key": "codexMicro.onboarding.agentKeys.legend.idle",
+  "value": "White – Idle",
+  "description": "Legend entry for an idle Codex Micro agent key"
+ },
+ {
+  "file": "codex-micro-onboarding-host-376afbc88fc8.js",
+  "key": "codexMicro.onboarding.agentKeys.legend.thinking",
+  "value": "Blue – Thinking",
+  "description": "Legend entry for a thinking Codex Micro agent key"
+ },
+ {
+  "file": "codex-micro-onboarding-host-376afbc88fc8.js",
+  "key": "codexMicro.onboarding.agentKeys.legend.complete",
+  "value": "Green – Complete",
+  "description": "Legend entry for a completed Codex Micro agent key"
+ },
+ {
+  "file": "codex-micro-onboarding-host-376afbc88fc8.js",
+  "key": "codexMicro.onboarding.agentKeys.legend.requiresInput",
+  "value": "Amber – Requires input",
+  "description": "Legend entry for a Codex Micro agent key requiring input"
+ },
+ {
+  "file": "codex-micro-onboarding-host-376afbc88fc8.js",
+  "key": "codexMicro.onboarding.agentKeys.legend.error",
+  "value": "Red – Error",
+  "description": "Legend entry for a Codex Micro agent key with an error"
+ },
+ {
+  "file": "codex-micro-onboarding-host-376afbc88fc8.js",
+  "key": "codexMicro.onboarding.agentKeys.legend.unassigned",
+  "value": "Off – No Assigned Agent",
+  "description": "Legend entry for an unassigned Codex Micro agent key"
+ },
+ {
+  "file": "codex-micro-onboarding-host-376afbc88fc8.js",
+  "key": "codexMicro.onboarding.build",
+  "value": "Let’s build!",
+  "description": "Button that completes the Codex Micro feature tour"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.analog.assignDirection",
+  "value": "Assign {direction}",
+  "description": "Label above Codex Micro analog direction action choices"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.analog.direction.mapping",
+  "value": "{direction}: {action}",
+  "description": "Accessible label for a Codex Micro analog direction and its assigned action"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.connection.controlUnavailableDescriptionByDevice",
+  "value": "{deviceName} input remains available, but lighting and battery updates are temporarily unavailable",
+  "description": "Explains that a connected Codex Micro or Creator Micro can still receive input while its device control channel is unavailable"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.connection.problemDescriptionByDevice",
+  "value": "ChatGPT couldn't communicate with your {deviceName}. ChatGPT is reconnecting automatically. If the problem continues, reconnect it and try again.",
+  "description": "Fallback troubleshooting guidance for a Codex Micro or Creator Micro connection error"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.connection.discoveryFailedDescriptionByDevice",
+  "value": "ChatGPT couldn't check for your {deviceName}. ChatGPT will try again automatically. If the problem continues, reconnect the device or restart ChatGPT.",
+  "description": "Troubleshooting guidance shown when Codex Micro or Creator Micro device discovery fails"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.lightingBrightness.descriptionByDevice",
+  "value": "Adjusts the brightness of all {deviceName} lighting",
+  "description": "Description for the Codex Micro or Creator Micro lighting brightness setting"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.lightingAutoOff.descriptionByDevice",
+  "value": "Turns lighting off after inactivity and back on when you use {deviceName} or an agent key changes color or state",
+  "description": "Description for the Codex Micro or Creator Micro lighting auto-dim setting"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.keyboardLayout.knob.configureByDevice",
+  "value": "Configure {deviceName} knob actions",
+  "description": "Accessible label for opening the Codex Micro or Creator Micro knob action mapping editor"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.encoder.assign",
+  "value": "{input, select, left {Assign left turn} right {Assign right turn} click {Assign click} longPress {Assign long press} other {Assign knob gesture}}",
+  "description": "Label above action choices for a Codex Micro knob gesture"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.encoder.mapping",
+  "value": "{input, select, left {Turn left} right {Turn right} click {Click} longPress {Press and hold} other {Knob gesture}}: {action}",
+  "description": "Accessible label for a Codex Micro knob gesture and its assigned action"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.encoder.gesture",
+  "value": "{input, select, left {Turn left} right {Turn right} click {Click} longPress {Press and hold} other {Knob gesture}}",
+  "description": "Label for a Codex Micro knob gesture"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.keyboardLayout.resetConfirmation.title",
+  "value": "Reset keyboard layout?",
+  "description": "Title for the dialog confirming a Codex Micro keyboard layout reset"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.connection.removeConfirmation.title",
+  "value": "Remove {deviceName}?",
+  "description": "Title for the dialog confirming removal of an unavailable Codex Micro or Creator Micro connection from ChatGPT"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.connection.removeConfirmation.description",
+  "value": "This removes {deviceName} from ChatGPT without changing its preferences, custom chat assignments, or Bluetooth pairing. Reconnect the device to add it again.",
+  "description": "Explanation shown before removing an unavailable Codex Micro or Creator Micro connection from ChatGPT"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.customAgent.search.labelByType",
+  "value": "Search {type, select, chat {chats} shortcut {shortcuts} keycap {keycaps} skill {skills} other {assignments}} to assign",
+  "description": "Accessible label for searching Codex Micro agent-key assignments by assignment type"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.customAgent.title",
+  "value": "Assign agent key {position}",
+  "description": "Title of the dialog for assigning a task to a numbered physical Agent Key on the Codex Micro hardware keypad"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.customAgent.search.placeholderByType",
+  "value": "Search {type, select, chat {chats} shortcut {shortcuts} keycap {keycaps} skill {skills} other {assignments}}",
+  "description": "Placeholder for searching Codex Micro agent-key assignments by assignment type"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.customAgent.assignedKey",
+  "value": "Key {position}",
+  "description": "Label identifying the numbered physical Agent Key on the Codex Micro hardware keypad currently assigned to a task"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.customAgent.actions.empty",
+  "value": "No matching {type, select, shortcut {shortcuts} keycap {keycaps} skill {skills} other {actions}}",
+  "description": "Empty state when searching actions for a Codex Micro agent key"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.customAgent.keycaps.composerText",
+  "value": "Insert {text} into the composer",
+  "description": "Description for a Codex Micro keycap that inserts text into the composer"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.customAgent.keycaps.externalUrl",
+  "value": "Open {url}",
+  "description": "Description for a Codex Micro keycap that opens an external URL"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.inputMonitoring.descriptionByDevice",
+  "value": "Required for {deviceName} key presses on macOS",
+  "description": "Description for the macOS Input Monitoring permission state for Codex Micro or Creator Micro"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.editor.customShortcut.useDefault",
+  "value": "Dropdown option that restores a Codex Micro keycap's predefined action",
+  "description": null
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.editor.customShortcut.defaultAction",
+  "value": "Keycap default: {action}",
+  "description": "Description shown when a Codex Micro keycap uses its predefined action"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.editor.subtitle",
+  "value": "Choose what appears on {slotId}",
+  "description": "Subtitle for the Codex Micro keycap slot editor"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.agentKeyPreview.keycap",
+  "value": "{keycapId} keycap",
+  "description": "Title for a keycap assigned to a Codex Micro agent key"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.keyboardLayout.knobTooltip.pressAndHoldActionByDevice",
+  "value": "Open {deviceName} settings",
+  "description": "Action performed when pressing and holding the Codex Micro or Creator Micro encoder knob"
+ },
+ {
+  "file": "codex-micro-settings-e26c9caffecc.js",
+  "key": "settings.codexMicro.keyboardLayout.knobByDevice",
+  "value": "{deviceName} knob",
+  "description": "Accessible label for the encoder knob in the Codex Micro or Creator Micro keyboard preview"
+ },
+ {
+  "file": "codex-mobile-setup-dialog-f9d566940f74.js",
+  "key": "codexMobile.setupDialog.connected.heading",
+  "value": "You’re connected",
+  "description": "Heading for the Codex mobile setup connected state"
+ },
+ {
+  "file": "codex-mobile-setup-dialog-f9d566940f74.js",
+  "key": "codexMobile.setupPage.waiting.pairing.unavailableWithError",
+  "value": "Pairing code unavailable: {error}",
+  "description": "Message shown when the remote-control pairing code cannot be loaded, including the app-server error detail"
+ },
+ {
+  "file": "codex-mobile-setup-dialog-f9d566940f74.js",
+  "key": "codexMobile.setupDialog.initial.startSetupError",
+  "value": "Couldn’t check security requirements. Try again",
+  "description": "Error shown when Codex mobile setup cannot check the MFA requirement"
+ },
+ {
+  "file": "codex-mobile-setup-dialog-f9d566940f74.js",
+  "key": "codexMobile.setupDialog.allowHost.heading",
+  "value": "Allow devices to control this computer?",
+  "description": "Heading for the Codex mobile allow host dialog state"
+ },
+ {
+  "file": "codex-mobile-setup-dialog-f9d566940f74.js",
+  "key": "codexMobile.setupDialog.allowHost.error",
+  "value": "Couldn’t enable remote control. Try again",
+  "description": "Error shown when Codex mobile setup cannot enable remote control"
+ },
+ {
+  "file": "codex-mobile-setup-dialog-f9d566940f74.js",
+  "key": "codexMobile.setupDialog.mfaRequired.description",
+  "value": "To enable this feature, you’ll need to turn on Multi-Factor Authentication for your ChatGPT account",
+  "description": "Description for the Codex mobile MFA required dialog state"
+ }
+]

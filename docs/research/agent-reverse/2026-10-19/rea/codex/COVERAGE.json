@@ -27,7 +27,10 @@
    "note": "新增：系统提示全文、插件/hook、二进制函数边界"
   },
   "ui_visualization": {
-   "ratio": 0.15
+   "ratio": 0.9,
+   "note": "按'界面元素是否已识别并说明用途'计：14 类 128 项清单已建立（UI-INVENTORY-ZH.md）；真实截图仅 2 张（登录页+彩蛋），登录后需账号",
+   "elements_identified": 128,
+   "screenshots_captured": 2
   },
   "e2e_verification": {
    "ratio": 0.35,
@@ -38,6 +41,10 @@
    "binaries_with_function_boundaries": "1/5",
    "binaries_with_semantic_decompile": "0/5",
    "functions_exported": 23289
+  },
+  "ui_visualization_screenshots_only": {
+   "ratio": 0.15,
+   "note": "仅按真实截图数计，与上项区分"
   }
  },
  "counts": {
@@ -56,7 +63,15 @@
   "ui_chunks": 2176,
   "native_functions_exported": 23289,
   "bundled_plugins": 10,
-  "system_prompt_chars": 18037
+  "system_prompt_chars": 18037,
+  "ui_elements_identified": 128,
+  "ui_strings_extracted": {
+   "zh-CN": 24293,
+   "ja-JP": 22993,
+   "de-DE": 28499,
+   "fr-FR": 24230
+  },
+  "codex_specific_chunks": 34
  },
  "unknowns": [
   "codex.exe 函数级反编译未完成（341MB stripped Rust）",

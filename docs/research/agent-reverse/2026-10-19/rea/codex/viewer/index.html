@@ -70,6 +70,7 @@ let DATA=null, VIEW='overview', FILTER='';
 const SEL=new Set();
 const NAV=[
  ['overview','总览与证据',''],
+ ['inventory','界面功能全清单',''],
  ['arch','架构与进程',''],
  ['crates','Rust Crate 目录',155],
  ['agentloop','Agent 主循环',''],
@@ -123,6 +124,7 @@ function render(){
     <div class="note">所有条目均标注可定位来源。</div></div>
     <div class="card"><h3>选择</h3><div id="selbox" class="note">勾选条目后在此汇总，可导出 SELECTIONS.json</div></div>`;
   if(VIEW==='overview') return viewOverview(main);
+  if(VIEW==='inventory') return viewInventory(main);
   if(VIEW==='arch') return viewArch(main);
   if(VIEW==='crates') return viewCrates(main);
   if(VIEW==='agentloop') return viewAgentLoop(main);
@@ -440,6 +442,19 @@ function viewUnknowns(el){
   <div class="card"><h3>统计口径</h3><p>覆盖率数字见 <code>COVERAGE.json</code>；本图鉴不宣称 100%。</p></div>`;
 }
 
+
+
+function viewInventory(el){
+  const secs=DATA.uiInventory||[];
+  const total=secs.reduce((a,s)=>a+s.rows.length,0);
+  el.innerHTML=H(`Codex 界面功能全清单（${total} 项 / ${secs.length-1} 类）`,
+   '全部来自包内 <code>webview/assets</code> 的 i18n 文案与协议方法；不需要登录截图也能确定"有什么、干什么用"')+
+   secs.filter(s=>s.rows.length).map(s=>`
+   <div class="card"><h3>${esc(s.title)}（${s.rows.length}）</h3>
+   <table><tr><th style="width:26%">东西</th><th>用来干嘛</th><th style="width:28%">包内证据</th></tr>
+   ${s.rows.map(r=>`<tr><td>${esc(r.what)}</td><td>${esc(r.usage)}</td><td class="mono">${esc(r.evidence)}</td></tr>`).join('')}
+   </table></div>`).join('');
+}
 
 function viewPrompt(el){
   const p=DATA.systemPrompt||{chars:0,lines:0,text:''};
