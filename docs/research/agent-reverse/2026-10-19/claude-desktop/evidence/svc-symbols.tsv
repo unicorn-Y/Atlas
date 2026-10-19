@@ -6,5 +6,6 @@ HCN APIs	HcnOpenNetwork, HcnCloseNetwork, HcnDeleteNetwork, HcnEnumerateNetworks
 VM transport	Plan9 shares, HvSocket, gvisor tap-vsock SSH/DNS/DHCP/forwarder	PE string table	Component/protocol names embedded; runtime use not dynamically observed	S string
 Go module	github.com/anthropics/cowork-win32-service	Go build/string metadata	Identifies build module	S
 launch linkage	No literal cowork-svc or @ant/cowork-win32-service in bounded .vite/build JS scan	ASAR JS bundles	App-to-service installation/connect path unresolved	U
-Go func metadata	pipe.(*Server).handleStartVM	0x140950f5b (string address)	Go pclntab/function metadata string; Ghidra procedure entry remains FUN_ name	S symbol string only
-Go func metadata	vm.(*WindowsVMManager).StartVMWithBundle	0x140949431 (string address)	Go pclntab/function metadata string; body/call edges not recovered	S symbol string only
+Go func metadata	pipe.(*Server).handleStartVM	0x140950f5b (string address); entry 0x14051d3c0	PCLN function-table entry recovered from Go 1.18+ pclntab; Ghidra entry remains FUN_ name; body directly calls StartVMWithBundle	S + Ghidra body
+Go func metadata	vm.(*WindowsVMManager).StartVMWithBundle	0x140949431 (string address); entry 0x1404fdd00	PCLN function-table entry recovered; Ghidra body validates/caps config then calls StartVM at 0x1404f6f20	S + Ghidra body
+Go pclntab subset	evidence/svc-pclntab-relevant-functions.tsv	21 relevant names mapped to entry VAs	PCLN entry table was parsed from exact signed cowork-svc.exe; Ghidra decomp confirms direct call edges for handleStartVM, handleStopVM, StartVMWithBundle, and CLI handlers	S/D; function naming remains analyst-generated map

@@ -1,0 +1,22 @@
+go_function	pclntab_entry_va	ghidra_entry_va	observed_link_or_role	evidence
+main.main	0x140524800	0x140524800	CLI dispatch branches to install/uninstall/start/stop/status handlers	Ghidra dossier ev_6b48b92c9701e9ab9e5250e430b01f9ee1e5be97eeb856367258fdb54829a4e9; prior PCLN parser output
+main.runService	0x140524c60	0x140524c60	Initializes logging, legacy HCN cleanup, signature verification, then runtime callbacks	Ghidra dossier ev_fc66bff96b3fc792a4371fa1ae36e4a4e4c54ffe1f8505f6e593f2b216ac933d
+main.handleInstall	0x140525340	0x140525340	CLI install handler	Ghidra dossier from prior analysis; PCLN parser output
+main.handleUninstall	0x140525400	0x140525400	CLI uninstall handler	Ghidra dossier from prior analysis; PCLN parser output
+main.handleStart	0x140525460	0x140525460	CLI start handler calls main.startService	Ghidra dossier ev_f1ad6fffe5537d1436b6827bd0326c41393a5ea2a93c2fdc3eb3129c7b2cdbbd; PCLN parser output
+main.handleStop	0x1405254c0	0x1405254c0	CLI stop handler	Ghidra dossier from prior analysis; PCLN parser output
+main.handleStatus	0x140525520	0x140525520	CLI status handler	Ghidra dossier from prior analysis; PCLN parser output
+main.(*serviceHandler).Execute	0x140525f40	0x140525f40	Windows service lifecycle loop includes ready/error/recovery branches	Ghidra dossier ev_fb8184f9ba423891ca212e05150849ca186eb0b476a637c050ad68a56a4a477e
+main.installService	0x140527e00	0x140527e00	Registers Windows service through SCM and configures recovery policy	Ghidra dossier ev_b998761ec69e6b8e535410f8737024c6200f0c4e3aa5d1192262d3c9263be39b; PCLN parser output
+main.uninstallService	0x140528760	0x140528760	Removes Windows service through SCM	Ghidra dossier from prior analysis; PCLN parser output
+main.startService	0x140529000	0x140529000	Opens and starts registered Windows service via SCM	Ghidra dossier ev_5c45b0e603a35684fc311b9f57b13eadcf5d8ef49ee7fea3eed0516afc01ad5c; PCLN parser output
+main.stopService	0x140529480	0x140529480	Stops Windows service via SCM	Ghidra dossier from prior analysis; PCLN parser output
+main.queryService	0x140529b60	0x140529b60	Queries Windows service state via SCM	Ghidra dossier from prior analysis; PCLN parser output
+pipe.(*Server).handleConfigure	0x14051a5e0	0x14051a5e0	Named-pipe configure RPC handler	PCLN parser output; Ghidra dossier ev_d0a7aa91d7286e2616da2b642c85f21cc5a25d9f9795612e8df1499a5969439b
+pipe.(*Server).handleStartVM	0x14051d3c0	0x14051d3c0	Direct call to vm.(*WindowsVMManager).StartVMWithBundle	Ghidra dossiers ev_09111f0d584cad573aba23f65dc650b7b6f80eef94a24ffa3f8e7e4e6cb6ce1d and ev_9e448869621d93cfb39eec144abd25facc1dffae9caf6557513036a94e33cdeb; PCLN parser output
+pipe.(*Server).handleStopVM	0x14051d7e0	0x14051d7e0	Direct call to vm.(*WindowsVMManager).StopVM	Ghidra dossier ev_2ade64c74f17e34dec254b35dc1addd32f933c9bb50e82bb1637adab2447441d
+pipe.(*Server).handleIsRunning	0x14051da20	0x14051da20	Named-pipe running-state RPC handler	PCLN parser output
+pipe.(*Server).handleWriteStdin	0x14051e0e0	0x14051e0e0	Named-pipe guest stdin RPC handler	PCLN parser output
+vm.(*WindowsVMManager).StartVM	0x1404f6f20	0x1404f6f20	VM start implementation; decompiler body is available, semantics only partially interpreted	Ghidra dossiers ev_0bcf44c900026bfb64de5a02c0f5c4e71586538105c8ef31eab3e4f5561eb1eb and ev_ae192748db81b8ecc8a9e83dec1235d46fda80f268e21204fc80181b886a5924
+vm.(*WindowsVMManager).StopVM	0x1404fc560	0x1404fc560	VM stop implementation called by pipe stop handler	PCLN parser output
+vm.(*WindowsVMManager).StartVMWithBundle	0x1404fdd00	0x1404fdd00	Validates/caps memory and CPU, configures options, then calls StartVM	Ghidra dossier ev_fb1e07019b5895827fb6fd974887d75d96efd5a67810f4f59fe3040b45e5b1b5

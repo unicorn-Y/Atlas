@@ -39,6 +39,14 @@ The app side of the Cowork artifact protocol sets a top-level frame origin guard
 - Methods sent through the pipe include `configure`, `startVM`, `stopVM`, `isRunning`, `isGuestConnected`, `spawn`, `kill`, and `writeStdin`. This is strong app-side service-protocol evidence. The service help string states appName arrives on named-pipe connect and the account/profile comes from a verified connection; service strings include a Go `pipe.(*Server).handleStartVM` symbol and VM manager `StartVMWithBundle`.
 - Limitation: static JS does not contain literal `cowork-svc` nor a direct install/spawn call. The Windows service's installation/launch mechanism and complete Go call graph remain unproven. We have now established pipe connection/protocol and VM start/stop request path, so do not describe the entire app-service connection as unresolved.
 
+## Go service call edges (S/D — exact cowork-svc.exe)
+
+The exact service image is `app/resources/cowork-svc.exe` (SHA256 `934e5b671813ef3d5684c0ee0d1d18835af74e9ecfb114575e0d8fdbb663ba8f`). Ghidra 12.1.4 does not label Go procedures with pclntab names, so a local Go 1.18+ pclntab parser mapped selected function-table name offsets to entry virtual addresses; the subset and method are recorded at `evidence/svc-pclntab-relevant-functions.tsv`. Ghidra then analyzed exact entry addresses, retaining `FUN_<address>` labels. Do not present those labels as decompiler-recovered source symbols.
+
+The direct chain is now body-confirmed: `pipe.(*Server).handleStartVM` at `0x14051d3c0` calls entry `0x1404fdd00`, mapped by pclntab to `vm.(*WindowsVMManager).StartVMWithBundle`; that body validates/caps configuration and calls entry `0x1404f6f20`, mapped to `vm.(*WindowsVMManager).StartVM`. `handleStopVM` at `0x14051d7e0` directly calls `0x1404fc560`, mapped to `StopVM`. This closes service-side request-handler → VM manager call edges for start/stop, but not the full listener dispatch, service installation parent, service process start, or VM outcome.
+
+The service CLI map is also improved: `main.main` dispatches to install/uninstall/start/stop/status handlers; `handleStart` calls `startService`. `installService` and `startService` bodies show Windows SCM operations, and `main.(*serviceHandler).Execute` contains lifecycle handling. `runService` initializes logging, HCN cleanup and signature verification; signature-verification initialization failure returns an error. This is code-path evidence only. No Windows service was installed or started in this research run.
+
 
 ## Pipe-server identity boundary (S — exact packaged-code branch)
 
