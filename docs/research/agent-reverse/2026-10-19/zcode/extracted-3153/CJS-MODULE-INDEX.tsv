@@ -1,0 +1,23 @@
+kind	start_byte	end_byte_or_scope	symbol_or_identity	result
+source	file	15127039 bytes	zcode.cjs	sha256=31965ce1d5d4a808ef156784f67996de42ccab335591d2386a61ea8f6f506a54
+parser	Acorn 8.16.0	-	ecmaVersion=latest, sourceType=script, allowReturnOutsideFunction=true	parse success; target not executed
+AST	3458803 nodes	-	whole CJS	derived by recursive AST traversal
+function nodes	58079	-	FunctionDeclaration/FunctionExpression/ArrowFunctionExpression
+variable declarations	43602	-	VariableDeclaration
+call expressions	231843	-	CallExpression
+encoding	UTF-16 length 15124982; UTF-8 bytes 15127039	-	whole CJS	byte offset conversion uses Buffer.byteLength(source.slice(0, AcornIndex)); delta=2057
+bundle wrapper	2489228	-	__webpack_require__	webpack-style runtime function returns n.m=e,n.c=t,n.p="",n(0); module array follows
+entry file metadata	0	15127039	#!/usr/bin/env node; strict mode	Node CLI script; app launch invocation unobserved
+function	13192839	13193404	gBe / persistPendingToolPart	named by bundle helper r(fn,name)
+function	13205979	13210657	qwt	tool scheduler and executor method body around scheduleTools, tool_queued, executeTools
+function	3898082	3898491	V9s	bundled retry-after helper; likely SDK layer
+function	4007148	4007440	qXr	model-request error Retry-After parser; handles milliseconds, seconds, and HTTP-date
+function	4097229	4097847	HB	emits model.retry.delay.resolved diagnostic with retry status/reason/header fields
+function	4099067	4099316	sHs	classifies retry source: blocked_by_x_should_retry/provider_header/header_unparsed_or_ignored/missing
+class closure	5042044	5044543	anonymous init defining InMemoryRuntimeTaskRegistry	contains activeBranchGeneration/tasks/waiters/register/update/requestBackground
+class method anchor	5042679	-	requestBackground	task registry marks isBackgrounded and resolves waiters
+runner method	12715173	~12720000	onSessionReady / run	background subagent event and detach region; exact snippets in CJS-SLICES.md
+workflow migration closure	1515023	1543238	anonymous migration closure	contains 0019_dwf_journal, dwf_run and activity schema
+workflow replay helpers	12513514	12524160	K4 / N9 and adjacent helpers	inputHash reuse/mismatch helper region; names are minified and not mapped to source
+REA runtime directory	360 relevant files; 294 parsed JS; 186 modules; 1292029 visited AST nodes	-	resources/glm directory	partial semantic coverage; 0 parse failures; 413 limitations; CJS indexed exact but parse_status null in REA record
+coverage	partial	-	source maps not found in collection	indexing includes app runtime packages; missing full ASAR graph and execution

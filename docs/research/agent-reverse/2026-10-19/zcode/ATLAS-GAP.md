@@ -1,6 +1,6 @@
 # ZCode 3.15.1 vs Atlas main：逐能力真实代码差距
 
-证据基线：Atlas main aa6196f550098cc46081dc6db2c376cb87ddffa5；ZCode upstream 3.15.1 aac4755666d09fdcd70272fcf063c077a639015f。此表描述本轮已检查的实现路径，不声称 Atlas 绝对没有某个功能，也不把 upstream 3.15.1 当作 Desktop 3.15.3。双方仅静态代码 S；**没有任何 R 运行验收**。
+证据基线：Atlas main `aa6196f550098cc46081dc6db2c376cb87ddffa5`（本轮 `git fetch origin main` 后 HEAD 未变化）；ZCode upstream source 3.15.1 `aac4755666d09fdcd70272fcf063c077a639015f`; ZCode Desktop/runtime 3.15.3 verified package hashes见 `extracted-3153/ASSET-HASHES.txt`。旧源码对照和 3.15.3 packaged CJS 均为静态 S，**没有 R 运行验收**。本轮同版 CJS 已证实底层机制确实打包；尚不能把 3.15.1 UI/IPC 源码或旧 Atlas 对照升级成 3.15.3 全链等价结论。
 
 | ZCode 机制 | Atlas main 的真实基础 / 锚点 | 差距判断 | 建议 |
 |---|---|---|---|
@@ -22,6 +22,10 @@
 | ZCODE-024 定时调度独立进程 | core/atlas/scheduler/__init__.py L1-35,L310+ APScheduler 4；runtime/hub.py 真后台执行 | **等价方向**；ZCode 无 Host 的 transient 派发退避应和 Atlas Hub 状态/任务状态区分比较 | P1 不重造 scheduler |
 | ZCODE-025 群聊/远程会话 | core/atlas/api/group_router.py L1-72 真 Group REST/Orchestrator、api/channel_router.py 渠道 API | 部分；有 Group/API 不能直接推断 Feishu WebSocket 与 ZCode 的 task snapshot ETag、远程 replayable 一致 | P2 单独实证查验 |
 | ZCODE-027 同版运行差异 | Atlas 本次 HEAD 固定，ZCode 3.15.3 只有采集记录 | **U**：不许从 3.15.1 推断 3.15.3 现状 | 见 EXTRACTION-REQUEST |
+| ZCODE-030 tool scheduling / queued lifecycle | Atlas `tool_node.py` 与 `run_phases.py` 有真实工具执行，但本轮未核对 Atlas event schema 是否与 CJS 的 scheduled/tool_queued/executing 持久化逐项对应 | 基础能力在；队列状态、流式 tool call 关闭和取消投影的等价性 U | 先逐项比 event/DB 字段，不增加并行 UI 结论 |
+| ZCODE-031/032 子 Agent task registry/background parent detach | Atlas 有 subagent worktree 与 Hub；此前已定位 Atlas 外部 ZCode backend 每轮 subprocess 且 `resume()` 未实现。3.15.3 CJS 已见 registry waiter、background/detach 及 Subagent events | 部分；尚未证明 Atlas child 成果以 generation-safe model-only command 回到父下一轮，或在 detach 后跨 host 重启保持同语义 | 继续核 Atlas runtime IDs/event queue/resume 持久化实现，不将子进程后台状态等于任务恢复 |
+| ZCODE-033 dynamic-workflow journal/replay | Atlas Scheduler/checkpoints 不是 DWF `run/node/activity` schema；3.15.3 CJS 已见同版 journal migration 和 input hash/actor sequence anchors | 同构机制本轮未发现于已列 Atlas 路径；差距较可能为实质性，但须直接核 Atlas 现 main 的 scheduler/checkpoint persistence 再定范围 | 查当前 main 的 journal schemas 与 resume dispatch；不在研究阶段施工 |
+| ZCODE-034 Retry-After | Atlas fallback cooldown/model router 已覆盖部分 provider fault policy；3.15.3 CJS SDK helper 解析 Retry-After 头 | 部分/未知：header utility 不证明高并发 Agent 修复是同一算法，也不证明 Atlas lacks delay parsing | 对照 Atlas HTTP client/model runner retry handling，维持 release-note 关联为 U |
 
 ## 最值得直接吸收的机制链条
 

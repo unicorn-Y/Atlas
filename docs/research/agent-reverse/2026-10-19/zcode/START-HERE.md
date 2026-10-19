@@ -1,14 +1,14 @@
 # ZCode Desktop / Agent Runtime 逆向研究 — START HERE
 
-> **阶段结论：PARTIAL / BLOCKED（3.15.3 二进制直接验收未完成）。** ZCode 3.15.1 公开完整源码显示一套比“多 Agent 聊天”复杂得多的执行系统：有独立 turn loop、带命令队列的父子代理通信、受 journal 约束的可重放工作流、弹性并发、Electron 多进程宿主和 MCP Apps 沙箱。已追查这些源码及 Atlas main 的具体实现；不能以较旧源码冒充 3.15.3 实物。
+> **阶段结论：PARTIAL（3.15.3 实物已取得并完成 runtime AST 与关键机制锚点；app.asar 深度图、全量 UI/IPC 和运行实测仍未完成）。** ZCode Desktop 3.15.3 的真实 Windows x64 EXE、独立嵌入 CJS 和 3.15.1 源码快照均已按 manifest 字节数/SHA256 核实。3.15.3 CJS 经 Acorn 8.16.0 成功解析；首轮已证实 tool schedule/queued/execute、child background detach、branchGeneration 任务状态、workflow journal/schema 和 Retry-After helper 的打包代码锚点。旧源码快照仍为 3.15.1，不代表 3.15.3 全部源码。
 
 ## 研究基线、产物与边界
 
 - 目标：ZCode Desktop Windows x64 **3.15.3**，安装包 SHA256 **bc8100ba4377256fbe1531d549b4775f18e3ba21768b6294ca50751cd461faca**；内嵌 resources/glm/zcode.cjs 15,127,039 bytes，SHA256 **31965ce1d5d4a808ef156784f67996de42ccab335591d2386a61ea8f6f506a54**。这是收集分支索引的机械提取记录，不是本会话亲自解析 CJS 的结果。
-- 本次**实际读取并分析**：zai-org/ZCode 固定源码提交 **aac4755666d09fdcd70272fcf063c077a639015f**（root package.json 为 3.15.1）；以及 Atlas main **aa6196f550098cc46081dc6db2c376cb87ddffa5** 的代码与树。
+- 本次**实际读取并分析**：zai-org/ZCode 固定源码提交 **aac4755666d09fdcd70272fcf063c077a639015f**（root package.json 为 3.15.1）；Atlas main **aa6196f550098cc46081dc6db2c376cb87ddffa5**；以及官方 3.15.3 Windows x64 安装包和其中 `resources/glm/zcode.cjs` 的真实字节。
 - 研究分支从 research/agent-reverse-dispatch-20261019 建立；**没有修改 Atlas 业务源码**。
-- 覆盖：3.15.1 核心 turn loop、subagent、dynamic workflow、SQLite journal、上下文、MCP、插件、Electron 进程、UI、后台调度，以及 Atlas main 对照（全部静态证据 S）。没有在本环境启动 Windows Electron/ZCode 3.15.3，不存在运行证据 R。
-- 尚欠：3.15.3 CJS 内的函数符号、入口/版本差分；同版 app.asar 组件/IPC 的实物对照；Windows 运行日志/任务恢复实操。GitHub 连接可读源码文本，但不支持 Release 大型二进制直接获取。精确机械补采见 EXTRACTION-REQUEST.md。
+- 覆盖：3.15.1 核心 turn loop、subagent、dynamic workflow、SQLite journal、上下文、MCP、插件、Electron 进程、UI、后台调度，以及 Atlas main 对照；3.15.3 CJS AST 统计和字节偏移锚点；PE 资源静态清单。REA 对 `resources/glm` 扫描含 360 个相关文件、294 个成功解析 JS、186 个模块、0 个 parse failure；语义图 coverage partial。没有运行未知 EXE，也没有启动 Electron；R=0。
+- 尚欠：app.asar 同版 renderer/main 深度模块与 IPC 图、全 UI surface、runtime 全功能调用链、与 3.15.1 的逐符号 diff、Windows 运行/恢复实操。全 application 目录 REA 因超时未产出完整记录；严格 ASAR 校验先发现 unpacked `node-pty` companion integrity mismatch，record-and-continue 重试未在 MCP 等待期限内返回，须保持该构件不可信/未解决。
 
 ## 报告导航
 
@@ -32,6 +32,6 @@
 
 ## 交付状态
 
-**静态源码阶段：完成初轮取证与 Atlas main 对照，25 个 ZCODE-001..025 源码证据条目。3.15.3 Release 实物深度逆向：BLOCKED；补采请求已写入。** “S”只说明可定位源码行为，不表示当前安装包或动态运行已验证。这里的状态是阶段性研究提交，不是最终穷尽产品能力。
+**静态源码阶段：初轮 25 个 ZCODE-001..025（3.15.1）+ 已新增 3.15.3 包内观察 ZCODE-028..033。** 3.15.3 真实 Runtime 与 PE 已取得和静态解析；桌面 app.asar 完整模块图以及动态验收仍是 partial/U，不能宣称穷尽。各证据层级在 `extracted-3153/` 区分。
 
 源代码固定快照：[ZCode v3.15.1](https://github.com/zai-org/ZCode/tree/aac4755666d09fdcd70272fcf063c077a639015f) · [Atlas main 基准](https://github.com/unicorn-Y/Atlas/tree/aa6196f550098cc46081dc6db2c376cb87ddffa5) · [原包归档](https://github.com/unicorn-Y/Atlas/releases/tag/agent-client-packages-20261019)

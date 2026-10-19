@@ -1,0 +1,6 @@
+Input / actual package path | Expected size bytes | Observed size bytes | Expected SHA-256 | Observed SHA-256 | Result
+zcode-desktop-v3.15.3-bc8100ba43.exe (Atlas Release) | 181367144 | 181367144 | bc8100ba4377256fbe1531d549b4775f18e3ba21768b6294ca50751cd461faca | bc8100ba4377256fbe1531d549b4775f18e3ba21768b6294ca50751cd461faca | MATCH
+zcode-agent-runtime-embedded-v3.15.3-31965ce1d5.cjs (Atlas Release and resources/glm/zcode.cjs) | 15127039 | 15127039 | 31965ce1d5d4a808ef156784f67996de42ccab335591d2386a61ea8f6f506a54 | 31965ce1d5d4a808ef156784f67996de42ccab335591d2386a61ea8f6f506a54 | MATCH
+zcode-source-main-aac4755-45034cfbc0.zip (Atlas Release) | 100436252 | 100436252 | 45034cfbc064716a34a06a117af6aed359012927834a3e40c24cf89682ef8ab1 | 45034cfbc064716a34a06a117af6aed359012927834a3e40c24cf89682ef8ab1 | MATCH
+
+Manifest: docs/research/agent-clients/2026-10-19/manifest.json on the dispatch research baseline. Hashes were independently recalculated locally with Get-FileHash -Algorithm SHA256 after gh release download.

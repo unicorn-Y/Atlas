@@ -1,0 +1,35 @@
+{
+  "input": {
+    "path": "resources/glm/zcode.cjs",
+    "size_bytes": 15127039,
+    "sha256": "31965ce1d5d4a808ef156784f67996de42ccab335591d2386a61ea8f6f506a54",
+    "parser": "Acorn 8.16.0",
+    "parse": "success",
+    "execution": "not run"
+  },
+  "ast": {
+    "nodes": 3458803,
+    "functions": 58079,
+    "variable_declarations": 43602,
+    "call_expressions": 231843,
+    "utf16_code_units": 15124982,
+    "utf8_bytes": 15127039
+  },
+  "families": [
+    {"family":"tool lifecycle","offsets":[13192839,13205979,13207351,13207831,13208003,13218154],"classification":"exact code seen","status":"static only"},
+    {"family":"subagent/background","offsets":[5042161,5042679,12715173,12716232,12719281],"classification":"exact code seen","status":"static only"},
+    {"family":"branch generation","offsets":[5042191,1307473],"classification":"exact code seen","status":"static only"},
+    {"family":"workflow journal/replay","offsets":[1515023,1523765,1540293,12513514,12520817,12521196,12524192],"classification":"exact code/schema seen","status":"driver lifecycle incomplete"},
+    {"family":"HTTP retry-after","offsets":[3898253,3898328,4007191,4007255,4097377,4097620,4097828],"classification":"exact bundled helper and retry diagnostic seen","status":"release-note concurrency fix linkage unproven"},
+    {"family":"IPC/MCP Apps/desktop","offsets":[],"classification":"not yet analyzed in app.asar","status":"unknown"}
+  ],
+  "coverage": {
+    "source_maps": 0,
+    "rea_resources_glm_files_relevant": 360,
+    "rea_resources_glm_parsed_javascript": 294,
+    "rea_resources_glm_modules": 186,
+    "rea_semantic_coverage": "partial/truncated",
+    "full_app_asar_graph": "running/pending",
+    "windows_runtime": "not run"
+  }
+}

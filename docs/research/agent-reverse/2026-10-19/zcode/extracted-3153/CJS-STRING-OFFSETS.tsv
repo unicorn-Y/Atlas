@@ -1,0 +1,25 @@
+token	kind	start_byte	end_byte	utf8_decode_status	context_sha256_or_basis
+__webpack_require__	bundler runtime anchor	2489228	2489247	valid UTF-8	verified CJS SHA; exact raw byte search; local function wrapper
+0019_dwf_journal	migration identifier	1540263	1540279	valid UTF-8	verified CJS SHA; embedded migration object
+dwf_run	SQLite table identifier	1540320	1540327	valid UTF-8; repeated at additional offsets	verified CJS SHA; create table migration literal
+input_hash	SQLite column identifier	1523765	1523775	valid UTF-8	verified CJS SHA; activity schema
+inputHash	replay state identifier	12513514	12513523	valid UTF-8	verified CJS SHA; workflow helper region
+InputHashMismatch	replay error identifier	12524144	12524160	valid UTF-8	verified CJS SHA; formatted deterministic replay mismatch
+actorSeq	workflow actor sequence identifier	1462709	1462717	valid UTF-8	verified CJS SHA; actor state schema; offset repeated elsewhere
+InMemoryRuntimeTaskRegistry	task registry class name	5042161	5042188	valid UTF-8	verified CJS SHA; helper r() class name
+activeBranchGeneration	branch generation state	5042191	5042213	valid UTF-8	verified CJS SHA; exact raw byte search
+requestBackground	background transition method	5042679	5042695	valid UTF-8	verified CJS SHA; exact raw byte search
+persistPendingToolPart	tool persistence function name	13193541	13193562	valid UTF-8	verified CJS SHA; helper r() name after definition
+tool_queued	tool lifecycle status	13207831	13207842	valid UTF-8	verified CJS SHA; qwt tool scheduling method
+executeTools	tool executor call	13208003	13208015	valid UTF-8; repeated at additional offsets	verified CJS SHA; qwt tool scheduling method
+SubagentSpawned	child lifecycle event	1299129	1299144	valid UTF-8	verified CJS SHA; event enum
+SubagentSpawned	runtime event emission	12715173	12715188	valid UTF-8	verified CJS SHA; child runner callback
+detachParent	background detach method	12716232	12716244	valid UTF-8	verified CJS SHA; runner result branch
+retry-after-ms	HTTP retry header	3898253	3898268	valid UTF-8	verified CJS SHA; V9s parser
+retry-after	HTTP retry header	3898328	3898339	valid UTF-8	verified CJS SHA; V9s parser; distinct header key
+Retry-After	documented text string	7700433	7700444	valid UTF-8	verified CJS SHA; unrelated fetcher error rendering, do not conflate with retry policy
+retry-after-ms	model request header key	4007191	4007206	valid UTF-8	verified CJS SHA; exact core retry delay parser qXr
+retry-after	model request header key	4007255	4007266	valid UTF-8	verified CJS SHA; exact core retry delay parser qXr
+model.retry.delay.resolved	retry lifecycle event	4097377	4097402	valid UTF-8	verified CJS SHA; HB event/log payload
+retryAfterSource	retry header classification field	4097620	4097636	valid UTF-8	verified CJS SHA; provider_header/header_unparsed_or_ignored/missing classification
+x-should-retry	provider retry policy header	4097828	4097842	valid UTF-8	verified CJS SHA; HB payload; exact raw occurrences also at 4007550 and 4099098

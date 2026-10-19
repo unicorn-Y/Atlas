@@ -13,7 +13,7 @@
 - https://github.com/zai-org/ZCode/tree/aac4755666d09fdcd70272fcf063c077a639015f
 - https://github.com/unicorn-Y/Atlas/tree/aa6196f550098cc46081dc6db2c376cb87ddffa5
 
-## 原始材料身份（来自已提交的机械采集索引，本会话未亲自重新计算哈希）
+## 原始材料身份（本轮从 Release 下载并重新计算）
 
 | 项目 | 版本/路径 | 大小 | SHA256 |
 |---|---|---:|---|
@@ -27,7 +27,34 @@
 - [机械索引](https://github.com/unicorn-Y/Atlas/blob/research/agent-reverse-dispatch-20261019/docs/research/agent-clients/2026-10-19/indexes/opencode-zcode-index.md)
 - [manifest](https://github.com/unicorn-Y/Atlas/blob/research/agent-reverse-dispatch-20261019/docs/research/agent-clients/2026-10-19/manifest.json)
 
-采集记录：官方 Windows 内层 NSIS app-64.7z -> application/resources/app.asar，内含 resources/glm/zcode.cjs；整个 application tree 有 882 package.json / 693 命名包，source map 0。该数字仅为采集索引的证据，**并非本次解包统计**。内部 CLI 版本尚不确定。排除同名第三方 npm zcode-cli@0.0.1，独立官方 CLI Release 未找到。
+本轮复核：通过 gh release download 拉取上述三个资产后，Get-Item.Length 与 SHA256 均逐个匹配 manifest。独立 PE 资源静态扫描完整遍历 61 项/28 个叶资源（REA evidence ev_0d6e943812a8cf8f6c73c8824ac8f0668d808de57b7f4cc85c852757fd82f759）；PE 解码为 x86 NSIS/安装器，未运行 EXE。既有 staging 已含内层 NSIS app-64.7z 解出目录及同 hash CJS；安装树 package manifest 写明 app @zcode/desktop@3.15.3、out/main/index.js、type=module；bundle meta 写明 electron-node、win32-x64、zcode.cjs、source apps/zcode-cli/packages/cli/dist/zcode.cjs。完整 package/PE/ASAR 元数据仍增补中。
+
+## 本轮 3.15.3 包内实证
+
+- CJS 输入：D:\agent-client-staging\opencode-zcode\requested-assets\zcode-agent-runtime-embedded-v3.15.3-31965ce1d5.cjs，与包内 resources/glm/zcode.cjs 同 SHA。Acorn 8.16.0 成功 parse（15,124,982 UTF-16 code units / 15,127,039 UTF-8 bytes，3,458,803 AST nodes，58,079 function nodes，43,602 variable declarations，231,843 call expressions）；未执行此文件。CJS-MODULE-INDEX.tsv 记录统计与 wrapper。
+- REA evidence ev_b8b2fd3fa4a83e172dd4680e7c32e7b59a25a4c293615f1af2633d64fa08bfcb 对 resources/glm 目录：root SHA 3d777334938a6657c9e1e87601588faa80469e3e9f61dda2fb6ecef926401352；360 relevant files、294 parsed JS、186 modules、1,292,029 visited AST nodes、0 parse failures、semantic graph partial/truncated；CJS inventory node exact artifact hash 31965ce1...506a54，但 REA 的 parse_status=null，专门 CJS AST 数来自 Acorn 而非 REA。
+- PE evidence ev_711f8e6d9a5a21e984b06cd0da188d083ad3c6819aa6c451cfbda0bfb7f7a854：7 segments、269 procedures、239 strings；仅 static overview，不解释 NSIS/运行逻辑。
+- ASAR integrity boundary：对完整 application tree 的严格 REA 初次失败，原文报出 resources/app.asar/node_modules/node-pty/prebuilds/win32-x64/conpty_console_list.node 声明 integrity 与 companion file bytes 不符。record-and-continue 重试超出 MCP 300s 等待时间；不能称为完整、可信 ASAR 图，也不能把该 native companion 当 verified。安装包从未执行。
+- app.asar 同版入口清单：resources/app.asar.extracted/package.json（来自留存的 ASAR 索引文件）明示 main=out/main/index.js 以及 Electron host/service/provider packages；resources/glm/.node-bundle-meta.json 明示 runtime bundle metadata。该 manifest 不是同版 renderer/IPC 实现链证据。
+
+### 精确 UTF-8 byte-offset 锚点
+
+以下偏移相对于 SHA 31965ce1...506a54 原始字节；CJS 为压缩/混淆 bundle，source-map 数量为 0，偏移和短符号可复核，不能自行映射为 3.15.1 源码行号。
+
+| 证据 | byte offset / range | 实际锚点 | 结论边界 |
+|---|---:|---|---|
+| ZCODE-029 | 2,489,228 | __webpack_require__ wrapper；后续数字 ID module array | 识别 bundler wrapper，不代表 module names 可恢复 |
+| ZCODE-033 | 1,540,263; 1,540,320; 1,523,765; region 1,515,023–1,543,238; replay region 12,513,514–12,524,192 | 0019_dwf_journal; dwf_run; input_hash; InputHashMismatch at 12,524,144; migration SQL and replay hash check | packaged journal/replay anchors; 未证明该路径启动及 DB 实际创建 |
+| ZCODE-034 | V9s 3,898,082–3,898,491; qXr 4,007,148–4,007,440; HB 4,097,229–4,097,847; sHs 4,099,067–4,099,316 | SDK helper + model request retry parser and structured retry delay/source diagnostics | request retry telemetry packaged; release-note concurrency-fix linkage remains U |
+| ZCODE-031 | region 5,042,044–5,044,543 | class InMemoryRuntimeTaskRegistry; activeBranchGeneration, backgroundWaiters, tasks, terminalWaiters; register/update resolves waiters | in-process task-state mechanism seen in packaged bytes |
+| ZCODE-030 | region 13,192,839–13,193,404 | gBe function persistPendingToolPart; awaits persistPart for pending tool call | persistence function present in bundle |
+| ZCODE-030 | region 13,205,979–13,210,657 | qwt; tool-call closure -> scheduleTools -> state transition -> tool_queued -> executeTools | static local order is visible; runtime timing/result not observed |
+| ZCODE-032 | byte 12,715,173 | runner onSessionReady emits SubagentSpawned with child/parent identifiers | event emission present |
+| ZCODE-032 | byte 12,716,232 | run observes backgrounded, calls detachParent(), retains async child completion callbacks | parent detachment path present; actual background survival unobserved |
+| ZCODE-032 | byte 12,719,281 | task port backgroundTask requests registry background state | interface wiring visible in same local region |
+| ZCODE-031 | byte 5,042,679 | requestBackground(taskId) marks task isBackgrounded and resolves waiters | state transition function present |
+
+Exact snippets and parser/hash metadata are in extracted-3153/CJS-SLICES.md and CJS-MODULE-INDEX.tsv. Offsets were calculated against UTF-8 Buffer bytes; Acorn start/end values are UTF-16 code units and were converted before citation. The source contains non-ASCII content: whole-file UTF-16-unit count differs from UTF-8 byte size by 2,057.
 
 ## 真实源码证据目录（全部为 3.15.1）
 

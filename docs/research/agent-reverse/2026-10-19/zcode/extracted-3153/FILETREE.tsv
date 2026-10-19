@@ -1,0 +1,14 @@
+relative_path	type	size_bytes	status / note
+ZCode-3.15.3-win-x64.exe	PE installer	181367144	verified Release bytes; not executed
+desktop/extracted-installer/application/ZCode.exe	Electron executable	222866328	in existing extraction; separate inner Electron executable; not yet SHA-pinned
+desktop/extracted-installer/application/resources/app.asar	ASAR	340516766	existing extraction; full semantic analysis pending; integrity mismatch reported for unpacked node-pty companion
+desktop/extracted-installer/application/resources/app.asar.extracted/package.json	JSON	1785	ASAR index manifest; @zcode/desktop 3.15.3, out/main/index.js
+desktop/extracted-installer/application/resources/app.asar.extracted/out/.host-build-ready	marker	25	existing ASAR extraction index
+desktop/extracted-installer/application/resources/app.asar.extracted/out/.main-build-ready	marker	25	existing ASAR extraction index
+desktop/extracted-installer/application/resources/app.asar.extracted/out/.preload-build-ready	marker	25	existing ASAR extraction index
+desktop/extracted-installer/application/resources/app.asar.extracted/out/.scheduler-build-ready	marker	25	existing ASAR extraction index
+desktop/extracted-installer/application/resources/app.asar.unpacked/node_modules/	unpacked dependency tree	partial	contains native node-pty; declared ASAR integrity versus companion bytes mismatch, untrusted
+desktop/extracted-installer/application/resources/glm/zcode.cjs	CommonJS bundle	15127039	exact hash match to verified CJS Release asset
+desktop/extracted-installer/application/resources/glm/.node-bundle-meta.json	JSON	142	electron-node / win32-x64 / source dist/zcode.cjs
+desktop/extracted-installer/application/resources/glm/packages/	plugin/package directory	unknown	REA found JS modules under android-emulator-plugin, browser-use-plugin, node-repl-host, visualize-plugin, and zcode-cua-plugin; package inventory pending
+desktop/extracted-installer/application/resources/	asset tree	partial	large app resources; full path/hash enumeration pending
