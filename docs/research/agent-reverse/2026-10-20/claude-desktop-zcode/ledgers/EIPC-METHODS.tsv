@@ -1,0 +1,1171 @@
+path,service,method,params,kind,namespace
+.vite/build/index.chunk-BN7PaJ_P.js	SableOtterHud	button	index	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.sableOtter_$_
+.vite/build/index.chunk-BN7PaJ_P.js	SableOtterHud	submit	text	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.sableOtter_$_
+.vite/build/index.chunk-BN7PaJ_P.js	SableOtterHud	fieldChanged	text	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.sableOtter_$_
+.vite/build/index.chunk-BN7PaJ_P.js	SableOtterHud	paste		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.sableOtter_$_
+.vite/build/index.chunk-BN7PaJ_P.js	SableOtterHud	escape		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.sableOtter_$_
+.vite/build/index.chunk-BN7PaJ_P.js	SableOtterHud	tab		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.sableOtter_$_
+.vite/build/index.chunk-BN7PaJ_P.js	SableOtterHud	removePill	title	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.sableOtter_$_
+.vite/build/index.chunk-BN7PaJ_P.js	SableOtterHud	settings		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.sableOtter_$_
+.vite/build/index.chunk-BN7PaJ_P.js	SableOtterHud	resize	width,height	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.sableOtter_$_
+.vite/build/index.chunk-JnLh1fOe.js	LocalExecConsent	choose	choice	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.localExecConsent_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AboutWindow	openHelp		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.ui_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AboutWindow	getSupport		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.ui_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AboutWindow	getAppName		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.ui_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AboutWindow	getBuildProps		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.ui_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AboutWindow	ancientJournal		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.ui_$_
+.vite/build/index.chunk-lzaSYO3Q.js	QuickWindow	requestDismiss	promptText	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.ui_$_
+.vite/build/index.chunk-lzaSYO3Q.js	QuickWindow	requestSkooch	contentWidth,contentHeight	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.ui_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MainWindowTitleBar	titleBarReady		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.ui_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MainWindowTitleBar	requestReloadMainView		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.ui_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MainWindowTitleBar	requestRestartApp		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.ui_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MainWindowTitleBar	requestMainMenuPopup		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.ui_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AppConfig	getAppConfig		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AppConfig	setAppFeature	feature,enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AppConfig	setIsUsingBuiltInNodeForMcp	enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AppConfig	setIsDxtAutoUpdatesEnabled	enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Startup	isStartupOnLoginEnabled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Startup	setStartupOnLoginEnabled	enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Startup	isMenuBarEnabled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Startup	setMenuBarEnabled	enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CcdCli	getCcdCliStatus		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CcdCli	installCcdCli		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CcdCli	uninstallCcdCli		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	GlobalShortcut	setGlobalShortcut	globalShortcut	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	GlobalShortcut	getGlobalShortcut		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MCP	isLocalDevMcpEnabled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MCP	setMcpServerConfigs	configs	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MCP	getMcpServersConfig	forceReload	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MCP	getMcpServersConfigWithStatus		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MCP	revealConfig		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MCP	revealLogs		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MCP	revealServerLog	serverName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	isExtensionsEnabled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	isLocalExtensionInstallAllowed		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	isDirectoryEnabled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	isDesktopExtensionSignatureRequired		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	isDesktopExtensionDirectoryEnabled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	getInstalledExtensionsWithState		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	getIsUpdateAvailable	extensionId,manifest	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	getManifestCompatibilityResult	manifest	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	getAvailableExtensionRuntimes		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	getExtensionSettings	extensionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	setExtensionSettings	extensionId,settings	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	installDxt	extensionId,dxtFilePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	installDxtUnpacked	folderPath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	installDxtFromDirectory	extensionId,version	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	handleDxtFile	dxtPath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	showInstallDxtDialog		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	deleteExtension	extensionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	openExtensionsFolder		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	openExtensionSettingsFolder		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	getDirectoryUrl		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	getExtension	request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	getExtensionVersions	request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	installExtensionFromPreview	extensionId,path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	refreshAllowlistCheck		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FilePickers	getDirectoryPath	multiple	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FilePickers	getFilePath	multiple	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AppPreferences	getPreferences		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AppPreferences	setPreference	key,value	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AppFeatures	getSupportedFeatures		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesktopInfo	getSystemInfo		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesktopInfo	showLogsInFileManager		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesktopInfo	getDefaultBrowserName		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	exportConfig	config,format	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	relaunchApp		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	relaunchAppWithSessionGuard		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	probeEgressHosts	hosts	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	scanOrgPlugins		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	probeMcpServer	config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	authorizeAndProbeMcpServer	config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	forgetMcpOAuth	serverName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	getLoginDesktop3pStatus		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	getConfigHealth		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	recheckConfigHealth		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	retryModelDiscovery		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	setDeploymentMode	mode	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	openSetupWindow		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	signInWithAnthropicApi		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	applyAnthropicApiShortcut		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	openDeviceCodeWindowForE2e		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	listConfigs		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	getMergedConfig		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	readConfig	id	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	writeConfig	id,config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	createConfig	name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	duplicateConfig	sourceId,name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	renameConfig	id,name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	deleteConfig	id	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	setAppliedConfig	id	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	revealConfig	id	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	triggerBootstrapAuth	args	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	commitHybridTransition		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	cancelHybridTransition		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	resolverLandedTainted	orgUuid,orgName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	setHybridOrgList	uuids	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	switchOrgAndRelaunch	targetOrgUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	listSwitchableProfiles		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pSetup	switchProfile	target	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pHelperRun	runCredentialHelper	helperPath,env,timeoutSec,args	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pHelperRun	probeInference	config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pHelperRun	discoverModels	config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	getAuthState		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	startAuth		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	reopenAuthTab		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	clearAuth		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	fetchRemoteExport		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	cancelRemoteFetch		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	discardRemoteExport		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	pickLocalZips		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	peekLocalZips	zipPaths	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	runImportFromLocalZips	zipPaths	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	pickSessionSourceFolder		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	listImportSpaceTwins		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	mergeImportedSpace	twinSpaceId,existingSpaceId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	previewSessionExport	cutoffMs	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	runSessionExport	cutoffMs	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	cancelSessionExport		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	showExportInFolder	destPath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	registerDesktop3pBundle	zipPath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	confirmImportedSessionResume	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	getImportCapabilities		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	enumerateSessionSources		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	scanSessionSource	sourceId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	importSessionSources	cutoffMs,sourceIds	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	listSourceExtras	sourceId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	importSourceExtras	sourceId,ids	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	getImportHistory		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	getRemovePreview	runId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	removeImportRun	runId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	removeAllImportRuns		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	getAutoImportStatus	account,org	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	listInstructionTexts	account,org	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	instructionTextAdded	account,org	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	SupportBundle	submitAction	action	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WakeScheduler	getStatus		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WakeScheduler	openSettings		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pUsage	getSummary	windowDays	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesktopIntl	getInitialLocale		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.hybrid_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesktopIntl	requestLocaleChange	locale	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.hybrid_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	resize	width,height,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	show		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	focus		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	close		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	setThemeMode	mode	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	setIncognitoMode	enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	setModalScrimActive	active	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	reportModalScrim	active,backdrop	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	captureScreenshot		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	reportFrameLayout	layout	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	reportSidebarPlaceholder	shapes	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	reportSidebarMenuState	state	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	reportSplitViewMenuState	state	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	reportGoMenuAreas	areas	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	reportCloseMenuTarget	target	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowControl	reportReopenClosedSessionMenuState	state	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	QuickEntry	setRecentChats	chats,activeChatId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Account	setAccountDetails	info	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Account	activeAccountChanged	accountUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	PlanUsage	nudgeRefresh		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WebBuild	reportCommitHash	commitHash	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OsOpenHandlers	ready		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OsEntryPlaces	report	groups	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	claimEditCommands	popoutWindowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	releaseEditCommands	popoutWindowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	reportContextMenuEditor	ownHistory,popoutWindowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	editCommandUnclaimed	command,popoutWindowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ContentStampReporter	report	stamp	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowState	getFullscreen		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowState	getVisibility		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowState	getOnScreen		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowState	getKeptHidden		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowState	getAppFocused		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowState	getZoomFactor		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceStorage	getUsage	refresh	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceStorage	getFreeDiskSpace		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceStorage	reveal		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceStorage	clearCacheAndRestart		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceStorage	previewCodeCleanup	window	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceStorage	runCodeCleanup	token,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceStorage	cancelCodeCleanup		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Auth	doAuthInBrowser	url	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Auth	prepareForSignedIn		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesktopNotifications	getAuthorizationStatus		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesktopNotifications	requestAuthorization		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesktopNotifications	openNotificationSettings		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesktopNotifications	showNotification	title,body,tag,navigateTo,notificationType,attribution	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesktopNotifications	supportsNotificationActions		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesktopNotifications	showNotificationWithActions	notification	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesktopNotifications	setProjectPromptsWaiting	count	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AutoUpdater	restartToUpdate		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AutoUpdater	checkForUpdates	userInitiated	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AutoUpdater	getRunningLocalSessionCount		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AutoUpdater	getRunningLocalSessions		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AutoUpdater	restartToUpdateWhenIdle		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AutoUpdater	cancelPendingRestart		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AutoUpdater	ancientJournalState		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AutoUpdater	requestAncientJournal	value	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	BrowserNavigation	goBack		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	BrowserNavigation	goForward		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	BrowserNavigation	requestMainMenuPopup		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FindInPageProvider	setProviderActive	active	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FindInPageProvider	setProviderActiveInPopout	popoutWindowId,active	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FindInPageProvider	reportFindResult	requestId,result	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	getAllArtifacts		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	getArtifactMetadata	artifactId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	getArtifactThumbnail	artifactId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	deleteArtifact	artifactId,removeFiles	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	showArtifact	artifactId,bounds,version,targetWindowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	hideArtifact	targetWindowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	parkAndCaptureArtifact	bounds,targetWindowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	reloadArtifactView		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	printArtifactToPdf		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	restoreArtifactVersion	artifactId,version	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	setArtifactStarred	artifactId,starred	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	setArtifactLastModifiedSession	artifactId,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	setArtifactMcpTools	artifactId,tools,toolServers	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	setArtifactName	artifactId,name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	getArtifactHtml	artifactId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	getArtifactRepublishContent	artifactId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	isSharingEnabled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	isAutoPublishEnabled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	setArtifactAutoPublish	artifactId,enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	isSharedContentCurrent	artifactId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	shareArtifact	artifactId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	unshareArtifact	artifactId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	refreshImportedArtifact	artifactId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	importArtifact	artifactUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkFilePreview	isEnabled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkFilePreview	isEpitaxyPreviewEnabled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkFilePreview	isOpenInDefaultAppEnabled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkFilePreview	isVmReady		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkFilePreview	vmReadiness		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkFilePreview	show	sessionId,path,bounds,consumerId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkFilePreview	hide	consumerId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkFilePreview	parkAndCapture	bounds,consumerId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkFilePreview	whenContentReady	loadSeq,consumerId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeCode	getStatus		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeCode	prepare		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeCode	checkGitAvailable		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeCode	resolveLocalSettings	workspacePath,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeCode	patchUserSettings	patch	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeCode	setEnableWorkflows	value	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeCode	getPeriodUsage		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeCode	setLocalSandboxEnabled	enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeCode	setStrictSandboxMode	strict,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeCode	getLocalSandboxStatus		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CliSessionImport	submitAction	action	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CliSessionImport	claimMenuStart		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CloudMove	setCloudMoveListening	listening	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CloudMove	reportCloudMoveResult	result	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ChromeExtension	isInstalled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ChromeExtension	installExtension		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ChromeExtension	restartChrome		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ChromeExtension	getBrowserActivity		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ChromeExtension	launchBrowser	browser	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ChromeExtension	getConnectedExtensions		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ComputerUseTcc	getState		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ComputerUseTcc	requestAccessibility		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ComputerUseTcc	requestScreenRecording		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ComputerUseTcc	requestMicrophone		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ComputerUseTcc	openSystemSettings	pane	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ComputerUseTcc	revokeGrant	sessionId,bundleId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ComputerUseTcc	listInstalledApps		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ComputerUseLivePreview	setFps	fps	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ComputerUseLivePreview	setSubscribed	sessionId,subscribed,wantsCapture	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	BuddyRemoteFeed	sync	sessions	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FramebufferPreview	requestFramePort		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FramebufferPreview	listSources	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FramebufferPreview	attach	cwd,name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FramebufferPreview	detach	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FramebufferPreview	setStreamHints	sessionId,hints	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FramebufferPreview	sendPointer	sessionId,x,y,buttonMask	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FramebufferPreview	sendKey	sessionId,key,code,down	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FramebufferPreview	sendScroll	sessionId,direction,notches	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	start	info	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	setSpSectionPrompts	push	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	sendMessage	sessionId,message,images,userSelectedFiles,messageUuid,toolStates,fileAttachments,contentBlocks,syntheticMessage,documentFunnelEnabled,seededSummon,extendedThinking,docxEditingCarveout,trailingContentBlocks,seededKind	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	setModel	sessionId,model	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	setEffort	sessionId,effortLevel	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	setExtendedThinking	sessionId,enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	setPermissionMode	sessionId,mode,_chromeAllowedDomains,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	setChromePermissionMode	sessionId,mode	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	stop	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	stopTask	sessionId,taskId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	rewind	sessionId,targetMessageUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	rewindV2	sessionId,targetMessageUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	archive	sessionId,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	delete	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	deleteBridgeSession		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	deleteBridgeAgentMemory		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	updateSession	sessionId,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getSession	sessionId,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getSessionMissReason	sessionId,rendererOrgId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getAll		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getTranscript	sessionId,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getTranscriptRead	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	searchSessions	query,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	respondToToolPermission	requestId,decision,updatedInput	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	onAutoModeOverrideAlwaysAllow	sessionId,toolName,toolUseId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	openOutputsDir	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	shareSession	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	submitTranscriptFeedback	sessionId,feedback	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	setDraftSessionFolders	folders	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getDefaultWorkspaceFolders		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getSupportedCommands	options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	addTrustedFolder	folder	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	browseAndAddTrustedFolder		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	grantRemoteSessionFolders	sessionId,folders	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	browseAndGrantRemoteSessionFolder	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	grantRemoteSessionFolder	sessionId,folder	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	clearRemoteSessionFolderGrants	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	replayChatFolderAccessReports	conversationUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	ackChatFolderAccessReport	conversationUuid,generation	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	grantProjectUploadFolder	projectUuid,folder	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	listProjectUploadFolder	grantId,projectUuid,relativeDir	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	readProjectUploadFile	grantId,projectUuid,relativePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	releaseProjectUploadFolder	grantId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	stageRemoteSessionAttachmentsViaFilesApi	sessionId,paths	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	uploadRemoteAttachmentsToFilesApi	paths	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	releaseRemoteAttachmentUploads	fileIds	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	grantRoutineFolders	routineId,folders,taskName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	allowRoutineFolders	routineId,folders,taskName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	revokeRoutineFolderGrant	routineId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getRoutineFolderGrant	routineId,folders	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	autoSaveDeliveredFiles	sessionId,files	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	removeTrustedFolder	folder	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	isFolderTrusted	folder	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	readOpenedFiles	paths	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	addFolderToSession	sessionId,folderPath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	setMcpServers	sessionId,servers	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	replaceRemoteMcpServers	sessionId,servers	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	replaceEnabledMcpTools	sessionId,enabledMcpTools	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	setFocusedSession	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	signalSessionIntent	intent	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	syncSkills		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	listLocalSkills		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getLocalSkillFiles	name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	saveLocalSkill	name,description,skillMd,overwrite,replaces	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	saveLocalSkillArchive	upload	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	renameLocalSkill	name,newName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	setLocalSkillEnabled	name,enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	deleteLocalSkill	name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	revealLocalSkill	name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	respondDirectoryServers	requestId,servers	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	respondPluginSearch	requestId,resultsJson	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	respondSlashMenuSkills	requestId,skillsJson	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	mcpCallTool	sessionId,serverUuid,toolName,args	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	mcpReadResource	sessionId,serverUuid,uri	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	mcpListResources	sessionId,serverUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getLocalMcpServers		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	mcpAuthenticate	sessionId,serverName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	mcpReconnect	sessionId,serverName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	mcpSubmitOAuthCallbackUrl	sessionId,serverName,callbackUrl	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getSessionsForScheduledTask	scheduledTaskId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	resetBridge		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	resetBridgeSession		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	abandonBridgeEnvironment	deregisterAll	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	kickBridgePoll		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getBridgeConsent		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getSessionsBridgeEnabled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	setSessionsBridgeEnabled	enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	refetchMyAccess		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	requestFolderTccAccess		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	respondBridgePermissionPreflight	requestId,verdict	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	startWatchRecording	sessionId,resumeRecord,purpose	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	takeHeldWatchRecording		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	takeCopperHeronSummary		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	takeCopperHeronThumbnails	holdEpoch	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	takeCopperHeronFrame	holdEpoch,tMs	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	touchCopperHeron	holdEpoch	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	finalizeCopperHeron	selection	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	discardCopperHeron	holdEpoch,ack	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	dismissWatchRecordPill	holdEpoch	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	releaseRemoteCuLock	sessionId,source	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getAppIconForBundleId	bundleId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	authorizeDirectMcpServer	name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	authorizeDirectMcpServerWithAccountPicker	name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	disconnectDirectMcpServer	name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	disconnectDirectMcpServerV2	name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	callChromeToolForRemoteSession	sessionId,toolName,argsJson,overridesJson	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	closeRemoteSessionTabGroup	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getDirectMcpServerStatuses		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	directMcpCallTool	name,toolName,args	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	directMcpReadResource	name,uri	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	directMcpListResources	name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	getManagedAskToolNames		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	triggerInteractiveAuth	force	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	revokeInteractiveAuth		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	cancelInteractiveAuth		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkStorage	getCounts		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkStorage	getUsage	refresh	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkStorage	reveal		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkStorage	previewCleanup	window	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkStorage	runCleanup	token	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkStorage	cancelCleanup		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkStorage	exportTask	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkStorage	exportProject	spaceId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkStorage	exportAll		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkUserFiles	getInfo		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkUserFiles	pickTarget		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkUserFiles	migrate	targetRoot	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkUserFiles	reveal		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkMemory	readGlobalMemory		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkMemory	writeGlobalMemory	content	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkMemory	listAccountMemories	includeContent	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkMemory	readAccountMemory	path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkMemory	writeAccountMemory	path,content	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkMemory	deleteAccountMemory	path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkMemory	resetMemories		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Gorse	preview		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Gorse	migrateToProject	includeHistory	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Gorse	exportToFiles	includeHistory	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Gorse	openExportFallbackFolder		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Gorse	decline		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Gorse	status		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Gorse	progress		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	getAllSpaces		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	getSpacesStoreState		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	getSpace	spaceId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	createSpace	params	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	updateSpace	spaceId,params	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	deleteSpace	spaceId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	addFolderToSpace	spaceId,folderPath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	removeFolderFromSpace	spaceId,folderPath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	addProjectToSpace	spaceId,projectUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	removeProjectFromSpace	spaceId,projectUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	addLinkToSpace	spaceId,link	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	removeLinkFromSpace	spaceId,url	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	getAutoMemoryDir	spaceId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	readSpaceMemoryIndex	spaceId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	listFolderContents	spaceId,folderPath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	readFileContents	spaceId,filePath,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	openFile	spaceId,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	createSpaceFolder	parentPath,folderName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	copyFilesToSpaceFolder	spaceId,filePaths	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	classifySessions	sessions,spaces	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	summarizeSpace	spaceName,sessions	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	setAutoDescription	spaceId,description	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	getRemoteSessionSpaces		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	setRemoteSessionSpace	entry	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	removeRemoteSessionSpace	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	appendRemoteSessionSpaceFolders	sessionId,folders	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	setSpaceMigration	spaceId,migration	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	getSpaceMemorySummary	spaceId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	recordSpaceMigrationOutcome	outcome	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	startSpaceMemoryCopy	spaceId,projectUuid,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	getSpaceMemoryCopyStatus	spaceId,projectUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	requestSpacesInventoryReport		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	getSpaceMemoryCapabilities		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AgentModeFeedback	openFeedbackAndConfirmReinstall	options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AgentModeFeedback	reportErrorToSlack	sessionId,errorMessage,slackChannelUrl,channelId,channelThreadId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkFeedback	getSystemInfo		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkFeedback	captureScreenshot		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkFeedback	discardScreenshot	token	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkFeedback	getScreenshotDataUrl	token	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkFeedback	submitFeedback	form	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	getAvailability	accountUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	getPublicKey	accountUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	signAttestationPreimage	accountUuid,preimageB64	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	signForSessionHeader	accountUuid,orgUuid,sessionUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	signCreateSessionBind	accountUuid,orgUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	signSessionBind	accountUuid,orgUuid,sessionUuid,expectedCurrentDeviceId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	signConversationBind	accountUuid,orgUuid,conversationUuid,expectedCurrentDeviceId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	signProjectThreadLink	accountUuid,orgUuid,sessionUuid,expectedCurrentDeviceId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	signTriggerOp	accountUuid,orgUuid,op,subjectId,fireContentHashHex	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	signTriggerDigest	accountUuid,request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	signSessionRequest	accountUuid,request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	signSessionFileCopy	accountUuid,request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	getLocalDeviceInfo	accountUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	getOwnRowPk	accountUuid,orgUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	notifyRegistered	accountUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	notifyBridgeAbsent	accountUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	setKeylessBridgeRowPk	accountUuid,rowPk	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceRegistry	rotateKey	accountUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Dictation	getStreamCredential		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DocumentFunnel	ensureScratchRoot	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DocumentFunnel	writeScratchFile	sessionId,path,contentBase64,ifMatchSha256	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DocumentFunnel	listScratchWorkingFiles	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DocumentFunnel	runClarkdownConvert	sessionId,request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DocumentFunnel	runClarkdownDownloadExport	sessionId,request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DocumentFunnel	revealDownloadExport	sessionId,handle	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DocumentFunnel	openDownloadExport	sessionId,handle	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DocumentFunnel	injectDocumentContext	sessionId,text	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DocumentFunnel	ingestSessionDocument	sessionId,sourcePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	writeFileDownloadAndOpen	filename,url	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	writeFileDownload	filename,url	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	whichApplication	filename	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	appInfoForExtension	extension	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	browseFolder	title,restrictToHomeDir,validateAsCoworkMount,wslDistro	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	browseFolders	title,restrictToHomeDir,validateAsCoworkMount	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	listDirectory	dirPath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	getSystemPath	pathType	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	openLocalFile	sessionId,path,showInFolder	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	listFilesInFolder	sessionId,folderPath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	readLocalFile	sessionId,path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	getLocalFileThumbnail	sessionId,path,maxSize	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	writeLocalFile	sessionId,path,content	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	showInFolder	path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	savePastedFile	base64,mimeType,filename	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	browseFiles	title	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	browseFile	title,cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	exportLocalFileToGoogleDrive	sessionId,path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FileSystem	promoteScratchpadFile	sessionId,path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	fetchMentionOptions	query,filter	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	handleMentionSelect	optionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	setFocusedCwd	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	setFocusedSshTarget	cwd,sshConfigId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	setFocusedRemoteTarget	cwd,remoteTarget	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	getProjectFileList		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	getProjectFileListIfChanged	knownVersion	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	searchFileContents	query,maxResults	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	searchFileContentsWithOptions	request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	setFindInPageClaimed	claimed	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	hideFindInPageOverlay		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	setFindInPageOverlayObstructed	obstructed	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	setFindInPageOverlayObstructedInPopout	popoutWindowId,obstructed	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	offerFindInPageInPopout	popoutWindowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	releaseFindInPageInPopout	popoutWindowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ForgeState	getForgeStateSnapshot		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ForgeState	setForgeStateVisibleKeys	keys	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ForgeState	refreshForgeStateRow	key,reason	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	GitState	getGitStateSnapshot	cwds	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	GrandPrix	pair	partnerId,context	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	GrandPrix	disconnect	partnerId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	GrandPrix	request	req	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	GrandPrix	submitVerificationCode	requestId,code	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	GrandPrix	dismissVerificationCode	requestId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	isAvailable		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	isJitlessForced		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	getLogs	serverId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	stopServer	serverId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	showPreview	serverId,bounds,claimantId,targetWindowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	hidePreview	serverId,claimantId,targetWindowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	destroyPreview	serverId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	teardownRemoteSessionPreview	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	setRemoteSessionViewed	sessionId,viewed	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	refreshPreview	serverId,tabId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	focusPreview	serverId,targetWindowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	setPreviewChromeFocus	previewId,focused	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	setPreviewPaneShortcutArmed	serverId,armed	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	setPreviewViewport	serverId,width,height,tabId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	clearPreviewViewport	serverId,tabId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	setPreviewColorScheme	serverId,scheme,tabId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	toggleSelectionMode	serverId,enabled,tabId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	startFromConfig	cwd,name,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	focusOrOpenPreviewTab	previewId,cwd,url	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	openExternalLinkInPreview	previewId,cwd,url	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	openClickedLinkInPreview	link	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	setPreviewLinkRouting	serverId,routed	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	openRoutedLinkExternally	serverId,url	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	setRoutedLinkConfirmReady	ready	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	resolveRoutedLinkConfirm	requestId,confirmed	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	getConfiguredServices	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	getAutoVerify	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	setAutoVerify	cwd,enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	detectServerCandidates	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	detectServerCandidatesWithAgent	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	addServerFromCandidate	cwd,candidate	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	getPreviewUrl	serverId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	navigatePreview	serverId,url,tabId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	goBack	serverId,tabId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	goForward	serverId,tabId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	setActivePreviewTab	serverId,tabId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	closePreviewTab	serverId,tabId,reopenable	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	reopenClosedPreviewTab	serverId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	reorderPreviewTab	serverId,tabId,toIndex	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	openPreviewTab	serverId,cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	closeAllPreviewTabs	serverId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	getPreviewTabs	serverId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	setPreviewMuted	serverId,muted	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	getAllSessionPreviewTabs		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	capturePreviewScreenshot	serverId,tabId,targetWindowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	capturePreviewScreenshotIfChanged	serverId,force,targetWindowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	getPreviewLastFrame	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	discardPreviewLastFrame	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	armPreviewLiveStream	previewId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	exportPreview	serverId,kind	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	getPreviewNavState	serverId,tabId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	loadHtmlPreview	filePath,sessionId,cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	loadClaudePagePreview	pageUrl,cwd,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	setArtifactPaneHost	artifactUuid,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	loadHtmlPreviewContent	content,path,isSvg,cwd,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	getPreviewAllowedOrigins		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	removePreviewAllowedOrigin	origin	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	clearPreviewAllowedOrigins		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	addPreviewAllowedOrigin	origin,schemeless	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	openPreviewInBrowser	serverId,tabId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	startBrowserPreview	cwd,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	ensureRemoteBlankPreview	sessionId,coworkRemote	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	ensureChatBlankPreview	conversationUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	openGdriveDocument	conversationUuid,kind,fileId,page,fullChrome	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	startRemoteBrowserPreview	sessionId,initialUrl,openInNewTab,coworkRemote	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	pickHtmlFile	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	setPreviewPaneMounted	previewId,mounted	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	clearCoworkBrowserData		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	clearPreviewBrowsingData	previewId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	getChromeImportAvailability		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	getCoworkChromeImportAvailability		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	listChromeImportProfiles		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	listChromeImportSites	previewId,profileId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	importChromeLogins	previewId,ticket,roots,enablePersist	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	listImportedChromeLogins	previewId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	removeImportedChromeLogins	previewId,root	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	getChromeImportSharedOffer	previewId,anySite	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	acceptChromeImportSharedOffer	previewId,keepSignedIn	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewSnapshot	serverId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewInspect	serverId,selector,styles	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewConsoleLogs	serverId,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewModelScreenshot	serverId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	navigatePreviewFromModel	serverId,url	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	listRemoteBrowserTools		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	callRemoteBrowserTool	call	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	resolveRemotePaneConsent	query	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	recordRemotePaneOriginDecision	sessionId,url,remember	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	admitRemotePaneOriginOnce	sessionId,origin	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	toggleRemoteControl	sessionId,enable	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getRemoteControlStartState		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	dropsHostReplyStamp		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	shareSession	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	start	info	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	forkSession	parentSessionId,sessionId,forkAtMessageUuid,targetCwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	detachFromParent	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	sendMessage	sessionId,message,images,toolStates,attachments,priority,steeringGates,messageUuid,seededSummon,typedText,sessionMentions,paneHolds,seededKind,pastes,marks	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setModel	sessionId,model	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setEffort	sessionId,effort	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getAdvisorSetting	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setFastMode	sessionId,fastMode	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setThinkingSummariesWanted	sessionId,wanted	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setAvailableNextActions	sessionId,actions	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	applyFlagSettings	sessionId,settings	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	validateNewOutputStyleName	sessionId,name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	createOutputStyle	sessionId,description,name,cancelToken	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	cancelCreateOutputStyle	sessionId,cancelToken	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	refreshOutputStyles	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	revealOutputStyle	name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	listGlobalOutputStyles		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getDefaultEffort		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getContextUsage	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getContextUsageSummary	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	warmSession	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	personOpenedSession	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getClaudeCodeRestartVersions	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	applyModelByRestart	sessionId,model	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	restartRemoteSession	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reinstallRemoteClaudeCode	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	restartRemoteHelper	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	retryStart	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	confirmImportedSessionResume	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reviewRepository	sessionId,generation	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	prewarmAuth		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	canAutoResume	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	startSideChat	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	sendSideChatMessage	sessionId,text	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	stopSideChat	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	interruptSideChat	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	startBtwChild	parentSessionId,sessionId,openedBy	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	closeBtwChild	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	stop	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	interrupt	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	stopTask	sessionId,taskId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getTaskOutput	sessionId,taskId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	backgroundTasks	sessionId,toolUseId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setBackgroundTasksShortcutArmed	armed	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setSessionPaneMenuState	state	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	markPeerMessagesRead	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	completeSessionViewRequest	requestId,result	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	completeCodeSettingRequest	requestId,result	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setCodeSettingAvailability	key,available	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	completeStartTargetsRequest	requestId,result	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	cancelQueuedMessage	sessionId,messageUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reorderQueuedMessage	sessionId,messageUuid,overUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	promoteQueuedMessage	sessionId,messageUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	sendSteeredNow	sessionId,messageUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	logCliEvent	sessionId,eventName,eventData	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reportSwitchTiming	timing	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reportSwitchInitiated	report	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reportSwitchAbandoned	report	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reportSessionListHint	kind	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reportComposerInp	timing	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reportTranscriptLoadEarlier	report	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reportTranscriptWindowBackfill	report	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reportStreamRender	summary	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reportRunFollowUp	summary	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reportSessionDeadEnd	report	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reportArtifactsReset	report	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reportSessionListLoad	report	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	clearSession	sessionId,stashForResume	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	rewind	sessionId,targetMessageUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	rewindV2	sessionId,targetMessageUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	rewindToRefusedPrompt	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	rewindFiles	sessionId,userMessageUuid,dryRun	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	discardPendingTurn	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	resumePreClearSession	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	undoRewind	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	switchRewindMark	sessionId,markId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getUncommittedChanges	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getUncommittedChangesByFolder	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	archive	sessionId,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	unarchive	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	discardKeptWorktree	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	delete	sessionId,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	updateSession	sessionId,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setCustomGroups	snapshot	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	respondSidebarCommand	requestId,result	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSession	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	findLocalSessionIdForBridgeId	bridgeSessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getAll		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSessionList		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	loadArchivedSessions		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSessionsForScheduledTask	scheduledTaskId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getDetectedProjects		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getCodeStats		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getGitInfo	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getLocalBranches	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getGitDiff	cwd,base,head,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getGitDiffStats	cwd,base,head	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getDiffFileContent	cwd,mergeBase,filePath,prevFilePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getDiffFileImage	request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getGitDiffFilePatch	cwd,mergeBase,filePath,prevFilePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getGitCommits	cwd,base,head	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getCommitDiff	cwd,sha	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	refreshGitState	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	invalidateGitDiffCache	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getTranscript	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getTranscriptTail	sessionId,limit	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getTranscriptPage	sessionId,beforeUuid,limit,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	requestTranscriptPort		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	readTranscript	request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	searchSessions	query,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getInstalledEditors	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	openInEditor	path,editor,sshConfig,line,remoteTarget	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	revealRemotePath	remoteTarget,path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	pickSessionFile	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	pickFileAtCwd	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	readFileAtCwd	cwd,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	listDirectoryAtCwd	cwd,dirPath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	readSessionFile	sessionId,filePath,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	readSessionFileWithStatus	sessionId,filePath,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSessionFilePlacement	sessionId,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	suggestFolderForSessionFile	sessionId,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	addSuggestedFolderForSessionFile	sessionId,filePath,folder	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	resolveSessionFile	sessionId,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	isSessionPathGone	sessionId,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	showSessionFileInFolder	sessionId,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	showSessionFilePreview	sessionId,filePath,bounds,consumerId,targetWindowId,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	openSessionFileInDefaultApp	sessionId,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	listSessionDirectory	sessionId,dirPath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	watchSessionDirectories	request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	readSessionImageAsDataUrl	sessionId,filePath,userInitiated,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSessionImageStreamUrl	sessionId,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	readSessionMediaAsDataUrl	sessionId,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	readSessionPanelMediaAsDataUrl	sessionId,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSessionMediaStreamUrl	sessionId,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSessionPanelMediaStreamUrl	sessionId,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	readSessionPanelDocumentAsDataUrl	sessionId,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	writeSessionFile	sessionId,filePath,contents,expectedHash	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	createSessionFile	sessionId,filePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	startShellPty	sessionId,cols,rows,spawnReason,ownerCwd,linkAware,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	stopShellPty	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	resizeShellPty	sessionId,cols,rows	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	writeShellPty	sessionId,data	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getBusyShellPtyKeys	sessionId,tabsOnly	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setShellPtyTitle	sessionId,title	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getTerminalShells		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	runBashCommand	sessionId,command	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	interruptBashCommand	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	respondToToolPermission	requestId,decision,updatedInput	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	respondToRefusalFallbackPrompt	sessionId,promptId,choice	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	respondToAutoModeServerFallbackPrompt	sessionId,promptId,choice	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	respondToLanyardConsent	sessionId,promptId,choice	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	respondToViolinBowPrompt	sessionId,promptId,choice	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	checkTrust	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	checkStoredTrust	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	saveTrust	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	createScratchWorkspace		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	prewarmFolderless	info	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	prewarmLocal	info	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	discardPrewarm	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	changeCwd	sessionId,cwd,trustAccepted,trustedDirectory	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	answerPendingCwdTrust	sessionId,promptId,accepted	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setPermissionMode	sessionId,mode,_chromeAllowedDomains,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setChipLevel	sessionId,level,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getChipLevelPreference		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setChipLevelPreference	level	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	launchUltrareview	sessionId,args,confirm	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	submitFeedback	sessionId,description	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	addDirectories	sessionId,directories	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getDefaultPermissionMode	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSupportedCommands	options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHDraftCommandNames	sshConfigId,cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	writeAutoModeProposalFile	sessionId,proposalJson	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	cleanupAutoModeProposalFile	path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getAgents	options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	createAgent	params	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setMcpServers	sessionId,servers	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	replaceRemoteMcpServers	sessionId,servers	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	replaceEnabledMcpTools	sessionId,enabledMcpTools	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	sessionConnectorToggleStarted	requestId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	respondSessionConnectorToggle	requestId,saved	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	remoteStartMcpConfigStarted	requestId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	respondRemoteStartMcpConfig	requestId,config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	mcpAuthenticate	sessionId,serverName,expectedUrl	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	mcpReconnect	sessionId,serverName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	mcpRetryConnection	sessionId,serverName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	mcpSubmitOAuthCallbackUrl	sessionId,serverName,callbackUrl	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	mcpAuthenticateConfigServer	sessionId,serverName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	mcpClearAuth	sessionId,serverName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	mcpEnableServer	sessionId,serverName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	mcpCallTool	sessionId,serverUuid,toolName,args	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	mcpReadResource	sessionId,serverUuid,uri	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	mcpListResources	sessionId,serverUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getProxiedConnectorCall	sessionId,toolUseId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getLocalMcpServers		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSessionCliMcpServers		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setFocusedSession	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setAvailableCodeModels	modelIds	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setAccountBranchPrefix	prefix	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	openMacFilesAndFoldersSettings		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	classifyTccFolderKind	path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	testSSHConnection	config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	probeSSHConnection	config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reconnectSessionHost	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	forceReconnectSSH	config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHProxyOutput	config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHLocalClientCapture	config,reason	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHAuthSummary	config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSessionSSHRemedies	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getRemoteSSHRemedies	remoteTarget	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	runSSHRemedy	id	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	listSSHDirectory	config,path,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHGitInfo	config,path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHLocalBranches	config,path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHGitDiff	config,cwd,base,head	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHGitDiffStats	config,cwd,base,head	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHGitCommits	config,cwd,base,head	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHCommitDiff	config,cwd,sha	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHDiffFileContent	config,cwd,mergeBase,filePath,prevFilePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getRemoteGitInfo	remoteTarget,path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getRemoteLocalBranches	remoteTarget,path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getRemoteGitDiff	remoteTarget,cwd,base,head	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getRemoteGitDiffStats	remoteTarget,cwd,base,head	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getRemoteGitCommits	remoteTarget,cwd,base,head	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getRemoteCommitDiff	remoteTarget,cwd,sha	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getRemoteDiffFileContent	remoteTarget,cwd,mergeBase,filePath,prevFilePath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	listRemoteDirectory	remoteTarget,root,path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	checkRemoteTrust	config,cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	checkRemoteTargetTrust	remoteTarget,cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	saveRemoteTargetTrust	remoteTarget,cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	resolveSSHSettings	config,remoteCwd,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHConfigs		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	listWslDistros		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	canStartWslSession	distro	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setSSHConfigs	configs	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getTrustedSSHHosts		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setTrustedSSHHosts	hosts	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHWorktreeLocation	config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHSavedPassword	config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	forgetSSHSavedPassword	config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHHostToolGrants		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	removeSSHHostToolGrant	endpointKey,toolName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	clearSSHHostToolGrants	endpointKey	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setSSHWorktreeLocation	config,location	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getSSHWorktreeDefaults	config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	importAllCliSessions		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	probeImportableCliSessions		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setVisibility	sessionId,isVisible,reason	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	checkGhAvailable	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	listGhIssues	cwd,query	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getGhIssue	repo,issueNumber,hostname	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getGhRefSummary	host,repo,refNumber	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getGhRefSummaryWithStatus	host,repo,refNumber	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getGhUserSummary	host,login	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getCrRefSummary	org,repo,seq	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getCrCliStatus		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	isWorkingTreeDirty	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getWorkingTreeDirtyState	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	checkBranchSwitchConflict	cwd,targetBranch	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	isBranchOnOrigin	cwd,branch	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getWorkingTreeStatus	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	stashWorkingTree	cwd,message	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	commitWipForBranchSwitch	cwd,fromBranch	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	discardWorkingTree	cwd	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	installGh		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getPrChecks	cwd,prNumber,repo,host	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getCheckRunAnnotations	sessionId,prNumber,checkRunId,repo	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	rerunPrCheck	sessionId,prNumber,checkRunId,repo	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getPrStateForBranch	cwd,branch,sessionId,repo,host	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getPrReviewComments	cwd,prNumber,repo,host	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getPrOverview	cwd,prNumber,repo,sessionId,slim	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getPrTimeline	cwd,prNumber,repo	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getPrFiles	cwd,prNumber,repo	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getPrCommits	cwd,prNumber,repo	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getPrFileContent	cwd,prNumber,path,ref,repo	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	fetchGithubImage	cwd,prNumber,url,repo,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	replyToPrReviewComment	cwd,prNumber,commentId,body,repo,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	resolvePrReviewThread	cwd,prNumber,commentId,repo,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	updatePrComment	cwd,commentId,body,isReviewComment,repo,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	createPrReviewComment	cwd,prNumber,commitSha,path,line,body,startLine,side,repo,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	submitPrReview	cwd,prNumber,event,body,repo,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	updatePrBody	cwd,prNumber,body,repo,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	mergePr	cwd,prNumber,method,repo,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setBoundPrAutoFix	sessionId,repo,prNumber,enabled,host	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setSessionAutoArchiveOnPrClose	sessionId,enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	respondToTitleOffer	sessionId,ordinal,response	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setManualKeepAwake	sessionId,enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	armAutoFixOnNextPr	sessionId,branch	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setAutoFixOwnPrsWanted	sessionId,wanted	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	dismissBoundPr	sessionId,repo,prNumber,host	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	enableAutoMerge	cwd,prNumber,repo,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	disableAutoMerge	cwd,prNumber,repo,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	markPrReady	cwd,prNumber,repo,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	markPrDraft	cwd,prNumber,repo,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	invalidatePrCaches	cwd,prNumber,repo	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	dequeuePr	sessionId,cwd,prNumber,repo	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	popBackgroundTaskSuggestion	sessionId,launched	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	popBackgroundTaskSuggestionById	sessionId,taskId,launched	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getTaskBacklog	cwd,limit	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	dismissTaskBacklogItem	id,taken	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	notifySpawnedTaskStarted	parentSessionId,taskId,childKind,childSessionId,title	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	notifySpawnedTaskUnstarted	parentSessionId,taskId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	acceptSideSessionOffer	sessionId,taskId,accept	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	muteSideSessionOffers	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getTeleportReadiness	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getTeleportPlan	sessionId,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	teleportToCloud	sessionId,environmentId,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	resolveCloudBranch	req	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	resolveGithubRepoIds	input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	beginTearOffHalo	title,style	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	setTearOffHalo	armed	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	endTearOffHalo		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	listCliSessions	limit	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	readCliTranscript	handle,offset,limit	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	enableCliRemoteControl	handle	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	openCliTail	handle	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	closeCliTail	handle	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	listResumableCliSessions	limit	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	resumeCliSession	handle	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	previewCliResume	handle	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	createLogsHandoffBundle	threadUrl,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	respondToSSHPassword	requestId,password,remember	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	getPendingSSHPasswordRequests		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	ackSSHPasswordRequestShown	requestId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	reportSSHPasswordPromptHidden	requestId,folded	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	declareSSHPromptKinds	kinds	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessionEnvironment	get		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessionEnvironment	save	envVars	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessionEnvironment	getScoped	scopeId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessionEnvironment	saveScoped	scopeId,envVars	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessionEnvironment	removeScoped	scopeId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessionEnvironment	moveIntoScopes	scopeIds,remoteScopeIds	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessionPresets	load	accountUuid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessionPresets	replaceAll	accountUuid,catalog	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	getPlugins	options,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	getDownloadedRemotePlugins	pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	syncRemotePlugins	pluginContext,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	materializeEnabledPlugins	pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	listSkillFiles	pluginId,skillName,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	uploadPlugin	filename,base64Content,replaceExisting,pluginContext,uploadSource	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	deletePlugin	pluginId,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	setPluginEnabled	pluginId,enabled,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	startPluginOAuthFlow	pluginId,cliName,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	revokePluginOAuth	pluginId,cliName,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	getPluginCliStatus	pluginId,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	setPluginEnvVars	pluginId,cliName,values,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	setPluginOAuthClient	pluginId,cliName,clientId,clientSecret,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	getPluginShimOps	pluginId,pluginContext,cliName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	getPluginCliBatch	pluginIds,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	setPluginShimPermission	pluginId,op,permission,pluginContext,cliName	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	PluginBridgeMcp	listServers		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	addMarketplace	input,egressAllowedDomains,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	removeMarketplace	name,egressAllowedDomains,pluginContext,backendId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	refreshMarketplace	name,egressAllowedDomains,pluginContext,backendId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	listMarketplaces	egressAllowedDomains,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	installPlugin	pluginId,egressAllowedDomains,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	updatePlugin	pluginId,egressAllowedDomains,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	uninstallPlugin	pluginId,egressAllowedDomains,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	listAvailablePlugins	egressAllowedDomains,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	listRemotePluginsPage	limit,offset	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	checkPluginHasLocalChanges	pluginId,pluginContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	getAndClearMigrationIssues		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	listLocalOrgPlugins		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	installLocalOrgPlugin	name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	syncLocalOrgPlugins		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	RemoteControlServing	requestEnable		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	RemoteControlServing	disable		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	RemoteControlServing	removeFolder	path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	RemoteControlServing	setFolderPinned	path,pinned	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	RemoteControlServing	setFolderWorktree	path,worktree	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	RemoteControlServing	disconnectCloudSession	path,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	RemoteControlServing	requestAddFolder		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	RemoteControlServing	requestServeSessionFolder	localSessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	RemoteControlServing	requestServeGrantedFolder	sessionId,folder,silent	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	getAllScheduledTasks		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	getScheduledTaskFileContent	scheduledTaskId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	updateScheduledTaskStatus	scheduledTaskId,status,removeFiles	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	createScheduledTask	params	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	updateScheduledTask	params	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	removeApprovedPermission	scheduledTaskId,toolName,ruleContent	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	clearChromePermissions	scheduledTaskId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	getWatcherHistory	scheduledTaskId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	markListenerReady		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	setEventAckSupported		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	ackEvent	ackId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	releaseDispatchClaim	scheduledTaskId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	beginManualMigration	scheduledTaskId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	endManualMigration	scheduledTaskId,token,migrated,remoteTriggerId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	revertRemoteMigration	scheduledTaskId,triggerId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	answerBoundCreateSign	requestId,answer	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CCDScheduledTasks	getAllScheduledTasks		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CCDScheduledTasks	getScheduledTaskFileContent	scheduledTaskId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CCDScheduledTasks	updateScheduledTaskStatus	scheduledTaskId,status,removeFiles	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CCDScheduledTasks	createScheduledTask	params	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CCDScheduledTasks	updateScheduledTask	params	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CCDScheduledTasks	removeApprovedPermission	scheduledTaskId,toolName,ruleContent	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CCDScheduledTasks	getWatcherHistory	scheduledTaskId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CCDScheduledTasks	markListenerReady		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CCDScheduledTasks	setEventAckSupported		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CCDScheduledTasks	ackEvent	ackId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CCDScheduledTasks	releaseDispatchClaim	scheduledTaskId,sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CCDScheduledTasks	setHostRunsSupported		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	SessionPopouts	reportOpenPopouts	popouts	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	SessionPopouts	takeRestorablePopouts		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	SessionPopouts	reportOpenLayout	layout	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	SessionPopouts	takeRestorableLayout		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ViolinFret	setViolinFretChoice	choice	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	download		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	startVM	options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	restartVM		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	getDownloadStatus		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	getRunningStatus		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	isHostLoopModeEnabled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	isHostLoopDevOverrideActive		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	setForceDisableHostLoop	value	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	setYukonSilverConfig	config	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	checkVirtualMachinePlatform		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	enableVirtualMachinePlatform		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	restartAfterVMPInstall		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowLayout	setLayoutCommandListening	listening	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowLayout	reportLayoutCommandResult	result	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	RendererMemoryReporter	report	sample	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.telemetry_$_
+.vite/build/index.chunk-lzaSYO3Q.js	PrintCallReporter	report	printing	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.telemetry_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FindInPage	findInPage	text,options	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.findInPage_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FindInPage	stopFindInPage		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.findInPage_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FindInPage	endFindSession		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.findInPage_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesignPdf	printFrameToPdf	request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.designPdf_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OfficeAddinFiles	getConnectedFiles	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.officeAddin_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OfficeAddinFiles	isFeatureEnabled		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.officeAddin_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OfficeAddinFiles	focusFile	fileId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.officeAddin_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OfficeAddinFiles	selectFile	fileId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.officeAddin_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OfficeAddinFiles	updateActiveConversationSummary	summary	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.officeAddin_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OfficeAddinFiles	queuePorterHandoff	request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.officeAddin_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OfficeAddinFiles	downloadAndQueuePorterHandoff	request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.officeAddin_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OfficeAddinFiles	cancelPorterHandoff	handoffId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.officeAddin_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OfficeAddinFiles	probePorterOpenTarget		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.officeAddin_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Buddy	status		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Buddy	deviceStatus		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Buddy	setName	name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Buddy	pairDevice		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Buddy	scanDevices		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Buddy	pickDevice	id	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Buddy	cancelScan		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Buddy	submitPin	pin	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Buddy	forgetDevice		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Buddy	pickFolder		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Buddy	preview	folderPath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Buddy	install	folderPath	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	BuddyBleTransport	rx	line	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	BuddyBleTransport	reportState	state,name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	BuddyBleTransport	log	msg	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiRender	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiPress	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiInput	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiSelect	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiPromptEdit	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiClientModule	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiClientPress	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiMessage	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiClientFault	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiAttach	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiDetach	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiPanes	sessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiPaneShow	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiPaneFocus	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiClose	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiScroll	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiFocus	sessionId,input	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiPinnedStatus		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiHostAnswer	sessionId,answer	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifactBridge	callMcpTool	tool,args	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.coworkArtifact_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifactBridge	askClaude	prompt,data	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.coworkArtifact_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifactBridge	runScheduledTask	taskId,preloadContext	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.coworkArtifact_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifactBridge	navigateHost	direction	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.coworkArtifact_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifactBridge	openExternalUrl	url	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.coworkArtifact_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifactBridge	setEditableFocused	focused	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.coworkArtifact_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	attach	udid,deviceName,kind,autoBoot,intent,originSessionId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	detach	udid,reason	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	shutdown	udid,trigger	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	startDevice	id,kind	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	restartDevice	id,kind	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	renameDevice	udid,name	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	getSlowAnimations	udid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	setSlowAnimations	udid,enabled	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	listDevices	kind	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	simulatorProcessRunning		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	awaitQuitRestart	udid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	panelViewed	kind,opened	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	setupStepChanged	kind,step,status	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	setupCtaClicked	kind,cta	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	captureThumbnailAction	kind,details	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	miniViewChanged	kind,change	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	gesture	udid,msg	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	getAppearance	udid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	setAppearance	udid,mode	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	checkSetup		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	checkAndroidSetup		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	openXcode		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	openAppStore		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	openAndroidStudio		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	requestDeviceConsent	udid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	requestDeviceToolsRepin		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	setEditShortcutsClaimed	udid,claimed,scope	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	editAction	udid,request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	sendClipboard	udid,request	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	getClipboard	udid,scope	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	setCaptureShortcutsClaimed	udid,claims,scope	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	setKeyboardShortcutClaimed	udid,claimed,scope	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	setQuitShortcutClaimed	udid,claimed,scope	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	setZoomShortcutsClaimed	udid,claimed,scope	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	displayPointsPerInch	windowId	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	saveScreenshot	udid,trigger	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	captureScreenshot	udid,purpose	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	readCapture	path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	deleteCapture	path	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	describeAccessibility	udid,query	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	startRecording	udid,trigger	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	stopRecording	udid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	getLogEntries	udid,sinceSeq,limit,beforeSeq	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	nativeViewMount	udid,bounds,targetWindowId,pane	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	nativeViewSetBounds	udid,bounds,pane	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	nativeViewSetVisible	udid,visible,pane	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	nativeViewSetOrientation	udid,quarterTurns,pane	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	nativeViewSetBend	udid,bend,pane	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	nativeViewFoldPlay	udid,plan,pane	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	nativeViewFoldGo	udid,id,pane	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	nativeViewFoldConfirm	udid,id,screen,pane	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	nativeViewFoldEnd	udid,id,flat,quarterTurns,pane	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	nativeViewUnmount	udid,pane	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	nativeViewStill	udid,maxWidth,maxHeight,pane	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuTeach	next		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuTeach	exit		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuTeach	mouseEnter		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuTeach	mouseLeave		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuWatchRecordPill	done		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuWatchRecordPill	discard		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuWatchRecordPill	toggleMic		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuWatchRecordPill	reportProcessingWidth	width	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuWatchRecordChooser	choose	action	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuWatchRecordChooser	setMicPreview	deviceUid	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuWatchRecordChooser	stopMicPreview		method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuWatchRecordChooser	reportContentShortfall	px	method	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_

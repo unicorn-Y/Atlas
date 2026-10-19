@@ -1,0 +1,2 @@
+module_id,path,kind,at,arg_type
+M-00410	node_modules/node-pty/lib/utils.js	require	29:44	CallExpression

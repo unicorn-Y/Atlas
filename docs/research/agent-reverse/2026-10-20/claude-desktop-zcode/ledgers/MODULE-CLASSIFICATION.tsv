@@ -1,0 +1,507 @@
+path	bytes	parse	layer	role_detail	eipc_services	bridge_worlds	ipc_registrations	eipc_methods	eipc_events	evidence	notes
+.vite/build/aboutWindow.js	87077	ok	preload	preload:aboutWindow		process,desktopEssentialTelemetryDisabled	17	0	0	S	
+.vite/build/buddy.js	4536	ok	preload	preload:buddy		process,desktopEssentialTelemetryDisabled,buddy	17	0	0	S	
+.vite/build/claudePagePreview.js	1930	ok	preload	preload:claudePagePreview		claudeDesktopArtifactPane	5	0	0	S	
+.vite/build/computerUseTeach.js	5190	ok	preload	preload:computerUseTeach			33	0	0	S	
+.vite/build/computerUseWatchRecord.js	3725	ok	preload	preload:computerUseWatchRecord			22	0	0	S	
+.vite/build/coworkArtifact.js	2687	ok	preload	preload:coworkArtifact		cowork	6	0	0	S	
+.vite/build/designWindow.js	1469	ok	preload	preload:designWindow		omeletteDesktopPdf	1	0	0	S	
+.vite/build/file-index-worker/fileIndexWorker.js	906737	ok	worker	worker:file-index-worker			0	0	0	S	
+.vite/build/findInPage.js	86785	ok	preload	preload:findInPage		process,desktopEssentialTelemetryDisabled	13	0	0	S	
+.vite/build/heavy-work-worker/dist-CI9lzb1v.js	433463	ok	worker	worker:heavy-work-worker			0	0	0	S	
+.vite/build/heavy-work-worker/heavyWorkWorker.js	699494	ok	worker	worker:heavy-work-worker			0	0	0	S	
+.vite/build/heavy-work-worker/rolldown-runtime-CI_2c2Xz.js	732	ok	worker	worker:heavy-work-worker			0	0	0	S	
+.vite/build/index.chunk--Ke4fVuU.js	711	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk--pR4DFWL.js	2346	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-0jb8zQWa.js	755	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-0q54qGlJ.js	15956	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-1lJXcT8c.js	41464	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-2_Kpgj9v.js	4036	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-4HAlnXqB.js	936	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-5TaW4QRE.js	5571	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-5wlbAX53.js	3848	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-6HzFAPWT.js	1655	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-713hoB_d.js	3734	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B-eEmKcL.js	831	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B-m_SPwC.js	7180	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B08Ms-4o.js	6901	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B0WAWLOW.js	159861	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B17ncv_E.js	139558	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B2Moev8O.js	1634	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B2Rrv5Um.js	6031	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B2Vbqvd-.js	32393	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B3Fg7lxU.js	936	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B3ord9Gq.js	9260	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B4iWTRPf.js	3239	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B5xg_hLm.js	2285	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B7dhjaUQ.js	2951	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B7hSi02X.js	5427	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B8JZ7v6H.js	21545	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B8ZKzQZo.js	5702	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-B9ueezvW.js	1111	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BAEQpeU2.js	39118	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BAr-M6Uk.js	3846	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BB4dhyVR.js	778	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BBUs8uvY.js	7423	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BCxvKF4p.js	2813	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BEVeQ4eS.js	2350	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BF0qZsid.js	7155	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BFOvM_pR.js	875	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BFgHcLgq.js	2443	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BFtu7z-n.js	2068	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BFxRKxih.js	8498	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BH0bRpNM.js	10857	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BIQH9bmT.js	1219	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BIps7hQO.js	8193	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BK7U1e7z.js	1202	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BKwJ0Kzl.js	8051	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BMFhTup2.js	41629	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BMJzdG-N.js	6847	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BN7PaJ_P.js	52116	ok	main	main-chunk	SableOtterHud		1	9	2	S	
+.vite/build/index.chunk-BNd-Veq8.js	3561	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BP9wjxd9.js	17537	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BPH2yjvG.js	7501	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BPjIr-mn.js	50076	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BPxbWJAH.js	5557	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BQf2i5CR.js	5231	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BQi7slPm.js	1480	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BQkApOKK.js	700	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BSSe-7sQ.js	2835	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BTny0TLv.js	810	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BVerX_SL.js	768	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BVryDrIy.js	1297	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BWI7goHJ.js	65850	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BWl4h9Ko.js	7854	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BXF3MbS8.js	1811	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BXLZazwD.js	2585	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BXYGThVv.js	4311	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BYMGAPtw.js	461552	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BZ4d--Z2.js	2579	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BZpj-Xyx.js	1973	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BbK5vSxh.js	5654	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BbpAC-UC.js	832	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BbrNXR5p.js	775	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BcNzSWBi.js	770	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BdmPP2qV.js	15667	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Be0WbAnH.js	1424	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BeZcR6Nl.js	4139	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BemIcaFh.js	882	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Bf9o4l1C.js	8515	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Bfz0nkIg.js	601	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Bg3zmPAK.js	797	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BgNlZkJ7.js	15227	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BgSwqbzh.js	10527	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Bgul06K6.js	9914	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BhtDJrnm.js	831	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Bib_F17Q.js	992	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Bj1rMKq6.js	2682	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BjZ3vX9r.js	809	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Bk2sltuX.js	1412	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BkZ4tpDY.js	132677	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BlEfqh4Z.js	917018	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BlIyBYaD.js	8444	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BlX2K52i.js	1129	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BmfewHq3.js	1866	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Bn6onBlX.js	2106696	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BnPPioal.js	1663	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BnZH0cT0.js	769	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Bolwy5c8.js	1662	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BopPBEgI.js	961	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BpoRyh_b.js	7338	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Bq0b1KR5.js	2588	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Bsn1VIro.js	2060	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BtXfU220.js	9881	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BtyBHo3K.js	601	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Bu0Hda6m.js	12304	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BvMaI6NQ.js	592251	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BvUB77vv.js	4130	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-BxLuI_4U.js	2016	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-By3lrqDG.js	13381	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-ByvAMUkj.js	5065	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-C-8wcdkH.js	5903	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-C-v1WiLD.js	2031	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-C0sq-LTJ.js	5206	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-C15e1VST.js	3811	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-C15iBw1-.js	3160	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-C1l855wQ.js	4681	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-C2TjXBTO.js	1933	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-C5Ud-KyG.js	4105	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-C5_DUEl_.js	6411	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-C6OBlOlX.js	133497	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-C7ydsIk6.js	4052	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CAAuh_N2.js	10217	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CAaS9_t_.js	2912	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CCgl5N-V.js	2549	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CCotqg2k.js	9700	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CCzyVBVq.js	1637	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CDdFTMzQ.js	5357	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CDpxTd3c.js	5419	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CELowqls.js	8059	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CEkgISQ-.js	5884	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CEsJ07Wf.js	20586	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CFY-4zeK.js	1605	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CGwsahND.js	2679	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CIspABeP.js	1049	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CJRhqwjr.js	2194	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CJxqg9Un.js	128756	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CKOX3env.js	32734	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CLDnJbh1.js	237178	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CLyGth5n.js	3913	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CNXRFRP7.js	16155	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CN_uPo6d.js	1216	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CPEA6dKA.js	353429	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CPUoh-Ta.js	5431	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CPzeH_V9.js	7346	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CQQIsj7r.js	191188	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CQeTfNrA.js	6869	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CQr0Ee4m.js	3411	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CS97pYxF.js	2052	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CTyoJC3M.js	32426	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CU-hpQBB.js	9667	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CU89UzUr.js	6345	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CUMCDUNn.js	1538	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CUNvOQN2.js	992	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CUXAfqTZ.js	7256	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CUYqXjqj.js	1638	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CVOteD6E.js	2035	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CVfpPT7d.js	6591	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CWVQDNOx.js	2905	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CYu8whgJ.js	1051	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CZGv8iib.js	1369	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CZXx132H.js	5397	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-C_4pXLR0.js	2448	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-C_qk6eGw.js	20498	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-C_ze_R2E.js	1241	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Cau1PpCq.js	3679	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CbSbf3Tr.js	58512	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CbfUFryd.js	5408	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CcXrDQ0i.js	4900	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CcveFAuE.js	242613	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CcyCtVxN.js	564	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Cd8cGj4_.js	40203	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CdsxofPO.js	101549	ok	main	main-chunk			3	0	0	S	
+.vite/build/index.chunk-CdzcX3nr.js	6723	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CeJGoREc.js	37842	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CeSjtxih.js	5668	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Ceg5Z3Ce.js	47295	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CekorYcU.js	11585	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CexIg5zO.js	3463	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CfYHAcpH.js	11776	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CgH6Cli_.js	1060	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-ChpGVBJ1.js	6408	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Chu9Of_9.js	4887	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CiPwBI1D.js	1550	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CiRCUv_L.js	773	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CiZj5wKe.js	19874	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Cj79nCi4.js	1582	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Ck3ee-gJ.js	29126	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CkecUsrN.js	3912	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-ClUXMtQ7.js	5589	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-ClrUhXWp.js	1213	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Cm-Uv1wR.js	1840	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CmeqApNG.js	5769	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CneElZpr.js	1790	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CnkTpwso.js	68502	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CpFPgE9p.js	1135	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CpOIE1nf.js	5343	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CrblwMDh.js	6665	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Crjx4ZVt.js	1793	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CuCIlj4E.js	1004	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CuJrF8sP.js	5050	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CvLGcrZB.js	1424	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CwIQU-8Y.js	116399	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CwuFYsKE.js	29241	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CxI_2nWm.js	22295	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CxNVpniR.js	888	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CxUAVDxD.js	6283	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CxzV6l7X.js	3631	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CzLc7P9j.js	16630	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CzY1tCPL.js	13013	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-CziplGGF.js	1467	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D-0924nl.js	1560	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D-HqUGLi.js	6246	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D-T5CYlE.js	2297	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D1RwX_Ka.js	8179	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D25qKEdm.js	15965	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D2A8Ncj4.js	1928	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D3Peov1H.js	9845	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D4B44ehk.js	1802	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D5gwoNxg.js	40559	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D6ax747K.js	2802	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D76cxAuR.js	15093	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D7UNC1Oj.js	2867	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D8KN2IXy.js	1061	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D8KhDGfd.js	2696	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D8RdLxk8.js	4723	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D8phPbdW.js	1021	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-D8wkeL37.js	2665	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DA534R-L.js	86564	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DAR5x_5h.js	775	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DAabB_9C.js	3661	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DAy4YstQ.js	774	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DCgdwyFw.js	4670	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DD2qsWbt.js	11954	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DD9Q9sLU.js	1132	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DDLL2EES.js	868	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DDW7ExCv.js	12531	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DDsgmCu_.js	1086	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DEvtmnQ-.js	6340	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DEx3njUs.js	3860	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DF2E1zuK.js	84830	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DGLBzABn.js	8528	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DGgKKPXU.js	2187	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DI47cOp_.js	24571	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DINXX5S-.js	7083	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DJXBruhf.js	1682	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DLcJEY_w.js	11517	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DLkBHW-V.js	1848	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DLqLwOmD.js	69895	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DLvhfzmK.js	930	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DMEJLiDO.js	1780	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DNxwdxw-.js	771	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DNyequwM.js	1224866	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DPHCUQQy.js	43680	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DPuRWdEL.js	5257	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DQ3698r0.js	6336	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DRFAz7zF.js	2881	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DRb1afDC.js	7160	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DRlnO5CK.js	12278	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DSNPhQKz.js	1087	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DT4sNa4R.js	2171	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DVKorKfz.js	3451	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DVtfwF6X.js	17490	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DWmvMnwU.js	2560	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DXQssFNd.js	3820	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DZSaR_us.js	3061	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DZV6mBvi.js	56790	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DaEcYOkw.js	5601	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DajqLQbW.js	980	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DcO4CDAv.js	5241	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Dd4cATog.js	317789	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Dd9v2aGl.js	1014	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Dgy-1Nht.js	3414	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Dh527fpx.js	2025	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DiIqVGe0.js	958	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Dig-VUnE.js	367325	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DiuE5YRB.js	2006	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DjgBgJOe.js	9957	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DkUVHq8L.js	15703	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DlE0R5Pd.js	5322	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DlUQavGs.js	2625	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DllGAjvd.js	11372	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DoU0pLl3.js	151465	ok	main	main-chunk			1	0	0	S	
+.vite/build/index.chunk-Dp-fwrC4.js	163378	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DqAcjgt5.js	6333	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DqGUM1Dr.js	1419	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DuNMxYBx.js	778	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Dujv1em2.js	7670	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DvQd8RR7.js	4358	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DvdZaxqH.js	82096	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DwhRU0hX.js	1091	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DyGy2D-O.js	1871	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-DyYrY1NN.js	215517	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-EI2tE9_4.js	955	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-EwbxZ6wW.js	8144	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-FiyCjals.js	93385	ok	main	main-chunk			7	0	0	S	
+.vite/build/index.chunk-G9_mRSUx.js	17810	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-GMy-Fx2L.js	8928	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Gxf1yHDU.js	5753	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Hph4NgNJ.js	6348	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-I9bAj080.js	49981	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-IEsexX9X.js	2642	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-JnLh1fOe.js	9818	ok	main	main-chunk	LocalExecConsent		2	1	0	S	
+.vite/build/index.chunk-KfAz_42N.js	769	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-LPK9kWWN.js	2336	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-LqLRvaib.js	1821	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-LtG4Q0jJ.js	1961	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-M4RyjaHM.js	20463	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-M6SkuaH9.js	737910	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-MT_AbdGg.js	5448	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-MijPx1d7.js	3861	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-NjFfajPS.js	2468	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-PXR81r8F.js	4005	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-QSM1kwGG.js	12540	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-QXv2aC_b.js	2615	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-RQsbjaP_.js	935	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Ray2aCu3.js	55491	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-S2eKuU9U.js	765	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-TDahgEnt.js	779	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-TIxUOzMy.js	10544	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-US5c54N2.js	1915	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Uk7wsaDw.js	4252	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-VXoZYQbU.js	8151	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Vdvw6mum.js	11102	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-VeAh16Bs.js	1872	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-Vi4y50hN.js	4276	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-VlHCkRyl.js	808	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-WxlVBeEX.js	16741	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-XFjt9B7T.js	7326	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-ZvAdCieZ.js	1686	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-aK0JyCY9.js	6357	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-b_nHwNir.js	18776	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-bnDZLEe6.js	1653	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-cZIsAMJH.js	2065	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-eLxLj6qe.js	9809	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-f4SiagXk.js	1789	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-hOorvWtr.js	19794	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-ilWIs3r6.js	15189	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-klfIxYlb.js	1422	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-l9SraRJO.js	1623	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-lZjBQ2C7.js	2125	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-ljgWmT8p.js	2742	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-lxiRko9r.js	8279	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-lzaSYO3Q.js	7081117	ok	main	main-chunk	AboutWindow,QuickWindow,MainWindowTitleBar,AppConfig,Startup,CcdCli,GlobalShortcut,MCP,Extensions,FilePickers,AppPreferences,AppFeatures,DesktopInfo,Custom3pSetup,Custom3pHelperRun,ClaudeAiImport,HistoryImport,SupportBundle,WakeScheduler,Custom3pUsage,DesktopIntl,WindowControl,QuickEntry,Account,PlanUsage,WebBuild,Navigation,OsOpenHandlers,OsEntryPlaces,DeepLink,MenuEvents,ContentStampReporter,WindowState,DeviceStorage,Toast,Auth,DesktopNotifications,AutoUpdater,BrowserNavigation,FindInPageProvider,ManagedConfig,CoworkArtifacts,CoworkFilePreview,ClaudeCode,CliSessionImport,CloudMove,ChromeExtension,ComputerUseTcc,ComputerUseLivePreview,BuddyRemoteFeed,FramebufferPreview,LocalAgentModeSessions,CoworkStorage,CoworkUserFiles,CoworkMemory,Gorse,CoworkSpaces,AgentModeFeedback,CoworkFeedback,DeviceRegistry,Dictation,DocumentFunnel,FileSystem,Resources,ForgeState,GitState,GrandPrix,Launch,LocalSessions,LocalSessionEnvironment,LocalSessionPresets,LocalPlugins,PluginBridgeMcp,CustomPlugins,RemoteControlServing,CoworkScheduledTasks,CCDScheduledTasks,SessionPopouts,ViolinFret,ClaudeVM,WindowLayout,RendererMemoryReporter,PrintCallReporter,FindInPage,DesignPdf,OfficeAddinFiles,Skills,Buddy,BuddyBleTransport,EngineSurface,CoworkArtifactBridge,Simulator,CuTeach,CuWatchRecordPill,CuWatchRecordChooser		57	1160	160	S	
+.vite/build/index.chunk-nB1UBbHL.js	11867	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-qy0A6HAj.js	2873	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-rUSp9s65.js	15288	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-uAdDXvxb.js	5022	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-vYnAlWmT.js	39251	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-xBKHjffa.js	14910	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-xoZNrP6a.js	2910	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-y1BuSqXP.js	38496	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-yHaef_W6.js	1317	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-yKIwpGVf.js	53974	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-zDwQxd00.js	5603	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-zIoHNHnH.js	1122	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-zyVF5iEQ.js	2440	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.chunk-zzWYn-sM.js	1053	ok	main	main-chunk			0	0	0	S	
+.vite/build/index.js	638	ok	main	main-entry			0	0	0	S	
+.vite/build/index.pre.js	930575	ok	main	main-entry-pre			6	0	0	S	
+.vite/build/localExecConsent.js	1366	ok	preload	preload:localExecConsent			1	0	0	S	
+.vite/build/mainView.js	171276	ok	preload	preload:mainView		buddyBle,claudeAppBindings,claudeAppSettings,process,desktopBootFeatures,desktopManagedConfig,desktopEnterpriseConfig,desktopTelemetryConfig,desktopDeviceClass,desktopPreferredLanguages,electronWindowControl,electronIntl	1361	0	0	S	
+.vite/build/mainWindow.js	88193	ok	preload	preload:mainWindow		process,desktopEssentialTelemetryDisabled,desktopBootPlaceholder	17	0	0	S	
+.vite/build/mcp-runtime/directMcpHost.js	613700	ok	mcp-runtime	MCP host			0	0	0	S	
+.vite/build/mcp-runtime/nodeHost.js	5907	ok	mcp-runtime	MCP host			0	0	0	S	
+.vite/build/msal-broker-worker/msalBrokerWorker.js	21601	ok	worker	worker:msal-broker-worker			0	0	0	S	
+.vite/build/pty-host/ptyHostWorker.js	12018	ok	worker	worker:pty-host			0	0	0	S	
+.vite/build/quickWindow.js	87077	ok	preload	preload:quickWindow		process,desktopEssentialTelemetryDisabled	17	0	0	S	
+.vite/build/shell-path-worker/shellPathWorker.js	9575	ok	worker	worker:shell-path-worker			0	0	0	S	
+.vite/build/stall-sampler-worker/stallSamplerWorker.js	2033	ok	worker	worker:stall-sampler-worker			0	0	0	S	
+.vite/build/transcript-search-worker/transcriptSearchWorker.js	35452	ok	worker	worker:transcript-search-worker			0	0	0	S	
+.vite/build/watchRecordChooser.js	3721	ok	preload	preload:watchRecordChooser			22	0	0	S	
+.vite/renderer/about_window/assets/AboutWindow-DtKZougt.js	6046	ok	renderer	renderer-about_window			0	0	0	S	
+.vite/renderer/about_window/assets/main-tJY2FsYJ.js	323260	ok	renderer	renderer-about_window			0	0	0	S	
+.vite/renderer/buddy_window/assets/BuddyWindow-_Jgif_qX.js	18577	ok	renderer	renderer-buddy_window			0	0	0	S	
+.vite/renderer/buddy_window/assets/main-DeOnnb9G.js	323249	ok	renderer	renderer-buddy_window			0	0	0	S	
+.vite/renderer/find_in_page/assets/CdsPortal-CNRGQfg8.js	52525	ok	renderer	renderer-find_in_page			0	0	0	S	
+.vite/renderer/find_in_page/assets/FindInPage-CfNQSgeo.js	66900	ok	renderer	renderer-find_in_page			0	0	0	S	
+.vite/renderer/find_in_page/assets/Tooltip-B9_DnyKN.js	64467	ok	renderer	renderer-find_in_page			0	0	0	S	
+.vite/renderer/find_in_page/assets/asHTMLElement-B2Zv_iii.js	53844	ok	renderer	renderer-find_in_page			0	0	0	S	
+.vite/renderer/find_in_page/assets/impl-DwLiCTEL.js	74736	ok	renderer	renderer-find_in_page			0	0	0	S	
+.vite/renderer/find_in_page/assets/main-hLSpBHWq.js	323568	ok	renderer	renderer-find_in_page			0	0	0	S	
+.vite/renderer/local_exec_consent/assets/main-Ddc-H8_l.js	5061	ok	renderer	renderer-local_exec_consent			0	0	0	S	
+.vite/renderer/main_window/assets/MainWindowPage-BM1J3SeB.js	11683	ok	renderer	renderer-main_window			0	0	0	S	
+.vite/renderer/main_window/assets/attachReactWithSelector-Bf7MO2XB.js	183023	ok	renderer	renderer-main_window			0	0	0	S	
+.vite/renderer/main_window/assets/clawdQuestEngine-CdvdlRdl.js	1232059	ok	renderer	renderer-main_window			0	0	0	S	
+.vite/renderer/main_window/assets/main-9C0encc1.js	85469	ok	renderer	renderer-main_window			0	0	0	S	
+.vite/renderer/main_window/assets/react-intl-CW2bLHOS.js	56287	ok	renderer	renderer-main_window			0	0	0	S	
+.vite/renderer/quick_window/assets/main-DFyKxPTW.js	342393	ok	renderer	renderer-quick_window			0	0	0	S	
+node_modules/@ant/claude-native/index.js	324	ok	dependency	npm:@ant/claude-native			0	0	0	S	
+node_modules/agent-base/dist/helpers.d.ts	624	FAIL	dependency	npm:agent-base/dist			0	0	0	U	
+node_modules/agent-base/dist/helpers.js	2314	ok	dependency	npm:agent-base/dist			0	0	0	S	
+node_modules/agent-base/dist/index.d.ts	1519	FAIL	dependency	npm:agent-base/dist			0	0	0	U	
+node_modules/agent-base/dist/index.js	7324	ok	dependency	npm:agent-base/dist			0	0	0	S	
+node_modules/node-pty/lib/conpty_console_list_agent.js	932	ok	dependency	npm:node-pty/lib			0	0	0	S	
+node_modules/node-pty/lib/eventEmitter2.js	1600	ok	dependency	npm:node-pty/lib			0	0	0	S	
+node_modules/node-pty/lib/index.js	1942	ok	dependency	npm:node-pty/lib			0	0	0	S	
+node_modules/node-pty/lib/interfaces.js	233	ok	dependency	npm:node-pty/lib			0	0	0	S	
+node_modules/node-pty/lib/shared/conout.js	322	ok	dependency	npm:node-pty/lib			0	0	0	S	
+node_modules/node-pty/lib/terminal.js	7499	ok	dependency	npm:node-pty/lib			0	0	0	S	
+node_modules/node-pty/lib/types.js	228	ok	dependency	npm:node-pty/lib			0	0	0	S	
+node_modules/node-pty/lib/unixTerminal.js	13921	ok	dependency	npm:node-pty/lib			0	0	0	S	
+node_modules/node-pty/lib/utils.js	1548	ok	dependency	npm:node-pty/lib			0	0	0	S	
+node_modules/node-pty/lib/windowsConoutConnection.js	6264	ok	dependency	npm:node-pty/lib			0	0	0	S	
+node_modules/node-pty/lib/windowsPtyAgent.js	12587	ok	dependency	npm:node-pty/lib			0	0	0	S	
+node_modules/node-pty/lib/windowsTerminal.js	8422	ok	dependency	npm:node-pty/lib			0	0	0	S	
+node_modules/node-pty/lib/worker/conoutSocketWorker.js	878	ok	dependency	npm:node-pty/lib			0	0	0	S	
+node_modules/ws/browser.js	176	ok	dependency	npm:ws/browser.js			0	0	0	S	
+node_modules/ws/index.js	796	ok	dependency	npm:ws/index.js			0	0	0	S	
+node_modules/ws/lib/buffer-util.js	3056	ok	dependency	npm:ws/lib			0	0	0	S	
+node_modules/ws/lib/constants.js	503	ok	dependency	npm:ws/lib			0	0	0	S	
+node_modules/ws/lib/event-target.js	7321	ok	dependency	npm:ws/lib			0	0	0	S	
+node_modules/ws/lib/extension.js	6183	ok	dependency	npm:ws/lib			0	0	0	S	
+node_modules/ws/lib/limiter.js	1034	ok	dependency	npm:ws/lib			0	0	0	S	
+node_modules/ws/lib/permessage-deflate.js	14532	ok	dependency	npm:ws/lib			0	0	0	S	
+node_modules/ws/lib/receiver.js	17802	ok	dependency	npm:ws/lib			0	0	0	S	
+node_modules/ws/lib/sender.js	16886	ok	dependency	npm:ws/lib			0	0	0	S	
+node_modules/ws/lib/stream.js	4204	ok	dependency	npm:ws/lib			0	0	0	S	
+node_modules/ws/lib/subprotocol.js	1498	ok	dependency	npm:ws/lib			0	0	0	S	
+node_modules/ws/lib/validation.js	3903	ok	dependency	npm:ws/lib			0	0	0	S	
+node_modules/ws/lib/websocket-server.js	17026	ok	dependency	npm:ws/lib			0	0	0	S	
+node_modules/ws/lib/websocket.js	37371	ok	dependency	npm:ws/lib			0	0	0	S	
+node_modules/ws/wrapper.mjs	554	ok	dependency	npm:ws/wrapper.mjs			0	0	0	S	
+resources/artifact-libs/npm_chart.js@4.5.0_dist_chart.umd.js	208337	ok	resource	artifact-libs			0	0	0	S	
+resources/artifact-libs/npm_gridjs@5.0.2_dist_gridjs.umd.js	60552	ok	resource	artifact-libs			0	0	0	S	
+resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	3572661	ok	resource	artifact-libs			0	0	0	S	
+resources/office365-mcp/office365-mcp-stdio.mjs	7288531	ok	resource	office365-mcp			0	0	0	S	
+resources/office365-mcp/pdf.worker.mjs	1089813	ok	resource	office365-mcp			0	0	0	S	
+resources/office365-mcp/pdfExtractorProcess.mjs	425295	ok	resource	office365-mcp			0	0	0	S	
+.vite/renderer/about_window/about.html	245745	n/a	renderer	renderer-about_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/about_window/assets/AnthropicSans-Italic-Variable-CJtkx3-S.woff2	129536	n/a	renderer	renderer-about_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/about_window/assets/AnthropicSans-Roman-Variable-DDVos-BJ.woff2	118172	n/a	renderer	renderer-about_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/about_window/assets/AnthropicSerif-Italic-Variable-Dcb-9NUS.woff2	163440	n/a	renderer	renderer-about_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/about_window/assets/AnthropicSerif-Roman-Variable-2VcCjn5t.woff2	165536	n/a	renderer	renderer-about_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/about_window/assets/icon-BhGhQuZm.png	196590	n/a	renderer	renderer-about_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/about_window/assets/main-CiwjW8Wn.css	2226	n/a	renderer	renderer-about_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/about_window/window-legacy-pins.css	6444	n/a	renderer	renderer-about_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/about_window/window-shared.css	8327	n/a	renderer	renderer-about_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/buddy_window/assets/AnthropicSans-Italic-Variable-CJtkx3-S.woff2	129536	n/a	renderer	renderer-buddy_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/buddy_window/assets/AnthropicSans-Roman-Variable-DDVos-BJ.woff2	118172	n/a	renderer	renderer-buddy_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/buddy_window/assets/AnthropicSerif-Italic-Variable-Dcb-9NUS.woff2	163440	n/a	renderer	renderer-buddy_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/buddy_window/assets/AnthropicSerif-Roman-Variable-2VcCjn5t.woff2	165536	n/a	renderer	renderer-buddy_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/buddy_window/assets/main-a4mzyXdA.css	4185	n/a	renderer	renderer-buddy_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/buddy_window/buddy.html	245746	n/a	renderer	renderer-buddy_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/buddy_window/window-legacy-pins.css	6444	n/a	renderer	renderer-buddy_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/buddy_window/window-shared.css	8327	n/a	renderer	renderer-buddy_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/find_in_page/assets/AnthropicSans-Italic-Variable-CJtkx3-S.woff2	129536	n/a	renderer	renderer-find_in_page			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/find_in_page/assets/AnthropicSans-Roman-Variable-DDVos-BJ.woff2	118172	n/a	renderer	renderer-find_in_page			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/find_in_page/assets/AnthropicSerif-Italic-Variable-Dcb-9NUS.woff2	163440	n/a	renderer	renderer-find_in_page			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/find_in_page/assets/AnthropicSerif-Roman-Variable-2VcCjn5t.woff2	165536	n/a	renderer	renderer-find_in_page			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/find_in_page/assets/FindInPage-BLyCri-A.css	159	n/a	renderer	renderer-find_in_page			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/find_in_page/assets/anthropicons-variable-cvFTkbeX.woff2	102544	n/a	renderer	renderer-find_in_page			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/find_in_page/assets/main-CiwjW8Wn.css	2226	n/a	renderer	renderer-find_in_page			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/find_in_page/find-in-page.html	245051	n/a	renderer	renderer-find_in_page			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/find_in_page/window-legacy-pins.css	6444	n/a	renderer	renderer-find_in_page			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/find_in_page/window-shared.css	8327	n/a	renderer	renderer-find_in_page			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/local_exec_consent/localExecConsent.html	7614	n/a	renderer	renderer-local_exec_consent			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/main_window/assets/AnthropicSans-Italic-Variable-CJtkx3-S.woff2	129536	n/a	renderer	renderer-main_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/main_window/assets/AnthropicSans-Roman-Variable-DDVos-BJ.woff2	118172	n/a	renderer	renderer-main_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/main_window/assets/AnthropicSerif-Italic-Variable-Dcb-9NUS.woff2	163440	n/a	renderer	renderer-main_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/main_window/assets/AnthropicSerif-Roman-Variable-2VcCjn5t.woff2	165536	n/a	renderer	renderer-main_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/main_window/assets/MainWindowPage-DTxMhyWF.css	251089	n/a	renderer	renderer-main_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/main_window/assets/clawdQuestEngine-C2Z1JudX.css	10425	n/a	renderer	renderer-main_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/main_window/index.html	9198	n/a	renderer	renderer-main_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/quick_window/assets/AnthropicSans-Italic-Variable-CJtkx3-S.woff2	129536	n/a	renderer	renderer-quick_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/quick_window/assets/AnthropicSans-Roman-Variable-DDVos-BJ.woff2	118172	n/a	renderer	renderer-quick_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/quick_window/assets/AnthropicSerif-Italic-Variable-Dcb-9NUS.woff2	163440	n/a	renderer	renderer-quick_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/quick_window/assets/AnthropicSerif-Roman-Variable-2VcCjn5t.woff2	165536	n/a	renderer	renderer-quick_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/quick_window/assets/main-CiwjW8Wn.css	2226	n/a	renderer	renderer-quick_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/quick_window/quick-window.html	250391	n/a	renderer	renderer-quick_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/quick_window/window-legacy-pins.css	6444	n/a	renderer	renderer-quick_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+.vite/renderer/quick_window/window-shared.css	8327	n/a	renderer	renderer-quick_window			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+compile-cache/index.chunk-D4B44ehk.js.x64.jsc	5880	n/a	cache	v8-code-cache			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+compile-cache/index.chunk-lzaSYO3Q.js.x64.jsc	6862816	n/a	cache	v8-code-cache			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+compile-cache/index.js.x64.jsc	1584	n/a	cache	v8-code-cache			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+node_modules/@ant/claude-native/claude-native-binding.node	3758080	n/a	dependency	npm:@ant/claude-native			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+node_modules/@ant/claude-native/package.json	1033	n/a	dependency	npm:@ant/claude-native			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+node_modules/agent-base/LICENSE	1101	n/a	dependency	npm:agent-base/LICENSE			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+node_modules/agent-base/README.md	2459	n/a	dependency	npm:agent-base/README.md			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+node_modules/agent-base/package.json	1059	n/a	dependency	npm:agent-base/package.json			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+node_modules/node-pty/package.json	1694	n/a	dependency	npm:node-pty/package.json			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+node_modules/node-pty/prebuilds/win32-x64/conpty.node	291328	n/a	dependency	npm:node-pty/prebuilds			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+node_modules/node-pty/prebuilds/win32-x64/conpty_console_list.node	134656	n/a	dependency	npm:node-pty/prebuilds			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+node_modules/ws/LICENSE	1183	n/a	dependency	npm:ws/LICENSE			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+node_modules/ws/README.md	15306	n/a	dependency	npm:ws/README.md			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+node_modules/ws/package.json	1753	n/a	dependency	npm:ws/package.json			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+package.json	5088	n/a	metadata	package-manifest			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+resources/artifact-libs/npm_gridjs@5.0.2_dist_theme_mermaid.min.css	7762	n/a	resource	artifact-libs			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+resources/bundled-skills/docx.skill	163372	n/a	resource	bundled-skills			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+resources/bundled-skills/frontend-design.skill	8125	n/a	resource	bundled-skills			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+resources/bundled-skills/manifest.json	4628	n/a	resource	bundled-skills			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+resources/bundled-skills/pdf-reading.skill	7997	n/a	resource	bundled-skills			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+resources/bundled-skills/pdf.skill	21600	n/a	resource	bundled-skills			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+resources/bundled-skills/pptx.skill	173007	n/a	resource	bundled-skills			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+resources/bundled-skills/xlsx.skill	155709	n/a	resource	bundled-skills			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+resources/github-mcp/github-mcp-server.exe	20545536	n/a	resource	github-mcp			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+resources/office365-mcp/msal-node-runtime.node	345088	n/a	resource	office365-mcp			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger
+resources/office365-mcp/msalruntime.dll	3240736	n/a	resource	office365-mcp			0	0	0	S	non-JS asset/scaffold; registered in P0 ledger

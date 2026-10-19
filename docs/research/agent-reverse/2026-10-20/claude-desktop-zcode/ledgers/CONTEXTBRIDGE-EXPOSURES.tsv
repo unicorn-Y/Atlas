@@ -1,0 +1,53 @@
+path,api,world_key,resolution
+.vite/build/aboutWindow.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/aboutWindow.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/aboutWindow.js	contextBridge.exposeInMainWorld	process	literal
+.vite/build/aboutWindow.js	contextBridge.exposeInMainWorld	desktopEssentialTelemetryDisabled	literal
+.vite/build/buddy.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/buddy.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/buddy.js	contextBridge.exposeInMainWorld	process	literal
+.vite/build/buddy.js	contextBridge.exposeInMainWorld	desktopEssentialTelemetryDisabled	literal
+.vite/build/buddy.js	contextBridge.exposeInMainWorld	buddy	literal
+.vite/build/claudePagePreview.js	contextBridge.exposeInMainWorld	claudeDesktopArtifactPane	literal
+.vite/build/computerUseTeach.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/computerUseTeach.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/computerUseWatchRecord.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/coworkArtifact.js	contextBridge.exposeInMainWorld	cowork	literal
+.vite/build/designWindow.js	contextBridge.exposeInMainWorld	omeletteDesktopPdf	literal
+.vite/build/findInPage.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/findInPage.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/findInPage.js	contextBridge.exposeInMainWorld	process	literal
+.vite/build/findInPage.js	contextBridge.exposeInMainWorld	desktopEssentialTelemetryDisabled	literal
+.vite/build/localExecConsent.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/mainView.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/mainView.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/mainView.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/mainView.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/mainView.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/mainView.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/mainView.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/mainView.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/mainView.js	contextBridge.exposeInMainWorld		identifier:gr
+.vite/build/mainView.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/mainView.js	contextBridge.exposeInMainWorld	buddyBle	literal
+.vite/build/mainView.js	contextBridge.exposeInMainWorld	claudeAppBindings	literal
+.vite/build/mainView.js	contextBridge.exposeInMainWorld	claudeAppSettings	literal
+.vite/build/mainView.js	contextBridge.exposeInMainWorld	process	literal
+.vite/build/mainView.js	contextBridge.exposeInMainWorld	desktopBootFeatures	literal
+.vite/build/mainView.js	contextBridge.exposeInMainWorld	desktopManagedConfig	literal
+.vite/build/mainView.js	contextBridge.exposeInMainWorld	desktopEnterpriseConfig	literal
+.vite/build/mainView.js	contextBridge.exposeInMainWorld	desktopTelemetryConfig	literal
+.vite/build/mainView.js	contextBridge.exposeInMainWorld	desktopDeviceClass	literal
+.vite/build/mainView.js	contextBridge.exposeInMainWorld	desktopPreferredLanguages	literal
+.vite/build/mainView.js	contextBridge.exposeInMainWorld	electronWindowControl	literal
+.vite/build/mainView.js	contextBridge.exposeInMainWorld	electronIntl	literal
+.vite/build/mainWindow.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/mainWindow.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/mainWindow.js	contextBridge.exposeInMainWorld	process	literal
+.vite/build/mainWindow.js	contextBridge.exposeInMainWorld	desktopEssentialTelemetryDisabled	literal
+.vite/build/mainWindow.js	contextBridge.exposeInMainWorld	desktopBootPlaceholder	literal
+.vite/build/quickWindow.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/quickWindow.js	contextBridge.exposeInMainWorld		identifier:t
+.vite/build/quickWindow.js	contextBridge.exposeInMainWorld	process	literal
+.vite/build/quickWindow.js	contextBridge.exposeInMainWorld	desktopEssentialTelemetryDisabled	literal
+.vite/build/watchRecordChooser.js	contextBridge.exposeInMainWorld		identifier:t

@@ -1,0 +1,163 @@
+path,service,event,params,kind,namespace
+.vite/build/index.chunk-BN7PaJ_P.js	SableOtterHud	render	content	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.sableOtter_$_
+.vite/build/index.chunk-BN7PaJ_P.js	SableOtterHud	levels	values	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.sableOtter_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MainWindowTitleBar	updateTitleBar	title	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.ui_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MainWindowTitleBar	showLoadError	details	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.ui_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MainWindowTitleBar	hideLoadError		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.ui_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MCP	mcpConfigChange	configs	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MCP	mcpStatusChanged	name,status,error	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	extensionsChanged		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	extensionSettingsChanged	extensionId,settings	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	previewExtensionInstallation	manifest,path,extensionId,signatureInfo	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Extensions	extensionDownloadProgress	extensionId,progress,receivedBytes,totalBytes,manifest,phase	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AppPreferences	preferencesChanged	preferences	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	AppFeatures	supportedFeaturesChanged		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Custom3pHelperRun	probeDeviceCode	userCode,verificationUri	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	onRemoteExportProgress	receivedBytes,totalBytes	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	onRemoteExportStatus	status	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	onSessionExportProgress	done,total	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	onAuthUserCode	code	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeAiImport	onAuthStateChange	state	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	onImportProgress	phase,done,total	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	HistoryImport	onAutoImportStatus	status	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.settings_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesktopIntl	localeChanged	locale,messages	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.hybrid_$_
+.vite/build/index.chunk-lzaSYO3Q.js	QuickEntry	onQuickEntrySubmit	payload	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Navigation	navigate	path	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeepLink	handleDeepLink	url	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	openFile	anywhere	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	openFolder		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	newWindow		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	closeWindow		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	reopenClosedSession		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	toggleSidebar	via	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	backgroundTasksShortcut		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	switchSurface	direction	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	selectArea	id	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	cycleSession	direction	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	openCommandPalette	search	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	openKeyboardShortcuts		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	toggleSessionPane	pane,typed	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	closeSessionPane		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	findInFiles		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	splitViewCommand	command	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	MenuEvents	editCommand	command,popoutWindowId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowState	fullscreenChanged	isFullscreen	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowState	visibilityChanged	isVisible	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowState	keptHiddenChanged	isKeptHidden	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowState	appFocusChanged	isFocused	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowState	zoomFactorChanged	zoomFactor	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowState	cuDockStateChanged	isDocked,holderSessionId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DeviceStorage	codeCleanupProgress	done,total	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Toast	showToast	message,toastType,opts	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DesktopNotifications	notificationAction	press	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FindInPageProvider	findRequest	requestId,query,forward,isNewSearch,popoutWindowId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FindInPageProvider	findClear		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkArtifacts	onArtifactsChanged		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CliSessionImport	startFromMenu		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CloudMove	cloudMoveCommand	command	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ChromeExtension	connectedExtensionsChanged	extensions	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	BuddyRemoteFeed	permissionDecision	sessionId,requestId,decision	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FramebufferPreview	sessionResized	sessionId,width,height	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FramebufferPreview	sessionFatal	sessionId,message	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FramebufferPreview	openSourceRequested	name,cwd,sessionId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	onDirectMcpServerStatusesChanged	statuses	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	onManagedAskToolNamesChanged	payload	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	onBridgePermissionPreflight	request	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	onEvent	event	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	onToolPermissionRequest	request	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	onCoworkFromMain	request	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	onRemoteSessionStart	request	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	onCuEmergencyStop	sessionId,orgUuid	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	onFolderSkillsCapped	payload	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	onRemoteFolderConsentDialogShown	sessionId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	onChatFolderAccessChanged	report	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	watchRecordingComplete	result	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalAgentModeSessions	copperHeronHoldDropped	holdEpoch	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkStorage	cleanupProgress	done,total	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkSpaces	onSpaceEvent	event	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	DocumentFunnel	workingDocumentsChanged	sessionId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	findRequested		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Resources	findStepRequested	forward	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ForgeState	forgeStateChanged	changed,removed	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	GitState	gitStateChanged	changed,removed	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	elementSelected	serverId,context	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	selectionModeEnded	serverId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewUrlChanged	serverId,url	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewTabsChanged	serverId,tabs,activeTabId,detail	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewSelectionShortcut	serverId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewSketchShortcut	serverId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewPaneShortcut	serverId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewCloseShortcut	serverId,tabId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewNewTabShortcut	serverId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewReopenTabShortcut	serverId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewAddressBarShortcut	serverId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewFocusExit	serverId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewBoundsProbe	serverIds	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewFocusEnter	serverId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewRevealRequested	previewId,sessionId,tabId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	sessionPaneVisibilityRequested	previewId,visible	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewSupersededByArtifact	report	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	previewExternalLinkRequested	serverId,url	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	routedLinkConfirmRequested	requestId,serverId,url	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Launch	claudePageLoadSettled	serverId,ok	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	onEvent	event	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	sidebarCommand	requestId,command	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	sessionViewRequest	request	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	codeSettingRequest	request	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	startTargetsRequest	request	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	sessionDirectoryChanged	sessionId,dirPath	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	onToolPermissionRequest	request	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	onSSHPasswordRequired	request	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	onSSHPasswordRequestWithdrawn	notice	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalSessions	onSSHPasswordQueueChanged	notice	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	LocalPlugins	onCliOpAlwaysAllowed	keys	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	PluginBridgeMcp	changed		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CustomPlugins	localOrgPluginsSynced		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	onScheduledTaskEvent	event	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CoworkScheduledTasks	boundCreateSignRequested	request	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CCDScheduledTasks	onScheduledTaskEvent	event	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	downloadProgress	percent	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	downloadStatusChanged	status	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	runningStatusChanged	status	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	ClaudeVM	startupError	error	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	WindowLayout	layoutCommand	command	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FindInPage	stepToMatch	forward	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.findInPage_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FindInPage	focusInput		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.findInPage_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FindInPage	blurInput		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.findInPage_$_
+.vite/build/index.chunk-lzaSYO3Q.js	FindInPage	clearQuery		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.findInPage_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OfficeAddinFiles	onFileStateChanged	file	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.officeAddin_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OfficeAddinFiles	onFileAdded	file	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.officeAddin_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OfficeAddinFiles	onFileRemoved	fileId	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.officeAddin_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OfficeAddinFiles	onPorterHandoffOutcome	outcome	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.officeAddin_$_
+.vite/build/index.chunk-lzaSYO3Q.js	OfficeAddinFiles	onAddinNeedsContext		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.officeAddin_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Skills	previewSkillFile	data,filename	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.skills_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Buddy	progress	msg	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Buddy	pairingPrompt	deviceName	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	BuddyBleTransport	tx	line	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.buddy_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiNotified	sessionId,notice	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiPanesChanged	sessionId,roster	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiScrolled	sessionId,scroll	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiFocused	sessionId,focus	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiHostAsked	sessionId,ask	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	EngineSurface	uiSessionChanged	sessionId,change	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.engineSurface_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	captureShortcut	udid,action	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	keyboardShortcut	udid	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	quitShortcut	udid	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	zoomShortcut	udid,action,repeat	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	displayPointsPerInchChanged		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	logEntries	udid,entries,captureId,captureStartedAt	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	nativeViewFold	udid,pane,id,kind,p,screen	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	hingeAngle	udid,deg,source	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	recordingEnded	udid	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	modelActivity	activity	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	Simulator	consentAskShown	ask	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.simulator_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuTeach	show	payload	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuTeach	working		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuTeach	hide		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuTeach	reassertHover		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuWatchRecordPill	micState	on,level	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuWatchRecordPill	processing		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuWatchRecordPill	timeWarning	msRemaining	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuWatchRecordPill	micError		event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuWatchRecordChooser	micState	on,level	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_
+.vite/build/index.chunk-lzaSYO3Q.js	CuWatchRecordChooser	inputDevices	devices	event	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.computerUse_$_

@@ -1,0 +1,9 @@
+path,line,col,api,channel,channel_kind
+.vite/build/index.chunk-CdsxofPO.js	1	41265	webContents.send	<MemberExpression>	computed
+.vite/build/index.chunk-DoU0pLl3.js	1	30142	webContents.send	<MemberExpression>	computed
+.vite/build/index.chunk-lzaSYO3Q.js	13	2682094	webContents.send	<MemberExpression>	computed
+.vite/build/index.chunk-lzaSYO3Q.js	13	3222363	webContents.send	<MemberExpression>	computed
+.vite/build/index.chunk-lzaSYO3Q.js	13	3237784	webContents.send	<MemberExpression>	computed
+.vite/build/index.chunk-lzaSYO3Q.js	13	3238453	webContents.send	<MemberExpression>	computed
+.vite/build/index.chunk-lzaSYO3Q.js	13	5302690	webContents.postMessage	<MemberExpression>	computed
+.vite/build/index.chunk-lzaSYO3Q.js	13	5302785	webContents.postMessage	<MemberExpression>	computed

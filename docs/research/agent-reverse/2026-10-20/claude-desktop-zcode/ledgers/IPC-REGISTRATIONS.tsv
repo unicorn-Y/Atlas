@@ -1,0 +1,1610 @@
+path,api,channel_resolved,resolution
+.vite/build/aboutWindow.js	ipcRenderer.invoke	AboutWindow_$_openHelp	concat:identifier:n+literal
+.vite/build/aboutWindow.js	ipcRenderer.invoke	AboutWindow_$_getSupport	concat:identifier:n+literal
+.vite/build/aboutWindow.js	ipcRenderer.invoke	AboutWindow_$_getAppName	concat:identifier:n+literal
+.vite/build/aboutWindow.js	ipcRenderer.invoke	AboutWindow_$_getBuildProps	concat:identifier:n+literal
+.vite/build/aboutWindow.js	ipcRenderer.invoke	AboutWindow_$_ancientJournal	concat:identifier:n+literal
+.vite/build/aboutWindow.js	ipcRenderer.invoke	QuickWindow_$_requestDismiss	concat:identifier:n+literal
+.vite/build/aboutWindow.js	ipcRenderer.invoke	QuickWindow_$_requestSkooch	concat:identifier:n+literal
+.vite/build/aboutWindow.js	ipcRenderer.invoke	MainWindowTitleBar_$_titleBarReady	concat:identifier:n+literal
+.vite/build/aboutWindow.js	ipcRenderer.invoke	MainWindowTitleBar_$_requestReloadMainView	concat:identifier:n+literal
+.vite/build/aboutWindow.js	ipcRenderer.invoke	MainWindowTitleBar_$_requestRestartApp	concat:identifier:n+literal
+.vite/build/aboutWindow.js	ipcRenderer.invoke	MainWindowTitleBar_$_requestMainMenuPopup	concat:identifier:n+literal
+.vite/build/aboutWindow.js	ipcRenderer.on		identifier:i
+.vite/build/aboutWindow.js	ipcRenderer.on		identifier:i
+.vite/build/aboutWindow.js	ipcRenderer.on		identifier:i
+.vite/build/aboutWindow.js	ipcRenderer.invoke	DesktopIntl_$_getInitialLocale	concat:identifier:d+literal
+.vite/build/aboutWindow.js	ipcRenderer.invoke	DesktopIntl_$_requestLocaleChange	concat:identifier:d+literal
+.vite/build/aboutWindow.js	ipcRenderer.on		identifier:r
+.vite/build/buddy.js	ipcRenderer.invoke	Buddy_$_status	concat:identifier:n+literal
+.vite/build/buddy.js	ipcRenderer.invoke	Buddy_$_deviceStatus	concat:identifier:n+literal
+.vite/build/buddy.js	ipcRenderer.invoke	Buddy_$_setName	concat:identifier:n+literal
+.vite/build/buddy.js	ipcRenderer.invoke	Buddy_$_pairDevice	concat:identifier:n+literal
+.vite/build/buddy.js	ipcRenderer.invoke	Buddy_$_scanDevices	concat:identifier:n+literal
+.vite/build/buddy.js	ipcRenderer.invoke	Buddy_$_pickDevice	concat:identifier:n+literal
+.vite/build/buddy.js	ipcRenderer.invoke	Buddy_$_cancelScan	concat:identifier:n+literal
+.vite/build/buddy.js	ipcRenderer.invoke	Buddy_$_submitPin	concat:identifier:n+literal
+.vite/build/buddy.js	ipcRenderer.invoke	Buddy_$_forgetDevice	concat:identifier:n+literal
+.vite/build/buddy.js	ipcRenderer.invoke	Buddy_$_pickFolder	concat:identifier:n+literal
+.vite/build/buddy.js	ipcRenderer.invoke	Buddy_$_preview	concat:identifier:n+literal
+.vite/build/buddy.js	ipcRenderer.invoke	Buddy_$_install	concat:identifier:n+literal
+.vite/build/buddy.js	ipcRenderer.on		identifier:i
+.vite/build/buddy.js	ipcRenderer.on		identifier:i
+.vite/build/buddy.js	ipcRenderer.invoke	DesktopIntl_$_getInitialLocale	concat:identifier:s+literal
+.vite/build/buddy.js	ipcRenderer.invoke	DesktopIntl_$_requestLocaleChange	concat:identifier:s+literal
+.vite/build/buddy.js	ipcRenderer.on		identifier:r
+.vite/build/claudePagePreview.js	ipcRenderer.send		identifier:r
+.vite/build/claudePagePreview.js	ipcRenderer.on		identifier:i
+.vite/build/claudePagePreview.js	ipcRenderer.send		identifier:t
+.vite/build/claudePagePreview.js	ipcRenderer.send		identifier:n
+.vite/build/claudePagePreview.js	ipcRenderer.on		identifier:n
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	CuTeach_$_next	concat:identifier:n+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	CuTeach_$_exit	concat:identifier:n+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	CuTeach_$_mouseEnter	concat:identifier:n+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	CuTeach_$_mouseLeave	concat:identifier:n+literal
+.vite/build/computerUseTeach.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseTeach.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseTeach.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseTeach.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	CuWatchRecordPill_$_done	concat:identifier:n+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	CuWatchRecordPill_$_discard	concat:identifier:n+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	CuWatchRecordPill_$_toggleMic	concat:identifier:n+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	CuWatchRecordPill_$_reportProcessingWidth	concat:identifier:n+literal
+.vite/build/computerUseTeach.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseTeach.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseTeach.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseTeach.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	CuWatchRecordChooser_$_choose	concat:identifier:n+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	CuWatchRecordChooser_$_setMicPreview	concat:identifier:n+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	CuWatchRecordChooser_$_stopMicPreview	concat:identifier:n+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	CuWatchRecordChooser_$_reportContentShortfall	concat:identifier:n+literal
+.vite/build/computerUseTeach.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseTeach.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	SableOtterHud_$_button	concat:identifier:d+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	SableOtterHud_$_submit	concat:identifier:d+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	SableOtterHud_$_fieldChanged	concat:identifier:d+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	SableOtterHud_$_paste	concat:identifier:d+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	SableOtterHud_$_escape	concat:identifier:d+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	SableOtterHud_$_tab	concat:identifier:d+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	SableOtterHud_$_removePill	concat:identifier:d+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	SableOtterHud_$_settings	concat:identifier:d+literal
+.vite/build/computerUseTeach.js	ipcRenderer.invoke	SableOtterHud_$_resize	concat:identifier:d+literal
+.vite/build/computerUseTeach.js	ipcRenderer.on		identifier:r
+.vite/build/computerUseTeach.js	ipcRenderer.on		identifier:r
+.vite/build/computerUseWatchRecord.js	ipcRenderer.invoke	CuTeach_$_next	concat:identifier:n+literal
+.vite/build/computerUseWatchRecord.js	ipcRenderer.invoke	CuTeach_$_exit	concat:identifier:n+literal
+.vite/build/computerUseWatchRecord.js	ipcRenderer.invoke	CuTeach_$_mouseEnter	concat:identifier:n+literal
+.vite/build/computerUseWatchRecord.js	ipcRenderer.invoke	CuTeach_$_mouseLeave	concat:identifier:n+literal
+.vite/build/computerUseWatchRecord.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseWatchRecord.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseWatchRecord.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseWatchRecord.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseWatchRecord.js	ipcRenderer.invoke	CuWatchRecordPill_$_done	concat:identifier:n+literal
+.vite/build/computerUseWatchRecord.js	ipcRenderer.invoke	CuWatchRecordPill_$_discard	concat:identifier:n+literal
+.vite/build/computerUseWatchRecord.js	ipcRenderer.invoke	CuWatchRecordPill_$_toggleMic	concat:identifier:n+literal
+.vite/build/computerUseWatchRecord.js	ipcRenderer.invoke	CuWatchRecordPill_$_reportProcessingWidth	concat:identifier:n+literal
+.vite/build/computerUseWatchRecord.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseWatchRecord.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseWatchRecord.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseWatchRecord.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseWatchRecord.js	ipcRenderer.invoke	CuWatchRecordChooser_$_choose	concat:identifier:n+literal
+.vite/build/computerUseWatchRecord.js	ipcRenderer.invoke	CuWatchRecordChooser_$_setMicPreview	concat:identifier:n+literal
+.vite/build/computerUseWatchRecord.js	ipcRenderer.invoke	CuWatchRecordChooser_$_stopMicPreview	concat:identifier:n+literal
+.vite/build/computerUseWatchRecord.js	ipcRenderer.invoke	CuWatchRecordChooser_$_reportContentShortfall	concat:identifier:n+literal
+.vite/build/computerUseWatchRecord.js	ipcRenderer.on		identifier:i
+.vite/build/computerUseWatchRecord.js	ipcRenderer.on		identifier:i
+.vite/build/coworkArtifact.js	ipcRenderer.invoke	CoworkArtifactBridge_$_callMcpTool	concat:identifier:n+literal
+.vite/build/coworkArtifact.js	ipcRenderer.invoke	CoworkArtifactBridge_$_askClaude	concat:identifier:n+literal
+.vite/build/coworkArtifact.js	ipcRenderer.invoke	CoworkArtifactBridge_$_runScheduledTask	concat:identifier:n+literal
+.vite/build/coworkArtifact.js	ipcRenderer.invoke	CoworkArtifactBridge_$_navigateHost	concat:identifier:n+literal
+.vite/build/coworkArtifact.js	ipcRenderer.invoke	CoworkArtifactBridge_$_openExternalUrl	concat:identifier:n+literal
+.vite/build/coworkArtifact.js	ipcRenderer.invoke	CoworkArtifactBridge_$_setEditableFocused	concat:identifier:n+literal
+.vite/build/designWindow.js	ipcRenderer.invoke	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.designPdf_$_DesignPdf_$_printFrameToPdf	literal
+.vite/build/findInPage.js	ipcRenderer.invoke	FindInPage_$_findInPage	concat:identifier:n+literal
+.vite/build/findInPage.js	ipcRenderer.invoke	FindInPage_$_stopFindInPage	concat:identifier:n+literal
+.vite/build/findInPage.js	ipcRenderer.invoke	FindInPage_$_endFindSession	concat:identifier:n+literal
+.vite/build/findInPage.js	ipcRenderer.on		identifier:i
+.vite/build/findInPage.js	ipcRenderer.on		identifier:i
+.vite/build/findInPage.js	ipcRenderer.on		identifier:i
+.vite/build/findInPage.js	ipcRenderer.on		identifier:i
+.vite/build/findInPage.js	ipcRenderer.invoke	FindInPage_$_density_$store$_getState	concat:identifier:n+literal
+.vite/build/findInPage.js	ipcRenderer.sendSync	FindInPage_$_density_$store$_getStateSync	concat:identifier:n+literal
+.vite/build/findInPage.js	ipcRenderer.on		identifier:i
+.vite/build/findInPage.js	ipcRenderer.invoke	DesktopIntl_$_getInitialLocale	concat:identifier:s+literal
+.vite/build/findInPage.js	ipcRenderer.invoke	DesktopIntl_$_requestLocaleChange	concat:identifier:s+literal
+.vite/build/findInPage.js	ipcRenderer.on		identifier:r
+.vite/build/index.chunk-BN7PaJ_P.js	webContents.on	will-navigate	literal
+.vite/build/index.chunk-CdsxofPO.js	webContents.send		member-expr
+.vite/build/index.chunk-CdsxofPO.js	webContents.once	destroyed	literal
+.vite/build/index.chunk-CdsxofPO.js	webContents.once	destroyed	literal
+.vite/build/index.chunk-DoU0pLl3.js	webContents.send		member-expr
+.vite/build/index.chunk-FiyCjals.js	webContents.once	destroyed	literal
+.vite/build/index.chunk-FiyCjals.js	webContents.on	did-navigate	literal
+.vite/build/index.chunk-FiyCjals.js	webContents.on	render-process-gone	literal
+.vite/build/index.chunk-FiyCjals.js	webContents.once	destroyed	literal
+.vite/build/index.chunk-FiyCjals.js	webContents.on	did-start-navigation	literal
+.vite/build/index.chunk-FiyCjals.js	webContents.on	render-process-gone	literal
+.vite/build/index.chunk-FiyCjals.js	webContents.once	destroyed	literal
+.vite/build/index.chunk-JnLh1fOe.js	webContents.on	will-navigate	literal
+.vite/build/index.chunk-JnLh1fOe.js	webContents.on	before-input-event	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	enter-html-full-screen	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	leave-html-full-screen	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.once	did-finish-load	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-start-navigation	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-fail-load	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-start-navigation	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.once	did-stop-loading	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.send	mcp-server-auto-reconnect	enum:Za.McpServerAutoReconnect
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-start-navigation	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	render-process-gone	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-navigate	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-navigate-in-page	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.send	mcp-server-auto-reconnect	enum:Za.McpServerAutoReconnect
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.send	mcp-server-auto-reconnect	enum:Za.McpServerAutoReconnect
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.send	mcp-server-auto-reconnect	enum:Za.McpServerAutoReconnect
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	will-prevent-unload	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	will-navigate	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	will-redirect	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.once	destroyed	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.once	destroyed	literal
+.vite/build/index.chunk-lzaSYO3Q.js	ipcMain.removeHandler		identifier:e
+.vite/build/index.chunk-lzaSYO3Q.js	ipcMain.handle		identifier:e
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-start-navigation	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-navigate	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-navigate	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-navigate-in-page	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.postMessage	mcp-server-connected	enum:Za.McpServerConnected
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.postMessage	mcp-server-connected	enum:Za.McpServerConnected
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-navigate	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-navigate-in-page	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-start-navigation	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	render-process-gone	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-navigate	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-navigate-in-page	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.once	ready-to-show	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-finish-load	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-navigate	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.once	ready-to-show	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	dom-ready	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-finish-load	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	before-input-event	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	will-navigate	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	will-redirect	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	context-menu	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-navigate	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-finish-load	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.once	destroyed	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	will-navigate	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	will-redirect	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-create-window	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.once	destroyed	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	context-menu	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-start-navigation	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	did-start-navigation	literal
+.vite/build/index.chunk-lzaSYO3Q.js	ipcMain.handle	request-open-mcp-settings	enum:Za.RequestOpenMcpSettings
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	will-navigate	literal
+.vite/build/index.chunk-lzaSYO3Q.js	webContents.on	will-redirect	literal
+.vite/build/index.pre.js	ipcMain.on		call
+.vite/build/index.pre.js	ipcMain.on		call
+.vite/build/index.pre.js	ipcMain.on		call
+.vite/build/index.pre.js	ipcMain.on		call
+.vite/build/index.pre.js	ipcMain.on		call
+.vite/build/index.pre.js	ipcMain.on		call
+.vite/build/localExecConsent.js	ipcRenderer.invoke	$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.internal.localExecConsent_$_LocalExecConsent_$_choose	literal
+.vite/build/mainView.js	ipcRenderer.invoke	AppConfig_$_getAppConfig	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AppConfig_$_setAppFeature	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AppConfig_$_setIsUsingBuiltInNodeForMcp	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AppConfig_$_setIsDxtAutoUpdatesEnabled	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Startup_$_isStartupOnLoginEnabled	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Startup_$_setStartupOnLoginEnabled	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Startup_$_isMenuBarEnabled	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Startup_$_setMenuBarEnabled	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CcdCli_$_getCcdCliStatus	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CcdCli_$_installCcdCli	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CcdCli_$_uninstallCcdCli	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	GlobalShortcut_$_setGlobalShortcut	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	GlobalShortcut_$_getGlobalShortcut	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	MCP_$_isLocalDevMcpEnabled	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	MCP_$_setMcpServerConfigs	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	MCP_$_getMcpServersConfig	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	MCP_$_getMcpServersConfigWithStatus	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	MCP_$_revealConfig	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	MCP_$_revealLogs	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	MCP_$_revealServerLog	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_isExtensionsEnabled	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_isLocalExtensionInstallAllowed	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_isDirectoryEnabled	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_isDesktopExtensionSignatureRequired	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_isDesktopExtensionDirectoryEnabled	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_getInstalledExtensionsWithState	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_getIsUpdateAvailable	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_getManifestCompatibilityResult	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_getAvailableExtensionRuntimes	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_getExtensionSettings	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_setExtensionSettings	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_installDxt	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_installDxtUnpacked	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_installDxtFromDirectory	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_handleDxtFile	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_showInstallDxtDialog	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_deleteExtension	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_openExtensionsFolder	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_openExtensionSettingsFolder	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_getDirectoryUrl	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_getExtension	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_getExtensionVersions	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_installExtensionFromPreview	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Extensions_$_refreshAllowlistCheck	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.invoke	FilePickers_$_getDirectoryPath	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FilePickers_$_getFilePath	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AppPreferences_$_getPreferences	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AppPreferences_$_setPreference	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.invoke	AppFeatures_$_getSupportedFeatures	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.invoke	DesktopInfo_$_getSystemInfo	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DesktopInfo_$_showLogsInFileManager	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DesktopInfo_$_getDefaultBrowserName	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_exportConfig	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_relaunchApp	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_relaunchAppWithSessionGuard	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_probeEgressHosts	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_scanOrgPlugins	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_probeMcpServer	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_authorizeAndProbeMcpServer	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_forgetMcpOAuth	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_getLoginDesktop3pStatus	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_getConfigHealth	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_recheckConfigHealth	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_retryModelDiscovery	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_setDeploymentMode	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_openSetupWindow	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_signInWithAnthropicApi	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_applyAnthropicApiShortcut	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_openDeviceCodeWindowForE2e	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_listConfigs	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_getMergedConfig	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_readConfig	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_writeConfig	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_createConfig	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_duplicateConfig	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_renameConfig	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_deleteConfig	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_setAppliedConfig	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_revealConfig	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_triggerBootstrapAuth	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_commitHybridTransition	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_cancelHybridTransition	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_resolverLandedTainted	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_setHybridOrgList	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_switchOrgAndRelaunch	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_listSwitchableProfiles	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_switchProfile	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_bootstrapState_$store$_getState	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	Custom3pSetup_$_bootstrapState_$store$_getStateSync	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pSetup_$_hybridTransition_$store$_getState	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	Custom3pSetup_$_hybridTransition_$store$_getStateSync	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pHelperRun_$_runCredentialHelper	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pHelperRun_$_probeInference	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pHelperRun_$_discoverModels	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_getAuthState	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_startAuth	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_reopenAuthTab	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_clearAuth	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_fetchRemoteExport	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_cancelRemoteFetch	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_discardRemoteExport	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_pickLocalZips	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_peekLocalZips	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_runImportFromLocalZips	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_pickSessionSourceFolder	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_listImportSpaceTwins	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_mergeImportedSpace	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_previewSessionExport	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_runSessionExport	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_cancelSessionExport	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_showExportInFolder	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_registerDesktop3pBundle	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeAiImport_$_confirmImportedSessionResume	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.invoke	HistoryImport_$_getImportCapabilities	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	HistoryImport_$_enumerateSessionSources	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	HistoryImport_$_scanSessionSource	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	HistoryImport_$_importSessionSources	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	HistoryImport_$_listSourceExtras	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	HistoryImport_$_importSourceExtras	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.invoke	HistoryImport_$_getImportHistory	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	HistoryImport_$_getRemovePreview	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	HistoryImport_$_removeImportRun	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	HistoryImport_$_removeAllImportRuns	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	HistoryImport_$_getAutoImportStatus	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	HistoryImport_$_listInstructionTexts	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	HistoryImport_$_instructionTextAdded	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.invoke	SupportBundle_$_submitAction	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	SupportBundle_$_supportBundleState_$store$_getState	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	SupportBundle_$_supportBundleState_$store$_getStateSync	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:i
+.vite/build/mainView.js	ipcRenderer.invoke	WakeScheduler_$_getStatus	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WakeScheduler_$_openSettings	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Custom3pUsage_$_getSummary	concat:identifier:n+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_attach	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_detach	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_shutdown	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_startDevice	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_restartDevice	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_renameDevice	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_getSlowAnimations	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_setSlowAnimations	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_listDevices	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_simulatorProcessRunning	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_awaitQuitRestart	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_panelViewed	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_setupStepChanged	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_setupCtaClicked	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_captureThumbnailAction	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_miniViewChanged	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_gesture	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_getAppearance	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_setAppearance	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_checkSetup	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_checkAndroidSetup	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_openXcode	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_openAppStore	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_openAndroidStudio	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_requestDeviceConsent	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_requestDeviceToolsRepin	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_setEditShortcutsClaimed	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_editAction	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_sendClipboard	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_getClipboard	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_setCaptureShortcutsClaimed	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_setKeyboardShortcutClaimed	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_setQuitShortcutClaimed	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_setZoomShortcutsClaimed	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_displayPointsPerInch	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_saveScreenshot	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_captureScreenshot	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_readCapture	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_deleteCapture	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_describeAccessibility	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_startRecording	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_stopRecording	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_getLogEntries	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_nativeViewMount	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_nativeViewSetBounds	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_nativeViewSetVisible	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_nativeViewSetOrientation	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_nativeViewSetBend	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_nativeViewFoldPlay	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_nativeViewFoldGo	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_nativeViewFoldConfirm	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_nativeViewFoldEnd	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_nativeViewUnmount	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_nativeViewStill	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_attachment_$store$_getState	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	Simulator_$_attachment_$store$_getStateSync	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	Simulator_$_debugAttaching_$store$_getState	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	Simulator_$_debugAttaching_$store$_getStateSync	concat:identifier:_+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	OfficeAddinFiles_$_getConnectedFiles	concat:identifier:b+literal
+.vite/build/mainView.js	ipcRenderer.invoke	OfficeAddinFiles_$_isFeatureEnabled	concat:identifier:b+literal
+.vite/build/mainView.js	ipcRenderer.invoke	OfficeAddinFiles_$_focusFile	concat:identifier:b+literal
+.vite/build/mainView.js	ipcRenderer.invoke	OfficeAddinFiles_$_selectFile	concat:identifier:b+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	OfficeAddinFiles_$_updateActiveConversationSummary	concat:identifier:b+literal
+.vite/build/mainView.js	ipcRenderer.invoke	OfficeAddinFiles_$_queuePorterHandoff	concat:identifier:b+literal
+.vite/build/mainView.js	ipcRenderer.invoke	OfficeAddinFiles_$_downloadAndQueuePorterHandoff	concat:identifier:b+literal
+.vite/build/mainView.js	ipcRenderer.invoke	OfficeAddinFiles_$_cancelPorterHandoff	concat:identifier:b+literal
+.vite/build/mainView.js	ipcRenderer.invoke	OfficeAddinFiles_$_probePorterOpenTarget	concat:identifier:b+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	OfficeAddinFiles_$_connectedFilesState_$store$_getState	concat:identifier:b+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	OfficeAddinFiles_$_connectedFilesState_$store$_getStateSync	concat:identifier:b+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiRender	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiPress	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiInput	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiSelect	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiPromptEdit	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiClientModule	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiClientPress	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiMessage	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiClientFault	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiAttach	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiDetach	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiPanes	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiPaneShow	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiPaneFocus	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiClose	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiScroll	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiFocus	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiPinnedStatus	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	EngineSurface_$_uiHostAnswer	concat:identifier:S+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	DesktopIntl_$_getInitialLocale	concat:identifier:E+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DesktopIntl_$_requestLocaleChange	concat:identifier:E+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_resize	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_show	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_focus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_close	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_setThemeMode	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_setIncognitoMode	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_setModalScrimActive	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_reportModalScrim	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_captureScreenshot	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_reportFrameLayout	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_reportSidebarPlaceholder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_reportSidebarMenuState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_reportSplitViewMenuState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_reportGoMenuAreas	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_reportCloseMenuTarget	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowControl_$_reportReopenClosedSessionMenuState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	QuickEntry_$_setRecentChats	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	Account_$_setAccountDetails	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Account_$_activeAccountChanged	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	PlanUsage_$_nudgeRefresh	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WebBuild_$_reportCommitHash	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	OsOpenHandlers_$_ready	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	OsEntryPlaces_$_report	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	MenuEvents_$_claimEditCommands	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	MenuEvents_$_releaseEditCommands	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	MenuEvents_$_reportContextMenuEditor	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	MenuEvents_$_editCommandUnclaimed	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ContentStampReporter_$_report	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	WindowState_$_getFullscreen	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	WindowState_$_getVisibility	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowState_$_getOnScreen	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	WindowState_$_getKeptHidden	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	WindowState_$_getAppFocused	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	WindowState_$_getZoomFactor	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	WindowState_$_hostPower_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	WindowState_$_hostPower_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	WindowState_$_deviceLink_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	WindowState_$_deviceLink_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	WindowState_$_compositing_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	WindowState_$_compositing_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceStorage_$_getUsage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceStorage_$_getFreeDiskSpace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceStorage_$_reveal	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceStorage_$_clearCacheAndRestart	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceStorage_$_previewCodeCleanup	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceStorage_$_runCodeCleanup	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceStorage_$_cancelCodeCleanup	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	Auth_$_doAuthInBrowser	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Auth_$_prepareForSignedIn	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DesktopNotifications_$_getAuthorizationStatus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DesktopNotifications_$_requestAuthorization	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DesktopNotifications_$_openNotificationSettings	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DesktopNotifications_$_showNotification	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DesktopNotifications_$_supportsNotificationActions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DesktopNotifications_$_showNotificationWithActions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	DesktopNotifications_$_setProjectPromptsWaiting	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AutoUpdater_$_restartToUpdate	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AutoUpdater_$_checkForUpdates	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AutoUpdater_$_getRunningLocalSessionCount	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AutoUpdater_$_getRunningLocalSessions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AutoUpdater_$_restartToUpdateWhenIdle	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AutoUpdater_$_cancelPendingRestart	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AutoUpdater_$_ancientJournalState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AutoUpdater_$_requestAncientJournal	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AutoUpdater_$_updaterState_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	AutoUpdater_$_updaterState_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	BrowserNavigation_$_goBack	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	BrowserNavigation_$_goForward	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	BrowserNavigation_$_requestMainMenuPopup	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	BrowserNavigation_$_navigationState_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	BrowserNavigation_$_navigationState_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	FindInPageProvider_$_setProviderActive	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FindInPageProvider_$_setProviderActiveInPopout	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FindInPageProvider_$_reportFindResult	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	ManagedConfig_$_managedRendererConfig_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	ManagedConfig_$_managedRendererConfig_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_getAllArtifacts	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_getArtifactMetadata	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_getArtifactThumbnail	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_deleteArtifact	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_showArtifact	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_hideArtifact	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_parkAndCaptureArtifact	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_reloadArtifactView	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_printArtifactToPdf	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_restoreArtifactVersion	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_setArtifactStarred	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_setArtifactLastModifiedSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_setArtifactMcpTools	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_setArtifactName	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_getArtifactHtml	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_getArtifactRepublishContent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_isSharingEnabled	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_isAutoPublishEnabled	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_setArtifactAutoPublish	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_isSharedContentCurrent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_shareArtifact	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_unshareArtifact	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_refreshImportedArtifact	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkArtifacts_$_importArtifact	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkFilePreview_$_isEnabled	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkFilePreview_$_isEpitaxyPreviewEnabled	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkFilePreview_$_isOpenInDefaultAppEnabled	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkFilePreview_$_isVmReady	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkFilePreview_$_vmReadiness	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkFilePreview_$_show	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkFilePreview_$_hide	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkFilePreview_$_parkAndCapture	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkFilePreview_$_whenContentReady	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeCode_$_getStatus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeCode_$_prepare	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeCode_$_checkGitAvailable	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeCode_$_resolveLocalSettings	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeCode_$_patchUserSettings	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeCode_$_setEnableWorkflows	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeCode_$_getPeriodUsage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeCode_$_setLocalSandboxEnabled	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeCode_$_setStrictSandboxMode	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeCode_$_getLocalSandboxStatus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CliSessionImport_$_submitAction	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CliSessionImport_$_claimMenuStart	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	CliSessionImport_$_cliImport_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	CliSessionImport_$_cliImport_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	CloudMove_$_setCloudMoveListening	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CloudMove_$_reportCloudMoveResult	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	ChromeExtension_$_isInstalled	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ChromeExtension_$_installExtension	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ChromeExtension_$_restartChrome	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ChromeExtension_$_getBrowserActivity	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ChromeExtension_$_launchBrowser	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ChromeExtension_$_getConnectedExtensions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	ComputerUseTcc_$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ComputerUseTcc_$_requestAccessibility	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ComputerUseTcc_$_requestScreenRecording	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ComputerUseTcc_$_requestMicrophone	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ComputerUseTcc_$_openSystemSettings	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ComputerUseTcc_$_revokeGrant	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ComputerUseTcc_$_listInstalledApps	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ComputerUseLivePreview_$_setFps	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ComputerUseLivePreview_$_setSubscribed	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ComputerUseLivePreview_$_computerUsePreview_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	ComputerUseLivePreview_$_computerUsePreview_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	ComputerUseLivePreview_$_browserPreview_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	ComputerUseLivePreview_$_browserPreview_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	BuddyRemoteFeed_$_sync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	FramebufferPreview_$_requestFramePort	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FramebufferPreview_$_listSources	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FramebufferPreview_$_attach	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FramebufferPreview_$_detach	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FramebufferPreview_$_setStreamHints	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FramebufferPreview_$_sendPointer	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FramebufferPreview_$_sendKey	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FramebufferPreview_$_sendScroll	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_start	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_setSpSectionPrompts	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_sendMessage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_setModel	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_setEffort	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_setExtendedThinking	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_setPermissionMode	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_setChromePermissionMode	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_stop	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_stopTask	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_rewind	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_rewindV2	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_archive	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_delete	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_deleteBridgeSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_deleteBridgeAgentMemory	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_updateSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getSessionMissReason	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getAll	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getTranscript	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getTranscriptRead	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_searchSessions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_respondToToolPermission	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_onAutoModeOverrideAlwaysAllow	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_openOutputsDir	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_shareSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_submitTranscriptFeedback	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_setDraftSessionFolders	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getDefaultWorkspaceFolders	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getSupportedCommands	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_addTrustedFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_browseAndAddTrustedFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_grantRemoteSessionFolders	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_browseAndGrantRemoteSessionFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_grantRemoteSessionFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_clearRemoteSessionFolderGrants	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_replayChatFolderAccessReports	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_ackChatFolderAccessReport	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_grantProjectUploadFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_listProjectUploadFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_readProjectUploadFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_releaseProjectUploadFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_stageRemoteSessionAttachmentsViaFilesApi	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_uploadRemoteAttachmentsToFilesApi	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_releaseRemoteAttachmentUploads	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_grantRoutineFolders	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_allowRoutineFolders	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_revokeRoutineFolderGrant	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getRoutineFolderGrant	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_autoSaveDeliveredFiles	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_removeTrustedFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_isFolderTrusted	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_readOpenedFiles	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_addFolderToSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_setMcpServers	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_replaceRemoteMcpServers	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_replaceEnabledMcpTools	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_setFocusedSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_signalSessionIntent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_syncSkills	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_listLocalSkills	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getLocalSkillFiles	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_saveLocalSkill	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_saveLocalSkillArchive	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_renameLocalSkill	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_setLocalSkillEnabled	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_deleteLocalSkill	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_revealLocalSkill	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_respondDirectoryServers	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_respondPluginSearch	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_respondSlashMenuSkills	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_mcpCallTool	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_mcpReadResource	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_mcpListResources	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getLocalMcpServers	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_mcpAuthenticate	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_mcpReconnect	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_mcpSubmitOAuthCallbackUrl	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getSessionsForScheduledTask	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_resetBridge	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_resetBridgeSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_abandonBridgeEnvironment	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_kickBridgePoll	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getBridgeConsent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getSessionsBridgeEnabled	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_setSessionsBridgeEnabled	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_refetchMyAccess	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_requestFolderTccAccess	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_respondBridgePermissionPreflight	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_startWatchRecording	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_takeHeldWatchRecording	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_takeCopperHeronSummary	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_takeCopperHeronThumbnails	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_takeCopperHeronFrame	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_touchCopperHeron	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_finalizeCopperHeron	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_discardCopperHeron	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_dismissWatchRecordPill	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_releaseRemoteCuLock	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getAppIconForBundleId	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_authorizeDirectMcpServer	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_authorizeDirectMcpServerWithAccountPicker	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_disconnectDirectMcpServer	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_disconnectDirectMcpServerV2	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_callChromeToolForRemoteSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_closeRemoteSessionTabGroup	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getDirectMcpServerStatuses	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_directMcpCallTool	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_directMcpReadResource	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_directMcpListResources	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_getManagedAskToolNames	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_triggerInteractiveAuth	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_revokeInteractiveAuth	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_cancelInteractiveAuth	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_sessionsBridgeStatus_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	LocalAgentModeSessions_$_sessionsBridgeStatus_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	LocalAgentModeSessions_$_interactiveAuth_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	LocalAgentModeSessions_$_interactiveAuth_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkStorage_$_getCounts	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkStorage_$_getUsage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkStorage_$_reveal	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkStorage_$_previewCleanup	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkStorage_$_runCleanup	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkStorage_$_cancelCleanup	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkStorage_$_exportTask	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkStorage_$_exportProject	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkStorage_$_exportAll	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkUserFiles_$_getInfo	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkUserFiles_$_pickTarget	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkUserFiles_$_migrate	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkUserFiles_$_reveal	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkMemory_$_readGlobalMemory	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkMemory_$_writeGlobalMemory	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkMemory_$_listAccountMemories	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkMemory_$_readAccountMemory	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkMemory_$_writeAccountMemory	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkMemory_$_deleteAccountMemory	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkMemory_$_resetMemories	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Gorse_$_preview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Gorse_$_migrateToProject	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Gorse_$_exportToFiles	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Gorse_$_openExportFallbackFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Gorse_$_decline	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Gorse_$_status	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Gorse_$_progress	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_getAllSpaces	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_getSpacesStoreState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_getSpace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_createSpace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_updateSpace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_deleteSpace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_addFolderToSpace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_removeFolderFromSpace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_addProjectToSpace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_removeProjectFromSpace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_addLinkToSpace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_removeLinkFromSpace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_getAutoMemoryDir	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_readSpaceMemoryIndex	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_listFolderContents	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_readFileContents	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_openFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_createSpaceFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_copyFilesToSpaceFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_classifySessions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_summarizeSpace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_setAutoDescription	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_getRemoteSessionSpaces	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_setRemoteSessionSpace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_removeRemoteSessionSpace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_appendRemoteSessionSpaceFolders	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_setSpaceMigration	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_getSpaceMemorySummary	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_recordSpaceMigrationOutcome	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_startSpaceMemoryCopy	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_getSpaceMemoryCopyStatus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_requestSpacesInventoryReport	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkSpaces_$_getSpaceMemoryCapabilities	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	AgentModeFeedback_$_openFeedbackAndConfirmReinstall	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	AgentModeFeedback_$_reportErrorToSlack	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkFeedback_$_getSystemInfo	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkFeedback_$_captureScreenshot	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkFeedback_$_discardScreenshot	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkFeedback_$_getScreenshotDataUrl	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkFeedback_$_submitFeedback	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_getAvailability	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_getPublicKey	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_signAttestationPreimage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_signForSessionHeader	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_signCreateSessionBind	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_signSessionBind	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_signConversationBind	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_signProjectThreadLink	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_signTriggerOp	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_signTriggerDigest	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_signSessionRequest	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_signSessionFileCopy	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_getLocalDeviceInfo	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_getOwnRowPk	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_notifyRegistered	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_notifyBridgeAbsent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_setKeylessBridgeRowPk	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DeviceRegistry_$_rotateKey	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Dictation_$_getStreamCredential	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DocumentFunnel_$_ensureScratchRoot	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DocumentFunnel_$_writeScratchFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DocumentFunnel_$_listScratchWorkingFiles	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DocumentFunnel_$_runClarkdownConvert	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DocumentFunnel_$_runClarkdownDownloadExport	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DocumentFunnel_$_revealDownloadExport	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DocumentFunnel_$_openDownloadExport	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DocumentFunnel_$_injectDocumentContext	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	DocumentFunnel_$_ingestSessionDocument	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_writeFileDownloadAndOpen	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_writeFileDownload	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_whichApplication	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_appInfoForExtension	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_browseFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_browseFolders	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_listDirectory	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_getSystemPath	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_openLocalFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_listFilesInFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_readLocalFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_getLocalFileThumbnail	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_writeLocalFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_showInFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_savePastedFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_browseFiles	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_browseFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_exportLocalFileToGoogleDrive	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	FileSystem_$_promoteScratchpadFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_fetchMentionOptions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_handleMentionSelect	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_setFocusedCwd	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_setFocusedSshTarget	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_setFocusedRemoteTarget	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_getProjectFileList	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_getProjectFileListIfChanged	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_searchFileContents	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_searchFileContentsWithOptions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_setFindInPageClaimed	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_hideFindInPageOverlay	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_setFindInPageOverlayObstructed	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_setFindInPageOverlayObstructedInPopout	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_offerFindInPageInPopout	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Resources_$_releaseFindInPageInPopout	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	ForgeState_$_getForgeStateSnapshot	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ForgeState_$_setForgeStateVisibleKeys	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ForgeState_$_refreshForgeStateRow	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	GitState_$_getGitStateSnapshot	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	GrandPrix_$_pair	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	GrandPrix_$_disconnect	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	GrandPrix_$_request	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	GrandPrix_$_submitVerificationCode	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	GrandPrix_$_dismissVerificationCode	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	GrandPrix_$_grandPrixStatus_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	GrandPrix_$_grandPrixStatus_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_isAvailable	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_isJitlessForced	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_getLogs	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_stopServer	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_showPreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_hidePreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_destroyPreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_teardownRemoteSessionPreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_setRemoteSessionViewed	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_refreshPreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_focusPreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_setPreviewChromeFocus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_setPreviewPaneShortcutArmed	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_setPreviewViewport	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_clearPreviewViewport	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_setPreviewColorScheme	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_toggleSelectionMode	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_startFromConfig	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_focusOrOpenPreviewTab	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_openExternalLinkInPreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_openClickedLinkInPreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_setPreviewLinkRouting	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_openRoutedLinkExternally	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_setRoutedLinkConfirmReady	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_resolveRoutedLinkConfirm	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_getConfiguredServices	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_getAutoVerify	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_setAutoVerify	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_detectServerCandidates	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_detectServerCandidatesWithAgent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_addServerFromCandidate	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_getPreviewUrl	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_navigatePreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_goBack	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_goForward	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_setActivePreviewTab	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_closePreviewTab	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_reopenClosedPreviewTab	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_reorderPreviewTab	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_openPreviewTab	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_closeAllPreviewTabs	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_getPreviewTabs	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_setPreviewMuted	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_getAllSessionPreviewTabs	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_capturePreviewScreenshot	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_capturePreviewScreenshotIfChanged	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_getPreviewLastFrame	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_discardPreviewLastFrame	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_armPreviewLiveStream	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_exportPreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_getPreviewNavState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_loadHtmlPreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_loadClaudePagePreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_setArtifactPaneHost	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_loadHtmlPreviewContent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_getPreviewAllowedOrigins	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_removePreviewAllowedOrigin	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_clearPreviewAllowedOrigins	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_addPreviewAllowedOrigin	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_openPreviewInBrowser	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_startBrowserPreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_ensureRemoteBlankPreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_ensureChatBlankPreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_openGdriveDocument	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_startRemoteBrowserPreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_pickHtmlFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_setPreviewPaneMounted	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_clearCoworkBrowserData	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_clearPreviewBrowsingData	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_getChromeImportAvailability	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_getCoworkChromeImportAvailability	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_listChromeImportProfiles	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_listChromeImportSites	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_importChromeLogins	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_listImportedChromeLogins	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_removeImportedChromeLogins	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_getChromeImportSharedOffer	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_acceptChromeImportSharedOffer	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_previewSnapshot	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_previewInspect	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_previewConsoleLogs	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_previewModelScreenshot	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_navigatePreviewFromModel	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_listRemoteBrowserTools	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_callRemoteBrowserTool	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_resolveRemotePaneConsent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_recordRemotePaneOriginDecision	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_admitRemotePaneOriginOnce	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	Launch_$_activeServers_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	Launch_$_activeServers_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_toggleRemoteControl	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getRemoteControlStartState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_dropsHostReplyStamp	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_shareSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_start	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_forkSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_detachFromParent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_sendMessage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setModel	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setEffort	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getAdvisorSetting	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setFastMode	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setThinkingSummariesWanted	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setAvailableNextActions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_applyFlagSettings	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_validateNewOutputStyleName	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_createOutputStyle	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_cancelCreateOutputStyle	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_refreshOutputStyles	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_revealOutputStyle	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_listGlobalOutputStyles	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getDefaultEffort	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getContextUsage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getContextUsageSummary	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_warmSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_personOpenedSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getClaudeCodeRestartVersions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_applyModelByRestart	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_restartRemoteSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reinstallRemoteClaudeCode	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_restartRemoteHelper	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_retryStart	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_confirmImportedSessionResume	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reviewRepository	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_prewarmAuth	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_canAutoResume	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_startSideChat	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_sendSideChatMessage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_stopSideChat	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_interruptSideChat	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_startBtwChild	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_closeBtwChild	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_stop	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_interrupt	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_stopTask	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getTaskOutput	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_backgroundTasks	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setBackgroundTasksShortcutArmed	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setSessionPaneMenuState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_markPeerMessagesRead	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_completeSessionViewRequest	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_completeCodeSettingRequest	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setCodeSettingAvailability	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_completeStartTargetsRequest	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_cancelQueuedMessage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reorderQueuedMessage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_promoteQueuedMessage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_sendSteeredNow	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_logCliEvent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reportSwitchTiming	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reportSwitchInitiated	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reportSwitchAbandoned	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reportSessionListHint	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reportComposerInp	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reportTranscriptLoadEarlier	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reportTranscriptWindowBackfill	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reportStreamRender	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reportRunFollowUp	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reportSessionDeadEnd	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reportArtifactsReset	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reportSessionListLoad	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_clearSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_rewind	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_rewindV2	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_rewindToRefusedPrompt	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_rewindFiles	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_discardPendingTurn	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_resumePreClearSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_undoRewind	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_switchRewindMark	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getUncommittedChanges	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getUncommittedChangesByFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_archive	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_unarchive	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_discardKeptWorktree	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_delete	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_updateSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setCustomGroups	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_respondSidebarCommand	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_findLocalSessionIdForBridgeId	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getAll	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSessionList	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_loadArchivedSessions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSessionsForScheduledTask	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getDetectedProjects	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getCodeStats	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getGitInfo	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getLocalBranches	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getGitDiff	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getGitDiffStats	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getDiffFileContent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getDiffFileImage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getGitDiffFilePatch	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getGitCommits	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getCommitDiff	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_refreshGitState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_invalidateGitDiffCache	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getTranscript	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getTranscriptTail	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getTranscriptPage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_requestTranscriptPort	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_readTranscript	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_searchSessions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getInstalledEditors	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_openInEditor	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_revealRemotePath	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_pickSessionFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_pickFileAtCwd	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_readFileAtCwd	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_listDirectoryAtCwd	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_readSessionFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_readSessionFileWithStatus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSessionFilePlacement	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_suggestFolderForSessionFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_addSuggestedFolderForSessionFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_resolveSessionFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_isSessionPathGone	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_showSessionFileInFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_showSessionFilePreview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_openSessionFileInDefaultApp	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_listSessionDirectory	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_watchSessionDirectories	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_readSessionImageAsDataUrl	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSessionImageStreamUrl	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_readSessionMediaAsDataUrl	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_readSessionPanelMediaAsDataUrl	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSessionMediaStreamUrl	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSessionPanelMediaStreamUrl	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_readSessionPanelDocumentAsDataUrl	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_writeSessionFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_createSessionFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_startShellPty	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_stopShellPty	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_resizeShellPty	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_writeShellPty	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getBusyShellPtyKeys	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setShellPtyTitle	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getTerminalShells	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_runBashCommand	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_interruptBashCommand	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_respondToToolPermission	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_respondToRefusalFallbackPrompt	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_respondToAutoModeServerFallbackPrompt	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_respondToLanyardConsent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_respondToViolinBowPrompt	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_checkTrust	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_checkStoredTrust	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_saveTrust	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_createScratchWorkspace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_prewarmFolderless	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_prewarmLocal	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_discardPrewarm	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_changeCwd	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_answerPendingCwdTrust	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setPermissionMode	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setChipLevel	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getChipLevelPreference	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setChipLevelPreference	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_launchUltrareview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_submitFeedback	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_addDirectories	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getDefaultPermissionMode	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSupportedCommands	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHDraftCommandNames	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_writeAutoModeProposalFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_cleanupAutoModeProposalFile	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getAgents	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_createAgent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setMcpServers	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_replaceRemoteMcpServers	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_replaceEnabledMcpTools	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_sessionConnectorToggleStarted	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_respondSessionConnectorToggle	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_remoteStartMcpConfigStarted	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_respondRemoteStartMcpConfig	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_mcpAuthenticate	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_mcpReconnect	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_mcpRetryConnection	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_mcpSubmitOAuthCallbackUrl	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_mcpAuthenticateConfigServer	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_mcpClearAuth	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_mcpEnableServer	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_mcpCallTool	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_mcpReadResource	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_mcpListResources	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getProxiedConnectorCall	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getLocalMcpServers	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSessionCliMcpServers	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setFocusedSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setAvailableCodeModels	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setAccountBranchPrefix	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_openMacFilesAndFoldersSettings	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_classifyTccFolderKind	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_testSSHConnection	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_probeSSHConnection	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reconnectSessionHost	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_forceReconnectSSH	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHProxyOutput	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHLocalClientCapture	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHAuthSummary	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSessionSSHRemedies	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getRemoteSSHRemedies	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_runSSHRemedy	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_listSSHDirectory	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHGitInfo	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHLocalBranches	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHGitDiff	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHGitDiffStats	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHGitCommits	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHCommitDiff	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHDiffFileContent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getRemoteGitInfo	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getRemoteLocalBranches	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getRemoteGitDiff	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getRemoteGitDiffStats	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getRemoteGitCommits	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getRemoteCommitDiff	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getRemoteDiffFileContent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_listRemoteDirectory	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_checkRemoteTrust	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_checkRemoteTargetTrust	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_saveRemoteTargetTrust	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_resolveSSHSettings	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHConfigs	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_listWslDistros	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_canStartWslSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setSSHConfigs	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getTrustedSSHHosts	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setTrustedSSHHosts	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHWorktreeLocation	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHSavedPassword	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_forgetSSHSavedPassword	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHHostToolGrants	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_removeSSHHostToolGrant	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_clearSSHHostToolGrants	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setSSHWorktreeLocation	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getSSHWorktreeDefaults	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_importAllCliSessions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_probeImportableCliSessions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setVisibility	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_checkGhAvailable	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_listGhIssues	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getGhIssue	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getGhRefSummary	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getGhRefSummaryWithStatus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getGhUserSummary	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getCrRefSummary	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getCrCliStatus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_isWorkingTreeDirty	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getWorkingTreeDirtyState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_checkBranchSwitchConflict	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_isBranchOnOrigin	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getWorkingTreeStatus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_stashWorkingTree	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_commitWipForBranchSwitch	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_discardWorkingTree	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_installGh	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getPrChecks	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getCheckRunAnnotations	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_rerunPrCheck	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getPrStateForBranch	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getPrReviewComments	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getPrOverview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getPrTimeline	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getPrFiles	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getPrCommits	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getPrFileContent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_fetchGithubImage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_replyToPrReviewComment	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_resolvePrReviewThread	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_updatePrComment	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_createPrReviewComment	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_submitPrReview	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_updatePrBody	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_mergePr	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setBoundPrAutoFix	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setSessionAutoArchiveOnPrClose	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_respondToTitleOffer	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setManualKeepAwake	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_armAutoFixOnNextPr	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setAutoFixOwnPrsWanted	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_dismissBoundPr	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_enableAutoMerge	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_disableAutoMerge	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_markPrReady	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_markPrDraft	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_invalidatePrCaches	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_dequeuePr	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_popBackgroundTaskSuggestion	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_popBackgroundTaskSuggestionById	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getTaskBacklog	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_dismissTaskBacklogItem	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_notifySpawnedTaskStarted	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_notifySpawnedTaskUnstarted	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_acceptSideSessionOffer	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_muteSideSessionOffers	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getTeleportReadiness	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getTeleportPlan	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_teleportToCloud	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_resolveCloudBranch	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_resolveGithubRepoIds	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_beginTearOffHalo	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_setTearOffHalo	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_endTearOffHalo	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_listCliSessions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_readCliTranscript	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_enableCliRemoteControl	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_openCliTail	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_closeCliTail	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_listResumableCliSessions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_resumeCliSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_previewCliResume	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_createLogsHandoffBundle	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_respondToSSHPassword	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_getPendingSSHPasswordRequests	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_ackSSHPasswordRequestShown	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_reportSSHPasswordPromptHidden	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessions_$_declareSSHPromptKinds	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessionEnvironment_$_get	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessionEnvironment_$_save	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessionEnvironment_$_getScoped	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessionEnvironment_$_saveScoped	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessionEnvironment_$_removeScoped	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessionEnvironment_$_moveIntoScopes	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessionPresets_$_load	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalSessionPresets_$_replaceAll	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_getPlugins	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_getDownloadedRemotePlugins	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_syncRemotePlugins	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_materializeEnabledPlugins	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_listSkillFiles	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_uploadPlugin	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_deletePlugin	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_setPluginEnabled	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_startPluginOAuthFlow	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_revokePluginOAuth	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_getPluginCliStatus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_setPluginEnvVars	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_setPluginOAuthClient	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_getPluginShimOps	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_getPluginCliBatch	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	LocalPlugins_$_setPluginShimPermission	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	PluginBridgeMcp_$_listServers	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	CustomPlugins_$_addMarketplace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CustomPlugins_$_removeMarketplace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CustomPlugins_$_refreshMarketplace	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CustomPlugins_$_listMarketplaces	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CustomPlugins_$_installPlugin	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CustomPlugins_$_updatePlugin	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CustomPlugins_$_uninstallPlugin	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CustomPlugins_$_listAvailablePlugins	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CustomPlugins_$_listRemotePluginsPage	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CustomPlugins_$_checkPluginHasLocalChanges	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CustomPlugins_$_getAndClearMigrationIssues	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CustomPlugins_$_listLocalOrgPlugins	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CustomPlugins_$_installLocalOrgPlugin	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CustomPlugins_$_syncLocalOrgPlugins	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	RemoteControlServing_$_requestEnable	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	RemoteControlServing_$_disable	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	RemoteControlServing_$_removeFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	RemoteControlServing_$_setFolderPinned	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	RemoteControlServing_$_setFolderWorktree	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	RemoteControlServing_$_disconnectCloudSession	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	RemoteControlServing_$_requestAddFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	RemoteControlServing_$_requestServeSessionFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	RemoteControlServing_$_requestServeGrantedFolder	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	RemoteControlServing_$_remoteControlServeStatus_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	RemoteControlServing_$_remoteControlServeStatus_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_getAllScheduledTasks	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_getScheduledTaskFileContent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_updateScheduledTaskStatus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_createScheduledTask	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_updateScheduledTask	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_removeApprovedPermission	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_clearChromePermissions	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_getWatcherHistory	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_markListenerReady	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_setEventAckSupported	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_ackEvent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_releaseDispatchClaim	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_beginManualMigration	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_endManualMigration	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_revertRemoteMigration	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CoworkScheduledTasks_$_answerBoundCreateSign	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	CCDScheduledTasks_$_getAllScheduledTasks	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CCDScheduledTasks_$_getScheduledTaskFileContent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CCDScheduledTasks_$_updateScheduledTaskStatus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CCDScheduledTasks_$_createScheduledTask	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CCDScheduledTasks_$_updateScheduledTask	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CCDScheduledTasks_$_removeApprovedPermission	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CCDScheduledTasks_$_getWatcherHistory	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CCDScheduledTasks_$_markListenerReady	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CCDScheduledTasks_$_setEventAckSupported	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CCDScheduledTasks_$_ackEvent	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CCDScheduledTasks_$_releaseDispatchClaim	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	CCDScheduledTasks_$_setHostRunsSupported	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	SessionPopouts_$_reportOpenPopouts	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	SessionPopouts_$_takeRestorablePopouts	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	SessionPopouts_$_reportOpenLayout	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	SessionPopouts_$_takeRestorableLayout	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ViolinFret_$_setViolinFretChoice	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ViolinFret_$_violinFretStatus_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	ViolinFret_$_violinFretStatus_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeVM_$_download	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeVM_$_startVM	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeVM_$_restartVM	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeVM_$_getDownloadStatus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeVM_$_getRunningStatus	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeVM_$_isHostLoopModeEnabled	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeVM_$_isHostLoopDevOverrideActive	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeVM_$_setForceDisableHostLoop	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeVM_$_setYukonSilverConfig	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeVM_$_checkVirtualMachinePlatform	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeVM_$_enableVirtualMachinePlatform	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeVM_$_restartAfterVMPInstall	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeVM_$_apiReachability_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	ClaudeVM_$_apiReachability_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	ClaudeVM_$_hostIPv6Notice_$store$_getState	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.sendSync	ClaudeVM_$_hostIPv6Notice_$store$_getStateSync	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	WindowLayout_$_setLayoutCommandListening	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.invoke	WindowLayout_$_reportLayoutCommandResult	concat:identifier:k+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	$eipc_message$_fcb91d11-972d-4fd6-b90b-72739699bff5_$_electron_window_$_WindowManager_$_RegisterWindow	literal
+.vite/build/mainView.js	ipcRenderer.invoke	$eipc_message$_fcb91d11-972d-4fd6-b90b-72739699bff5_$_electron_window_$_WindowManager_$_UnregisterWindow	literal
+.vite/build/mainView.js	ipcRenderer.invoke	$eipc_message$_fcb91d11-972d-4fd6-b90b-72739699bff5_$_electron_window_$_WindowManager_$_UpdateWindow	literal
+.vite/build/mainView.js	ipcRenderer.invoke	$eipc_message$_fcb91d11-972d-4fd6-b90b-72739699bff5_$_electron_window_$_WindowManager_$_DestroyWindow	literal
+.vite/build/mainView.js	ipcRenderer.invoke	$eipc_message$_fcb91d11-972d-4fd6-b90b-72739699bff5_$_electron_window_$_WindowManager_$_WindowAction	literal
+.vite/build/mainView.js	ipcRenderer.invoke	$eipc_message$_fcb91d11-972d-4fd6-b90b-72739699bff5_$_electron_window_$_WindowManager_$_GetWindowState	literal
+.vite/build/mainView.js	ipcRenderer.on	$eipc_message$_fcb91d11-972d-4fd6-b90b-72739699bff5_$_electron_window_$_WindowManager_$_WindowEvent	literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:lr
+.vite/build/mainView.js	ipcRenderer.send		identifier:ur
+.vite/build/mainView.js	ipcRenderer.on		identifier:hr
+.vite/build/mainView.js	ipcRenderer.invoke		identifier:hr
+.vite/build/mainView.js	ipcRenderer.invoke	Buddy_$_status	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Buddy_$_deviceStatus	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Buddy_$_setName	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Buddy_$_pairDevice	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Buddy_$_scanDevices	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Buddy_$_pickDevice	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Buddy_$_cancelScan	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Buddy_$_submitPin	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Buddy_$_forgetDevice	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Buddy_$_pickFolder	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Buddy_$_preview	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.invoke	Buddy_$_install	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	BuddyBleTransport_$_rx	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.invoke	BuddyBleTransport_$_reportState	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.invoke	BuddyBleTransport_$_log	concat:identifier:I+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:r
+.vite/build/mainView.js	ipcRenderer.invoke	RendererMemoryReporter_$_report	concat:identifier:Fr+literal
+.vite/build/mainView.js	ipcRenderer.invoke	PrintCallReporter_$_report	concat:identifier:Fr+literal
+.vite/build/mainView.js	ipcRenderer.on		identifier:t
+.vite/build/mainView.js	ipcRenderer.removeAllListeners		identifier:t
+.vite/build/mainView.js	ipcRenderer.invoke	list-mcp-servers	enum:N.ListMcpServers
+.vite/build/mainView.js	ipcRenderer.invoke	connect-to-mcp-server	enum:N.ConnectToMcpServer
+.vite/build/mainView.js	ipcRenderer.invoke	request-open-mcp-settings	enum:N.RequestOpenMcpSettings
+.vite/build/mainView.js	ipcRenderer.on	mcp-server-connected	enum:N.McpServerConnected
+.vite/build/mainView.js	ipcRenderer.on	mcp-server-auto-reconnect	enum:N.McpServerAutoReconnect
+.vite/build/mainView.js	ipcRenderer.on	cowork-session-folders-updated	enum:N.CoworkSessionFoldersUpdated
+.vite/build/mainView.js	ipcRenderer.on	cowork-session-directories-staged	enum:N.CoworkSessionDirectoriesStaged
+.vite/build/mainView.js	ipcRenderer.on		identifier:Ie
+.vite/build/mainView.js	ipcRenderer.on		identifier:Zn
+.vite/build/mainWindow.js	ipcRenderer.invoke	AboutWindow_$_openHelp	concat:identifier:n+literal
+.vite/build/mainWindow.js	ipcRenderer.invoke	AboutWindow_$_getSupport	concat:identifier:n+literal
+.vite/build/mainWindow.js	ipcRenderer.invoke	AboutWindow_$_getAppName	concat:identifier:n+literal
+.vite/build/mainWindow.js	ipcRenderer.invoke	AboutWindow_$_getBuildProps	concat:identifier:n+literal
+.vite/build/mainWindow.js	ipcRenderer.invoke	AboutWindow_$_ancientJournal	concat:identifier:n+literal
+.vite/build/mainWindow.js	ipcRenderer.invoke	QuickWindow_$_requestDismiss	concat:identifier:n+literal
+.vite/build/mainWindow.js	ipcRenderer.invoke	QuickWindow_$_requestSkooch	concat:identifier:n+literal
+.vite/build/mainWindow.js	ipcRenderer.invoke	MainWindowTitleBar_$_titleBarReady	concat:identifier:n+literal
+.vite/build/mainWindow.js	ipcRenderer.invoke	MainWindowTitleBar_$_requestReloadMainView	concat:identifier:n+literal
+.vite/build/mainWindow.js	ipcRenderer.invoke	MainWindowTitleBar_$_requestRestartApp	concat:identifier:n+literal
+.vite/build/mainWindow.js	ipcRenderer.invoke	MainWindowTitleBar_$_requestMainMenuPopup	concat:identifier:n+literal
+.vite/build/mainWindow.js	ipcRenderer.on		identifier:i
+.vite/build/mainWindow.js	ipcRenderer.on		identifier:i
+.vite/build/mainWindow.js	ipcRenderer.on		identifier:i
+.vite/build/mainWindow.js	ipcRenderer.invoke	DesktopIntl_$_getInitialLocale	concat:identifier:d+literal
+.vite/build/mainWindow.js	ipcRenderer.invoke	DesktopIntl_$_requestLocaleChange	concat:identifier:d+literal
+.vite/build/mainWindow.js	ipcRenderer.on		identifier:r
+.vite/build/quickWindow.js	ipcRenderer.invoke	AboutWindow_$_openHelp	concat:identifier:n+literal
+.vite/build/quickWindow.js	ipcRenderer.invoke	AboutWindow_$_getSupport	concat:identifier:n+literal
+.vite/build/quickWindow.js	ipcRenderer.invoke	AboutWindow_$_getAppName	concat:identifier:n+literal
+.vite/build/quickWindow.js	ipcRenderer.invoke	AboutWindow_$_getBuildProps	concat:identifier:n+literal
+.vite/build/quickWindow.js	ipcRenderer.invoke	AboutWindow_$_ancientJournal	concat:identifier:n+literal
+.vite/build/quickWindow.js	ipcRenderer.invoke	QuickWindow_$_requestDismiss	concat:identifier:n+literal
+.vite/build/quickWindow.js	ipcRenderer.invoke	QuickWindow_$_requestSkooch	concat:identifier:n+literal
+.vite/build/quickWindow.js	ipcRenderer.invoke	MainWindowTitleBar_$_titleBarReady	concat:identifier:n+literal
+.vite/build/quickWindow.js	ipcRenderer.invoke	MainWindowTitleBar_$_requestReloadMainView	concat:identifier:n+literal
+.vite/build/quickWindow.js	ipcRenderer.invoke	MainWindowTitleBar_$_requestRestartApp	concat:identifier:n+literal
+.vite/build/quickWindow.js	ipcRenderer.invoke	MainWindowTitleBar_$_requestMainMenuPopup	concat:identifier:n+literal
+.vite/build/quickWindow.js	ipcRenderer.on		identifier:i
+.vite/build/quickWindow.js	ipcRenderer.on		identifier:i
+.vite/build/quickWindow.js	ipcRenderer.on		identifier:i
+.vite/build/quickWindow.js	ipcRenderer.invoke	DesktopIntl_$_getInitialLocale	concat:identifier:d+literal
+.vite/build/quickWindow.js	ipcRenderer.invoke	DesktopIntl_$_requestLocaleChange	concat:identifier:d+literal
+.vite/build/quickWindow.js	ipcRenderer.on		identifier:r
+.vite/build/watchRecordChooser.js	ipcRenderer.invoke	CuTeach_$_next	concat:identifier:n+literal
+.vite/build/watchRecordChooser.js	ipcRenderer.invoke	CuTeach_$_exit	concat:identifier:n+literal
+.vite/build/watchRecordChooser.js	ipcRenderer.invoke	CuTeach_$_mouseEnter	concat:identifier:n+literal
+.vite/build/watchRecordChooser.js	ipcRenderer.invoke	CuTeach_$_mouseLeave	concat:identifier:n+literal
+.vite/build/watchRecordChooser.js	ipcRenderer.on		identifier:i
+.vite/build/watchRecordChooser.js	ipcRenderer.on		identifier:i
+.vite/build/watchRecordChooser.js	ipcRenderer.on		identifier:i
+.vite/build/watchRecordChooser.js	ipcRenderer.on		identifier:i
+.vite/build/watchRecordChooser.js	ipcRenderer.invoke	CuWatchRecordPill_$_done	concat:identifier:n+literal
+.vite/build/watchRecordChooser.js	ipcRenderer.invoke	CuWatchRecordPill_$_discard	concat:identifier:n+literal
+.vite/build/watchRecordChooser.js	ipcRenderer.invoke	CuWatchRecordPill_$_toggleMic	concat:identifier:n+literal
+.vite/build/watchRecordChooser.js	ipcRenderer.invoke	CuWatchRecordPill_$_reportProcessingWidth	concat:identifier:n+literal
+.vite/build/watchRecordChooser.js	ipcRenderer.on		identifier:i
+.vite/build/watchRecordChooser.js	ipcRenderer.on		identifier:i
+.vite/build/watchRecordChooser.js	ipcRenderer.on		identifier:i
+.vite/build/watchRecordChooser.js	ipcRenderer.on		identifier:i
+.vite/build/watchRecordChooser.js	ipcRenderer.invoke	CuWatchRecordChooser_$_choose	concat:identifier:n+literal
+.vite/build/watchRecordChooser.js	ipcRenderer.invoke	CuWatchRecordChooser_$_setMicPreview	concat:identifier:n+literal
+.vite/build/watchRecordChooser.js	ipcRenderer.invoke	CuWatchRecordChooser_$_stopMicPreview	concat:identifier:n+literal
+.vite/build/watchRecordChooser.js	ipcRenderer.invoke	CuWatchRecordChooser_$_reportContentShortfall	concat:identifier:n+literal
+.vite/build/watchRecordChooser.js	ipcRenderer.on		identifier:i
+.vite/build/watchRecordChooser.js	ipcRenderer.on		identifier:i
