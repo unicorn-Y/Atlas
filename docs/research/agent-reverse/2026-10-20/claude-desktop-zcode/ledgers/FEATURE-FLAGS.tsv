@@ -1,0 +1,381 @@
+path	flat_key	title	scopes	execution_target	visibility	available_in_version	fail_closed
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceCustomHeaders		3p	desktop		1.8089.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceSessionLifetimeSec		3p	desktop		1.14271.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceCredentialHelper		3p			1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceCredentialHelperTtlSec		3p			1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceCredentialHelperTimeoutSec		3p			1.8089.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceCredentialHelperSilentRefreshEnabled		3p			1.10628.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockProfile		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockAwsDir		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockAwsCliPath		3p	desktop		1.13576.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockRegion		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockBaseUrl		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockBearerToken		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockProfile						
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockAwsDir						
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockAwsCliPath						
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockRegion						
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceCredentialHelperWindows		3p			2.2553.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceCredentialHelperArgs		3p			2.110.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceGatewayAuthScheme		3p	desktop		1.3036.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceGatewayApiKey		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceIdpAuthFlow		3p			2.7032.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceIdpOidc		3p			2.7032.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceGatewayOidcAuthFlow		3p	desktop		1.25927.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceGatewayOidc		3p	desktop		1.6889.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceGatewayBaseUrl		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceStreamIdleTimeoutSec		3p	desktop		1.44121.1	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceGatewayManagedClaudeCode		3p	desktop	public-undocumented	2.9939.2	false
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceAnthropicApiKey		3p	desktop		1.8089.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockSsoStartUrl		3p	desktop		1.6259.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockSsoRegion		3p	desktop		1.6259.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockSsoAccountId		3p	desktop		1.6259.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockSsoRoleName		3p	desktop		1.6259.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockServiceTier		3p	desktop		1.5186.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceBedrockWebIdentityRoleArn		3p			@next	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceVertexOAuthClientId		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceVertexOAuthClientSecret		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceVertexOAuthScopes		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceVertexOAuthLoginHint		3p	desktop		1.12603.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceVertexWorkforceAudience		3p	desktop		1.10628.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceVertexWorkforceUserProject		3p	desktop		1.10628.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceVertexWorkforceAuthFlow		3p	desktop		1.25927.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceVertexWorkforceOidc		3p	desktop		1.10628.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceVertexCredentialsFile		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceVertexProjectId		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceVertexRegion		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceVertexBaseUrl		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceFoundryApiKey		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceFoundryTenantId		3p	desktop		1.9255.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceFoundryClientId		3p	desktop		1.9255.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceFoundryAuthFlow		3p	desktop		1.19367.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceFoundryResource		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceFoundryBaseUrl		3p	desktop		2.110.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceCredentialKind		3p			1.8555.0	
+.vite/build/index.chunk-lzaSYO3Q.js	selfHostedToken		3p	selfHosted	public-undocumented	2.16120.0	
+.vite/build/index.chunk-lzaSYO3Q.js	selfHostedUrl		3p	selfHosted	public-undocumented	2.16120.0	
+.vite/build/index.chunk-lzaSYO3Q.js	skillBundles		3p			@next	
+.vite/build/index.chunk-lzaSYO3Q.js	organizationPluginsUrl		3p	desktop	public-undocumented	1.10628.0	
+.vite/build/index.chunk-lzaSYO3Q.js	orgPluginSettings		3p			1.8089.0	AEe
+.vite/build/index.chunk-lzaSYO3Q.js	allowedPluginMarketplaces		3p			1.17377.1	null
+.vite/build/index.chunk-lzaSYO3Q.js	sharingEndpoint		3p		public-undocumented	2.9939.2	
+.vite/build/index.chunk-lzaSYO3Q.js	userPluginMarketplacesEnabled		3p			1.37937.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	userPluginUploadsEnabled		3p			1.37937.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	otlpEndpoint		3p			1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	otlpProtocol		3p			1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	otlpHeaders		3p			1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	otlpAuthMode		3p			1.30096.1	
+.vite/build/index.chunk-lzaSYO3Q.js	otlpHeadersHelper		3p			1.30096.1	
+.vite/build/index.chunk-lzaSYO3Q.js	otlpResourceAttributes		3p			1.5354.0	
+.vite/build/index.chunk-lzaSYO3Q.js	otlpDesktopLogLevel		3p			1.9255.0	
+.vite/build/index.chunk-lzaSYO3Q.js	otlpContentCapture		3p,1p			1.15962.0	null
+.vite/build/index.chunk-lzaSYO3Q.js	otlpTracesEnabled		3p			1.22209.0	
+.vite/build/index.chunk-lzaSYO3Q.js	otlpAttrMaxChars		3p			2.31226.0	
+.vite/build/index.chunk-lzaSYO3Q.js	dictationEnabled		3p	desktop	public-undocumented	1.44121.1	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceMaxTokensPerWindow		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceTokenWindowHours		3p	desktop		1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	coworkTabEnabled		3p			1.9659.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	isClaudeCodeForDesktopEnabled		3p,1p			1.2581.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	disableDesktopLocalSessions		3p	desktop	public-undocumented	@next	true
+.vite/build/index.chunk-lzaSYO3Q.js	sshHostAllowlist		3p	desktop		1.40609.0	null
+.vite/build/index.chunk-lzaSYO3Q.js	sshConfigs		3p	desktop	public-undocumented	@next	
+.vite/build/index.chunk-lzaSYO3Q.js	sshClientPath		3p	desktop		1.46388.1	aMe
+.vite/build/index.chunk-lzaSYO3Q.js	sshTransport		3p	desktop		1.52386.0	builtin
+.vite/build/index.chunk-lzaSYO3Q.js	codeAllowedRepositories		3p		public-undocumented	2.16120.0	null
+.vite/build/index.chunk-lzaSYO3Q.js	chatTabEnabled		3p	desktop		1.13576.0	
+.vite/build/index.chunk-lzaSYO3Q.js	chatAdvancedFileAnalysisEnabled		3p	desktop		1.14271.0	
+.vite/build/index.chunk-lzaSYO3Q.js	desktopHome		3p			1.52386.0	off
+.vite/build/index.chunk-lzaSYO3Q.js	isDesktopExtensionEnabled		3p,1p	desktop		1.2581.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	isDesktopExtensionDirectoryEnabled		1p			1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	isDesktopExtensionSignatureRequired		3p,1p	desktop		1.2581.0	true
+.vite/build/index.chunk-lzaSYO3Q.js	disableAutoUpdates		3p,1p			1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	autoUpdaterEnforcementHours		3p,1p			1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	updateViaUpdatesHost		3p			1.26832.0	
+.vite/build/index.chunk-lzaSYO3Q.js	releaseChannel		3p		internal-only	@next	staggered
+.vite/build/index.chunk-lzaSYO3Q.js	dangerousMaxVersion		3p		public-undocumented	2.110.0	
+.vite/build/index.chunk-lzaSYO3Q.js	disableFeatureDiscovery		3p			1.21459.0	true
+.vite/build/index.chunk-lzaSYO3Q.js	bootstrapEnabled		3p			1.10628.0	
+.vite/build/index.chunk-lzaSYO3Q.js	bootstrapUrl		3p			1.10628.0	
+.vite/build/index.chunk-lzaSYO3Q.js	bootstrapOidc		3p			1.10628.0	
+.vite/build/index.chunk-lzaSYO3Q.js	bootstrapHeaders		3p			1.32885.1	
+.vite/build/index.chunk-lzaSYO3Q.js	bootstrapHeadersHelper		3p			1.32885.1	
+.vite/build/index.chunk-lzaSYO3Q.js	trustBootstrapDelivery		3p			1.26832.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	relaunchEnforcementHours		3p			1.40609.0	
+.vite/build/index.chunk-lzaSYO3Q.js	configRecheckIntervalMinutes		3p			1.46388.1	
+.vite/build/index.chunk-lzaSYO3Q.js	disableLocalConfigCache		3p			2.7032.0	true
+.vite/build/index.chunk-lzaSYO3Q.js	modelDiscoveryEnabled		3p	desktop		1.8089.0	
+.vite/build/index.chunk-lzaSYO3Q.js	modelPrefer1mContext		3p			1.28929.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceModels		3p			1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	defaultModelEffort		3p			2.110.0	
+.vite/build/index.chunk-lzaSYO3Q.js	alwaysStartWithDefaultModel		3p			2.110.0	true
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceModelPricingEnabled		3p	desktop		1.37937.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceModelPricingMultiplier		3p	desktop		1.37937.0	
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceModelPricing		3p	desktop		1.37937.0	
+.vite/build/index.chunk-lzaSYO3Q.js	modelCatalogEnabled		3p			2.110.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	modelCatalogUrl		3p			2.110.0	https://model-catalog.invalid/unreadable
+.vite/build/index.chunk-lzaSYO3Q.js	deploymentOrganizationUuid		3p			1.2581.0	
+.vite/build/index.chunk-lzaSYO3Q.js	disableEssentialTelemetry		3p			1.2581.0	true
+.vite/build/index.chunk-lzaSYO3Q.js	disableNonessentialTelemetry		3p			1.2581.0	true
+.vite/build/index.chunk-lzaSYO3Q.js	disableNonessentialServices		3p			1.2581.0	true
+.vite/build/index.chunk-lzaSYO3Q.js	usageMetricsEnabled		3p		public-undocumented	1.46388.1	
+.vite/build/index.chunk-lzaSYO3Q.js	managedMcpServers						gOe
+.vite/build/index.chunk-lzaSYO3Q.js	mcpPersistentAlwaysAllowEnabled		3p			1.24012.9	false
+.vite/build/index.chunk-lzaSYO3Q.js	mcpScheduledTaskApprovalLifetimeDays		3p			2.7032.0	0
+.vite/build/index.chunk-lzaSYO3Q.js	claudeInChromeEnabled		3p	desktop	public-undocumented	1.34493.0	
+.vite/build/index.chunk-lzaSYO3Q.js	claudeInChromePasswordManagersEnabled		3p	desktop	public-undocumented	2.9939.2	
+.vite/build/index.chunk-lzaSYO3Q.js	isLocalDevMcpEnabled		3p,1p			1.2581.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	allowedPluginMcpServers		3p			2.2553.0	null
+.vite/build/index.chunk-lzaSYO3Q.js	deniedPluginMcpServers		3p			2.16120.0	null
+.vite/build/index.chunk-lzaSYO3Q.js	mcpToolTimeoutSec		3p	desktop		1.37937.0	
+.vite/build/index.chunk-lzaSYO3Q.js	disabledBuiltinTools		3p,1p	desktop		1.2581.0	null
+.vite/build/index.chunk-lzaSYO3Q.js	disableBundledSkills		3p,1p	desktop		1.15962.0	true
+.vite/build/index.chunk-lzaSYO3Q.js	skillCreationEnabled		3p			1.25927.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	scheduledTasksEnabled		3p			2.110.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	keepAwakeEnabled		3p			2.7032.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	developerModeEnabled		3p,1p			2.37337.1	false
+.vite/build/index.chunk-lzaSYO3Q.js	builtinToolPolicy		3p,1p			1.8089.0	null
+.vite/build/index.chunk-lzaSYO3Q.js	toolPolicyEndpoint		3p		public-undocumented	2.31226.0	null
+.vite/build/index.chunk-lzaSYO3Q.js	autoModeEnabled		3p			1.10628.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	disableBypassPermissionsMode		3p			1.46388.1	true
+.vite/build/index.chunk-lzaSYO3Q.js	toolSearchEnabled		3p	desktop		1.21459.0	
+.vite/build/index.chunk-lzaSYO3Q.js	skipWebFetchPreflight		3p	desktop		1.37937.0	
+.vite/build/index.chunk-lzaSYO3Q.js	allowedWorkspaceFolders		3p,1p			1.2581.0	null
+.vite/build/index.chunk-lzaSYO3Q.js	blockReadsOutsideWorkingDirectories		3p,1p	desktop		1.46388.1	true
+.vite/build/index.chunk-lzaSYO3Q.js	disableWslSessions		3p,1p	desktop	public-undocumented	1.19367.0	
+.vite/build/index.chunk-lzaSYO3Q.js	claudeCodeProcessWrapperEnabled			desktop	public-undocumented		true
+.vite/build/index.chunk-lzaSYO3Q.js	relocateUncUserData		1p			1.32352.0	
+.vite/build/index.chunk-lzaSYO3Q.js	coworkEgressAllowedHosts		3p	desktop		1.2581.0	null
+.vite/build/index.chunk-lzaSYO3Q.js	egressProxyUrl		3p,1p			1.44121.1	
+.vite/build/index.chunk-lzaSYO3Q.js	egressProxyPacUrl		3p,1p			1.44121.1	
+.vite/build/index.chunk-lzaSYO3Q.js	coworkEDRIntegration		3p,1p	desktop	public-undocumented	2.16120.0	
+.vite/build/index.chunk-lzaSYO3Q.js	coworkEDRIntegrationVendor		3p,1p	desktop	public-undocumented	2.16120.0	
+.vite/build/index.chunk-lzaSYO3Q.js	coworkFileReadCheck		3p		public-undocumented	2.37337.1	null
+.vite/build/index.chunk-lzaSYO3Q.js	coworkVmIpv6Enabled		3p	desktop		1.52386.0	
+.vite/build/index.chunk-lzaSYO3Q.js	secureVmFeaturesEnabled		1p	desktop		1.2581.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	hardwareBuddyEnabled		1p	desktop		1.18286.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	quickWriteEnabled		1p		public-undocumented	2.26454.0	
+.vite/build/index.chunk-lzaSYO3Q.js	requireCoworkFullVmSandbox		1p	desktop		1.2581.0	true
+.vite/build/index.chunk-lzaSYO3Q.js	endUserAttribution		3p			1.25927.0	false
+.vite/build/index.chunk-lzaSYO3Q.js	userContentRendererUrl		3p			1.24012.0	
+.vite/build/index.chunk-lzaSYO3Q.js	organizationInstructions		3p	desktop		1.37937.0	
+.vite/build/index.chunk-lzaSYO3Q.js	disableDeploymentModeChooser		3p			1.3834.0	true
+.vite/build/index.chunk-lzaSYO3Q.js	forceLoginOrgUUID		1p			1.2581.0	[]
+.vite/build/index.chunk-lzaSYO3Q.js	disableMultiAccount		1p		public-undocumented	1.46388.1	true
+.vite/build/index.chunk-lzaSYO3Q.js	loginSsoOrgDomain		1p			1.10628.0	
+.vite/build/index.chunk-lzaSYO3Q.js	importThirdPartyHistoryIntoOrgUUID		1p		public-undocumented	2.2553.0	
+.vite/build/index.chunk-lzaSYO3Q.js	disableDeepLinkRegistration		3p			1.6889.0	true
+.vite/build/index.chunk-lzaSYO3Q.js	disableConnectorSignInInApp		1p		public-undocumented	2.26454.0	true
+.vite/build/index.chunk-lzaSYO3Q.js	microsoftAuthBroker						disabled
+.vite/build/index.chunk-lzaSYO3Q.js	microsoftAuthDefaultAccount		3p			2.26454.0	disabled
+.vite/build/index.chunk-lzaSYO3Q.js	allowOptionalClientAuth		3p		public-undocumented	1.17377.1	
+.vite/build/index.chunk-lzaSYO3Q.js	deploymentDisplayName		3p			1.24012.0	
+.vite/build/index.chunk-lzaSYO3Q.js	deploymentDisplaySubtitle		3p			1.24012.0	
+.vite/build/index.chunk-lzaSYO3Q.js	disableConfigDeprecationWarnings		3p,1p			1.40609.0	
+.vite/build/index.chunk-lzaSYO3Q.js	claudeAiImport		3p			1.10628.0	
+.vite/build/index.chunk-lzaSYO3Q.js	banner		1p,3p			1.7196.0	
+.vite/build/index.chunk-lzaSYO3Q.js	entraClientId		3p			@next	
+.vite/build/index.chunk-lzaSYO3Q.js	entraAzureCloud		3p			@next	
+.vite/build/index.chunk-lzaSYO3Q.js	entraScope		3p			@next	
+.vite/build/index.chunk-lzaSYO3Q.js	officeDisabledHosts		3p			@next	null
+.vite/build/index.chunk-lzaSYO3Q.js	officeDisabledFeatures		3p			@next	null
+.vite/build/index.chunk-lzaSYO3Q.js	officeAccessPolicies		3p			@next	CPe
+.vite/build/index.chunk-lzaSYO3Q.js	builtinBrowserEnabled		3p	desktop		2.2553.0	
+.vite/build/index.chunk-lzaSYO3Q.js	builtinBrowserDefaultDomainPolicy		3p	desktop		2.2553.0	block
+.vite/build/index.chunk-lzaSYO3Q.js	builtinBrowserAllowedDomains		3p	desktop		2.2553.0	null
+.vite/build/index.chunk-lzaSYO3Q.js	builtinBrowserBlockedDomains		3p	desktop		2.2553.0	null
+.vite/build/index.chunk-lzaSYO3Q.js	claudeCodeSettings		3p		public-undocumented	@next	
+.vite/build/index.chunk-lzaSYO3Q.js	chatSessionRetentionDays		3p			1.52386.0	
+.vite/build/index.chunk-lzaSYO3Q.js	coworkSessionRetentionDays		3p			1.52386.0	
+.vite/build/index.chunk-lzaSYO3Q.js	codeSessionRetentionDays		3p			1.52386.0	
+.vite/build/index.chunk-lzaSYO3Q.js	sessionRetentionHold		3p			1.52386.0	true
+.vite/build/index.chunk-lzaSYO3Q.js	inferenceProvider		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceCustomHeaders		3p	desktop		1.8089.0	
+.vite/build/index.pre.js	inferenceSessionLifetimeSec		3p	desktop		1.14271.0	
+.vite/build/index.pre.js	inferenceCredentialHelper		3p			1.2581.0	
+.vite/build/index.pre.js	inferenceCredentialHelperTtlSec		3p			1.2581.0	
+.vite/build/index.pre.js	inferenceCredentialHelperTimeoutSec		3p			1.8089.0	
+.vite/build/index.pre.js	inferenceCredentialHelperSilentRefreshEnabled		3p			1.10628.0	false
+.vite/build/index.pre.js	inferenceBedrockProfile		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceBedrockAwsDir		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceBedrockAwsCliPath		3p	desktop		1.13576.0	
+.vite/build/index.pre.js	inferenceBedrockRegion		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceBedrockBaseUrl		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceBedrockBearerToken		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceBedrockProfile						
+.vite/build/index.pre.js	inferenceBedrockAwsDir						
+.vite/build/index.pre.js	inferenceBedrockAwsCliPath						
+.vite/build/index.pre.js	inferenceBedrockRegion						
+.vite/build/index.pre.js	inferenceCredentialHelperWindows		3p			2.2553.0	
+.vite/build/index.pre.js	inferenceCredentialHelperArgs		3p			2.110.0	
+.vite/build/index.pre.js	inferenceGatewayAuthScheme		3p	desktop		1.3036.0	
+.vite/build/index.pre.js	inferenceGatewayApiKey		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceIdpAuthFlow		3p			2.7032.0	
+.vite/build/index.pre.js	inferenceIdpOidc		3p			2.7032.0	
+.vite/build/index.pre.js	inferenceGatewayOidcAuthFlow		3p	desktop		1.25927.0	
+.vite/build/index.pre.js	inferenceGatewayOidc		3p	desktop		1.6889.0	
+.vite/build/index.pre.js	inferenceGatewayBaseUrl		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceStreamIdleTimeoutSec		3p	desktop		1.44121.1	
+.vite/build/index.pre.js	inferenceGatewayManagedClaudeCode		3p	desktop	public-undocumented	2.9939.2	false
+.vite/build/index.pre.js	inferenceAnthropicApiKey		3p	desktop		1.8089.0	
+.vite/build/index.pre.js	inferenceBedrockSsoStartUrl		3p	desktop		1.6259.0	
+.vite/build/index.pre.js	inferenceBedrockSsoRegion		3p	desktop		1.6259.0	
+.vite/build/index.pre.js	inferenceBedrockSsoAccountId		3p	desktop		1.6259.0	
+.vite/build/index.pre.js	inferenceBedrockSsoRoleName		3p	desktop		1.6259.0	
+.vite/build/index.pre.js	inferenceBedrockServiceTier		3p	desktop		1.5186.0	
+.vite/build/index.pre.js	inferenceBedrockWebIdentityRoleArn		3p			@next	
+.vite/build/index.pre.js	inferenceVertexOAuthClientId		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceVertexOAuthClientSecret		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceVertexOAuthScopes		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceVertexOAuthLoginHint		3p	desktop		1.12603.0	
+.vite/build/index.pre.js	inferenceVertexWorkforceAudience		3p	desktop		1.10628.0	
+.vite/build/index.pre.js	inferenceVertexWorkforceUserProject		3p	desktop		1.10628.0	
+.vite/build/index.pre.js	inferenceVertexWorkforceAuthFlow		3p	desktop		1.25927.0	
+.vite/build/index.pre.js	inferenceVertexWorkforceOidc		3p	desktop		1.10628.0	
+.vite/build/index.pre.js	inferenceVertexCredentialsFile		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceVertexProjectId		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceVertexRegion		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceVertexBaseUrl		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceFoundryApiKey		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceFoundryTenantId		3p	desktop		1.9255.0	
+.vite/build/index.pre.js	inferenceFoundryClientId		3p	desktop		1.9255.0	
+.vite/build/index.pre.js	inferenceFoundryAuthFlow		3p	desktop		1.19367.0	
+.vite/build/index.pre.js	inferenceFoundryResource		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceFoundryBaseUrl		3p	desktop		2.110.0	
+.vite/build/index.pre.js	inferenceCredentialKind		3p			1.8555.0	
+.vite/build/index.pre.js	selfHostedToken		3p	selfHosted	public-undocumented	2.16120.0	
+.vite/build/index.pre.js	selfHostedUrl		3p	selfHosted	public-undocumented	2.16120.0	
+.vite/build/index.pre.js	skillBundles		3p			@next	
+.vite/build/index.pre.js	organizationPluginsUrl		3p	desktop	public-undocumented	1.10628.0	
+.vite/build/index.pre.js	orgPluginSettings		3p			1.8089.0	_F
+.vite/build/index.pre.js	allowedPluginMarketplaces		3p			1.17377.1	null
+.vite/build/index.pre.js	sharingEndpoint		3p		public-undocumented	2.9939.2	
+.vite/build/index.pre.js	userPluginMarketplacesEnabled		3p			1.37937.0	false
+.vite/build/index.pre.js	userPluginUploadsEnabled		3p			1.37937.0	false
+.vite/build/index.pre.js	otlpEndpoint		3p			1.2581.0	
+.vite/build/index.pre.js	otlpProtocol		3p			1.2581.0	
+.vite/build/index.pre.js	otlpHeaders		3p			1.2581.0	
+.vite/build/index.pre.js	otlpAuthMode		3p			1.30096.1	
+.vite/build/index.pre.js	otlpHeadersHelper		3p			1.30096.1	
+.vite/build/index.pre.js	otlpResourceAttributes		3p			1.5354.0	
+.vite/build/index.pre.js	otlpDesktopLogLevel		3p			1.9255.0	
+.vite/build/index.pre.js	otlpContentCapture		3p,1p			1.15962.0	null
+.vite/build/index.pre.js	otlpTracesEnabled		3p			1.22209.0	
+.vite/build/index.pre.js	otlpAttrMaxChars		3p			2.31226.0	
+.vite/build/index.pre.js	dictationEnabled		3p	desktop	public-undocumented	1.44121.1	
+.vite/build/index.pre.js	inferenceMaxTokensPerWindow		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	inferenceTokenWindowHours		3p	desktop		1.2581.0	
+.vite/build/index.pre.js	coworkTabEnabled		3p			1.9659.0	false
+.vite/build/index.pre.js	isClaudeCodeForDesktopEnabled		3p,1p			1.2581.0	false
+.vite/build/index.pre.js	disableDesktopLocalSessions		3p	desktop	public-undocumented	@next	true
+.vite/build/index.pre.js	sshHostAllowlist		3p	desktop		1.40609.0	null
+.vite/build/index.pre.js	sshConfigs		3p	desktop	public-undocumented	@next	
+.vite/build/index.pre.js	sshClientPath		3p	desktop		1.46388.1	RB
+.vite/build/index.pre.js	sshTransport		3p	desktop		1.52386.0	builtin
+.vite/build/index.pre.js	codeAllowedRepositories		3p		public-undocumented	2.16120.0	null
+.vite/build/index.pre.js	chatTabEnabled		3p	desktop		1.13576.0	
+.vite/build/index.pre.js	chatAdvancedFileAnalysisEnabled		3p	desktop		1.14271.0	
+.vite/build/index.pre.js	desktopHome		3p			1.52386.0	off
+.vite/build/index.pre.js	isDesktopExtensionEnabled		3p,1p	desktop		1.2581.0	false
+.vite/build/index.pre.js	isDesktopExtensionDirectoryEnabled		1p			1.2581.0	
+.vite/build/index.pre.js	isDesktopExtensionSignatureRequired		3p,1p	desktop		1.2581.0	true
+.vite/build/index.pre.js	disableAutoUpdates		3p,1p			1.2581.0	
+.vite/build/index.pre.js	autoUpdaterEnforcementHours		3p,1p			1.2581.0	
+.vite/build/index.pre.js	updateViaUpdatesHost		3p			1.26832.0	
+.vite/build/index.pre.js	releaseChannel		3p		internal-only	@next	staggered
+.vite/build/index.pre.js	dangerousMaxVersion		3p		public-undocumented	2.110.0	
+.vite/build/index.pre.js	disableFeatureDiscovery		3p			1.21459.0	true
+.vite/build/index.pre.js	bootstrapEnabled		3p			1.10628.0	
+.vite/build/index.pre.js	bootstrapUrl		3p			1.10628.0	
+.vite/build/index.pre.js	bootstrapOidc		3p			1.10628.0	
+.vite/build/index.pre.js	bootstrapHeaders		3p			1.32885.1	
+.vite/build/index.pre.js	bootstrapHeadersHelper		3p			1.32885.1	
+.vite/build/index.pre.js	trustBootstrapDelivery		3p			1.26832.0	false
+.vite/build/index.pre.js	relaunchEnforcementHours		3p			1.40609.0	
+.vite/build/index.pre.js	configRecheckIntervalMinutes		3p			1.46388.1	
+.vite/build/index.pre.js	disableLocalConfigCache		3p			2.7032.0	true
+.vite/build/index.pre.js	modelDiscoveryEnabled		3p	desktop		1.8089.0	
+.vite/build/index.pre.js	modelPrefer1mContext		3p			1.28929.0	
+.vite/build/index.pre.js	inferenceModels		3p			1.2581.0	
+.vite/build/index.pre.js	defaultModelEffort		3p			2.110.0	
+.vite/build/index.pre.js	alwaysStartWithDefaultModel		3p			2.110.0	true
+.vite/build/index.pre.js	inferenceModelPricingEnabled		3p	desktop		1.37937.0	
+.vite/build/index.pre.js	inferenceModelPricingMultiplier		3p	desktop		1.37937.0	
+.vite/build/index.pre.js	inferenceModelPricing		3p	desktop		1.37937.0	
+.vite/build/index.pre.js	modelCatalogEnabled		3p			2.110.0	false
+.vite/build/index.pre.js	modelCatalogUrl		3p			2.110.0	https://model-catalog.invalid/unreadable
+.vite/build/index.pre.js	deploymentOrganizationUuid		3p			1.2581.0	
+.vite/build/index.pre.js	disableEssentialTelemetry		3p			1.2581.0	true
+.vite/build/index.pre.js	disableNonessentialTelemetry		3p			1.2581.0	true
+.vite/build/index.pre.js	disableNonessentialServices		3p			1.2581.0	true
+.vite/build/index.pre.js	usageMetricsEnabled		3p		public-undocumented	1.46388.1	
+.vite/build/index.pre.js	managedMcpServers						nL
+.vite/build/index.pre.js	mcpPersistentAlwaysAllowEnabled		3p			1.24012.9	false
+.vite/build/index.pre.js	mcpScheduledTaskApprovalLifetimeDays		3p			2.7032.0	0
+.vite/build/index.pre.js	claudeInChromeEnabled		3p	desktop	public-undocumented	1.34493.0	
+.vite/build/index.pre.js	claudeInChromePasswordManagersEnabled		3p	desktop	public-undocumented	2.9939.2	
+.vite/build/index.pre.js	isLocalDevMcpEnabled		3p,1p			1.2581.0	false
+.vite/build/index.pre.js	allowedPluginMcpServers		3p			2.2553.0	null
+.vite/build/index.pre.js	deniedPluginMcpServers		3p			2.16120.0	null
+.vite/build/index.pre.js	mcpToolTimeoutSec		3p	desktop		1.37937.0	
+.vite/build/index.pre.js	disabledBuiltinTools		3p,1p	desktop		1.2581.0	null
+.vite/build/index.pre.js	disableBundledSkills		3p,1p	desktop		1.15962.0	true
+.vite/build/index.pre.js	skillCreationEnabled		3p			1.25927.0	false
+.vite/build/index.pre.js	scheduledTasksEnabled		3p			2.110.0	false
+.vite/build/index.pre.js	keepAwakeEnabled		3p			2.7032.0	false
+.vite/build/index.pre.js	developerModeEnabled		3p,1p			2.37337.1	false
+.vite/build/index.pre.js	builtinToolPolicy		3p,1p			1.8089.0	null
+.vite/build/index.pre.js	toolPolicyEndpoint		3p		public-undocumented	2.31226.0	null
+.vite/build/index.pre.js	autoModeEnabled		3p			1.10628.0	false
+.vite/build/index.pre.js	disableBypassPermissionsMode		3p			1.46388.1	true
+.vite/build/index.pre.js	toolSearchEnabled		3p	desktop		1.21459.0	
+.vite/build/index.pre.js	skipWebFetchPreflight		3p	desktop		1.37937.0	
+.vite/build/index.pre.js	allowedWorkspaceFolders		3p,1p			1.2581.0	null
+.vite/build/index.pre.js	blockReadsOutsideWorkingDirectories		3p,1p	desktop		1.46388.1	true
+.vite/build/index.pre.js	disableWslSessions		3p,1p	desktop	public-undocumented	1.19367.0	
+.vite/build/index.pre.js	claudeCodeProcessWrapperEnabled			desktop	public-undocumented		true
+.vite/build/index.pre.js	relocateUncUserData		1p			1.32352.0	
+.vite/build/index.pre.js	coworkEgressAllowedHosts		3p	desktop		1.2581.0	null
+.vite/build/index.pre.js	egressProxyUrl		3p,1p			1.44121.1	
+.vite/build/index.pre.js	egressProxyPacUrl		3p,1p			1.44121.1	
+.vite/build/index.pre.js	coworkEDRIntegration		3p,1p	desktop	public-undocumented	2.16120.0	
+.vite/build/index.pre.js	coworkEDRIntegrationVendor		3p,1p	desktop	public-undocumented	2.16120.0	
+.vite/build/index.pre.js	coworkFileReadCheck		3p		public-undocumented	2.37337.1	null
+.vite/build/index.pre.js	coworkVmIpv6Enabled		3p	desktop		1.52386.0	
+.vite/build/index.pre.js	secureVmFeaturesEnabled		1p	desktop		1.2581.0	false
+.vite/build/index.pre.js	hardwareBuddyEnabled		1p	desktop		1.18286.0	false
+.vite/build/index.pre.js	quickWriteEnabled		1p		public-undocumented	2.26454.0	
+.vite/build/index.pre.js	requireCoworkFullVmSandbox		1p	desktop		1.2581.0	true
+.vite/build/index.pre.js	endUserAttribution		3p			1.25927.0	false
+.vite/build/index.pre.js	userContentRendererUrl		3p			1.24012.0	
+.vite/build/index.pre.js	organizationInstructions		3p	desktop		1.37937.0	
+.vite/build/index.pre.js	disableDeploymentModeChooser		3p			1.3834.0	true
+.vite/build/index.pre.js	forceLoginOrgUUID		1p			1.2581.0	[]
+.vite/build/index.pre.js	disableMultiAccount		1p		public-undocumented	1.46388.1	true
+.vite/build/index.pre.js	loginSsoOrgDomain		1p			1.10628.0	
+.vite/build/index.pre.js	importThirdPartyHistoryIntoOrgUUID		1p		public-undocumented	2.2553.0	
+.vite/build/index.pre.js	disableDeepLinkRegistration		3p			1.6889.0	true
+.vite/build/index.pre.js	disableConnectorSignInInApp		1p		public-undocumented	2.26454.0	true
+.vite/build/index.pre.js	microsoftAuthBroker						disabled
+.vite/build/index.pre.js	microsoftAuthDefaultAccount		3p			2.26454.0	disabled
+.vite/build/index.pre.js	allowOptionalClientAuth		3p		public-undocumented	1.17377.1	
+.vite/build/index.pre.js	deploymentDisplayName		3p			1.24012.0	
+.vite/build/index.pre.js	deploymentDisplaySubtitle		3p			1.24012.0	
+.vite/build/index.pre.js	disableConfigDeprecationWarnings		3p,1p			1.40609.0	
+.vite/build/index.pre.js	claudeAiImport		3p			1.10628.0	
+.vite/build/index.pre.js	banner		1p,3p			1.7196.0	
+.vite/build/index.pre.js	entraClientId		3p			@next	
+.vite/build/index.pre.js	entraAzureCloud		3p			@next	
+.vite/build/index.pre.js	entraScope		3p			@next	
+.vite/build/index.pre.js	officeDisabledHosts		3p			@next	null
+.vite/build/index.pre.js	officeDisabledFeatures		3p			@next	null
+.vite/build/index.pre.js	officeAccessPolicies		3p			@next	aU
+.vite/build/index.pre.js	builtinBrowserEnabled		3p	desktop		2.2553.0	
+.vite/build/index.pre.js	builtinBrowserDefaultDomainPolicy		3p	desktop		2.2553.0	block
+.vite/build/index.pre.js	builtinBrowserAllowedDomains		3p	desktop		2.2553.0	null
+.vite/build/index.pre.js	builtinBrowserBlockedDomains		3p	desktop		2.2553.0	null
+.vite/build/index.pre.js	claudeCodeSettings		3p		public-undocumented	@next	
+.vite/build/index.pre.js	chatSessionRetentionDays		3p			1.52386.0	
+.vite/build/index.pre.js	coworkSessionRetentionDays		3p			1.52386.0	
+.vite/build/index.pre.js	codeSessionRetentionDays		3p			1.52386.0	
+.vite/build/index.pre.js	sessionRetentionHold		3p			1.52386.0	true
+.vite/build/index.pre.js	inferenceProvider		3p	desktop		1.2581.0	
