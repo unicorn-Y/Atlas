@@ -1,0 +1,8 @@
+package/cli-wrapper.cjs  4997 bytes  SHA256 61ad63033d9c8155d5e60a29f45dc4665afa07631c0b108e62cc83bf45ba490e
+package/install.cjs      8375 bytes  SHA256 32a7b2429d7447c5aa043e383bcf9a72e0b233dff66336ea4a5b32531da981ad
+package/bin/claude.exe    500 bytes  SHA256 6d7abae055d3b598281300a6c835086dec81bf3048f8a2294c5d3e50c8830d7b
+package/package.json     1476 bytes  SHA256 7aefd02c45ca3d00fc7ac15bcb378ac3d30f37c1709dbed1190b3f4fa914ea50
+package/LICENSE.md       147 bytes  SHA256 8ce94b9478bb9868f9641f818e06cd722fbe55d4c22e2d2ed11971b20146173a
+package/README.md       2037 bytes  SHA256 da7cf15ce4e35bad6a107acd6a36b4fe052083068bb9e564b1aa3f2078b5d0ce
+package/sdk-tools.d.ts 171863 bytes  SHA256 25fa8caa18dacde752ebede11d55dccfc5f8c6ff011478cf92da49420e2690dc
+

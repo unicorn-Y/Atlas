@@ -25,3 +25,12 @@
 
 ## Decision
 Preserve Atlas as the sole runtime/memory owner. Use Claude externally through supported boundaries, translate typed events without throwing away provenance, and implement missing Atlas-native durability. For native Claude mechanisms, defer code-level porting decisions until **actual binary evidence** is extracted; official docs establish user behavior but not internal architecture or reuse rights.
+
+## C6 — Workflow and task semantics from the shipped SDK types
+- The core package's `sdk-tools.d.ts:772-812,2802-2900,4005-4038` publishes agent isolation, addressable background agents, explicit task dependencies/status, and resumable Workflow script/run identifiers. These are useful interop-contract candidates for comparison with Atlas `TodoStore`, group/task storage, subagent worktrees and run lifecycle.
+- The declarations are bundled SDK API types, not source under an OSI license and not proof the native CLI calls each interface. The package license is all-rights-reserved / subject to Anthropic legal agreements; copy neither code nor type text into Atlas. Reimplement compatible concepts from observed behavior only if product requirements justify them.
+- High-value verification: establish whether Atlas's task store needs owner/dependency links and whether resumed workflow caching requires idempotency records. First obtain an actual Claude API/event sample; do not infer user-facing guarantees solely from TypeScript comments.
+
+## C7 — Windows supervisor feasibility and platform boundary
+- The actual PE imports Windows console, process, named-pipe and job APIs, while the bundle includes explicit diagnostics that self-hosted lifecycle hooks/orchestrator mode require POSIX execution. This identifies a platform-specific boundary to investigate; imported Win32 symbols are not permission or evidence to copy a supervisor design.
+- Native executable remains proprietary. Evidence is restricted to hashes, metadata, short literal names, offsets and independently written analysis; no decompiled code is redistributed.

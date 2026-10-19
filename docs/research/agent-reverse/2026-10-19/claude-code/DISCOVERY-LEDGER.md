@@ -1,6 +1,6 @@
 # Discovery ledger — Claude Code CLI 2.1.302
 
-Evidence: **S** = exact Claude package code/symbol, **R** = observed this 2.1.302 runtime, **D** = Anthropic documentation, **I** = reasoned inference, **U** = needs verification. **Zero Claude S/R** at this stage: release-asset bytes were inaccessible in this session. None of the D items assert that a specific 2.1.302 executable registers the command. Affected command probes are in EXTRACTION-REQUEST.md. Atlas counterparts have independent source anchors in ATLAS-GAP.md.
+Evidence: **S** = exact Claude package code/symbol, **R** = observed this 2.1.302 runtime, **D** = Anthropic documentation, **I** = reasoned inference, **U** = needs verification. The 2.1.302 archives and Windows PE are now available and hash-verified; see `evidence/`. R is restricted to version/help probes. Native strings are static S anchors, not proof of callable functions. Existing IDs remain stable; upgrades and added discoveries below are evidence deltas, not redefinitions. Atlas counterparts have independent source anchors in ATLAS-GAP.md.
 
 | ID | Capability / mechanism to reverse | Current evidence | Why it matters and unlock |
 |---|---|---|---|
@@ -43,3 +43,35 @@ CLAUDE_CODE-003, -014, -015, -019, -020, -021, -024 are proactive expansion cand
 - https://code.claude.com/docs/zh-CN/commands — additional interactive command inventory
 
 **No attempt was made to impersonate authenticated usage or assert undocumented server internals.**
+
+## Evidence upgrades for existing IDs (pinned executable only)
+
+| Existing IDs | New evidence | Still unknown |
+|---|---|---|
+| `CLAUDE_CODE-001` | **R:** native `--help` registers interactive default and `-p/--print`; structured output flags appear in actual help. | Generated stream event schema and prompt execution. |
+| `CLAUDE_CODE-002` | **R/S:** help advertises `--resume`, `--continue`, `--fork-session`; bundle string cluster includes `--session-id`, `transcriptPath`, `launch`, `fork`. | Identity/ancestry write semantics. |
+| `CLAUDE_CODE-003`, `-021` | **R/S:** help registers `agents`, `attach`, `logs`, `stop`, `respawn`, `rm`, `daemon`; `agents --json/--all` and daemon service lifecycle options are concrete. Strings include lease/client schemas, claim frame, socket auth, stale-idle respawn, scheduling and respawn reason constants. | No service process was started; lease/reattach/recovery behavior remains unobserved. |
+| `CLAUDE_CODE-004`, `-005`, `-006`, `-019`, `-023` | **S:** embedded strings include `AgentTool`, `SendMessageTool`, agent/team context helpers, disk subagent enumeration and parent-child fields. **R:** dispatched-session CLI options expose model, effort, permission mode/restriction, settings sources, MCP and plugin directories; published SDK `AgentInput` describes background default, addressable `name`, and worktree/remote isolation. | No agent/team run, mailbox operation, event sample, or background-vs-foreground tool execution. |
+| `CLAUDE_CODE-007` | **S:** bundle includes named setup, stop-failure, subagent-start, task-created/completed, teammate-idle, user-prompt, and worktree hook helpers. | Ordering/blocking/error contracts not decoded or run. |
+| `CLAUDE_CODE-008`, `-009` | **R:** plugin marketplace lifecycle and MCP `serve` are in native help. **S:** tool registry chunk names include skills/goal/plugin/notification and MCP operations. | Config precedence, plugin hot reload and transport/auth behavior. |
+| `CLAUDE_CODE-010`, `-022` | **S:** stream/result/session/token-like names occur in bundle. | These are weak field/string hints; compaction, cache accounting, retry and fallback policy remain U. |
+| `CLAUDE_CODE-011` | **R:** dispatched agent help exposes restricted mode and permission defaults. **S:** permission parsing/change-guard helper names exist. | Actual permission decision path and tool-block event behavior. |
+| `CLAUDE_CODE-012`, `-020` | PE subsystem is console; Windows imports include ConPTY APIs; help confirms agent view/interactive session commands. | TUI render loop, keyboard behavior and accessibility fallbacks not observed. |
+| `CLAUDE_CODE-013` | **R:** `rm --help` exposes unpushed commit/worktree and force-remove-worktree options; SDK declares worktree isolation. | Actual checkpoint/rewind and worktree transaction semantics. |
+| `CLAUDE_CODE-014` | **S:** exact binary embeds explicit Windows restriction strings for self-hosted runner `--hooks-dir` and orchestrator lifecycle hooks. **R:** `gateway` is registered. | Runner/gateway/cloud service behavior is not observed. |
+| `CLAUDE_CODE-015` | **R:** actual help registers `import`, `gateway`, `ultrareview`, `auto-mode`, `purge`, `install`, `update`, `doctor` and `setup-token`, beyond earlier workflow examples. | Cloud review/gateway and authenticated state remain U. |
+| `CLAUDE_CODE-016` | **S/R:** exact native file hash/version, AMD64 console PE structure, 13 sections, 18 resources, Bun-compiled `.bun` payload and runtime version/help are confirmed. | Application code remains embedded; function graph not decompiled. |
+| `CLAUDE_CODE-017`, `-018`, `-024`, `-025` | **S:** tool/event names, `parent_tool_use_id`, `agent_id`, CLI command registry and SDK task/workflow schemas provide real evidence targets. | No real model turn, auth, structured output result, or exhaustive hidden/gated command inventory. |
+
+## Newly discovered from the package (stable new IDs)
+
+| ID | New observation | Evidence / boundary |
+|---|---|---|
+| CLAUDE_CODE-026 | npm install normally hardlinks/copies the platform binary over a tiny `bin/claude.exe` stub; manual CJS fallback instead spawns it and propagates signals/status | **S:** `install.cjs` and `cli-wrapper.cjs`; explains why installed and fallback process trees differ. |
+| CLAUDE_CODE-027 | Background-session supervisor exposes lease/claim/attach/detach and stale-idle respawn concepts, with explicit legacy/stall/upgrade reason identifiers | **S/R:** exact native string anchors plus matching CLI commands. Concrete lease state machine still U. |
+| CLAUDE_CODE-028 | Agent transcript discovery has disk helpers (`getSessionSubagentsDir`, `listSubagentIdsFromDisk`, `locateAgentTranscript`) and dynamic team context getters | **S:** bundle literals; file schema and lifecycle not observed. |
+| CLAUDE_CODE-029 | Bundled SDK defines resumable Workflow scripts: persisted script path, `resumeFromRunId`, same-session cached completed `agent()` calls when prompt/options are unchanged, and TaskStop-before-resume guidance | **S:** `sdk-tools.d.ts:2869-2900`; SDK type contract, not asserted as CLI call path. |
+| CLAUDE_CODE-030 | SDK task store has `pending/in_progress/completed`, `blocks`, `blockedBy`, optional owner, active-form spinner label and arbitrary metadata | **S:** `sdk-tools.d.ts:2802-2868,4005-4038`; existence in SDK declarations, not a captured persisted task file. |
+| CLAUDE_CODE-031 | Native CLI provides worktree-aware cleanup (`--discard-unpushed`, `--force-remove-worktree`) and service registration/uninstall controls | **R:** exact `rm --help` and `daemon --help` output; no destructive operation run. |
+| CLAUDE_CODE-032 | Windows build rejects POSIX lifecycle-hook runner `--hooks-dir` and orchestrator mode | **S:** literal diagnostic strings in native `.bun`; runtime failure path not executed. |
+| CLAUDE_CODE-033 | `gateway` and `ultrareview` are product-level, server-backed command surfaces hidden outside simple coding loop | **R:** native help labels them enterprise auth/telemetry gateway and cloud-hosted multi-agent review; backend is U. |

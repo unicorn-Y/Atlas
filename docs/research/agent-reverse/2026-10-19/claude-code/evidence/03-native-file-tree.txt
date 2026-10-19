@@ -1,0 +1,5 @@
+package/claude.exe       290211488 bytes  executable  SHA256 3ab075f78998efef8b87f491c2e4a39c309dddf44e51d0103eba4f3713d2a0ae
+package/package.json        272 bytes              SHA256 2196a1a1023c1de816db42f19d536f8ab0db38a5a7eb8dfeddbe10dc0a5ff69c
+package/LICENSE.md          148 bytes              SHA256 fe8260e23b045e5d1ce9c31d2dfe06a39ec9227a12b1bde4c8c6bcb50e9310c8
+package/README.md            150 bytes              SHA256 88b447ebed5c162732eb18e9bd51aed947841a82272225a636b84bfbef06eb55
+

@@ -1,7 +1,7 @@
 # Implementation traces — bounded by actual source
 
-## A. Native Claude 2.1.302 execution: NOT YET TRACEABLE
-Two official npm assets are identified and hash-pinned, but neither is a text codebase accessible to this runtime. The 29 KB core wrapper could be inspected after extraction, and the 132 MB platform native asset requires strings/disassembly/controlled command tracing. Do not reverse-infer internal algorithms from Anthropic docs. Required native traces after evidence upload:
+## A. Native Claude 2.1.302 execution: partial trace from exact packages
+The two pinned npm assets are now extracted and hashed; `evidence/` records bytes and bounded evidence. The Node wrapper-to-native launch path and the console command surface are directly established. The Bun-compiled application logic is not decompiled; do not infer control flow from a symbol string alone. Remaining native traces are:
 
 1. Entry executable -> command/flag dispatcher -> mode selection (interactive / -p / daemon / attach).
 2. Turn constructor -> model request/stream reader -> tool call parser -> permission/hook -> scheduler -> tool result -> next model turn -> stop.
@@ -10,7 +10,21 @@ Two official npm assets are identified and hash-pinned, but neither is a text co
 5. Transcript/log writer -> session ID -> fork/rewind -> compaction -> summary and budget accounting.
 6. Interactive state changes -> TUI rendering/diff/status; noninteractive stream-json full event envelopes.
 
-For each, publish decoded file/function/offset and exact short string evidence with confidence. **Nothing in this list is claimed already decoded.**
+For each remaining path, publish decoded file/function/offset and exact short string evidence with confidence. Only the wrapper/binary boundary and CLI registration have runtime evidence; there is still no completed model/tool invocation trace.
+
+### A1. Installed command to native CLI
+1. `package/package.json` lines 4-5,7-16,23-38 exposes `bin/claude=bin/claude.exe`; Node `>=22`, postinstall script, and platform-specific optional package versions are pinned at 2.1.302.
+2. `install.cjs:1-6,69-103,105-150,152-163,165-239` detects OS/arch, resolves `@anthropic-ai/claude-code-win32-x64/package.json`, then links/copies its `claude.exe` over the 500-byte placeholder. For normal install, npm's bin shim reaches that PE directly, so Node is not the resident process.
+3. If manually invoked, `cli-wrapper.cjs:50-78,83-125,131-155` resolves the optional package, `spawnSync`s the PE with inherited stdio and `CLAUDE_CODE_INSTALLED_VIA_NPM_WRAPPER=1`, maps signal status to 128+signal, and returns process status.
+4. The PE SHA is `3ab075f78998efef8b87f491c2e4a39c309dddf44e51d0103eba4f3713d2a0ae`; PE header identifies AMD64 console subsystem. `claude.exe --version` returns `2.1.302 (Claude Code)`; `--help` exits 0 and emits 311 lines. This is observed binary execution, not a model turn.
+
+### A2. Observed CLI command and supervisor boundary
+Native help verifies the command parser exposes interactive/print mode, resume/fork flags, `agents`, attach/log/stop/respawn/rm, `daemon`, plugin, MCP, import, gateway and cloud ultrareview surfaces. `agents --json` is documented by the binary as machine-readable active sessions with optional completed-session inclusion; dispatch options supply model/effort/permission/settings/MCP/plugin choices. `daemon` help gives run/status/logs/uninstall/stop. No lifecycle mutator or daemon status was invoked.
+
+Static bundle strings (`06-native-string-index.jsonl`) include named supervisor/lease/auth/claim/respawn helpers, disk-backed subagent transcript lookup, team-context helpers, tool registry names and hook lifecycle helpers. They cluster in the `.bun` embedded payload and are corroborated by CLI commands, but their call relationships/argument fields are not resolved. Treat them as S-level code identifiers and U-level semantics.
+
+### A3. SDK declarations: separate public type contract
+The shipped `sdk-tools.d.ts` gives explicit child-agent isolation/model/name/background types (`AgentInput`, lines 772-812), task creation/status/owner/blocking types (2802-2868, 4005-4038) and resumable Workflow inputs/results (2869-2900, 4142+). This gives a real published contract for concepts related to delegation and workflows. The type file does not prove a standalone CLI code path or actual persisted object schema.
 
 ## B. Atlas actual primary agent loop (source S for Atlas ONLY)
 - core/atlas/agent/__init__.py:310 defines AgentOrchestrator; :761-870 packages RunRequest + RunCallbacks and delegates to execute -> phase runner. This is not an in-house clone of Claude Code's loop.
@@ -43,4 +57,4 @@ For each, publish decoded file/function/offset and exact short string evidence w
 - core/atlas/runtime/external_process.py:24-118 pipes subprocess I/O, supports pi-rpc and text only; :133-134 throws NotImplementedError for generic resume. Do not confuse this adapter with ACPBackend.
 
 ## E. What source alone does not prove
-No available Claude native function names/offsets, actual subprocess topology, mailbox parser, native events, intermediate terminal frames, TUI AST, compaction algorithm, model request routing or crash-recovery invariants have been observed. Likewise Atlas frontend components existing does not establish end-to-end parity. Extraction and controlled dynamic runs are the minimum next stage.
+Despite exact package and help evidence, no native executable function body/call graph, actual spawned daemon process tree, mailbox operation, native event trace, interactive terminal frame, compaction algorithm, authenticated model request routing, or crash-recovery invariant has been observed. PE imports like ConPTY/named pipes/Job Objects are runtime dependencies and do not prove product flow without call xrefs. Likewise Atlas frontend components existing does not establish end-to-end parity. A controlled synthetic authenticated run and a bytecode-aware call trace remain required.

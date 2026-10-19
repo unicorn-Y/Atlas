@@ -1,11 +1,15 @@
 # Evidence index and evidence boundaries
 
+## 2026-10-19 exact-package follow-up overrides the original extraction blocker
+
+The text below under E0/E3 records the earlier web-session state; it is **historical** and no longer describes this local Codex pass. Both cached release TGZs were SHA256/size verified, fully listed and extracted, and the native PE was inspected and invoked for isolated help/version probes. Current evidence is indexed in `evidence/INDEX.md`; the older D/U statements remain valid only for claims outside that package/help scope.
+
 ## E0 — fixed artifact provenance (collection snapshot, not binary analysis)
 - Source: unicorn-Y/Atlas, research/agent-reverse-dispatch-20261019, docs/research/agent-clients/2026-10-19/manifest.json and indexes/claude-codex-index.txt.
 - CLI core: claude-code-cli-core-ac1a6a3364.tgz, 2.1.302, 29,082 bytes, SHA256 **ac1a6a3364c467392bc40a8a405490e821575e3e858d3013b11258862c01dfc8**. Official npm URL https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-2.1.302.tgz ; release URL https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/claude-code-cli-core-ac1a6a3364.tgz.
 - CLI native: claude-code-cli-win32-x64-cd077f50f2.tgz, 2.1.302, 132,494,857 bytes, SHA256 **cd077f50f24f5155c28800a3658a58c89b5d1ccae2f95a2e096a16ab250a544d**. Official npm URL https://registry.npmjs.org/@anthropic-ai/claude-code-win32-x64/-/claude-code-win32-x64-2.1.302.tgz ; release URL https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/claude-code-cli-win32-x64-cd077f50f2.tgz.
-- Collector index says **7** core-package files and **4** platform-package files extracted. It does not publish their textual contents in this index. Release exists as archive listing; **this session did not fetch bytes or independently recompute hash**.
-- Local environment check: direct requests to registry.npmjs.org failed DNS resolution; GitHub connector explicitly rejects non-UTF-8 oversized binary. No fake unpack logs or binaries generated.
+- Collector index lists **7** core-package files and **4** platform-package files. Local Codex independently inspected all 11 members and their SHA256; see `evidence/01-archive-manifest.json`. Both archive hashes and exact lengths match the release manifest. The full native executable was unpacked only into local scratch and is not committed.
+- Earlier web-session network limitations did not apply to this local Windows follow-up. No hashes, extraction, disassembly, or runtime results were fabricated.
 
 ## E1 — Atlas main source snapshot (direct files read)
 HEAD verified via GitHub branch API: **aa6196f550098cc46081dc6db2c376cb87ddffa5**. Relative source links below point to main, so recheck exact SHA for future work.
@@ -47,9 +51,18 @@ Source URL prefix: https://github.com/unicorn-Y/Atlas/blob/aa6196f550098cc46081d
 7. https://code.claude.com/docs/zh-CN/commands — commands including /goal, /batch, /autofix-pr and /focus.
 Documentation can evolve independently of npm 2.1.302 and is **not native-S evidence**.
 
-## E3 — gap register / missing observations
-- **No:** core package.json and files read, platform binary name/PE header, native strings with offsets, unpacked program modules, registration map, disassembly, exact agent tool grammar, TUI frames, daemon socket protocol, native session schema, HTTP routing/wire captures, runtime testing, errors/stack traces.
-- **Reason:** release asset is available but current connector cannot materialize executable bytes; outbound DNS from container failed.
-- **Unlock:** run EXTRACTION-REQUEST.md on authorized local Windows Atlas environment. Preserve artifact SHA and exact asset paths, attach only text/JSON/redacted task logs; raw executable can remain at Release.
+## E3 — remaining gap register
+- **Resolved here:** core package metadata/wrapper, exact PE header/section/import/resource maps, bounded strings with byte offsets, native help registration, version/help execution.
+- **Still missing:** native disassembly/decompiled call graph, exact agent tool/event grammar, TUI frames, daemon socket protocol and runtime process tree, native session/task schema, HTTP routing/wire captures, authenticated model/agent turns, operation failures and crash recovery.
+- **Reason:** Bun-compiled code was not decompiled; model/daemon/agent operations require a controlled authenticated test or reliable native function analysis. A full PE inventory attempt exceeded the provider's 330-second analysis deadline; no partial result was treated as success.
+- **Unlock:** use a bytecode-aware Bun/Ghidra workflow on the pinned file SHA and a fresh synthetic project/account run without reading pre-existing profile or chat data. Keep all raw binaries/strings local; upload only bounded sanitized evidence.
 - **Scope excluded:** Claude Desktop/Cowork app.asar or its internal services, cloud server implementation, other products' source inferred as Claude's native code, authentication bypass/DRM and credentials.
-- **Coverage:** Atlas source inspected across orchestration/backend/session/UI/hooks/MCP/skills/daemon. Claude package first-hand coverage **0 files / 0 bytes**; static native source **S=0**, runtime **R=0**. Do not call this complete.
+- **Historical coverage line:** the prior web-only session had Claude package first-hand coverage 0 files/0 bytes, S=0, R=0. Current local package/help coverage is in E4 and supersedes that snapshot. This lane remains partial rather than complete.
+
+## E4 — local package and runtime evidence
+- `evidence/01-archive-manifest.json` — both verified archives, member inventory, size/type/executable/hash.
+- `evidence/02-core-file-tree.txt`, `03-native-file-tree.txt`, `04-package-metadata.md` — actual payload paths and install/runtime launcher chain.
+- `evidence/05-native-header.md` — PE structure, imports/resources; `06-native-string-index.jsonl` — selected byte-offset strings tied to executable SHA; `08-native-call-anchors.md` — symbol/module anchors and limits.
+- `evidence/07-native-registrations.md`, `11-cli-probes.md` — exact binary help and command exit/output summary.
+- `evidence/09-native-state-schema.md`, `10-unknowns.md` — bounded observed types/keys and remaining unknowns.
+- Current package evidence totals: 2 exact archives / 11 extracted members independently hashed; 19 curated native string offsets; 11 version/help commands exit 0. Code S exists for package/wrapper/PE/string/type facts. R exists only for binary version/help output. Agent operation R remains 0.

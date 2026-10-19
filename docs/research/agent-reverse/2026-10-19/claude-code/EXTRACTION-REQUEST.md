@@ -1,6 +1,8 @@
 # EXTRACTION REQUEST — execute mechanically on local Windows with Codex
 
-**Blocker:** This ChatGPT GitHub connector can read repository text but rejects the 132 MB native executable as binary; local container outbound npm DNS failed. This is a *targeted evidence collection request*, not a delegation of the research. Return a GitHub commit so this session can continue analyzing actual bytes-derived evidence.
+**Status: MECHANICAL PACKAGE COLLECTION RESOLVED; DYNAMIC/DECOMPILATION GATES REMAIN.** The original blocker statement immediately below records the prior web-session context and is historical. This request has now been executed against the exact pinned assets. Results are in `evidence/00-11*` and `evidence/INDEX.md`; see each file for precise scope. The remaining work is not another mechanical extraction: it is function-level Bun analysis and a controlled authenticated runtime sample, described in `evidence/10-unknowns.md`.
+
+**Historical original blocker:** This ChatGPT GitHub connector could read repository text but rejected the 132 MB native executable as binary; the earlier container could not reach npm. This was a targeted evidence collection request, not a delegation of the research.
 
 **Scope:** Claude Code 2.1.302 only. **DO NOT** inspect Claude Desktop/Cowork, Codex CLI, other products, user account data or unrelated packages. **DO NOT** modify Atlas product code or main. Create/use **research/agent-reverse-20261019-claude-code**, initially branched from the dispatch branch; write solely under docs/research/agent-reverse/2026-10-19/claude-code/evidence/.
 
@@ -15,6 +17,8 @@ Optional upstream sanity checks, *only if matching these SHA*: npm @anthropic-ai
 
 ## Step 0: branch isolation
 Use a **separate git worktree** based on origin/research/agent-reverse-20261019-claude-code. If already checked out somewhere, use that checkout; do not force-reset or overwrite other agents' files. Work in a temporary scratch directory outside the repository for archives and full extracted binaries. Only upload bounded sanitized text/JSON evidence; leave raw .tgz/.exe in Release or local scratch. Confirm HEAD and note commit in evidence/00-provenance.md.
+
+Completion record: isolated linked worktree `work/claude-code-lane`, baseline `18a280b25c4a49c8eb554e227a32e0fd7c58fe4b`; scratch stayed outside this checkout; no Atlas application code or raw archives were committed.
 
 ## Step 1: independently inspect real archives
 Download both release assets through authenticated gh release download or standard GET. Compute PowerShell Get-FileHash SHA256 and exact byte lengths; abort further analysis if either mismatches. Run tar -tzf against *both*. Extract to two separate scratch folders with tar -xzf, preserving paths. Generate evidence:

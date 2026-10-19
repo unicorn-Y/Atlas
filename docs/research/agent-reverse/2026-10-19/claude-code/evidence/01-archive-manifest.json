@@ -1,0 +1,34 @@
+{
+  "release": "agent-client-packages-20261019",
+  "version": "2.1.302",
+  "archive_verification": "local cached bytes, SHA256 and exact archive length independently recomputed before extraction",
+  "archives": [
+    {
+      "file": "claude-code-cli-core-ac1a6a3364.tgz",
+      "url": "https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/claude-code-cli-core-ac1a6a3364.tgz",
+      "size": 29082,
+      "sha256": "ac1a6a3364c467392bc40a8a405490e821575e3e858d3013b11258862c01dfc8",
+      "members": [
+        {"path":"package/cli-wrapper.cjs","size":4997,"type":"file","executable":false,"sha256":"61ad63033d9c8155d5e60a29f45dc4665afa07631c0b108e62cc83bf45ba490e"},
+        {"path":"package/install.cjs","size":8375,"type":"file","executable":false,"sha256":"32a7b2429d7447c5aa043e383bcf9a72e0b233dff66336ea4a5b32531da981ad"},
+        {"path":"package/bin/claude.exe","size":500,"type":"file","executable":false,"sha256":"6d7abae055d3b598281300a6c835086dec81bf3048f8a2294c5d3e50c8830d7b"},
+        {"path":"package/package.json","size":1476,"type":"file","executable":false,"sha256":"7aefd02c45ca3d00fc7ac15bcb378ac3d30f37c1709dbed1190b3f4fa914ea50"},
+        {"path":"package/LICENSE.md","size":147,"type":"file","executable":false,"sha256":"8ce94b9478bb9868f9641f818e06cd722fbe55d4c22e2d2ed11971b20146173a"},
+        {"path":"package/README.md","size":2037,"type":"file","executable":false,"sha256":"da7cf15ce4e35bad6a107acd6a36b4fe052083068bb9e564b1aa3f2078b5d0ce"},
+        {"path":"package/sdk-tools.d.ts","size":171863,"type":"file","executable":false,"sha256":"25fa8caa18dacde752ebede11d55dccfc5f8c6ff011478cf92da49420e2690dc"}
+      ]
+    },
+    {
+      "file": "claude-code-cli-win32-x64-cd077f50f2.tgz",
+      "url": "https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/claude-code-cli-win32-x64-cd077f50f2.tgz",
+      "size": 132494857,
+      "sha256": "cd077f50f24f5155c28800a3658a58c89b5d1ccae2f95a2e096a16ab250a544d",
+      "members": [
+        {"path":"package/claude.exe","size":290211488,"type":"file","executable":true,"sha256":"3ab075f78998efef8b87f491c2e4a39c309dddf44e51d0103eba4f3713d2a0ae"},
+        {"path":"package/package.json","size":272,"type":"file","executable":false,"sha256":"2196a1a1023c1de816db42f19d536f8ab0db38a5a7eb8dfeddbe10dc0a5ff69c"},
+        {"path":"package/LICENSE.md","size":148,"type":"file","executable":false,"sha256":"fe8260e23b045e5d1ce9c31d2dfe06a39ec9227a12b1bde4c8c6bcb50e9310c8"},
+        {"path":"package/README.md","size":150,"type":"file","executable":false,"sha256":"88b447ebed5c162732eb18e9bd51aed947841a82272225a636b84bfbef06eb55"}
+      ]
+    }
+  ]
+}
