@@ -1,0 +1,14 @@
+# Atlas implementation backlog derived from the Claude Desktop lane
+
+Baseline: `origin/main` at `aa6196f550098cc46081dc6db2c376cb87ddffa5`. This is research guidance only; no product source was changed. Claude package code is closed-source, so do not copy its implementation. Any reusable implementation must be independently designed; no third-party license grants reuse of this bundle.
+
+| Priority | Observed mechanism / evidence | Atlas main anchors | Classification | Research implication / candidate anchor |
+|---|---|---|---|---|
+| P0 | Scheduled task artifact click reaches guarded handler and scheduler; G4 still unobserved | `core/atlas/scheduler/__init__.py`; `core/atlas/runtime/hub.py`; `frontend/src/renderer/pages/AutomationPage.tsx` (verify exact entry before any implementation) | Mechanism differs; Atlas has scheduler, no equivalence claim | Trace whether user-visible task card can run a persisted schedule as an explicit user action and retain task/session linkage. No coding authorized in this lane. |
+| P0 | Local VM start/stop/process API uses system-owned named pipe and a Hyper-V/gvisor guest | `core/atlas/api/tools_router.py:92-130`; host terminal launches process locally; Atlas main lacks evidenced equivalent Windows guest service | Real architecture difference | If isolation/host delegation is needed, first design host identity, authorization, framed RPC, idempotency, and lifecycle; do not transplant binary/protocol assumptions. |
+| P1 | Bulk renderer bridge is generated/dynamic, with only one representative end-to-end operation paired | `frontend/src/renderer/runtimeEvents.ts`; `core/atlas/api/runtime_ws_router.py` | Atlas's known run APIs are more explicit; no parity judgment for untraced Claude chat path | Research durable event schema and capability-discovery strategy before proposing event handling changes. |
+| P1 | Artifact MCP bridge applies per-tool managed policy and destructive confirmation; narrow remote read cache | `core/atlas/tools/mcp_client.py:171-193`; `core/atlas/api/runtime_ws_router.py:141-152`; `core/atlas/agent/tool_node.py:240+` | Atlas has MCP and approval policy but exact scope/lifetime differs or remains unknown | Compare policy origin, remembered approval scope, cancellation, and result persistence using source and synthetic runtime traces. |
+| P1 | Main owns VM status/event callbacks; session/task DB and recovery tail are unknown | `core/atlas/api/runtime.py:108-152`; `core/atlas/runtime/run_drive.py:1420-1428`; `frontend/src/main/electron.ts:231-242` | Atlas restart marks active runs failed; not a task cold-resume equivalent | Keep host process lifecycle, durable task identity, and replayable event log as separate design questions. |
+
+Unresolved source anchors are explicitly candidate lookup locations, not verified exact behavior claims. License: Atlas's existing license governs Atlas code; Claude package licensing does not authorize code reuse.
+
