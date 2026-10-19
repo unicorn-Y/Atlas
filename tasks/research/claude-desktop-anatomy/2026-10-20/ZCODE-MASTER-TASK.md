@@ -1,4 +1,4 @@
-# ZCode 执行任务书：Claude Desktop / Cowork 全量解剖（B 级：安装包 + 真实运行）
+# ZCode 执行任务书：Claude Desktop / Cowork 全量静态解剖（安装包 + 内部实现）
 
 **任务日期：2026-10-20**  
 **唯一目标：Claude Desktop（以 Windows 版为主，包含其中真实交付的 Chat、Cowork、Agent、服务、工具、前端和宿主层）；本轮不拆其他产品。**  
@@ -8,6 +8,17 @@
 **源材料分支：`research/agent-client-packages-20261019`、`research/agent-reverse-20261019-claude-desktop`、`research/claude-desktop-gpt6-direct-20261020`。**  
 **报告路径：`docs/research/agent-reverse/2026-10-20/claude-desktop-zcode/`。**  
 **本地目录（原包与解包可保存在 Git 忽略目录）：`D:\Atlas\_research\claude-desktop\2026-10-20`，若实际机器路径不同，记录实际绝对路径。**
+
+## 最高优先级纠偏（2026-10-20；覆盖下文所有冲突要求）
+
+**任务只拆真实 Claude Desktop 发行包。不得再打开 Claude 窗口、截图、点 UI、尝试登录、连接 API、使用账号或要求用户提供认证。用户选择拆包就是为了避开未登录导致功能不可见的问题。**
+
+- 所有研究依据优先来自 MSIX、ASAR、源码 bundle、Native/Go/PE 反编译、符号、AST、配置、IPC/RPC schema、静态调用关系。功能需要登录也要从静态代码找到客户端的完整实现入口、参数、状态、边界和调用链；不可得的服务器内部代码标 `CLOUD-UNAVAILABLE`，绝不凭空推测。
+- 对前端也只做**代码级解剖**：HTML、JS/React 组件、布局、路由、菜单、事件、调用关系。可根据源码制作离线布局视图，但禁止把未登录软件截图作为研究成果。
+- **阶段 P7 原“运行时取证”要求取消；不要求实际启动、测试、进程观测或操作 Claude，也不将缺少动态 R 级实证列为完成障碍。** P7 改为从静态实现构建启动/任务/退出/异常恢复的代码级时序图，并列明不可证实项。旧文中所有“实操、截图、登录环境、run ID、必须动态验证、W7 运行时取证”等冲突要求一律作废。
+- ZCode 继续全面拆包：逐文件逐模块确认作用和层级，追调用者与被调用者，穷举动态生成 IPC、Agent/Cowork 的客户端路径、Go service、MCP、Skills、Worker、前端等。不能用关键词、文件清单、空泛介绍代替完整代码追踪。
+- **不得为了运行观察花费资源、不得因没有 Claude 账号/API 停工或向用户索要这些条件。** 当前阶段只以静态证据和剩余未知项的透明列账验收。
+- 已经制作的截图仅归档为 `out-of-scope`，不计入完成率；立即转入原包/反编译器/AST 分析。每阶段保存本地、push 仓库；无需再询问，直接继续。
 
 ## 0. 任务定义及不可误解的要求
 
@@ -119,7 +130,7 @@ D. **运行行为账（动态层）**：时间线、进程、线程/worker、窗
 - 动态组件、Markdown/HTML/Artifact 渲染、iframe/webview、工具回执、文件树、任务历史及错误 UI。
 - 每一入口追踪 `window/route/component → event handler → state change → preload/API → host handler → reply/event → UI state`；不能只写截图或组件名称。
 - 给 UI 元素建立可按窗口浏览的 `UI-SURFACES.tsv`、`UI-ACTIONS.tsv`、`HOTKEYS.tsv`、`UI-STATE-LINKS.tsv`。
-- 在可运行的独立测试环境截取真实窗口及状态；若不可运行，做**离线组件/布局证据页**并明确标 STATIC，绝不能把静态效果图冒充实际运行截图。
+- 禁止启动软件或截图。基于实际 renderer HTML、bundle、CSS、组件、路由创建有代码锚点的静态 UI 结构目录，必要时生成离线预览。
 - 为用户制作**可离线打开的 HTML 浏览器**：树状导航 → 点击模块/页面 → 功能用途、关联源码位置、截图/静态预览、IPC、层级和未解析标记；支持全文搜索、层级筛选、状态筛选。
 
 **P2 成果**：每一个找到的 window/route/menu/action 都有登记和处理状态，未闭合的 UI→执行链统计为明确数字。
@@ -176,23 +187,13 @@ D. **运行行为账（动态层）**：时间线、进程、线程/worker、窗
 
 输出 `EXTENSIONS-AND-SKILLS.md`、`DEPENDENCY-ROLES.tsv`、`FEATURE-FLAGS.tsv`、`UNKNOWN-DISCOVERIES.tsv`、`VERSION-DELTA.md`。
 
-## 10. 阶段 P7 — 真实运行时取证（B 范围不可省略，但遇硬阻塞如实写）
+## 10. 阶段 P7 — 静态运行机制还原（不启动 Claude）
 
-在**可用的、与目标版本一致**的 Windows 环境中，用独立测试 profile / disposable 数据目录运行，记录版本与登录/rollout 条件。允许做非破坏性的安装、启动、操作和 ProcMon / Process Explorer / ETW / DevTools / 本地日志等观察。不要读取或上传用户的密码、Cookie、Token、私人聊天和个人文件；日志只保留脱敏结构。
-
-至少覆盖以下**实际可操作**的行为，按可用性取证，不将无法访问强作成功：
-
-1. 初次启动、主界面加载、窗口增删、托盘、退出、重开；
-2. Chat 输入→发送→流式返回→停止→继续→会话列表/搜索/附件；
-3. Cowork/可执行任务创建→工具→过程反馈→完成/取消→再次打开；
-4. 已发现的 Task card/Artifact/调度任务/手动触发/暂停恢复；
-5. 可用的本机 MCP、技能、文件、terminal/browser/computer-use 权限与回执；
-6. 窗口关闭/后台继续、最小化、断网/重连、服务关闭/重开、退出重启；
-7. 版本/账号/rollout 对可见功能的影响；当前使用环境不可触发的明确注明条件。
-
-每个测试生成 `RUN-ID`，记录开始条件、动作、进程树、事件、UI/截图、结束状态、静态锚点、不能确认的地方。要查“恢复”时区分：UI 恢复历史、网络事件重放、进程内任务续跑、跨进程冷恢复、云端后台真实执行。
-
-**若官方登录/地区/账号权限使运行不可达，严禁绕过认证或编造 R 级证据。** 原因和必要补充条件写进 `RUNTIME-BLOCKERS.md`，其余任务继续做，最终标 `PARTIAL / BLOCKED` 而非 `COMPLETE`。
+- 从发行包的代码/二进制反编译结果还原 Electron 主进程、renderer、preload、workers、native 和 cowork-svc 的调用依赖与生命周期。
+- 对所有登录后功能，继续静态追踪 UI 代码入口→动作→状态→IPC/RPC/网络客户端→服务边界。缺服务器内部实现标 CLOUD-UNAVAILABLE。
+- 双向求差：UI 注册点是否有处理链；handler 是否有前端调用者；Go service 的 handlers 是否有已建立的边。
+- 生成 STATIC-LIFECYCLE.md、STATIC-STATE-AND-EVENTS.md、UNRESOLVED-CALL-EDGES.tsv；没有登录/API 不阻塞。
+- 不启动应用、不截图、不做动态验收。静态代码可推导的运行行为标 S，无法推导的标 U，不能标 R。
 
 ## 11. 阶段 P8 — 可理解的“人体解剖目录”与本地可浏览成果
 
@@ -253,7 +254,7 @@ ZCode 负责统筹，能开多少有效子任务就按实际可用并发尽量�
 - W4 Chat/Cowork/Agent/Scheduler/数据状态；
 - W5 Windows Go service/Hyper-V/Native；
 - W6 MCP/Skills/插件/浏览器/PTY/Computer Use；
-- W7 运行时取证 + 从原包独立覆盖审计。
+- W7 完整**静态**覆盖审计，独立从原包重建索引。
 
 同一源码可以交叉分析，输出文件按分工隔离，最后 ZCode 整合去重；避免多个 worker 同时覆盖同一个报告。无需为了“流程”浪费模型 token。
 
@@ -291,8 +292,8 @@ First-party modules indexed: N
 Symbols indexed: N
 UI entrypoints: confirmed N / unresolved N
 IPC/RPC registrations: paired N / unpaired N
-Agent/runtime mechanisms: S N / R N / D N / I N / U N
-Runtime test runs: N
+Agent/runtime mechanisms: S N / R N/A / D N / I N / U N
+Runtime test runs: NOT APPLICABLE (static only)
 New/previously unknown discoveries: N
 Remaining blockers: <specific list>
 Independent audit: PASS / PARTIAL / BLOCKED; discrepancy count N
