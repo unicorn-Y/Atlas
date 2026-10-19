@@ -1,6 +1,6 @@
 # Interface, protocol and workflow tracing
 
-**R** = exact shipped 2.1.302 CLI help/version output; **S** = exact package/bundle literal/type evidence; **D** = official description; **A-S** = Atlas source observation; **U** = unobserved runtime behavior. The real PE was probed in an isolated empty profile. This report still does **not** claim native TUI screenshots, keyboard recordings, generated event captures or an authenticated agent run.
+**R** = exact shipped 2.1.302 CLI help/version output; **S** = exact package/bundle literal/type evidence; **D** = official description; **A-S** = Atlas source observation; **U** = unobserved runtime behavior. The real PE was probed in an isolated empty profile. The PE contains readable message/task schema builders (static S; `evidence/13-native-message-task-schemas.md`), which refine the wire-format description below but are not captured runtime events. This report still does **not** claim native TUI screenshots, keyboard recordings, generated event captures or an authenticated agent run.
 
 ## Workflow 1 — CLI interactive lifecycle (R/D/U)
 - Entry: claude launches interactive mode, claude "query" prepopulates first prompt.
@@ -11,13 +11,13 @@
 ## Workflow 2 — Headless structured request (R/D/U)
 - Entry: claude -p "query" --output-format stream-json --verbose --include-partial-messages
 - Optional: --forward-subagent-text exposes child assistant/user text with parent_tool_use_id; --include-hook-events surfaces allowed hook lifecycle messages; --input-format stream-json allows structured requests and --replay-user-messages acknowledges stdin.
-- Evidence needed: exact JSON lines for initialization, assistant text, tool use/results, subagent turn, usage and result, error and exit; fields must be copied from *generated sample*, not fabricated.
+- Exact PE schemas now show `system/init`, parent-linked assistant/user/stream frames, result timing phases, task lifecycle forms and tool-result metadata (`evidence/13-native-message-task-schemas.md`). Exact generated JSON lines, field presence/order in a live request, error and exit must still come from an *actual generated sample*.
 - UI consequence: a consumer must preserve parent/child provenance and status types; printing plain lines is insufficient. Atlas currently normalizes limited ACP types in core/atlas/runtime/external_agents.py:60-98 (A-S).
 
 ## Workflow 3 — Supervisable background session (R/S/U)
 - Entry: claude --background "..." (also --bg); a supervisor may manage worker sessions.
 - Inspection: claude agents --json [--all], claude logs ID, claude daemon status/logs; attach ID to re-enter interactive UI; respawn ID to restart while retaining conversation; stop/rm manage lifecycle.
-- Distinguished statuses required: queued, active, waiting for permission/tool/agent, disconnected, stopped, resumed, failed, completed; do not claim exact state enum without native evidence.
+- Shipped client source has a restart/retirement state machine with idle/in-flight/attached guards and v5 state recovery fields (`evidence/12-native-supervisor-source.md`). The bundled wire schemas distinguish task `status` values (`pending|running|completed|failed|killed|paused` in `task_updated`), terminal notification (`completed|failed|stopped`), and live background membership. Do not conflate these event-specific values with a complete daemon state enum. None was captured from an executing daemon.
 - Data path needing reverse: CLI -> supervisor discovery/IPC -> worker runtime -> transcript + registry -> attach/logs renderer -> restart reconnection.
 - Compare Atlas: runtime/hub.py:1-17 is a separate *scheduled-agent* service, not established as identical to an interactive attachable supervisor (A-S).
 
@@ -25,7 +25,7 @@
 - Agent tool can launch foreground or background workers, with different tool eligibility and permission-prompt delivery; a background task can notify parent upon completion.
 - Some team configurations have per-agent independent context, a common task list and direct named messages; official doc describes JSON mailbox paths at ~/.claude/teams/{team-name}/inboxes/{agent-name}.json.
 - Team messages include plain text and structured plans/shutdown signals; confirmed *documentation*, not verified layout of version 2.1.302's active implementation.
-- Required field trace: parent session ID, child agent ID and name, parent_tool_use_id, message ID, task claim owner, cancellation/stop code, restart behavior; capture concurrency and failure test.
+- Static schema now declares task/run/tool IDs, parent task and depth, awaited/background flags, terminal output/summary/usage and parent_tool_use_id on message/progress frames. A background result can arrive later through a task notification linked by tool_use_id; the live background task list is a replace-all snapshot (`evidence/13-native-message-task-schemas.md`). Team mailbox write/claim, message identifiers, cancellation semantics and actual concurrency/failure behavior remain unobserved.
 - Compare Atlas: agent/__init__.py:512-650 runs a separate worker and emits progress; post-completion deletes its session. UI ConversationActivity.tsx:132-190 supports progress, steer, cancel; no first-hand Claude mailbox equivalence established (A-S).
 
 ## Workflow 5 — Skills, plugins, hooks and MCP (D/U)
@@ -39,7 +39,7 @@
 - ConversationActivity.tsx:35-105 selects timeline rows; :132-190 shows steps + steer-subagent; :191-287 presents approval, question and proposed plan controls.
 - shell/panels/ProcessesPanel.tsx:7-32 lists background processes, polls every three seconds and supports output/stop.
 - components/ForkTree.tsx:12-67 projects parent/child branch relationships.
-- These components substantiate front-end presence. No real Claude TUI image or round-trip parity test was performed.
+- These components substantiate front-end presence. No real Claude TUI image, serialized event sample or round-trip parity test was performed. The bounded Atlas ACP projection does not demonstrate the full Claude-native task/result schema.
 
 ## Suggested test captures (strictly controlled; see extraction request)
 1. Terminal initial/exit/help rendering on Windows x64, sanitized terminal profile.
@@ -59,6 +59,7 @@ Evidence: `evidence/11-cli-probes.md`, executable SHA `3ab075f78998efef8b87f491c
 - Plugin help lists marketplace and plugin lifecycle commands, plus `validate`; MCP help lists `serve`. These are real shipped surfaces, not proof of a configured plugin/MCP tool.
 - Additional native CLI discoveries: `import` configuration from another AI coding agent, enterprise `gateway`, cloud-hosted multi-agent `ultrareview`, and worktree-aware `rm` flags. No server-side implementation is visible here.
 - Static bundle strings locate `SendMessageTool`, `AgentTool`, `listSubagentIdsFromDisk`, `locateAgentTranscript`, `getDynamicTeamContext`, hook lifecycle helpers, `parent_tool_use_id`, lease/claim and respawn symbols. They enrich the reverse-engineering map, but cannot substitute for a screen/event/session trace.
+- Follow-up on the exact binary: bounded source reads recover supervisor branch logic (`evidence/12`) and executable message/task schema builders (`evidence/13`), beyond strings alone. This gives declared task snapshot, delayed completion and result/permission metadata semantics; it still cannot substitute for a screen/event/session trace.
 
 ## U boundaries for interactive UI
 The interactive terminal renderer, input editing, focus/navigation, live task/status panels, status transitions and error/cancel rendering were not operated. Windows ConPTY imports and console subsystem are structural evidence only. Treat the documented /agent view or TUI behavior as D, and the exact command registration as R; visual details stay U.

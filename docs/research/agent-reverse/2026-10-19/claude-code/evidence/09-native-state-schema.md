@@ -13,3 +13,5 @@
 
 No real session/transcript/daemon/team file was created or read. Exact event envelopes, task-file or mailbox schema, lock/lease transaction, atomic writes, state recovery sequence, transcript-parent linkage, compaction write contract and cloud protocol fields remain U. SDK types and string literals must not be promoted into the native CLI's full persisted schema.
 
+**Schema-source delta:** `evidence/13-native-message-task-schemas.md` now records exact-PE schema builders for user/assistant/stream/result/init and child-task event envelopes, including `parent_tool_use_id`, task/run/tool IDs, `task_updated` patches, `background_tasks_changed` replacement snapshots and terminal task notifications. These define wire fields in the shipped client. They do not resolve task-file/mailbox persistence, transaction ordering, actual field presence or serialized runtime messages; those remain U.
+
