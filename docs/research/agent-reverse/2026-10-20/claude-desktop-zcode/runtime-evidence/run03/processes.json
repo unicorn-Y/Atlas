@@ -1,0 +1,38 @@
+[
+    {
+        "Id":  46180,
+        "WS_MB":  66.2,
+        "Threads":  25,
+        "MainWindowTitle":  ""
+    },
+    {
+        "Id":  48536,
+        "WS_MB":  185.5,
+        "Threads":  57,
+        "MainWindowTitle":  "Claude"
+    },
+    {
+        "Id":  49184,
+        "WS_MB":  150,
+        "Threads":  19,
+        "MainWindowTitle":  ""
+    },
+    {
+        "Id":  53168,
+        "WS_MB":  107.6,
+        "Threads":  55,
+        "MainWindowTitle":  ""
+    },
+    {
+        "Id":  54048,
+        "WS_MB":  87.8,
+        "Threads":  19,
+        "MainWindowTitle":  ""
+    },
+    {
+        "Id":  55576,
+        "WS_MB":  37.4,
+        "Threads":  8,
+        "MainWindowTitle":  ""
+    }
+]

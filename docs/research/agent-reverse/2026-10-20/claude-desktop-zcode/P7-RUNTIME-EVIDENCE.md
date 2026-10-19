@@ -103,7 +103,59 @@
 5. **`claude-native-binding.node` 在解包树下加载失败**（`ERR_DLOPEN_FAILED`）。原因：该 `.node` 依赖 MSIX 环境/签名上下文；**这也是我未做更深入运行时验证的客观限制**，同时说明 `[sableOtter] has no entry points` 并非功能缺失而是该构建下原生模块未加载。
 6. **主 webview 在 04:22:42 崩溃**（exitCode 143 = SIGTERM 类，符合我的 45 秒超时终止）。崩溃前已完整加载 `claude.com` 的 Next.js 静态资源 —— **证实主 UI 确实由远程站点渲染**。
 
-## 3. 明确未能取证的部分（不得含糊）
+## 3. 第二次与第三次取证（MCP 与进程拓扑）
+
+### 3.1 Run-02：配置 MCP 服务器后的真实行为
+
+在隔离 profile 写入 `mcpServers: { "probe-fs": { command: "node", ... } }` 后启动。结果：
+
+- `mcp.log` 仍为 **0 字节** —— 该服务器**没有被拉起**。
+- 但 main.log 出现了此前没有的 MCP 相关子系统：
+  ```
+  [Chrome Extension MCP] Failed to sync native host in Windows registry: Claude Native is missing
+  [Chrome Extension MCP] Native host sync complete
+  [Chrome Extension MCP] Watching Chrome for extension changes
+  [Chrome Extension MCP] Watching Edge for extension changes
+  ```
+- **结论（S+R）**：`Chrome Extension MCP` 是独立于用户 `mcpServers` 的**内建 MCP 通道**，它在启动时就注册/监视 Chrome 与 Edge 的扩展变化；其原生宿主注册依赖 `claude-native`，在非安装环境下缺失。
+- 用户级 MCP 服务器在**未登录**时不启动（与 `MCP` 服务的 eipc 层需要账号上下文一致）。
+
+### 3.2 Run-03：完整进程拓扑与 URL Scheme（高价值发现）
+
+6 个进程的真实父子关系：
+
+```
+48536  (main, MainWindowTitle="Claude", WS 210.3 MB)
+ ├─ 55576  --type=crashpad-handler
+ ├─ 53168  --type=gpu-process
+ ├─ 46180  --type=utility  --utility-sub-type=network.mojom.NetworkService
+ ├─ 54048  --type=renderer
+ └─ 49184  --type=renderer
+```
+
+**每个子进程的 CommandLine 都携带完整的自定义 scheme 注册表**，这是 Electron 的 `registerSchemesAsPrivileged` 落点，直接暴露内部内容通道：
+
+| scheme | standard | secure | bypassCSP | CORS | fetch | service-worker | streaming |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `cowork-artifact` | ✅ | ✅ | | | ✅ | | |
+| `cowork-file` | ✅ | ✅ | | | ✅ | | ✅ |
+| `claude-media` | ✅ | ✅ | ✅ | | ✅ | | ✅ |
+| `claude-simulator` | ✅ | ✅ | ✅ | ✅ | ✅ | | ✅ |
+| `app` | ✅ | ✅ | | ✅ | ✅ | ✅ | |
+| `sentry-ipc` | | ✅ | ✅ | ✅ | ✅ | | |
+
+这张表说明：
+- **`cowork-file` 是 streaming scheme** → Cowork 文件按流读取（大文件不整载入）。
+- **`claude-media` bypass CSP** → 媒体资源不受页面 CSP 限制，这是 artifact 能内嵌图片/媒体的机制。
+- **`claude-simulator` 同时具备 bypassCSP + CORS + fetch** → `Simulator` 服务（54 个方法）是一个**可注入脚本的沙箱化页面容器**。
+- **`app` 是 service-worker scheme** → 本地应用页可注册 Service Worker，具备离线能力。
+- **`sentry-ipc` 单独成 scheme** → Sentry 通过自定义协议与主进程通信，而非 HTTP。
+
+### 3.3 截图失败说明
+
+`CopyFromScreen` 抛 `ExternalException`（会话隔离/无交互桌面），**未能取得窗口像素截图**。这是环境限制，不是应用问题。窗口本身真实存在（`MainWindowTitle="Claude"`，WS 210.3 MB，2 个 renderer 进程）。**报告中不提供任何伪造截图。**
+
+## 4. 明确未能取证的部分（不得含糊）
 
 | 项 | 原因 | 补采条件 |
 |---|---|---|
