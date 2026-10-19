@@ -12,3 +12,7 @@ ZIP/SHA 是对 Atlas release asset 实际字节的来源身份核验。它们不
 相关细目：`A-package-tree.tsv`、`B-package-tree.tsv`、`A-code-sha256.tsv`、`B-code-sha256.tsv`、`A-vendor-package-index.tsv`、`LICENSE-MAP.tsv`。官方运行时选定文件与关键符号位置见 `A-runtime-symbol-index.md`。上游源码本身没有复制进仓库。
 
 Tree TSV 的 `compression` 列保留 ZIP 标准数值方法 ID（0 = stored，8 = deflate）；`crc32` 为 entry CRC32 十六进制值。ZIP 内同时出现 directory entries 与 files，因此 tree-entry count 和 extracted-file count 不相等。
+
+## Continuation verification
+
+During the 2026-10-19 continuation, the original A and B ZIPs were independently rehashed in the preserved external scratch root and matched the values above: A 222,488,979 bytes / SHA-256 `03d18d13bb4a5bbfe79e3cd340d465d415a24f69968828c045efb5ea234b0a31`; B 5,400,611 bytes / SHA-256 `1dd3b7ded3646abf5245f46b76e214d33908ac563d1c796d1a9baf592a9f5dc6`. A embedded Web frontend tarball and its main JS bundle hashes are recorded in `COVERAGE.md` and `EVIDENCE-INDEX.md`.

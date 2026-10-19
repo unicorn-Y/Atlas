@@ -34,3 +34,9 @@ A Next 包中 `@deepseek-ai/dsh-client-ui-chat@0.2.1-rc.2` 的 `lib/client.js:27
 同包 `@deepseek-ai/dsh-api-session-controller@0.2.1-rc.2` client `lib/client.js:2415-2418` 将 `updateQueue(itemId, action)` 调用转为 `session/updateQueue` RPC。controller `lib/index.js:1004-1054` 对 cold Agent 先恢复，再执行 edit/remove/steer；不能编辑非文本内容，不能修改已被消费/删除的旧队列 ID，删除会退役关联上传收据，steer 必须命中运行中的 next-turn。Agent loop `@deepseek-ai/dsh-agent-loop@0.2.1-rc.2` 的 `lib/index.js:70-204` 将两类 Inbox 项以 `agent/inbox/spliced` session event 持久化；`:806-813` 定义 followup/steer 的不同目标队列。
 
 本次对打包 JS 确认了 inbox projection、回显、RPC client 和后端 mutation 语义；**没能将具体 edit/remove/steer 图标或按钮可靠映射到 UI 组件**，因此这部分控件级路径仍记为 U。应用未启动，所有展示/交互结论均为 S，不是 R。
+
+## A pinned frontend queue control finding
+
+A's Next package pins `@deepseek-ai/dsh-web-frontend@0.2.1-rc.2` (`dsh-desktop-next/package.json:209`) and embeds its tarball. Search of all 61 packaged JS assets plus all 106 Next app source files found no `session/updateQueue`, `next-step`, `next-turn`, `QueueAction`, or `steer` control/caller. The 55 `updateQueue` strings in the one main frontend chunk are React Fiber internal update queues. Thus the official API exists in A's bundled DSH server/client runtime but no queue edit/remove/steer UI is present in this exact pinned frontend. This is separate from B: B navigates to an external engine and its Web UI version is not fixed by B's wrapper source.
+
+A Next build passed in a disposable copy. Electron verification failed fetching its binary before a window appeared. The synthetic Node host did start and shut down, but the host verifier then failed a market-bundle assertion. Runtime evidence is host lifecycle only; no UI/Agent operation was observed.

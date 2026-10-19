@@ -54,4 +54,6 @@ Manifest：https://github.com/unicorn-Y/Atlas/blob/research/agent-reverse-dispat
 
 ## 证据缺口（显式 U）
 
-已对指定 ZIP 实际 hash/unzip，并抽取 A runtime manifest 343 个 tarball hash；但没有启动桌面应用、抓 OS 进程/WS frame/真实 Session UI，因此 **R=0**。未将所有历史 stable/beta profile 的每包 tarball 内容全部反编译，也未追官方 Agent Host 所有 prompt/interrupt 权限边。A 中具体 edit/remove/steer 图标到 RPC 的控件调用点未定位。Atlas 子代理 persistent mapping 的全仓完整性仍有 U。详见 `RUNTIME-OBSERVATIONS.md` 及 `EXTRACTION-REQUEST.md` 状态追记。
+已对指定 ZIP 实际 hash/unzip，并抽取 A runtime manifest 343 个 tarball hash；但没有启动 Electron GUI，也未抓 WS frame/真实 Session UI；Node host 有限生命周期已观察，Agent/UI 仍 **R=0**。未将所有历史 stable/beta profile 的每包 tarball 内容全部反编译，也未追官方 Agent Host 所有 prompt/interrupt 权限边。A 中具体 edit/remove/steer 图标到 RPC 的控件调用点未定位。Atlas 子代理 persistent mapping 的全仓完整性仍有 U。详见 `RUNTIME-OBSERVATIONS.md` 及 `EXTRACTION-REQUEST.md` 状态追记。
+
+**This continuation's runtime and UI evidence:** A Next `package.json:209` pins `@deepseek-ai/dsh-web-frontend@0.2.1-rc.2`; its embedded tarball SHA-256 is `c797fa5fce3375c78b2afe7458864bb5b23814eef80013e510ad9a1f8bfbfbda`. The exact frontend contained 61 JS assets (4,798,411 bytes). `updateQueue` appears 55 times in only `index-CN7NIWNw.js` (921,071 bytes; SHA-256 `4bc914bfbb6addd63953a29f63835eb7127defd2a973149d64cdab489f1a9a5`), in React internal update queue code; DSH queue action names/RPC are absent. Build/host/Electron outcomes and limits are recorded in `extracted/RUNTIME-OBSERVATIONS.md`.

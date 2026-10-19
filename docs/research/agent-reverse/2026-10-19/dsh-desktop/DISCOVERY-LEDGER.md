@@ -62,3 +62,11 @@ S：固定 commit 源码；D：固定文档；I：推断；U：本轮未确认�
 ## 未证 / 不可冒充完整
 
 A 的 experimental Agent team、AA 远控和默认插件实际激活、桌面关闭/重启后的当前 Agent turn 恢复；B 自研 Agent UI、每子 Agent精确计费、所有三平台体验；官方 external 子代理 leaf 可点击进入聊天；UI inbox action 的具体控件到 RPC 映射、Windows 真实运行、WS trace：本轮统统 **U**。A/B 指定归档身份校验已完成，不再列为 U。
+
+## Continuation: pinned Web frontend and host R evidence
+
+| ID | Finding | Evidence | Status |
+|---|---|---|---|
+| DSH_DESKTOP-038 | A Next explicitly pins and embeds `@deepseek-ai/dsh-web-frontend@0.2.1-rc.2`; all 61 packaged JS assets and all 106 A Next `src` files were searched. The exact build has no queue edit/remove/steer control and no `session/updateQueue` caller. The 55 `updateQueue` matches are React Fiber internal state queue code in one chunk, not the DSH RPC. | A `package.json:209`; embedded tarball SHA `c797fa5fce3375c78b2afe7458864bb5b23814eef80013e510ad9a1f8bfbfbda`; chunk SHA/bytes in `COVERAGE.md`. | S, exact pinned build only |
+| DSH_DESKTOP-039 | A Next builds in isolated scratch. Electron verifier cannot fetch Electron and exits before creating a GUI. Host verifier starts synthetic-profile Node host, observes `process.ready` and graceful shutdown, then fails missing market-bundle assertion at `verify-host.mjs:118`. | `extracted/RUNTIME-OBSERVATIONS.md`; `END-TO-END-TRACES.md`. | R host lifecycle only; no GUI/Agent |
+| DSH_DESKTOP-040 | B is a Tauri management shell that navigates its top-level WebView to the selected external official DSH engine; queue/subagent controls belong to that external served build, which this archive does not pin. | `IMPLEMENTATION-TRACE.md` B cold-start/business readiness/navigation sections; B `src-tauri/src/lib.rs:158-293`. | S boundary; actual external UI/version U |

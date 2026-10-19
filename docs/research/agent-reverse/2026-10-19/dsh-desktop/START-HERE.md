@@ -1,6 +1,6 @@
 # DSH 社区 Desktop 双项目逆向研究 — 入口
 
-**状态：真实发布源码归档已独立下载、核 SHA/CRC、完整解包并静态拆解；研究报告已据实物补充。动态应用运行仍 NOT-RUN，故整体保持 PARTIAL，不能视为完整 runtime acceptance。**
+**状态：A build/Node-host lifecycle 有隔离 R 证据；Electron GUI 因 Electron 二进制 fetch 失败未启动，Agent/UI/工具/子代理/恢复仍未运行。精确 A 前端构建已验证 queue mutation UI/caller 缺失。整体仍 PARTIAL，不能最终验收。**
 **研究分支：research/agent-reverse-20261019-dsh-desktop**
 **Atlas main 基线：aa6196f550098cc46081dc6db2c376cb87ddffa5**
 
@@ -21,7 +21,7 @@
 
 ## 本轮证据与边界
 
-已从 Atlas Release 取得两份任务书指定 ZIP：A 222,488,979 bytes / SHA-256 `03d18d13bb4a5bbfe79e3cd340d465d415a24f69968828c045efb5ea234b0a31`；B 5,400,611 bytes / SHA-256 `1dd3b7ded3646abf5245f46b76e214d33908ac563d1c796d1a9baf592a9f5dc6`。ZIP CRC、路径与重复名检查通过并完整解包；A 包内 DSH 0.2.1-rc.2 runtime 清单的 343 个 tarball SHA 全部匹配。本轮因此新增已发布包中官方 Agent Inbox durable queue 和 `session/updateQueue` 冷恢复/编辑删除 steer 的静态实物证据，以及 Atlas main renderer follow-up queue 的实际差异。**S=实物包中静态源码，D=仓库说明，I=推断，U=尚未核实；没有 R=运行证据。** 归档与符号证据见 `extracted/`；ZIP 与解包树仅在 worktree 外 scratch，没有提交 upstream payload。
+已从 Atlas Release 取得两份任务书指定 ZIP：A 222,488,979 bytes / SHA-256 `03d18d13bb4a5bbfe79e3cd340d465d415a24f69968828c045efb5ea234b0a31`；B 5,400,611 bytes / SHA-256 `1dd3b7ded3646abf5245f46b76e214d33908ac563d1c796d1a9baf592a9f5dc6`。ZIP CRC、路径与重复名检查通过并完整解包；A 包内 DSH 0.2.1-rc.2 runtime 清单的 343 个 tarball SHA 全部匹配。本轮因此新增已发布包中官方 Agent Inbox durable queue 和 `session/updateQueue` 冷恢复/编辑删除 steer 的静态实物证据，以及 Atlas main renderer follow-up queue 的实际差异。**S=实物包静态源码，D=仓库说明，I=推断，U=尚未核实；本轮仅 R=Node host boot/ready/shutdown，不是 GUI 或 Agent 运行证据。** 归档与符号证据见 `extracted/`；ZIP 与解包树仅在 worktree 外 scratch，没有提交 upstream payload。
 
 ## 报告入口
 
