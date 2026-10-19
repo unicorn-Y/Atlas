@@ -2,7 +2,7 @@ id	category	object	status	evidence_level	reason	how_to_resolve
 U-001	cloud	claude.ai 服务端 agent loop 实现	CLOUD-UNAVAILABLE	U	服务端代码不在安装包内，且按新规不连接 API	仅能通过官方文档（D 级）间接了解；客户端侧请求/响应形状已在 P4 记录
 U-002	cloud	1P 模式下的聊天 UI 组件树	CLOUD-UNAVAILABLE	U	1P 从 claude.ai 加载远程 SPA，本地无该代码	在 3P 模式下改用本地 ion-dist，可静态分析（部分已做：ION-MODULES/ROUTES）
 U-003	cloud	模型目录（catalog.json）实际内容	U	U	仅见下载 URL，包内无缓存	该文件由服务端下发；形状可从 schema.json URL 推断但未取得
-U-004	code	Simulator 服务（54 方法）的业务目标	PARTIAL	S/U	方法名全部已知，但"模拟什么"未从代码定位到具体注释/常量	继续在 index.chunk 中追踪 attach/detach 调用点
+U-004	code	Simulator 服务（54 方法）的业务目标	PARTIAL	S/U	方法名全部已知，业务目标仍未从代码定位到注释/常量	继续在 index.chunk 中追踪 attach/detach 调用点
 U-005	code	GrandPrix / ForgeState / Gorse / ViolinFret / WebBuild / Baku 代号含义	UNKNOWN	S/U	仅能从方法名推断领域，无内部注释	需结合调用方（远程 UI 不可得）或后续版本对比
 U-006	code	handleEvent 的完整事件名枚举	RESOLVED	S	7 个事件已从指令级 cmp/memequal 恢复：exit / error / ready / stderr / stdout / networkStatus / apiReachability；startupStep 已被证伪（实为 step 字段）	—
 U-007	code	cowork-svc 帧协议字节序与 10 MiB 上限	RESOLVED	S	大端已由 bigEndian itab 证明；管道上限 0xa00000=10MiB；guest vsock 上限 0x6400000=100MiB；越界报错文本已定位	—
@@ -27,3 +27,6 @@ U-025	code	Go 1.25 structtype 字段数组解码未收敛	PARTIAL	S/U	91 个 jso
 U-026	code	SSH helper 的中继管道路径	UNKNOWN	U	路径作为参数传入，不在任何二进制中作为字面量出现	追踪 claude-ssh-broker 的命令行参数构造点
 U-027	code	napi-rs 原生模块的参数 schema	PARTIAL	S/U	恢复了 109 个 napi 导出名与 1 个 PE 导出，但参数类型不在二进制中	读取 JS 侧调用点推断签名
 U-028	code	chrome-native-host.exe 的协议	PARTIAL	S/U	仅提取了导入表，未做协议分析	分析其 stdin/stdout native messaging 帧格式
+U-029	code	`shell-path-worker` 的用途与其 Windows 替代	RESOLVED	S	worker 带完整 POSIX login-shell env 提取实现，但本构建**无 spawn 点**；Windows 实走 `@ant/claude-native readFreshUserPath`（`index.chunk-lzaSYO3Q.js@4364744`），仅余错误串 "Shell path worker not found"	—
+U-030	code	内建 GitHub/Office365 MCP 的启用条件	RESOLVED	S	两者均已 packaged→registered→delegated；1P 池被 `zvn(e)=e.server==="microsoft365"` 过滤且受 GrowthBook "4074604942" 门控，3P 路径 `Evn(cOe(...))` 剥除 builtin —— 故在无托管配置的消费者安装中休眠	—
+U-031	code	Artifact 运行库是否真的从 CDN 加载	RESOLVED	S	否。https 协议覆写把恰好 3 个 jsDelivr URL 映射到本地 resources/artifact-libs；不在允许表的请求一律取消，CSP connect-src 'none'	—

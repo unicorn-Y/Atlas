@@ -36,7 +36,7 @@
 | 内置 SPA JS | 3,588 | 3,588 | **100%** | acorn 全解析，0 失败，121,560,060 B |
 | Go 函数（4 个二进制） | 23,018 | 23,018 | **100%** | pclntab 全量：cowork-svc 15,181 + ssh 三件套 7,837 |
 | PE 二进制 | 18 | 18 | **100%** | 含 Authenticode 验证 |
-| Worker | 8 | 8 | **100%** | 含文件数与字节数 |
+| Worker | 7 packaged | 7 | **100%** | 8 个目录中 `mcp-runtime` 是 MCP host 不是 worker；`shell-path-worker` 在本构建中**无 spawn 点** |
 
 ## 4. 接口配对
 
@@ -52,7 +52,7 @@
 | 传输层注册点（原始） | 1,609 |
 | Electron channel 级配对闭合 | 3 / 1,232 —— **已解释**：单 channel 多路复用，正确单位是方法级 |
 | `contextBridge` 暴露 | 52 |
-| MCP 工具声明（从二进制恢复） | **200**（github 137 / office365 60 / runtime 3） |
+| MCP 工具声明（从二进制恢复） | **200 行**（github 137 字面量≈135 去重 / office365 50 工具+10 资源处理器 / runtime 3） |
 | `webContents` 原生事件 | 60（非 IPC，无需配对） |
 
 ## 5. UI 覆盖
@@ -95,11 +95,11 @@
 
 | 状态 | 数量 | 类别分布 |
 |---|---:|---|
-| RESOLVED（本轮内已解决） | **7** | 3 个 WASM 身份、gated-imports、scc.json、handleEvent 事件名、帧协议/10MiB/100MiB、handlePassthrough 目标、nodeHost vs directMcpHost |
-| PARTIAL（部分解释） | 14 | 代号服务、SPA 组件树、两版 diff、Claude Code CLI 参数等 |
+| RESOLVED（本轮内已解决） | **10** | 3 个 WASM 身份、gated-imports、scc.json、handleEvent 事件名、帧协议/10MiB/100MiB、handlePassthrough 目标、nodeHost vs directMcpHost |
+| PARTIAL（部分解释） | 13 | 代号服务、SPA 组件树、两版 diff、Claude Code CLI 参数等 |
 | CLOUD-UNAVAILABLE | 2 | 服务端 agent loop、1P 远程 UI |
 | UNKNOWN | 5 | 若干构建标记与小文件语义 |
-| **合计** | **28** | — |
+| **合计** | **31** | — |
 
 ## 9. 独立审计（从原始包重新生成，不看本报告结论）
 

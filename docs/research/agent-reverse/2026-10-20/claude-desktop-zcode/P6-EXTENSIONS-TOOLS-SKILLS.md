@@ -47,7 +47,11 @@ disableBundledSkills: U(k().optional(), {
 
 3. 因此技能的实际执行者是 **内置 Claude Code（CCD）**，Desktop 只负责：打包 → 定位 → 通过环境变量启用/禁用 → 由 CLI 读取 `SKILL.md` 并注入 prompt。
 
-**结论**：`packaged（S）→ registered in manifest（S）→ gated by disableBundledSkills（S）→ executed by external claude CLI（S，环境变量为证）`。**不能**说“Desktop 内置了 docx 生成能力”；正确说法是“Desktop 打包了技能包并把它交给它拉起的 CLI”。
+**结论**：`packaged（S）→ registered via manifest（S）→ seeded to disk at session start（S）→ gated by disableBundledSkills（S）→ executed by external claude CLI（S）`。
+
+具体落盘链路（`SKILL-DELIVERY.md`）：`checkBundledSkillsAtSessionStart()` → `bundledSkillsSeededHere()` → `checkBundledSkills()` → `_checkBundledSkills()` → `downloadSkills()`，把技能解到 skills 插件目录后以 `--plugin-dir` 传给 Claude Code。
+
+**不能**说“Desktop 内置了 docx 生成能力”；正确说法是“Desktop 打包了技能包、按 manifest 播种到磁盘，再交给它拉起的 CLI”。
 
 ## 3. 环境变量面：1,062 个（`ENV-VARS.tsv`）
 
@@ -134,11 +138,11 @@ CLAUDE_CODE_ENHANCED_TELEMETRY_BETA
 
 `MCP-TOOLS.tsv` 共 **200 个工具声明**：
 
-| 服务器 | 工具数 | 来源 |
+| 服务器 | 工具数 | 来源与细节 |
 |---|---:|---|
-| `github`（`github-mcp-server.exe`） | **137** | 从 20.5 MB 二进制中恢复的工具名与 schema |
-| `office365`（`office365-mcp-stdio.mjs`） | **60** | 从 7.28 MB bundle 中恢复 |
-| `runtime`（内置 runtime 工具） | 3 | 来自 mcp-runtime |
+| `github`（`github-mcp-server.exe` v1.6.0，Go 1.25.12，rev 7629b6e，2026-07-15） | **137 个字面量** | 每个工具一个名字面量；`get_release`/`get_release_by_tag`、`get_repository`/`get_repository_tree` 落在同一偏移，**去重后约 135** |
+| `office365`（`mcp-microsoft-graph` v1.6.0） | **50 工具 + 10 资源处理器** | 13 个读 + `read_resource` + `get_granted_scopes` + 4 个 Teams 写 + 31 个 Outlook/SharePoint 写；**只读默认 = 15 个工具** |
+| `runtime` | 3 | `web_search`、`mcp__<server>__<tool>` 桥命名、非 MCP 的 `Skill` 工具引用 |
 
 这是"打包存在"升级为"已声明工具面"的实证，但仍不等于"账号下已启用"。
 
@@ -162,8 +166,41 @@ CLAUDE_CODE_ENHANCED_TELEMETRY_BETA
 - **`pty-host`**：承载全部 `node-pty`(ConPTY) 终端，流式数据、退出跟踪、**分段 scrollback**（ANSI-VT 剥离、grep、窗口化读取），退出时 `taskkill /T /F` 清理。经 `utilityProcess.fork` 启动。
 - **`file-index-worker`**：工作区**文件名索引 + 内容搜索**。支持 `set-entries`、git 列表暂存（`git ls-files`）、`search`（trigram/bitap 索引）、`content-search`（`ripgrep --json`，git-grep 兜底）、`list`。
 - **`heavy-work-worker`**：主线程外的重活，**30 个任务处理器**（`claudeJsonProjection`、`ppkConvert`、`terminalScreen`、`codeStats`、`directoryUsage`、`dxtExtract` 等）。
+- **`transcript-search-worker`**：会话记录全文检索。
+- **`msal-broker-worker`**：把 `@azure/msal-node` 的 NativeBrokerPlugin（WAM）放到进程外，**broker 崩溃不会拖垮主程序**；提供 probe / getAccountById / getAllAccounts / acquireTokenSilent / acquireTokenInteractive / signOut。
+- **`stall-sampler-worker`**：用 `SharedArrayBuffer` 心跳检测主线程卡顿，漏拍即启停 inspector Profiler 并上报 `{type:"stall_capture",resumeSeq,frames[],startLagMs}`，带突发预算。
+- **`shell-path-worker`：本构建中没有任何 spawn 点。** 它带着完整的 POSIX login-shell 环境提取实现（`$SHELL -l -i -c` + NUL 分隔 env 解析），但 Windows 路径实际改用 `@ant/claude-native readFreshUserPath`（`index.chunk-lzaSYO3Q.js@4364744`）。只剩一条错误字符串 "Shell path worker not found"。
 
-## 5. Worker 全表（8 个目录，`WORKERS.tsv`）
+**修正**：因此"8 个 worker 目录"里真正被打包并可能运行的只有 **7 个**（`mcp-runtime` 不是 worker，是 MCP host 目录）。
+
+
+### 4.6 内建 MCP 在 1P / 3P 下到底能不能起来（决定性差异）
+
+子任务定位到注册与 spawn 的全部代码锚点，结论是 ** packaged → registered → delegated 三段全部成立，但第 4 段 "invoked" 在本机不成立**，且 **1P 消费者池根本无法拉起 GitHub**：
+
+| 环节 | 证据 |
+|---|---|
+| 注册 | `index.chunk-lzaSYO3Q.js@1463500` 的 `Bat()`：除非 `source==="admin"` 否则抛 `built-in servers are not permitted for source "<x>"`；随后按 `server` 分派 `"websearch"｜"microsoft365"｜"github"`，否则 `no spawner for builtin server` |
+| GitHub 专用 chunk | `index.chunk-CQr0Ee4m.js`（3,411 B）：`github-mcp-server.exe`@814、`GITHUB_PERSONAL_ACCESS_TOKEN`@1098、`args:["stdio"]`@2083 |
+| office365 spawn | `@1463956` 的 `zat()` → `new sit(<resources>/office365-mcp/office365-mcp-stdio.mjs, [], env, {proxyTargetHost:"https://graph.microsoft.com"})`，即**经 `nodeHost.js`** |
+| github spawn | 走**普通 SDK `StdioClientTransport`**（不经 nodeHost），需缓存 token，否则抛 `EAUTHREQUIRED` |
+| 1P 为何起不来 | `managedMicrosoft365Configs()` 用 `zvn(e)= e.server==="microsoft365"` 过滤（`@2877169`），1P arming 还受 GrowthBook key `"4074604942"` 门控（`@2877406`）——**1P 消费者池里没有 GitHub** |
+| 3P 为何也起不来 | 3P 路径取 `Evn(cOe(managedServers))`（`@2870520`），**会剥掉所有 builtin 条目**；只能来自部署 bootstrap 的 `creds.mcpServers` |
+
+**结论**：`github-mcp-server.exe` 与 `office365-mcp` 是**管理员/企业供给的功能**，代码完整、可被分派，但在无托管 MCP 配置的消费者安装里是**休眠的**。这纠正了"打包=可用"的误读，也解释了为什么 `MCP` 服务的方法里有一批 `revealServerLog` / `getMcpServersConfigWithStatus` 这类诊断入口。
+
+### 4.7 扩展包（DXT/MCPB）的校验是真的
+
+- 签名是 **trailer 里的 PKCS#7**：标记 `MCPB_SIG_V1` … `MCPB_SIG_END`。
+- 先做 sha256 与 `messageDigest` 比对，再做**操作系统链校验**：Windows 用 `X509Chain`（在线吊销 + code-signing EKU），macOS 用 `security verify-cert`，其它平台用 `openssl verify`。
+- 还有**服务端**准入：`POST /api/organizations/<org>/dxt/can_install` 做黑/白名单，结果缓存在 `safeStorage` 加密的缓存里。
+
+### 4.8 Artifact 运行库从不走 CDN
+
+`https` 协议有覆写：把**恰好三个** `cdn.jsdelivr.net` URL 映射到本地 `resources/artifact-libs/npm_<pkg>@<ver>_<path>`；`onBeforeRequest` 取消一切不在允许表内的请求，CSP 也用同一张表生成，且 `connect-src 'none'`。
+这意味着 P3 里列出的那些 CDN 地址是**构建期字符串**，运行期被本机文件拦截替换。
+
+## 5. Worker 全表（`WORKERS.tsv`）
 
 | worker | 文件数 | 字节 | 用途（依据文件名 + 引用上下文） |
 |---|---:|---:|---|

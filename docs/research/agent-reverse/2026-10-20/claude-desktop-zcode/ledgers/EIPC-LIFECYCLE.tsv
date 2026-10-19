@@ -1,0 +1,69 @@
+service	method	params	lifecycle_stage	notes	evidence
+Extensions	isExtensionsEnabled		gate	extensions.enabled && features.isDxtEnabled	index.chunk-lzaSYO3Q.js@2067973 service table; impl @2068040
+Extensions	isLocalExtensionInstallAllowed		gate	hasOrgPolicyBackend() && extensionsEnabled	index.chunk-lzaSYO3Q.js@2068119
+Extensions	isDirectoryEnabled		gate	org + directoryEnabled	index.chunk-lzaSYO3Q.js@4518294
+Extensions	isDesktopExtensionSignatureRequired		gate	K().extensions.signatureRequired	index.chunk-lzaSYO3Q.js@4518443
+Extensions	isDesktopExtensionDirectoryEnabled		gate	directoryEnabled === true	index.chunk-lzaSYO3Q.js@4518569
+Extensions	getInstalledExtensionsWithState		list	dir + settings merge; also triggers applyPendingUpdates + update/blocklist checks	index.chunk-lzaSYO3Q.js@4518870
+Extensions	getIsUpdateAvailable	extensionId,manifest	update-check	semver compare against directory versions, 30 min cache	index.chunk-lzaSYO3Q.js@4516500
+Extensions	getManifestCompatibilityResult	manifest	verify	manifest compat validation	service table @1596145
+Extensions	getAvailableExtensionRuntimes		install	runtime capability list	service table @1596145
+Extensions	getExtensionSettings	extensionId	enable/settings	read <userData>/Claude Extensions Settings/<id>.json	index.chunk-lzaSYO3Q.js@2067900
+Extensions	setExtensionSettings	extensionId,settings	enable/settings	write settings + emit extensionSettingsChanged	service table @1596145
+Extensions	installDxt	extensionId,dxtFilePath	install (local file)	full pipeline: copy→verify→consent→can_install→extract→record→reload	index.chunk-lzaSYO3Q.js@4511967 (bJ)
+Extensions	installDxtUnpacked	folderPath	install (unpacked, dev mode)	needs developerModeEnabled	index.chunk-lzaSYO3Q.js@4507309 (Hni)
+Extensions	installDxtFromDirectory	extensionId,version	install (registry)	download /extensions/<id>/download[/<v>] then bJ	index.chunk-lzaSYO3Q.js@4514715 (Yni), URL @4515187
+Extensions	handleDxtFile	dxtPath	install (OS association)	entry from "open with" / double-click	service table @1596145 (TPa)
+Extensions	showInstallDxtDialog		install (picker)	native file dialog then installDxt	service table @1596145 (Pni)
+Extensions	deleteExtension	extensionId	remove	lock→metadata→rm dir→close pooled servers→dispatch	index.chunk-lzaSYO3Q.js@4498894 (jni)
+Extensions	openExtensionsFolder		ui	shell.openPath(<userData>/Extensions)	service table @1596145
+Extensions	openExtensionSettingsFolder		ui	shell.openPath(<userData>/Claude Extensions Settings)	service table @1596145
+Extensions	getDirectoryUrl		marketplace URL	${mainWindowUrl}/api/organizations/<org>/dxt	index.chunk-lzaSYO3Q.js@4518569 (ari)
+Extensions	getExtension	request	list (directory)	GET directory entry	service table @1596145 (W4a)
+Extensions	getExtensionVersions	request	update-check	list versions for id	service table @1596145 (G4a)
+Extensions	installExtensionFromPreview	extensionId,path	install (preview)	bJ(...,source:"local") after previewExtensionInstallation event	service table @1596145 + event
+Extensions	refreshAllowlistCheck		verify	force updateAndCheckBlockedExtensions	service table @1596145
+Extensions	extensionsChanged (event)		update	UI refresh	service event table @1596145
+Extensions	extensionSettingsChanged (event)	extensionId,settings	enable/settings	service event table @1596145
+Extensions	previewExtensionInstallation (event)	manifest,path,extensionId,signatureInfo	install preview	service event table @1596145
+Extensions	extensionDownloadProgress (event)	extensionId,progress,receivedBytes,totalBytes,manifest,phase	install progress	service event table @1596145
+MCP	isLocalDevMcpEnabled		gate	local dev MCP toggle	index.chunk-lzaSYO3Q.js@1593000 table
+MCP	setMcpServerConfigs	configs	config write	persists configs the MCP hosts build from	index.chunk-lzaSYO3Q.js@1593000 table
+MCP	getMcpServersConfig	forceReload	config read	index.chunk-lzaSYO3Q.js@1593000 table
+MCP	getMcpServersConfigWithStatus		config read + status	index.chunk-lzaSYO3Q.js@1593000 table
+MCP	revealConfig / revealLogs / revealServerLog	serverName	support	open files in OS	index.chunk-lzaSYO3Q.js@1593000 table
+MCP	mcpConfigChange (event)	configs	notify	index.chunk-lzaSYO3Q.js@1593000 table
+MCP	mcpStatusChanged (event)	name,status,error	notify	index.chunk-lzaSYO3Q.js@1593000 table
+LocalPlugins	getPlugins	options,pluginContext	list	index.chunk-lzaSYO3Q.js@1970952 table
+LocalPlugins	getDownloadedRemotePlugins	pluginContext	list remote-synced	index.chunk-lzaSYO3Q.js@1970952 table
+LocalPlugins	syncRemotePlugins	pluginContext,options	update (remote sync)	index.chunk-lzaSYO3Q.js@1970952 table
+LocalPlugins	materializeEnabledPlugins	pluginContext	enable→materialize	index.chunk-lzaSYO3Q.js@1970952 table
+LocalPlugins	listSkillFiles	pluginId,skillName,pluginContext	inspect	index.chunk-lzaSYO3Q.js@1970952 table
+LocalPlugins	uploadPlugin	filename,base64Content,replaceExisting,pluginContext,uploadSource	install (zip)	index.chunk-lzaSYO3Q.js@1970952 table
+LocalPlugins	deletePlugin	pluginId,pluginContext	remove	index.chunk-lzaSYO3Q.js@1970952 table
+LocalPlugins	setPluginEnabled	pluginId,enabled,pluginContext	enable/disable	index.chunk-lzaSYO3Q.js@1970952 table
+LocalPlugins	startPluginOAuthFlow / revokePluginOAuth	pluginId,cliName,pluginContext	connector auth	index.chunk-lzaSYO3Q.js@1970952 table
+LocalPlugins	getPluginCliStatus	pluginId,pluginContext	status	index.chunk-lzaSYO3Q.js@1970952 table
+LocalPlugins	setPluginEnvVars	pluginId,cliName,values,pluginContext	config	index.chunk-lzaSYO3Q.js@1970952 table
+LocalPlugins	setPluginOAuthClient	pluginId,cliName,clientId,clientSecret,pluginContext	config	index.chunk-lzaSYO3Q.js@1970952 table
+LocalPlugins	getPluginShimOps / getPluginCliBatch / setPluginShimPermission	…	permission shim	index.chunk-lzaSYO3Q.js@1970952 table
+LocalPlugins	onCliOpAlwaysAllowed (event)	keys	permission shim	index.chunk-lzaSYO3Q.js@1970952 table
+CustomPlugins	addMarketplace	input,egressAllowedDomains,pluginContext	marketplace add	index.chunk-lzaSYO3Q.js@1972475 table
+CustomPlugins	removeMarketplace	name,egressAllowedDomains,pluginContext,backendId	marketplace remove	index.chunk-lzaSYO3Q.js@1972475 table
+CustomPlugins	refreshMarketplace	name,egressAllowedDomains,pluginContext,backendId	marketplace refresh	index.chunk-lzaSYO3Q.js@1972475 table
+CustomPlugins	listMarketplaces	egressAllowedDomains,pluginContext	marketplace list	index.chunk-lzaSYO3Q.js@1972475 table
+CustomPlugins	installPlugin	pluginId,egressAllowedDomains,pluginContext	install	index.chunk-lzaSYO3Q.js@1972475 table
+CustomPlugins	updatePlugin	pluginId,egressAllowedDomains,pluginContext	update	index.chunk-lzaSYO3Q.js@1972475 table
+CustomPlugins	uninstallPlugin	pluginId,egressAllowedDomains,pluginContext	remove	index.chunk-lzaSYO3Q.js@1972475 table
+CustomPlugins	listAvailablePlugins	egressAllowedDomains,pluginContext	list	index.chunk-lzaSYO3Q.js@1972475 table
+CustomPlugins	listRemotePluginsPage	limit,offset	list paged	index.chunk-lzaSYO3Q.js@1972475 table
+CustomPlugins	checkPluginHasLocalChanges	pluginId,pluginContext	verify (dirty check)	index.chunk-lzaSYO3Q.js@1972475 table
+CustomPlugins	getAndClearMigrationIssues		migration	index.chunk-lzaSYO3Q.js@1972475 table
+CustomPlugins	listLocalOrgPlugins		org plugin list	index.chunk-lzaSYO3Q.js@1972475 table
+CustomPlugins	installLocalOrgPlugin	name	install (org)	index.chunk-lzaSYO3Q.js@1972475 table
+CustomPlugins	syncLocalOrgPlugins		update (org)	index.chunk-lzaSYO3Q.js@1972475 table
+CustomPlugins	localOrgPluginsSynced (event)		notify	index.chunk-lzaSYO3Q.js@1972475 table
+PluginBridgeMcp	listServers		list plugin MCP servers	index.chunk-lzaSYO3Q.js@1972381 table
+PluginBridgeMcp	changed (event)		notify	index.chunk-lzaSYO3Q.js@1972381 table
+Skills	previewSkillFile (event)	data,filename	skill UI preview	the ONLY eipc entry in the Skills service (0 methods)	index.chunk-lzaSYO3Q.js@5193169
+CoworkScheduledTasks	createScheduledTask / updateScheduledTask / getAllScheduledTasks / …	see EIPC-METHODS	skill-driven scheduling	16 methods incl. watcher history and migration	EIPC-METHODS.tsv; index.chunk-lzaSYO3Q.js@1972500
