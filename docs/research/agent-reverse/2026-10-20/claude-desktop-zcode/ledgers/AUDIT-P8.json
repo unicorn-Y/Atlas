@@ -1,0 +1,20 @@
+{
+  "msix_files_source": 4443,
+  "msix_files_registered": 4443,
+  "msix_missing_from_report": [],
+  "msix_extra_in_report": [],
+  "msix_missing_count": 0,
+  "msix_extra_count": 0,
+  "asar_files_source": 506,
+  "asar_dirs_source": 42,
+  "asar_files_registered": 506,
+  "asar_missing_from_report": [],
+  "asar_missing_count": 0,
+  "asar_extra_count": 0,
+  "classified_paths": 506,
+  "unclassified_asar_files": [],
+  "unclassified_count": 0,
+  "hashes_reverified": 4443,
+  "hash_mismatches": [],
+  "hash_mismatch_count": 0
+}

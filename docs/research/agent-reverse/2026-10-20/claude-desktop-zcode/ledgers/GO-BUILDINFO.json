@@ -1,0 +1,88 @@
+{
+  "per_binary_funcs": {
+    "claude-ssh-askpass.exe": 2865,
+    "claude-ssh-broker.exe": 2786,
+    "claude-ssh-proxy.exe": 2186,
+    "cowork-svc.exe": 15181
+  },
+  "first_party_prefixes": {
+    "claude-ssh-askpass.exe": [
+      "github.com/anthropics/ssh-askpass",
+      "github.com/anthropics/ssh-askpass/cmd/claude-ssh-askpass"
+    ],
+    "claude-ssh-broker.exe": [
+      "github.com/anthropics/ssh-askpass",
+      "github.com/anthropics/ssh-askpass/cmd/claude-ssh-broker"
+    ],
+    "claude-ssh-proxy.exe": [
+      "github.com/anthropics/ssh-askpass",
+      "github.com/anthropics/ssh-askpass/cmd/claude-ssh-proxy"
+    ],
+    "cowork-svc.exe": [
+      "github.com/anthropics/cowork-win32-service",
+      "github.com/anthropics/cowork-win32-service/cmd/cowork-svc"
+    ]
+  },
+  "buildinfo": {
+    "claude-ssh-askpass.exe": {
+      "gover": "go1.25.14",
+      "main": "github.com/anthropics/ssh-askpass",
+      "build": [
+        "-buildmode=exe",
+        "-compiler=gc",
+        "-trimpath=true",
+        "CGO_ENABLED=0",
+        "GOARCH=amd64",
+        "GOOS=windows",
+        "GOAMD64=v1"
+      ],
+      "nfunc": 2865
+    },
+    "claude-ssh-broker.exe": {
+      "gover": "go1.25.14",
+      "main": "github.com/anthropics/ssh-askpass",
+      "build": [
+        "-buildmode=exe",
+        "-compiler=gc",
+        "-trimpath=true",
+        "CGO_ENABLED=0",
+        "GOARCH=amd64",
+        "GOOS=windows",
+        "GOAMD64=v1"
+      ],
+      "nfunc": 2786
+    },
+    "claude-ssh-proxy.exe": {
+      "gover": "go1.25.14",
+      "main": "github.com/anthropics/ssh-askpass",
+      "build": [
+        "-buildmode=exe",
+        "-compiler=gc",
+        "-trimpath=true",
+        "CGO_ENABLED=0",
+        "GOARCH=amd64",
+        "GOOS=windows",
+        "GOAMD64=v1"
+      ],
+      "nfunc": 2186
+    },
+    "cowork-svc.exe": {
+      "gover": "go1.25.14",
+      "main": "github.com/anthropics/cowork-win32-service",
+      "build": [
+        "-buildmode=exe",
+        "-compiler=gc",
+        "-ldflags=\"-s -w\"",
+        "CGO_ENABLED=1",
+        "CGO_CFLAGS=",
+        "CGO_CPPFLAGS=",
+        "CGO_CXXFLAGS=",
+        "CGO_LDFLAGS=",
+        "GOARCH=amd64",
+        "GOOS=windows",
+        "GOAMD64=v1"
+      ],
+      "nfunc": 15181
+    }
+  }
+}

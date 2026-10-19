@@ -1,0 +1,25 @@
+binary	module	version	replace
+claude-ssh-askpass.exe	github.com/Microsoft/go-winio	v0.6.2	
+claude-ssh-askpass.exe	golang.org/x/sys	v0.46.0	
+claude-ssh-broker.exe	github.com/Microsoft/go-winio	v0.6.2	
+claude-ssh-broker.exe	golang.org/x/sys	v0.46.0	
+claude-ssh-proxy.exe	golang.org/x/sys	v0.46.0	
+cowork-svc.exe	github.com/Microsoft/go-winio	v0.6.2	
+cowork-svc.exe	github.com/anthropics/win-httpproxy	v0.0.0	../win-httpproxy
+cowork-svc.exe	github.com/containers/gvisor-tap-vsock	v0.8.9	../third_party/gvisor-tap-vsock
+cowork-svc.exe	github.com/google/btree	v1.1.2	
+cowork-svc.exe	github.com/google/gopacket	v1.1.19	
+cowork-svc.exe	github.com/inetaf/tcpproxy	v0.0.0-20260515195445-c159a6051109	
+cowork-svc.exe	github.com/insomniacslk/dhcp	v0.0.0-20260719225207-c76316d4aa82	
+cowork-svc.exe	github.com/linuxkit/virtsock	v0.0.0-20220523201153-1a23e78aa7a2	
+cowork-svc.exe	github.com/miekg/dns	v1.1.73	
+cowork-svc.exe	github.com/pierrec/lz4/v4	v4.1.14	
+cowork-svc.exe	github.com/pkg/errors	v0.9.1	
+cowork-svc.exe	github.com/sirupsen/logrus	v1.10.2	
+cowork-svc.exe	github.com/u-root/uio	v0.0.0-20240224005618-d2acac8f3701	
+cowork-svc.exe	golang.org/x/crypto	v0.55.0	
+cowork-svc.exe	golang.org/x/exp	v0.0.0-20231110203233-9a3e6036ecaa	
+cowork-svc.exe	golang.org/x/net	v0.58.0	
+cowork-svc.exe	golang.org/x/sys	v0.47.0	
+cowork-svc.exe	golang.org/x/time	v0.12.0	
+cowork-svc.exe	gvisor.dev/gvisor	v0.0.0-20260413194555-9680d69bf798	
