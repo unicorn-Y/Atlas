@@ -23,6 +23,8 @@ Native help verifies the command parser exposes interactive/print mode, resume/f
 
 Static bundle strings (`06-native-string-index.jsonl`) include named supervisor/lease/auth/claim/respawn helpers, disk-backed subagent transcript lookup, team-context helpers, tool registry names and hook lifecycle helpers. They cluster in the `.bun` embedded payload and are corroborated by CLI commands, but their call relationships/argument fields are not resolved. Treat them as S-level code identifiers and U-level semantics.
 
+**Update from exact embedded source:** the payload also contains readable minified application JS. `evidence/12-native-supervisor-source.md` gives exact PE offsets and bounded method content for `respawnIfIdleStale`, `retireIfSettled`, the interval sweeper, `doSpawn`, claim-frame creation and adoption. The background-supervisor client-side static state logic is now substantially traced, including safety gates, recovery fields and PID/process-start identity checks. These method bodies establish static branch logic, but not execution. Actual daemon/worker creation, attach across daemon restart, on-disk transaction/lease semantics, model interaction and emitted event sequences remain unobserved.
+
 ### A3. SDK declarations: separate public type contract
 The shipped `sdk-tools.d.ts` gives explicit child-agent isolation/model/name/background types (`AgentInput`, lines 772-812), task creation/status/owner/blocking types (2802-2868, 4005-4038) and resumable Workflow inputs/results (2869-2900, 4142+). This gives a real published contract for concepts related to delegation and workflows. The type file does not prove a standalone CLI code path or actual persisted object schema.
 
