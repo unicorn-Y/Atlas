@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Codex 逆向图鉴 · Reverse Atlas Lab</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--panel2:#1c2128;--line:#30363d;--fg:#e6edf3;--dim:#8b949e;--acc:#58a6ff;--ok:#3fb950;--warn:#d29922;--bad:#f85149}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.6 -apple-system,"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+header{display:flex;align-items:center;gap:16px;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+header h1{font-size:17px;margin:0;font-weight:600}
+header .ver{color:var(--dim);font-size:12px}
+#q{flex:1;max-width:420px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 11px;color:var(--fg)}
+#count{color:var(--dim);font-size:12px}
+.layout{display:grid;grid-template-columns:264px 1fr 360px;height:calc(100vh - 57px)}
+nav{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:10px 0}
+nav div.item{padding:8px 18px;cursor:pointer;border-left:3px solid transparent;display:flex;justify-content:space-between;gap:8px}
+nav div.item:hover{background:var(--panel2)}
+nav div.item.active{background:var(--panel2);border-left-color:var(--acc);color:var(--acc)}
+nav .n{color:var(--dim);font-size:11px}
+main{overflow:auto;padding:22px 28px}
+aside{background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding:16px}
+h2{margin:0 0 4px;font-size:20px}
+.sub{color:var(--dim);margin-bottom:18px;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--dim);font-weight:500;position:sticky;top:0;background:var(--bg)}
+tr:hover td{background:var(--panel2)}
+code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12px;color:#79c0ff}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;border:1px solid var(--line);color:var(--dim)}
+.tag.s{color:var(--ok);border-color:#238636}
+.tag.w{color:var(--warn);border-color:#9e6a03}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:12px}
+.card h3{margin:0 0 6px;font-size:14px}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:4px 10px;font-size:12px}
+.kv span:first-child{color:var(--dim)}
+button{cursor:pointer;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:5px 10px;font-size:12px}
+button:hover{border-color:var(--acc)}
+button.on{background:#1f6feb33;border-color:var(--acc);color:var(--acc)}
+.star{color:var(--dim);cursor:pointer;font-size:15px}
+.star.on{color:#e3b341}
+img.shot{max-width:100%;border:1px solid var(--line);border-radius:6px;margin:6px 0}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.gallery figure{margin:0;background:var(--panel2);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.gallery img{width:100%;display:block}
+.gallery figcaption{padding:7px 9px;font-size:11px;color:var(--dim)}
+.bar{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;background:var(--acc)}
+.note{color:var(--dim);font-size:12px;margin-top:10px}
+.pill{font-size:11px;padding:1px 6px;border-radius:9px;background:#1f6feb22;color:var(--acc);border:1px solid #1f6feb55}
+</style>
+</head>
+<body>
+<header>
+  <h1>Codex 逆向图鉴</h1>
+  <span class="ver" id="ver"></span>
+  <input id="q" placeholder="搜索 crate / 工具 / RPC / 组件 / 开关…">
+  <span id="count"></span>
+  <button id="export">导出选择</button>
+</header>
+<div class="layout">
+  <nav id="nav"></nav>
+  <main id="main"></main>
+  <aside id="side"></aside>
+</div>
+<script>
+const D = null;
+let DATA=null, VIEW='overview', FILTER='';
+const SEL=new Set();
+const NAV=[
+ ['overview','总览与证据',''],
+ ['arch','架构与进程',''],
+ ['crates','Rust Crate 目录',155],
+ ['agentloop','Agent 主循环',''],
+ ['tools','工具系统',28],
+ ['multiagent','多 Agent',''],
+ ['compact','上下文压缩',''],
+ ['codemode','Code Mode',''],
+ ['protocol','app-server 协议',257],
+ ['persistence','本地持久化',''],
+ ['desktop','桌面端与 IPC',''],
+ ['ui','前端组件',2176],
+ ['flags','功能开关',185],
+ ['models','模型目录',11],
+ ['shots','界面截图',''],
+ ['unknowns','未解与盲点',''],
+];
+async function boot(){
+  DATA=await (await fetch('data.json')).json();
+  document.getElementById('ver').textContent =
+    `Desktop ${DATA.meta.versions.desktop} · CLI ${DATA.meta.versions.cli}`;
+  renderNav(); render();
+  document.getElementById('q').oninput=e=>{FILTER=e.target.value.toLowerCase();render();};
+  document.getElementById('export').onclick=exportSel;
+}
+function renderNav(){
+  const n=document.getElementById('nav');
+  n.innerHTML=NAV.map(([id,label,cnt])=>
+    `<div class="item ${VIEW===id?'active':''}" data-id="${id}">
+       <span>${label}</span>${cnt?`<span class="n">${cnt}</span>`:''}</div>`).join('');
+  n.querySelectorAll('.item').forEach(el=>el.onclick=()=>{VIEW=el.dataset.id;renderNav();render();window.scrollTo(0,0);});
+  document.getElementById('count').textContent = `${DATA.crates.length} crates · ${DATA.tools.length} tools · ${DATA.rpc.requests.length} RPC · ${DATA.ui.length} UI chunks`;
+}
+function m(f){return (f/1048576).toFixed(2)+' MB'}
+function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+function match(){const f=FILTER;return s=>!f||JSON.stringify(s).toLowerCase().includes(f)}
+
+// ---------- views ----------
+function render(){
+  const main=document.getElementById('main'), side=document.getElementById('side');
+  side.innerHTML=`<div class="card"><h3>证据等级</h3>
+    <div class="kv"><span>S</span><span>源码/二进制直接可读</span>
+    <span>R</span><span>本机实际运行观察</span>
+    <span>D</span><span>官方文档声明</span>
+    <span>I</span><span>推断</span>
+    <span>U</span><span>无法验证</span></div>
+    <div class="note">所有条目均标注可定位来源。</div></div>
+    <div class="card"><h3>选择</h3><div id="selbox" class="note">勾选条目后在此汇总，可导出 SELECTIONS.json</div></div>`;
+  if(VIEW==='overview') return viewOverview(main);
+  if(VIEW==='arch') return viewArch(main);
+  if(VIEW==='crates') return viewCrates(main);
+  if(VIEW==='agentloop') return viewAgentLoop(main);
+  if(VIEW==='tools') return viewTools(main);
+  if(VIEW==='multiagent') return viewMulti(main);
+  if(VIEW==='compact') return viewCompact(main);
+  if(VIEW==='codemode') return viewCodeMode(main);
+  if(VIEW==='protocol') return viewProtocol(main);
+  if(VIEW==='persistence') return viewPersist(main);
+  if(VIEW==='desktop') return viewDesktop(main);
+  if(VIEW==='ui') return viewUI(main);
+  if(VIEW==='flags') return viewFlags(main);
+  if(VIEW==='models') return viewModels(main);
+  if(VIEW==='shots') return viewShots(main);
+  if(VIEW==='unknowns') return viewUnknowns(main);
+}
+function H(t,s){return `<h2>${t}</h2><div class="sub">${s||''}</div>`}
+
+function viewOverview(el){
+  const m0=DATA.meta;
+  el.innerHTML=H('总览','本次逆向覆盖的 Codex 产品体系与材料清单')+`
+  <div class="card"><h3>版本与哈希（${m0.verifiedAt} 实测）</h3>
+   <table><tr><th>组件</th><th>版本</th><th>SHA256</th></tr>
+   <tr><td>Codex Desktop (MSIX)</td><td>${m0.versions.desktop}</td><td class="mono">${m0.hashes['ChatGPT-x64.msix']}</td></tr>
+   <tr><td>code CLI</td><td>${m0.versions.cli}</td><td class="mono">${m0.hashes['openai-codex-cli-x64-dabdb4d16a.zip']}</td></tr>
+   <tr><td>Code Mode Host</td><td>${m0.versions.codeModeHost}</td><td class="mono">${m0.hashes['openai-codex-code-mode-host-x64-bc82fa6d8f.zip']}</td></tr>
+   <tr><td>Rust 源码</td><td>rust-v0.163.0</td><td class="mono">${m0.hashes['openai-codex-source-36fda4e61c.zip']}</td></tr>
+   </table></div>
+  <div class="card"><h3>规模</h3><div class="kv">
+   <span>MSIX 文件</span><span>3,651 个（2.2 GB 解压）</span>
+   <span>app.asar</span><span>21,073 条目 / 593.7 MB</span>
+   <span>Rust workspace</span><span>155 crate / 5,276 .rs / 约 190 万行</span>
+   <span>工具</span><span>28 个内置工具定义（+hosted 工具）</span>
+   <span>RPC</span><span>172 请求 + 85 通知</span>
+   <span>前端</span><span>2,176 个 UI chunk</span>
+   <span>功能开关</span><span>175 CLI flags + 10 具名 + 74 匿名 Statsig gate</span>
+  </div></div>
+  <div class="card"><h3>最重要的发现</h3><ul>
+   <li><b>多 Agent 是协议级能力</b>：9 个协作工具、V1/V2 两代语义、mailbox 模型</li>
+   <li><b>Remote Control</b>：可被其他设备遥控本机 Codex（配对/客户端/撤销）</li>
+   <li><b>Realtime 语音</b>：WebRTC + SDP + 音频增量，9 个 RPC</li>
+   <li><b>Agent Jobs</b>：CSV 批量任务队列，带输出 CSV 导出</li>
+   <li><b>Code Mode</b>：工具调用变成 V8 沙箱里的代码执行（exec/wait 两个工具）</li>
+   <li><b>三种压缩路径</b>：模型摘要 / 远程压缩 V2 / token-budget 新窗口</li>
+   <li><b>Statsig 远程开关</b>：同版本不同账号功能不同</li>
+   <li><b>隐藏彩蛋</b>：登录页 Play Snake 贪吃蛇</li>
+  </ul></div>`;
+}
+
+function viewArch(el){
+  el.innerHTML=H('架构与进程','实测启动桌面端后的进程树与通信层次')+`
+  <div class="card"><h3>进程树（R 级：Get-Process 实测）</h3>
+  <pre class="mono" style="color:#8b949e;line-height:1.5">
+ChatGPT.exe  (Electron 主进程 + 渲染 + GPU + Utility, 10+ 子进程)
+ ├─ codex.exe                        341,312,816 B  ← Agent Runtime
+ │   └─ codex-code-mode-host.exe      74,921,776 B  ← Code Mode 执行宿主
+ ├─ codex-command-runner.exe           8,217,392 B  ← 沙箱命令代理
+ ├─ codex-windows-sandbox-service.exe 55,824,688 B  ← Windows 沙箱服务
+ └─ codex-windows-sandbox-setup.exe   17,700,144 B  ← 沙箱安装器
+  </pre></div>
+  <div class="card"><h3>通信层次</h3><table>
+  <tr><th>层</th><th>机制</th><th>证据</th></tr>
+  <tr><td>渲染 ↔ 主进程</td><td>Electron IPC + contextBridge</td><td><code>preload.js</code> electronBridge</td></tr>
+  <tr><td>大消息</td><td>分片协议 <code>codex-host-chunked-message-v1</code></td><td><code>preload.js</code></td></tr>
+  <tr><td>MCP App</td><td>MessageChannel + 独立源沙箱</td><td><code>sandbox-preload.js</code></td></tr>
+  <tr><td>主进程 ↔ Runtime</td><td>app-server（JSON-RPC / stdio / UDS / WS）</td><td><code>codex app-server</code></td></tr>
+  <tr><td>Runtime 对外</td><td>172 RPC + 85 通知</td><td><code>generate-json-schema</code></td></tr>
+  <tr><td>命令执行</td><td>命名管道，首帧必须 spawn_request</td><td>runner 字符串</td></tr>
+  </table></div>
+  <div class="card"><h3>四套外壳，同一内核</h3>
+  <p>TUI (456,055 行) · Desktop (Electron) · app-server (195,443 行) · exec-server / code-mode-host</p></div>`;
+}
+
+function viewCrates(el){
+  const f=match();
+  const rows=DATA.crates.filter(f);
+  el.innerHTML=H(`Rust Crate 目录（${rows.length}/${DATA.crates.length}）`,'按代码行数排序，来自 workspace Cargo.toml 与逐文件统计')+
+  `<table><tr><th>Crate</th><th>文件</th><th>代码行</th><th>说明</th></tr>`+
+  rows.map(c=>`<tr><td><code>${c.crate}</code>${SEL.has('crate:'+c.crate)?' <span class="pill">已选</span>':''}</td>
+   <td>${c.files}</td><td>${c.loc.toLocaleString()}<div class="bar"><i style="width:${Math.min(100,c.loc/4562)}%"></i></div></td>
+   <td>${esc(c.description||'—')}</td></tr>`).join('')+`</table>`;
+}
+
+function viewAgentLoop(el){
+  el.innerHTML=H('Agent 主循环','源码 <code>core/src/session/turn.rs:166 run_turn()</code>')+`
+  <div class="card"><h3>一轮 Turn 的时序</h3><ol>
+   <li>判断自动压缩开关（<code>AutoCompactionDisabled</code> / <code>Feature::TokenBudget</code>）— <code>turn.rs:177</code></li>
+   <li>Guardian 预检 — <code>turn.rs:184</code></li>
+   <li>结算上一轮异步 Hook — <code>turn.rs:188</code></li>
+   <li>预采样压缩（触顶或后台压缩就绪则执行）— <code>turn.rs:194 → 1372</code></li>
+   <li>解析本轮 MCP 依赖（@plugin 提及触发安装）— <code>turn.rs:236</code></li>
+   <li>捕获 StepContext（模型/工具/环境完整视图）— <code>turn.rs:271</code></li>
+   <li><b>进入主循环</b> — <code>turn.rs:454</code>
+     <ul><li>取出排队输入 → 跑 Hook → 记录（Hook 可终止本轮）</li>
+         <li>记录世界状态、校验 skills、记录 reasoning effort</li>
+         <li>构造 prompt <code>clone_history().for_prompt()</code></li>
+         <li>发起流式请求，处理 ResponseEvent</li>
+         <li>工具调用 → ToolCall → Registry → 执行 → 回填</li>
+         <li>判断是否滚动新窗口（MidTurn 压缩）— <code>turn.rs:659</code></li></ul>
+   </li>
+   <li>PostTurn 压缩判断 — <code>turn.rs:791</code></li>
+  </ol></div>
+  <div class="card"><h3>关键设计</h3><ul>
+   <li><b>单 turn 内多 step</b>：一个 turn 可含多次模型请求，直到模型不再需要 follow-up</li>
+   <li><b>CancellationToken 贯穿</b>：所有 await 都 <code>.or_cancel()</code></li>
+   <li><b>错误分级</b>：<code>TurnAborted</code>（用户中断）/ <code>ToolCollision</code>（工具冲突，直接终止）</li>
+   <li><b>换模型自动压缩</b>：<code>maybe_run_previous_model_inline_compact</code> 适配窗口</li>
+  </ul></div>`;
+}
+
+function viewTools(el){
+  const f=match();
+  const rows=DATA.tools.filter(r=>f(r));
+  el.innerHTML=H(`工具系统（${rows.length}/${DATA.tools.length}）`,'来源 <code>core/src/tools/handlers/</code>；六种暴露面：direct / direct_model_only / deferred / deferred_model_only / code_mode_only / hidden')+
+  `<table><tr><th>工具</th><th>定义位置</th><th>说明</th><th></th></tr>`+
+  rows.map(r=>`<tr><td><code>${r.tool}</code></td><td class="mono">${esc(r.file)}:${r.line}</td>
+   <td>${esc(r.desc||'—')}</td>
+   <td><span class="star ${SEL.has('tool:'+r.tool)?'on':''}" data-k="tool:${r.tool}">★</span></td></tr>`).join('')+`</table>
+  <div class="card" style="margin-top:16px"><h3>hosted 工具</h3>
+   <p><code>web_search</code>（<code>core/src/tools/hosted_spec.rs</code>）、<code>view_image</code>、<code>image_generation</code>。</p>
+   <p class="note">工具描述与参数 schema 可被模型目录远程覆盖（<code>multi_agent_tool.rs</code> 的 description_override / parameters_override），且支持参数加密标记。</p></div>`;
+  bindStars(el);
+}
+
+function viewMulti(el){
+  el.innerHTML=H('多 Agent 机制','V1/V2 双版本，9 个协作工具，mailbox 语义')+`
+  <div class="card"><h3>9 个协作工具</h3><table>
+  <tr><th>工具</th><th>语义（工具描述原文要点）</th></tr>
+  <tr><td><code>spawn_agent</code></td><td>派生子代理，可指定模型与 agent_type</td></tr>
+  <tr><td><code>send_input</code></td><td>发消息并触发 turn；<code>interrupt=true</code> 可改变任务方向</td></tr>
+  <tr><td><code>send_message</code></td><td>只投递，<b>不触发</b>新 turn</td></tr>
+  <tr><td><code>followup_task</code></td><td>给非根代理追加任务；空闲则触发，忙则边界投递</td></tr>
+  <tr><td><code>resume_agent</code></td><td>恢复已关闭代理</td></tr>
+  <tr><td><code>wait_agent</code></td><td>V1 等终态；V2 等 <b>mailbox</b> 更新（含用户 steer 提前结束）</td></tr>
+  <tr><td><code>list_agents</code></td><td>列出当前根线程树下活代理</td></tr>
+  <tr><td><code>close_agent</code></td><td>关闭代理及全部后代</td></tr>
+  <tr><td><code>interrupt_agent</code></td><td>打断当前 turn 并返回上一状态</td></tr>
+  </table></div>
+  <div class="card"><h3>V1 vs V2</h3><table>
+  <tr><th></th><th>V1</th><th>V2</th></tr>
+  <tr><td>必需工具</td><td>send_input / wait_agent / resume_agent / close_agent</td><td>send_message / followup_task / interrupt_agent / list_agents（+可选 wait_agent）</td></tr>
+  <tr><td>等待语义</td><td>等终态</td><td>等 mailbox 更新</td></tr>
+  <tr><td>可关闭</td><td>—</td><td><code>disable_direct_message</code>、<code>disable_native_tools</code></td></tr>
+  <tr><td>命名空间</td><td><code>MULTI_AGENT_V1_NAMESPACE</code></td><td>可配置命名空间 + 描述/参数覆盖</td></tr>
+  </table>
+  <p class="note">相关 crate：agent-graph-store、agent-message-board-client、agent-identity、agent-roles、core/src/agent/</p></div>
+  <div class="card"><h3>深度限制</h3>
+  <p><code>exceeds_thread_spawn_depth_limit(next_thread_spawn_depth(...), agent_max_depth)</code>（<code>spec_plan.rs:714</code>）——存在最大嵌套深度。</p></div>`;
+}
+
+function viewCompact(el){
+  el.innerHTML=H('上下文压缩','三条路径 / 三个触发点 / 与 Hook 生命周期绑定')+`
+  <div class="card"><h3>三条路径</h3><table>
+  <tr><th>路径</th><th>实现</th><th>特点</th></tr>
+  <tr><td>本地模型摘要</td><td><code>core/src/compact.rs</code></td><td>一次模型调用生成摘要，用户消息上限 20,000 token</td></tr>
+  <tr><td>远程压缩 V2</td><td><code>compact_remote_v2.rs</code></td><td>服务端完成，<code>RemoteCompactionSupport::V2</code></td></tr>
+  <tr><td>Token Budget 新窗口</td><td><code>compact_token_budget.rs</code></td><td><b>不调模型</b>，直接 <code>start_new_context_window</code></td></tr>
+  </table></div>
+  <div class="card"><h3>三个触发点</h3><ul>
+  <li><b>PreTurn</b> <code>turn.rs:194</code> — <code>token_limit_reached || candidate.is_some()</code></li>
+  <li><b>MidTurn</b> <code>turn.rs:659</code> — needs_follow_up 且（新窗口请求 / 触顶 / 后台压缩就绪）</li>
+  <li><b>PostTurn</b> <code>turn.rs:791</code> — <code>turn_end_compaction_threshold_reached</code></li></ul></div>
+  <div class="card"><h3>配置项</h3><pre class="mono">model_auto_compact_token_limit = &lt;i64&gt;
+model_auto_compact_token_limit_scope = "total" | "body_after_prefix"
+model_post_turn_compact_threshold_percent = &lt;u8&gt;</pre></div>
+  <div class="card"><h3>输入保护</h3><p>预采样压缩失败时先把用户输入记录进历史再报错（<code>turn.rs:203</code>），注释：<i>"Compaction runs before the new input is recorded, so preserve it on every failure."</i></p></div>`;
+}
+
+function viewCodeMode(el){
+  el.innerHTML=H('Code Mode','模型写的不是 JSON 工具调用，而是可执行代码')+`
+  <div class="card"><h3>对外只有两个工具</h3>
+   <pre class="mono">pub const PUBLIC_TOOL_NAME: &str = "exec";
+pub const WAIT_TOOL_NAME: &str = "wait";</pre>
+   <p class="note"><code>code-mode-protocol/src/lib.rs</code></p></div>
+  <div class="card"><h3>gRPC 接口（二进制字符串实证）</h3>
+   <pre class="mono">code_mode_host.grpc.open_session
+code_mode_host.grpc.execute
+code_mode_host.grpc.wait
+code_mode_host.grpc.close_session
+code_mode_host.grpc.shutdown_session
+code_mode_host.grpc.event</pre></div>
+  <div class="card"><h3>资源限制</h3>
+   <pre class="mono">DEFAULT_EXEC_YIELD_TIME_MS = 10_000
+DEFAULT_WAIT_YIELD_TIME_MS = 10_000
+DEFAULT_MAX_OUTPUT_TOKENS_PER_EXEC_CALL = 10_000
+CodeModeSessionCellExecutionLimits { max_yield_time_ms, max_heap_size_bytes }</pre>
+   <p>二进制硬限制：<code>too many active cells</code>、<code>too many tool subscriptions</code>、<code>HeapLimitExceeded</code>、<code>SandboxSize &lt; address_space_limit</code>、<code>TickLimit</code>、<code>CallstackSize</code></p></div>
+  <div class="card"><h3>相关 flags</h3><p><code>code_mode_host</code> (stable, true) · <code>code_mode</code> (dev, false) · <code>code_mode_host_grpc</code> (dev) · <code>code_mode_interrupt</code> (stable) · <code>code_mode_only</code> (dev)</p>
+   <p class="note">基础设施已上线，主功能默认关闭。</p></div>`;
+}
+
+function viewProtocol(el){
+  const f=match();
+  const reqs=DATA.rpc.requests.filter(x=>!f||x.toLowerCase().includes(FILTER));
+  const nots=DATA.rpc.notifications.filter(x=>!f||x.toLowerCase().includes(FILTER));
+  el.innerHTML=H(`app-server 协议（${reqs.length} 请求 / ${nots.length} 通知）`,'由官方二进制自生成 schema：<code>codex app-server generate-json-schema --experimental</code>')+
+  `<div class="card"><h3>请求方法</h3><div style="columns:2;column-gap:24px">`+
+  reqs.map(x=>`<div class="mono" style="padding:2px 0">${esc(x)}</div>`).join('')+`</div></div>
+   <div class="card"><h3>服务端通知</h3><div style="columns:2;column-gap:24px">`+
+  nots.map(x=>`<div class="mono" style="padding:2px 0">${esc(x)}</div>`).join('')+`</div></div>`;
+}
+
+function viewPersist(el){
+  el.innerHTML=H('本地持久化','SQLite 表结构直接来自 migration SQL')+`
+  <div class="card"><h3>数据库文件</h3><table>
+  <tr><th>文件</th><th>核心表</th><th>用途</th></tr>
+  <tr><td><code>state_N.sqlite</code></td><td>threads, thread_dynamic_tools, agent_jobs, agent_job_items</td><td>线程索引与批量任务</td></tr>
+  <tr><td><code>thread_history_N.sqlite</code></td><td>分页历史</td><td>thread/items、turns</td></tr>
+  <tr><td><code>goals_1.sqlite</code></td><td>thread_goals</td><td>目标 + token 预算</td></tr>
+  <tr><td><code>memories_1.sqlite</code></td><td>stage1_outputs, jobs</td><td>两阶段记忆</td></tr>
+  <tr><td><code>logs_2.sqlite</code></td><td>logs</td><td>结构化日志（按进程/线程分区）</td></tr>
+  <tr><td><code>queue_1.sqlite</code></td><td>队列</td><td>待处理消息</td></tr>
+  </table></div>
+  <div class="card"><h3>threads 表</h3><pre class="mono">id, rollout_path, created_at, updated_at, source, model_provider,
+cwd, title, sandbox_policy, approval_mode, tokens_used,
+has_user_event, archived, archived_at, git_sha, git_branch, git_origin_url</pre></div>
+  <div class="card"><h3>thread_goals 表</h3><pre class="mono">thread_id, goal_id, objective, status CHECK IN
+  ('active','paused','blocked','usage_limited','budget_limited','complete'),
+token_budget, tokens_used, time_used_seconds, created_at_ms, updated_at_ms</pre></div>
+  <div class="card"><h3>agent_jobs 表（CSV 批处理）</h3><pre class="mono">agent_jobs: id, name, status, instruction, output_schema_json,
+  input_headers_json, input_csv_path, output_csv_path, auto_export, ...
+agent_job_items: job_id, item_id, row_index, row_json, status,
+  assigned_thread_id, attempt_count, result_json, ...</pre></div>
+  <div class="card"><h3>memories 两阶段</h3><pre class="mono">stage1_outputs: thread_id, raw_memory, rollout_summary,
+  usage_count, last_usage, selected_for_phase2</pre></div>`;
+}
+
+function viewDesktop(el){
+  el.innerHTML=H('桌面端与 IPC','app.asar 解包后的 preload / 通道 / 沙箱隔离')+`
+  <div class="card"><h3>electronBridge API</h3><div style="columns:2;column-gap:24px" class="mono">`+
+  ['acknowledgeChunkedMessage','getPreloadStartedAtMs','sendMessageFromView','getPathForFile','startFileDrag','startLinkDrag','sendWorkerMessageFromView','subscribeToWorkerMessages','showContextMenu','getFastModeRolloutMetrics','getSharedObjectSnapshotValue','getInitialSidebarBootstrap','getSystemThemeVariant','subscribeToSystemThemeVariant','triggerSentryTestError','getSentryInitOptions','getDesktopUserAgent','getAppSessionId','getBuildFlavor','isDeviceCheckSupported','isIntelMacBuild'].map(x=>`<div>${x}</div>`).join('')+`</div></div>
+  <div class="card"><h3>IPC 通道</h3><div class="mono" style="line-height:1.9">`+
+  ['message-from-view','message-for-view','chunked-message-ack','connect-app-host','worker:{id}:from-view','worker:{id}:for-view','get-sentry-init-options (sync)','get-build-flavor (sync)','get-shared-object-snapshot (sync)','get-system-theme-variant (sync)','get-initial-sidebar-bootstrap (sync)','start-file-drag (sync)','show-context-menu','start-link-drag','trigger-sentry-test','get-fast-mode-rollout-metrics','system-theme-variant-updated','remote-hosted-pip-video-frame','check-for-updates','browser-page-event','browser-sidebar-runtime-message','get-browser-annotation-api-policy','get-browser-webmcp-policy','mcp-app-sandbox-host-message','mcp-app-sandbox-guest-message'].map(x=>`codex_desktop:${esc(x)}<br>`).join('')+`</div></div>
+  <div class="card"><h3>MCP App 沙箱</h3>
+   <p>允许源：<code>https://*.web-sandbox.oaiusercontent.com</code> / <code>codex-sandbox://*.web-sandbox.oaiusercontent.com</code></p>
+   <p>必须 <code>?app=skybridge</code> + hash 中的 <code>initId</code>（≤128 字符）</p>
+   <p>端口白名单：navigate / notifyMcpApps* / runWidgetCode / setTheme / setWidgetData / setSafeArea 等；部分场景还有 screenshot / runUserCode / prepareEnvironment</p></div>
+  <div class="card"><h3>大消息分片</h3>
+   <pre class="mono">{ marker:'codex-host-chunked-message-v1', transferId, sequence,
+  kind:'start'|'chunk'|'end', tokens:[...] }</pre></div>`;
+}
+
+function viewUI(el){
+  const f=match();
+  const rows=DATA.ui.filter(r=>f(r)).slice(0,400);
+  el.innerHTML=H(`前端组件（显示 ${rows.length} / ${DATA.ui.length}）`,'webview/assets 中的 UI chunk；完整清单见 indexes/ui-chunks.json')+
+  `<table><tr><th>文件</th><th>大小</th><th>组件符号</th></tr>`+
+  rows.map(r=>`<tr><td class="mono">${esc(r.file)}</td><td>${(r.bytes/1024).toFixed(1)} KB</td>
+   <td class="mono">${esc((r.components||[]).join(', ').slice(0,80))||'—'}</td></tr>`).join('')+`</table>`;
+}
+
+function viewFlags(el){
+  const f=match();
+  const feats=DATA.features.filter(x=>!f||x.join(' ').toLowerCase().includes(FILTER));
+  const named=DATA.gates.named.filter(x=>!f||x.gate.toLowerCase().includes(FILTER));
+  el.innerHTML=H(`功能开关（CLI ${feats.length} · Statsig 具名 ${named.length} + 匿名 ${DATA.gates.numeric.length}）`,'CLI flags 来自 <code>codex features list</code> 实测；Statsig gate 来自主进程 JS')+
+  `<div class="card"><h3>Statsig 具名 gate</h3><table><tr><th>gate</th><th>出现文件</th></tr>`+
+  named.map(x=>`<tr><td><code>${esc(x.gate)}</code></td><td class="mono">${esc((x.files||[]).join(', '))}</td></tr>`).join('')+`</table>
+  <p class="note">另有 ${DATA.gates.numeric.length} 个数字 gate（如 ${DATA.gates.numeric.slice(0,6).join('、')}…），名称不下发以降低泄漏。</p></div>
+  <div class="card"><h3>CLI feature flags</h3><table><tr><th>名称</th><th>阶段</th><th>默认</th></tr>`+
+  feats.map(x=>`<tr><td><code>${esc(x[0])}</code></td><td>${esc(x[1]||'')}</td><td>${esc(x[2]||'')}</td></tr>`).join('')+`</table></div>`;
+}
+
+function viewModels(el){
+  el.innerHTML=H('模型目录','<code>codex debug models</code> 实测输出，含每个模型的隐藏配置')+`
+  <table><tr><th>slug</th><th>显示名</th><th>可见性</th><th>shell</th><th>推理档位</th></tr>
+  <tr><td><code>gpt-6-astra</code></td><td>GPT-6-Astra</td><td>list</td><td>unified_exec</td><td>low/medium/high/xhigh/max/ultra</td></tr>
+  <tr><td><code>gpt-6.1-sol</code></td><td>GPT-6.1-Sol</td><td>list</td><td>unified_exec</td><td>low…ultra</td></tr>
+  <tr><td><code>gpt-6-sol</code></td><td>GPT-6-Sol</td><td>list</td><td>unified_exec</td><td>low…ultra</td></tr>
+  <tr><td><code>gpt-6-luna</code></td><td>GPT-6-Luna</td><td>list</td><td>unified_exec</td><td>low…max</td></tr>
+  <tr><td><code>gpt-5.6-sol</code></td><td>GPT-5.6-Sol</td><td>list</td><td>unified_exec</td><td>low…ultra</td></tr>
+  <tr><td><code>gpt-5.6-terra</code></td><td>GPT-5.6-Terra</td><td>list</td><td>unified_exec</td><td>low…ultra</td></tr>
+  <tr><td><code>gpt-5.6-luna</code></td><td>GPT-5.6-Luna</td><td>list</td><td>unified_exec</td><td>low…max</td></tr>
+  <tr><td><code>gpt-daybreak-blue-latest</code></td><td>Daybreak Blue</td><td><b>hide</b></td><td>unified_exec</td><td>low…ultra</td></tr>
+  <tr><td><code>gpt-daybreak-red-latest</code></td><td>Daybreak Red</td><td><b>hide</b></td><td>unified_exec</td><td>low…ultra</td></tr>
+  <tr><td><code>gpt-5.5</code></td><td>GPT-5.5</td><td>list</td><td>unified_exec</td><td>low…xhigh</td></tr>
+  <tr><td><code>codex-auto-review</code></td><td>Codex Auto Review</td><td><b>hide</b></td><td>unified_exec</td><td>low…max</td></tr>
+  </table>
+  <div class="card"><h3>隐藏项</h3><p><code>daybreak-blue/red</code> 与 <code>codex-auto-review</code> 的 <code>visibility=hide</code>：不出现在模型选择器，但可被内部调用（如自动审查）。<code>service_tiers</code> 含 <code>priority</code>（Fast，2x 速度，增加用量）。</p></div>
+  <div class="card"><h3>模型目录中的提示词</h3><p>每个模型条目带 <code>model_messages</code>，其中 <code>persistent_instructions</code> 是完整的系统提示（实测抓到 GPT-6-Astra 的 persistent 模式提示）。这部分属于模型配置，随服务端下发，可远程修改。</p></div>`;
+}
+
+function viewShots(el){
+  el.innerHTML=H('界面截图','全部来自解包副本（全新 user-data-dir + 空 CODEX_HOME），不含任何个人账号数据')+`
+  <div class="gallery">
+    <figure><img src="shots/signin.png" onerror="this.src='../ui/screenshots/100_extracted_signin.png'"><figcaption>登录页（解包副本首启）</figcaption></figure>
+    <figure><img src="shots/snake.png" onerror="this.src='../ui/screenshots/101_easter_egg_snake.png'"><figcaption>隐藏彩蛋：Play Snake 贪吃蛇</figcaption></figure>
+  </div>
+  <div class="card" style="margin-top:16px"><h3>说明</h3>
+   <p>登录后的会话界面、子代理面板、设置页等需要 OpenAI 账号。为避免混入个人会话数据，本图鉴不包含登录后截图；这些界面的结构与实现改由组件 chunk 与协议分析给出。</p>
+   <p class="note">已隔离：任何含个人信息的截图存放在 <code>evidence/_quarantine_private/</code>，不进入 viewer、不进入 Git。</p></div>`;
+}
+
+function viewUnknowns(el){
+  el.innerHTML=H('未解与盲点','如实记录未完成部分')+`
+  <div class="card"><h3>已确认但未动态验证</h3><ul>
+   <li>Remote Control 遥控链路（需要两台设备 + 账号）</li>
+   <li>Realtime 语音（需要 WebRTC 服务端 + 麦克风）</li>
+   <li>Agent Jobs 实际跑批（需要可用的模型额度）</li>
+   <li>Plugin Marketplace 安装/分享（需要登录与市场服务端）</li>
+   <li>Windows 沙箱的完整 ACL 行为（需要提权环境）</li>
+  </ul></div>
+  <div class="card"><h3>只做了字符串级，未做函数级反编译</h3><ul>
+   <li><code>codex.exe</code>（341 MB）：Rust 单体，符号已 strip，仅提取 1,413,792 条字符串与 1,850 条协议关键词。未做全量函数级反编译。</li>
+   <li><code>ChatGPT.exe</code>（Electron 壳）：未反编译，行为已由 app.asar 完整覆盖。</li>
+   <li><code>codex-command-runner.exe</code>：已提取协议结构与命名管道名，未做函数级伪代码。</li>
+  </ul></div>
+  <div class="card"><h3>完全无法取得</h3><ul>
+   <li>服务端实现（模型网关、Statsig 后台、Marketplace 服务、Remote Control 配对服务）</li>
+   <li>模型权重与真实系统提示的完整版本（仅拿到模型目录里的片段）</li>
+   <li>OpenAI 内部构建流水线与签名密钥</li>
+  </ul></div>
+  <div class="card"><h3>统计口径</h3><p>覆盖率数字见 <code>COVERAGE.json</code>；本图鉴不宣称 100%。</p></div>`;
+}
+
+function bindStars(el){
+  el.querySelectorAll('.star').forEach(s=>s.onclick=()=>{
+    const k=s.dataset.k;
+    if(SEL.has(k)){SEL.delete(k);s.classList.remove('on');}else{SEL.add(k);s.classList.add('on');}
+    refreshSel();
+  });
+}
+function refreshSel(){
+  const box=document.getElementById('selbox');
+  if(!box) return;
+  box.innerHTML = SEL.size? [...SEL].map(k=>`<div class="mono">${esc(k)}</div>`).join('') : '勾选条目后在此汇总，可导出 SELECTIONS.json';
+}
+function exportSel(){
+  const obj={exportedAt:new Date().toISOString(),product:'OpenAI Codex',selections:[...SEL]};
+  const md='# Codex 图鉴选择\n\n'+[...SEL].map(k=>'- `'+k+'`').join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}));
+  a.download='SELECTIONS.json'; a.click();
+  const b=document.createElement('a');
+  b.href=URL.createObjectURL(new Blob([md],{type:'text/markdown'}));
+  b.download='SELECTIONS.md'; b.click();
+}
+boot();
+</script>
+</body>
+</html>

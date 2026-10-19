@@ -1,0 +1,2218 @@
+{
+ "requests": [
+  {
+   "method": "initialize",
+   "title": "InitializeRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "server/diagnostics",
+   "title": "Server/diagnosticsRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "userVerification/status",
+   "title": "UserVerification/statusRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "userVerification/enroll",
+   "title": "UserVerification/enrollRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "userVerification/delete",
+   "title": "UserVerification/deleteRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "userVerification/verify",
+   "title": "UserVerification/verifyRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "userVerification/cancel",
+   "title": "UserVerification/cancelRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/start",
+   "title": "Thread/startRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/resume",
+   "title": "Thread/resumeRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/fork",
+   "title": "Thread/forkRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/archive",
+   "title": "Thread/archiveRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/delete",
+   "title": "Thread/deleteRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/unsubscribe",
+   "title": "Thread/unsubscribeRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/increment_elicitation",
+   "title": "Thread/incrementElicitationRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/decrement_elicitation",
+   "title": "Thread/decrementElicitationRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/name/set",
+   "title": "Thread/name/setRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/prediction/request",
+   "title": "Thread/prediction/requestRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/goal/set",
+   "title": "Thread/goal/setRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/goal/get",
+   "title": "Thread/goal/getRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/goal/clear",
+   "title": "Thread/goal/clearRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/queue/add",
+   "title": "Thread/queue/addRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/queue/list",
+   "title": "Thread/queue/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/queue/update",
+   "title": "Thread/queue/updateRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/queue/delete",
+   "title": "Thread/queue/deleteRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/queue/reorder",
+   "title": "Thread/queue/reorderRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/queue/start",
+   "title": "Thread/queue/startRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/metadata/update",
+   "title": "Thread/metadata/updateRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/attachment/add",
+   "title": "Thread/attachment/addRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/attachment/list",
+   "title": "Thread/attachment/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/attachmentOwner/list",
+   "title": "Thread/attachmentOwner/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/attachment/remove",
+   "title": "Thread/attachment/removeRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/section/move",
+   "title": "Thread/section/moveRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/settings/update",
+   "title": "Thread/settings/updateRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/memoryMode/set",
+   "title": "Thread/memoryMode/setRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "memory/status",
+   "title": "Memory/statusRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "memory/reset",
+   "title": "Memory/resetRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "rollout/compress",
+   "title": "Rollout/compressRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "thread/unarchive",
+   "title": "Thread/unarchiveRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/compact/start",
+   "title": "Thread/compact/startRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/shellCommand",
+   "title": "Thread/shellCommandRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/approveGuardianDeniedAction",
+   "title": "Thread/approveGuardianDeniedActionRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/backgroundTerminals/clean",
+   "title": "Thread/backgroundTerminals/cleanRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/backgroundTerminals/list",
+   "title": "Thread/backgroundTerminals/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/backgroundTerminals/terminate",
+   "title": "Thread/backgroundTerminals/terminateRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/revert",
+   "title": "Thread/revertRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/list",
+   "title": "Thread/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "project/list",
+   "title": "Project/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "project/read",
+   "title": "Project/readRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "project/create",
+   "title": "Project/createRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "project/import",
+   "title": "Project/importRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "project/update",
+   "title": "Project/updateRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "project/move",
+   "title": "Project/moveRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "project/delete",
+   "title": "Project/deleteRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "threadSection/list",
+   "title": "ThreadSection/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "threadSection/create",
+   "title": "ThreadSection/createRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "threadSection/update",
+   "title": "ThreadSection/updateRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "threadSection/delete",
+   "title": "ThreadSection/deleteRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/search",
+   "title": "Thread/searchRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/searchOccurrences",
+   "title": "Thread/searchOccurrencesRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/loaded/list",
+   "title": "Thread/loaded/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/read",
+   "title": "Thread/readRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/readState/update",
+   "title": "Thread/readState/updateRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/turns/list",
+   "title": "Thread/turns/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/items/list",
+   "title": "Thread/items/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/items/read",
+   "title": "Thread/items/readRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/inject_items",
+   "title": "Thread/injectItemsRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "skills/list",
+   "title": "Skills/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "skills/extraRoots/set",
+   "title": "Skills/extraRoots/setRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "hooks/list",
+   "title": "Hooks/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "marketplace/add",
+   "title": "Marketplace/addRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "marketplace/remove",
+   "title": "Marketplace/removeRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "marketplace/upgrade",
+   "title": "Marketplace/upgradeRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "plugin/list",
+   "title": "Plugin/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "plugin/search",
+   "title": "Plugin/searchRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "plugin/installed",
+   "title": "Plugin/installedRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "plugin/reconcile",
+   "title": "Plugin/reconcileRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "plugin/read",
+   "title": "Plugin/readRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "plugin/skill/read",
+   "title": "Plugin/skill/readRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "plugin/share/save",
+   "title": "Plugin/share/saveRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "plugin/share/updateTargets",
+   "title": "Plugin/share/updateTargetsRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "plugin/share/list",
+   "title": "Plugin/share/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "plugin/share/checkout",
+   "title": "Plugin/share/checkoutRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "plugin/share/delete",
+   "title": "Plugin/share/deleteRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "app/read",
+   "title": "App/readRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "app/list",
+   "title": "App/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "app/installed",
+   "title": "App/installedRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fs/readFile",
+   "title": "Fs/readFileRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fs/writeFile",
+   "title": "Fs/writeFileRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fs/createDirectory",
+   "title": "Fs/createDirectoryRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fs/getMetadata",
+   "title": "Fs/getMetadataRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fs/readDirectory",
+   "title": "Fs/readDirectoryRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fs/remove",
+   "title": "Fs/removeRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fs/copy",
+   "title": "Fs/copyRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fs/watch",
+   "title": "Fs/watchRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fs/unwatch",
+   "title": "Fs/unwatchRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "skills/config/write",
+   "title": "Skills/config/writeRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "plugin/install",
+   "title": "Plugin/installRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "plugin/uninstall",
+   "title": "Plugin/uninstallRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "turn/start",
+   "title": "Turn/startRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "turn/settings/update",
+   "title": "Turn/settings/updateRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "turn/steer",
+   "title": "Turn/steerRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "turn/interrupt",
+   "title": "Turn/interruptRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/start",
+   "title": "Thread/realtime/startRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/appendAudio",
+   "title": "Thread/realtime/appendAudioRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/appendText",
+   "title": "Thread/realtime/appendTextRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/appendSpeech",
+   "title": "Thread/realtime/appendSpeechRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/stop",
+   "title": "Thread/realtime/stopRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/timeline/list",
+   "title": "Thread/timeline/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/listVoices",
+   "title": "Thread/realtime/listVoicesRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "review/start",
+   "title": "Review/startRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "model/list",
+   "title": "Model/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "account/gatewayOAuth/read",
+   "title": "Account/gatewayOAuth/readRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "account/gatewayOAuth/login",
+   "title": "Account/gatewayOAuth/loginRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "account/gatewayOAuth/cancel",
+   "title": "Account/gatewayOAuth/cancelRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "modelProvider/capabilities/read",
+   "title": "ModelProvider/capabilities/readRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "experimentalFeature/list",
+   "title": "ExperimentalFeature/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "permissionProfile/list",
+   "title": "PermissionProfile/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "experimentalFeature/enablement/set",
+   "title": "ExperimentalFeature/enablement/setRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "remoteControl/enable",
+   "title": "RemoteControl/enableRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "remoteControl/disable",
+   "title": "RemoteControl/disableRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "remoteControl/status/read",
+   "title": "RemoteControl/status/readRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "remoteControl/pairing/start",
+   "title": "RemoteControl/pairing/startRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "remoteControl/pairing/status",
+   "title": "RemoteControl/pairing/statusRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "remoteControl/client/list",
+   "title": "RemoteControl/client/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "remoteControl/client/revoke",
+   "title": "RemoteControl/client/revokeRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "collaborationMode/list",
+   "title": "CollaborationMode/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "mock/experimentalMethod",
+   "title": "Mock/experimentalMethodRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "environment/add",
+   "title": "Environment/addRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "environment/info",
+   "title": "Environment/infoRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "environment/status",
+   "title": "Environment/statusRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "mcpServer/oauth/login",
+   "title": "McpServer/oauth/loginRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "config/mcpServer/reload",
+   "title": "Config/mcpServer/reloadRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "mcpServerStatus/list",
+   "title": "McpServerStatus/listRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "mcpServer/resource/read",
+   "title": "McpServer/resource/readRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "mcpServer/event/stream/start",
+   "title": "McpServer/event/stream/startRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "mcpServer/event/stream/stop",
+   "title": "McpServer/event/stream/stopRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "mcpServer/tool/call",
+   "title": "McpServer/tool/callRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "windowsSandbox/setupStart",
+   "title": "WindowsSandbox/setupStartRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "windowsSandbox/readiness",
+   "title": "WindowsSandbox/readinessRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "account/login/start",
+   "title": "Account/login/startRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "account/bedrock/discover",
+   "title": "Account/bedrock/discoverRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "account/bedrock/setup",
+   "title": "Account/bedrock/setupRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "account/bedrock/checkGovCloudRequirements",
+   "title": "Account/bedrock/checkGovCloudRequirementsRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "account/login/cancel",
+   "title": "Account/login/cancelRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "account/logout",
+   "title": "Account/logoutRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "account/rateLimits/read",
+   "title": "Account/rateLimits/readRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "account/rateLimitResetCredit/consume",
+   "title": "Account/rateLimitResetCredit/consumeRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "account/usage/read",
+   "title": "Account/usage/readRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "account/workspaceMessages/read",
+   "title": "Account/workspaceMessages/readRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "account/sendAddCreditsNudgeEmail",
+   "title": "Account/sendAddCreditsNudgeEmailRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "feedback/upload",
+   "title": "Feedback/uploadRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "command/exec",
+   "title": "Command/execRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "command/exec/write",
+   "title": "Command/exec/writeRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "command/exec/terminate",
+   "title": "Command/exec/terminateRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "command/exec/resize",
+   "title": "Command/exec/resizeRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "process/spawn",
+   "title": "Process/spawnRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "process/writeStdin",
+   "title": "Process/writeStdinRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "process/kill",
+   "title": "Process/killRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "process/resizePty",
+   "title": "Process/resizePtyRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "config/read",
+   "title": "Config/readRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "externalAgentConfig/detect",
+   "title": "ExternalAgentConfig/detectRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "externalAgentConfig/import",
+   "title": "ExternalAgentConfig/importRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "externalAgentConfig/import/recordHistory",
+   "title": "ExternalAgentConfig/import/recordHistoryRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "externalAgentConfig/import/readHistories",
+   "title": "ExternalAgentConfig/import/readHistoriesRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "config/value/write",
+   "title": "Config/value/writeRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "config/batchWrite",
+   "title": "Config/batchWriteRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "configRequirements/read",
+   "title": "ConfigRequirements/readRequest",
+   "required": [
+    "id",
+    "method"
+   ]
+  },
+  {
+   "method": "account/read",
+   "title": "Account/readRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fuzzyFileSearch",
+   "title": "FuzzyFileSearchRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fuzzyFileSearch/sessionStart",
+   "title": "FuzzyFileSearch/sessionStartRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fuzzyFileSearch/sessionUpdate",
+   "title": "FuzzyFileSearch/sessionUpdateRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fuzzyFileSearch/sessionStop",
+   "title": "FuzzyFileSearch/sessionStopRequest",
+   "required": [
+    "id",
+    "method",
+    "params"
+   ]
+  }
+ ],
+ "notifications": [
+  {
+   "method": "error",
+   "title": "ErrorNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/started",
+   "title": "Thread/startedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/status/changed",
+   "title": "Thread/status/changedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/readState/changed",
+   "title": "Thread/readState/changedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/archived",
+   "title": "Thread/archivedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/deleted",
+   "title": "Thread/deletedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/unarchived",
+   "title": "Thread/unarchivedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/closed",
+   "title": "Thread/closedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/reverted",
+   "title": "Thread/revertedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "skills/changed",
+   "title": "Skills/changedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/name/updated",
+   "title": "Thread/name/updatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/attachment/updated",
+   "title": "Thread/attachment/updatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/goal/updated",
+   "title": "Thread/goal/updatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/prediction/updated",
+   "title": "Thread/prediction/updatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/goal/cleared",
+   "title": "Thread/goal/clearedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/queue/changed",
+   "title": "Thread/queue/changedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "project/changed",
+   "title": "Project/changedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/project/updated",
+   "title": "Thread/project/updatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/environment/connected",
+   "title": "Thread/environment/connectedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/environment/disconnected",
+   "title": "Thread/environment/disconnectedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/settings/updated",
+   "title": "Thread/settings/updatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/tokenUsage/updated",
+   "title": "Thread/tokenUsage/updatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "turn/started",
+   "title": "Turn/startedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "hook/started",
+   "title": "Hook/startedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "turn/completed",
+   "title": "Turn/completedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "hook/completed",
+   "title": "Hook/completedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "turn/diff/updated",
+   "title": "Turn/diff/updatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "turn/plan/updated",
+   "title": "Turn/plan/updatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "item/started",
+   "title": "Item/startedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "item/autoApprovalReview/started",
+   "title": "Item/autoApprovalReview/startedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "item/autoApprovalReview/completed",
+   "title": "Item/autoApprovalReview/completedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "autoApprovalReview/strictReviewRequired",
+   "title": "AutoApprovalReview/strictReviewRequiredNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "item/completed",
+   "title": "Item/completedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "item/agentMessage/delta",
+   "title": "Item/agentMessage/deltaNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "item/plan/delta",
+   "title": "Item/plan/deltaNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "command/exec/outputDelta",
+   "title": "Command/exec/outputDeltaNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "process/outputDelta",
+   "title": "Process/outputDeltaNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "process/exited",
+   "title": "Process/exitedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "item/commandExecution/outputDelta",
+   "title": "Item/commandExecution/outputDeltaNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "item/commandExecution/terminalInteraction",
+   "title": "Item/commandExecution/terminalInteractionNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "item/fileChange/outputDelta",
+   "title": "Item/fileChange/outputDeltaNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "item/fileChange/patchUpdated",
+   "title": "Item/fileChange/patchUpdatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "serverRequest/resolved",
+   "title": "ServerRequest/resolvedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "item/mcpToolCall/progress",
+   "title": "Item/mcpToolCall/progressNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "mcpServer/oauthLogin/completed",
+   "title": "McpServer/oauthLogin/completedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "mcpServer/startupStatus/updated",
+   "title": "McpServer/startupStatus/updatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "mcpServer/event/stream/notification",
+   "title": "McpServer/event/stream/notificationNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "account/updated",
+   "title": "Account/updatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "account/gatewayOAuth/changed",
+   "title": "Account/gatewayOAuth/changedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "account/rateLimits/updated",
+   "title": "Account/rateLimits/updatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "app/list/updated",
+   "title": "App/list/updatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "remoteControl/status/changed",
+   "title": "RemoteControl/status/changedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "externalAgentConfig/import/progress",
+   "title": "ExternalAgentConfig/import/progressNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "externalAgentConfig/import/completed",
+   "title": "ExternalAgentConfig/import/completedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fs/changed",
+   "title": "Fs/changedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "item/reasoning/summaryTextDelta",
+   "title": "Item/reasoning/summaryTextDeltaNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "item/reasoning/summaryPartAdded",
+   "title": "Item/reasoning/summaryPartAddedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "item/reasoning/textDelta",
+   "title": "Item/reasoning/textDeltaNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/compacted",
+   "title": "Thread/compactedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "model/rerouted",
+   "title": "Model/reroutedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "model/verification",
+   "title": "Model/verificationNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "modelProvider/authRecoveryStarted",
+   "title": "ModelProvider/authRecoveryStartedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "modelProvider/authRecoveryCompleted",
+   "title": "ModelProvider/authRecoveryCompletedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "turn/moderationMetadata",
+   "title": "Turn/moderationMetadataNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "model/safetyBuffering/updated",
+   "title": "Model/safetyBuffering/updatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "warning",
+   "title": "WarningNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "guardianWarning",
+   "title": "GuardianWarningNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "deprecationNotice",
+   "title": "DeprecationNoticeNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "configWarning",
+   "title": "ConfigWarningNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fuzzyFileSearch/sessionUpdated",
+   "title": "FuzzyFileSearch/sessionUpdatedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "fuzzyFileSearch/sessionCompleted",
+   "title": "FuzzyFileSearch/sessionCompletedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/started",
+   "title": "Thread/realtime/startedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/itemAdded",
+   "title": "Thread/realtime/itemAddedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/item/started",
+   "title": "Thread/realtime/item/startedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/item/transcript/delta",
+   "title": "Thread/realtime/item/transcript/deltaNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/item/completed",
+   "title": "Thread/realtime/item/completedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/transcript/delta",
+   "title": "Thread/realtime/transcript/deltaNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/transcript/done",
+   "title": "Thread/realtime/transcript/doneNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/outputAudio/delta",
+   "title": "Thread/realtime/outputAudio/deltaNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/sdp",
+   "title": "Thread/realtime/sdpNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/error",
+   "title": "Thread/realtime/errorNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "thread/realtime/closed",
+   "title": "Thread/realtime/closedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "windows/worldWritableWarning",
+   "title": "Windows/worldWritableWarningNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "windowsSandbox/setupCompleted",
+   "title": "WindowsSandbox/setupCompletedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  },
+  {
+   "method": "account/login/completed",
+   "title": "Account/login/completedNotification",
+   "required": [
+    "method",
+    "params"
+   ]
+  }
+ ]
+}

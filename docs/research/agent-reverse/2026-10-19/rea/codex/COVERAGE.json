@@ -1,0 +1,58 @@
+{
+ "product": "OpenAI Codex",
+ "versions": {
+  "desktop": "26.1013.4894.0",
+  "cli": "rust-v0.163.0",
+  "code_mode_host": "0.163.0",
+  "source": "rust-v0.163.0"
+ },
+ "verified_at": "2026-10-19",
+ "coverage": {
+  "file_registration": {
+   "numerator": 12875,
+   "denominator": 12875,
+   "ratio": 1.0,
+   "note": "files.jsonl 全量登记"
+  },
+  "file_content_parse": {
+   "ratio": 0.12,
+   "note": "按全部解包字节计；按承载 Codex 逻辑的字节约 0.35"
+  },
+  "symbol_enumeration": {
+   "ratio": 0.85,
+   "note": "协议/工具/crate/前端 chunk 100%，原生函数 0%"
+  },
+  "mechanism_explanation": {
+   "ratio": 0.45
+  },
+  "ui_visualization": {
+   "ratio": 0.15
+  },
+  "e2e_verification": {
+   "ratio": 0.2
+  }
+ },
+ "counts": {
+  "desktop_files": 3651,
+  "asar_entries": 21073,
+  "cli_files": 47,
+  "rust_files": 5276,
+  "rust_crates": 155,
+  "tools": 28,
+  "rpc_requests": 172,
+  "rpc_notifications": 85,
+  "protocol_definitions": 810,
+  "cli_feature_flags": 175,
+  "statsig_named_gates": 10,
+  "statsig_numeric_gates": 74,
+  "ui_chunks": 2176
+ },
+ "unknowns": [
+  "codex.exe 函数级反编译未完成（341MB stripped Rust）",
+  "登录后界面未截图（避免个人数据）",
+  "74 个匿名 Statsig gate 用途未知",
+  "MCP/Skills/Hooks/Guardian 未逐函数精读",
+  "Remote Control / Realtime / Agent Jobs 未端到端验证",
+  "服务端实现不可得（U 级）"
+ ]
+}

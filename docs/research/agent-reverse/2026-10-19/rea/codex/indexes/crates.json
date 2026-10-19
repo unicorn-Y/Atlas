@@ -1,0 +1,932 @@
+[
+ {
+  "crate": "aws-auth",
+  "description": "",
+  "files": 6,
+  "loc": 1313
+ },
+ {
+  "crate": "analytics",
+  "description": "",
+  "files": 29,
+  "loc": 17641
+ },
+ {
+  "crate": "agent-graph-store",
+  "description": "",
+  "files": 5,
+  "loc": 479
+ },
+ {
+  "crate": "agent-message-board-client",
+  "description": "",
+  "files": 5,
+  "loc": 920
+ },
+ {
+  "crate": "agent-identity",
+  "description": "",
+  "files": 1,
+  "loc": 1000
+ },
+ {
+  "crate": "agent-roles",
+  "description": "",
+  "files": 4,
+  "loc": 592
+ },
+ {
+  "crate": "backend-client",
+  "description": "",
+  "files": 21,
+  "loc": 4988
+ },
+ {
+  "crate": "cloud-client",
+  "description": "",
+  "files": 5,
+  "loc": 693
+ },
+ {
+  "crate": "bwrap",
+  "description": "",
+  "files": 2,
+  "loc": 151
+ },
+ {
+  "crate": "build-info",
+  "description": "",
+  "files": 3,
+  "loc": 360
+ },
+ {
+  "crate": "ansi-escape",
+  "description": "",
+  "files": 2,
+  "loc": 142
+ },
+ {
+  "crate": "attachment-store",
+  "description": "",
+  "files": 2,
+  "loc": 311
+ },
+ {
+  "crate": "async-utils",
+  "description": "",
+  "files": 2,
+  "loc": 110
+ },
+ {
+  "crate": "app-server",
+  "description": "",
+  "files": 353,
+  "loc": 195443
+ },
+ {
+  "crate": "app-server-transport",
+  "description": "",
+  "files": 34,
+  "loc": 18385
+ },
+ {
+  "crate": "app-server-daemon",
+  "description": "",
+  "files": 34,
+  "loc": 10980
+ },
+ {
+  "crate": "app-server-client",
+  "description": "",
+  "files": 6,
+  "loc": 3670
+ },
+ {
+  "crate": "app-server-protocol",
+  "description": "",
+  "files": 68,
+  "loc": 36126
+ },
+ {
+  "crate": "app-server-protocol-noop-macros",
+  "description": "",
+  "files": 1,
+  "loc": 20
+ },
+ {
+  "crate": "app-server-test-client",
+  "description": "",
+  "files": 9,
+  "loc": 3931
+ },
+ {
+  "crate": "apply-patch",
+  "description": "",
+  "files": 16,
+  "loc": 5556
+ },
+ {
+  "crate": "arg0",
+  "description": "",
+  "files": 1,
+  "loc": 821
+ },
+ {
+  "crate": "feedback",
+  "description": "",
+  "files": 12,
+  "loc": 3519
+ },
+ {
+  "crate": "features",
+  "description": "",
+  "files": 4,
+  "loc": 3751
+ },
+ {
+  "crate": "install-context",
+  "description": "",
+  "files": 2,
+  "loc": 956
+ },
+ {
+  "crate": "codex-backend-openapi-models",
+  "description": "",
+  "files": 22,
+  "loc": 1254
+ },
+ {
+  "crate": "code-mode",
+  "description": "",
+  "files": 31,
+  "loc": 9351
+ },
+ {
+  "crate": "code-mode-host",
+  "description": "",
+  "files": 34,
+  "loc": 9984
+ },
+ {
+  "crate": "code-mode-protocol",
+  "description": "",
+  "files": 20,
+  "loc": 5023
+ },
+ {
+  "crate": "code-mode-runtime",
+  "description": "",
+  "files": 27,
+  "loc": 8961
+ },
+ {
+  "crate": "codex-home",
+  "description": "",
+  "files": 3,
+  "loc": 325
+ },
+ {
+  "crate": "cloud-config",
+  "description": "",
+  "files": 10,
+  "loc": 3353
+ },
+ {
+  "crate": "cloud-tasks",
+  "description": "",
+  "files": 11,
+  "loc": 5403
+ },
+ {
+  "crate": "cloud-tasks-client",
+  "description": "",
+  "files": 3,
+  "loc": 1117
+ },
+ {
+  "crate": "cloud-tasks-mock-client",
+  "description": "",
+  "files": 2,
+  "loc": 270
+ },
+ {
+  "crate": "cli",
+  "description": "",
+  "files": 104,
+  "loc": 41784
+ },
+ {
+  "crate": "collaboration-mode-templates",
+  "description": "",
+  "files": 1,
+  "loc": 2
+ },
+ {
+  "crate": "connectors",
+  "description": "",
+  "files": 20,
+  "loc": 5362
+ },
+ {
+  "crate": "config",
+  "description": "",
+  "files": 96,
+  "loc": 31241
+ },
+ {
+  "crate": "config-schema",
+  "description": "",
+  "files": 1,
+  "loc": 22
+ },
+ {
+  "crate": "context-fragments",
+  "description": "",
+  "files": 8,
+  "loc": 518
+ },
+ {
+  "crate": "shell-command",
+  "description": "",
+  "files": 19,
+  "loc": 10358
+ },
+ {
+  "crate": "skills",
+  "description": "",
+  "files": 17,
+  "loc": 2672
+ },
+ {
+  "crate": "core",
+  "description": "",
+  "files": 862,
+  "loc": 456237
+ },
+ {
+  "crate": "core-api",
+  "description": "",
+  "files": 1,
+  "loc": 150
+ },
+ {
+  "crate": "core-plugin-common",
+  "description": "",
+  "files": 4,
+  "loc": 209
+ },
+ {
+  "crate": "core-plugins",
+  "description": "",
+  "files": 93,
+  "loc": 49027
+ },
+ {
+  "crate": "diagnostics",
+  "description": "",
+  "files": 2,
+  "loc": 268
+ },
+ {
+  "crate": "guardian-context",
+  "description": "",
+  "files": 41,
+  "loc": 8632
+ },
+ {
+  "crate": "hooks",
+  "description": "",
+  "files": 35,
+  "loc": 16019
+ },
+ {
+  "crate": "history",
+  "description": "",
+  "files": 17,
+  "loc": 4190
+ },
+ {
+  "crate": "http-client",
+  "description": "",
+  "files": 42,
+  "loc": 11830
+ },
+ {
+  "crate": "secrets",
+  "description": "",
+  "files": 3,
+  "loc": 1025
+ },
+ {
+  "crate": "exec",
+  "description": "",
+  "files": 36,
+  "loc": 13223
+ },
+ {
+  "crate": "file-system",
+  "description": "",
+  "files": 4,
+  "loc": 1152
+ },
+ {
+  "crate": "exec-server-protocol",
+  "description": "",
+  "files": 10,
+  "loc": 2923
+ },
+ {
+  "crate": "exec-server",
+  "description": "",
+  "files": 195,
+  "loc": 66845
+ },
+ {
+  "crate": "exec-server/tests/support",
+  "description": "",
+  "files": 2,
+  "loc": 125
+ },
+ {
+  "crate": "execpolicy",
+  "description": "Codex exec policy: prefix-based Starlark rules for command decisions.",
+  "files": 13,
+  "loc": 2975
+ },
+ {
+  "crate": "ext/agent",
+  "description": "",
+  "files": 2,
+  "loc": 172
+ },
+ {
+  "crate": "ext/agent-message-board",
+  "description": "",
+  "files": 22,
+  "loc": 5144
+ },
+ {
+  "crate": "ext/connectors",
+  "description": "",
+  "files": 2,
+  "loc": 74
+ },
+ {
+  "crate": "ext/extension-api",
+  "description": "",
+  "files": 29,
+  "loc": 3217
+ },
+ {
+  "crate": "ext/goal",
+  "description": "",
+  "files": 14,
+  "loc": 5876
+ },
+ {
+  "crate": "ext/git-attribution",
+  "description": "",
+  "files": 4,
+  "loc": 437
+ },
+ {
+  "crate": "ext/guardian-reviewer",
+  "description": "",
+  "files": 24,
+  "loc": 3560
+ },
+ {
+  "crate": "ext/guardian-v2",
+  "description": "",
+  "files": 50,
+  "loc": 17064
+ },
+ {
+  "crate": "ext/history-notes",
+  "description": "",
+  "files": 8,
+  "loc": 1583
+ },
+ {
+  "crate": "ext/image-generation",
+  "description": "",
+  "files": 6,
+  "loc": 1483
+ },
+ {
+  "crate": "ext/items",
+  "description": "",
+  "files": 5,
+  "loc": 380
+ },
+ {
+  "crate": "ext/memories",
+  "description": "",
+  "files": 19,
+  "loc": 2597
+ },
+ {
+  "crate": "ext/mcp",
+  "description": "",
+  "files": 16,
+  "loc": 4275
+ },
+ {
+  "crate": "ext/queue",
+  "description": "",
+  "files": 3,
+  "loc": 1703
+ },
+ {
+  "crate": "ext/skills",
+  "description": "",
+  "files": 87,
+  "loc": 23984
+ },
+ {
+  "crate": "ext/web-search",
+  "description": "",
+  "files": 6,
+  "loc": 911
+ },
+ {
+  "crate": "external-agent-migration",
+  "description": "",
+  "files": 64,
+  "loc": 16471
+ },
+ {
+  "crate": "keyring-store",
+  "description": "",
+  "files": 4,
+  "loc": 453
+ },
+ {
+  "crate": "file-search",
+  "description": "",
+  "files": 5,
+  "loc": 1484
+ },
+ {
+  "crate": "file-watcher",
+  "description": "",
+  "files": 2,
+  "loc": 1626
+ },
+ {
+  "crate": "linux-sandbox",
+  "description": "",
+  "files": 33,
+  "loc": 13286
+ },
+ {
+  "crate": "lmstudio",
+  "description": "",
+  "files": 2,
+  "loc": 470
+ },
+ {
+  "crate": "login",
+  "description": "",
+  "files": 68,
+  "loc": 21903
+ },
+ {
+  "crate": "codex-mcp",
+  "description": "",
+  "files": 55,
+  "loc": 26314
+ },
+ {
+  "crate": "memories/read",
+  "description": "",
+  "files": 6,
+  "loc": 293
+ },
+ {
+  "crate": "memories/write",
+  "description": "",
+  "files": 27,
+  "loc": 5897
+ },
+ {
+  "crate": "mermaid",
+  "description": "",
+  "files": 11,
+  "loc": 2425
+ },
+ {
+  "crate": "model-provider-info",
+  "description": "",
+  "files": 5,
+  "loc": 1932
+ },
+ {
+  "crate": "mxc-sandbox",
+  "description": "",
+  "files": 7,
+  "loc": 1871
+ },
+ {
+  "crate": "models-manager",
+  "description": "",
+  "files": 14,
+  "loc": 3687
+ },
+ {
+  "crate": "network-proxy",
+  "description": "",
+  "files": 66,
+  "loc": 31123
+ },
+ {
+  "crate": "ollama",
+  "description": "",
+  "files": 7,
+  "loc": 1107
+ },
+ {
+  "crate": "process-hardening",
+  "description": "",
+  "files": 1,
+  "loc": 193
+ },
+ {
+  "crate": "realtime-webrtc",
+  "description": "",
+  "files": 14,
+  "loc": 2105
+ },
+ {
+  "crate": "voice-host",
+  "description": "",
+  "files": 33,
+  "loc": 6182
+ },
+ {
+  "crate": "protocol",
+  "description": "",
+  "files": 79,
+  "loc": 32491
+ },
+ {
+  "crate": "prompts",
+  "description": "",
+  "files": 23,
+  "loc": 2766
+ },
+ {
+  "crate": "rollout",
+  "description": "",
+  "files": 39,
+  "loc": 17779
+ },
+ {
+  "crate": "rollout-trace",
+  "description": "",
+  "files": 34,
+  "loc": 13304
+ },
+ {
+  "crate": "rmcp-client",
+  "description": "",
+  "files": 108,
+  "loc": 39145
+ },
+ {
+  "crate": "responses-api-proxy",
+  "description": "",
+  "files": 4,
+  "loc": 1007
+ },
+ {
+  "crate": "response-debug-context",
+  "description": "",
+  "files": 1,
+  "loc": 185
+ },
+ {
+  "crate": "sandboxing",
+  "description": "",
+  "files": 32,
+  "loc": 11492
+ },
+ {
+  "crate": "stdio-to-uds",
+  "description": "",
+  "files": 3,
+  "loc": 223
+ },
+ {
+  "crate": "otel",
+  "description": "",
+  "files": 44,
+  "loc": 10450
+ },
+ {
+  "crate": "otel-trace-websocket",
+  "description": "",
+  "files": 1,
+  "loc": 179
+ },
+ {
+  "crate": "tcp-tunnel",
+  "description": "",
+  "files": 5,
+  "loc": 1318
+ },
+ {
+  "crate": "tui",
+  "description": "",
+  "files": 1130,
+  "loc": 456055
+ },
+ {
+  "crate": "user-verification",
+  "description": "",
+  "files": 19,
+  "loc": 1248
+ },
+ {
+  "crate": "tools",
+  "description": "",
+  "files": 43,
+  "loc": 8051
+ },
+ {
+  "crate": "v8-poc",
+  "description": "",
+  "files": 1,
+  "loc": 92
+ },
+ {
+  "crate": "websocket-auth",
+  "description": "",
+  "files": 2,
+  "loc": 767
+ },
+ {
+  "crate": "websocket-client",
+  "description": "",
+  "files": 6,
+  "loc": 1728
+ },
+ {
+  "crate": "windows-sandbox-rs/tests/support",
+  "description": "",
+  "files": 1,
+  "loc": 49
+ },
+ {
+  "crate": "windows-sandbox-service",
+  "description": "",
+  "files": 31,
+  "loc": 6039
+ },
+ {
+  "crate": "worktree",
+  "description": "",
+  "files": 8,
+  "loc": 2118
+ },
+ {
+  "crate": "workload-identity",
+  "description": "",
+  "files": 4,
+  "loc": 972
+ },
+ {
+  "crate": "utils/absolute-path",
+  "description": "",
+  "files": 4,
+  "loc": 1025
+ },
+ {
+  "crate": "utils/audio",
+  "description": "",
+  "files": 2,
+  "loc": 438
+ },
+ {
+  "crate": "utils/path-uri",
+  "description": "",
+  "files": 10,
+  "loc": 4229
+ },
+ {
+  "crate": "utils/cargo-bin",
+  "description": "",
+  "files": 2,
+  "loc": 298
+ },
+ {
+  "crate": "git-utils",
+  "description": "",
+  "files": 17,
+  "loc": 4770
+ },
+ {
+  "crate": "utils/cache",
+  "description": "",
+  "files": 2,
+  "loc": 269
+ },
+ {
+  "crate": "utils/git-discovery",
+  "description": "",
+  "files": 2,
+  "loc": 305
+ },
+ {
+  "crate": "utils/image",
+  "description": "",
+  "files": 4,
+  "loc": 1083
+ },
+ {
+  "crate": "utils/json-to-toml",
+  "description": "",
+  "files": 1,
+  "loc": 83
+ },
+ {
+  "crate": "utils/home-dir",
+  "description": "",
+  "files": 1,
+  "loc": 134
+ },
+ {
+  "crate": "utils/process",
+  "description": "",
+  "files": 2,
+  "loc": 80
+ },
+ {
+  "crate": "utils/pty",
+  "description": "",
+  "files": 37,
+  "loc": 9720
+ },
+ {
+  "crate": "utils/readiness",
+  "description": "",
+  "files": 1,
+  "loc": 336
+ },
+ {
+  "crate": "utils/redacted-string",
+  "description": "",
+  "files": 1,
+  "loc": 49
+ },
+ {
+  "crate": "utils/rustls-provider",
+  "description": "",
+  "files": 3,
+  "loc": 81
+ },
+ {
+  "crate": "utils/string",
+  "description": "",
+  "files": 4,
+  "loc": 687
+ },
+ {
+  "crate": "utils/cli",
+  "description": "",
+  "files": 8,
+  "loc": 682
+ },
+ {
+  "crate": "utils/elapsed",
+  "description": "",
+  "files": 1,
+  "loc": 71
+ },
+ {
+  "crate": "utils/sandbox-summary",
+  "description": "",
+  "files": 2,
+  "loc": 323
+ },
+ {
+  "crate": "utils/sleep-inhibitor",
+  "description": "",
+  "files": 6,
+  "loc": 608
+ },
+ {
+  "crate": "utils/approval-presets",
+  "description": "",
+  "files": 1,
+  "loc": 77
+ },
+ {
+  "crate": "utils/oss",
+  "description": "",
+  "files": 1,
+  "loc": 62
+ },
+ {
+  "crate": "utils/output-truncation",
+  "description": "",
+  "files": 2,
+  "loc": 769
+ },
+ {
+  "crate": "utils/path-utils",
+  "description": "",
+  "files": 5,
+  "loc": 594
+ },
+ {
+  "crate": "utils/plugins",
+  "description": "",
+  "files": 4,
+  "loc": 446
+ },
+ {
+  "crate": "utils/fuzzy-match",
+  "description": "",
+  "files": 1,
+  "loc": 163
+ },
+ {
+  "crate": "utils/stream-parser",
+  "description": "",
+  "files": 8,
+  "loc": 1506
+ },
+ {
+  "crate": "utils/template",
+  "description": "",
+  "files": 1,
+  "loc": 442
+ },
+ {
+  "crate": "codex-client",
+  "description": "",
+  "files": 5,
+  "loc": 300
+ },
+ {
+  "crate": "codex-api",
+  "description": "",
+  "files": 53,
+  "loc": 17531
+ },
+ {
+  "crate": "state",
+  "description": "",
+  "files": 64,
+  "loc": 27664
+ },
+ {
+  "crate": "terminal-detection",
+  "description": "",
+  "files": 2,
+  "loc": 1280
+ },
+ {
+  "crate": "test-binary-support",
+  "description": "",
+  "files": 1,
+  "loc": 77
+ },
+ {
+  "crate": "thread-manager-sample",
+  "description": "",
+  "files": 1,
+  "loc": 508
+ },
+ {
+  "crate": "thread-store",
+  "description": "",
+  "files": 71,
+  "loc": 35593
+ },
+ {
+  "crate": "uds",
+  "description": "",
+  "files": 6,
+  "loc": 1090
+ },
+ {
+  "crate": "codex-experimental-api-macros",
+  "description": "",
+  "files": 1,
+  "loc": 310
+ },
+ {
+  "crate": "plugin",
+  "description": "",
+  "files": 6,
+  "loc": 971
+ },
+ {
+  "crate": "model-provider",
+  "description": "",
+  "files": 31,
+  "loc": 8346
+ }
+]

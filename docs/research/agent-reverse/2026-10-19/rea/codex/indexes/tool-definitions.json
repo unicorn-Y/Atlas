@@ -1,0 +1,170 @@
+[
+ {
+  "tool": "apply_patch",
+  "file": "core/src/tools/handlers\\apply_patch_spec.rs",
+  "line": 19,
+  "desc": "The `apply_patch` tool can be used to edit files. This is a FREEFORM tool, so do not wrap the patch in JSON."
+ },
+ {
+  "tool": "extension_echo",
+  "file": "core/src/tools/handlers\\extension_tools.rs",
+  "line": 267,
+  "desc": "Echoes arguments."
+ },
+ {
+  "tool": "list_available_plugins_to_install",
+  "file": "core/src/tools/handlers\\list_available_plugins_to_install_spec.rs",
+  "line": 32,
+  "desc": ""
+ },
+ {
+  "tool": "list_mcp_resources",
+  "file": "core/src/tools/handlers\\mcp_resource_spec.rs",
+  "line": 25,
+  "desc": "Lists resources provided by MCP servers. Resources allow servers to share data that provides context to language models, such as files, database schemas, or application-specific information. Prefer resources over web search when possible."
+ },
+ {
+  "tool": "list_mcp_resource_templates",
+  "file": "core/src/tools/handlers\\mcp_resource_spec.rs",
+  "line": 54,
+  "desc": "Lists resource templates provided by MCP servers. Parameterized resource templates allow servers to share data that takes parameters and provides context to language models, such as files, database schemas, or application-specific informati"
+ },
+ {
+  "tool": "read_mcp_resource",
+  "file": "core/src/tools/handlers\\mcp_resource_spec.rs",
+  "line": 83,
+  "desc": "Read a specific resource from an MCP server given the server name and resource URI."
+ },
+ {
+  "tool": "spawn_agent",
+  "file": "core/src/tools/handlers\\multi_agents_spec.rs",
+  "line": 92,
+  "desc": ""
+ },
+ {
+  "tool": "send_input",
+  "file": "core/src/tools/handlers\\multi_agents_spec.rs",
+  "line": 193,
+  "desc": "Send a message to an existing agent. Use interrupt=true to redirect work immediately. You should reuse the agent by send_input if you believe your assigned task is highly dependent on the context of a previous task."
+ },
+ {
+  "tool": "send_message",
+  "file": "core/src/tools/handlers\\multi_agents_spec.rs",
+  "line": 222,
+  "desc": "Send a message to an existing agent. The message will be delivered promptly. Does not trigger a new turn."
+ },
+ {
+  "tool": "followup_task",
+  "file": "core/src/tools/handlers\\multi_agents_spec.rs",
+  "line": 255,
+  "desc": "Send a follow-up task to an existing non-root target agent and trigger a turn if it is idle. If the target is already running, deliver the task promptly at message boundaries while sampling, or after the pending tool call completes."
+ },
+ {
+  "tool": "resume_agent",
+  "file": "core/src/tools/handlers\\multi_agents_spec.rs",
+  "line": 275,
+  "desc": "Resume a previously closed agent by id so it can receive send_input and wait_agent calls."
+ },
+ {
+  "tool": "wait_agent",
+  "file": "core/src/tools/handlers\\multi_agents_spec.rs",
+  "line": 292,
+  "desc": "Wait for agents to reach a final status. Completed statuses may include the agent's final message. Returns empty status when timed out. Once the agent reaches a final status, a notification message will be received containing the same compl"
+ },
+ {
+  "tool": "list_agents",
+  "file": "core/src/tools/handlers\\multi_agents_spec.rs",
+  "line": 325,
+  "desc": "List live agents in the current root thread tree. Optionally filter by task-path prefix."
+ },
+ {
+  "tool": "close_agent",
+  "file": "core/src/tools/handlers\\multi_agents_spec.rs",
+  "line": 346,
+  "desc": "Close an agent and any open descendants when they are no longer needed, and return the target agent's previous status before shutdown was requested. Completed agents remain open and count toward the concurrency limit until closed. Don't kee"
+ },
+ {
+  "tool": "interrupt_agent",
+  "file": "core/src/tools/handlers\\multi_agents_spec.rs",
+  "line": 370,
+  "desc": "Interrupt an agent's current turn, if any, and return its previous status. The agent remains available for messages and follow-up tasks."
+ },
+ {
+  "tool": "update_plan",
+  "file": "core/src/tools/handlers\\plan_spec.rs",
+  "line": 43,
+  "desc": ""
+ },
+ {
+  "tool": "request_plugin_install",
+  "file": "core/src/tools/handlers\\request_plugin_install_spec.rs",
+  "line": 102,
+  "desc": ""
+ },
+ {
+  "tool": "exec_command",
+  "file": "core/src/tools/handlers\\shell_spec.rs",
+  "line": 96,
+  "desc": ""
+ },
+ {
+  "tool": "write_stdin",
+  "file": "core/src/tools/handlers\\shell_spec.rs",
+  "line": 146,
+  "desc": "Writes characters to an existing unified exec session and returns recent output."
+ },
+ {
+  "tool": "request_permissions",
+  "file": "core/src/tools/handlers\\shell_spec.rs",
+  "line": 180,
+  "desc": ""
+ },
+ {
+  "tool": "test_sync_tool",
+  "file": "core/src/tools/handlers\\test_sync_spec.rs",
+  "line": 59,
+  "desc": "Internal synchronization helper used by Codex integration tests."
+ },
+ {
+  "tool": "lookup",
+  "file": "core/src/tools/handlers\\tool_search.rs",
+  "line": 448,
+  "desc": "Search current records"
+ },
+ {
+  "tool": "codex_app",
+  "file": "core/src/tools/handlers\\tool_search.rs",
+  "line": 493,
+  "desc": "Tools in the codex_app namespace."
+ },
+ {
+  "tool": "automation_update",
+  "file": "core/src/tools/handlers\\tool_search.rs",
+  "line": 498,
+  "desc": "Tools in the codex_app namespace."
+ },
+ {
+  "tool": "mcp__calendar",
+  "file": "core/src/tools/handlers\\tool_search.rs",
+  "line": 544,
+  "desc": "Tools in the mcp__calendar namespace."
+ },
+ {
+  "tool": "create_event",
+  "file": "core/src/tools/handlers\\tool_search.rs",
+  "line": 548,
+  "desc": "Create events desktop tool"
+ },
+ {
+  "tool": "list_events",
+  "file": "core/src/tools/handlers\\tool_search.rs",
+  "line": 560,
+  "desc": "List events desktop tool"
+ },
+ {
+  "tool": "docs",
+  "file": "core/src/tools/handlers\\tool_search_spec.rs",
+  "line": 132,
+  "desc": ""
+ }
+]
