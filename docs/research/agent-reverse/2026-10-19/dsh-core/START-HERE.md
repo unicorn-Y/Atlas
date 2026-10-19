@@ -1,6 +1,6 @@
-# DSH 官方 Agent Core — 源码逆向阶段报告
+# DSH 官方 Agent Core — 逆向续工 checkpoint
 
-> 状态：**PARTIAL / ARTIFACT-AND-SOURCE-VERIFIED**。三个 Release 资产现已实物下载、哈希核验、解包和静态拆解；固定源码调用链亦已审查。**S = 实际文件/源码，U = 未验证**。未经运行验证不写 R。
+> 状态：**WORK IN PROGRESS / PARTIAL**。G0 资产身份可通过；G1–G6 仍有未闭合项，G7 保持 OPEN。三个 Release 资产与固定源码身份保留；新增代码覆盖计数、UI/RPC/Host 静态链和 deterministic synthetic test 证据。不得把 synthetic mock 描述成真实云模型或打包 UI 的运行。
 
 ## 一句话结论
 DeepSeek Harness 的核心不是单一的聊天循环，而是 **Cordis 可组合插件服务 + Session 事件日志/投影 + Agent Turn/Step 循环 + 多 provider 子代理生命周期 + Typert 远程控制与 Web 投影**。最值得 Atlas 吸收的是：模型请求与工具事件的可恢复边界、子代理持久地址/冷热驻留分离、并发执行而顺序提交的工具调度、浏览器子 Session 可观察和可干预的真正端到端路径。
@@ -31,6 +31,12 @@ DeepSeek Harness 的核心不是单一的聊天循环，而是 **Cordis 可组�
 13. 版本对照排除了把 source ZIP 当作 CLI runtime：CLI 82 个发布依赖中 73 个 DSH package name 在 ZIP 也有，但 source package 均已到 0.2.1-rc.2，而 CLI 实际 pin 在 0.2.0-rc.2；Web client package 也不在发布版本范围。
 
 ## 阅读路线
+
+- [COVERAGE.md](COVERAGE.md)：G0–G1 包身份与可执行路径覆盖计数和盲区
+- [SURFACE-MAP.tsv](SURFACE-MAP.tsv)：可达 UI/action 到 RPC、Host、状态与反馈链
+- [END-TO-END-TRACES.md](END-TO-END-TRACES.md)：状态生命周期、synthetic R 测试、失败和未知边界
+- [ATLAS-IMPLEMENTATION-BACKLOG.md](ATLAS-IMPLEMENTATION-BACKLOG.md)：固定 Atlas main 的机制型缺口与后续研究
+- [FINISH-GATES.md](FINISH-GATES.md)：逐项 G0–G7 状态
 - [DISCOVERY-LEDGER.md](DISCOVERY-LEDGER.md)：`DSH_CORE-NNN` 主账（各项版本/证明级别）
 - [IMPLEMENTATION-TRACE.md](IMPLEMENTATION-TRACE.md)：核心链路、输入输出、状态时序与故障边界
 - [UI-AND-WORKFLOWS.md](UI-AND-WORKFLOWS.md)：可见操作到 Host 控制的双向追踪

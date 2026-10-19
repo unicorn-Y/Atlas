@@ -124,4 +124,10 @@ Module resolver 为 bundle/plugin 维护 installation 与 profile 两个 anchor�
 
 ## 未闭合链路
 
+## G2 continuation: UI to addressed child (S, newer source)
+
+ConversationService submit calls the selected Session wrapper. Session.prompt chooses session.prompt for a root address or subagents.prompt for a continuable addressed child; Session.updateQueue invokes the queue RPC. The host SessionController exposes the prompt/updateQueue remotes and SessionCommands applies queue/Agent ownership rules. Child stop uses subagents.interruptByParent. Child navigation resolves a real child Session then uses page/follow/control. See SURFACE-MAP.tsv for source anchors and END-TO-END-TRACES.md for state effects and limits. These are newer-source static traces; the shipped Web npm is an older non-mapped bundle and has not yet been interactively run.
+
+Session-controller test source explicitly rejects generic cancel/updateQueue/model selection/create against runtime-owned child Sessions with session/agent-busy, while addressed child control uses parent-addressed subagent RPC. This is a separate discovery, DSH_CORE-036; dynamic execution is pending.
+
 CLI 0.2.0 与源码根 0.2.1 的实际 diff、Web UI 0.0.1-rc.5 构建中是否有上述 UI、production profile 默认插件矩阵、各源码 plugin 的运行状态、进程重启时挂起 model/tool/subagent 真实恢复、浏览器协议抓包：**U，补采见 EXTRACTION-REQUEST.md**。

@@ -1,5 +1,9 @@
 # 证据索引：原始材料、源码锚点与覆盖边界
 
+## Completion-gate local runtime evidence (R-synthetic)
+
+Fixed upstream commit 687f282e8625c6b8d11ff58211a90524be2e4317, isolated under the system temporary directory, Windows x64 / Node 24.18.1 / Vitest 4.1.11 / pnpm 11.28.5. Deterministic MockAdapter and fake-tool execution passed in packages/core/agent-loop/tests/loop.spec.ts and agent.spec.ts; SessionController queue/child-fence, inbox projection, subagent service/state and React queue/input cases passed. Exact file counts and case totals (4 suites/112 tests + 2/56 + 3/174) and the separate profile symlink failure are recorded in END-TO-END-TRACES.md. This is R for synthetic test-harness code execution only; it is not a real vendor model, CLI profile, live Web UI, or cross-process crash test.
+
 ## 身份与来源
 
 官方上游：`https://github.com/deepseek-ai/deepseek-harness`；固定提交 `687f282e8625c6b8d11ff58211a90524be2e4317`。源码 ZIP `dcc4cf8df9c3cbb3d57726b7a1ad5a52c16a754dcdbc2c0a0836788976090d9f` 已直接下载、完整 SHA 验证并解包。解包 tree index 有 9,485 条文件记录；GitHub Tree API 对 commit 的 **18,758** tracked paths 且 `truncated=false` 包含 Git 未跟踪文件表/目录记录，两计数语义不同。**仍不代表逐文件读取所有源码文件**。审查内容来自本地 ZIP 与固定提交源码（S），不是第三方博客摘要。

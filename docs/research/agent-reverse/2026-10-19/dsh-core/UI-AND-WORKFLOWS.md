@@ -55,4 +55,8 @@ Release 中的 `@deepseek-ai/dsh-web-frontend@0.0.1-rc.5` 是 Vite 静态产物�
 - `packages/boot/plugin-manager/src/operations.ts`：插件管理作为 Host pnpm profile 变更，UI 可调用服务，但成功安装、reload/HMR 后注册才算功能完成。
 
 ## 发行验证缺口
+
+## Continuation: address-aware conversation controls
+
+Newer-source composer and queue flow is mapped in SURFACE-MAP.tsv: QueueDock calls the conversation queue API; the Session client sends session.updateQueue; addressed child messages select subagents.prompt, and stop selects subagents.interruptByParent. A child opened from SubagentHeaderLineage is a Session resource with page/follow/control state, not a synthetic nested message. The matching SessionController test source also exercises a generic-control rejection fence for child Sessions. This closes the static interaction-to-Host chain for the snapshot, but not a live UI click/run or a feature claim about the older Web npm.
 固定源码包含 `apps/web` 和 `apps/desktop` 入口，但任务给的 CLI npm 与 Web npm **是不同且更早版本**。Web 旧版 dist、chunk 词项及 package metadata 已机械提取，25 个 JS 有 sourceMappingURL marker 但 `.map` 未随包发布。当前还不能说旧版 Web UI 的子 Agent tree/inline intervention 或实验 Team 都在正式发包中实际可见；继续闭环需获取旧版对应 TS 源或同版本构建产物与 Host runtime，再实际启动验证，见 `extracted/version-diff.md`。

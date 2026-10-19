@@ -40,4 +40,10 @@ Atlas `unicorn-Y/Atlas@aa6196f550098cc46081dc6db2c376cb87ddffa5`（main）；DSH
 
 ## 未验证事项
 
+## Completion-gate source-path follow-up
+
+Refreshed origin/main during continuation; SHA remains aa6196f550098cc46081dc6db2c376cb87ddffa5. Atlas message path is present: frontend/src/renderer/App.tsx:396 invokes the store; frontend/src/renderer/store/useAtlasStore.ts:622+ constructs a queued item, chooses steer/queue, and calls startRun; the same store posts run.start at approximately line 1013. core/atlas/api/runtime_ws_router.py:52-55 dispatches start/resume to handlers wired from core/atlas/server.py:784-785; core/atlas/api/run_drive.py:1239+ owns run startup and delegates into execution. Tool delegate entry is core/atlas/engine/tool_registry.py:43-53,586-650; child execution/hooks are in core/atlas/agent/enrichment.py:414-699. Runtime restart in core/atlas/api/runtime.py:108-146 fails interrupted runs rather than resuming original compute.
+
+Classification: Atlas has message/queue/steer, run event stream, delegate_task, child-worktree and background-run mechanisms. Equivalence to DSH addressed child Session RPC, child timeline/follow/control and durable child activation is not established by inspected paths. Next steps are in ATLAS-IMPLEMENTATION-BACKLOG.md. No Atlas product code was changed.
+
 未打开 Atlas 最新其他研究分支；本报告严格对 `main@aa6196f...`，它的 2026-10-05 提交时间 **早于**某些 Oct17–19 的其它项目工作，不得把其它分支实现当 main。未启动两个程序做性能/功能 E2E。缺口优先级基于观察机制，可继续扩展，非全库功能验收。
