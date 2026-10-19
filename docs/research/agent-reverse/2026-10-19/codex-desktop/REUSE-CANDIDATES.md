@@ -16,3 +16,9 @@
 公开上游 repo：https://github.com/openai/codex/tree/rust-v0.163.0；许可文件请由本地提取/实施前核对上游标签及依赖的具体许可证，此阶段**未查到并确认所有单文件版权条件**，不作一揽子 MIT/Apache 断言。官方 Desktop MSIX 属单独发行物；仅分析事实，不复制内置闭源代码/UI 资源至 Atlas。
 
 **使用原则**：先吸收成熟状态/协议机制，避免新造抽象层；代码直用仅限许可核实后且与 Atlas 架构匹配。最终施工顺序等客户端证据补齐再排，不向 main 提交任何改动。
+
+## MSIX 实物检查补记（2026-10-19）
+
+本次确认的桌面包静态机制中，**未发现可直接复制进 Atlas 的代码候选**。`app.asar` 的 Electron `preload.js` (`electronBridge`、chunked message validation/ACK)、`main-C4DYk222.js` 的 JSON-RPC client，以及 Windows `computerUse` pipe-host 生命周期，均来自 OpenAI.Codex `26.1013.4894.0` 的打包桌面端；其源码许可/再分发权在本研究中未核实，因此只登记为可供独立设计的行为参考，不复制代码、资源或 UI。证据定位及 SHA/offset 见 `IMPLEMENTATION-TRACE.md` §8 与 `EVIDENCE-INDEX.md`。
+
+可继续评估的**机制级原创实现**：按 transfer ID + sequence + ACK 设计受限、有界的跨进程大消息传输；把 app-server protocol version/capability 与明确兼容错误接入 adapter；区分 host lifecycle 和用户 run lifecycle。当前证据只说明 Codex 包静态包含这些机制，消息组包端、完整 IPC handler、实际执行拓扑及动态行为未闭环；不要照此推定 Atlas 缺少完整等价物。公开 `openai/codex` Rust 源码仍按上表单独处理，许可须在拟引用的精确 tag/文件/依赖处复核；不能用公开仓库许可覆盖闭源 MSIX。
