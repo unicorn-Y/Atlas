@@ -1,0 +1,310 @@
+{
+  "process": {
+    "title": "Claude",
+    "name": "claude",
+    "id": 62884
+  },
+  "element_count": 15,
+  "elements": [
+    {
+      "depth": 0,
+      "path": "0",
+      "name": "Claude",
+      "automationId": "",
+      "className": "Chrome_WidgetWin_1",
+      "controlType": "ControlType.Window",
+      "localizedControlType": "窗口",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 396,
+        "w": 616,
+        "x": 972,
+        "h": 608
+      }
+    },
+    {
+      "depth": 1,
+      "path": "0/0",
+      "name": "",
+      "automationId": "",
+      "className": "Intermediate D3D Window",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "窗格",
+      "isEnabled": false,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 396,
+        "w": 600,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 1,
+      "path": "0/1",
+      "name": "Claude",
+      "automationId": "",
+      "className": "RootView",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 396,
+        "w": 600,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 2,
+      "path": "0/1/0",
+      "name": "",
+      "automationId": "",
+      "className": "NonClientView",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 396,
+        "w": 600,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 3,
+      "path": "0/1/0/0",
+      "name": "",
+      "automationId": "",
+      "className": "WinFrameView",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 396,
+        "w": 600,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 4,
+      "path": "0/1/0/0/0",
+      "name": "",
+      "automationId": "",
+      "className": "WinCaptionButtonContainer",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 397,
+        "w": 137,
+        "x": 1443,
+        "h": 35
+      }
+    },
+    {
+      "depth": 5,
+      "path": "0/1/0/0/0/0",
+      "name": "最小化",
+      "automationId": "",
+      "className": "WinCaptionButton",
+      "controlType": "ControlType.Button",
+      "localizedControlType": "按钮",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 397,
+        "w": 45,
+        "x": 1443,
+        "h": 35
+      }
+    },
+    {
+      "depth": 5,
+      "path": "0/1/0/0/0/1",
+      "name": "最大化",
+      "automationId": "",
+      "className": "WinCaptionButton",
+      "controlType": "ControlType.Button",
+      "localizedControlType": "按钮",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 397,
+        "w": 46,
+        "x": 1488,
+        "h": 35
+      }
+    },
+    {
+      "depth": 5,
+      "path": "0/1/0/0/0/2",
+      "name": "关闭",
+      "automationId": "",
+      "className": "WinCaptionButton",
+      "controlType": "ControlType.Button",
+      "localizedControlType": "按钮",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 397,
+        "w": 46,
+        "x": 1534,
+        "h": 35
+      }
+    },
+    {
+      "depth": 4,
+      "path": "0/1/0/0/1",
+      "name": "",
+      "automationId": "",
+      "className": "ClientView",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 396,
+        "w": 600,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 5,
+      "path": "0/1/0/0/1/0",
+      "name": "",
+      "automationId": "",
+      "className": "View",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 396,
+        "w": 600,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 6,
+      "path": "0/1/0/0/1/0/0",
+      "name": "",
+      "automationId": "",
+      "className": "View",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 396,
+        "w": 600,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 7,
+      "path": "0/1/0/0/1/0/0/0",
+      "name": "",
+      "automationId": "",
+      "className": "View",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 396,
+        "w": 600,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 7,
+      "path": "0/1/0/0/1/0/0/1",
+      "name": "",
+      "automationId": "",
+      "className": "View",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 396,
+        "w": 600,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 8,
+      "path": "0/1/0/0/1/0/0/1/0",
+      "name": "",
+      "automationId": "",
+      "className": "View",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "y": 396,
+        "w": 600,
+        "x": 980,
+        "h": 600
+      }
+    }
+  ]
+}

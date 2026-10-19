@@ -1,0 +1,877 @@
+{
+ "flags_block_offset": 1566981,
+ "flag_count": 130,
+ "flags": [
+  {
+   "name": "artifactsPane",
+   "kind": "tg"
+  },
+  {
+   "name": "nativeQuickEntry",
+   "kind": "tg"
+  },
+  {
+   "name": "quickEntryDictation",
+   "kind": "tg"
+  },
+  {
+   "name": "customQuickEntryDictationShortcut",
+   "kind": "tg"
+  },
+  {
+   "name": "quickEntryGlobalShortcut",
+   "kind": "tg"
+  },
+  {
+   "name": "trayIcon",
+   "kind": "tg"
+  },
+  {
+   "name": "quietPenguin",
+   "kind": "tg"
+  },
+  {
+   "name": "louderPenguin",
+   "kind": "tg"
+  },
+  {
+   "name": "rubberDuck",
+   "kind": "tg"
+  },
+  {
+   "name": "chillingSlothEnterprise",
+   "kind": "tg"
+  },
+  {
+   "name": "chillingSlothFeat",
+   "kind": "tg"
+  },
+  {
+   "name": "ultrareviewErrorCategories",
+   "kind": "tg"
+  },
+  {
+   "name": "spawnTaskPendingPop",
+   "kind": "tg"
+  },
+  {
+   "name": "spawnTaskInFlightIds",
+   "kind": "tg"
+  },
+  {
+   "name": "folderWorktrees",
+   "kind": "tg"
+  },
+  {
+   "name": "folderWorktreesRemote",
+   "kind": "tg"
+  },
+  {
+   "name": "folderWorktreesListedDiscard",
+   "kind": "tg"
+  },
+  {
+   "name": "chillingSlothSshShell",
+   "kind": "tg"
+  },
+  {
+   "name": "terminalShellReported",
+   "kind": "tg"
+  },
+  {
+   "name": "chillingSlothSshWorktreeLocation",
+   "kind": "tg"
+  },
+  {
+   "name": "chillingSlothSshPuttyKeyConversion",
+   "kind": "tg"
+  },
+  {
+   "name": "chillingSlothRemoteFilePreview",
+   "kind": "tg"
+  },
+  {
+   "name": "chillingSlothLocal",
+   "kind": "tg"
+  },
+  {
+   "name": "yukonSilver",
+   "kind": "tg"
+  },
+  {
+   "name": "yukonSilverGems",
+   "kind": "tg"
+  },
+  {
+   "name": "yukonSilverGemsCache",
+   "kind": "tg"
+  },
+  {
+   "name": "wakeScheduler",
+   "kind": "tg"
+  },
+  {
+   "name": "keepAwake",
+   "kind": "tg"
+  },
+  {
+   "name": "codeSessionKeepAwake",
+   "kind": "tg"
+  },
+  {
+   "name": "ccdPromptSuggestionsSetting",
+   "kind": "tg"
+  },
+  {
+   "name": "ccdLandingTools",
+   "kind": "tg"
+  },
+  {
+   "name": "ccdMcpVerbsMidTurn",
+   "kind": "tg"
+  },
+  {
+   "name": "ccdMcpTurnOnSshHost",
+   "kind": "tg"
+  },
+  {
+   "name": "ccdRestartRemoteClaudeCode",
+   "kind": "tg"
+  },
+  {
+   "name": "ccdSshStartsWithoutBlockedPlugins",
+   "kind": "tg"
+  },
+  {
+   "name": "openWithConsentAnyLanding",
+   "kind": "tg"
+  },
+  {
+   "name": "desktopTopBar",
+   "kind": "tg"
+  },
+  {
+   "name": "ccdPlugins",
+   "kind": "tg"
+  },
+  {
+   "name": "ccdPluginSourceRouting",
+   "kind": "tg"
+  },
+  {
+   "name": "computerUse",
+   "kind": "tg"
+  },
+  {
+   "name": "computerUseComplianceGate",
+   "kind": "tg"
+  },
+  {
+   "name": "computerUseRollout",
+   "kind": "tg"
+  },
+  {
+   "name": "computerUseAppScoped",
+   "kind": "tg"
+  },
+  {
+   "name": "computerUsePerAppAccess",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkWatchRecord",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkCopperHeron",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkKappa",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkWatchers",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkArtifacts",
+   "kind": "tg"
+  },
+  {
+   "name": "trustedFolderSettingsConsent",
+   "kind": "tg"
+  },
+  {
+   "name": "framebufferPreview",
+   "kind": "tg"
+  },
+  {
+   "name": "iosSimulator",
+   "kind": "tg"
+  },
+  {
+   "name": "androidEmulator",
+   "kind": "tg"
+  },
+  {
+   "name": "iosSimulatorH264",
+   "kind": "tg"
+  },
+  {
+   "name": "iosSimulatorAccessibilityReader",
+   "kind": "tg"
+  },
+  {
+   "name": "iosSimulatorDuo",
+   "kind": "tg"
+  },
+  {
+   "name": "simulatorScreenshotEditor",
+   "kind": "tg"
+  },
+  {
+   "name": "simulatorMiniView",
+   "kind": "tg"
+  },
+  {
+   "name": "grandPrix",
+   "kind": "tg"
+  },
+  {
+   "name": "chromeExtensionInstall",
+   "kind": "tg"
+  },
+  {
+   "name": "ccdGitEngine",
+   "kind": "tg"
+  },
+  {
+   "name": "sessionPrOwnership",
+   "kind": "tg"
+  },
+  {
+   "name": "sessionFolderFileAccess",
+   "kind": "tg"
+  },
+  {
+   "name": "conversationFolderGrants",
+   "kind": "tg"
+  },
+  {
+   "name": "localSessionsWithoutGit",
+   "kind": "tg"
+  },
+  {
+   "name": "tearOffHalo",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkArtifactPopout",
+   "kind": "tg"
+  },
+  {
+   "name": "sidePanePopoutNativeViews",
+   "kind": "tg"
+  },
+  {
+   "name": "simulatorNativeViewPopout",
+   "kind": "tg"
+  },
+  {
+   "name": "simulatorPopoutShortcuts",
+   "kind": "tg"
+  },
+  {
+   "name": "simulatorNativeViewPerPane",
+   "kind": "tg"
+  },
+  {
+   "name": "popoutZoom",
+   "kind": "tg"
+  },
+  {
+   "name": "popoutTitleBarOverlay",
+   "kind": "tg"
+  },
+  {
+   "name": "filePreviewNativeViewRouting",
+   "kind": "tg"
+  },
+  {
+   "name": "claudeDesignWindow",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkRemoteSessionSpaces",
+   "kind": "tg"
+  },
+  {
+   "name": "spaceMemoryBridge",
+   "kind": "tg"
+  },
+  {
+   "name": "grandPrixRequest",
+   "kind": "tg"
+  },
+  {
+   "name": "bootstrapConfig",
+   "kind": "tg"
+  },
+  {
+   "name": "chatIn3p",
+   "kind": "tg"
+  },
+  {
+   "name": "chatTab",
+   "kind": "tg"
+  },
+  {
+   "name": "selfHostedSessions",
+   "kind": "tg"
+  },
+  {
+   "name": "selfHostedCowork",
+   "kind": "tg"
+  },
+  {
+   "name": "desktopHome",
+   "kind": "tg"
+  },
+  {
+   "name": "chatCodeExecution",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkBranchSession",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkScheduledTaskProjects",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkLocalSessionProjects",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkScheduledTaskRepoint",
+   "kind": "tg"
+  },
+  {
+   "name": "sshAttachmentTransport",
+   "kind": "tg"
+  },
+  {
+   "name": "wslForkSession",
+   "kind": "tg"
+  },
+  {
+   "name": "wslTerminal",
+   "kind": "tg"
+  },
+  {
+   "name": "wslMcp",
+   "kind": "tg"
+  },
+  {
+   "name": "wslPreview",
+   "kind": "tg"
+  },
+  {
+   "name": "wslLocalFiles",
+   "kind": "tg"
+  },
+  {
+   "name": "wslRoutines",
+   "kind": "tg"
+  },
+  {
+   "name": "humbleSky",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkSeededSummon",
+   "kind": "tg"
+  },
+  {
+   "name": "seededKind",
+   "kind": "tg"
+  },
+  {
+   "name": "sendNowEscalation",
+   "kind": "tg"
+  },
+  {
+   "name": "steerDetachField",
+   "kind": "tg"
+  },
+  {
+   "name": "sessionMentions",
+   "kind": "tg"
+  },
+  {
+   "name": "inlinePastes",
+   "kind": "tg"
+  },
+  {
+   "name": "turnDiscardedEvent",
+   "kind": "tg"
+  },
+  {
+   "name": "violinBow",
+   "kind": "tg"
+  },
+  {
+   "name": "violinBowHomeSettings",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkThinkingInSend",
+   "kind": "tg"
+  },
+  {
+   "name": "epitaxyMcpApps",
+   "kind": "tg"
+  },
+  {
+   "name": "epitaxyMcpAppPane",
+   "kind": "tg"
+  },
+  {
+   "name": "sideSessions",
+   "kind": "tg"
+  },
+  {
+   "name": "sideSessionProposalPicks",
+   "kind": "tg"
+  },
+  {
+   "name": "sideSessionProposalWorktreePick",
+   "kind": "tg"
+  },
+  {
+   "name": "sideSessionOfferCloudStart",
+   "kind": "tg"
+  },
+  {
+   "name": "btwChildSessions",
+   "kind": "tg"
+  },
+  {
+   "name": "nestedArchiveKeepsFamily",
+   "kind": "tg"
+  },
+  {
+   "name": "ccdConnectorTools",
+   "kind": "tg"
+  },
+  {
+   "name": "ccdTeleportSnapshot",
+   "kind": "tg"
+  },
+  {
+   "name": "launch",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkBrowser",
+   "kind": "tg"
+  },
+  {
+   "name": "coworkAutoModeAlwaysAllowOverride",
+   "kind": "tg"
+  },
+  {
+   "name": "multiAccount",
+   "kind": "tg"
+  },
+  {
+   "name": "telescopeBridge",
+   "kind": "tg"
+  },
+  {
+   "name": "sableOtter",
+   "kind": "tg"
+  },
+  {
+   "name": "mcpPersistentAlwaysAllow",
+   "kind": "tg"
+  },
+  {
+   "name": "mcpScheduledTaskAlwaysAllow",
+   "kind": "tg"
+  },
+  {
+   "name": "mcpScheduledTaskApprovalLifetime",
+   "kind": "tg"
+  },
+  {
+   "name": "bootPlaceholder",
+   "kind": "tg"
+  },
+  {
+   "name": "copperLarkA",
+   "kind": "tg"
+  },
+  {
+   "name": "copperLarkB",
+   "kind": "tg"
+  },
+  {
+   "name": "copperLarkC",
+   "kind": "tg"
+  }
+ ],
+ "preference_count": 58,
+ "preferences": [
+  {
+   "name": "menuBarEnabled",
+   "validator": "k()",
+   "category": "other",
+   "offset": 1556487
+  },
+  {
+   "name": "legacyQuickEntryEnabled",
+   "validator": "k()",
+   "category": "other",
+   "offset": 1556535
+  },
+  {
+   "name": "chromeExtensionEnabled",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1556592
+  },
+  {
+   "name": "hardwareBuddyEnabled",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1557139
+  },
+  {
+   "name": "sableOtterEnabled",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1557196
+  },
+  {
+   "name": "sableOtterTalkHold",
+   "validator": "qlt",
+   "category": "other",
+   "offset": 1557250
+  },
+  {
+   "name": "sableOtterCardHold",
+   "validator": "qlt",
+   "category": "other",
+   "offset": 1557302
+  },
+  {
+   "name": "sableOtterDictateHold",
+   "validator": "qlt",
+   "category": "other",
+   "offset": 1557354
+  },
+  {
+   "name": "sableOtterDictationCount",
+   "validator": "O().int().min(0)",
+   "category": "ui_state",
+   "offset": 1557409
+  },
+  {
+   "name": "sableOtterModel",
+   "validator": "D()",
+   "category": "other",
+   "offset": 1557483
+  },
+  {
+   "name": "sableOtterWindowContext",
+   "validator": "Rn([\"ask\",\"never\"])",
+   "category": "security",
+   "offset": 1557532
+  },
+  {
+   "name": "quietPenguinEnabled",
+   "validator": "k()",
+   "category": "other",
+   "offset": 1557844
+  },
+  {
+   "name": "louderPenguinEnabled",
+   "validator": "k()",
+   "category": "internal_state",
+   "offset": 1557897
+  },
+  {
+   "name": "rubberDuckEnabled",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1557960
+  },
+  {
+   "name": "velvetFinchEnabled",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1558120
+  },
+  {
+   "name": "chillingSlothLocation",
+   "validator": "Glt",
+   "category": "security",
+   "offset": 1558175
+  },
+  {
+   "name": "ccBranchPrefix",
+   "validator": "D()",
+   "category": "internal_state",
+   "offset": 1558233
+  },
+  {
+   "name": "ccMaxWarmWorktrees",
+   "validator": "O().int().min(0)",
+   "category": "other",
+   "offset": 1558290
+  },
+  {
+   "name": "ccWorktreeReapAfterHours",
+   "validator": "O().min(0)",
+   "category": "other",
+   "offset": 1558355
+  },
+  {
+   "name": "secureVmFeaturesEnabled",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1558420
+  },
+  {
+   "name": "launchEnabled",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1558480
+  },
+  {
+   "name": "coworkBrowserToolsEnabled",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1558530
+  },
+  {
+   "name": "previewJitlessKillSwitchEngaged",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1559665
+  },
+  {
+   "name": "selfHostedGrantsHost",
+   "validator": "D()",
+   "category": "security",
+   "offset": 1560390
+  },
+  {
+   "name": "coworkLegacyRootGrantsPruned",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1560851
+  },
+  {
+   "name": "allowAllBrowserActions",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1561232
+  },
+  {
+   "name": "coworkScheduledTasksEnabled",
+   "validator": "k()",
+   "category": "internal_state",
+   "offset": 1561503
+  },
+  {
+   "name": "coworkHipaaRestricted",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1561648
+  },
+  {
+   "name": "orgWorkAcrossAppsDisabled",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1561706
+  },
+  {
+   "name": "ccdScheduledTasksEnabled",
+   "validator": "k()",
+   "category": "internal_state",
+   "offset": 1561768
+  },
+  {
+   "name": "windowsAppJobLatched",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1561915
+  },
+  {
+   "name": "httpCacheZstdLatched",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1561972
+  },
+  {
+   "name": "coworkLocalTasksOffLatched",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1562105
+  },
+  {
+   "name": "sentryDwocDropDisabledLatched",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1562168
+  },
+  {
+   "name": "sentryHoldDisabledLatched",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1562234
+  },
+  {
+   "name": "bypassPermissionsModeEnabled",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1562389
+  },
+  {
+   "name": "coworkWebSearchEnabled",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1563165
+  },
+  {
+   "name": "coworkSpaceContextEnabled",
+   "validator": "k()",
+   "category": "other",
+   "offset": 1563360
+  },
+  {
+   "name": "keepAwakeEnabled",
+   "validator": "k()",
+   "category": "other",
+   "offset": 1563419
+  },
+  {
+   "name": "wakeSchedulerEnabled",
+   "validator": "k()",
+   "category": "other",
+   "offset": 1564297
+  },
+  {
+   "name": "wakeSchedulerApprovedThisCycle",
+   "validator": "k()",
+   "category": "internal_state",
+   "offset": 1564351
+  },
+  {
+   "name": "wakeSchedulerRegisteredAtVersion",
+   "validator": "D()",
+   "category": "internal_state",
+   "offset": 1564424
+  },
+  {
+   "name": "wakeSchedulerCourtesyFlippedKeepAwake",
+   "validator": "k()",
+   "category": "internal_state",
+   "offset": 1564499
+  },
+  {
+   "name": "wakeSchedulerDisableEmitted",
+   "validator": "k()",
+   "category": "internal_state",
+   "offset": 1564579
+  },
+  {
+   "name": "chicagoEnabled",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1564776
+  },
+  {
+   "name": "remoteToolsDeviceName",
+   "validator": "D()",
+   "category": "internal_state",
+   "offset": 1564827
+  },
+  {
+   "name": "chicagoAutoUnhide",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1564891
+  },
+  {
+   "name": "chicagoPreferredMode",
+   "validator": "Rn([\"background\",\"full_control\"])",
+   "category": "security",
+   "offset": 1565011
+  },
+  {
+   "name": "chicagoBackgroundIntroSeen",
+   "validator": "k()",
+   "category": "ui_state",
+   "offset": 1565098
+  },
+  {
+   "name": "vmMemoryGB",
+   "validator": "O().int().min(0)",
+   "category": "other",
+   "offset": 1565161
+  },
+  {
+   "name": "vmCpuCount",
+   "validator": "O().int().min(0)",
+   "category": "other",
+   "offset": 1565218
+  },
+  {
+   "name": "ccAutoArchiveOnPrClose",
+   "validator": "k()",
+   "category": "internal_state",
+   "offset": 1565275
+  },
+  {
+   "name": "ccNewTaskPrompt",
+   "validator": "Rn([\"ask\",\"here\",\"new_session\"])",
+   "category": "other",
+   "offset": 1565406
+  },
+  {
+   "name": "claudeIosSimulatorAccessEnabled",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1565561
+  },
+  {
+   "name": "claudeAndroidEmulatorAccessEnabled",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1565629
+  },
+  {
+   "name": "remoteControlSpawnMode",
+   "validator": "Rn([\"same-dir\",\"worktree\"])",
+   "category": "security",
+   "offset": 1565834
+  },
+  {
+   "name": "remoteControlStayReachable",
+   "validator": "k()",
+   "category": "security",
+   "offset": 1565917
+  },
+  {
+   "name": "ancientJournal",
+   "validator": "Ylt",
+   "category": "security",
+   "offset": 1566283
+  }
+ ]
+}

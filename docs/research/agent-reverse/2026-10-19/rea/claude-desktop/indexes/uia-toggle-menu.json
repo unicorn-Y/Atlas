@@ -1,0 +1,5084 @@
+{
+  "process": {
+    "id": 46868,
+    "title": "Claude",
+    "name": "claude"
+  },
+  "element_count": 254,
+  "elements": [
+    {
+      "depth": 0,
+      "path": "0",
+      "name": "Claude",
+      "automationId": "",
+      "className": "Chrome_WidgetWin_1",
+      "controlType": "ControlType.Window",
+      "localizedControlType": "窗口",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 616,
+        "y": 396,
+        "x": 972,
+        "h": 608
+      }
+    },
+    {
+      "depth": 1,
+      "path": "0/0",
+      "name": "",
+      "automationId": "",
+      "className": "Intermediate D3D Window",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "窗格",
+      "isEnabled": false,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 600,
+        "y": 396,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 1,
+      "path": "0/1",
+      "name": "Claude",
+      "automationId": "",
+      "className": "RootView",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 600,
+        "y": 396,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 2,
+      "path": "0/1/0",
+      "name": "",
+      "automationId": "",
+      "className": "NonClientView",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 600,
+        "y": 396,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 3,
+      "path": "0/1/0/0",
+      "name": "",
+      "automationId": "",
+      "className": "WinFrameView",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 600,
+        "y": 396,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 4,
+      "path": "0/1/0/0/0",
+      "name": "",
+      "automationId": "",
+      "className": "WinCaptionButtonContainer",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 137,
+        "y": 397,
+        "x": 1443,
+        "h": 35
+      }
+    },
+    {
+      "depth": 5,
+      "path": "0/1/0/0/0/0",
+      "name": "最小化",
+      "automationId": "",
+      "className": "WinCaptionButton",
+      "controlType": "ControlType.Button",
+      "localizedControlType": "按钮",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 45,
+        "y": 397,
+        "x": 1443,
+        "h": 35
+      }
+    },
+    {
+      "depth": 5,
+      "path": "0/1/0/0/0/1",
+      "name": "最大化",
+      "automationId": "",
+      "className": "WinCaptionButton",
+      "controlType": "ControlType.Button",
+      "localizedControlType": "按钮",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 46,
+        "y": 397,
+        "x": 1488,
+        "h": 35
+      }
+    },
+    {
+      "depth": 5,
+      "path": "0/1/0/0/0/2",
+      "name": "关闭",
+      "automationId": "",
+      "className": "WinCaptionButton",
+      "controlType": "ControlType.Button",
+      "localizedControlType": "按钮",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 46,
+        "y": 397,
+        "x": 1534,
+        "h": 35
+      }
+    },
+    {
+      "depth": 4,
+      "path": "0/1/0/0/1",
+      "name": "",
+      "automationId": "",
+      "className": "ClientView",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 600,
+        "y": 396,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 5,
+      "path": "0/1/0/0/1/0",
+      "name": "",
+      "automationId": "",
+      "className": "View",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 600,
+        "y": 396,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 6,
+      "path": "0/1/0/0/1/0/0",
+      "name": "",
+      "automationId": "",
+      "className": "View",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 600,
+        "y": 396,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 7,
+      "path": "0/1/0/0/1/0/0/0",
+      "name": "",
+      "automationId": "",
+      "className": "View",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 600,
+        "y": 396,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 8,
+      "path": "0/1/0/0/1/0/0/0/0",
+      "name": "",
+      "automationId": "RootWebArea",
+      "className": "",
+      "controlType": "ControlType.Document",
+      "localizedControlType": "文档",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 600,
+        "y": 396,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 9,
+      "path": "0/1/0/0/1/0/0/0/0/0",
+      "name": "",
+      "automationId": "root",
+      "className": "",
+      "controlType": "ControlType.Group",
+      "localizedControlType": "组",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": ""
+    },
+    {
+      "depth": 7,
+      "path": "0/1/0/0/1/0/0/1",
+      "name": "",
+      "automationId": "",
+      "className": "View",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 600,
+        "y": 396,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 8,
+      "path": "0/1/0/0/1/0/0/1/0",
+      "name": "",
+      "automationId": "",
+      "className": "View",
+      "controlType": "ControlType.Pane",
+      "localizedControlType": "区域",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 600,
+        "y": 396,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 9,
+      "path": "0/1/0/0/1/0/0/1/0/0",
+      "name": "App unavailable in region | Claude by Anthropic",
+      "automationId": "RootWebArea",
+      "className": "",
+      "controlType": "ControlType.Document",
+      "localizedControlType": "文档",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 600,
+        "y": 396,
+        "x": 980,
+        "h": 600
+      }
+    },
+    {
+      "depth": 10,
+      "path": "0/1/0/0/1/0/0/1/0/0/0",
+      "name": "Skip to main content",
+      "automationId": "",
+      "className": "skip-link",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 181,
+        "y": 327,
+        "x": 996,
+        "h": 43
+      }
+    },
+    {
+      "depth": 10,
+      "path": "0/1/0/0/1/0/0/1/0/0/1",
+      "name": "",
+      "automationId": "",
+      "className": "NavBar-module-scss-module__s3E3Dq__header theme-main",
+      "controlType": "ControlType.Group",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 588,
+        "y": 396,
+        "x": 980,
+        "h": 118
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/0",
+      "name": "Claude",
+      "automationId": "",
+      "className": "NavBar-module-scss-module__s3E3Dq__logo",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 120,
+        "y": 418,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/0/0",
+      "name": "Claude",
+      "automationId": "",
+      "className": "ClaudeWordmark-module-scss-module__u-w1aa__claudeWordmark",
+      "controlType": "ControlType.Image",
+      "localizedControlType": "图形",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 120,
+        "y": 418,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/1",
+      "name": "Toggle menu",
+      "automationId": "",
+      "className": "MenuToggle-module-scss-module__Kj6-VG__toggle",
+      "controlType": "ControlType.Button",
+      "localizedControlType": "按钮",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 24,
+        "y": 420,
+        "x": 1504,
+        "h": 24
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/2",
+      "name": "Breadcrumb",
+      "automationId": "",
+      "className": "NavBar-module-scss-module__s3E3Dq__breadcrumbs",
+      "controlType": "ControlType.Group",
+      "localizedControlType": "导航",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 588,
+        "y": 468,
+        "x": 980,
+        "h": 46
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/2/0",
+      "name": "",
+      "automationId": "",
+      "className": "NavBar-module-scss-module__s3E3Dq__breadcrumbsLeft",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 144,
+        "y": 481,
+        "x": 1020,
+        "h": 20
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/2/0/0",
+      "name": "App unavailable in region",
+      "automationId": "",
+      "className": "text-caption",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 144,
+        "y": 481,
+        "x": 1020,
+        "h": 20
+      }
+    },
+    {
+      "depth": 14,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/2/0/0/0",
+      "name": "",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.Group",
+      "localizedControlType": "组",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 144,
+        "y": 481,
+        "x": 1020,
+        "h": 20
+      }
+    },
+    {
+      "depth": 15,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/2/0/0/0/0",
+      "name": "App unavailable in region",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "文本",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 144,
+        "y": 483,
+        "x": 1020,
+        "h": 15
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/2/1",
+      "name": "",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.Group",
+      "localizedControlType": "组",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 94,
+        "y": 481,
+        "x": 1434,
+        "h": 20
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/2/1/0",
+      "name": "Explore here",
+      "automationId": "",
+      "className": "ExploreActions-module-scss-module__psqQxq__trigger",
+      "controlType": "ControlType.Button",
+      "localizedControlType": "按钮",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 94,
+        "y": 481,
+        "x": 1434,
+        "h": 20
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/2/2",
+      "name": "Explore here",
+      "automationId": "",
+      "className": "Dropdown-module-scss-module__3qB1IG__content Dropdown-module-scss-module__3qB1IG__contentOpen ExploreActions-module-scss-module__psqQxq__content",
+      "controlType": "ControlType.Menu",
+      "localizedControlType": "菜单",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 276,
+        "y": 508,
+        "x": 1252,
+        "h": 94
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/2/2/0",
+      "name": "",
+      "automationId": "",
+      "className": "Dropdown-module-scss-module__3qB1IG__list",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 260,
+        "y": 516,
+        "x": 1260,
+        "h": 78
+      }
+    },
+    {
+      "depth": 14,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/2/2/0/0",
+      "name": "Ask questions about this page",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.MenuItem",
+      "localizedControlType": "菜单项",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 260,
+        "y": 516,
+        "x": 1260,
+        "h": 39
+      }
+    },
+    {
+      "depth": 15,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/2/2/0/0/0",
+      "name": "Ask questions about this page",
+      "automationId": "",
+      "className": "Dropdown-module-scss-module__3qB1IG__link",
+      "controlType": "ControlType.Button",
+      "localizedControlType": "按钮",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 260,
+        "y": 516,
+        "x": 1260,
+        "h": 39
+      }
+    },
+    {
+      "depth": 14,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/2/2/0/1",
+      "name": "Copy as markdown",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.MenuItem",
+      "localizedControlType": "菜单项",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 260,
+        "y": 554,
+        "x": 1260,
+        "h": 40
+      }
+    },
+    {
+      "depth": 15,
+      "path": "0/1/0/0/1/0/0/1/0/0/1/2/2/0/1/0",
+      "name": "Copy as markdown",
+      "automationId": "",
+      "className": "Dropdown-module-scss-module__3qB1IG__link",
+      "controlType": "ControlType.Button",
+      "localizedControlType": "按钮",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 260,
+        "y": 554,
+        "x": 1260,
+        "h": 40
+      }
+    },
+    {
+      "depth": 10,
+      "path": "0/1/0/0/1/0/0/1/0/0/2",
+      "name": "",
+      "automationId": "main-content",
+      "className": "",
+      "controlType": "ControlType.Group",
+      "localizedControlType": "主要",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 588,
+        "y": 396,
+        "x": 980,
+        "h": 621
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/2/0",
+      "name": "Abstract geometric composition featuring overlapping angular shapes and blocks in beige and dark charcoal, suggesting dimension and depth through layered design",
+      "automationId": "",
+      "className": "Illustration-module-scss-module__pBGuRG__base Illustration-module-scss-module__pBGuRG__pictogram Illustration-module-scss-module__pBGuRG__size-large HeroPictogram-module-scss-module__ubGjQq__pictogram",
+      "controlType": "ControlType.Image",
+      "localizedControlType": "图形",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 72,
+        "y": 600,
+        "x": 1238,
+        "h": 72
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/2/1",
+      "name": "App unavailable",
+      "automationId": "",
+      "className": "Heading-module-scss-module__AyGdUq__heading text-display-2-serif Heading-module-scss-module__AyGdUq__balance HeroPictogram-module-scss-module__ubGjQq__headline",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 336,
+        "y": 700,
+        "x": 1106,
+        "h": 32
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/2/2",
+      "name": "Unfortunately, Claude is only available in certain regions right now. Please contact support if you think you’re getting this message in error.",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "文本",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 466,
+        "y": 759,
+        "x": 1041,
+        "h": 90
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/2/3",
+      "name": "",
+      "automationId": "",
+      "className": "ButtonGroup-module-scss-module__HSKYlq__buttonGroup HeroPictogram-module-scss-module__ubGjQq__ctas",
+      "controlType": "ControlType.Group",
+      "localizedControlType": "组",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 258,
+        "y": 872,
+        "x": 1145,
+        "h": 41
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/2/3/0",
+      "name": "View supported countries",
+      "automationId": "",
+      "className": "Button-module-scss-module__1SItCG__button Button-module-scss-module__1SItCG__variant-primary Button-module-scss-module__1SItCG__size-main text-body-2",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 258,
+        "y": 872,
+        "x": 1145,
+        "h": 41
+      }
+    },
+    {
+      "depth": 10,
+      "path": "0/1/0/0/1/0/0/1/0/0/3",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__footer theme-dark",
+      "controlType": "ControlType.Group",
+      "localizedControlType": "页脚",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 588,
+        "y": 1016,
+        "x": 980,
+        "h": 2202
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/0",
+      "name": "Claude",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__logo",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 120,
+        "y": 1089,
+        "x": 1020,
+        "h": 33
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/0/0",
+      "name": "Claude",
+      "automationId": "",
+      "className": "ClaudeWordmark-module-scss-module__u-w1aa__claudeWordmark",
+      "controlType": "ControlType.Image",
+      "localizedControlType": "图形",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 120,
+        "y": 1089,
+        "x": 1020,
+        "h": 27
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/1",
+      "name": "Ask Claude",
+      "automationId": "",
+      "className": "TextInput-module-scss-module__9-ItLa__input",
+      "controlType": "ControlType.Edit",
+      "localizedControlType": "编辑",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "How can I help you today?",
+      "accessKey": "",
+      "rect": {
+        "w": 450,
+        "y": 1162,
+        "x": 1033,
+        "h": 26
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/2",
+      "name": "Submit",
+      "automationId": "",
+      "className": "Button-module-scss-module__1SItCG__button Button-module-scss-module__1SItCG__variant-brand Button-module-scss-module__1SItCG__size-small Button-module-scss-module__1SItCG__iconOnly text-caption",
+      "controlType": "ControlType.Button",
+      "localizedControlType": "按钮",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 28,
+        "y": 1162,
+        "x": 1491,
+        "h": 29
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/3",
+      "name": "Products",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionTitle text-caption",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1231,
+        "x": 1020,
+        "h": 20
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionItems",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1258,
+        "x": 1020,
+        "h": 246
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/0",
+      "name": "Claude",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1258,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/0/0",
+      "name": "Claude",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1258,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/1",
+      "name": "Claude Code",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1286,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/1/0",
+      "name": "Claude Code",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1286,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/2",
+      "name": "Claude Cowork",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1313,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/2/0",
+      "name": "Claude Cowork",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1313,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/3",
+      "name": "@Claude",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1340,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/3/0",
+      "name": "@Claude",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1340,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/4",
+      "name": "Claude Science",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1367,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/4/0",
+      "name": "Claude Science",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1367,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/5",
+      "name": "Claude Security",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1394,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/5/0",
+      "name": "Claude Security",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1394,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/6",
+      "name": "Download app",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1422,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/6/0",
+      "name": "Download app",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1422,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/7",
+      "name": "Pricing",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1449,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/7/0",
+      "name": "Pricing",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1449,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/8",
+      "name": "Log in",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1476,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/4/8/0",
+      "name": "Log in",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1476,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/5",
+      "name": "Capabilities",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionTitle text-caption",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1231,
+        "x": 1290,
+        "h": 20
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/6",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionItems",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1258,
+        "x": 1290,
+        "h": 137
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/6/0",
+      "name": "Artifacts",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1258,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/6/0/0",
+      "name": "Artifacts",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1258,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/6/1",
+      "name": "Design",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1286,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/6/1/0",
+      "name": "Design",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1286,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/6/2",
+      "name": "Connectors",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1313,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/6/2/0",
+      "name": "Connectors",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1313,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/6/3",
+      "name": "Plugins",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1340,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/6/3/0",
+      "name": "Plugins",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1340,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/6/4",
+      "name": "Skills",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1367,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/6/4/0",
+      "name": "Skills",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1367,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/7",
+      "name": "Extensions",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionTitle text-caption",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1535,
+        "x": 1020,
+        "h": 20
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/8",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionItems",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1562,
+        "x": 1020,
+        "h": 83
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/8/0",
+      "name": "Claude in Chrome",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1562,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/8/0/0",
+      "name": "Claude in Chrome",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1562,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/8/1",
+      "name": "Claude for Google Workspace",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1590,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/8/1/0",
+      "name": "Claude for Google Workspace",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1590,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/8/2",
+      "name": "Claude for Microsoft 365",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1617,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/8/2/0",
+      "name": "Claude for Microsoft 365",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1617,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/9",
+      "name": "Models",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionTitle text-caption",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1535,
+        "x": 1290,
+        "h": 20
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/10",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionItems",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1562,
+        "x": 1290,
+        "h": 137
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/10/0",
+      "name": "Mythos",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1562,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/10/0/0",
+      "name": "Mythos",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1562,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/10/1",
+      "name": "Fable",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1590,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/10/1/0",
+      "name": "Fable",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1590,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/10/2",
+      "name": "Opus",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1617,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/10/2/0",
+      "name": "Opus",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1617,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/10/3",
+      "name": "Sonnet",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1644,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/10/3/0",
+      "name": "Sonnet",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1644,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/10/4",
+      "name": "Haiku",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1671,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/10/4/0",
+      "name": "Haiku",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1671,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/11",
+      "name": "Enterprise",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionTitle text-caption",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1730,
+        "x": 1020,
+        "h": 20
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/12",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionItems",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1757,
+        "x": 1020,
+        "h": 56
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/12/0",
+      "name": "Overview",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1757,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/12/0/0",
+      "name": "Overview",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1757,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/12/1",
+      "name": "Claude Code for Enterprise",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1785,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/12/1/0",
+      "name": "Claude Code for Enterprise",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1785,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/13",
+      "name": "Departments",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionTitle text-caption",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1730,
+        "x": 1290,
+        "h": 20
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/14",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionItems",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1757,
+        "x": 1290,
+        "h": 110
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/14/0",
+      "name": "Customer support",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1757,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/14/0/0",
+      "name": "Customer support",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1757,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/14/1",
+      "name": "Cybersecurity",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1785,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/14/1/0",
+      "name": "Cybersecurity",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1785,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/14/2",
+      "name": "Legal",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1812,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/14/2/0",
+      "name": "Legal",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1812,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/14/3",
+      "name": "Sales",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1839,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/14/3/0",
+      "name": "Sales",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1839,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/15",
+      "name": "Industries",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionTitle text-caption",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1898,
+        "x": 1020,
+        "h": 20
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionItems",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1925,
+        "x": 1020,
+        "h": 246
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/0",
+      "name": "Financial advisors",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1925,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/0/0",
+      "name": "Financial advisors",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1925,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/1",
+      "name": "Financial services",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1953,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/1/0",
+      "name": "Financial services",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1953,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/2",
+      "name": "Government",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1980,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/2/0",
+      "name": "Government",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1980,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/3",
+      "name": "Healthcare",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2007,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/3/0",
+      "name": "Healthcare",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2007,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/4",
+      "name": "Higher education",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2034,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/4/0",
+      "name": "Higher education",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2034,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/5",
+      "name": "K-12 teachers",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2061,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/5/0",
+      "name": "K-12 teachers",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2061,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/6",
+      "name": "Life sciences",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2089,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/6/0",
+      "name": "Life sciences",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2089,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/7",
+      "name": "Nonprofits",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2116,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/7/0",
+      "name": "Nonprofits",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2116,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/8",
+      "name": "Small business",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2143,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/16/8/0",
+      "name": "Small business",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2143,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/17",
+      "name": "Programs",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionTitle text-caption",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1898,
+        "x": 1290,
+        "h": 20
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/18",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionItems",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1925,
+        "x": 1290,
+        "h": 110
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/18/0",
+      "name": "Campus",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1925,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/18/0/0",
+      "name": "Campus",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1925,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/18/1",
+      "name": "Frontier Academy",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1953,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/18/1/0",
+      "name": "Frontier Academy",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1953,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/18/2",
+      "name": "Scientists",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1980,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/18/2/0",
+      "name": "Scientists",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 1980,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/18/3",
+      "name": "Startups",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2007,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/18/3/0",
+      "name": "Startups",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2007,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/19",
+      "name": "Developers",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionTitle text-caption",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2202,
+        "x": 1020,
+        "h": 20
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/20",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionItems",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2229,
+        "x": 1020,
+        "h": 137
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/20/0",
+      "name": "Developer docs",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2229,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/20/0/0",
+      "name": "Developer docs",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2229,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/20/1",
+      "name": "Developer blog",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2256,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/20/1/0",
+      "name": "Developer blog",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2256,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/20/2",
+      "name": "Community",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2284,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/20/2/0",
+      "name": "Community",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2284,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/20/3",
+      "name": "Console",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2311,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/20/3/0",
+      "name": "Console",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2311,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/20/4",
+      "name": "Engineering at Anthropic",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2338,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/20/4/0",
+      "name": "Engineering at Anthropic",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2338,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/21",
+      "name": "Platform",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionTitle text-caption",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2202,
+        "x": 1290,
+        "h": 20
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/22",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionItems",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2229,
+        "x": 1290,
+        "h": 137
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/22/0",
+      "name": "Overview",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2229,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/22/0/0",
+      "name": "Overview",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2229,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/22/1",
+      "name": "Marketplace",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2256,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/22/1/0",
+      "name": "Marketplace",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2256,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/22/2",
+      "name": "Claude on AWS",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2284,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/22/2/0",
+      "name": "Claude on AWS",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2284,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/22/3",
+      "name": "Google Cloud",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2311,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/22/3/0",
+      "name": "Google Cloud",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2311,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/22/4",
+      "name": "Microsoft Foundry",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2338,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/22/4/0",
+      "name": "Microsoft Foundry",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2338,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/23",
+      "name": "Resources",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionTitle text-caption",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2397,
+        "x": 1020,
+        "h": 20
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionItems",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2424,
+        "x": 1020,
+        "h": 246
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/0",
+      "name": "Overview",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2424,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/0/0",
+      "name": "Overview",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2424,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/1",
+      "name": "Articles",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2452,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/1/0",
+      "name": "Articles",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2452,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/2",
+      "name": "Webinars",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2479,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/2/0",
+      "name": "Webinars",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2479,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/3",
+      "name": "Claude partner network",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2506,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/3/0",
+      "name": "Claude partner network",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2506,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/4",
+      "name": "Claude Academy",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2533,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/4/0",
+      "name": "Claude Academy",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2533,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/5",
+      "name": "Customer stories",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2560,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/5/0",
+      "name": "Customer stories",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2560,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/6",
+      "name": "Events",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2588,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/6/0",
+      "name": "Events",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2588,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/7",
+      "name": "Powered by Claude",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2615,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/7/0",
+      "name": "Powered by Claude",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2615,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/8",
+      "name": "Service partners",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2642,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/24/8/0",
+      "name": "Service partners",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2642,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/25",
+      "name": "Help and security",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionTitle text-caption",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2397,
+        "x": 1290,
+        "h": 20
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionItems",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2424,
+        "x": 1290,
+        "h": 192
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26/0",
+      "name": "Availability",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2424,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26/0/0",
+      "name": "Availability",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2424,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26/1",
+      "name": "Check files",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2452,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26/1/0",
+      "name": "Check files",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2452,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26/2",
+      "name": "Regional compliance",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2479,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26/2/0",
+      "name": "Regional compliance",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2479,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26/3",
+      "name": "Report abuse",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2506,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26/3/0",
+      "name": "Report abuse",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2506,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26/4",
+      "name": "Security and compliance",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2533,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26/4/0",
+      "name": "Security and compliance",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2533,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26/5",
+      "name": "Status",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2560,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26/5/0",
+      "name": "Status",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2560,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26/6",
+      "name": "Support center",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2588,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/26/6/0",
+      "name": "Support center",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2588,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/27",
+      "name": "Company",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionTitle text-caption",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2701,
+        "x": 1020,
+        "h": 20
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionItems",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2728,
+        "x": 1020,
+        "h": 219
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/0",
+      "name": "Anthropic",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2728,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/0/0",
+      "name": "Anthropic",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2728,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/1",
+      "name": "Careers",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2755,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/1/0",
+      "name": "Careers",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2755,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/2",
+      "name": "Policy",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2783,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/2/0",
+      "name": "Policy",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2783,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/3",
+      "name": "Research",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2810,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/3/0",
+      "name": "Research",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2810,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/4",
+      "name": "Anthropic news",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2837,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/4/0",
+      "name": "Anthropic news",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2837,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/5",
+      "name": "Policy on the AI Exponential",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2864,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/5/0",
+      "name": "Policy on the AI Exponential",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2864,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/6",
+      "name": "Responsible Scaling Policy",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2891,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/6/0",
+      "name": "Responsible Scaling Policy",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2891,
+        "x": 1020,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/7",
+      "name": "Transparency",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2919,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/28/7/0",
+      "name": "Transparency",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2919,
+        "x": 1020,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/29",
+      "name": "Terms and policies",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionTitle text-caption",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "标题",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2701,
+        "x": 1290,
+        "h": 20
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionItems",
+      "controlType": "ControlType.List",
+      "localizedControlType": "列表",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2728,
+        "x": 1290,
+        "h": 213
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/0",
+      "name": "Privacy choices",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2728,
+        "x": 1290,
+        "h": 23
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/0/0",
+      "name": "Privacy choices",
+      "automationId": "",
+      "className": "ConsentContainer-module-scss-module__e332Bq__consentButton",
+      "controlType": "ControlType.Button",
+      "localizedControlType": "按钮",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 88,
+        "y": 2728,
+        "x": 1290,
+        "h": 23
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/1",
+      "name": "Privacy policy",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2750,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/1/0",
+      "name": "Privacy policy",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2750,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/2",
+      "name": "Responsible disclosure policy",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2777,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/2/0",
+      "name": "Responsible disclosure policy",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2777,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/3",
+      "name": "Terms of service: Commercial",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2804,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/3/0",
+      "name": "Terms of service: Commercial",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2804,
+        "x": 1290,
+        "h": 29
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/4",
+      "name": "Terms of service: Consumer",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2832,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/4/0",
+      "name": "Terms of service: Consumer",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2832,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/5",
+      "name": "Terms of Service: US K-12",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2859,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/5/0",
+      "name": "Terms of Service: US K-12",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2859,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/6",
+      "name": "Data Processing Agreement: US K-12",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2886,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/6/0",
+      "name": "Data Processing Agreement: US K-12",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2886,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/7",
+      "name": "Usage Policy",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.ListItem",
+      "localizedControlType": "列表项目",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2913,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 13,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/30/7/0",
+      "name": "Usage Policy",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__sectionLink text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 238,
+        "y": 2913,
+        "x": 1290,
+        "h": 28
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/31",
+      "name": "Anthropic",
+      "automationId": "",
+      "className": "AnthropicWordmark-module-scss-module__Yh_IMW__anthropicWordmark Footer-module-scss-module__fZonEa__anthropicLogo",
+      "controlType": "ControlType.Image",
+      "localizedControlType": "图形",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 108,
+        "y": 3002,
+        "x": 1020,
+        "h": 13
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/32",
+      "name": "© 2026 Anthropic PBC",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "文本",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 115,
+        "y": 3029,
+        "x": 1020,
+        "h": 15
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/33",
+      "name": "",
+      "automationId": "",
+      "className": "Footer-module-scss-module__fZonEa__divider",
+      "controlType": "ControlType.Separator",
+      "localizedControlType": "分隔符",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 508,
+        "y": 3077,
+        "x": 1020,
+        "h": 2
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/34",
+      "name": "X (Twitter)",
+      "automationId": "",
+      "className": "SocialIcons-module-scss-module__UZclsa__socialLink",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 16,
+        "y": 3094,
+        "x": 1020,
+        "h": 17
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/35",
+      "name": "Threads",
+      "automationId": "",
+      "className": "SocialIcons-module-scss-module__UZclsa__socialLink",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 16,
+        "y": 3094,
+        "x": 1052,
+        "h": 17
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/36",
+      "name": "LinkedIn",
+      "automationId": "",
+      "className": "SocialIcons-module-scss-module__UZclsa__socialLink",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 16,
+        "y": 3094,
+        "x": 1084,
+        "h": 17
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/37",
+      "name": "YouTube",
+      "automationId": "",
+      "className": "SocialIcons-module-scss-module__UZclsa__socialLink",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 16,
+        "y": 3094,
+        "x": 1116,
+        "h": 17
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/38",
+      "name": "Instagram",
+      "automationId": "",
+      "className": "SocialIcons-module-scss-module__UZclsa__socialLink",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 16,
+        "y": 3094,
+        "x": 1148,
+        "h": 17
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/39",
+      "name": "Google Add to Preferred Sources",
+      "automationId": "",
+      "className": "PreferredSourceLink-module-scss-module__K5BQCW__link text-caption",
+      "controlType": "ControlType.Hyperlink",
+      "localizedControlType": "链接",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 170,
+        "y": 3126,
+        "x": 1020,
+        "h": 20
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/39/0",
+      "name": "Google",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.Image",
+      "localizedControlType": "图形",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 16,
+        "y": 3127,
+        "x": 1020,
+        "h": 17
+      }
+    },
+    {
+      "depth": 11,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/40",
+      "name": "",
+      "automationId": "",
+      "className": "",
+      "controlType": "ControlType.Group",
+      "localizedControlType": "组",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 128,
+        "y": 3096,
+        "x": 1400,
+        "h": 47
+      }
+    },
+    {
+      "depth": 12,
+      "path": "0/1/0/0/1/0/0/1/0/0/3/40/0",
+      "name": "Language: English",
+      "automationId": "",
+      "className": "LocalePicker-module-scss-module__zgB75W__trigger text-caption",
+      "controlType": "ControlType.Button",
+      "localizedControlType": "按钮",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": true,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 128,
+        "y": 3096,
+        "x": 1400,
+        "h": 47
+      }
+    },
+    {
+      "depth": 10,
+      "path": "0/1/0/0/1/0/0/1/0/0/4",
+      "name": "",
+      "automationId": "__next-route-announcer__",
+      "className": "",
+      "controlType": "ControlType.Text",
+      "localizedControlType": "警报",
+      "isEnabled": true,
+      "isOffscreen": true,
+      "isKeyboardFocusable": false,
+      "helpText": "",
+      "accessKey": "",
+      "rect": {
+        "w": 1,
+        "y": 3216,
+        "x": 979,
+        "h": 2
+      }
+    }
+  ]
+}

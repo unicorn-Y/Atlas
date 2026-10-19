@@ -1,0 +1,75 @@
+== context-bridge-api (19) ==
+  t                                  .vite/build/aboutWindow.js               1:4147
+  t                                  .vite/build/aboutWindow.js               1:2641
+  desktopEssentialTelemetryDisabled  .vite/build/aboutWindow.js               7:1430
+  process                            .vite/build/aboutWindow.js               7:1382
+  buddy                              .vite/build/buddy.js                     1:4410
+  t                                  .vite/build/buddy.js                     1:3571
+  desktopEssentialTelemetryDisabled  .vite/build/buddy.js                     1:4323
+  process                            .vite/build/buddy.js                     1:4276
+  t                                  .vite/build/buddy.js                     1:2070
+  claudeDesktopArtifactPane          .vite/build/claudePagePreview.js         1:780
+  t                                  .vite/build/computerUseTeach.js          1:5106
+  t                                  .vite/build/computerUseTeach.js          1:3635
+  t                                  .vite/build/computerUseWatchRecord.js    1:3635
+  cowork                             .vite/build/coworkArtifact.js            1:1702
+  omeletteDesktopPdf                 .vite/build/designWindow.js              1:1098
+  t                                  .vite/build/findInPage.js                1:2373
+  t                                  .vite/build/findInPage.js                1:3874
+  process                            .vite/build/findInPage.js                7:1382
+  desktopEssentialTelemetryDisabled  .vite/build/findInPage.js                7:1430
+
+== electron-renderer (6) ==
+   None None {'declared_path': '.vite/renderer/local_exec_consent/localExecConsent.html', 'resolution_context': 'html-reference', 'resolved_path': '.vite/renderer/local_exec_consent/localExecConsent.html', 'resolution_status': 'resolved', 'mechanism': 'html-script-entrypoint'}
+   None None {'declared_path': '.vite/renderer/main_window/index.html', 'resolution_context': 'html-reference', 'resolved_path': '.vite/renderer/main_window/index.html', 'resolution_status': 'resolved', 'mechanism': 'html-script-entrypoint'}
+   None None {'declared_path': '.vite/renderer/quick_window/quick-window.html', 'resolution_context': 'html-reference', 'resolved_path': '.vite/renderer/quick_window/quick-window.html', 'resolution_status': 'resolved', 'mechanism': 'html-script-entrypoint'}
+   None None {'declared_path': '.vite/renderer/find_in_page/find-in-page.html', 'resolution_context': 'html-reference', 'resolved_path': '.vite/renderer/find_in_page/find-in-page.html', 'resolution_status': 'resolved', 'mechanism': 'html-script-entrypoint'}
+   None None {'declared_path': '.vite/renderer/about_window/about.html', 'resolution_context': 'html-reference', 'resolved_path': '.vite/renderer/about_window/about.html', 'resolution_status': 'resolved', 'mechanism': 'html-script-entrypoint'}
+   None None {'declared_path': '.vite/renderer/buddy_window/buddy.html', 'resolution_context': 'html-reference', 'resolved_path': '.vite/renderer/buddy_window/buddy.html', 'resolution_status': 'resolved', 'mechanism': 'html-script-entrypoint'}
+
+== electron-main (1) ==
+   None None {'declared_path': '.vite/build/index.pre.js', 'resolution_context': 'package-entrypoint', 'resolved_path': '.vite/build/index.pre.js', 'resolution_status': 'resolved', 'mechanism': 'package.json:main'}
+
+== worker (3) ==
+   .vite/build/heavy-work-worker/dist-CI9lzb1v.js 1 {'expression': 'new Worker(f)'}
+   .vite/build/heavy-work-worker/dist-CI9lzb1v.js 1 {'expression': 'new Worker(n)'}
+   resources/office365-mcp/pdfExtractorProcess.mjs 6 {'expression': 'new Worker(t,{type:"module"})'}
+
+== ipc-handler (37) ==
+   .vite/build/aboutWindow.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 2141}, 'end': {'line': 1, 'column': 2142}}}
+   .vite/build/aboutWindow.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 2289}, 'end': {'line': 1, 'column': 2290}}}
+   .vite/build/aboutWindow.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'r', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 3965}, 'end': {'line': 1, 'column': 3966}}}
+   .vite/build/aboutWindow.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 2432}, 'end': {'line': 1, 'column': 2433}}}
+   .vite/build/buddy.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 1902}, 'end': {'line': 1, 'column': 1903}}}
+   .vite/build/buddy.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'r', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 3394}, 'end': {'line': 1, 'column': 3395}}}
+   .vite/build/buddy.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 1767}, 'end': {'line': 1, 'column': 1768}}}
+   .vite/build/claudePagePreview.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'n', 'handler_kind': 'inline-function', 'handler_location': {'start': {'line': 1, 'column': 1762}, 'end': {'line': 1, 'column': 1882}}}
+   .vite/build/claudePagePreview.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'inline-function', 'handler_location': {'start': {'line': 1, 'column': 1110}, 'end': {'line': 1, 'column': 1208}}}
+   .vite/build/computerUseTeach.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 1235}, 'end': {'line': 1, 'column': 1236}}}
+   .vite/build/computerUseTeach.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 3397}, 'end': {'line': 1, 'column': 3398}}}
+   .vite/build/computerUseTeach.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'r', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 4888}, 'end': {'line': 1, 'column': 4889}}}
+   .vite/build/computerUseTeach.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 2190}, 'end': {'line': 1, 'column': 2191}}}
+   .vite/build/computerUseTeach.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'r', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 4759}, 'end': {'line': 1, 'column': 4760}}}
+   .vite/build/computerUseTeach.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 3249}, 'end': {'line': 1, 'column': 3250}}}
+   .vite/build/computerUseTeach.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 2326}, 'end': {'line': 1, 'column': 2327}}}
+   .vite/build/computerUseTeach.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 2601}, 'end': {'line': 1, 'column': 2602}}}
+   .vite/build/computerUseTeach.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 1601}, 'end': {'line': 1, 'column': 1602}}}
+   .vite/build/computerUseTeach.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 2469}, 'end': {'line': 1, 'column': 2470}}}
+   .vite/build/computerUseTeach.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 1469}, 'end': {'line': 1, 'column': 1470}}}
+   .vite/build/computerUseTeach.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 1355}, 'end': {'line': 1, 'column': 1356}}}
+   .vite/build/computerUseWatchRecord.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 1469}, 'end': {'line': 1, 'column': 1470}}}
+   .vite/build/computerUseWatchRecord.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 1235}, 'end': {'line': 1, 'column': 1236}}}
+   .vite/build/computerUseWatchRecord.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 3249}, 'end': {'line': 1, 'column': 3250}}}
+   .vite/build/computerUseWatchRecord.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 2601}, 'end': {'line': 1, 'column': 2602}}}
+   .vite/build/computerUseWatchRecord.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 2190}, 'end': {'line': 1, 'column': 2191}}}
+   .vite/build/computerUseWatchRecord.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 2326}, 'end': {'line': 1, 'column': 2327}}}
+   .vite/build/computerUseWatchRecord.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 1355}, 'end': {'line': 1, 'column': 1356}}}
+   .vite/build/computerUseWatchRecord.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 3397}, 'end': {'line': 1, 'column': 3398}}}
+   .vite/build/computerUseWatchRecord.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 1601}, 'end': {'line': 1, 'column': 1602}}}
+   .vite/build/computerUseWatchRecord.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 2469}, 'end': {'line': 1, 'column': 2470}}}
+   .vite/build/findInPage.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 1239}, 'end': {'line': 1, 'column': 1240}}}
+   .vite/build/findInPage.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'r', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 3697}, 'end': {'line': 1, 'column': 3698}}}
+   .vite/build/findInPage.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 2157}, 'end': {'line': 1, 'column': 2158}}}
+   .vite/build/findInPage.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 1495}, 'end': {'line': 1, 'column': 1496}}}
+   .vite/build/findInPage.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 1368}, 'end': {'line': 1, 'column': 1369}}}
+   .vite/build/findInPage.js 1 {'side': 'renderer', 'operation': 'on', 'mode': 'listen', 'channel_expression': 'i', 'handler_kind': 'identifier', 'handler_location': {'start': {'line': 1, 'column': 1624}, 'end': {'line': 1, 'column': 1625}}}

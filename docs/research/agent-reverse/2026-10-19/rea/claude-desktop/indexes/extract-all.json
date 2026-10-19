@@ -1,0 +1,7737 @@
+{
+ "generated_from": "D:\\Atlas-Reverse-Lab\\claude-desktop\\extracted\\asar\\.vite\\build",
+ "module_count": 369,
+ "modules": [
+  {
+   "file": "index.chunk-lzaSYO3Q.js",
+   "bytes": 7081117,
+   "signatures": {
+    "cowork": 618,
+    "mcp": 301,
+    "permission": 110,
+    "tool_use": 182,
+    "session": 1011,
+    "skills": 46,
+    "subagent": 8,
+    "cron": 403,
+    "artifact": 464,
+    "browser": 931,
+    "telemetry": 183,
+    "experiment": 73,
+    "sandbox": 148,
+    "worktree": 91,
+    "checkpoint": 2,
+    "vm": 1
+   },
+   "score": 4572
+  },
+  {
+   "file": "index.chunk-Bn6onBlX.js",
+   "bytes": 2106696,
+   "signatures": {
+    "mcp": 493,
+    "permission": 369,
+    "tool_use": 162,
+    "session": 1836,
+    "streaming": 5,
+    "skills": 1,
+    "subagent": 41,
+    "cron": 123,
+    "artifact": 7,
+    "browser": 10,
+    "telemetry": 14,
+    "experiment": 1,
+    "sandbox": 45,
+    "worktree": 1113,
+    "checkpoint": 7
+   },
+   "score": 4227
+  },
+  {
+   "file": "index.chunk-BvMaI6NQ.js",
+   "bytes": 592251,
+   "signatures": {
+    "cowork": 188,
+    "mcp": 170,
+    "permission": 149,
+    "tool_use": 32,
+    "session": 525,
+    "streaming": 4,
+    "skills": 3,
+    "subagent": 7,
+    "cron": 149,
+    "artifact": 23,
+    "browser": 1,
+    "telemetry": 36,
+    "experiment": 7,
+    "sandbox": 11
+   },
+   "score": 1305
+  },
+  {
+   "file": "index.chunk-M6SkuaH9.js",
+   "bytes": 737910,
+   "signatures": {
+    "cowork": 30,
+    "mcp": 78,
+    "permission": 68,
+    "tool_use": 50,
+    "session": 466,
+    "streaming": 1,
+    "skills": 1,
+    "subagent": 14,
+    "cron": 22,
+    "artifact": 21,
+    "telemetry": 9,
+    "experiment": 3,
+    "sandbox": 44,
+    "worktree": 282,
+    "checkpoint": 2
+   },
+   "score": 1091
+  },
+  {
+   "file": "index.chunk-DNyequwM.js",
+   "bytes": 1224866,
+   "signatures": {
+    "cowork": 15,
+    "mcp": 166,
+    "permission": 36,
+    "tool_use": 54,
+    "session": 224,
+    "subagent": 22,
+    "cron": 2,
+    "artifact": 6,
+    "telemetry": 42,
+    "experiment": 2,
+    "sandbox": 176,
+    "worktree": 19,
+    "checkpoint": 4
+   },
+   "score": 768
+  },
+  {
+   "file": "index.chunk-Dd4cATog.js",
+   "bytes": 317789,
+   "signatures": {
+    "session": 19,
+    "telemetry": 5,
+    "sandbox": 2,
+    "worktree": 442,
+    "checkpoint": 1
+   },
+   "score": 469
+  },
+  {
+   "file": "index.pre.js",
+   "bytes": 930575,
+   "signatures": {
+    "cowork": 56,
+    "mcp": 12,
+    "tool_use": 3,
+    "session": 1,
+    "skills": 1,
+    "cron": 13,
+    "artifact": 34,
+    "browser": 9,
+    "telemetry": 242,
+    "sandbox": 50,
+    "worktree": 2
+   },
+   "score": 423
+  },
+  {
+   "file": "index.chunk-FiyCjals.js",
+   "bytes": 93385,
+   "signatures": {
+    "mcp": 15,
+    "permission": 9,
+    "tool_use": 1,
+    "session": 125,
+    "skills": 1,
+    "cron": 6,
+    "browser": 52,
+    "telemetry": 5,
+    "worktree": 3
+   },
+   "score": 217
+  },
+  {
+   "file": "index.chunk-BlEfqh4Z.js",
+   "bytes": 917018,
+   "signatures": {
+    "cowork": 10,
+    "mcp": 6,
+    "permission": 1,
+    "tool_use": 58,
+    "session": 46,
+    "streaming": 16,
+    "subagent": 11,
+    "cron": 1,
+    "artifact": 8,
+    "telemetry": 23,
+    "sandbox": 2,
+    "worktree": 1
+   },
+   "score": 183
+  },
+  {
+   "file": "index.chunk-Ceg5Z3Ce.js",
+   "bytes": 47295,
+   "signatures": {
+    "session": 5,
+    "telemetry": 5,
+    "worktree": 119
+   },
+   "score": 129
+  },
+  {
+   "file": "index.chunk-CbSbf3Tr.js",
+   "bytes": 58512,
+   "signatures": {
+    "cowork": 12,
+    "mcp": 2,
+    "session": 9,
+    "skills": 8,
+    "artifact": 91,
+    "telemetry": 5,
+    "sandbox": 1
+   },
+   "score": 128
+  },
+  {
+   "file": "index.chunk-DoU0pLl3.js",
+   "bytes": 151465,
+   "signatures": {
+    "cowork": 6,
+    "artifact": 114,
+    "browser": 2,
+    "telemetry": 5
+   },
+   "score": 127
+  },
+  {
+   "file": "index.chunk-CdsxofPO.js",
+   "bytes": 101549,
+   "signatures": {
+    "cowork": 13,
+    "mcp": 15,
+    "permission": 1,
+    "tool_use": 5,
+    "session": 41,
+    "skills": 9,
+    "cron": 5,
+    "artifact": 1,
+    "browser": 28,
+    "telemetry": 6
+   },
+   "score": 124
+  },
+  {
+   "file": "index.chunk-DyYrY1NN.js",
+   "bytes": 215517,
+   "signatures": {
+    "mcp": 2,
+    "tool_use": 74,
+    "session": 14,
+    "streaming": 19,
+    "artifact": 2,
+    "telemetry": 5
+   },
+   "score": 116
+  },
+  {
+   "file": "aboutWindow.js",
+   "bytes": 87077,
+   "signatures": {
+    "telemetry": 104,
+    "sandbox": 2
+   },
+   "score": 106
+  },
+  {
+   "file": "findInPage.js",
+   "bytes": 86785,
+   "signatures": {
+    "telemetry": 104,
+    "sandbox": 2
+   },
+   "score": 106
+  },
+  {
+   "file": "mainWindow.js",
+   "bytes": 88193,
+   "signatures": {
+    "telemetry": 104,
+    "sandbox": 2
+   },
+   "score": 106
+  },
+  {
+   "file": "quickWindow.js",
+   "bytes": 87077,
+   "signatures": {
+    "telemetry": 104,
+    "sandbox": 2
+   },
+   "score": 106
+  },
+  {
+   "file": "index.chunk-BPjIr-mn.js",
+   "bytes": 50076,
+   "signatures": {
+    "cowork": 28,
+    "mcp": 26,
+    "session": 4,
+    "cron": 17,
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 81
+  },
+  {
+   "file": "index.chunk-1lJXcT8c.js",
+   "bytes": 41464,
+   "signatures": {
+    "cowork": 4,
+    "mcp": 8,
+    "permission": 3,
+    "tool_use": 4,
+    "session": 11,
+    "skills": 4,
+    "cron": 39,
+    "telemetry": 5
+   },
+   "score": 78
+  },
+  {
+   "file": "index.chunk-D5gwoNxg.js",
+   "bytes": 40559,
+   "signatures": {
+    "mcp": 11,
+    "permission": 8,
+    "session": 10,
+    "browser": 2,
+    "telemetry": 5,
+    "experiment": 1,
+    "worktree": 35
+   },
+   "score": 72
+  },
+  {
+   "file": "index.chunk-C6OBlOlX.js",
+   "bytes": 133497,
+   "signatures": {
+    "mcp": 4,
+    "tool_use": 22,
+    "session": 19,
+    "streaming": 1,
+    "browser": 1,
+    "telemetry": 5,
+    "experiment": 2,
+    "worktree": 15
+   },
+   "score": 69
+  },
+  {
+   "file": "mainView.js",
+   "bytes": 171276,
+   "signatures": {
+    "cowork": 2,
+    "mcp": 48,
+    "session": 3,
+    "artifact": 6,
+    "telemetry": 5
+   },
+   "score": 64
+  },
+  {
+   "file": "index.chunk-BAEQpeU2.js",
+   "bytes": 39118,
+   "signatures": {
+    "session": 26,
+    "browser": 1,
+    "telemetry": 5,
+    "sandbox": 14,
+    "worktree": 15
+   },
+   "score": 61
+  },
+  {
+   "file": "index.chunk-CnkTpwso.js",
+   "bytes": 68502,
+   "signatures": {
+    "permission": 2,
+    "telemetry": 6,
+    "sandbox": 18,
+    "worktree": 33,
+    "checkpoint": 2
+   },
+   "score": 61
+  },
+  {
+   "file": "index.chunk-D76cxAuR.js",
+   "bytes": 15093,
+   "signatures": {
+    "session": 37,
+    "telemetry": 5,
+    "worktree": 15
+   },
+   "score": 57
+  },
+  {
+   "file": "index.chunk-CcveFAuE.js",
+   "bytes": 242613,
+   "signatures": {
+    "mcp": 1,
+    "session": 1,
+    "telemetry": 7,
+    "worktree": 16,
+    "checkpoint": 29
+   },
+   "score": 54
+  },
+  {
+   "file": "index.chunk-CxI_2nWm.js",
+   "bytes": 22295,
+   "signatures": {
+    "mcp": 41,
+    "session": 8,
+    "telemetry": 5
+   },
+   "score": 54
+  },
+  {
+   "file": "index.chunk-vYnAlWmT.js",
+   "bytes": 39251,
+   "signatures": {
+    "tool_use": 15,
+    "session": 6,
+    "subagent": 6,
+    "telemetry": 5,
+    "worktree": 18
+   },
+   "score": 50
+  },
+  {
+   "file": "index.chunk-DLqLwOmD.js",
+   "bytes": 69895,
+   "signatures": {
+    "skills": 40,
+    "subagent": 1,
+    "cron": 1,
+    "telemetry": 5
+   },
+   "score": 47
+  },
+  {
+   "file": "index.chunk-Ck3ee-gJ.js",
+   "bytes": 29126,
+   "signatures": {
+    "session": 28,
+    "telemetry": 5,
+    "sandbox": 1,
+    "worktree": 11
+   },
+   "score": 45
+  },
+  {
+   "file": "index.chunk-CPEA6dKA.js",
+   "bytes": 353429,
+   "signatures": {
+    "subagent": 1,
+    "artifact": 38,
+    "telemetry": 5
+   },
+   "score": 44
+  },
+  {
+   "file": "index.chunk-BMFhTup2.js",
+   "bytes": 41629,
+   "signatures": {
+    "cowork": 16,
+    "session": 7,
+    "browser": 14,
+    "telemetry": 5,
+    "sandbox": 1
+   },
+   "score": 43
+  },
+  {
+   "file": "index.chunk-CeJGoREc.js",
+   "bytes": 37842,
+   "signatures": {
+    "tool_use": 10,
+    "subagent": 27,
+    "telemetry": 5,
+    "worktree": 1
+   },
+   "score": 43
+  },
+  {
+   "file": "index.chunk-yKIwpGVf.js",
+   "bytes": 53974,
+   "signatures": {
+    "cowork": 2,
+    "mcp": 1,
+    "tool_use": 1,
+    "session": 18,
+    "artifact": 9,
+    "telemetry": 5,
+    "worktree": 3
+   },
+   "score": 39
+  },
+  {
+   "file": "index.chunk-B3ord9Gq.js",
+   "bytes": 9260,
+   "signatures": {
+    "permission": 25,
+    "tool_use": 2,
+    "session": 2,
+    "telemetry": 5
+   },
+   "score": 34
+  },
+  {
+   "file": "index.chunk-B0WAWLOW.js",
+   "bytes": 159861,
+   "signatures": {
+    "session": 5,
+    "telemetry": 6,
+    "sandbox": 10,
+    "worktree": 10
+   },
+   "score": 31
+  },
+  {
+   "file": "index.chunk-DA534R-L.js",
+   "bytes": 86564,
+   "signatures": {
+    "session": 23,
+    "telemetry": 5,
+    "worktree": 3
+   },
+   "score": 31
+  },
+  {
+   "file": "index.chunk-CKOX3env.js",
+   "bytes": 32734,
+   "signatures": {
+    "session": 21,
+    "telemetry": 5,
+    "sandbox": 2
+   },
+   "score": 28
+  },
+  {
+   "file": "index.chunk-rUSp9s65.js",
+   "bytes": 15288,
+   "signatures": {
+    "tool_use": 1,
+    "session": 21,
+    "telemetry": 5
+   },
+   "score": 27
+  },
+  {
+   "file": "index.chunk-CCotqg2k.js",
+   "bytes": 9700,
+   "signatures": {
+    "cowork": 12,
+    "session": 9,
+    "telemetry": 5
+   },
+   "score": 26
+  },
+  {
+   "file": "index.chunk-DI47cOp_.js",
+   "bytes": 24571,
+   "signatures": {
+    "mcp": 20,
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 26
+  },
+  {
+   "file": "index.chunk-B2Vbqvd-.js",
+   "bytes": 32393,
+   "signatures": {
+    "tool_use": 1,
+    "cron": 1,
+    "browser": 2,
+    "telemetry": 5,
+    "worktree": 16
+   },
+   "score": 25
+  },
+  {
+   "file": "index.chunk-BtXfU220.js",
+   "bytes": 9881,
+   "signatures": {
+    "cowork": 6,
+    "mcp": 13,
+    "telemetry": 5
+   },
+   "score": 24
+  },
+  {
+   "file": "index.chunk-B8JZ7v6H.js",
+   "bytes": 21545,
+   "signatures": {
+    "mcp": 13,
+    "session": 5,
+    "telemetry": 5
+   },
+   "score": 23
+  },
+  {
+   "file": "index.chunk-DvdZaxqH.js",
+   "bytes": 82096,
+   "signatures": {
+    "cowork": 1,
+    "tool_use": 8,
+    "session": 1,
+    "cron": 8,
+    "telemetry": 5
+   },
+   "score": 23
+  },
+  {
+   "file": "index.chunk-BBUs8uvY.js",
+   "bytes": 7423,
+   "signatures": {
+    "session": 2,
+    "telemetry": 5,
+    "worktree": 15
+   },
+   "score": 22
+  },
+  {
+   "file": "index.chunk-JnLh1fOe.js",
+   "bytes": 9818,
+   "signatures": {
+    "mcp": 10,
+    "browser": 6,
+    "telemetry": 5,
+    "sandbox": 1
+   },
+   "score": 22
+  },
+  {
+   "file": "index.chunk-C5_DUEl_.js",
+   "bytes": 6411,
+   "signatures": {
+    "cowork": 8,
+    "session": 6,
+    "skills": 1,
+    "subagent": 1,
+    "telemetry": 5
+   },
+   "score": 21
+  },
+  {
+   "file": "index.chunk-Ray2aCu3.js",
+   "bytes": 55491,
+   "signatures": {
+    "browser": 16,
+    "telemetry": 5
+   },
+   "score": 21
+  },
+  {
+   "file": "index.chunk-CekorYcU.js",
+   "bytes": 11585,
+   "signatures": {
+    "cowork": 8,
+    "skills": 1,
+    "cron": 6,
+    "telemetry": 5
+   },
+   "score": 20
+  },
+  {
+   "file": "index.chunk-CwuFYsKE.js",
+   "bytes": 29241,
+   "signatures": {
+    "tool_use": 2,
+    "session": 5,
+    "telemetry": 5,
+    "worktree": 8
+   },
+   "score": 20
+  },
+  {
+   "file": "index.chunk-CzY1tCPL.js",
+   "bytes": 13013,
+   "signatures": {
+    "browser": 15,
+    "telemetry": 5
+   },
+   "score": 20
+  },
+  {
+   "file": "index.chunk-DqAcjgt5.js",
+   "bytes": 6333,
+   "signatures": {
+    "telemetry": 5,
+    "sandbox": 15
+   },
+   "score": 20
+  },
+  {
+   "file": "index.chunk-0q54qGlJ.js",
+   "bytes": 15956,
+   "signatures": {
+    "cowork": 1,
+    "permission": 10,
+    "session": 3,
+    "telemetry": 5
+   },
+   "score": 19
+  },
+  {
+   "file": "index.chunk-C7ydsIk6.js",
+   "bytes": 4052,
+   "signatures": {
+    "cowork": 1,
+    "tool_use": 2,
+    "session": 11,
+    "telemetry": 5
+   },
+   "score": 19
+  },
+  {
+   "file": "index.chunk-CwIQU-8Y.js",
+   "bytes": 116399,
+   "signatures": {
+    "permission": 3,
+    "session": 10,
+    "telemetry": 5,
+    "sandbox": 1
+   },
+   "score": 19
+  },
+  {
+   "file": "index.chunk-CfYHAcpH.js",
+   "bytes": 11776,
+   "signatures": {
+    "session": 13,
+    "telemetry": 5
+   },
+   "score": 18
+  },
+  {
+   "file": "index.chunk-Bgul06K6.js",
+   "bytes": 9914,
+   "signatures": {
+    "mcp": 12,
+    "telemetry": 5
+   },
+   "score": 17
+  },
+  {
+   "file": "index.chunk-Bu0Hda6m.js",
+   "bytes": 12304,
+   "signatures": {
+    "permission": 2,
+    "session": 6,
+    "telemetry": 5,
+    "worktree": 4
+   },
+   "score": 17
+  },
+  {
+   "file": "index.chunk-BvUB77vv.js",
+   "bytes": 4130,
+   "signatures": {
+    "mcp": 1,
+    "session": 4,
+    "browser": 7,
+    "telemetry": 5
+   },
+   "score": 17
+  },
+  {
+   "file": "index.chunk-BWI7goHJ.js",
+   "bytes": 65850,
+   "signatures": {
+    "cowork": 1,
+    "tool_use": 3,
+    "session": 5,
+    "browser": 2,
+    "telemetry": 5
+   },
+   "score": 16
+  },
+  {
+   "file": "index.chunk-CJxqg9Un.js",
+   "bytes": 128756,
+   "signatures": {
+    "telemetry": 13,
+    "sandbox": 3
+   },
+   "score": 16
+  },
+  {
+   "file": "index.chunk-BNd-Veq8.js",
+   "bytes": 3561,
+   "signatures": {
+    "session": 9,
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 15
+  },
+  {
+   "file": "index.chunk-CNXRFRP7.js",
+   "bytes": 16155,
+   "signatures": {
+    "telemetry": 5,
+    "worktree": 10
+   },
+   "score": 15
+  },
+  {
+   "file": "index.chunk-Cd8cGj4_.js",
+   "bytes": 40203,
+   "signatures": {
+    "session": 2,
+    "telemetry": 13
+   },
+   "score": 15
+  },
+  {
+   "file": "index.chunk-CeSjtxih.js",
+   "bytes": 5668,
+   "signatures": {
+    "cowork": 9,
+    "telemetry": 5,
+    "worktree": 1
+   },
+   "score": 15
+  },
+  {
+   "file": "index.chunk-BFxRKxih.js",
+   "bytes": 8498,
+   "signatures": {
+    "session": 9,
+    "telemetry": 5
+   },
+   "score": 14
+  },
+  {
+   "file": "index.chunk-BN7PaJ_P.js",
+   "bytes": 52116,
+   "signatures": {
+    "browser": 8,
+    "telemetry": 5,
+    "sandbox": 1
+   },
+   "score": 14
+  },
+  {
+   "file": "index.chunk-ilWIs3r6.js",
+   "bytes": 15189,
+   "signatures": {
+    "mcp": 3,
+    "session": 2,
+    "telemetry": 9
+   },
+   "score": 14
+  },
+  {
+   "file": "index.chunk-BdmPP2qV.js",
+   "bytes": 15667,
+   "signatures": {
+    "cowork": 2,
+    "session": 4,
+    "artifact": 1,
+    "telemetry": 6
+   },
+   "score": 13
+  },
+  {
+   "file": "index.chunk-Bq0b1KR5.js",
+   "bytes": 2588,
+   "signatures": {
+    "cowork": 2,
+    "session": 4,
+    "browser": 2,
+    "telemetry": 5
+   },
+   "score": 13
+  },
+  {
+   "file": "index.chunk-CEsJ07Wf.js",
+   "bytes": 20586,
+   "signatures": {
+    "cowork": 6,
+    "session": 2,
+    "telemetry": 5
+   },
+   "score": 13
+  },
+  {
+   "file": "index.chunk-zDwQxd00.js",
+   "bytes": 5603,
+   "signatures": {
+    "cowork": 7,
+    "telemetry": 5,
+    "worktree": 1
+   },
+   "score": 13
+  },
+  {
+   "file": "index.chunk-B8ZKzQZo.js",
+   "bytes": 5702,
+   "signatures": {
+    "cowork": 2,
+    "session": 5,
+    "telemetry": 5
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-BPxbWJAH.js",
+   "bytes": 5557,
+   "signatures": {
+    "mcp": 5,
+    "skills": 2,
+    "telemetry": 5
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-BZpj-Xyx.js",
+   "bytes": 1973,
+   "signatures": {
+    "permission": 2,
+    "session": 5,
+    "telemetry": 5
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-CELowqls.js",
+   "bytes": 8059,
+   "signatures": {
+    "tool_use": 6,
+    "telemetry": 6
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-D2A8Ncj4.js",
+   "bytes": 1928,
+   "signatures": {
+    "session": 7,
+    "telemetry": 5
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-b_nHwNir.js",
+   "bytes": 18776,
+   "signatures": {
+    "telemetry": 5,
+    "worktree": 7
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-y1BuSqXP.js",
+   "bytes": 38496,
+   "signatures": {
+    "cowork": 6,
+    "session": 1,
+    "telemetry": 5
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-BH0bRpNM.js",
+   "bytes": 10857,
+   "signatures": {
+    "permission": 3,
+    "session": 3,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-CAAuh_N2.js",
+   "bytes": 10217,
+   "signatures": {
+    "telemetry": 5,
+    "worktree": 6
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-D3Peov1H.js",
+   "bytes": 9845,
+   "signatures": {
+    "cowork": 6,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-DD2qsWbt.js",
+   "bytes": 11954,
+   "signatures": {
+    "cowork": 6,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-DRlnO5CK.js",
+   "bytes": 12278,
+   "signatures": {
+    "session": 6,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-DZV6mBvi.js",
+   "bytes": 56790,
+   "signatures": {
+    "cowork": 2,
+    "mcp": 1,
+    "skills": 1,
+    "telemetry": 5,
+    "experiment": 2
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-DkUVHq8L.js",
+   "bytes": 15703,
+   "signatures": {
+    "session": 3,
+    "telemetry": 5,
+    "worktree": 3
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-DyGy2D-O.js",
+   "bytes": 1871,
+   "signatures": {
+    "cowork": 1,
+    "tool_use": 1,
+    "session": 4,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-aK0JyCY9.js",
+   "bytes": 6357,
+   "signatures": {
+    "cowork": 1,
+    "mcp": 5,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "coworkArtifact.js",
+   "bytes": 2687,
+   "signatures": {
+    "cowork": 4,
+    "artifact": 1,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-BEVeQ4eS.js",
+   "bytes": 2350,
+   "signatures": {
+    "session": 2,
+    "telemetry": 5,
+    "worktree": 3
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-BFgHcLgq.js",
+   "bytes": 2443,
+   "signatures": {
+    "telemetry": 5,
+    "worktree": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-BeZcR6Nl.js",
+   "bytes": 4139,
+   "signatures": {
+    "tool_use": 3,
+    "session": 2,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-CEkgISQ-.js",
+   "bytes": 5884,
+   "signatures": {
+    "permission": 1,
+    "cron": 4,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-CTyoJC3M.js",
+   "bytes": 32426,
+   "signatures": {
+    "cowork": 1,
+    "mcp": 3,
+    "artifact": 1,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-CiZj5wKe.js",
+   "bytes": 19874,
+   "signatures": {
+    "session": 5,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-DlE0R5Pd.js",
+   "bytes": 5322,
+   "signatures": {
+    "cowork": 2,
+    "mcp": 3,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-xBKHjffa.js",
+   "bytes": 14910,
+   "signatures": {
+    "skills": 5,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-BYMGAPtw.js",
+   "bytes": 461552,
+   "signatures": {
+    "artifact": 3,
+    "telemetry": 5,
+    "sandbox": 1
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-BgSwqbzh.js",
+   "bytes": 10527,
+   "signatures": {
+    "artifact": 4,
+    "telemetry": 5
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-CUXAfqTZ.js",
+   "bytes": 7256,
+   "signatures": {
+    "tool_use": 4,
+    "telemetry": 5
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-CxzV6l7X.js",
+   "bytes": 3631,
+   "signatures": {
+    "cowork": 4,
+    "telemetry": 5
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-D8RdLxk8.js",
+   "bytes": 4723,
+   "signatures": {
+    "mcp": 2,
+    "permission": 2,
+    "telemetry": 5
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-DEvtmnQ-.js",
+   "bytes": 6340,
+   "signatures": {
+    "cowork": 4,
+    "telemetry": 5
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-DVtfwF6X.js",
+   "bytes": 17490,
+   "signatures": {
+    "telemetry": 5,
+    "worktree": 4
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-EwbxZ6wW.js",
+   "bytes": 8144,
+   "signatures": {
+    "permission": 2,
+    "cron": 1,
+    "telemetry": 5,
+    "sandbox": 1
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-M4RyjaHM.js",
+   "bytes": 20463,
+   "signatures": {
+    "permission": 1,
+    "session": 3,
+    "telemetry": 5
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-PXR81r8F.js",
+   "bytes": 4005,
+   "signatures": {
+    "cowork": 4,
+    "telemetry": 5
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-713hoB_d.js",
+   "bytes": 3734,
+   "signatures": {
+    "cowork": 1,
+    "session": 2,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-BPH2yjvG.js",
+   "bytes": 7501,
+   "signatures": {
+    "session": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-BbK5vSxh.js",
+   "bytes": 5654,
+   "signatures": {
+    "permission": 2,
+    "telemetry": 5,
+    "sandbox": 1
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-By3lrqDG.js",
+   "bytes": 13381,
+   "signatures": {
+    "session": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-CCgl5N-V.js",
+   "bytes": 2549,
+   "signatures": {
+    "cowork": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-CLDnJbh1.js",
+   "bytes": 237178,
+   "signatures": {
+    "session": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-Crjx4ZVt.js",
+   "bytes": 1793,
+   "signatures": {
+    "browser": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-D6ax747K.js",
+   "bytes": 2802,
+   "signatures": {
+    "telemetry": 5,
+    "worktree": 3
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-DGLBzABn.js",
+   "bytes": 8528,
+   "signatures": {
+    "session": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-Dd9v2aGl.js",
+   "bytes": 1014,
+   "signatures": {
+    "mcp": 1,
+    "permission": 2,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-DiuE5YRB.js",
+   "bytes": 2006,
+   "signatures": {
+    "telemetry": 5,
+    "worktree": 3
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-VXoZYQbU.js",
+   "bytes": 8151,
+   "signatures": {
+    "browser": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-zyVF5iEQ.js",
+   "bytes": 2440,
+   "signatures": {
+    "artifact": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-5TaW4QRE.js",
+   "bytes": 5571,
+   "signatures": {
+    "cowork": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-5wlbAX53.js",
+   "bytes": 3848,
+   "signatures": {
+    "permission": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-B17ncv_E.js",
+   "bytes": 139558,
+   "signatures": {
+    "cron": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-BIps7hQO.js",
+   "bytes": 8193,
+   "signatures": {
+    "cowork": 1,
+    "tool_use": 1,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-BQf2i5CR.js",
+   "bytes": 5231,
+   "signatures": {
+    "telemetry": 5,
+    "experiment": 2
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-CPzeH_V9.js",
+   "bytes": 7346,
+   "signatures": {
+    "tool_use": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-CU-hpQBB.js",
+   "bytes": 9667,
+   "signatures": {
+    "browser": 1,
+    "telemetry": 5,
+    "sandbox": 1
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-CneElZpr.js",
+   "bytes": 1790,
+   "signatures": {
+    "session": 1,
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-CuJrF8sP.js",
+   "bytes": 5050,
+   "signatures": {
+    "cowork": 1,
+    "skills": 1,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-CzLc7P9j.js",
+   "bytes": 16630,
+   "signatures": {
+    "cowork": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-DPuRWdEL.js",
+   "bytes": 5257,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5,
+    "experiment": 1
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-DT4sNa4R.js",
+   "bytes": 2171,
+   "signatures": {
+    "session": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-DXQssFNd.js",
+   "bytes": 3820,
+   "signatures": {
+    "telemetry": 5,
+    "worktree": 2
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-GMy-Fx2L.js",
+   "bytes": 8928,
+   "signatures": {
+    "mcp": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-QSM1kwGG.js",
+   "bytes": 12540,
+   "signatures": {
+    "mcp": 1,
+    "session": 1,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-klfIxYlb.js",
+   "bytes": 1422,
+   "signatures": {
+    "session": 1,
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-lxiRko9r.js",
+   "bytes": 8279,
+   "signatures": {
+    "cowork": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-zIoHNHnH.js",
+   "bytes": 1122,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5,
+    "sandbox": 1
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-4HAlnXqB.js",
+   "bytes": 936,
+   "signatures": {
+    "tool_use": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-BAr-M6Uk.js",
+   "bytes": 3846,
+   "signatures": {
+    "mcp": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-BF0qZsid.js",
+   "bytes": 7155,
+   "signatures": {
+    "mcp": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-BP9wjxd9.js",
+   "bytes": 17537,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-BgNlZkJ7.js",
+   "bytes": 15227,
+   "signatures": {
+    "skills": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-BhtDJrnm.js",
+   "bytes": 831,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-Bj1rMKq6.js",
+   "bytes": 2682,
+   "signatures": {
+    "artifact": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-BlIyBYaD.js",
+   "bytes": 8444,
+   "signatures": {
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-Bsn1VIro.js",
+   "bytes": 2060,
+   "signatures": {
+    "mcp": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-C-8wcdkH.js",
+   "bytes": 5903,
+   "signatures": {
+    "skills": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-C-v1WiLD.js",
+   "bytes": 2031,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-CQQIsj7r.js",
+   "bytes": 191188,
+   "signatures": {
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-CQr0Ee4m.js",
+   "bytes": 3411,
+   "signatures": {
+    "mcp": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-CWVQDNOx.js",
+   "bytes": 2905,
+   "signatures": {
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-Cau1PpCq.js",
+   "bytes": 3679,
+   "signatures": {
+    "session": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-CxUAVDxD.js",
+   "bytes": 6283,
+   "signatures": {
+    "session": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-D7UNC1Oj.js",
+   "bytes": 2867,
+   "signatures": {
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DGgKKPXU.js",
+   "bytes": 2187,
+   "signatures": {
+    "tool_use": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DMEJLiDO.js",
+   "bytes": 1780,
+   "signatures": {
+    "session": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DZSaR_us.js",
+   "bytes": 3061,
+   "signatures": {
+    "session": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DlUQavGs.js",
+   "bytes": 2625,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DqGUM1Dr.js",
+   "bytes": 1419,
+   "signatures": {
+    "telemetry": 5,
+    "worktree": 1
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-Dujv1em2.js",
+   "bytes": 7670,
+   "signatures": {
+    "cron": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DvQd8RR7.js",
+   "bytes": 4358,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-I9bAj080.js",
+   "bytes": 49981,
+   "signatures": {
+    "telemetry": 5,
+    "worktree": 1
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-TIxUOzMy.js",
+   "bytes": 10544,
+   "signatures": {
+    "skills": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-US5c54N2.js",
+   "bytes": 1915,
+   "signatures": {
+    "session": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-Vi4y50hN.js",
+   "bytes": 4276,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-cZIsAMJH.js",
+   "bytes": 2065,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-hOorvWtr.js",
+   "bytes": 19794,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-nB1UBbHL.js",
+   "bytes": 11867,
+   "signatures": {
+    "artifact": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-uAdDXvxb.js",
+   "bytes": 5022,
+   "signatures": {
+    "skills": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-xoZNrP6a.js",
+   "bytes": 2910,
+   "signatures": {
+    "mcp": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "buddy.js",
+   "bytes": 4536,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "claudePagePreview.js",
+   "bytes": 1930,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "computerUseTeach.js",
+   "bytes": 5190,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "computerUseWatchRecord.js",
+   "bytes": 3725,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "designWindow.js",
+   "bytes": 1469,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk--Ke4fVuU.js",
+   "bytes": 711,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk--pR4DFWL.js",
+   "bytes": 2346,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-0jb8zQWa.js",
+   "bytes": 755,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-2_Kpgj9v.js",
+   "bytes": 4036,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-6HzFAPWT.js",
+   "bytes": 1655,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B-eEmKcL.js",
+   "bytes": 831,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B-m_SPwC.js",
+   "bytes": 7180,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B08Ms-4o.js",
+   "bytes": 6901,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B2Moev8O.js",
+   "bytes": 1634,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B2Rrv5Um.js",
+   "bytes": 6031,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B3Fg7lxU.js",
+   "bytes": 936,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B4iWTRPf.js",
+   "bytes": 3239,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B5xg_hLm.js",
+   "bytes": 2285,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B7dhjaUQ.js",
+   "bytes": 2951,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B7hSi02X.js",
+   "bytes": 5427,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B9ueezvW.js",
+   "bytes": 1111,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BB4dhyVR.js",
+   "bytes": 778,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BCxvKF4p.js",
+   "bytes": 2813,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BFOvM_pR.js",
+   "bytes": 875,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BFtu7z-n.js",
+   "bytes": 2068,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BIQH9bmT.js",
+   "bytes": 1219,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BK7U1e7z.js",
+   "bytes": 1202,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BKwJ0Kzl.js",
+   "bytes": 8051,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BMJzdG-N.js",
+   "bytes": 6847,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BQi7slPm.js",
+   "bytes": 1480,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BQkApOKK.js",
+   "bytes": 700,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BSSe-7sQ.js",
+   "bytes": 2835,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BTny0TLv.js",
+   "bytes": 810,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BVerX_SL.js",
+   "bytes": 768,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BVryDrIy.js",
+   "bytes": 1297,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BWl4h9Ko.js",
+   "bytes": 7854,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BXF3MbS8.js",
+   "bytes": 1811,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BXLZazwD.js",
+   "bytes": 2585,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BXYGThVv.js",
+   "bytes": 4311,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BZ4d--Z2.js",
+   "bytes": 2579,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BbpAC-UC.js",
+   "bytes": 832,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BbrNXR5p.js",
+   "bytes": 775,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BcNzSWBi.js",
+   "bytes": 770,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Be0WbAnH.js",
+   "bytes": 1424,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BemIcaFh.js",
+   "bytes": 882,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Bf9o4l1C.js",
+   "bytes": 8515,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Bfz0nkIg.js",
+   "bytes": 601,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Bg3zmPAK.js",
+   "bytes": 797,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Bib_F17Q.js",
+   "bytes": 992,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BjZ3vX9r.js",
+   "bytes": 809,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Bk2sltuX.js",
+   "bytes": 1412,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BkZ4tpDY.js",
+   "bytes": 132677,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BlX2K52i.js",
+   "bytes": 1129,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BmfewHq3.js",
+   "bytes": 1866,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BnPPioal.js",
+   "bytes": 1663,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BnZH0cT0.js",
+   "bytes": 769,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Bolwy5c8.js",
+   "bytes": 1662,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BopPBEgI.js",
+   "bytes": 961,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BpoRyh_b.js",
+   "bytes": 7338,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BtyBHo3K.js",
+   "bytes": 601,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BxLuI_4U.js",
+   "bytes": 2016,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-ByvAMUkj.js",
+   "bytes": 5065,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C0sq-LTJ.js",
+   "bytes": 5206,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C15e1VST.js",
+   "bytes": 3811,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C15iBw1-.js",
+   "bytes": 3160,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C1l855wQ.js",
+   "bytes": 4681,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C2TjXBTO.js",
+   "bytes": 1933,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C5Ud-KyG.js",
+   "bytes": 4105,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CAaS9_t_.js",
+   "bytes": 2912,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CCzyVBVq.js",
+   "bytes": 1637,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CDdFTMzQ.js",
+   "bytes": 5357,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CDpxTd3c.js",
+   "bytes": 5419,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CFY-4zeK.js",
+   "bytes": 1605,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CGwsahND.js",
+   "bytes": 2679,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CIspABeP.js",
+   "bytes": 1049,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CJRhqwjr.js",
+   "bytes": 2194,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CLyGth5n.js",
+   "bytes": 3913,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CN_uPo6d.js",
+   "bytes": 1216,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CPUoh-Ta.js",
+   "bytes": 5431,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CQeTfNrA.js",
+   "bytes": 6869,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CS97pYxF.js",
+   "bytes": 2052,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CU89UzUr.js",
+   "bytes": 6345,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CUMCDUNn.js",
+   "bytes": 1538,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CUNvOQN2.js",
+   "bytes": 992,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CUYqXjqj.js",
+   "bytes": 1638,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CVOteD6E.js",
+   "bytes": 2035,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CVfpPT7d.js",
+   "bytes": 6591,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CYu8whgJ.js",
+   "bytes": 1051,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CZGv8iib.js",
+   "bytes": 1369,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CZXx132H.js",
+   "bytes": 5397,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C_4pXLR0.js",
+   "bytes": 2448,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C_qk6eGw.js",
+   "bytes": 20498,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C_ze_R2E.js",
+   "bytes": 1241,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CbfUFryd.js",
+   "bytes": 5408,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CcXrDQ0i.js",
+   "bytes": 4900,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CcyCtVxN.js",
+   "bytes": 564,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CdzcX3nr.js",
+   "bytes": 6723,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CexIg5zO.js",
+   "bytes": 3463,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CgH6Cli_.js",
+   "bytes": 1060,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-ChpGVBJ1.js",
+   "bytes": 6408,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Chu9Of_9.js",
+   "bytes": 4887,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CiPwBI1D.js",
+   "bytes": 1550,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CiRCUv_L.js",
+   "bytes": 773,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Cj79nCi4.js",
+   "bytes": 1582,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CkecUsrN.js",
+   "bytes": 3912,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-ClUXMtQ7.js",
+   "bytes": 5589,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-ClrUhXWp.js",
+   "bytes": 1213,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Cm-Uv1wR.js",
+   "bytes": 1840,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CmeqApNG.js",
+   "bytes": 5769,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CpFPgE9p.js",
+   "bytes": 1135,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CpOIE1nf.js",
+   "bytes": 5343,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CrblwMDh.js",
+   "bytes": 6665,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CuCIlj4E.js",
+   "bytes": 1004,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CvLGcrZB.js",
+   "bytes": 1424,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CxNVpniR.js",
+   "bytes": 888,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CziplGGF.js",
+   "bytes": 1467,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D-0924nl.js",
+   "bytes": 1560,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D-HqUGLi.js",
+   "bytes": 6246,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D-T5CYlE.js",
+   "bytes": 2297,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D1RwX_Ka.js",
+   "bytes": 8179,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D25qKEdm.js",
+   "bytes": 15965,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D4B44ehk.js",
+   "bytes": 1802,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D8KN2IXy.js",
+   "bytes": 1061,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D8KhDGfd.js",
+   "bytes": 2696,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D8phPbdW.js",
+   "bytes": 1021,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D8wkeL37.js",
+   "bytes": 2665,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DAR5x_5h.js",
+   "bytes": 775,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DAabB_9C.js",
+   "bytes": 3661,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DAy4YstQ.js",
+   "bytes": 774,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DCgdwyFw.js",
+   "bytes": 4670,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DD9Q9sLU.js",
+   "bytes": 1132,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DDLL2EES.js",
+   "bytes": 868,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DDW7ExCv.js",
+   "bytes": 12531,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DDsgmCu_.js",
+   "bytes": 1086,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DEx3njUs.js",
+   "bytes": 3860,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DF2E1zuK.js",
+   "bytes": 84830,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DINXX5S-.js",
+   "bytes": 7083,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DJXBruhf.js",
+   "bytes": 1682,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DLcJEY_w.js",
+   "bytes": 11517,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DLkBHW-V.js",
+   "bytes": 1848,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DLvhfzmK.js",
+   "bytes": 930,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DNxwdxw-.js",
+   "bytes": 771,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DPHCUQQy.js",
+   "bytes": 43680,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DQ3698r0.js",
+   "bytes": 6336,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DRFAz7zF.js",
+   "bytes": 2881,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DRb1afDC.js",
+   "bytes": 7160,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DSNPhQKz.js",
+   "bytes": 1087,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DVKorKfz.js",
+   "bytes": 3451,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DWmvMnwU.js",
+   "bytes": 2560,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DaEcYOkw.js",
+   "bytes": 5601,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DajqLQbW.js",
+   "bytes": 980,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DcO4CDAv.js",
+   "bytes": 5241,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Dgy-1Nht.js",
+   "bytes": 3414,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Dh527fpx.js",
+   "bytes": 2025,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DiIqVGe0.js",
+   "bytes": 958,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Dig-VUnE.js",
+   "bytes": 367325,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DjgBgJOe.js",
+   "bytes": 9957,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DllGAjvd.js",
+   "bytes": 11372,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Dp-fwrC4.js",
+   "bytes": 163378,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DuNMxYBx.js",
+   "bytes": 778,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DwhRU0hX.js",
+   "bytes": 1091,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-EI2tE9_4.js",
+   "bytes": 955,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-G9_mRSUx.js",
+   "bytes": 17810,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Gxf1yHDU.js",
+   "bytes": 5753,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Hph4NgNJ.js",
+   "bytes": 6348,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-IEsexX9X.js",
+   "bytes": 2642,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-KfAz_42N.js",
+   "bytes": 769,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-LPK9kWWN.js",
+   "bytes": 2336,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-LqLRvaib.js",
+   "bytes": 1821,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-LtG4Q0jJ.js",
+   "bytes": 1961,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-MT_AbdGg.js",
+   "bytes": 5448,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-MijPx1d7.js",
+   "bytes": 3861,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-NjFfajPS.js",
+   "bytes": 2468,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-QXv2aC_b.js",
+   "bytes": 2615,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-RQsbjaP_.js",
+   "bytes": 935,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-S2eKuU9U.js",
+   "bytes": 765,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-TDahgEnt.js",
+   "bytes": 779,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Uk7wsaDw.js",
+   "bytes": 4252,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Vdvw6mum.js",
+   "bytes": 11102,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-VeAh16Bs.js",
+   "bytes": 1872,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-VlHCkRyl.js",
+   "bytes": 808,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-WxlVBeEX.js",
+   "bytes": 16741,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-XFjt9B7T.js",
+   "bytes": 7326,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-ZvAdCieZ.js",
+   "bytes": 1686,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-bnDZLEe6.js",
+   "bytes": 1653,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-eLxLj6qe.js",
+   "bytes": 9809,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-f4SiagXk.js",
+   "bytes": 1789,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-l9SraRJO.js",
+   "bytes": 1623,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-lZjBQ2C7.js",
+   "bytes": 2125,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-ljgWmT8p.js",
+   "bytes": 2742,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-qy0A6HAj.js",
+   "bytes": 2873,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-yHaef_W6.js",
+   "bytes": 1317,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-zzWYn-sM.js",
+   "bytes": 1053,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.js",
+   "bytes": 638,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "localExecConsent.js",
+   "bytes": 1366,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "watchRecordChooser.js",
+   "bytes": 3721,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  }
+ ],
+ "workers": [
+  {
+   "dir": "file-index-worker",
+   "file": "fileIndexWorker.js",
+   "bytes": 906737
+  },
+  {
+   "dir": "heavy-work-worker",
+   "file": "dist-CI9lzb1v.js",
+   "bytes": 433463
+  },
+  {
+   "dir": "heavy-work-worker",
+   "file": "heavyWorkWorker.js",
+   "bytes": 699494
+  },
+  {
+   "dir": "heavy-work-worker",
+   "file": "rolldown-runtime-CI_2c2Xz.js",
+   "bytes": 732
+  },
+  {
+   "dir": "mcp-runtime",
+   "file": "directMcpHost.js",
+   "bytes": 613700
+  },
+  {
+   "dir": "mcp-runtime",
+   "file": "nodeHost.js",
+   "bytes": 5907
+  },
+  {
+   "dir": "msal-broker-worker",
+   "file": "msalBrokerWorker.js",
+   "bytes": 21601
+  },
+  {
+   "dir": "pty-host",
+   "file": "ptyHostWorker.js",
+   "bytes": 12018
+  },
+  {
+   "dir": "shell-path-worker",
+   "file": "shellPathWorker.js",
+   "bytes": 9575
+  },
+  {
+   "dir": "stall-sampler-worker",
+   "file": "stallSamplerWorker.js",
+   "bytes": 2033
+  },
+  {
+   "dir": "transcript-search-worker",
+   "file": "transcriptSearchWorker.js",
+   "bytes": 35452
+  }
+ ],
+ "windows": [],
+ "forbidden_switches": [
+  "remote-debugging-port",
+  "remote-debugging-pipe",
+  "ignore-certificate-errors",
+  "host-resolver-rules",
+  "host-rules",
+  "disable-web-security",
+  "log-net-log",
+  "net-log-capture-mode",
+  "ssl-key-log-file",
+  "renderer-cmd-prefix",
+  "utility-cmd-prefix",
+  "gpu-launcher",
+  "zygote-cmd-prefix",
+  "ppapi-plugin-launcher",
+  "nacl-loader-cmd-prefix",
+  "browser-subprocess-path"
+ ],
+ "env_vars": [
+  "ALIYUN_REGION_ID",
+  "APPDATA",
+  "AWS_EXECUTION_ENV",
+  "AWS_REGION",
+  "CLAUDE_AI_URL",
+  "CLAUDE_CDP_AUTH",
+  "CLAUDE_E2E_PKCE_LOG",
+  "CLAUDE_ENABLE_LOGGING",
+  "CLAUDE_HARNESS_RESIZE",
+  "CLAUDE_HYBRID_BOOTSTRAP_URL",
+  "CLAUDE_USER_DATA_DIR",
+  "COMPUTERNAME",
+  "DEBUG",
+  "DESKTOP_LOG_LEVEL",
+  "DYNO",
+  "FLY_REGION",
+  "GCP_PROJECT",
+  "IBM_CLOUD_REGION",
+  "LOCALAPPDATA",
+  "NETLIFY",
+  "READABLE_STREAM",
+  "REGION_NAME",
+  "SENTRY_NAME",
+  "TENCENTCLOUD_APPID",
+  "TENCENTCLOUD_REGION",
+  "TENCENTCLOUD_ZONE",
+  "USERDOMAIN",
+  "VERCEL",
+  "VERCEL_REGION",
+  "WEBSITE_SITE_NAME"
+ ],
+ "globals": [
+  "__claudeMainJsStartMs",
+  "__coworkHipaaCrashDumps",
+  "__sentryDwocDropDisabled",
+  "__sentryElectronMain",
+  "__zod_globalConfig",
+  "__zod_globalRegistry",
+  "isDeveloperApprovedDevUrlOverrideEnabled",
+  "process",
+  "require"
+ ],
+ "ipc_namespace_templates": [],
+ "ipc_namespace_samples": [],
+ "channels": [
+  {
+   "name": "Debugger.paused",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js"
+   ]
+  },
+  {
+   "name": "abandoned",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-Bn6onBlX.js",
+    "index.chunk-FiyCjals.js",
+    "index.chunk-CcveFAuE.js"
+   ]
+  },
+  {
+   "name": "abort",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-Bn6onBlX.js",
+    "index.chunk-BlEfqh4Z.js",
+    "index.chunk-DyYrY1NN.js"
+   ]
+  },
+  {
+   "name": "aborted",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-BlEfqh4Z.js"
+   ]
+  },
+  {
+   "name": "accessibility-support-changed",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "action",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "activate",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "apiReachability",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "app-command",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "attachmentsChanged",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-Bn6onBlX.js"
+   ]
+  },
+  {
+   "name": "audio-state-changed",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "auth_agent_changed",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-FiyCjals.js"
+   ]
+  },
+  {
+   "name": "before-input-event",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "before-mouse-event",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "before-quit",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "before-quit-for-update",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-B0WAWLOW.js"
+   ]
+  },
+  {
+   "name": "beforeCaptureLog",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js"
+   ]
+  },
+  {
+   "name": "beforeEnvelope",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js"
+   ]
+  },
+  {
+   "name": "beforeExit",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js"
+   ]
+  },
+  {
+   "name": "beforeSendEvent",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "aboutWindow.js",
+    "findInPage.js",
+    "mainWindow.js",
+    "quickWindow.js"
+   ]
+  },
+  {
+   "name": "beforeSendSession",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "aboutWindow.js",
+    "findInPage.js",
+    "mainWindow.js",
+    "quickWindow.js"
+   ]
+  },
+  {
+   "name": "bridge_session_status",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "browser-window-blur",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "browser-window-created",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "browser-window-focus",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-BPjIr-mn.js"
+   ]
+  },
+  {
+   "name": "capsLockChanged",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "ccKeepAwakeOnBattery",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "ccKeepAwakeWhileWorking",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "change",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "changed",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "checking-for-update",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "child-process-gone",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "chromeExtensionEnabled",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "claudeAndroidEmulatorAccessEnabled",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-B0WAWLOW.js"
+   ]
+  },
+  {
+   "name": "cliOpAlwaysAllowed",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "click",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "close",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-Bn6onBlX.js",
+    "index.chunk-DNyequwM.js",
+    "index.chunk-BlEfqh4Z.js",
+    "index.chunk-CcveFAuE.js",
+    "index.chunk-CPEA6dKA.js",
+    "index.chunk-B0WAWLOW.js",
+    "index.chunk-DA534R-L.js"
+   ]
+  },
+  {
+   "name": "closed",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "complete",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "connect",
+   "ops": [
+    "once",
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-CcveFAuE.js"
+   ]
+  },
+  {
+   "name": "connected",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-Bn6onBlX.js",
+    "index.chunk-FiyCjals.js"
+   ]
+  },
+  {
+   "name": "console-message",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "content-bounds-updated",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "context-menu",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "coworkBrowserToolsEnabled",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "coworkHasBoundRoutine",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "coworkHipaaRestricted",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "cuAppLockChanged",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "cuLockChanged",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "cuSelectedDisplayChanged",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "cuSessionForgotten",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-M6SkuaH9.js"
+   ]
+  },
+  {
+   "name": "darkwake",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-Bn6onBlX.js",
+    "index.chunk-C6OBlOlX.js"
+   ]
+  },
+  {
+   "name": "deleted",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "destroyed",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-Bn6onBlX.js",
+    "index.chunk-FiyCjals.js",
+    "index.chunk-CdsxofPO.js",
+    "index.chunk-BMFhTup2.js"
+   ]
+  },
+  {
+   "name": "detach",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "did-become-active",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "did-create-window",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "did-fail-load",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-BMFhTup2.js"
+   ]
+  },
+  {
+   "name": "did-fail-provisional-load",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "did-finish-load",
+   "ops": [
+    "once",
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-BMFhTup2.js"
+   ]
+  },
+  {
+   "name": "did-frame-finish-load",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "did-frame-navigate",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "did-navigate",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-FiyCjals.js"
+   ]
+  },
+  {
+   "name": "did-navigate-in-page",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "did-redirect-navigation",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "did-resign-active",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "did-start-loading",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "did-start-navigation",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-FiyCjals.js"
+   ]
+  },
+  {
+   "name": "did-stop-loading",
+   "ops": [
+    "once",
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "disconnected",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-Bn6onBlX.js"
+   ]
+  },
+  {
+   "name": "display-added",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "display-metrics-changed",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "display-removed",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "dom-ready",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "drain",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "edrExtensionOutcome",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "edrExtensionRunStarted",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "electron-store-get-data",
+   "ops": [
+    "on",
+    "sendSync"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "enter-full-screen",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "enter-html-full-screen",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "entry",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "error",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-Bn6onBlX.js",
+    "index.chunk-BvMaI6NQ.js",
+    "index.chunk-DNyequwM.js",
+    "index.chunk-FiyCjals.js",
+    "index.chunk-BlEfqh4Z.js",
+    "index.chunk-DyYrY1NN.js",
+    "index.chunk-CcveFAuE.js",
+    "index.chunk-CPEA6dKA.js",
+    "index.chunk-CeJGoREc.js",
+    "index.chunk-B0WAWLOW.js",
+    "index.chunk-DA534R-L.js"
+   ]
+  },
+  {
+   "name": "event",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-Bn6onBlX.js",
+    "index.chunk-BvMaI6NQ.js",
+    "index.chunk-M6SkuaH9.js",
+    "index.chunk-FiyCjals.js",
+    "index.chunk-BPjIr-mn.js",
+    "index.chunk-C6OBlOlX.js",
+    "index.chunk-BAEQpeU2.js",
+    "index.chunk-D76cxAuR.js",
+    "index.chunk-rUSp9s65.js"
+   ]
+  },
+  {
+   "name": "exited-while-detached",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-CcveFAuE.js"
+   ]
+  },
+  {
+   "name": "failed",
+   "ops": [
+    "once"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "fastModeCreditsExhausted",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "finish",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "firstStdout",
+   "ops": [
+    "once"
+   ],
+   "files": [
+    "index.chunk-BvMaI6NQ.js"
+   ]
+  },
+  {
+   "name": "flush",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "aboutWindow.js",
+    "findInPage.js",
+    "mainWindow.js",
+    "quickWindow.js"
+   ]
+  },
+  {
+   "name": "focus",
+   "ops": [
+    "once",
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-DLqLwOmD.js"
+   ]
+  },
+  {
+   "name": "focusedSessionChanged",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "fsEvent",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-BvMaI6NQ.js"
+   ]
+  },
+  {
+   "name": "gap-detected",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-CcveFAuE.js"
+   ]
+  },
+  {
+   "name": "gpu-info-update",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "guestConnectionChanged",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "hostIPv6Notice",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "host_reachable",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-Bn6onBlX.js",
+    "index.chunk-FiyCjals.js"
+   ]
+  },
+  {
+   "name": "https",
+   "ops": [
+    "handle"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "input-event",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "keepAwakeEnabled",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "kernelConsoleData",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "kill-requested",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-CcveFAuE.js"
+   ]
+  },
+  {
+   "name": "killed-while-attached",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-CcveFAuE.js"
+   ]
+  },
+  {
+   "name": "launchPreviewStorage",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "leave-full-screen",
+   "ops": [
+    "once",
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "leave-html-full-screen",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "legacyQuickEntryEnabled",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "lifecycleChanged",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "listening",
+   "ops": [
+    "once"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "lock-screen",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "logAnalyticsEvent",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "maximize",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "menuBarEnabled",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "message",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-BMFhTup2.js",
+    "index.chunk-DA534R-L.js"
+   ]
+  },
+  {
+   "name": "minimize",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "moved",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "needs_attention",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-Bn6onBlX.js"
+   ]
+  },
+  {
+   "name": "networkStatus",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "newListener",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-BlEfqh4Z.js"
+   ]
+  },
+  {
+   "name": "notificationInteraction",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "notificationLevels",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "on-ac",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-C6OBlOlX.js"
+   ]
+  },
+  {
+   "name": "on-battery",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-C6OBlOlX.js"
+   ]
+  },
+  {
+   "name": "online",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js"
+   ]
+  },
+  {
+   "name": "open-file",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "optionDoubleTapped",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "orgWorkAcrossAppsDisabled",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "page-favicon-updated",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "page-title-updated",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "path_changed",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-FiyCjals.js"
+   ]
+  },
+  {
+   "name": "permissionCardRenotify",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "place_hold_notice",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "postTurnSummary",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "prefinish",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "preload-error",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "preprocessEvent",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "aboutWindow.js",
+    "findInPage.js",
+    "mainWindow.js",
+    "quickWindow.js"
+   ]
+  },
+  {
+   "name": "processMetric",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js"
+   ]
+  },
+  {
+   "name": "progress",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-BlEfqh4Z.js"
+   ]
+  },
+  {
+   "name": "queryCompleted",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-BvMaI6NQ.js",
+    "index.chunk-C6OBlOlX.js",
+    "index.chunk-rUSp9s65.js"
+   ]
+  },
+  {
+   "name": "quickEntryDictationShortcut",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "quickEntryShortcut",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "quickEntrySubmitted",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "reachability_unwatched",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-FiyCjals.js"
+   ]
+  },
+  {
+   "name": "readable",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-BlEfqh4Z.js",
+    "index.chunk-CPEA6dKA.js"
+   ]
+  },
+  {
+   "name": "ready",
+   "ops": [
+    "once",
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-Bn6onBlX.js",
+    "index.chunk-CPEA6dKA.js"
+   ]
+  },
+  {
+   "name": "ready-to-show",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "reattach-gap",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-CcveFAuE.js"
+   ]
+  },
+  {
+   "name": "reattach-outcome",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-CcveFAuE.js"
+   ]
+  },
+  {
+   "name": "reattached",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-Bn6onBlX.js"
+   ]
+  },
+  {
+   "name": "rebind-settled",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-CcveFAuE.js"
+   ]
+  },
+  {
+   "name": "rebind-wanted",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-CcveFAuE.js"
+   ]
+  },
+  {
+   "name": "reconnect_attempt_failed",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-Bn6onBlX.js"
+   ]
+  },
+  {
+   "name": "reconnect_attempt_started",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-Bn6onBlX.js"
+   ]
+  },
+  {
+   "name": "reconnect_ended_quietly",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-Bn6onBlX.js"
+   ]
+  },
+  {
+   "name": "reconnect_identity_wait",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-Bn6onBlX.js"
+   ]
+  },
+  {
+   "name": "reconnect_wait",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-Bn6onBlX.js"
+   ]
+  },
+  {
+   "name": "reconnect_wait_armed",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-Bn6onBlX.js"
+   ]
+  },
+  {
+   "name": "reconnecting",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-Bn6onBlX.js"
+   ]
+  },
+  {
+   "name": "redirect",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-Bn6onBlX.js"
+   ]
+  },
+  {
+   "name": "remote_session_start",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "render-process-gone",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-Bn6onBlX.js",
+    "index.chunk-FiyCjals.js"
+   ]
+  },
+  {
+   "name": "request",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "resize",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "resized",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "response",
+   "ops": [
+    "once",
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-Bn6onBlX.js",
+    "index.chunk-BlEfqh4Z.js"
+   ]
+  },
+  {
+   "name": "restore",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "resume",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-Bn6onBlX.js",
+    "index.chunk-BvMaI6NQ.js",
+    "index.chunk-C6OBlOlX.js",
+    "index.chunk-rUSp9s65.js"
+   ]
+  },
+  {
+   "name": "right-click",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "rotate",
+   "ops": [
+    "once"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "scheduledTaskRunFinished",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "scheduled_task_event",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "second-instance",
+   "ops": [
+    "once",
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "select-client-certificate",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "select-webauthn-account",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "sendsDroppedUnsent",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-BAEQpeU2.js"
+   ]
+  },
+  {
+   "name": "session-end",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "sessionHidden",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-D76cxAuR.js"
+   ]
+  },
+  {
+   "name": "socket",
+   "ops": [
+    "once",
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-BlEfqh4Z.js"
+   ]
+  },
+  {
+   "name": "space_event",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-BvMaI6NQ.js"
+   ]
+  },
+  {
+   "name": "spanStart",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "aboutWindow.js",
+    "findInPage.js",
+    "mainWindow.js",
+    "quickWindow.js"
+   ]
+  },
+  {
+   "name": "spawn",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-CPEA6dKA.js",
+    "index.chunk-DA534R-L.js"
+   ]
+  },
+  {
+   "name": "spawnConfirmed",
+   "ops": [
+    "once"
+   ],
+   "files": [
+    "index.chunk-BvMaI6NQ.js"
+   ]
+  },
+  {
+   "name": "stale",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "starSyncEpochReset",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-BAEQpeU2.js",
+    "index.chunk-D76cxAuR.js"
+   ]
+  },
+  {
+   "name": "streamEvent",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-DyYrY1NN.js"
+   ]
+  },
+  {
+   "name": "suspend",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-Bn6onBlX.js",
+    "index.chunk-BvMaI6NQ.js",
+    "index.chunk-C6OBlOlX.js"
+   ]
+  },
+  {
+   "name": "swipe",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "teachModeChanged",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "teachNonTeachAction",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "teachStepRequested",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "teachStepWorking",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "timeout",
+   "ops": [
+    "once",
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-BlEfqh4Z.js"
+   ]
+  },
+  {
+   "name": "turnCompleted",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-BAEQpeU2.js"
+   ]
+  },
+  {
+   "name": "uncaughtException",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "unhandledRejection",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "unlock-screen",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "unmaximize",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "unpipe",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js",
+    "index.chunk-BlEfqh4Z.js"
+   ]
+  },
+  {
+   "name": "unresponsive",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "update-available",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "update-downloaded",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "update-not-available",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "updated",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "upgrade",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "user-did-become-active",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "vmStartupStep",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "vmStopped",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "wakeSchedulerEnabled",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "web-contents-created",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "will-attach-webview",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "will-download",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "will-frame-navigate",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "will-navigate",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "will-prevent-unload",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "will-quit",
+   "ops": [
+    "on",
+    "once"
+   ],
+   "files": [
+    "index.pre.js",
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "will-redirect",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  },
+  {
+   "name": "window-all-closed",
+   "ops": [
+    "on"
+   ],
+   "files": [
+    "index.chunk-lzaSYO3Q.js"
+   ]
+  }
+ ],
+ "tools": [
+  {
+   "name": "Bash",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 719339
+  },
+  {
+   "name": "Read",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 719346
+  },
+  {
+   "name": "Edit",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 719361
+  },
+  {
+   "name": "MultiEdit",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4572194
+  },
+  {
+   "name": "Write",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 719353
+  },
+  {
+   "name": "Glob",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 719368
+  },
+  {
+   "name": "Grep",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 719375
+  },
+  {
+   "name": "LS",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6873162
+  },
+  {
+   "name": "WebFetch",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 719397
+  },
+  {
+   "name": "WebSearch",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 719408
+  },
+  {
+   "name": "NotebookEdit",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 719382
+  },
+  {
+   "name": "TodoWrite",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 719427
+  },
+  {
+   "name": "Task",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 719420
+  },
+  {
+   "name": "Agent",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5001086
+  },
+  {
+   "name": "ExitPlanMode",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2253338
+  },
+  {
+   "name": "AskUserQuestion",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 719525
+  },
+  {
+   "name": "Skill",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 719497
+  },
+  {
+   "name": "Workflow",
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3685041
+  },
+  {
+   "name": "Bash",
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 159463
+  },
+  {
+   "name": "Read",
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 162392
+  },
+  {
+   "name": "Edit",
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 111155
+  },
+  {
+   "name": "MultiEdit",
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 111170
+  },
+  {
+   "name": "Write",
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 111162
+  },
+  {
+   "name": "Glob",
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 162406
+  },
+  {
+   "name": "Grep",
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 162399
+  },
+  {
+   "name": "NotebookEdit",
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 111182
+  },
+  {
+   "name": "Task",
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 759906
+  },
+  {
+   "name": "Agent",
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 759898
+  },
+  {
+   "name": "ExitPlanMode",
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 249439
+  },
+  {
+   "name": "AskUserQuestion",
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 1661818
+  },
+  {
+   "name": "Skill",
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 147960
+  },
+  {
+   "name": "Workflow",
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 234305
+  },
+  {
+   "name": "Bash",
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 191324
+  },
+  {
+   "name": "Read",
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 259122
+  },
+  {
+   "name": "Edit",
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 298879
+  },
+  {
+   "name": "MultiEdit",
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 298886
+  },
+  {
+   "name": "Write",
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 298871
+  },
+  {
+   "name": "Glob",
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 304540
+  },
+  {
+   "name": "Grep",
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 304528
+  },
+  {
+   "name": "WebFetch",
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 339590
+  },
+  {
+   "name": "WebSearch",
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 356059
+  },
+  {
+   "name": "NotebookEdit",
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 356025
+  },
+  {
+   "name": "Task",
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 355967
+  },
+  {
+   "name": "AskUserQuestion",
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 225576
+  },
+  {
+   "name": "Skill",
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 219957
+  },
+  {
+   "name": "Workflow",
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 217843
+  },
+  {
+   "name": "WebSearch",
+   "file": "index.chunk-M6SkuaH9.js",
+   "offset": 674326
+  },
+  {
+   "name": "Workflow",
+   "file": "index.chunk-M6SkuaH9.js",
+   "offset": 609669
+  },
+  {
+   "name": "Bash",
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 898330
+  },
+  {
+   "name": "Read",
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 898248
+  },
+  {
+   "name": "Edit",
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 898263
+  },
+  {
+   "name": "MultiEdit",
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 904602
+  },
+  {
+   "name": "Write",
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 837626
+  },
+  {
+   "name": "Glob",
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 898270
+  },
+  {
+   "name": "NotebookEdit",
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 898292
+  },
+  {
+   "name": "NotebookRead",
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 898277
+  },
+  {
+   "name": "Agent",
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 819890
+  },
+  {
+   "name": "Skill",
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 1131451
+  },
+  {
+   "name": "Bash",
+   "file": "index.pre.js",
+   "offset": 592657
+  },
+  {
+   "name": "Read",
+   "file": "index.pre.js",
+   "offset": 592664
+  },
+  {
+   "name": "Edit",
+   "file": "index.pre.js",
+   "offset": 592679
+  },
+  {
+   "name": "Write",
+   "file": "index.pre.js",
+   "offset": 592671
+  },
+  {
+   "name": "Glob",
+   "file": "index.pre.js",
+   "offset": 592686
+  },
+  {
+   "name": "Grep",
+   "file": "index.pre.js",
+   "offset": 592693
+  },
+  {
+   "name": "WebFetch",
+   "file": "index.pre.js",
+   "offset": 592715
+  },
+  {
+   "name": "WebSearch",
+   "file": "index.pre.js",
+   "offset": 592726
+  },
+  {
+   "name": "NotebookEdit",
+   "file": "index.pre.js",
+   "offset": 592700
+  },
+  {
+   "name": "TodoWrite",
+   "file": "index.pre.js",
+   "offset": 592745
+  },
+  {
+   "name": "Task",
+   "file": "index.pre.js",
+   "offset": 592738
+  },
+  {
+   "name": "AskUserQuestion",
+   "file": "index.pre.js",
+   "offset": 592843
+  },
+  {
+   "name": "Skill",
+   "file": "index.pre.js",
+   "offset": 592815
+  }
+ ],
+ "curated_strings": {
+  "policy": [
+   {
+    "text": ")}}),directoryEnabled:U(k().optional(),{flatKey:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 687965
+   },
+   {
+    "text": ")},predicates:{show:e=>e.extensions?.enabled!==!1}}),signatureRequired:U(k().optional(),{flatKey:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 688272
+   },
+   {
+    "text": ")}}),allowedPluginServers:U(No(A(HMe(W({defaultMessage:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 713444
+   },
+   {
+    "text": "in a?r(a.reenable,`At least one surface must remain enabled; ${a.reenable===",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 785305
+   },
+   {
+    "text": "managed configuration",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 833136
+   },
+   {
+    "text": "))}function TGt(e,t){let n=t.thirdParty?e.mcp.allowedPluginServers:void 0;return n?{strictPluginOnlyCustomization:[",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2115128
+   },
+   {
+    "text": "[custom-3p] relaunching to apply managed configuration",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2231268
+   },
+   {
+    "text": "[keep-awake] stopped (id=%d): managed configuration key keepAwakeEnabled=false (claims kept: %s)",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3812934
+   },
+   {
+    "text": "[supportedFeatures] a feature answer changed at a managed configuration rebuild (the SSH engine, or a flag); re-signalling the renderer",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3856599
+   },
+   {
+    "text": "[updater] manual check skipped: enterprise policy",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4439127
+   },
+   {
+    "text": "],[/blocked by enterprise policy/i,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4485788
+   },
+   {
+    "text": "}));let d=yy(u);if(i&&!await bni(d))return null;let f=K().extensions.signatureRequired;if(f&&l.status!==",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4512593
+   },
+   {
+    "text": "scheduled tasks are turned off by managed configuration (scheduledTasksEnabled=false)",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5702762
+   },
+   {
+    "text": "blocked by enterprise policy",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6028907
+   },
+   {
+    "text": "Not in managed configuration",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6334928
+   },
+   {
+    "text": "A managed configuration is present but could not be read, so there is nothing to test.",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6335611
+   },
+   {
+    "text": "No managed configuration is active in this session.",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6336126
+   },
+   {
+    "text": "auto mode is turned off by this device's managed configuration",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 627023
+   },
+   {
+    "text": "local MCP execution is disabled by enterprise policy",
+    "file": "index.chunk-BvMaI6NQ.js",
+    "offset": 57592
+   },
+   {
+    "text": ")}}),directoryEnabled:U(I().optional(),{flatKey:",
+    "file": "index.pre.js",
+    "offset": 561712
+   },
+   {
+    "text": ")},predicates:{show:e=>e.extensions?.enabled!==!1}}),signatureRequired:U(I().optional(),{flatKey:",
+    "file": "index.pre.js",
+    "offset": 562018
+   },
+   {
+    "text": ")}}),allowedPluginServers:U(H(Oj(wV(q({defaultMessage:",
+    "file": "index.pre.js",
+    "offset": 586906
+   },
+   {
+    "text": "allowed (managed configuration)",
+    "file": "index.chunk-BPjIr-mn.js",
+    "offset": 3740
+   },
+   {
+    "text": "deferred: MCP servers: still held off (a config or the installed extensions unreadable, this app's config not writable, the kill switch, or the organization-policy gate); waiting for the next launch",
+    "file": "index.chunk-BPjIr-mn.js",
+    "offset": 42128
+   },
+   {
+    "text": "deferred: MCP servers: held off this pass (a config unreadable or not writable, the installed extensions not listed, the kill switch, or the organization-policy gate)",
+    "file": "index.chunk-BPjIr-mn.js",
+    "offset": 42329
+   },
+   {
+    "text": ");if(t.sQ())return{...e,detail:`deferred: plugins: the organization-policy gate holds them${R(n,",
+    "file": "index.chunk-BPjIr-mn.js",
+    "offset": 44177
+   }
+  ],
+  "cowork": [
+   {
+    "text": ",e.CoworkSessionFoldersUpdated=",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 531329
+   },
+   {
+    "text": ",e.CoworkSessionDirectoriesStaged=",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 531392
+   },
+   {
+    "text": "a scoped entry reaches Code sessions only, never Cowork; allow specific hosts with the egress host settings (coworkEgressAllowedHosts), one list for Cowork and Code",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 719624
+   },
+   {
+    "text": "}}};Promise.resolve().then((()=>rA)).then((e=>e.logCoworkEvent(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1450148
+   },
+   {
+    "text": "||(e.maxThinkingTokens,e.useCoworkOauth!==void 0&&typeof e.useCoworkOauth!=",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1917750
+   },
+   {
+    "text": "validateAsCoworkMount",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1941816
+   },
+   {
+    "text": "clearCoworkBrowserData",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1948210
+   },
+   {
+    "text": "getCoworkChromeImportAvailability",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1948330
+   },
+   {
+    "text": "}),Promise.resolve().then((()=>rA)).then((async({logCoworkEvent:n,flushEventQueue:r})=>{await n(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2219801
+   },
+   {
+    "text": ")return!1;let n=!1;try{n=(0,o.statSync)(eC()).isDirectory()}catch{}return N.warn(`[isCoworkManagedDirsInAppStorage] marker probe failed (${String(t)}); managed root ${n?",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2269274
+   },
+   {
+    "text": "[resolveCoworkUserFilesPath] stored path could not be verified; using userData fallback for this session",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2270253
+   },
+   {
+    "text": "Claude-Desktop-Cowork",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2501430
+   },
+   {
+    "text": "Claude Desktop Cowork Export",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2652739
+   },
+   {
+    "text": "),{all:n,readOnly:r}}async function gFn(e){let{resolveTrustedFolderCandidate:t,isCoworkInternalStoragePath:n}=await Promise.resolve().then((()=>require(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3054372
+   },
+   {
+    "text": "))).then((e=>e.t))).isVerifiedCoworkRemoteSession(e)}async function kGn(e){return(await Promise.resolve().then((()=>require(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3174343
+   },
+   {
+    "text": ")))),!1;case El.Cowork:{if(a.pathname===",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3292418
+   },
+   {
+    "text": "?t?.getSessionRoute(r.id):`/${Dl.Cowork}/${encodeURIComponent(r.id)}`}async function m4n(e,t,n,r){let i=MI(),a=t.host===El.Code?El.Code:El.ClaudeAI;try{if(a===El.Code&&ZA()){N.info(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3302743
+   },
+   {
+    "text": ")}function Kpr(e,t){return Ev()?(N.info(`[cu-hipaa] ${e} refused under the Cowork HIPAA gate`,{sessionId:t}),!0):!1}function qpr(e={}){return $z()&&rB(e)&&!yv(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3696029
+   },
+   {
+    "text": "Cowork is not currently supported on this architecture.",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3843486
+   },
+   {
+    "text": "Cowork requires macOS 14.0 (Sonoma) or later. Update your operating system to use this feature.",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3843652
+   },
+   {
+    "text": "Cowork requires Claude Desktop be installed with our modern installer",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3843847
+   },
+   {
+    "text": "},selfHostedCowork:UEr()?MV:{status:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3851964
+   },
+   {
+    "text": "lastSeenRequireCoworkFullVmSandbox",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4027632
+   },
+   {
+    "text": ",{signal:AbortSignal.timeout(t)})}catch{Z.warn(`[CoworkVMProcess:${e}] waitForVmProcessExit: exit not observed within ${t}ms, sending SIGKILL`),n.kill(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4256416
+   },
+   {
+    "text": ",e)}kill(e,{force:t=!1}={}){return Z.info(`[CoworkVMProcess:${this.id}] kill called with signal: %s${t?",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4258603
+   },
+   {
+    "text": "[edrIntegration] not run: this Cowork VM does not support the EDR Integration (guest_unsupported) (testHooksLatched=%s)",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4293338
+   },
+   {
+    "text": "Org runs Cowork in the cloud only",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4447868
+   },
+   {
+    "text": ":return`Couldn't start for Cowork and Code sessions.${e.error?` Error: ${e.error}`:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4461847
+   },
+   {
+    "text": "Offered no tools to Cowork and Code sessions, so they can't use it.",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4461957
+   },
+   {
+    "text": "Started after this computer's tools were shared with remote Cowork sessions, so they can't use it yet. Restart Claude to share it.",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4462044
+   },
+   {
+    "text": "Cowork pool close sweep failed: %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4498545
+   },
+   {
+    "text": "[CoworkFilePreview] Protocol handler registered",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4590373
+   },
+   {
+    "text": "):void 0)}async function vhi(e){let t=e?.preserveCoworkSharedJar??!1,n=await _hi();n&&await TM(n,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4767123
+   },
+   {
+    "text": "&&(G_i=!0,vhi({preserveCoworkSharedJar:!0}).catch((e=>{N.warn(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4877163
+   },
+   {
+    "text": "Cowork workspace disk full",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5010501
+   },
+   {
+    "text": "The model and effort level selected in each tab (Cowork, Code, Chat)",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5080984
+   },
+   {
+    "text": "Cowork VM service log",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5083863
+   },
+   {
+    "text": "Cowork VM guest log",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5084122
+   },
+   {
+    "text": "Cowork EDR integration",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5084362
+   },
+   {
+    "text": "[ShowLogs] Cowork VM logs copied",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5136490
+   },
+   {
+    "text": "Failed to open Cowork session data folder: %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5137391
+   },
+   {
+    "text": "Enable Cowork SDK Debugging",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5161052
+   },
+   {
+    "text": "HTML previews are not available for this session (Cowork renders files as tabs).",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5483300
+   },
+   {
+    "text": ")));return e()},getCoworkChromeImportAvailability:async()=>{if(!cM())return{available:!1,reason:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5561681
+   },
+   {
+    "text": "[Launch] navigatePreviewFromModel REFUSED (Cowork pane)",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5569651
+   },
+   {
+    "text": "Scheduled tasks can't run on SSH hosts while CLAUDE_CONFIG_DIR points inside the Cowork folder. Point it elsewhere and try again.",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5632603
+   },
+   {
+    "text": "whether the tasks' folder is in Cowork's tree cannot be told",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5632873
+   },
+   {
+    "text": "[CoworkArtifacts] clearWatcherStorage failed %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5799080
+   },
+   {
+    "text": "[CoworkArtifacts] Denied watcher request (path moved after validation) %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5801894
+   },
+   {
+    "text": "[CoworkArtifacts] Denied protocol request (outside container or not found) %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5802589
+   },
+   {
+    "text": "[CoworkArtifacts] Denied non-canonical protocol request %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5802731
+   },
+   {
+    "text": "Artifact path resolves outside Cowork files root. If the Claude folder was relocated via a symlink or junction, move it back and use the in-app Change location setting instead.",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5809617
+   },
+   {
+    "text": "[CoworkArtifacts] Failed to read manifest %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5810972
+   },
+   {
+    "text": "[CoworkArtifacts] Unparseable manifest %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5811182
+   },
+   {
+    "text": "[CoworkArtifacts] Created %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5812563
+   },
+   {
+    "text": "[CoworkArtifacts] Version snapshot failed %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5814364
+   },
+   {
+    "text": "[CoworkArtifacts] Auto-publish failed %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5816116
+   },
+   {
+    "text": "[CoworkArtifacts] Import write failed %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5818487
+   },
+   {
+    "text": "[CoworkArtifacts] Imported %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5818977
+   },
+   {
+    "text": "[CoworkArtifacts] Unshared %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5823531
+   },
+   {
+    "text": "[CoworkArtifacts] Granted mcpTools %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5827384
+   },
+   {
+    "text": "[CoworkArtifacts] Renamed %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5829227
+   },
+   {
+    "text": "[CoworkArtifacts] Failed to save manifest %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5829396
+   },
+   {
+    "text": "[CoworkArtifacts] Blocked window.open %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5840724
+   },
+   {
+    "text": "[CoworkArtifacts] openExternalUrl rejected unparseable %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5843878
+   },
+   {
+    "text": "[CoworkArtifacts] openExternalUrl rejected scheme %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5844012
+   },
+   {
+    "text": "[CoworkArtifacts] Withheld Claude auth URL %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5844123
+   },
+   {
+    "text": "[CoworkArtifacts] Opening allowlisted external %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5844293
+   },
+   {
+    "text": "[CoworkArtifacts] User cancelled external open %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5846288
+   },
+   {
+    "text": "[CoworkArtifacts] Opening confirmed external %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5846395
+   },
+   {
+    "text": "[CoworkArtifacts] Parent window not initialized",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5846667
+   },
+   {
+    "text": "[CoworkArtifacts] Popout window unavailable %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5846747
+   },
+   {
+    "text": "[CoworkArtifacts] Load superseded %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5847276
+   },
+   {
+    "text": "[CoworkArtifacts] Failed to load %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5847339
+   },
+   {
+    "text": "[CoworkArtifacts] clearCache failed %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5847716
+   },
+   {
+    "text": "[CoworkArtifacts] Printed to PDF %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5848302
+   },
+   {
+    "text": "[CoworkWatchers] Bridge call to disallowed tool %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5854738
+   },
+   {
+    "text": ",argsPreview:t,...e})));if(c)return N.info(`[CoworkArtifacts] askClaude() cache hit (artifactId=${o} cacheKey=${s})`),l({durationMs:0,isError:c.isError===!0,resultPreview:c.text,cached:!0}),a(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5859076
+   },
+   {
+    "text": "[CoworkArtifacts] Bridge call to disallowed tool %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5860786
+   },
+   {
+    "text": "),e}if(N.info(`[CoworkArtifacts] callMcpTool() cache ${w?",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5861878
+   },
+   {
+    "text": "[CoworkArtifacts] callMcpTool rate-limited %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5862789
+   },
+   {
+    "text": "};let c=await l4.runNow(s.id,{personStarted:!0});return c?(N.info(`[CoworkArtifacts] runScheduledTask() dispatched (artifactId=${o} taskId=${s.id} sessionId=${c})`),a(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5865046
+   },
+   {
+    "text": "[CoworkFilePreview]",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5876738
+   },
+   {
+    "text": "},{path:e}),displayName:`Cowork in ${e}`,description:X().formatMessage({defaultMessage:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5934904
+   },
+   {
+    "text": "},{directory:e}),displayName:`Cowork task in ${e}`,description:X().formatMessage({defaultMessage:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5935261
+   },
+   {
+    "text": ")){if(this.isDisposed)return;N.warn(`${h3} Cowork OAuth denied (403); disabling bridge for this launch ${Gd(e.reason)}`),lA(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5945442
+   },
+   {
+    "text": ",{entries:n.entries},{signal:t.signal,cancelAfterMs:zha}))}catch(e){throw t.signal.reason!==oga&&N.warn(`[CoworkStorage] scan failed (${xE(e)}): ${String(e)}`),t.abort(),Error(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6005232
+   },
+   {
+    "text": ",{entries:r.map((([t,n])=>dga(e,t,n,!0)))},{signal:i.signal});return new Map([...n,...fga(t)])}catch(e){throw i.abort(),N.warn(`[CoworkStorage] preview sizing failed (${xE(e)}): ${String(e)}`),Error(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6008044
+   },
+   {
+    "text": "&&!a.net.isOnline())return{...N3,errorCode:v_.Offline};let c=Pha(i);j3=c;let l,u;try{({deleteSessionFully:l,CoworkDeletionUnrecordedError:u}=await Promise.resolve().then((()=>require(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6010841
+   },
+   {
+    "text": "):(Sha(e)&&m++,N.warn(`[CoworkStorage] cleanup: delete failed for ${t}: ${String(e)}`),",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6012154
+   },
+   {
+    "text": ")}}})}finally{j3=null,Dga(f.key)}let _={deletedCount:g.done,skippedCount:g.skipped,failedCount:g.failed,failedInUseCount:m,cancelled:g.cancelled};return N.info(`[CoworkStorage] storage cleanup: ${o===",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6012249
+   },
+   {
+    "text": "[CoworkMemory] writeGlobalMemory skipped: no account context",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6306874
+   },
+   {
+    "text": ");return}o.dispatchOnCoworkFromMain({selectedDirectories:[e],source:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6364079
+   },
+   {
+    "text": ");return}let i=e.map((e=>n.default.resolve(e)));T0n(i),r.dispatchOnCoworkFromMain({selectedFiles:i,source:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6364561
+   },
+   {
+    "text": "[cu-hipaa] Cowork HIPAA gate engaged",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6399615
+   },
+   {
+    "text": "&&vhi({preserveCoworkSharedJar:aM()===",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6580763
+   },
+   {
+    "text": "}:{},headers:stn(t?.headers,`Bearer ${r}`)})}async function iQa(e,t){if(ezn(e))return!0;try{let{deniedCoworkMountRoot:n,isCoworkUserDataPath:r}=await Promise.resolve().then((()=>require(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6641747
+   },
+   {
+    "text": "host-loop mode required",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6719245
+   },
+   {
+    "text": "Cowork legacy grant prune failed",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6787851
+   },
+   {
+    "text": "))).then((e=>e.n)).then((e=>e.drainCoworkDeletionOutbox({retryParked:!0}))).catch((e=>{N.error(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6790105
+   },
+   {
+    "text": "))).then((e=>e.n)).then((e=>e.startCoworkDeletionOutbox())).catch((e=>{N.error(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6800383
+   },
+   {
+    "text": "[importCliSession] rejected live Cowork session id",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 2090948
+   },
+   {
+    "text": "),t.L5.warn(`${t.k0} Rejecting candidate ${a.cliSessionId}: id names a live Cowork session or preserved session jar`);continue}if(!await t.A(a.cwd,[a.cwd],g,this.isWorkspaceTrusted)){f(",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 2100516
+   },
+   {
+    "text": "[CoworkMemorySync]",
+    "file": "index.chunk-BvMaI6NQ.js",
+    "offset": 7681
+   },
+   {
+    "text": ")&&t.d6().canSyncCoworkMemoryRemotely()&&!t.sQ()}async function Ha(e){if(!t.d6().canSyncCoworkMemoryRemotely())return{refusal:",
+    "file": "index.chunk-BvMaI6NQ.js",
+    "offset": 87320
+   },
+   {
+    "text": "Ask your administrator to add this domain to the Cowork egress allowlist (`coworkEgressAllowedHosts`).",
+    "file": "index.chunk-BvMaI6NQ.js",
+    "offset": 289038
+   },
+   {
+    "text": "[CoworkArtifacts] post-create read grant failed %o",
+    "file": "index.chunk-CbSbf3Tr.js",
+    "offset": 39655
+   },
+   {
+    "text": "[CoworkArtifacts] post-update read grant failed %o",
+    "file": "index.chunk-CbSbf3Tr.js",
+    "offset": 42467
+   },
+   {
+    "text": "||t.HZ(Pt)?void 0:Ao(n,a,i,r))??`${n} is not inside a folder connected to Cowork on this device. ${yi(r)}`,outsideKind:a}}let l=a??await xi(r),u=t.z_(bi(s,l),l);if(u===",
+    "file": "index.chunk-DoU0pLl3.js",
+    "offset": 41878
+   },
+   {
+    "text": ",errText:`${n} is not inside a folder connected to Cowork on this device. ${yi(r)}`};if(u===",
+    "file": "index.chunk-DoU0pLl3.js",
+    "offset": 42108
+   },
+   {
+    "text": "The Cowork artifact store is not available on this device.",
+    "file": "index.chunk-DoU0pLl3.js",
+    "offset": 93607
+   },
+   {
+    "text": "} that only ${t} in the desktop Cowork sidebar and ${r}`)}return h>0&&_.push(",
+    "file": "index.chunk-DoU0pLl3.js",
+    "offset": 128275
+   },
+   {
+    "text": ")+`Can also stage a Cowork artifact's current HTML by id via artifact_ids (see that parameter's description). Returns {",
+    "file": "index.chunk-DoU0pLl3.js",
+    "offset": 137747
+   },
+   {
+    "text": "&&t.L5.warn(`[CoworkIntentWarmer] '${n[i].name}' rejected for kind=${e.kind}:`,a.reason)}}async maybeWarm(e,t){let n=e.keyBySessionId?`${t.kind}:${t.sessionId??",
+    "file": "index.chunk-CdsxofPO.js",
+    "offset": 3870
+   },
+   {
+    "text": " is not available for remote Cowork sessions on Desktop.`);if(t.mP()){await t.GP(e,t.IP());let n=t.hP(e);if(n!==void 0&&t._P(n)||n===void 0&&!t.FP(e)&&t.mP())return a(t.lP)}if(n===",
+    "file": "index.chunk-CdsxofPO.js",
+    "offset": 73260
+   },
+   {
+    "text": " is not available for remote Cowork sessions on Desktop.`)}}}let o=t._4(e);if(o===void 0)return t.L5.warn(`callChromeToolForRemoteSession: rejected non-CCR sessionId ",
+    "file": "index.chunk-CdsxofPO.js",
+    "offset": 73991
+   },
+   {
+    "text": "a Cowork task folder needs macOS folder access",
+    "file": "index.chunk-BPjIr-mn.js",
+    "offset": 13031
+   },
+   {
+    "text": "deferred: not signed in yet, or Cowork and Code are on different accounts or organizations",
+    "file": "index.chunk-BPjIr-mn.js",
+    "offset": 17477
+   },
+   {
+    "text": "skills upload waits: Cowork is not in host-loop mode",
+    "file": "index.chunk-BPjIr-mn.js",
+    "offset": 19592
+   },
+   {
+    "text": "deferred: Cowork projects store not loaded yet",
+    "file": "index.chunk-BPjIr-mn.js",
+    "offset": 25530
+   }
+  ],
+  "error": [
+   {
+    "text": "@ant/claude-native is required for safe-fs containment but failed to load; refusing to fall back to a path-based open (CC-2885)",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 285085
+   },
+   {
+    "text": ",blockedOnUserCount:0,projectPromptCount:0},this.lastRendered=JSON.stringify(Ehe({devLabel:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 296510
+   },
+   {
+    "text": "],eEe={blocked:3,ask:2,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 561718
+   },
+   {
+    "text": "}),blocked:W({defaultMessage:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 566288
+   },
+   {
+    "text": ",{docsUrl:`${ts}/configuration#allowedpluginmcpservers`})}}),deniedPluginServers:U(No(A(HMe(W({defaultMessage:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 714020
+   },
+   {
+    "text": ",{docsUrl:`${ts}/configuration#deniedpluginmcpservers`})}}),toolTimeoutSec:U(Wn().int().min(60).max(3600).optional(),{flatKey:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 714570
+   },
+   {
+    "text": "matches nothing: localhost dev servers are never blocked in the built-in browser",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 761741
+   },
+   {
+    "text": ",{docsUrl:`${ts}/configuration#builtinbrowseralloweddomains`})}}),blockedDomains:U(OPe(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 763811
+   },
+   {
+    "text": ",{docsUrl:`${ts}/configuration#builtinbrowserblockeddomains`})}})}),APe=W({defaultMessage:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 764332
+   },
+   {
+    "text": "}deniedBy(e){let t=this.cell(e);return t.state===",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 834958
+   },
+   {
+    "text": "?`denied by ${t.by}`:t.state.replace(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 835350
+   },
+   {
+    "text": ")?(r.error(`[${t.logTag}] helper blocked by macOS TCC ${y}`),{ok:!1,reason:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 855231
+   },
+   {
+    "text": "Provider returned error: access_denied",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 858904
+   },
+   {
+    "text": "){if(o>=t.length||t[o].out!==null)return 0;if(t[o].hole)return a&&i&&(i.blockedByHole=!0,i.holePos=o),0;for(;o<t.length;o++)s.push([o,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 917915
+   },
+   {
+    "text": "){if(c.hole)return a&&i&&(i.blockedByHole=!0,i.holePos=o),0;s.push([o,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 918255
+   },
+   {
+    "text": ",!1])}else{if(c.hole)return a&&i&&(i.blockedByHole=!0,i.holePos=o),0;if(!Dqe(c.decoded))return 0;s.push([o,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 918336
+   },
+   {
+    "text": "gateway_access_denied",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 940612
+   },
+   {
+    "text": "MCP Node Host refused to launch the app executable",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1441840
+   },
+   {
+    "text": "[org_policy_denied]",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1471009
+   },
+   {
+    "text": "kvm_permission_denied",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1566758
+   },
+   {
+    "text": "||!but(e.state)||typeof e.blockedBy!=",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1572311
+   },
+   {
+    "text": "||!Cut(e.code)||typeof e.blockedBy!=",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1572572
+   },
+   {
+    "text": "||e.blockedReason!==void 0&&typeof e.blockedReason!=",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1806530
+   },
+   {
+    "text": "||e.blockedPath!==void 0&&typeof e.blockedPath!=",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1839624
+   },
+   {
+    "text": "||e.deniedReason!==void 0&&typeof e.deniedReason!=",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1852524
+   },
+   {
+    "text": "cloud_storage_mount_denied",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2022594
+   },
+   {
+    "text": "refusing to use this socket",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2023287
+   },
+   {
+    "text": "refusing to connect to the cowork",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2023330
+   },
+   {
+    "text": "endpoint_security_blocked",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2030602
+   },
+   {
+    "text": "[path-safety] isRealpathWithin denied %s in %s: %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2062308
+   },
+   {
+    "text": "[path-safety] realPathsEqual denied %s vs %s: %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2063283
+   },
+   {
+    "text": "[path-safety] containment check denied %s in %s: %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2064311
+   },
+   {
+    "text": "[path-safety] isSafeWriteDestination denied %s in %s: %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2064608
+   },
+   {
+    "text": ")throw Error(`[custom3p-mcp] refusing to open non-https authorize URL: ${e.protocol}//${e.host}`);if(_v(e))throw N.warn(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2164892
+   },
+   {
+    "text": "blocked_by_org_admin",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2443209
+   },
+   {
+    "text": "blocked_by_platform",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2443624
+   },
+   {
+    "text": ",allow:[],deny:[],egress:[]};let{sitePolicy:t,egress:n}=e;return{mode:t.defaultDomainPolicy,allow:t.allowedDomains??[],deny:t.blockedDomains??[],egress:n.filter((e=>e!==void 0&&!e.includes(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2499530
+   },
+   {
+    "text": "macOS blocked the credential helper. Move it out of Documents, Desktop or Downloads, or grant access in System Settings > Privacy & Security > Files and Folders.",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2575250
+   },
+   {
+    "text": "}),r=await p.default.lstat(e,{bigint:!0});if(r.isSymbolicLink())throw n(`ELOOP: refusing to follow reparse point at ",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2605802
+   },
+   {
+    "text": ",`Redirect ${n} to ${TE(a)} blocked: ${c}`,a);return}s=a,f.followRedirect()})),f.on(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2657269
+   },
+   {
+    "text": "was blocked by macOS. Move it out of Documents, Desktop or Downloads, or grant access in System Settings > Privacy & Security > Files and Folders",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2875980
+   },
+   {
+    "text": "is a symlink or junction, refusing to open",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2969913
+   },
+   {
+    "text": "[org-policy-gate] no lastActiveOrg at verdict engage; mapped surfaces stay blocked until restart",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3061060
+   },
+   {
+    "text": "[org-policy-gate] lastActiveOrg capture failed; mapped surfaces stay blocked until restart",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3061183
+   },
+   {
+    "text": "category_org_blocked",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3126256
+   },
+   {
+    "text": "blocked by your site permissions",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3126713
+   },
+   {
+    "text": "blocked by your organization's policy",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3126837
+   },
+   {
+    "text": "denied_unattributed",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3222462
+   },
+   {
+    "text": "denied_not_top_frame",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3222553
+   },
+   {
+    "text": "navigate_blocked_domain",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3318502
+   },
+   {
+    "text": "navigation_blocked_mid_call",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3318710
+   },
+   {
+    "text": "js_permission_denied",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3318988
+   },
+   {
+    "text": "}],w3n=[{pattern:/^Permission denied for this action/,errorType:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3319347
+   },
+   {
+    "text": "}],T3n=[{pattern:/^Permission denied for reading page content/,errorType:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3320057
+   },
+   {
+    "text": "}],E3n=[{pattern:/^Permission denied for reading pages on this domain/,errorType:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3320761
+   },
+   {
+    "text": "},{pattern:/^Navigation was blocked by a ",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3321173
+   },
+   {
+    "text": "navigation_blocked",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3322582
+   },
+   {
+    "text": "permission_denied_user",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3322743
+   },
+   {
+    "text": "},{pattern:/^This site is blocked/,errorType:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3323559
+   },
+   {
+    "text": "))));if(i!==null&&!await qhr(i,t))throw Error(`the shadow common dir ${e} is marked for another repository; refusing to rebind it`);await o.default.promises.mkdir(n.default.join(e,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3717785
+   },
+   {
+    "text": ");if(c.length>rhr)throw Error(`the shadow config for ${t} would exceed ${rhr} bytes; refusing to build it`);await gB(n.default.join(e,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3718304
+   },
+   {
+    "text": ",{holder:e}),Jv(),!0}get currentHolder(){return this.exclusiveHolder}checkApp(e,t,n){if(this.exclusiveHolder!==void 0&&this.exclusiveHolder!==e)return{blockedBy:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3920139
+   },
+   {
+    "text": ",holder:this.exclusiveHolder};let r=this.appHolders.get(wAr(t,n));if(r!==void 0&&r.sessionId!==e)return{blockedBy:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3920311
+   },
+   {
+    "text": "@ant/claude-native does not provide connectNamedPipeSameUserOwned; refusing to dial the Claude in Chrome pipe unverified. Reinstall Claude to restore it.",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3933170
+   },
+   {
+    "text": "lam_hipaa_gate_blocked",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3935854
+   },
+   {
+    "text": " denied. Not a managed window and no fallbackWindowOpenHandler provided.`),{action:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4108855
+   },
+   {
+    "text": ",broken:[`${$U} (${t})`],denied:i};r=[]}let a=[Nj,...r],o=await Promise.all(a.map((t=>NLn((0,n.join)(e,t))))),s=[];return a.forEach(((e,t)=>{let n=o[t];n.status===",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4141810
+   },
+   {
+    "text": ",broken:s,denied:i}:{state:o.some((e=>e.status===",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4142045
+   },
+   {
+    "text": ",broken:s,denied:i}}async function tGr(e=QWr){let t=await eGr(e);return t.state===",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4142131
+   },
+   {
+    "text": "}function uGr(){return vC().deniedBy(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4143179
+   },
+   {
+    "text": ")&&!lGr())return[];let n=await tGr();return n.denied.length>0&&rW(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4143751
+   },
+   {
+    "text": ",`[localPolicyGate] this account may not read device managed settings in ${QWr} (${dGr(n.denied)}); whatever policy they hold is not applied`),n.state===",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4143834
+   },
+   {
+    "text": "),e;let r=XKr(e.permissions,n.deniedTools??[]);if(r!==void 0)return n.log!==!1&&N.warn(r),e;n.log!==!1&&N.warn(UKr(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4164878
+   },
+   {
+    "text": "$denied = 'Invoke-History', 'ihy', 'r', 'Invoke-Expression', 'iex', 'Add-Type', 'sal', 'nal', 'ipal', 'New-PSDrive', 'ndr', 'mount', 'prompt';",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4188823
+   },
+   {
+    "text": "`) is refused too; `alias -g` alone and a plain `alias name='command'` pass. Use the Bash tool for this line.",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4228323
+   },
+   {
+    "text": "&&t.push({id:i,fromFallback:!1})}return{blocked:e,allowed:t,metadataStoreUnreadable:i}}function cni(){return X().formatMessage({defaultMessage:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4489657
+   },
+   {
+    "text": "Failed to shut down chat-lane servers for blocked extension %s (%s)",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4490290
+   },
+   {
+    "text": "Failed to shut down blocked extension %s after save failure: %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4490756
+   },
+   {
+    "text": "Successfully disabled blocked extension %s: %s",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4491933
+   },
+   {
+    "text": "Removed cached update for blocked extension %s",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4492034
+   },
+   {
+    "text": "Failed to disable blocked extension %s: %o",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4492169
+   },
+   {
+    "text": "?l.fingerprint:void 0,m=await ani(t,e,d,l,s),h=m.hash;if(m.blocked)throw Error(X().formatMessage({defaultMessage:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4513102
+   },
+   {
+    "text": ",blocked:o.shouldBlockNavigation(t.category),highRisk:o.shouldForceApproval(t.category)}:{kind:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4536452
+   },
+   {
+    "text": ");if(ge.blocked)return he(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4545054
+   },
+   {
+    "text": "||a.blocked)return i(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4546307
+   },
+   {
+    "text": "page_access_denied",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4710304
+   },
+   {
+    "text": "desktop_launch_preview_ssrf_blocked",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4743605
+   },
+   {
+    "text": "desktop_launch_preview_governed_held_blocked",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4743887
+   },
+   {
+    "text": "desktop_launch_preview_media_permission_denied",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4755397
+   },
+   {
+    "text": "blocked-unavailable",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4784444
+   },
+   {
+    "text": "});let i=this.isClaudePage?`Link to ${r} was blocked. This preview only supports Claude artifact pages.`:this.isStaticHtml?",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4806119
+   },
+   {
+    "text": "preview_external_link_blocked",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4806751
+   },
+   {
+    "text": "} access, which is blocked in the Browser pane. Open the page in your default browser to use it.`,Kg.Error,{messageForLogging:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4806946
+   },
+   {
+    "text": "preview_popup_blocked_synthetic_input",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4808097
+   },
+   {
+    "text": "preview_popup_blocked_no_model_input",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4808137
+   },
+   {
+    "text": ":`Link to ${e.toastHostname(t)} was blocked because it embeds sign-in credentials. Remove the user:password@ part to open it.`,Kg.Error,{messageForLogging:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4809693
+   },
+   {
+    "text": "preview_consented_page_reload_blocked",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4811243
+   },
+   {
+    "text": "desktop_launch_preview_external_nav_policy_blocked",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4818769
+   },
+   {
+    "text": ")?a:l;e!==null&&e!==n.origin&&(n.deniedMediaKinds=void 0,n.handoffNotice=void 0),exi(this.tabs,this.supersededClipboardGuardDelegates,n,a,e)}i(a),this.deliverBackgroundDocState(e,n)})),t.on(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4841525
+   },
+   {
+    "text": ")?n:a;o!==null&&o!==r.origin&&(r.deniedMediaKinds=void 0,r.handoffNotice=void 0),exi(this.tabs,this.supersededClipboardGuardDelegates,r,n,o),r.origin=n.startsWith(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4861291
+   },
+   {
+    "text": "))return!0;return!1}function Lxi(e,t){let n=$.get(e);if(!n)return cM()?{denied:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4946207
+   },
+   {
+    "text": "}:null;if(!n.externalPreviewEnabled)return null;let r=n.gateFor(t);if(r===null)return{denied:`Preview tab ${t} is no longer open.`,state:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4946363
+   },
+   {
+    "text": "Tool access denied (unknown verdict).",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4947291
+   },
+   {
+    "text": "blocked by exec-bit/symlink gate",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4981046
+   },
+   {
+    "text": "Copy failed: permission denied",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5041658
+   },
+   {
+    "text": "on for the organization; waiting for the integration's configuration (feature flags not yet fetched with the control-plane sign-in, that fetch blocked, or entries this build does not accept)",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5062339
+   },
+   {
+    "text": "} but the system blocked Claude from running it`:t.errorDetail}},async resolveLocalSettings(e,t){if(e==null)return bRn(void 0,t);if(!(0,n.isAbsolute)(e))throw Error(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5225518
+   },
+   {
+    "text": ";for(let e of Cqi)try{e({fromMs:c-n,toMs:c,sleepSignal:u,blockedMs:l?.syncMs??0,task:l?.label,...o!==void 0&&s!==void 0?{cpuMs:Math.round((s-o)/1e3)}:{}})}catch{}let p=Xqi(),m=",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5286222
+   },
+   {
+    "text": "[event-loop-stall] main process blocked for %dms%s (task %s, total %d, cumulative %dms, rss %dMB)",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5286520
+   },
+   {
+    "text": ",reason:e.reason});return{entries:u,blockedByPolicy:a}}function WZi(e,t,n={}){return{tools:[{name:NZi,description:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5349891
+   },
+   {
+    "text": " macOS privacy protection likely blocked access to this folder. Grant access in System Settings > Privacy & Security > Files and Folders, or move the project outside Documents/Desktop/Downloads.",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5471841
+   },
+   {
+    "text": ")return{denied:yN(C6i,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5494794
+   },
+   {
+    "text": ")}}catch{return{denied:yN(C6i,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5494836
+   },
+   {
+    "text": ")}}return null}let a=KN(r);if(a===null)return{denied:yN(C6i,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5494886
+   },
+   {
+    "text": ")return{denied:yN(o2,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5495061
+   },
+   {
+    "text": ")return{denied:yN(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5495122
+   },
+   {
+    "text": "&&VN(o.category))return{denied:yN(`This site is ${LN(o)}.`,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5495230
+   },
+   {
+    "text": ")};if(cP()!==o)return{denied:yN(o2,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5496150
+   },
+   {
+    "text": ",parentWindow:bQ(e)}),cP()!==o))return{denied:yN(o2,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5496318
+   },
+   {
+    "text": "&&await EHn(r,l.addrs),cP()!==o)return{denied:yN(o2,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5496518
+   }
+  ],
+  "security": [
+   {
+    "text": "sandbox.claudemcpcontent.com",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 544216
+   },
+   {
+    "text": "requires strict Claude Code sandboxing",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 941391
+   },
+   {
+    "text": "Strict sandbox mode",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 941471
+   },
+   {
+    "text": "}}function FZe(e,t){return t.sandboxed&&e===",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 955044
+   },
+   {
+    "text": "virtualization_entitlement_missing",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1566670
+   },
+   {
+    "text": "||e.sandboxStatus!==void 0&&!Mxt(e.sandboxStatus)||e.overridePath!==void 0&&typeof e.overridePath!=",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 1738528
+   },
+   {
+    "text": "sandbox_deps_missing",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2030560
+   },
+   {
+    "text": "}},...r,...i&&{forceLoginOrgUUID:i},...Object.keys(s).length>0&&{permissions:s},...Object.keys(c).length>0&&{sandbox:c},...mGt(e,t,n.surface)&&{disableAutoMode:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2116615
+   },
+   {
+    "text": "),AWS_REGION:e.awsRegion,ANTHROPIC_BEDROCK_BASE_URL:e.baseUrl??`https://${fwe(e.awsRegion)}`,ANTHROPIC_BEDROCK_SERVICE_TIER:e.serviceTier??",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2513295
+   },
+   {
+    "text": ",...rT,AWS_BEARER_TOKEN_BEDROCK:n(e.awsBearerToken),...e.credentialKind!==",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2513462
+   },
+   {
+    "text": "),AWS_REGION:e.awsRegion,ANTHROPIC_BEDROCK_MANTLE_BASE_URL:e.baseUrl??`https://${pwe(e.awsRegion)}/anthropic`,ANTHROPIC_BEDROCK_BASE_URL:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2513835
+   },
+   {
+    "text": ",ANTHROPIC_BEDROCK_SERVICE_TIER:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2513974
+   },
+   {
+    "text": ",...r,AWS_BEARER_TOKEN_BEDROCK:n(e.awsBearerToken),AWS_ACCESS_KEY_ID:",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2514008
+   },
+   {
+    "text": "AWS_BEARER_TOKEN_BEDROCK",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2589724
+   },
+   {
+    "text": "default-src 'none'; frame-ancestors 'none'; sandbox",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 2774288
+   },
+   {
+    "text": ");return t?{...t,value:!t.value}:void 0}function Xj(e,t){let n;for(let{tier:r,path:i,settings:a}of e){let e=a?.sandbox?.[t];typeof e==",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3086358
+   },
+   {
+    "text": "allowUnsandboxedCommands",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3086562
+   },
+   {
+    "text": "entitlement_missing",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 3842631
+   },
+   {
+    "text": ",webPreferences:{sandbox:!0,nodeIntegration:!1,contextIsolation:!0}}),aU.setAlwaysOnTop(!0,",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4082901
+   },
+   {
+    "text": ";function OWr(e){return`${DWr}; sandbox allow-scripts; frame-ancestors ${e}`}var kWr=",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4135233
+   },
+   {
+    "text": "in t)||t.windowsHost!==!0||e?.sandbox?.allowUnsandboxedCommands!==!1)return e;if(WKr())return n.log!==!1&&N.warn(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4164623
+   },
+   {
+    "text": "coworkEDRIntegration",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4261241
+   },
+   {
+    "text": "coworkEDRIntegrationVendor",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4261268
+   },
+   {
+    "text": "[edrIntegration] not run: coworkEDRIntegration is set but coworkEDRIntegrationVendor is not. Set both in machine-wide device management (vendor_not_named) (testHooksLatched=%s)",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4291455
+   },
+   {
+    "text": "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4350862
+   },
+   {
+    "text": "),t.perSpawn&&await q4r(l),t.sandboxed&&(l.OTEL_EXPORTER_OTLP_ENDPOINT=await X4r(n.endpoint)),(t.sandboxed||t.target===",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4356161
+   },
+   {
+    "text": "&&t.platformLacksGrpcCaBridge===!0)&&(l.OTEL_EXPORTER_OTLP_PROTOCOL=FZe(n.protocol,{sandboxed:!0}),l.OTEL_EXPORTER_OTLP_PROTOCOL!==n.protocol&&B4r(t.sandboxed?",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4356284
+   },
+   {
+    "text": "),t.sandboxed||(l.CLAUDE_CODE_OTEL_DIAG_STDERR=",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4356698
+   },
+   {
+    "text": ")}`:void 0}}function fgi(e,t,n=!1){return{session:e,nodeIntegration:!1,contextIsolation:!0,sandbox:!0,focusOnNavigation:!1,disableDialogs:!0,plugins:n,...dpi(t)}}var lZ=",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 4780088
+   },
+   {
+    "text": "on a computer where Claude may run sandboxed, this app doesn't switch branches in the session's own folder",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5223820
+   },
+   {
+    "text": ",e),connected:e=>this.askChecker((t=>t.connected(e)),!1)})}emitTaskUpdated(e){let t=this._scheduledTasks.get(e);t&&this.emitGuarded(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5706910
+   },
+   {
+    "text": ":(n.userSelectedFolders=t,await this.persistToDisk()?(this.emitGuarded(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 5729082
+   },
+   {
+    "text": "),sandbox_settings:n(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6373670
+   },
+   {
+    "text": "),fFa();for(let e of UPa)bv.on(e,fFa),JPa.push((()=>bv.off(e,fFa)));Hu((()=>R8((()=>{XW()?.sandbox?.enabled===!0&&L8(",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6376125
+   },
+   {
+    "text": "):!e.savedConfined&&!e.offWithdrawn&&I8({lastOffReadAt:(new Date).toISOString()})}catch(t){e.statusReads+=1,N.warn(`[confinedInstall] could not read the sandbox status (${P(t)}); ${e.statusReads<BPa?",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6377784
+   },
+   {
+    "text": "This session's Claude Code runs in a sandbox, so a command it wants to run in your terminal here needs your approval in this app.",
+    "file": "index.chunk-lzaSYO3Q.js",
+    "offset": 6394357
+   },
+   {
+    "text": ",sandbox_required_unavailable:",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 51326
+   },
+   {
+    "text": ",model_requires_strict_sandbox:",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 51448
+   },
+   {
+    "text": "Approving types this command into a tab that is already open in your terminal and runs it there, outside Claude's sandbox.",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 151303
+   },
+   {
+    "text": "Approving types this command into a new tab of your terminal and runs it there, outside Claude's sandbox.",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 151428
+   },
+   {
+    "text": ";return P.t.warn(`[CCD] sandbox write deny: ${n===",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 554507
+   },
+   {
+    "text": ",sandboxed:!1,platformLacksGrpcCaBridge:!0,appVersion:He.app.getVersion()}),CLAUDE_CODE_DISABLE_ATTACHMENTS:",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 773258
+   },
+   {
+    "text": ",on:!1,...e!==void 0&&{unavailableReason:e}}}let r=n.unsandboxed_fallback,i=iH(n.restrictions).network_managed;return t.strict&&typeof r!=",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 1113906
+   },
+   {
+    "text": "){e.hostSandboxTold=void 0,o&&s!==void 0&&i(s);return}let c=a?.state===r.state;c||(t.L5.warn(`[CCD] SSH ${n}: the sandbox this app's policy asked for is not known to be in force (${r.state})`),t.cz(",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 1115388
+   },
+   {
+    "text": ",reason:r.state,sandbox_on:r.on})),e.hostSandboxTold={state:r.state,on:r.on,unavailableReason:r.unavailableReason,rowUuid:c&&o?a.rowUuid:s&&i(s),failedToStart:a?.failedToStart||r.state===",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 1115663
+   },
+   {
+    "text": "?e.settings:void 0;e.settings={...t,sandbox:{...t?.sandbox,...T}}}await(w?.())===!1&&(e.strictMcpConfig=!1,e.settings={...typeof e.settings==",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 1481305
+   },
+   {
+    "text": "||n===void 0?void 0:Math.max(0,t-n)}}let{query:Xe}=await t.wL();if(t.TT(e,G)&&e.violinBowCwdIdentity!==void 0){let{directoryIdentityGuardedNoFollow:n}=await Promise.resolve().then((()=>require(",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 1732835
+   },
+   {
+    "text": "&&(E=await t.qI(s.worktreePath||s.cwd).then((e=>t.iL(e,{mdmSandboxEnabled:t.xx()?.sandbox?.enabled===!0})?",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 2061648
+   },
+   {
+    "text": ")),s.query&&s.query!==i||s.isStopping))return;T=v.w({category:T,refusedAtStartup:S,backendKind:s.backend.kind,platform:process.platform,sandboxCascade:E})}if(T===",
+    "file": "index.chunk-Bn6onBlX.js",
+    "offset": 2061815
+   },
+   {
+    "text": " Shell commands run in the sandbox, which does not see these folders.",
+    "file": "index.chunk-BvMaI6NQ.js",
+    "offset": 261560
+   },
+   {
+    "text": "This session has too many connected folders to start in the sandbox. Start a new session with fewer folders.",
+    "file": "index.chunk-BvMaI6NQ.js",
+    "offset": 267839
+   },
+   {
+    "text": ";return hp(`That command targets ${h.display}, which bash cannot reach from the sandbox (${n}).${i}`)}let g=!dp.has(r.sessionId),_=t.wb();await t.Hw();let v=t.Lw().status!==",
+    "file": "index.chunk-BvMaI6NQ.js",
+    "offset": 293360
+   },
+   {
+    "text": "This session was created before your organization required the VM sandbox. It cannot be resumed under the current policy. Start a new session.",
+    "file": "index.chunk-BvMaI6NQ.js",
+    "offset": 420956
+   },
+   {
+    "text": "This session can't continue: it was created to run inside the VM sandbox, which this deployment no longer uses. Start a new session.",
+    "file": "index.chunk-BvMaI6NQ.js",
+    "offset": 421592
+   },
+   {
+    "text": "This tool is only available where Claude Code runs directly on the user's computer. This session's runs on a remote host, in WSL or in a sandbox, so the tool is not available here.",
+    "file": "index.chunk-M6SkuaH9.js",
+    "offset": 94336
+   },
+   {
+    "text": "The sandbox-protected files this merge touches are too large for the app to merge safely; merge the base branch yourself or ask the user.",
+    "file": "index.chunk-M6SkuaH9.js",
+    "offset": 112909
+   },
+   {
+    "text": "sandbox_required_unavailable",
+    "file": "index.chunk-M6SkuaH9.js",
+    "offset": 529379
+   },
+   {
+    "text": "]);function JT(e){return qT.has(e)}var YT={sandbox_required_unavailable:",
+    "file": "index.chunk-M6SkuaH9.js",
+    "offset": 529886
+   },
+   {
+    "text": "},...g.sandboxCascade&&{ccd_sandbox_cascade:g.sandboxCascade},...g.isViolinBow&&{ccd_is_violin_bow:",
+    "file": "index.chunk-M6SkuaH9.js",
+    "offset": 605736
+   },
+   {
+    "text": "When managed settings or a --settings file set allowUnsandboxedCommands: false, or managed settings set network.allowManagedDomainsOnly: true",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 775000
+   },
+   {
+    "text": "Run Bash commands inside the sandbox. Default: false. ",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 797441
+   },
+   {
+    "text": "CLAUDE_CODE_USE_BEDROCK",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 803846
+   },
+   {
+    "text": "ANTHROPIC_BEDROCK_BASE_URL",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 804763
+   },
+   {
+    "text": "ANTHROPIC_BEDROCK_MANTLE_BASE_URL",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 804817
+   },
+   {
+    "text": "),sandbox:()=>S2((()=>t2())),feedbackSurveyRate:()=>N().min(0).max(1).optional().describe(",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 968149
+   },
+   {
+    "text": "sandbox.credentials",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 996576
+   },
+   {
+    "text": "sandbox.credentials.",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 996613
+   },
+   {
+    "text": "}. This credential is NOT protected until the entry is fixed.`}),g):(e({path:`sandbox.credentials.${t}[]`,message:`Invalid entry was degraded to mode ",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 1017775
+   },
+   {
+    "text": " Under sandbox.filesystem.disabled, file read-denies are not enforced.",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 1018061
+   },
+   {
+    "text": "&&i.value!==null&&!Array.isArray(i.value)){let a=n.safeParse(i.value);if(a.success)return e({path:`sandbox.credentials.${t}`,message:`",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 1018300
+   },
+   {
+    "text": "sandbox.credentials.allowPlaintextInject",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 1019587
+   },
+   {
+    "text": "sandbox.credentials.awsPairs[]",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 1020063
+   },
+   {
+    "text": "sandbox.credentials.awsPairs",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 1021369
+   },
+   {
+    "text": "]).optional().catch((n=>(e({path:`sandbox.credentials.sigv4.${t}`,message:`${n.issues[0]?.message??",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 1021714
+   },
+   {
+    "text": "in n?n.url:void 0)}}}}let i=e.sandbox,a={},o={enabled:n8(i,",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 1026845
+   },
+   {
+    "text": "AWS_ENDPOINT_URL_BEDROCK",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 1037907
+   },
+   {
+    "text": "AWS_ENDPOINT_URL_BEDROCK_RUNTIME",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 1037934
+   },
+   {
+    "text": "sandbox.filesystem.allowRead",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 1107219
+   },
+   {
+    "text": ",e.allowReadCount)]);if(t.some((e=>e.sandbox?.network?.allowManagedDomainsOnly===!0)))for(let e of c)e.allowedDomainsCount>0&&s([n(e.file,",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 1107294
+   },
+   {
+    "text": "Cannot use both a settings file path and the sandbox option. Include the sandbox configuration in your settings file instead.",
+    "file": "index.chunk-DNyequwM.js",
+    "offset": 1125110
+   },
+   {
+    "text": ",e.existingBranch];else{let n,r,i=e.startPoint??e.sourceBranch;try{i?(n=await this.resolveGuardedStartPoint(y,p.n(b,",
+    "file": "index.chunk-Dd4cATog.js",
+    "offset": 187962
+   },
+   {
+    "text": "}}},readdirGuarded:async e=>{let t=await s(e);if(t===!1){let e=Error(",
+    "file": "index.chunk-CdsxofPO.js",
+    "offset": 5424
+   },
+   {
+    "text": ",c;let{realFolder:u,lstatPinned:d,readFilePinned:f,readdirGuarded:p}=l;if(s.aborted)return c.outcome=",
+    "file": "index.chunk-CdsxofPO.js",
+    "offset": 9845
+   },
+   {
+    "text": ",s;let{realFolder:l,lstatPinned:u,readFilePinned:d,readdirGuarded:f}=c;if(o.aborted)return s.outcome=",
+    "file": "index.chunk-CdsxofPO.js",
+    "offset": 14206
+   }
+  ]
+ }
+}

@@ -1,0 +1,144 @@
+{
+ "node_kinds": [
+  [
+   "unknown",
+   832
+  ],
+  [
+   "javascript-asset",
+   436
+  ],
+  [
+   "javascript-module",
+   135
+  ],
+  [
+   "ipc-channel",
+   114
+  ],
+  [
+   "endpoint",
+   52
+  ],
+  [
+   "ipc-handler",
+   37
+  ],
+  [
+   "source-map",
+   21
+  ],
+  [
+   "context-bridge-api",
+   19
+  ],
+  [
+   "artifact",
+   13
+  ],
+  [
+   "electron-renderer",
+   6
+  ],
+  [
+   "package",
+   5
+  ],
+  [
+   "worker",
+   3
+  ],
+  [
+   "electron-main",
+   1
+  ]
+ ],
+ "node_counts_by_file": [],
+ "sample_by_kind": {
+  "unknown": [
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "endpoint": [
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "javascript-asset": [
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "ipc-channel": [
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "javascript-module": [
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "context-bridge-api": [
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "source-map": [
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "artifact": [
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "ipc-handler": [
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "electron-renderer": [
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "electron-main": [
+   null
+  ],
+  "worker": [
+   null,
+   null,
+   null
+  ],
+  "package": [
+   null,
+   null,
+   null,
+   null,
+   null
+  ]
+ }
+}

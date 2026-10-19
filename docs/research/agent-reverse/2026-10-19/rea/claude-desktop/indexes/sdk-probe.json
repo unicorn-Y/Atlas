@@ -1,0 +1,382 @@
+{
+ "file": "D:\\Atlas-Reverse-Lab\\claude-desktop\\extracted\\asar\\.vite\\build\\index.chunk-Bn6onBlX.js",
+ "bytes": 2106696,
+ "hooks": [
+  {
+   "name": "PreToolUse",
+   "count": 65,
+   "first_offset": 196621,
+   "context": "ssionId,...a.fromTitle!==void 0&&{title:a.fromTitle}}),{hookSpecificOutput:{hookEventName:\"PreToolUse\",permissionDecision:\"allow\",permissionDecisionReason:t.rr,...o&&{updatedInput:o}}}}asDelegatedAllow(e,t,n,r,i){let a=\""
+  },
+  {
+   "name": "PostToolUse",
+   "count": 5,
+   "first_offset": 485319,
+   "context": "let s=!1,c=new Set,l=new Map;return{PostToolUse:[{hooks:[async u=>{if(u.hook_event_name!==\"PostToolUse\")return{};let d=u.tool_name;if(t.mA(d)){let e=u.tool_response,n=t.hA(d,u.tool_input)?.input??{},r=typeof e?.path==\"st"
+  },
+  {
+   "name": "SessionStart",
+   "count": 3,
+   "first_offset": 80256,
+   "context": "nreadable\";let t=e.hooks;if(t===void 0)return!1;if(!ao(t))return\"unreadable\";for(let e of[\"SessionStart\",\"Setup\"]){let n=t[e];if(n!==void 0&&!(Array.isArray(n)&&n.length===0))return!0}return!1}function co(e){if(!ao(e))re"
+  },
+  {
+   "name": "WorktreeCreate",
+   "count": 3,
+   "first_offset": 236841,
+   "context": "s.config.lazyWorktrees;return t?{WorktreeCreate:[{hooks:[async n=>{if(n.hook_event_name!==\"WorktreeCreate\")return{};this.refuseWorktreeAnswerForLauncherMarked(e,\"WorktreeCreate\");let{worktreePath:r}=await t.provide(e,{na"
+  },
+  {
+   "name": "UserPromptSubmit",
+   "count": 2,
+   "first_offset": 262044,
+   "context": "}=e,r=e=>n.drain(t,e)?.text,i={UserPromptSubmit:[{hooks:[async e=>{if(e.hook_event_name!==\"UserPromptSubmit\"||e.agent_id)return{};let t=r(\"turn_start\");return t?{hookSpecificOutput:{hookEventName:\"UserPromptSubmit\",addit"
+  },
+  {
+   "name": "Stop",
+   "count": 2,
+   "first_offset": 236492,
+   "context": "op:[{...i.backend?.remoteTarget!==void 0&&{timeout:5},hooks:[async e=>e.hook_event_name!==\"Stop\"||!this.config.getSession(r)?{}:(t.L5.info(`[Stop hook] Query completed for session ${r}`),this.config.signalTurnComplete(r)"
+  },
+  {
+   "name": "WorktreeRemove",
+   "count": 2,
+   "first_offset": 237129,
+   "context": "treeCreate\",worktreePath:r}}}]}],WorktreeRemove:[{hooks:[async n=>{if(n.hook_event_name!==\"WorktreeRemove\")return{};this.refuseWorktreeAnswerForLauncherMarked(e,\"WorktreeRemove\");let r=await t.release(e,n.worktree_path);"
+  },
+  {
+   "name": "SubagentStop",
+   "count": 1,
+   "first_offset": 237565,
+   "context": "hanged); left in place`);return{}}]}],SubagentStop:[{hooks:[async n=>(n.hook_event_name===\"SubagentStop\"&&t.subagentStopped(e,n.agent_id),{})]}]}:{}}refuseWorktreeAnswerForLauncherMarked(e,n){if(t.W(this.config.getSessio"
+  }
+ ],
+ "permission_modes": [
+  {
+   "name": "default",
+   "count": 24,
+   "first_offset": 249531,
+   "context": "xitPlanMode\"&&typeof e==\"string\"?e===\"acceptEdits\"||e===\"auto\"||e===\"bypassPermissions\"?e:\"default\":void 0,r=t?[{type:\"setMode\",mode:t,destination:\"session\"}]:void 0;p={behavior:\"allow\",updatedInput:l??s.input,updatedPer"
+  },
+  {
+   "name": "auto",
+   "count": 21,
+   "first_offset": 112691,
+   "context": "[^\\\\/]*$/,\"\")||i[1];t.includes(a)||t.push(a)}return t}var ps=new Set([\"bypassPermissions\",\"auto\"]);function ms(e){let t=e.replace(/\\\\/g,\"/\").replace(/^[a-z](?=:)/,(e=>e.toUpperCase()));return X.default.posix.normalize(t)"
+  },
+  {
+   "name": "ask",
+   "count": 18,
+   "first_offset": 160911,
+   "context": "rray(a)?\"unknown\":i?.some(t.Bx)?\"banned\":e===\"restricted\"||i?.some(t.zx)?\"restricted\":e===\"ask\"||a?.some(t.zx)?\"ask\":\"none\"}catch(e){return t.L5.warn(`[ToolPermissionBroker] managed settings unreadable (${t.E5(e)}); keep"
+  },
+  {
+   "name": "bypassPermissions",
+   "count": 4,
+   "first_offset": 112671,
+   "context": "=i[1].replace(/[\\\\/][^\\\\/]*$/,\"\")||i[1];t.includes(a)||t.push(a)}return t}var ps=new Set([\"bypassPermissions\",\"auto\"]);function ms(e){let t=e.replace(/\\\\/g,\"/\").replace(/^[a-z](?=:)/,(e=>e.toUpperCase()));return X.defaul"
+  },
+  {
+   "name": "acceptEdits",
+   "count": 2,
+   "first_offset": 249478,
+   "context": "ionId,s.input);let e=l?._targetMode,t=s.toolName===\"ExitPlanMode\"&&typeof e==\"string\"?e===\"acceptEdits\"||e===\"auto\"||e===\"bypassPermissions\"?e:\"default\":void 0,r=t?[{type:\"setMode\",mode:t,destination:\"session\"}]:void 0;p"
+  },
+  {
+   "name": "plan",
+   "count": 2,
+   "first_offset": 230665,
+   "context": "onDecisionReason:Ou}};if(g!==\"bypass\"){let t=await this.moveToCloudCard(r,eu(e.tool_input,\"plan\")??e.tool_input,e.tool_use_id,{hold:g===void 0});if(t.kind===\"deny\")return{hookSpecificOutput:{hookEventName:\"PreToolUse\",pe"
+  }
+ ],
+ "decisions": [
+  {
+   "name": "user_permanent",
+   "count": 4,
+   "first_offset": 242252,
+   "context": "f&&!o){let e={behavior:\"allow\",updatedInput:i,updatedPermissions:n,decisionClassification:\"user_permanent\"};return Il(c,e.updatedPermissions),e.updatedPermissions&&=(this.recordSessionPermissionUpdates(c,e.updatedPermiss"
+  },
+  {
+   "name": "user_reject",
+   "count": 1,
+   "first_offset": 249305,
+   "context": "ted ${t.$f(s.toolName)}`}p={behavior:\"deny\",message:r,interrupt:!e,decisionClassification:\"user_reject\"};break}case\"once\":{s.toolName===n.ks&&this.renewArchiveConsent(s.sessionId,s.input);let e=l?._targetMode,t=s.toolNam"
+  },
+  {
+   "name": "user_temporary",
+   "count": 1,
+   "first_offset": 249770,
+   "context": "hProjectConfigFence(d,r,s.toolName===\"ExitPlanMode\"&&t===void 0):r,decisionClassification:\"user_temporary\",...f&&{approvalSurface:\"host_dialog\"}},s.toolName===\"ExitPlanMode\"&&this.config.notePlanAnswered?.(s.sessionId,t="
+  }
+ ],
+ "stream_events": [
+  {
+   "name": "tool_use",
+   "count": 10,
+   "first_offset": 38245,
+   "context": "Group:!1,planCalls:0,toolUsesSincePlanCall:0};for(let e of t.message.content){if(e.type===\"tool_use\"){i.toolUses+=1;let t=e.name!==n.Bu&&e.name!==n.Vu;e.name===n.Bu&&(i.planCalls+=1,r.planCallsSinceCompaction!==void 0&&("
+  },
+  {
+   "name": "tool_result",
+   "count": 3,
+   "first_offset": 54323,
+   "context": "_use\"))r!==void 0&&i.set(e,r),n.set(e,i.get(e));else if(t.type===\"user\")for(let e of Pr(t,\"tool_result\"))n.delete(e),r.add(e);else if(t.type===\"tool_progress\")typeof t.tool_use_id==\"string\"&&!r.has(t.tool_use_id)&&n.set("
+  },
+  {
+   "name": "message_start",
+   "count": 2,
+   "first_offset": 763566,
+   "context": ",t){let n=t;if(n.parent_tool_use_id)return;let r=n.event,i=Date.now();switch(r?.type){case\"message_start\":e.inflightResponse={startedAt:i,onlyThinking:!0},this.maybeCutYoungResponse(e,\"stream\");break;case\"content_block_s"
+  },
+  {
+   "name": "content_block_start",
+   "count": 2,
+   "first_offset": 763680,
+   "context": "htResponse={startedAt:i,onlyThinking:!0},this.maybeCutYoungResponse(e,\"stream\");break;case\"content_block_start\":{let t=typeof r.content_block?.type==\"string\"?r.content_block.type:\"other\",n=e.inflightResponse??={startedAt"
+  },
+  {
+   "name": "content_block_delta",
+   "count": 2,
+   "first_offset": 1354049,
+   "context": ".parent_tool_use_id)return;let n=t.event;if(n.type===\"message_start\")l();else if(n.type===\"content_block_delta\"&&n.delta.type===\"text_delta\"&&n.delta.text){let t=r.streamedText===void 0?n.delta.text.trimStart():n.delta.t"
+  },
+  {
+   "name": "message_stop",
+   "count": 1,
+   "first_offset": 764017,
+   "context": "}case\"content_block_stop\":e.inflightResponse&&(e.inflightResponse.block=void 0);break;case\"message_stop\":e.inflightResponse=void 0}}maybeCutYoungResponse(e,n){if(e.steerDetachOn!==!0||!uM(e.inflightResponse,Date.now())||"
+  },
+  {
+   "name": "content_block_stop",
+   "count": 1,
+   "first_offset": 763932,
+   "context": "e:t,startedAt:i},lM(t)?this.maybeCutYoungResponse(e,\"stream\"):n.onlyThinking=!1;break}case\"content_block_stop\":e.inflightResponse&&(e.inflightResponse.block=void 0);break;case\"message_stop\":e.inflightResponse=void 0}}may"
+  },
+  {
+   "name": "text_delta",
+   "count": 1,
+   "first_offset": 1354087,
+   "context": "nt;if(n.type===\"message_start\")l();else if(n.type===\"content_block_delta\"&&n.delta.type===\"text_delta\"&&n.delta.text){let t=r.streamedText===void 0?n.delta.text.trimStart():n.delta.text;t&&(r.streamedText=(r.streamedText"
+  },
+  {
+   "name": "end_turn",
+   "count": 1,
+   "first_offset": 986813,
+   "context": " Date).toISOString(),message:{role:\"assistant\",content:[{type:\"text\",text:t}],stop_reason:\"end_turn\"}},a=n?.uuid?e.messageBuffer.findIndex((e=>e.uuid===r)):-1;return a>=0?e.messageBuffer[a]=i:e.messageBuffer.push(i),this"
+  },
+  {
+   "name": "tool_use_id",
+   "count": 1,
+   "first_offset": 1336743,
+   "context": "n=e,r;for(let e of n){if(typeof e!=\"object\"||!e||!(\"type\"in e)||e.type!==\"tool_result\"||!(\"tool_use_id\"in e)||typeof e.tool_use_id!=\"string\")continue;let n=t.get(e.tool_use_id);t.delete(e.tool_use_id),n!==void 0&&!(\"is_e"
+  }
+ ],
+ "sdk_options": [
+  {
+   "name": "agent",
+   "count": 20,
+   "first_offset": 15882,
+   "context": "})}catch(e){return Nt(e),\"skipped\"}return\"opened\"}let o;try{o=await t.mu(e,n,r,{initiator:\"agent\",provenance:\"incidental\"})}catch(e){return Nt(e),\"notOpened\"}if(o===null)return\"notOpened\";try{let a=i();if(a===\"gone\")retu"
+  },
+  {
+   "name": "agents",
+   "count": 11,
+   "first_offset": 113386,
+   "context": "e:\"hooks\",directory:!0},{name:\"skills\",directory:!0},{name:\"commands\",directory:!0},{name:\"agents\",directory:!0},{name:\"workflows\",directory:!0},{name:\"routines\",directory:!0},{name:\"output-styles\",directory:!0},{name:\"l"
+  },
+  {
+   "name": "resume",
+   "count": 5,
+   "first_offset": 394077,
+   "context": "er] merge-queue batch failed; membership unknown this poll: ${yg(e)}`)});let n=()=>{t.D4([\"resume\",\"unlock\",\"session\",\"focus\"],(()=>{this.ghRest.markEtagCacheStale();try{this.refreshStaleRowsOnReturn()}catch(e){t.L5.warn"
+  },
+  {
+   "name": "bypassPermissions",
+   "count": 4,
+   "first_offset": 112671,
+   "context": "=i[1].replace(/[\\\\/][^\\\\/]*$/,\"\")||i[1];t.includes(a)||t.push(a)}return t}var ps=new Set([\"bypassPermissions\",\"auto\"]);function ms(e){let t=e.replace(/\\\\/g,\"/\").replace(/^[a-z](?=:)/,(e=>e.toUpperCase()));return X.defaul"
+  },
+  {
+   "name": "canUseTool",
+   "count": 3,
+   "first_offset": 175024,
+   "context": "o};else if(C&&xu.has(a)&&!t.ux(a)&&x===void 0&&!Gd(a,o,e,(e=>this.config.getSession(e)),p,\"canUseTool\"))this.noteSideSessionStart(e,a,o,p,\"canUseTool\"),_={behavior:\"allow\",updatedInput:o};else if(C&&Ne.o(a,o))t.Nn(e,(e=>"
+  },
+  {
+   "name": "model",
+   "count": 2,
+   "first_offset": 1917470,
+   "context": "reAcceptedOffer(e,n,{title:r=\"New task\",asked:i}){let a=this.startProposedSideSession(e,n,\"model\",{prepareOffer:!0}).then((e=>(this.briefOwedTo.set(e.sessionId,{asked:i}),this.emitSessionUpdated(e.sessionId),e.sessionId)"
+  },
+  {
+   "name": "env",
+   "count": 2,
+   "first_offset": 845074,
+   "context": "\"disable_all_hooks\";if(oF.some(r))return\"http_hooks\";if(mF(Object.keys(n?.env??{})))return\"env\";if(e===t.PQ.Managed)return sF.some(r)?\"policy_helper\":Object.entries(n??{}).some((([e,t])=>cF.test(e)&&!(Object.hasOwn(dF,e)"
+  },
+  {
+   "name": "outputStyle",
+   "count": 2,
+   "first_offset": 765638,
+   "context": "t\":return{delivered:!0,pending:!0}}}var hM=new Map([[\"ultracode\",e=>typeof e==\"boolean\"],[\"outputStyle\",t.sL]]);function gM(e){if(!e||!(\"outputStyle\"in e)||t.sL(e.outputStyle))return e;t.L5.warn(\"sessionSettings replay: "
+  },
+  {
+   "name": "continue",
+   "count": 2,
+   "first_offset": 1367219,
+   "context": "==\"ui_invalidate\"?BJ(t):null}var HJ=new Set([\"retry_fallback\",\"edit_prompt\"]),UJ=new Set([\"continue\",\"interrupt\"]),WJ=3e5;function GJ(e){if(typeof e?.originalModel==\"string\"&&typeof e?.fallbackModel==\"string\")return{orig"
+  },
+  {
+   "name": "cwd",
+   "count": 1,
+   "first_offset": 1244475,
+   "context": "ts\"in n?n.effectiveRoots.length:-1,judged:a,kept_earlier:o,rounds:u})},m=await f(e.cwd),h=\"cwd\",g=e.cwd;if(m.kind===\"not-evaluable\"&&m.reason===\"cwd-missing\"&&e.projectFolder!==void 0&&e.projectFolder!==e.cwd){let t=awai"
+  },
+  {
+   "name": "permissionMode",
+   "count": 1,
+   "first_offset": 2076041,
+   "context": "eInitMessage(o,u)))continue;let d=u.type===\"system\"&&\"subtype\"in u&&u.subtype===\"status\"&&\"permissionMode\"in u?n.Tt(u.permissionMode,\"LocalSessionManager system/status\"):void 0,f=!a.sshAdoptionSettling,p=f&&this.permissi"
+  },
+  {
+   "name": "hooks",
+   "count": 1,
+   "first_offset": 113298,
+   "context": "r ys=[{name:\"settings.json\",directory:!1},{name:\"settings.local.json\",directory:!1},{name:\"hooks\",directory:!0},{name:\"skills\",directory:!0},{name:\"commands\",directory:!0},{name:\"agents\",directory:!0},{name:\"workflows\",d"
+  },
+  {
+   "name": "plugins",
+   "count": 1,
+   "first_offset": 849963,
+   "context": ")=>require(\"./index.chunk-G9_mRSUx.js\")));_=p;using b=i.unboundedSftpWrites?void 0:Cx(d(),\"plugins\");let x=DF(s,g,a,TF(u===!1)),{synced:S,foldersWithoutExecBits:C,failures:w,withoutHooks:T,onlyHooks:E,dependsOnOthers:D}="
+  },
+  {
+   "name": "sessionId",
+   "count": 1,
+   "first_offset": 596102,
+   "context": "ilter((([,e])=>e)).map((([e])=>e))}var jw=\"bridge-session\",Mw=`\"type\":\"${jw}\"`,Nw=`{${Mw},\"sessionId\":\"`;function Pw(e){return JSON.stringify({type:jw,sessionId:e,bridgeSessionId:\"\",lastSequenceNum:0})}function Fw(e,t){i"
+  },
+  {
+   "name": "cwd",
+   "count": 1,
+   "first_offset": 1244475,
+   "context": "ts\"in n?n.effectiveRoots.length:-1,judged:a,kept_earlier:o,rounds:u})},m=await f(e.cwd),h=\"cwd\",g=e.cwd;if(m.kind===\"not-evaluable\"&&m.reason===\"cwd-missing\"&&e.projectFolder!==void 0&&e.projectFolder!==e.cwd){let t=awai"
+  }
+ ],
+ "tool_names": [
+  {
+   "name": "Glob",
+   "count": 7,
+   "first_offset": 162406,
+   "context": "LE_TOOL_PATH_INPUT_KEYS).join(\"|\")}static{this.AWF_READ_ONLY_TOOLS=new Set([\"Read\",\"Grep\",\"Glob\"])}constructor(e){this.pendingPermissions=new Map,this.approvedSpawns=new Set,this.inFlightSpawnConsents=new Map,this.teleme"
+  },
+  {
+   "name": "ExitPlanMode",
+   "count": 7,
+   "first_offset": 249439,
+   "context": "==n.ks&&this.renewArchiveConsent(s.sessionId,s.input);let e=l?._targetMode,t=s.toolName===\"ExitPlanMode\"&&typeof e==\"string\"?e===\"acceptEdits\"||e===\"auto\"||e===\"bypassPermissions\"?e:\"default\":void 0,r=t?[{type:\"setMode\","
+  },
+  {
+   "name": "Read",
+   "count": 5,
+   "first_offset": 162392,
+   "context": "ject.keys(e.FILE_TOOL_PATH_INPUT_KEYS).join(\"|\")}static{this.AWF_READ_ONLY_TOOLS=new Set([\"Read\",\"Grep\",\"Glob\"])}constructor(e){this.pendingPermissions=new Map,this.approvedSpawns=new Set,this.inFlightSpawnConsents=new M"
+  },
+  {
+   "name": "Edit",
+   "count": 5,
+   "first_offset": 111155,
+   "context": "ce to trust it.`}function es(e,t){return f.r(X.default.resolve(o.kt(e)))===f.r(t)}var ts=[\"Edit\",\"Write\",\"MultiEdit\",\"NotebookEdit\",\"Artifact\",\"ArtifactData\"],ns=`^(${ts.join(\"|\")})$`,rs=/^(?!-)[^\\s(),\\\\\\p{Cc}]+$/u;funct"
+  },
+  {
+   "name": "Grep",
+   "count": 5,
+   "first_offset": 162399,
+   "context": "ys(e.FILE_TOOL_PATH_INPUT_KEYS).join(\"|\")}static{this.AWF_READ_ONLY_TOOLS=new Set([\"Read\",\"Grep\",\"Glob\"])}constructor(e){this.pendingPermissions=new Map,this.approvedSpawns=new Set,this.inFlightSpawnConsents=new Map,this"
+  },
+  {
+   "name": "Workflow",
+   "count": 4,
+   "first_offset": 234305,
+   "context": "},{matcher:`^${n.q}$`,hooks:[async e=>{if(e.hook_event_name!==\"PreToolUse\"||e.tool_name!==\"Workflow\")return{};let i=t.Nn(r,(e=>this.config.getSession(e))),{consented:a,managedFalse:o,indeterminate:s}=await n.Y();return a"
+  },
+  {
+   "name": "Bash",
+   "count": 3,
+   "first_offset": 159463,
+   "context": "n Rd(){return t.UZ(\"3067718716\",!0)}function zd(e,t,n){return!1}function Bd(){return t.mx(\"Bash\")||t.px(\"Bash\")}var Vd=3e3,Hd=500;async function Ud(){let e=c.l().catch((()=>void 0)),t=c.s()?Hd:Vd,n;await Promise.race([e,"
+  },
+  {
+   "name": "MultiEdit",
+   "count": 2,
+   "first_offset": 111170,
+   "context": "`}function es(e,t){return f.r(X.default.resolve(o.kt(e)))===f.r(t)}var ts=[\"Edit\",\"Write\",\"MultiEdit\",\"NotebookEdit\",\"Artifact\",\"ArtifactData\"],ns=`^(${ts.join(\"|\")})$`,rs=/^(?!-)[^\\s(),\\\\\\p{Cc}]+$/u;function is(e){retur"
+  },
+  {
+   "name": "Write",
+   "count": 2,
+   "first_offset": 111162,
+   "context": "rust it.`}function es(e,t){return f.r(X.default.resolve(o.kt(e)))===f.r(t)}var ts=[\"Edit\",\"Write\",\"MultiEdit\",\"NotebookEdit\",\"Artifact\",\"ArtifactData\"],ns=`^(${ts.join(\"|\")})$`,rs=/^(?!-)[^\\s(),\\\\\\p{Cc}]+$/u;function is("
+  },
+  {
+   "name": "Skill",
+   "count": 2,
+   "first_offset": 147960,
+   "context": "type!==\"setMode\"));return r.length>0?r:void 0}function Jl(e,n,r){if(!r)return r;let i=e===\"Skill\"&&typeof n.skill==\"string\"&&n.skill.trim().replace(/^\\//,\"\")||void 0;return t.Xk(r,((e,t)=>e===\"Skill\"&&(t===void 0||t!==i|"
+  },
+  {
+   "name": "NotebookEdit",
+   "count": 1,
+   "first_offset": 111182,
+   "context": "s(e,t){return f.r(X.default.resolve(o.kt(e)))===f.r(t)}var ts=[\"Edit\",\"Write\",\"MultiEdit\",\"NotebookEdit\",\"Artifact\",\"ArtifactData\"],ns=`^(${ts.join(\"|\")})$`,rs=/^(?!-)[^\\s(),\\\\\\p{Cc}]+$/u;function is(e){return e.replaceA"
+  },
+  {
+   "name": "Task",
+   "count": 1,
+   "first_offset": 759906,
+   "context": "SinceSpawn=i?!0:void 0)}var rM=3e3,iM=1e3,aM=15e3,oM=new Set([\"Bash\",\"PowerShell\",\"Agent\",\"Task\"]);function sM(e,t,n){let r=[];for(let[i,a]of Lr(e)){if(a===void 0||!oM.has(a))continue;let e=t?.get(i);r.push({id:i,name:a,"
+  },
+  {
+   "name": "Agent",
+   "count": 1,
+   "first_offset": 759898,
+   "context": "irstTurnSinceSpawn=i?!0:void 0)}var rM=3e3,iM=1e3,aM=15e3,oM=new Set([\"Bash\",\"PowerShell\",\"Agent\",\"Task\"]);function sM(e,t,n){let r=[];for(let[i,a]of Lr(e)){if(a===void 0||!oM.has(a))continue;let e=t?.get(i);r.push({id:i"
+  },
+  {
+   "name": "AskUserQuestion",
+   "count": 1,
+   "first_offset": 1661818,
+   "context": "length>0)&&($.additionalDirectories=[...yt,...bt]),i.scheduledTaskId&&($.disallowedTools=[\"AskUserQuestion\"]),le&&($.disallowedTools=[...$.disallowedTools??[],_l]),L&&($.disallowedTools=[...$.disallowedTools??[],n.na]),t"
+  }
+ ],
+ "env_literals": [
+  "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+  "CLAUDE_CODE_HOST_WORKTREE",
+  "CLAUDE_CODE_HOST_WORKTREE_FENCE",
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS",
+  "CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS",
+  "CLAUDE_CODE_SIMPLE",
+  "CLAUDE_CODE_STARTUP_FAILURE_RESULTS",
+  "CLAUDE_CONFIG_DIR",
+  "CLAUDE_E2E_WORKTREE_WRITE_GUARD_OFF",
+  "CLAUDE_SSH_FORK_KEPT_EXISTING"
+ ],
+ "flags": [
+  "--exclude-standard",
+  "--exec",
+  "--global",
+  "--host",
+  "--hostname",
+  "--modified",
+  "--name-only",
+  "--no-verify",
+  "--others",
+  "--quiet",
+  "--relative",
+  "--show-current",
+  "--verify",
+  "--version"
+ ],
+ "errors": []
+}

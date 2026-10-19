@@ -1,0 +1,3644 @@
+{
+ "root": "D:\\Atlas-Reverse-Lab\\claude-desktop\\extracted\\asar\\.vite\\build",
+ "file_count": 380,
+ "rows": [
+  {
+   "file": "index.chunk-lzaSYO3Q.js",
+   "bytes": 7081117,
+   "signatures": {
+    "cowork": 618,
+    "local_agent": 23,
+    "vm_service": 4,
+    "hvsock": 1,
+    "named_pipe": 1,
+    "subagent": 12,
+    "skill": 2,
+    "mcp": 301,
+    "tool_use": 185,
+    "session": 1011,
+    "context_window": 18,
+    "streaming": 28,
+    "checkpoint": 2,
+    "permission": 132,
+    "artifact": 464,
+    "browser": 931,
+    "mcpb": 21,
+    "cron": 866,
+    "worktree": 91,
+    "sandbox": 148,
+    "model_switch": 185,
+    "auth": 659,
+    "update": 40,
+    "telemetry": 183,
+    "experiment": 109
+   },
+   "score": 6035
+  },
+  {
+   "file": "index.chunk-Bn6onBlX.js",
+   "bytes": 2106696,
+   "signatures": {
+    "subagent": 44,
+    "skill": 1,
+    "mcp": 493,
+    "tool_use": 165,
+    "session": 1838,
+    "context_window": 9,
+    "streaming": 6,
+    "checkpoint": 7,
+    "permission": 385,
+    "artifact": 7,
+    "browser": 10,
+    "cron": 264,
+    "worktree": 1113,
+    "sandbox": 45,
+    "model_switch": 4,
+    "auth": 135,
+    "telemetry": 14,
+    "experiment": 2
+   },
+   "score": 4542
+  },
+  {
+   "file": "index.chunk-BvMaI6NQ.js",
+   "bytes": 592251,
+   "signatures": {
+    "cowork": 188,
+    "local_agent": 58,
+    "subagent": 13,
+    "skill": 1,
+    "mcp": 170,
+    "tool_use": 32,
+    "session": 525,
+    "context_window": 3,
+    "streaming": 4,
+    "permission": 156,
+    "artifact": 23,
+    "browser": 1,
+    "mcpb": 3,
+    "cron": 257,
+    "sandbox": 11,
+    "model_switch": 3,
+    "auth": 44,
+    "telemetry": 36,
+    "experiment": 7
+   },
+   "score": 1535
+  },
+  {
+   "file": "index.chunk-M6SkuaH9.js",
+   "bytes": 737910,
+   "signatures": {
+    "cowork": 30,
+    "local_agent": 1,
+    "subagent": 14,
+    "skill": 1,
+    "mcp": 78,
+    "tool_use": 52,
+    "session": 466,
+    "context_window": 11,
+    "streaming": 1,
+    "checkpoint": 2,
+    "permission": 72,
+    "artifact": 21,
+    "cron": 42,
+    "worktree": 282,
+    "sandbox": 44,
+    "model_switch": 3,
+    "auth": 1,
+    "telemetry": 9,
+    "experiment": 5
+   },
+   "score": 1135
+  },
+  {
+   "file": "index.chunk-DNyequwM.js",
+   "bytes": 1224866,
+   "signatures": {
+    "cowork": 15,
+    "agent_sdk": 2,
+    "subagent": 22,
+    "skill": 1,
+    "mcp": 166,
+    "tool_use": 56,
+    "session": 225,
+    "context_window": 8,
+    "streaming": 13,
+    "checkpoint": 4,
+    "permission": 43,
+    "artifact": 6,
+    "mcpb": 4,
+    "cron": 4,
+    "worktree": 19,
+    "sandbox": 176,
+    "model_switch": 28,
+    "auth": 62,
+    "telemetry": 42,
+    "experiment": 11
+   },
+   "score": 907
+  },
+  {
+   "file": "index.pre.js",
+   "bytes": 930575,
+   "signatures": {
+    "cowork": 56,
+    "skill": 1,
+    "mcp": 12,
+    "tool_use": 3,
+    "session": 1,
+    "streaming": 14,
+    "artifact": 34,
+    "browser": 9,
+    "cron": 26,
+    "worktree": 2,
+    "sandbox": 50,
+    "model_switch": 7,
+    "auth": 56,
+    "update": 6,
+    "telemetry": 242,
+    "experiment": 6
+   },
+   "score": 525
+  },
+  {
+   "file": "index.chunk-Dd4cATog.js",
+   "bytes": 317789,
+   "signatures": {
+    "session": 19,
+    "checkpoint": 1,
+    "cron": 5,
+    "worktree": 442,
+    "sandbox": 2,
+    "telemetry": 5
+   },
+   "score": 474
+  },
+  {
+   "file": "file-index-worker/fileIndexWorker.js",
+   "bytes": 906737,
+   "signatures": {
+    "cowork": 9,
+    "subagent": 8,
+    "skill": 1,
+    "mcp": 57,
+    "tool_use": 6,
+    "session": 33,
+    "context_window": 8,
+    "streaming": 8,
+    "checkpoint": 2,
+    "permission": 8,
+    "artifact": 6,
+    "mcpb": 4,
+    "cron": 4,
+    "worktree": 15,
+    "sandbox": 138,
+    "model_switch": 12,
+    "auth": 18,
+    "telemetry": 34,
+    "experiment": 5
+   },
+   "score": 376
+  },
+  {
+   "file": "index.chunk-BlEfqh4Z.js",
+   "bytes": 917018,
+   "signatures": {
+    "cowork": 10,
+    "subagent": 11,
+    "skill": 1,
+    "mcp": 6,
+    "tool_use": 62,
+    "session": 46,
+    "context_window": 8,
+    "streaming": 70,
+    "permission": 2,
+    "artifact": 8,
+    "cron": 4,
+    "worktree": 1,
+    "sandbox": 2,
+    "auth": 25,
+    "telemetry": 23
+   },
+   "score": 279
+  },
+  {
+   "file": "index.chunk-FiyCjals.js",
+   "bytes": 93385,
+   "signatures": {
+    "skill": 1,
+    "mcp": 15,
+    "tool_use": 1,
+    "session": 125,
+    "permission": 9,
+    "browser": 52,
+    "cron": 8,
+    "worktree": 3,
+    "auth": 3,
+    "telemetry": 5
+   },
+   "score": 222
+  },
+  {
+   "file": "mainView.js",
+   "bytes": 171276,
+   "signatures": {
+    "cowork": 2,
+    "local_agent": 137,
+    "mcp": 48,
+    "session": 3,
+    "artifact": 6,
+    "auth": 12,
+    "telemetry": 5
+   },
+   "score": 213
+  },
+  {
+   "file": "index.chunk-CdsxofPO.js",
+   "bytes": 101549,
+   "signatures": {
+    "cowork": 13,
+    "local_agent": 75,
+    "skill": 1,
+    "mcp": 15,
+    "tool_use": 5,
+    "session": 41,
+    "permission": 3,
+    "artifact": 1,
+    "browser": 28,
+    "cron": 8,
+    "auth": 3,
+    "telemetry": 6
+   },
+   "score": 199
+  },
+  {
+   "file": "heavy-work-worker/heavyWorkWorker.js",
+   "bytes": 699494,
+   "signatures": {
+    "cowork": 39,
+    "subagent": 17,
+    "mcp": 10,
+    "tool_use": 35,
+    "session": 3,
+    "artifact": 33,
+    "mcpb": 1,
+    "cron": 10,
+    "worktree": 13,
+    "auth": 4,
+    "telemetry": 20,
+    "experiment": 3
+   },
+   "score": 188
+  },
+  {
+   "file": "index.chunk-1lJXcT8c.js",
+   "bytes": 41464,
+   "signatures": {
+    "cowork": 4,
+    "skill": 4,
+    "mcp": 8,
+    "tool_use": 4,
+    "session": 11,
+    "permission": 3,
+    "cron": 133,
+    "telemetry": 5
+   },
+   "score": 172
+  },
+  {
+   "file": "index.chunk-DyYrY1NN.js",
+   "bytes": 215517,
+   "signatures": {
+    "mcp": 2,
+    "tool_use": 74,
+    "session": 14,
+    "context_window": 17,
+    "streaming": 22,
+    "artifact": 2,
+    "cron": 5,
+    "model_switch": 9,
+    "auth": 16,
+    "telemetry": 5
+   },
+   "score": 166
+  },
+  {
+   "file": "mcp-runtime/directMcpHost.js",
+   "bytes": 613700,
+   "signatures": {
+    "tool_use": 39,
+    "session": 35,
+    "streaming": 11,
+    "cron": 4,
+    "auth": 44,
+    "experiment": 15
+   },
+   "score": 148
+  },
+  {
+   "file": "index.chunk-DoU0pLl3.js",
+   "bytes": 151465,
+   "signatures": {
+    "cowork": 6,
+    "local_agent": 1,
+    "artifact": 114,
+    "browser": 2,
+    "cron": 3,
+    "auth": 2,
+    "telemetry": 5
+   },
+   "score": 133
+  },
+  {
+   "file": "index.chunk-Ceg5Z3Ce.js",
+   "bytes": 47295,
+   "signatures": {
+    "session": 5,
+    "worktree": 119,
+    "telemetry": 5
+   },
+   "score": 129
+  },
+  {
+   "file": "index.chunk-CbSbf3Tr.js",
+   "bytes": 58512,
+   "signatures": {
+    "cowork": 12,
+    "skill": 1,
+    "mcp": 2,
+    "session": 9,
+    "artifact": 91,
+    "cron": 1,
+    "sandbox": 1,
+    "telemetry": 5
+   },
+   "score": 122
+  },
+  {
+   "file": "index.chunk-C6OBlOlX.js",
+   "bytes": 133497,
+   "signatures": {
+    "mcp": 4,
+    "tool_use": 22,
+    "session": 19,
+    "streaming": 1,
+    "browser": 1,
+    "cron": 45,
+    "worktree": 15,
+    "auth": 1,
+    "telemetry": 5,
+    "experiment": 2
+   },
+   "score": 115
+  },
+  {
+   "file": "aboutWindow.js",
+   "bytes": 87077,
+   "signatures": {
+    "sandbox": 2,
+    "telemetry": 104,
+    "experiment": 3
+   },
+   "score": 109
+  },
+  {
+   "file": "findInPage.js",
+   "bytes": 86785,
+   "signatures": {
+    "sandbox": 2,
+    "telemetry": 104,
+    "experiment": 3
+   },
+   "score": 109
+  },
+  {
+   "file": "mainWindow.js",
+   "bytes": 88193,
+   "signatures": {
+    "sandbox": 2,
+    "telemetry": 104,
+    "experiment": 3
+   },
+   "score": 109
+  },
+  {
+   "file": "quickWindow.js",
+   "bytes": 87077,
+   "signatures": {
+    "sandbox": 2,
+    "telemetry": 104,
+    "experiment": 3
+   },
+   "score": 109
+  },
+  {
+   "file": "index.chunk-BPjIr-mn.js",
+   "bytes": 50076,
+   "signatures": {
+    "cowork": 28,
+    "mcp": 26,
+    "session": 4,
+    "browser": 1,
+    "cron": 28,
+    "telemetry": 5
+   },
+   "score": 92
+  },
+  {
+   "file": "index.chunk-D5gwoNxg.js",
+   "bytes": 40559,
+   "signatures": {
+    "mcp": 11,
+    "session": 10,
+    "permission": 8,
+    "browser": 2,
+    "worktree": 35,
+    "model_switch": 1,
+    "telemetry": 5,
+    "experiment": 1
+   },
+   "score": 73
+  },
+  {
+   "file": "index.chunk-CnkTpwso.js",
+   "bytes": 68502,
+   "signatures": {
+    "session": 1,
+    "checkpoint": 2,
+    "permission": 4,
+    "cron": 1,
+    "worktree": 33,
+    "sandbox": 18,
+    "telemetry": 6
+   },
+   "score": 65
+  },
+  {
+   "file": "index.chunk-BAEQpeU2.js",
+   "bytes": 39118,
+   "signatures": {
+    "session": 26,
+    "context_window": 2,
+    "browser": 1,
+    "worktree": 15,
+    "sandbox": 14,
+    "telemetry": 5
+   },
+   "score": 63
+  },
+  {
+   "file": "index.chunk-CcveFAuE.js",
+   "bytes": 242613,
+   "signatures": {
+    "mcp": 1,
+    "session": 1,
+    "streaming": 2,
+    "checkpoint": 29,
+    "cron": 5,
+    "worktree": 16,
+    "telemetry": 7
+   },
+   "score": 61
+  },
+  {
+   "file": "index.chunk-rUSp9s65.js",
+   "bytes": 15288,
+   "signatures": {
+    "tool_use": 1,
+    "session": 21,
+    "cron": 7,
+    "auth": 27,
+    "telemetry": 5
+   },
+   "score": 61
+  },
+  {
+   "file": "index.chunk-D76cxAuR.js",
+   "bytes": 15093,
+   "signatures": {
+    "session": 37,
+    "worktree": 15,
+    "telemetry": 5
+   },
+   "score": 57
+  },
+  {
+   "file": "index.chunk-CxI_2nWm.js",
+   "bytes": 22295,
+   "signatures": {
+    "mcp": 41,
+    "session": 8,
+    "telemetry": 5
+   },
+   "score": 54
+  },
+  {
+   "file": "index.chunk-vYnAlWmT.js",
+   "bytes": 39251,
+   "signatures": {
+    "subagent": 6,
+    "tool_use": 15,
+    "session": 6,
+    "worktree": 18,
+    "model_switch": 1,
+    "auth": 2,
+    "telemetry": 5
+   },
+   "score": 53
+  },
+  {
+   "file": "index.chunk-Ck3ee-gJ.js",
+   "bytes": 29126,
+   "signatures": {
+    "session": 28,
+    "worktree": 11,
+    "sandbox": 1,
+    "telemetry": 5
+   },
+   "score": 45
+  },
+  {
+   "file": "index.chunk-CPEA6dKA.js",
+   "bytes": 353429,
+   "signatures": {
+    "subagent": 1,
+    "artifact": 38,
+    "telemetry": 5
+   },
+   "score": 44
+  },
+  {
+   "file": "index.chunk-BMFhTup2.js",
+   "bytes": 41629,
+   "signatures": {
+    "cowork": 16,
+    "session": 7,
+    "browser": 14,
+    "sandbox": 1,
+    "telemetry": 5
+   },
+   "score": 43
+  },
+  {
+   "file": "index.chunk-CeJGoREc.js",
+   "bytes": 37842,
+   "signatures": {
+    "subagent": 27,
+    "tool_use": 10,
+    "worktree": 1,
+    "telemetry": 5
+   },
+   "score": 43
+  },
+  {
+   "file": "index.chunk-yKIwpGVf.js",
+   "bytes": 53974,
+   "signatures": {
+    "cowork": 2,
+    "mcp": 1,
+    "tool_use": 1,
+    "session": 18,
+    "artifact": 9,
+    "worktree": 3,
+    "auth": 1,
+    "telemetry": 5
+   },
+   "score": 40
+  },
+  {
+   "file": "index.chunk-DvdZaxqH.js",
+   "bytes": 82096,
+   "signatures": {
+    "cowork": 1,
+    "local_agent": 1,
+    "tool_use": 8,
+    "session": 1,
+    "cron": 22,
+    "telemetry": 5
+   },
+   "score": 38
+  },
+  {
+   "file": "index.chunk-B3ord9Gq.js",
+   "bytes": 9260,
+   "signatures": {
+    "tool_use": 2,
+    "session": 2,
+    "permission": 26,
+    "telemetry": 5
+   },
+   "score": 35
+  },
+  {
+   "file": "index.chunk-B8JZ7v6H.js",
+   "bytes": 21545,
+   "signatures": {
+    "subagent": 8,
+    "mcp": 13,
+    "session": 5,
+    "telemetry": 5,
+    "experiment": 4
+   },
+   "score": 35
+  },
+  {
+   "file": "index.chunk-JnLh1fOe.js",
+   "bytes": 9818,
+   "signatures": {
+    "local_agent": 9,
+    "mcp": 10,
+    "browser": 6,
+    "sandbox": 1,
+    "auth": 3,
+    "telemetry": 5
+   },
+   "score": 34
+  },
+  {
+   "file": "index.chunk-B0WAWLOW.js",
+   "bytes": 159861,
+   "signatures": {
+    "session": 5,
+    "cron": 1,
+    "worktree": 10,
+    "sandbox": 10,
+    "update": 1,
+    "telemetry": 6
+   },
+   "score": 33
+  },
+  {
+   "file": "index.chunk-DA534R-L.js",
+   "bytes": 86564,
+   "signatures": {
+    "session": 23,
+    "worktree": 3,
+    "telemetry": 5
+   },
+   "score": 31
+  },
+  {
+   "file": "index.chunk-B2Vbqvd-.js",
+   "bytes": 32393,
+   "signatures": {
+    "tool_use": 1,
+    "browser": 2,
+    "cron": 3,
+    "worktree": 16,
+    "auth": 2,
+    "telemetry": 5
+   },
+   "score": 29
+  },
+  {
+   "file": "index.chunk-CKOX3env.js",
+   "bytes": 32734,
+   "signatures": {
+    "session": 21,
+    "sandbox": 2,
+    "telemetry": 5
+   },
+   "score": 28
+  },
+  {
+   "file": "index.chunk-CCotqg2k.js",
+   "bytes": 9700,
+   "signatures": {
+    "cowork": 12,
+    "session": 9,
+    "telemetry": 5
+   },
+   "score": 26
+  },
+  {
+   "file": "index.chunk-DI47cOp_.js",
+   "bytes": 24571,
+   "signatures": {
+    "mcp": 20,
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 26
+  },
+  {
+   "file": "index.chunk-DLqLwOmD.js",
+   "bytes": 69895,
+   "signatures": {
+    "subagent": 1,
+    "skill": 3,
+    "cron": 16,
+    "telemetry": 5
+   },
+   "score": 25
+  },
+  {
+   "file": "index.chunk-BtXfU220.js",
+   "bytes": 9881,
+   "signatures": {
+    "cowork": 6,
+    "mcp": 13,
+    "telemetry": 5
+   },
+   "score": 24
+  },
+  {
+   "file": "index.chunk-CekorYcU.js",
+   "bytes": 11585,
+   "signatures": {
+    "cowork": 8,
+    "skill": 1,
+    "cron": 10,
+    "telemetry": 5
+   },
+   "score": 24
+  },
+  {
+   "file": "index.chunk-BWI7goHJ.js",
+   "bytes": 65850,
+   "signatures": {
+    "cowork": 1,
+    "tool_use": 3,
+    "session": 5,
+    "context_window": 1,
+    "browser": 2,
+    "model_switch": 1,
+    "auth": 5,
+    "telemetry": 5
+   },
+   "score": 23
+  },
+  {
+   "file": "index.chunk-BBUs8uvY.js",
+   "bytes": 7423,
+   "signatures": {
+    "session": 2,
+    "worktree": 15,
+    "telemetry": 5
+   },
+   "score": 22
+  },
+  {
+   "file": "index.chunk-Bgul06K6.js",
+   "bytes": 9914,
+   "signatures": {
+    "mcp": 12,
+    "mcpb": 3,
+    "cron": 1,
+    "telemetry": 5
+   },
+   "score": 21
+  },
+  {
+   "file": "index.chunk-C5_DUEl_.js",
+   "bytes": 6411,
+   "signatures": {
+    "cowork": 8,
+    "subagent": 1,
+    "skill": 1,
+    "session": 6,
+    "telemetry": 5
+   },
+   "score": 21
+  },
+  {
+   "file": "index.chunk-Ray2aCu3.js",
+   "bytes": 55491,
+   "signatures": {
+    "browser": 16,
+    "telemetry": 5
+   },
+   "score": 21
+  },
+  {
+   "file": "index.chunk-0q54qGlJ.js",
+   "bytes": 15956,
+   "signatures": {
+    "cowork": 1,
+    "session": 3,
+    "permission": 11,
+    "telemetry": 5
+   },
+   "score": 20
+  },
+  {
+   "file": "index.chunk-CwIQU-8Y.js",
+   "bytes": 116399,
+   "signatures": {
+    "session": 10,
+    "permission": 3,
+    "sandbox": 1,
+    "update": 1,
+    "telemetry": 5
+   },
+   "score": 20
+  },
+  {
+   "file": "index.chunk-CwuFYsKE.js",
+   "bytes": 29241,
+   "signatures": {
+    "tool_use": 2,
+    "session": 5,
+    "worktree": 8,
+    "telemetry": 5
+   },
+   "score": 20
+  },
+  {
+   "file": "index.chunk-CzY1tCPL.js",
+   "bytes": 13013,
+   "signatures": {
+    "browser": 15,
+    "telemetry": 5
+   },
+   "score": 20
+  },
+  {
+   "file": "index.chunk-DqAcjgt5.js",
+   "bytes": 6333,
+   "signatures": {
+    "sandbox": 15,
+    "telemetry": 5
+   },
+   "score": 20
+  },
+  {
+   "file": "shell-path-worker/shellPathWorker.js",
+   "bytes": 9575,
+   "signatures": {
+    "telemetry": 20
+   },
+   "score": 20
+  },
+  {
+   "file": "index.chunk-Bu0Hda6m.js",
+   "bytes": 12304,
+   "signatures": {
+    "session": 6,
+    "permission": 2,
+    "worktree": 4,
+    "model_switch": 2,
+    "telemetry": 5
+   },
+   "score": 19
+  },
+  {
+   "file": "index.chunk-C7ydsIk6.js",
+   "bytes": 4052,
+   "signatures": {
+    "cowork": 1,
+    "tool_use": 2,
+    "session": 11,
+    "telemetry": 5
+   },
+   "score": 19
+  },
+  {
+   "file": "index.chunk-CfYHAcpH.js",
+   "bytes": 11776,
+   "signatures": {
+    "session": 13,
+    "telemetry": 5
+   },
+   "score": 18
+  },
+  {
+   "file": "index.chunk-BFxRKxih.js",
+   "bytes": 8498,
+   "signatures": {
+    "session": 9,
+    "auth": 3,
+    "telemetry": 5
+   },
+   "score": 17
+  },
+  {
+   "file": "index.chunk-BvUB77vv.js",
+   "bytes": 4130,
+   "signatures": {
+    "mcp": 1,
+    "session": 4,
+    "browser": 7,
+    "telemetry": 5
+   },
+   "score": 17
+  },
+  {
+   "file": "index.chunk-CEsJ07Wf.js",
+   "bytes": 20586,
+   "signatures": {
+    "cowork": 6,
+    "session": 2,
+    "permission": 1,
+    "cron": 3,
+    "telemetry": 5
+   },
+   "score": 17
+  },
+  {
+   "file": "index.chunk-CJxqg9Un.js",
+   "bytes": 128756,
+   "signatures": {
+    "sandbox": 3,
+    "telemetry": 13,
+    "experiment": 1
+   },
+   "score": 17
+  },
+  {
+   "file": "index.chunk-DkUVHq8L.js",
+   "bytes": 15703,
+   "signatures": {
+    "local_agent": 4,
+    "session": 3,
+    "permission": 2,
+    "worktree": 3,
+    "telemetry": 5
+   },
+   "score": 17
+  },
+  {
+   "file": "index.chunk-zDwQxd00.js",
+   "bytes": 5603,
+   "signatures": {
+    "cowork": 7,
+    "cron": 4,
+    "worktree": 1,
+    "telemetry": 5
+   },
+   "score": 17
+  },
+  {
+   "file": "index.chunk-CLDnJbh1.js",
+   "bytes": 237178,
+   "signatures": {
+    "session": 3,
+    "context_window": 2,
+    "cron": 6,
+    "telemetry": 5
+   },
+   "score": 16
+  },
+  {
+   "file": "index.chunk-BNd-Veq8.js",
+   "bytes": 3561,
+   "signatures": {
+    "session": 9,
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 15
+  },
+  {
+   "file": "index.chunk-Bq0b1KR5.js",
+   "bytes": 2588,
+   "signatures": {
+    "cowork": 2,
+    "local_agent": 2,
+    "session": 4,
+    "browser": 2,
+    "telemetry": 5
+   },
+   "score": 15
+  },
+  {
+   "file": "index.chunk-Cd8cGj4_.js",
+   "bytes": 40203,
+   "signatures": {
+    "session": 2,
+    "telemetry": 13
+   },
+   "score": 15
+  },
+  {
+   "file": "index.chunk-CeSjtxih.js",
+   "bytes": 5668,
+   "signatures": {
+    "cowork": 9,
+    "worktree": 1,
+    "telemetry": 5
+   },
+   "score": 15
+  },
+  {
+   "file": "index.chunk-CNXRFRP7.js",
+   "bytes": 16155,
+   "signatures": {
+    "worktree": 10,
+    "telemetry": 5
+   },
+   "score": 15
+  },
+  {
+   "file": "index.chunk-BN7PaJ_P.js",
+   "bytes": 52116,
+   "signatures": {
+    "browser": 8,
+    "sandbox": 1,
+    "telemetry": 5
+   },
+   "score": 14
+  },
+  {
+   "file": "index.chunk-DZV6mBvi.js",
+   "bytes": 56790,
+   "signatures": {
+    "cowork": 2,
+    "skill": 1,
+    "mcp": 1,
+    "context_window": 3,
+    "telemetry": 5,
+    "experiment": 2
+   },
+   "score": 14
+  },
+  {
+   "file": "index.chunk-ilWIs3r6.js",
+   "bytes": 15189,
+   "signatures": {
+    "mcp": 3,
+    "session": 2,
+    "telemetry": 9
+   },
+   "score": 14
+  },
+  {
+   "file": "index.chunk-BdmPP2qV.js",
+   "bytes": 15667,
+   "signatures": {
+    "cowork": 2,
+    "session": 4,
+    "artifact": 1,
+    "telemetry": 6
+   },
+   "score": 13
+  },
+  {
+   "file": "index.chunk-BYMGAPtw.js",
+   "bytes": 461552,
+   "signatures": {
+    "context_window": 2,
+    "artifact": 3,
+    "cron": 1,
+    "sandbox": 1,
+    "auth": 1,
+    "telemetry": 5
+   },
+   "score": 13
+  },
+  {
+   "file": "index.chunk-CEkgISQ-.js",
+   "bytes": 5884,
+   "signatures": {
+    "permission": 1,
+    "cron": 7,
+    "telemetry": 5
+   },
+   "score": 13
+  },
+  {
+   "file": "index.chunk-CTyoJC3M.js",
+   "bytes": 32426,
+   "signatures": {
+    "cowork": 1,
+    "mcp": 3,
+    "artifact": 1,
+    "telemetry": 5,
+    "experiment": 3
+   },
+   "score": 13
+  },
+  {
+   "file": "index.chunk-B4iWTRPf.js",
+   "bytes": 3239,
+   "signatures": {
+    "auth": 7,
+    "telemetry": 5
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-B8ZKzQZo.js",
+   "bytes": 5702,
+   "signatures": {
+    "cowork": 2,
+    "session": 5,
+    "telemetry": 5
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-BbK5vSxh.js",
+   "bytes": 5654,
+   "signatures": {
+    "local_agent": 1,
+    "permission": 2,
+    "sandbox": 1,
+    "model_switch": 1,
+    "auth": 2,
+    "telemetry": 5
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-BZpj-Xyx.js",
+   "bytes": 1973,
+   "signatures": {
+    "session": 5,
+    "permission": 2,
+    "telemetry": 5
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-b_nHwNir.js",
+   "bytes": 18776,
+   "signatures": {
+    "worktree": 7,
+    "telemetry": 5
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-CELowqls.js",
+   "bytes": 8059,
+   "signatures": {
+    "tool_use": 6,
+    "telemetry": 6
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-D2A8Ncj4.js",
+   "bytes": 1928,
+   "signatures": {
+    "session": 7,
+    "telemetry": 5
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-Dujv1em2.js",
+   "bytes": 7670,
+   "signatures": {
+    "cron": 7,
+    "telemetry": 5
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-y1BuSqXP.js",
+   "bytes": 38496,
+   "signatures": {
+    "cowork": 6,
+    "session": 1,
+    "telemetry": 5
+   },
+   "score": 12
+  },
+  {
+   "file": "transcript-search-worker/transcriptSearchWorker.js",
+   "bytes": 35452,
+   "signatures": {
+    "tool_use": 3,
+    "session": 8,
+    "context_window": 1
+   },
+   "score": 12
+  },
+  {
+   "file": "index.chunk-aK0JyCY9.js",
+   "bytes": 6357,
+   "signatures": {
+    "cowork": 1,
+    "mcp": 5,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-BH0bRpNM.js",
+   "bytes": 10857,
+   "signatures": {
+    "session": 3,
+    "permission": 3,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-BPxbWJAH.js",
+   "bytes": 5557,
+   "signatures": {
+    "skill": 1,
+    "mcp": 5,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-CAAuh_N2.js",
+   "bytes": 10217,
+   "signatures": {
+    "worktree": 6,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-D3Peov1H.js",
+   "bytes": 9845,
+   "signatures": {
+    "cowork": 6,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-D8RdLxk8.js",
+   "bytes": 4723,
+   "signatures": {
+    "mcp": 2,
+    "permission": 2,
+    "auth": 2,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-DD2qsWbt.js",
+   "bytes": 11954,
+   "signatures": {
+    "cowork": 6,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-DlE0R5Pd.js",
+   "bytes": 5322,
+   "signatures": {
+    "cowork": 2,
+    "mcp": 3,
+    "cron": 1,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-DRlnO5CK.js",
+   "bytes": 12278,
+   "signatures": {
+    "session": 6,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-DyGy2D-O.js",
+   "bytes": 1871,
+   "signatures": {
+    "cowork": 1,
+    "tool_use": 1,
+    "session": 4,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-EwbxZ6wW.js",
+   "bytes": 8144,
+   "signatures": {
+    "permission": 2,
+    "cron": 1,
+    "sandbox": 1,
+    "model_switch": 1,
+    "auth": 1,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-Hph4NgNJ.js",
+   "bytes": 6348,
+   "signatures": {
+    "auth": 6,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "index.chunk-Vdvw6mum.js",
+   "bytes": 11102,
+   "signatures": {
+    "context_window": 6,
+    "telemetry": 5
+   },
+   "score": 11
+  },
+  {
+   "file": "heavy-work-worker/dist-CI9lzb1v.js",
+   "bytes": 433463,
+   "signatures": {
+    "session": 2,
+    "context_window": 8,
+    "mcpb": 1
+   },
+   "score": 11
+  },
+  {
+   "file": "coworkArtifact.js",
+   "bytes": 2687,
+   "signatures": {
+    "cowork": 4,
+    "artifact": 1,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-BEVeQ4eS.js",
+   "bytes": 2350,
+   "signatures": {
+    "session": 2,
+    "worktree": 3,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-BeZcR6Nl.js",
+   "bytes": 4139,
+   "signatures": {
+    "tool_use": 3,
+    "session": 2,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-BFgHcLgq.js",
+   "bytes": 2443,
+   "signatures": {
+    "worktree": 5,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-ChpGVBJ1.js",
+   "bytes": 6408,
+   "signatures": {
+    "auth": 5,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-CiZj5wKe.js",
+   "bytes": 19874,
+   "signatures": {
+    "session": 5,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-CQQIsj7r.js",
+   "bytes": 191188,
+   "signatures": {
+    "context_window": 2,
+    "browser": 1,
+    "update": 2,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-CUXAfqTZ.js",
+   "bytes": 7256,
+   "signatures": {
+    "tool_use": 4,
+    "model_switch": 1,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-CxzV6l7X.js",
+   "bytes": 3631,
+   "signatures": {
+    "cowork": 4,
+    "mcpb": 1,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-DEvtmnQ-.js",
+   "bytes": 6340,
+   "signatures": {
+    "cowork": 4,
+    "auth": 1,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-Dp-fwrC4.js",
+   "bytes": 163378,
+   "signatures": {
+    "context_window": 2,
+    "cron": 2,
+    "auth": 1,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-M4RyjaHM.js",
+   "bytes": 20463,
+   "signatures": {
+    "session": 3,
+    "permission": 2,
+    "telemetry": 5
+   },
+   "score": 10
+  },
+  {
+   "file": "index.chunk-BgSwqbzh.js",
+   "bytes": 10527,
+   "signatures": {
+    "artifact": 4,
+    "telemetry": 5
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-DAabB_9C.js",
+   "bytes": 3661,
+   "signatures": {
+    "cron": 4,
+    "telemetry": 5
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-DVtfwF6X.js",
+   "bytes": 17490,
+   "signatures": {
+    "worktree": 4,
+    "telemetry": 5
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-G9_mRSUx.js",
+   "bytes": 17810,
+   "signatures": {
+    "mcpb": 1,
+    "telemetry": 5,
+    "experiment": 3
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-PXR81r8F.js",
+   "bytes": 4005,
+   "signatures": {
+    "cowork": 4,
+    "telemetry": 5
+   },
+   "score": 9
+  },
+  {
+   "file": "index.chunk-5wlbAX53.js",
+   "bytes": 3848,
+   "signatures": {
+    "permission": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-713hoB_d.js",
+   "bytes": 3734,
+   "signatures": {
+    "cowork": 1,
+    "session": 2,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-BPH2yjvG.js",
+   "bytes": 7501,
+   "signatures": {
+    "session": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-Bsn1VIro.js",
+   "bytes": 2060,
+   "signatures": {
+    "mcp": 1,
+    "auth": 2,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-By3lrqDG.js",
+   "bytes": 13381,
+   "signatures": {
+    "session": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-C15e1VST.js",
+   "bytes": 3811,
+   "signatures": {
+    "auth": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-CCgl5N-V.js",
+   "bytes": 2549,
+   "signatures": {
+    "cowork": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-Crjx4ZVt.js",
+   "bytes": 1793,
+   "signatures": {
+    "browser": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-CU-hpQBB.js",
+   "bytes": 9667,
+   "signatures": {
+    "browser": 1,
+    "sandbox": 1,
+    "auth": 1,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-D6ax747K.js",
+   "bytes": 2802,
+   "signatures": {
+    "worktree": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-Dd9v2aGl.js",
+   "bytes": 1014,
+   "signatures": {
+    "mcp": 1,
+    "permission": 2,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-DGLBzABn.js",
+   "bytes": 8528,
+   "signatures": {
+    "session": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-Dig-VUnE.js",
+   "bytes": 367325,
+   "signatures": {
+    "streaming": 2,
+    "auth": 1,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-DiuE5YRB.js",
+   "bytes": 2006,
+   "signatures": {
+    "worktree": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-DjgBgJOe.js",
+   "bytes": 9957,
+   "signatures": {
+    "auth": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-GMy-Fx2L.js",
+   "bytes": 8928,
+   "signatures": {
+    "mcp": 2,
+    "permission": 1,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-QSM1kwGG.js",
+   "bytes": 12540,
+   "signatures": {
+    "mcp": 1,
+    "session": 1,
+    "auth": 1,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-VXoZYQbU.js",
+   "bytes": 8151,
+   "signatures": {
+    "browser": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-zyVF5iEQ.js",
+   "bytes": 2440,
+   "signatures": {
+    "artifact": 3,
+    "telemetry": 5
+   },
+   "score": 8
+  },
+  {
+   "file": "index.chunk-5TaW4QRE.js",
+   "bytes": 5571,
+   "signatures": {
+    "cowork": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-B17ncv_E.js",
+   "bytes": 139558,
+   "signatures": {
+    "cron": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-BhtDJrnm.js",
+   "bytes": 831,
+   "signatures": {
+    "cowork": 1,
+    "permission": 1,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-BIps7hQO.js",
+   "bytes": 8193,
+   "signatures": {
+    "cowork": 1,
+    "tool_use": 1,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-BQf2i5CR.js",
+   "bytes": 5231,
+   "signatures": {
+    "telemetry": 5,
+    "experiment": 2
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-CkecUsrN.js",
+   "bytes": 3912,
+   "signatures": {
+    "auth": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-CneElZpr.js",
+   "bytes": 1790,
+   "signatures": {
+    "session": 1,
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-CPzeH_V9.js",
+   "bytes": 7346,
+   "signatures": {
+    "tool_use": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-CQeTfNrA.js",
+   "bytes": 6869,
+   "signatures": {
+    "auth": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-CuJrF8sP.js",
+   "bytes": 5050,
+   "signatures": {
+    "cowork": 1,
+    "skill": 1,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-cZIsAMJH.js",
+   "bytes": 2065,
+   "signatures": {
+    "cowork": 1,
+    "cron": 1,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-CzLc7P9j.js",
+   "bytes": 16630,
+   "signatures": {
+    "cowork": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-D7UNC1Oj.js",
+   "bytes": 2867,
+   "signatures": {
+    "browser": 1,
+    "update": 1,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-Dgy-1Nht.js",
+   "bytes": 3414,
+   "signatures": {
+    "auth": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-DPuRWdEL.js",
+   "bytes": 5257,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5,
+    "experiment": 1
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-DT4sNa4R.js",
+   "bytes": 2171,
+   "signatures": {
+    "session": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-DXQssFNd.js",
+   "bytes": 3820,
+   "signatures": {
+    "worktree": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-klfIxYlb.js",
+   "bytes": 1422,
+   "signatures": {
+    "session": 1,
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-ljgWmT8p.js",
+   "bytes": 2742,
+   "signatures": {
+    "auth": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-lxiRko9r.js",
+   "bytes": 8279,
+   "signatures": {
+    "cowork": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-nB1UBbHL.js",
+   "bytes": 11867,
+   "signatures": {
+    "artifact": 1,
+    "cron": 1,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-xBKHjffa.js",
+   "bytes": 14910,
+   "signatures": {
+    "skill": 2,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-zIoHNHnH.js",
+   "bytes": 1122,
+   "signatures": {
+    "cowork": 1,
+    "sandbox": 1,
+    "telemetry": 5
+   },
+   "score": 7
+  },
+  {
+   "file": "index.chunk-2_Kpgj9v.js",
+   "bytes": 4036,
+   "signatures": {
+    "mcpb": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-4HAlnXqB.js",
+   "bytes": 936,
+   "signatures": {
+    "tool_use": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-B-m_SPwC.js",
+   "bytes": 7180,
+   "signatures": {
+    "streaming": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-BAr-M6Uk.js",
+   "bytes": 3846,
+   "signatures": {
+    "mcp": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-BF0qZsid.js",
+   "bytes": 7155,
+   "signatures": {
+    "mcp": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-BgNlZkJ7.js",
+   "bytes": 15227,
+   "signatures": {
+    "skill": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-Bj1rMKq6.js",
+   "bytes": 2682,
+   "signatures": {
+    "artifact": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-BlIyBYaD.js",
+   "bytes": 8444,
+   "signatures": {
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-BP9wjxd9.js",
+   "bytes": 17537,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-BSSe-7sQ.js",
+   "bytes": 2835,
+   "signatures": {
+    "auth": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-BZ4d--Z2.js",
+   "bytes": 2579,
+   "signatures": {
+    "auth": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-C-8wcdkH.js",
+   "bytes": 5903,
+   "signatures": {
+    "skill": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-C-v1WiLD.js",
+   "bytes": 2031,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-Cau1PpCq.js",
+   "bytes": 3679,
+   "signatures": {
+    "session": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-ClUXMtQ7.js",
+   "bytes": 5589,
+   "signatures": {
+    "streaming": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-CpOIE1nf.js",
+   "bytes": 5343,
+   "signatures": {
+    "cron": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-CQr0Ee4m.js",
+   "bytes": 3411,
+   "signatures": {
+    "mcp": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-CvLGcrZB.js",
+   "bytes": 1424,
+   "signatures": {
+    "auth": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-CWVQDNOx.js",
+   "bytes": 2905,
+   "signatures": {
+    "browser": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-CxUAVDxD.js",
+   "bytes": 6283,
+   "signatures": {
+    "session": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DaEcYOkw.js",
+   "bytes": 5601,
+   "signatures": {
+    "mcpb": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DCgdwyFw.js",
+   "bytes": 4670,
+   "signatures": {
+    "auth": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DGgKKPXU.js",
+   "bytes": 2187,
+   "signatures": {
+    "tool_use": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DlUQavGs.js",
+   "bytes": 2625,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DMEJLiDO.js",
+   "bytes": 1780,
+   "signatures": {
+    "session": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DQ3698r0.js",
+   "bytes": 6336,
+   "signatures": {
+    "context_window": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DqGUM1Dr.js",
+   "bytes": 1419,
+   "signatures": {
+    "worktree": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DvQd8RR7.js",
+   "bytes": 4358,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-DZSaR_us.js",
+   "bytes": 3061,
+   "signatures": {
+    "session": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-hOorvWtr.js",
+   "bytes": 19794,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-I9bAj080.js",
+   "bytes": 49981,
+   "signatures": {
+    "worktree": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-TIxUOzMy.js",
+   "bytes": 10544,
+   "signatures": {
+    "skill": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-uAdDXvxb.js",
+   "bytes": 5022,
+   "signatures": {
+    "skill": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-US5c54N2.js",
+   "bytes": 1915,
+   "signatures": {
+    "session": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-Vi4y50hN.js",
+   "bytes": 4276,
+   "signatures": {
+    "cowork": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "index.chunk-xoZNrP6a.js",
+   "bytes": 2910,
+   "signatures": {
+    "mcp": 1,
+    "telemetry": 5
+   },
+   "score": 6
+  },
+  {
+   "file": "buddy.js",
+   "bytes": 4536,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "claudePagePreview.js",
+   "bytes": 1930,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "computerUseTeach.js",
+   "bytes": 5190,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "computerUseWatchRecord.js",
+   "bytes": 3725,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "designWindow.js",
+   "bytes": 1469,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk--Ke4fVuU.js",
+   "bytes": 711,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk--pR4DFWL.js",
+   "bytes": 2346,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-0jb8zQWa.js",
+   "bytes": 755,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-6HzFAPWT.js",
+   "bytes": 1655,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B-eEmKcL.js",
+   "bytes": 831,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B08Ms-4o.js",
+   "bytes": 6901,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B2Moev8O.js",
+   "bytes": 1634,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B2Rrv5Um.js",
+   "bytes": 6031,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B3Fg7lxU.js",
+   "bytes": 936,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B5xg_hLm.js",
+   "bytes": 2285,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B7dhjaUQ.js",
+   "bytes": 2951,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B7hSi02X.js",
+   "bytes": 5427,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-B9ueezvW.js",
+   "bytes": 1111,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BB4dhyVR.js",
+   "bytes": 778,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BbpAC-UC.js",
+   "bytes": 832,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BbrNXR5p.js",
+   "bytes": 775,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BcNzSWBi.js",
+   "bytes": 770,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BCxvKF4p.js",
+   "bytes": 2813,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Be0WbAnH.js",
+   "bytes": 1424,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BemIcaFh.js",
+   "bytes": 882,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Bf9o4l1C.js",
+   "bytes": 8515,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BFOvM_pR.js",
+   "bytes": 875,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BFtu7z-n.js",
+   "bytes": 2068,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Bfz0nkIg.js",
+   "bytes": 601,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Bg3zmPAK.js",
+   "bytes": 797,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Bib_F17Q.js",
+   "bytes": 992,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BIQH9bmT.js",
+   "bytes": 1219,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BjZ3vX9r.js",
+   "bytes": 809,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Bk2sltuX.js",
+   "bytes": 1412,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BK7U1e7z.js",
+   "bytes": 1202,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BKwJ0Kzl.js",
+   "bytes": 8051,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BkZ4tpDY.js",
+   "bytes": 132677,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BlX2K52i.js",
+   "bytes": 1129,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BmfewHq3.js",
+   "bytes": 1866,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BMJzdG-N.js",
+   "bytes": 6847,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-bnDZLEe6.js",
+   "bytes": 1653,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BnPPioal.js",
+   "bytes": 1663,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BnZH0cT0.js",
+   "bytes": 769,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Bolwy5c8.js",
+   "bytes": 1662,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BopPBEgI.js",
+   "bytes": 961,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BpoRyh_b.js",
+   "bytes": 7338,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BQi7slPm.js",
+   "bytes": 1480,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BQkApOKK.js",
+   "bytes": 700,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BTny0TLv.js",
+   "bytes": 810,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BtyBHo3K.js",
+   "bytes": 601,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BVerX_SL.js",
+   "bytes": 768,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BVryDrIy.js",
+   "bytes": 1297,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BWl4h9Ko.js",
+   "bytes": 7854,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BXF3MbS8.js",
+   "bytes": 1811,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BxLuI_4U.js",
+   "bytes": 2016,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BXLZazwD.js",
+   "bytes": 2585,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-BXYGThVv.js",
+   "bytes": 4311,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-ByvAMUkj.js",
+   "bytes": 5065,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C0sq-LTJ.js",
+   "bytes": 5206,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C15iBw1-.js",
+   "bytes": 3160,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C1l855wQ.js",
+   "bytes": 4681,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C2TjXBTO.js",
+   "bytes": 1933,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C5Ud-KyG.js",
+   "bytes": 4105,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CAaS9_t_.js",
+   "bytes": 2912,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CbfUFryd.js",
+   "bytes": 5408,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CcXrDQ0i.js",
+   "bytes": 4900,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CcyCtVxN.js",
+   "bytes": 564,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CCzyVBVq.js",
+   "bytes": 1637,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CDdFTMzQ.js",
+   "bytes": 5357,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CDpxTd3c.js",
+   "bytes": 5419,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CdzcX3nr.js",
+   "bytes": 6723,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CexIg5zO.js",
+   "bytes": 3463,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CFY-4zeK.js",
+   "bytes": 1605,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CgH6Cli_.js",
+   "bytes": 1060,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CGwsahND.js",
+   "bytes": 2679,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Chu9Of_9.js",
+   "bytes": 4887,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CiPwBI1D.js",
+   "bytes": 1550,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CiRCUv_L.js",
+   "bytes": 773,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CIspABeP.js",
+   "bytes": 1049,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Cj79nCi4.js",
+   "bytes": 1582,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CJRhqwjr.js",
+   "bytes": 2194,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-ClrUhXWp.js",
+   "bytes": 1213,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CLyGth5n.js",
+   "bytes": 3913,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Cm-Uv1wR.js",
+   "bytes": 1840,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CmeqApNG.js",
+   "bytes": 5769,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CN_uPo6d.js",
+   "bytes": 1216,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CpFPgE9p.js",
+   "bytes": 1135,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CPUoh-Ta.js",
+   "bytes": 5431,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CrblwMDh.js",
+   "bytes": 6665,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CS97pYxF.js",
+   "bytes": 2052,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CU89UzUr.js",
+   "bytes": 6345,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CuCIlj4E.js",
+   "bytes": 1004,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CUMCDUNn.js",
+   "bytes": 1538,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CUNvOQN2.js",
+   "bytes": 992,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CUYqXjqj.js",
+   "bytes": 1638,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CVfpPT7d.js",
+   "bytes": 6591,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CVOteD6E.js",
+   "bytes": 2035,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CxNVpniR.js",
+   "bytes": 888,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CYu8whgJ.js",
+   "bytes": 1051,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CZGv8iib.js",
+   "bytes": 1369,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CziplGGF.js",
+   "bytes": 1467,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-CZXx132H.js",
+   "bytes": 5397,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C_4pXLR0.js",
+   "bytes": 2448,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C_qk6eGw.js",
+   "bytes": 20498,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-C_ze_R2E.js",
+   "bytes": 1241,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D-0924nl.js",
+   "bytes": 1560,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D-HqUGLi.js",
+   "bytes": 6246,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D-T5CYlE.js",
+   "bytes": 2297,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D1RwX_Ka.js",
+   "bytes": 8179,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D25qKEdm.js",
+   "bytes": 15965,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D4B44ehk.js",
+   "bytes": 1802,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D8KhDGfd.js",
+   "bytes": 2696,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D8KN2IXy.js",
+   "bytes": 1061,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D8phPbdW.js",
+   "bytes": 1021,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-D8wkeL37.js",
+   "bytes": 2665,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DajqLQbW.js",
+   "bytes": 980,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DAR5x_5h.js",
+   "bytes": 775,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DAy4YstQ.js",
+   "bytes": 774,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DcO4CDAv.js",
+   "bytes": 5241,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DD9Q9sLU.js",
+   "bytes": 1132,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DDLL2EES.js",
+   "bytes": 868,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DDsgmCu_.js",
+   "bytes": 1086,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DDW7ExCv.js",
+   "bytes": 12531,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DEx3njUs.js",
+   "bytes": 3860,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DF2E1zuK.js",
+   "bytes": 84830,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Dh527fpx.js",
+   "bytes": 2025,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DiIqVGe0.js",
+   "bytes": 958,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DINXX5S-.js",
+   "bytes": 7083,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DJXBruhf.js",
+   "bytes": 1682,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DLcJEY_w.js",
+   "bytes": 11517,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DLkBHW-V.js",
+   "bytes": 1848,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DllGAjvd.js",
+   "bytes": 11372,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DLvhfzmK.js",
+   "bytes": 930,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DNxwdxw-.js",
+   "bytes": 771,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DPHCUQQy.js",
+   "bytes": 43680,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DRb1afDC.js",
+   "bytes": 7160,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DRFAz7zF.js",
+   "bytes": 2881,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DSNPhQKz.js",
+   "bytes": 1087,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DuNMxYBx.js",
+   "bytes": 778,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DVKorKfz.js",
+   "bytes": 3451,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DwhRU0hX.js",
+   "bytes": 1091,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-DWmvMnwU.js",
+   "bytes": 2560,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-EI2tE9_4.js",
+   "bytes": 955,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-eLxLj6qe.js",
+   "bytes": 9809,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-f4SiagXk.js",
+   "bytes": 1789,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Gxf1yHDU.js",
+   "bytes": 5753,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-IEsexX9X.js",
+   "bytes": 2642,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-KfAz_42N.js",
+   "bytes": 769,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-l9SraRJO.js",
+   "bytes": 1623,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-LPK9kWWN.js",
+   "bytes": 2336,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-LqLRvaib.js",
+   "bytes": 1821,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-LtG4Q0jJ.js",
+   "bytes": 1961,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-lZjBQ2C7.js",
+   "bytes": 2125,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-MijPx1d7.js",
+   "bytes": 3861,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-MT_AbdGg.js",
+   "bytes": 5448,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-NjFfajPS.js",
+   "bytes": 2468,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-QXv2aC_b.js",
+   "bytes": 2615,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-qy0A6HAj.js",
+   "bytes": 2873,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-RQsbjaP_.js",
+   "bytes": 935,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-S2eKuU9U.js",
+   "bytes": 765,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-TDahgEnt.js",
+   "bytes": 779,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-Uk7wsaDw.js",
+   "bytes": 4252,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-VeAh16Bs.js",
+   "bytes": 1872,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-VlHCkRyl.js",
+   "bytes": 808,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-WxlVBeEX.js",
+   "bytes": 16741,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-XFjt9B7T.js",
+   "bytes": 7326,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-yHaef_W6.js",
+   "bytes": 1317,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-ZvAdCieZ.js",
+   "bytes": 1686,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.chunk-zzWYn-sM.js",
+   "bytes": 1053,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "index.js",
+   "bytes": 638,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "localExecConsent.js",
+   "bytes": 1366,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "watchRecordChooser.js",
+   "bytes": 3721,
+   "signatures": {
+    "telemetry": 5
+   },
+   "score": 5
+  },
+  {
+   "file": "msal-broker-worker/msalBrokerWorker.js",
+   "bytes": 21601,
+   "signatures": {
+    "auth": 1
+   },
+   "score": 1
+  },
+  {
+   "file": "heavy-work-worker/rolldown-runtime-CI_2c2Xz.js",
+   "bytes": 732,
+   "signatures": {},
+   "score": 0
+  },
+  {
+   "file": "mcp-runtime/nodeHost.js",
+   "bytes": 5907,
+   "signatures": {},
+   "score": 0
+  },
+  {
+   "file": "pty-host/ptyHostWorker.js",
+   "bytes": 12018,
+   "signatures": {},
+   "score": 0
+  },
+  {
+   "file": "stall-sampler-worker/stallSamplerWorker.js",
+   "bytes": 2033,
+   "signatures": {},
+   "score": 0
+  }
+ ]
+}

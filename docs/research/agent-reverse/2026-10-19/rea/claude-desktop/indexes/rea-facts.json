@@ -1,0 +1,4598 @@
+{
+ "summary": {
+  "browser_windows": 15,
+  "explicit_web_preferences": 41,
+  "preload_entrypoints": 0,
+  "context_bridge_apis": 52,
+  "exposed_api_members": 16,
+  "ipc": {
+   "operations": 1535,
+   "literal_channels": 10,
+   "dynamic_channel_operations": 1524,
+   "renderer_transmissions": 1301,
+   "renderer_listeners": 231,
+   "main_handlers": 3,
+   "paired_renderer_transmissions": 1,
+   "ambiguous_renderer_transmissions": 0,
+   "unpaired_literal_renderer_transmissions": 8
+  },
+  "sender_validation_observations": 63,
+  "utility_processes": 3,
+  "resolved_utility_entrypoints": 0,
+  "native_addon_bindings": 0,
+  "resolved_native_addon_bindings": 0
+ },
+ "statistics": {
+  "relevant_files": 449,
+  "nested_asar_containers": 0,
+  "text_bytes_read": 40616215,
+  "invalid_utf8_files": 0,
+  "parsed_javascript_files": 437,
+  "visited_ast_nodes": 9550272,
+  "findings": 6604,
+  "modules": 0,
+  "parse_failures": 0
+ },
+ "node_kind_counts": {
+  "unknown": 832,
+  "endpoint": 52,
+  "javascript-asset": 436,
+  "ipc-channel": 114,
+  "javascript-module": 135,
+  "context-bridge-api": 19,
+  "source-map": 21,
+  "artifact": 13,
+  "ipc-handler": 37,
+  "electron-renderer": 6,
+  "electron-main": 1,
+  "worker": 3,
+  "package": 5
+ },
+ "context-bridge-api": [
+  {
+   "kind": "context-bridge-api",
+   "label": null,
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 4147,
+   "props": {
+    "world": "main",
+    "api_key_expression": "t",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": null,
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 2641,
+   "props": {
+    "world": "main",
+    "api_key_expression": "t",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": "desktopEssentialTelemetryDisabled",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 7,
+   "col": 1430,
+   "props": {
+    "world": "main",
+    "api_key": "desktopEssentialTelemetryDisabled",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": "process",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 7,
+   "col": 1382,
+   "props": {
+    "world": "main",
+    "api_key": "process",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": "buddy",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 4410,
+   "props": {
+    "world": "main",
+    "api_key": "buddy",
+    "api_status": "object-literal",
+    "members": [
+     "getPathForFile"
+    ],
+    "unknown_members": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": null,
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 3571,
+   "props": {
+    "world": "main",
+    "api_key_expression": "t",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": "desktopEssentialTelemetryDisabled",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 4323,
+   "props": {
+    "world": "main",
+    "api_key": "desktopEssentialTelemetryDisabled",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": "process",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 4276,
+   "props": {
+    "world": "main",
+    "api_key": "process",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": null,
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 2070,
+   "props": {
+    "world": "main",
+    "api_key_expression": "t",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": "claudeDesktopArtifactPane",
+   "file": ".vite/build/claudePagePreview.js",
+   "line": 1,
+   "col": 780,
+   "props": {
+    "world": "main",
+    "api_key": "claudeDesktopArtifactPane",
+    "api_status": "object-literal",
+    "members": [
+     "chrome",
+     "embedded",
+     "platform"
+    ],
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": null,
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 5106,
+   "props": {
+    "world": "main",
+    "api_key_expression": "t",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": null,
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 3635,
+   "props": {
+    "world": "main",
+    "api_key_expression": "t",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": null,
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 3635,
+   "props": {
+    "world": "main",
+    "api_key_expression": "t",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": "cowork",
+   "file": ".vite/build/coworkArtifact.js",
+   "line": 1,
+   "col": 1702,
+   "props": {
+    "world": "main",
+    "api_key": "cowork",
+    "api_status": "object-literal",
+    "members": [
+     "askClaude",
+     "callMcpTool",
+     "runScheduledTask"
+    ],
+    "unknown_members": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": "omeletteDesktopPdf",
+   "file": ".vite/build/designWindow.js",
+   "line": 1,
+   "col": 1098,
+   "props": {
+    "world": "main",
+    "api_key": "omeletteDesktopPdf",
+    "api_status": "object-literal",
+    "members": [
+     "printFrameToPdf"
+    ],
+    "unknown_members": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": null,
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 2373,
+   "props": {
+    "world": "main",
+    "api_key_expression": "t",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": null,
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 3874,
+   "props": {
+    "world": "main",
+    "api_key_expression": "t",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": "process",
+   "file": ".vite/build/findInPage.js",
+   "line": 7,
+   "col": 1382,
+   "props": {
+    "world": "main",
+    "api_key": "process",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "context-bridge-api",
+   "label": "desktopEssentialTelemetryDisabled",
+   "file": ".vite/build/findInPage.js",
+   "line": 7,
+   "col": 1430,
+   "props": {
+    "world": "main",
+    "api_key": "desktopEssentialTelemetryDisabled",
+    "api_status": "dynamic",
+    "unknown_members": 1
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  }
+ ],
+ "ipc-channel": [
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"MainWindowTitleBar_$_titleBarReady\"",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 1680,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"MainWindowTitleBar_$_titleBarReady\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"AboutWindow_$_getAppName\"",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 1063,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"AboutWindow_$_getAppName\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "d+\"DesktopIntl_$_getInitialLocale\"",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 3713,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "d+\"DesktopIntl_$_getInitialLocale\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"MainWindowTitleBar_$_requestReloadMainView\"",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 1773,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"MainWindowTitleBar_$_requestReloadMainView\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 2270,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"AboutWindow_$_getBuildProps\"",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 1138,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"AboutWindow_$_getBuildProps\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"QuickWindow_$_requestDismiss\"",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 1406,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"QuickWindow_$_requestDismiss\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"AboutWindow_$_getSupport\"",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 991,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"AboutWindow_$_getSupport\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"QuickWindow_$_requestSkooch\"",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 1490,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"QuickWindow_$_requestSkooch\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"MainWindowTitleBar_$_requestMainMenuPopup\"",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 1966,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"MainWindowTitleBar_$_requestMainMenuPopup\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 2122,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"MainWindowTitleBar_$_requestRestartApp\"",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 1870,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"MainWindowTitleBar_$_requestRestartApp\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 2413,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"AboutWindow_$_ancientJournal\"",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 1217,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"AboutWindow_$_ancientJournal\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "r",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 3946,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "r",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"AboutWindow_$_openHelp\"",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 921,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"AboutWindow_$_openHelp\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "d+\"DesktopIntl_$_requestLocaleChange\"",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 3801,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "d+\"DesktopIntl_$_requestLocaleChange\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "s+\"DesktopIntl_$_getInitialLocale\"",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 3142,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "s+\"DesktopIntl_$_getInitialLocale\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"Buddy_$_cancelScan\"",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 1311,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"Buddy_$_cancelScan\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"Buddy_$_pickDevice\"",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 1243,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"Buddy_$_pickDevice\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"Buddy_$_setName\"",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 1043,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"Buddy_$_setName\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"Buddy_$_forgetDevice\"",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 1446,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"Buddy_$_forgetDevice\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 1748,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"Buddy_$_pickFolder\"",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 1514,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"Buddy_$_pickFolder\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"Buddy_$_scanDevices\"",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 1175,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"Buddy_$_scanDevices\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"Buddy_$_pairDevice\"",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 1108,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"Buddy_$_pairDevice\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"Buddy_$_install\"",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 1641,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"Buddy_$_install\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"Buddy_$_preview\"",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 1578,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"Buddy_$_preview\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"Buddy_$_deviceStatus\"",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 977,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"Buddy_$_deviceStatus\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "r",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 3375,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "r",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"Buddy_$_submitPin\"",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 1377,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"Buddy_$_submitPin\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 1883,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"Buddy_$_status\"",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 913,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"Buddy_$_status\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "s+\"DesktopIntl_$_requestLocaleChange\"",
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 3230,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "s+\"DesktopIntl_$_requestLocaleChange\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n",
+   "file": ".vite/build/claudePagePreview.js",
+   "line": 1,
+   "col": 1743,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "n",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "r",
+   "file": ".vite/build/claudePagePreview.js",
+   "line": 1,
+   "col": 1067,
+   "props": {
+    "side": "renderer",
+    "operation": "send",
+    "mode": "send",
+    "channel_expression": "r",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/claudePagePreview.js",
+   "line": 1,
+   "col": 1091,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "t",
+   "file": ".vite/build/claudePagePreview.js",
+   "line": 1,
+   "col": 1352,
+   "props": {
+    "side": "renderer",
+    "operation": "send",
+    "mode": "send",
+    "channel_expression": "t",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n",
+   "file": ".vite/build/claudePagePreview.js",
+   "line": 1,
+   "col": 1620,
+   "props": {
+    "side": "renderer",
+    "operation": "send",
+    "mode": "send",
+    "channel_expression": "n",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuTeach_$_next\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 926,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuTeach_$_next\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 2450,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordChooser_$_reportContentShortfall\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 3074,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordChooser_$_reportContentShortfall\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "d+\"SableOtterHud_$_settings\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 4549,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "d+\"SableOtterHud_$_settings\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "d+\"SableOtterHud_$_resize\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 4620,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "d+\"SableOtterHud_$_resize\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 2582,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 1450,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordPill_$_toggleMic\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 1933,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordPill_$_toggleMic\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "d+\"SableOtterHud_$_fieldChanged\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 4206,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "d+\"SableOtterHud_$_fieldChanged\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 3378,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "d+\"SableOtterHud_$_escape\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 4344,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "d+\"SableOtterHud_$_escape\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "r",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 4740,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "r",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 2307,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuTeach_$_mouseLeave\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 1112,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuTeach_$_mouseLeave\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "d+\"SableOtterHud_$_submit\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 4131,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "d+\"SableOtterHud_$_submit\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuTeach_$_exit\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 982,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuTeach_$_exit\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordPill_$_done\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 1790,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordPill_$_done\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 1336,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordPill_$_discard\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 1859,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordPill_$_discard\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "d+\"SableOtterHud_$_removePill\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 4475,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "d+\"SableOtterHud_$_removePill\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "d+\"SableOtterHud_$_paste\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 4279,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "d+\"SableOtterHud_$_paste\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordPill_$_reportProcessingWidth\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 2022,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordPill_$_reportProcessingWidth\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "d+\"SableOtterHud_$_tab\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 4407,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "d+\"SableOtterHud_$_tab\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 3230,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "r",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 4869,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "r",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "d+\"SableOtterHud_$_button\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 4062,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "d+\"SableOtterHud_$_button\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuTeach_$_mouseEnter\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 1044,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuTeach_$_mouseEnter\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 1582,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordChooser_$_choose\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 2803,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordChooser_$_choose\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 2171,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordChooser_$_setMicPreview\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 2886,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordChooser_$_setMicPreview\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 1216,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordChooser_$_stopMicPreview\"",
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 2976,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordChooser_$_stopMicPreview\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 3378,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 3230,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordChooser_$_reportContentShortfall\"",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 3074,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordChooser_$_reportContentShortfall\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordChooser_$_choose\"",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 2803,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordChooser_$_choose\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuTeach_$_next\"",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 926,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuTeach_$_next\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 1450,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 1216,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 2582,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 1582,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuTeach_$_mouseLeave\"",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 1112,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuTeach_$_mouseLeave\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordPill_$_toggleMic\"",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 1933,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordPill_$_toggleMic\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordChooser_$_setMicPreview\"",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 2886,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordChooser_$_setMicPreview\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 2171,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordPill_$_discard\"",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 1859,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordPill_$_discard\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 1336,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 2307,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 2450,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordPill_$_reportProcessingWidth\"",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 2022,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordPill_$_reportProcessingWidth\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordPill_$_done\"",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 1790,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordPill_$_done\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuTeach_$_mouseEnter\"",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 1044,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuTeach_$_mouseEnter\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuTeach_$_exit\"",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 982,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuTeach_$_exit\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CuWatchRecordChooser_$_stopMicPreview\"",
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 2976,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CuWatchRecordChooser_$_stopMicPreview\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CoworkArtifactBridge_$_navigateHost\"",
+   "file": ".vite/build/coworkArtifact.js",
+   "line": 1,
+   "col": 1070,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CoworkArtifactBridge_$_navigateHost\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CoworkArtifactBridge_$_runScheduledTask\"",
+   "file": ".vite/build/coworkArtifact.js",
+   "line": 1,
+   "col": 976,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CoworkArtifactBridge_$_runScheduledTask\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CoworkArtifactBridge_$_openExternalUrl\"",
+   "file": ".vite/build/coworkArtifact.js",
+   "line": 1,
+   "col": 1161,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CoworkArtifactBridge_$_openExternalUrl\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CoworkArtifactBridge_$_askClaude\"",
+   "file": ".vite/build/coworkArtifact.js",
+   "line": 1,
+   "col": 883,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CoworkArtifactBridge_$_askClaude\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CoworkArtifactBridge_$_callMcpTool\"",
+   "file": ".vite/build/coworkArtifact.js",
+   "line": 1,
+   "col": 795,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CoworkArtifactBridge_$_callMcpTool\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"CoworkArtifactBridge_$_setEditableFocused\"",
+   "file": ".vite/build/coworkArtifact.js",
+   "line": 1,
+   "col": 1258,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"CoworkArtifactBridge_$_setEditableFocused\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.designPdf_$_DesignPdf_$_printFrameToPdf",
+   "file": ".vite/build/designWindow.js",
+   "line": 1,
+   "col": 652,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel": "$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.designPdf_$_DesignPdf_$_printFrameToPdf",
+    "resolution": "literal"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"FindInPage_$_density_$store$_getState\"",
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 1700,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"FindInPage_$_density_$store$_getState\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 1476,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 1605,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "r",
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 3678,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "r",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"FindInPage_$_endFindSession\"",
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 1092,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"FindInPage_$_endFindSession\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"FindInPage_$_density_$store$_getStateSync\"",
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 1786,
+   "props": {
+    "side": "renderer",
+    "operation": "send-sync",
+    "mode": "send",
+    "channel_expression": "n+\"FindInPage_$_density_$store$_getStateSync\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "s+\"DesktopIntl_$_requestLocaleChange\"",
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 3533,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "s+\"DesktopIntl_$_requestLocaleChange\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"FindInPage_$_stopFindInPage\"",
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 1013,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"FindInPage_$_stopFindInPage\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 1349,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "s+\"DesktopIntl_$_getInitialLocale\"",
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 3445,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "s+\"DesktopIntl_$_getInitialLocale\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 2138,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "n+\"FindInPage_$_findInPage\"",
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 934,
+   "props": {
+    "side": "renderer",
+    "operation": "invoke",
+    "mode": "invoke",
+    "channel_expression": "n+\"FindInPage_$_findInPage\"",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-channel",
+   "label": "i",
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 1220,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "resolution": "dynamic"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  }
+ ],
+ "ipc-handler": [
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 2141,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 2141
+     },
+     "end": {
+      "line": 1,
+      "column": 2142
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 2289,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 2289
+     },
+     "end": {
+      "line": 1,
+      "column": 2290
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 3965,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "r",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 3965
+     },
+     "end": {
+      "line": 1,
+      "column": 3966
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/aboutWindow.js",
+   "line": 1,
+   "col": 2432,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 2432
+     },
+     "end": {
+      "line": 1,
+      "column": 2433
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 1902,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1902
+     },
+     "end": {
+      "line": 1,
+      "column": 1903
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 3394,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "r",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 3394
+     },
+     "end": {
+      "line": 1,
+      "column": 3395
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/buddy.js",
+   "line": 1,
+   "col": 1767,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1767
+     },
+     "end": {
+      "line": 1,
+      "column": 1768
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/claudePagePreview.js",
+   "line": 1,
+   "col": 1762,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "n",
+    "handler_kind": "inline-function",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1762
+     },
+     "end": {
+      "line": 1,
+      "column": 1882
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/claudePagePreview.js",
+   "line": 1,
+   "col": 1110,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "inline-function",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1110
+     },
+     "end": {
+      "line": 1,
+      "column": 1208
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 1235,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1235
+     },
+     "end": {
+      "line": 1,
+      "column": 1236
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 3397,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 3397
+     },
+     "end": {
+      "line": 1,
+      "column": 3398
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 4888,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "r",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 4888
+     },
+     "end": {
+      "line": 1,
+      "column": 4889
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 2190,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 2190
+     },
+     "end": {
+      "line": 1,
+      "column": 2191
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 4759,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "r",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 4759
+     },
+     "end": {
+      "line": 1,
+      "column": 4760
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 3249,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 3249
+     },
+     "end": {
+      "line": 1,
+      "column": 3250
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 2326,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 2326
+     },
+     "end": {
+      "line": 1,
+      "column": 2327
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 2601,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 2601
+     },
+     "end": {
+      "line": 1,
+      "column": 2602
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 1601,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1601
+     },
+     "end": {
+      "line": 1,
+      "column": 1602
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 2469,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 2469
+     },
+     "end": {
+      "line": 1,
+      "column": 2470
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 1469,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1469
+     },
+     "end": {
+      "line": 1,
+      "column": 1470
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseTeach.js",
+   "line": 1,
+   "col": 1355,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1355
+     },
+     "end": {
+      "line": 1,
+      "column": 1356
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 1469,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1469
+     },
+     "end": {
+      "line": 1,
+      "column": 1470
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 1235,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1235
+     },
+     "end": {
+      "line": 1,
+      "column": 1236
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 3249,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 3249
+     },
+     "end": {
+      "line": 1,
+      "column": 3250
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 2601,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 2601
+     },
+     "end": {
+      "line": 1,
+      "column": 2602
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 2190,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 2190
+     },
+     "end": {
+      "line": 1,
+      "column": 2191
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 2326,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 2326
+     },
+     "end": {
+      "line": 1,
+      "column": 2327
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 1355,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1355
+     },
+     "end": {
+      "line": 1,
+      "column": 1356
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 3397,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 3397
+     },
+     "end": {
+      "line": 1,
+      "column": 3398
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 1601,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1601
+     },
+     "end": {
+      "line": 1,
+      "column": 1602
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/computerUseWatchRecord.js",
+   "line": 1,
+   "col": 2469,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 2469
+     },
+     "end": {
+      "line": 1,
+      "column": 2470
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 1239,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1239
+     },
+     "end": {
+      "line": 1,
+      "column": 1240
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 3697,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "r",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 3697
+     },
+     "end": {
+      "line": 1,
+      "column": 3698
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 2157,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 2157
+     },
+     "end": {
+      "line": 1,
+      "column": 2158
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 1495,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1495
+     },
+     "end": {
+      "line": 1,
+      "column": 1496
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 1368,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1368
+     },
+     "end": {
+      "line": 1,
+      "column": 1369
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "ipc-handler",
+   "label": null,
+   "file": ".vite/build/findInPage.js",
+   "line": 1,
+   "col": 1624,
+   "props": {
+    "side": "renderer",
+    "operation": "on",
+    "mode": "listen",
+    "channel_expression": "i",
+    "handler_kind": "identifier",
+    "handler_location": {
+     "start": {
+      "line": 1,
+      "column": 1624
+     },
+     "end": {
+      "line": 1,
+      "column": 1625
+     }
+    }
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  }
+ ],
+ "electron-renderer": [
+  {
+   "kind": "electron-renderer",
+   "label": ".vite/renderer/local_exec_consent/localExecConsent.html",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "declared_path": ".vite/renderer/local_exec_consent/localExecConsent.html",
+    "resolution_context": "html-reference",
+    "resolved_path": ".vite/renderer/local_exec_consent/localExecConsent.html",
+    "resolution_status": "resolved",
+    "mechanism": "html-script-entrypoint"
+   },
+   "confidence": "high",
+   "state": "inferred",
+   "authority": "static-relationship-inference"
+  },
+  {
+   "kind": "electron-renderer",
+   "label": ".vite/renderer/main_window/index.html",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "declared_path": ".vite/renderer/main_window/index.html",
+    "resolution_context": "html-reference",
+    "resolved_path": ".vite/renderer/main_window/index.html",
+    "resolution_status": "resolved",
+    "mechanism": "html-script-entrypoint"
+   },
+   "confidence": "high",
+   "state": "inferred",
+   "authority": "static-relationship-inference"
+  },
+  {
+   "kind": "electron-renderer",
+   "label": ".vite/renderer/quick_window/quick-window.html",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "declared_path": ".vite/renderer/quick_window/quick-window.html",
+    "resolution_context": "html-reference",
+    "resolved_path": ".vite/renderer/quick_window/quick-window.html",
+    "resolution_status": "resolved",
+    "mechanism": "html-script-entrypoint"
+   },
+   "confidence": "high",
+   "state": "inferred",
+   "authority": "static-relationship-inference"
+  },
+  {
+   "kind": "electron-renderer",
+   "label": ".vite/renderer/find_in_page/find-in-page.html",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "declared_path": ".vite/renderer/find_in_page/find-in-page.html",
+    "resolution_context": "html-reference",
+    "resolved_path": ".vite/renderer/find_in_page/find-in-page.html",
+    "resolution_status": "resolved",
+    "mechanism": "html-script-entrypoint"
+   },
+   "confidence": "high",
+   "state": "inferred",
+   "authority": "static-relationship-inference"
+  },
+  {
+   "kind": "electron-renderer",
+   "label": ".vite/renderer/about_window/about.html",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "declared_path": ".vite/renderer/about_window/about.html",
+    "resolution_context": "html-reference",
+    "resolved_path": ".vite/renderer/about_window/about.html",
+    "resolution_status": "resolved",
+    "mechanism": "html-script-entrypoint"
+   },
+   "confidence": "high",
+   "state": "inferred",
+   "authority": "static-relationship-inference"
+  },
+  {
+   "kind": "electron-renderer",
+   "label": ".vite/renderer/buddy_window/buddy.html",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "declared_path": ".vite/renderer/buddy_window/buddy.html",
+    "resolution_context": "html-reference",
+    "resolved_path": ".vite/renderer/buddy_window/buddy.html",
+    "resolution_status": "resolved",
+    "mechanism": "html-script-entrypoint"
+   },
+   "confidence": "high",
+   "state": "inferred",
+   "authority": "static-relationship-inference"
+  }
+ ],
+ "electron-main": [
+  {
+   "kind": "electron-main",
+   "label": ".vite/build/index.pre.js",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "declared_path": ".vite/build/index.pre.js",
+    "resolution_context": "package-entrypoint",
+    "resolved_path": ".vite/build/index.pre.js",
+    "resolution_status": "resolved",
+    "mechanism": "package.json:main"
+   },
+   "confidence": "high",
+   "state": "inferred",
+   "authority": "static-relationship-inference"
+  }
+ ],
+ "worker": [
+  {
+   "kind": "worker",
+   "label": null,
+   "file": ".vite/build/heavy-work-worker/dist-CI9lzb1v.js",
+   "line": 1,
+   "col": 187034,
+   "props": {
+    "expression": "new Worker(f)"
+   },
+   "confidence": "high",
+   "state": "inferred",
+   "authority": "static-relationship-inference"
+  },
+  {
+   "kind": "worker",
+   "label": null,
+   "file": ".vite/build/heavy-work-worker/dist-CI9lzb1v.js",
+   "line": 1,
+   "col": 98997,
+   "props": {
+    "expression": "new Worker(n)"
+   },
+   "confidence": "high",
+   "state": "inferred",
+   "authority": "static-relationship-inference"
+  },
+  {
+   "kind": "worker",
+   "label": null,
+   "file": "resources/office365-mcp/pdfExtractorProcess.mjs",
+   "line": 6,
+   "col": 176834,
+   "props": {
+    "expression": "new Worker(t,{type:\"module\"})"
+   },
+   "confidence": "high",
+   "state": "inferred",
+   "authority": "static-relationship-inference"
+  }
+ ],
+ "endpoint": [
+  {
+   "kind": "endpoint",
+   "label": "network endpoint",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 2,
+   "col": 22725,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "sentry.sample_rand",
+    "mechanism": "call:a.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "sentry.dsc",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 2,
+   "col": 22494,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "sentry.dsc",
+    "mechanism": "call:a.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "network endpoint",
+   "file": ".vite/build/aboutWindow.js",
+   "line": 2,
+   "col": 22278,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "sentry.sample_rate",
+    "mechanism": "call:a.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 713669,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "sandbox.credentials.allowPlaintextInject",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 699560,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "availableModels",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 716145,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "sandbox.credentials.sigv4",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "/",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 780606,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "/",
+    "mechanism": "call:t.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "hooks",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 737928,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "hooks",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 700970,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "forceLoginOrgUUID",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 698135,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "strictPluginOnlyCustomization",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 745700,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "modelPricing.overrides",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 716631,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "sandbox.credentials",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "policyHelpers",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 707936,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "policyHelpers",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 696854,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "allowedMcpServers",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "network endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 713584,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "sandbox.credentials.allowPlaintextInject",
+    "mechanism": "call:get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 696375,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "strictKnownMarketplaces",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": null,
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 752389,
+   "props": {
+    "endpoint_kind": "route",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 715367,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "sandbox.credentials.awsPairs",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 700731,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "gatewayInternalNetworks",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 745415,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "modelPricing.multiplier",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "modelPricing",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 745201,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "modelPricing",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 697089,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "deniedMcpServers",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 695653,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "wslInheritsWindowsSettings",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "enabledPlugins",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 699099,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "enabledPlugins",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "policyHelper",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 703304,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "policyHelper",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 714063,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "sandbox.credentials.awsPairs[]",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "/",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 782202,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "/",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "route endpoint",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 696624,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "blockedMarketplaces",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "deniedModels",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 700000,
+   "props": {
+    "endpoint_kind": "route",
+    "value": "deniedModels",
+    "mechanism": "property:path"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "policySettings",
+   "file": ".vite/build/file-index-worker/fileIndexWorker.js",
+   "line": 7,
+   "col": 85435,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "policySettings",
+    "mechanism": "call:perSource.delete"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "network endpoint",
+   "file": ".vite/build/findInPage.js",
+   "line": 2,
+   "col": 22273,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "sentry.sample_rate",
+    "mechanism": "call:a.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "sentry.dsc",
+   "file": ".vite/build/findInPage.js",
+   "line": 2,
+   "col": 22489,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "sentry.dsc",
+    "mechanism": "call:a.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "network endpoint",
+   "file": ".vite/build/findInPage.js",
+   "line": 2,
+   "col": 22720,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "sentry.sample_rand",
+    "mechanism": "call:a.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "console.level",
+   "file": ".vite/build/heavy-work-worker/dist-CI9lzb1v.js",
+   "line": 1,
+   "col": 339703,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "console.level",
+    "mechanism": "call:f.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "console.lock",
+   "file": ".vite/build/heavy-work-worker/dist-CI9lzb1v.js",
+   "line": 1,
+   "col": 339763,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "console.lock",
+    "mechanism": "call:f.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "vm",
+   "file": ".vite/build/heavy-work-worker/heavyWorkWorker.js",
+   "line": 1,
+   "col": 674184,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "vm",
+    "mechanism": "call:Gg.open"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "workspace",
+   "file": ".vite/build/heavy-work-worker/heavyWorkWorker.js",
+   "line": 1,
+   "col": 260394,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "workspace",
+    "mechanism": "call:Gg.open"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": null,
+   "file": ".vite/build/heavy-work-worker/heavyWorkWorker.js",
+   "line": 1,
+   "col": 125622,
+   "props": {
+    "endpoint_kind": "network",
+    "mechanism": "call:v.delete"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "manifest.json",
+   "file": ".vite/build/heavy-work-worker/heavyWorkWorker.js",
+   "line": 1,
+   "col": 53014,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "manifest.json",
+    "mechanism": "call:a.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "a",
+   "file": "resources/office365-mcp/pdfExtractorProcess.mjs",
+   "line": 3,
+   "col": 22150,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "a",
+    "mechanism": "call:f.delete"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "b",
+   "file": "resources/office365-mcp/pdfExtractorProcess.mjs",
+   "line": 3,
+   "col": 35306,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "b",
+    "mechanism": "call:h.delete"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "c",
+   "file": "resources/office365-mcp/pdfExtractorProcess.mjs",
+   "line": 3,
+   "col": 35506,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "c",
+    "mechanism": "call:h.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "fillCanvas",
+   "file": "resources/office365-mcp/pdfExtractorProcess.mjs",
+   "line": 6,
+   "col": 108189,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "fillCanvas",
+    "mechanism": "call:cachedCanvases.delete"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "network endpoint",
+   "file": "resources/office365-mcp/pdfExtractorProcess.mjs",
+   "line": 6,
+   "col": 34210,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "pdfjs-editor-new-alt-text-generated-alt-text-with-disclaimer",
+    "mechanism": "call:o._l10n.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "Content-Length",
+   "file": "resources/office365-mcp/pdfExtractorProcess.mjs",
+   "line": 6,
+   "col": 140200,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "Content-Length",
+    "mechanism": "call:o.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "Accept-Ranges",
+   "file": "resources/office365-mcp/pdfExtractorProcess.mjs",
+   "line": 6,
+   "col": 140293,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "Accept-Ranges",
+    "mechanism": "call:o.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "network endpoint",
+   "file": "resources/office365-mcp/pdfExtractorProcess.mjs",
+   "line": 6,
+   "col": 140430,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "Content-Disposition",
+    "mechanism": "call:o.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "Content-Encoding",
+   "file": "resources/office365-mcp/pdfExtractorProcess.mjs",
+   "line": 6,
+   "col": 140328,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "Content-Encoding",
+    "mechanism": "call:o.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "hasAltText",
+   "file": "resources/office365-mcp/pdfExtractorProcess.mjs",
+   "line": 16,
+   "col": 57963,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "hasAltText",
+    "mechanism": "call:t.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "hasDescription",
+   "file": "resources/office365-mcp/pdfExtractorProcess.mjs",
+   "line": 16,
+   "col": 53383,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "hasDescription",
+    "mechanism": "call:t.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "aria-label",
+   "file": "resources/office365-mcp/pdfExtractorProcess.mjs",
+   "line": 16,
+   "col": 65227,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "aria-label",
+    "mechanism": "call:get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  },
+  {
+   "kind": "endpoint",
+   "label": "color",
+   "file": "resources/office365-mcp/pdfExtractorProcess.mjs",
+   "line": 16,
+   "col": 11698,
+   "props": {
+    "endpoint_kind": "network",
+    "value": "color",
+    "mechanism": "call:t.get"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "ast-static-analysis"
+  }
+ ],
+ "package": [
+  {
+   "kind": "package",
+   "label": "node-pty",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": "node_modules/node-pty/package.json",
+    "name": "node-pty",
+    "version": "1.2.0-beta.14",
+    "main": "./lib/index.js",
+    "parse_status": "included"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "package",
+   "label": "ws",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": "node_modules/ws/package.json",
+    "name": "ws",
+    "version": "8.21.0",
+    "main": "index.js",
+    "renderer": "browser.js",
+    "parse_status": "included"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "package",
+   "label": "agent-base",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": "node_modules/agent-base/package.json",
+    "name": "agent-base",
+    "version": "7.1.4",
+    "main": "./dist/index.js",
+    "parse_status": "included"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "package",
+   "label": "@ant/claude-native",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": "node_modules/@ant/claude-native/package.json",
+    "name": "@ant/claude-native",
+    "version": "0.0.0",
+    "main": "index.js",
+    "parse_status": "included"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "package",
+   "label": "@ant/desktop",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": "package.json",
+    "name": "@ant/desktop",
+    "version": "2.42304.0",
+    "main": ".vite/build/index.pre.js",
+    "parse_status": "included"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  }
+ ],
+ "artifact": [
+  {
+   "kind": "artifact",
+   "label": "package.json",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": "package.json",
+    "bytes": 5088,
+    "inventory_artifact_id": "art_4614205c5a0dd8250084df60254e8113d7521e2c83e9bb7ae87b9ebc8c84240a",
+    "unpacked": false,
+    "file_kind": "package-json",
+    "text_status": "included",
+    "omitted_json_top_level_keys": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "artifact",
+   "label": ".vite/renderer/local_exec_consent/localExecConsent.html",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": ".vite/renderer/local_exec_consent/localExecConsent.html",
+    "bytes": 7614,
+    "inventory_artifact_id": "art_591f338fe563fe2f0e25bf5db269d5fa3714b7d20f000f872e9be5a13c488108",
+    "unpacked": false,
+    "file_kind": "html",
+    "text_status": "included",
+    "omitted_json_top_level_keys": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "artifact",
+   "label": "node_modules/node-pty/package.json",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": "node_modules/node-pty/package.json",
+    "bytes": 1694,
+    "inventory_artifact_id": "art_3847fa070c2ddf76aae01b266c097502103c17b54e459403b87cf5cea3339ecb",
+    "unpacked": false,
+    "file_kind": "package-json",
+    "text_status": "included",
+    "omitted_json_top_level_keys": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "artifact",
+   "label": ".vite/renderer/about_window/about.html",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": ".vite/renderer/about_window/about.html",
+    "bytes": 245745,
+    "inventory_artifact_id": "art_8af1464c6472e11fa2f8ce66c67f8b28b9b8df6b9583c014ab31ecccec387420",
+    "unpacked": false,
+    "file_kind": "html",
+    "text_status": "included",
+    "omitted_json_top_level_keys": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "artifact",
+   "label": ".vite/renderer/quick_window/quick-window.html",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": ".vite/renderer/quick_window/quick-window.html",
+    "bytes": 250391,
+    "inventory_artifact_id": "art_46cf7f74cb12122abf1ea69943ac183827aead8b07d02b1600224a96362e2e0c",
+    "unpacked": false,
+    "file_kind": "html",
+    "text_status": "included",
+    "omitted_json_top_level_keys": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "artifact",
+   "label": ".vite/renderer/buddy_window/buddy.html",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": ".vite/renderer/buddy_window/buddy.html",
+    "bytes": 245746,
+    "inventory_artifact_id": "art_053e583c2654d4dca2214066d5f123c6119674a4bde443e314c5ef4a541cbab8",
+    "unpacked": false,
+    "file_kind": "html",
+    "text_status": "included",
+    "omitted_json_top_level_keys": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "artifact",
+   "label": ".vite/renderer/main_window/index.html",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": ".vite/renderer/main_window/index.html",
+    "bytes": 9198,
+    "inventory_artifact_id": "art_6e60ad528f659134c181b7beee10896cf03ded4f6d7e868828321c855ab94fbb",
+    "unpacked": false,
+    "file_kind": "html",
+    "text_status": "included",
+    "omitted_json_top_level_keys": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "artifact",
+   "label": "node_modules/@ant/claude-native/package.json",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": "node_modules/@ant/claude-native/package.json",
+    "bytes": 1033,
+    "inventory_artifact_id": "art_01ac320948b0f3fc7b822ea283b03863270e5e520da47759ca5e084313a85285",
+    "unpacked": false,
+    "file_kind": "package-json",
+    "text_status": "included",
+    "omitted_json_top_level_keys": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "artifact",
+   "label": "resources/bundled-skills/manifest.json",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": "resources/bundled-skills/manifest.json",
+    "bytes": 4628,
+    "inventory_artifact_id": "art_067f9140fba71a2e3456e8a7aeb359f1a3110224948b1e0626015b5c0db8474a",
+    "unpacked": false,
+    "file_kind": "json",
+    "text_status": "included",
+    "json_parse_status": "included",
+    "json_top_level_keys": [
+     "agentSkillsRef",
+     "skills"
+    ],
+    "omitted_json_top_level_keys": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "artifact",
+   "label": "node_modules/ws/package.json",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": "node_modules/ws/package.json",
+    "bytes": 1753,
+    "inventory_artifact_id": "art_0590c6a2a20a27d20053e03fcd48354a625a81bf1788c75a40c7e51e29b5886b",
+    "unpacked": false,
+    "file_kind": "package-json",
+    "text_status": "included",
+    "omitted_json_top_level_keys": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "artifact",
+   "label": "artifact root",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "format": "directory",
+    "bytes": 0,
+    "inventory_manifest_id": "agm_54ca34f9be6b2a9d58f0cc97fd5e3417b930b94367cd49cac0d90c0bfadd1147",
+    "inventory_graph_sha256": "648b81644c8165759f2ceb43c2b1eb13c51c634dc5065ef09756ac84a8a55408",
+    "inventory_artifact_id": "art_76943c0bd86ce88f0d9f88a2588ce8617427f43c0640d52781f8aba5002067ce"
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "artifact",
+   "label": ".vite/renderer/find_in_page/find-in-page.html",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": ".vite/renderer/find_in_page/find-in-page.html",
+    "bytes": 245051,
+    "inventory_artifact_id": "art_b04c40718e17369ac61a212e9a019b31d04af250e08e942766bd6b5cccd646b3",
+    "unpacked": false,
+    "file_kind": "html",
+    "text_status": "included",
+    "omitted_json_top_level_keys": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  },
+  {
+   "kind": "artifact",
+   "label": "node_modules/agent-base/package.json",
+   "file": null,
+   "line": null,
+   "col": null,
+   "props": {
+    "path": "node_modules/agent-base/package.json",
+    "bytes": 1059,
+    "inventory_artifact_id": "art_7da02a7eead08278b886927cda18c49e568e368c08ed6fa9b6756118cfeb9476",
+    "unpacked": false,
+    "file_kind": "package-json",
+    "text_status": "included",
+    "omitted_json_top_level_keys": 0
+   },
+   "confidence": "exact",
+   "state": "observed",
+   "authority": "artifact-bytes"
+  }
+ ]
+}

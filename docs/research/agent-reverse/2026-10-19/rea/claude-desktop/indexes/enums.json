@@ -1,0 +1,10297 @@
+{
+ "root": "D:\\Atlas-Reverse-Lab\\claude-desktop\\extracted\\asar\\.vite\\build",
+ "file_count": 380,
+ "enum_count": 637,
+ "enums": [
+  {
+   "kind": "dot-split",
+   "items": [
+    "GLIBC_TUNABLES",
+    "GCONV_PATH",
+    "HOSTALIASES",
+    "OPENSSL_CONF",
+    "OPENSSL_MODULES",
+    "OPENSSL_ENGINES",
+    "NODE_OPTIONS",
+    "NODE_PATH",
+    "BASH_ENV",
+    "GODEBUG",
+    "PATH",
+    "HOME",
+    "LANG",
+    "USER",
+    "SHELL",
+    "TZ",
+    "TERM",
+    "TMPDIR",
+    "CLAUDE_TMPDIR",
+    "PWD",
+    "IFS",
+    "ENV",
+    "PYTHONPATH",
+    "PYTHONSTARTUP",
+    "SSL_CERT_FILE",
+    "NODE_TLS_REJECT_UNAUTHORIZED",
+    "NODE_EXTRA_CA_CERTS",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+    "GIT_SSH_COMMAND",
+    "GIT_ASKPASS",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "DISABLE_AUTOUPDATER",
+    "DISABLE_MICROCOMPACT",
+    "MCP_TOOL_TIMEOUT",
+    "ENABLE_PROMPT_CACHING_1H",
+    "JAVA_TOOL_OPTIONS",
+    "_JAVA_OPTIONS",
+    "JDK_JAVA_OPTIONS",
+    "CLASSPATH",
+    "PERL5OPT",
+    "PERL5LIB",
+    "PERL5DB",
+    "PERLLIB",
+    "RUBYOPT",
+    "RUBYLIB",
+    "ELECTRON_RUN_AS_NODE",
+    "PYTHONHOME",
+    "DOTNET_STARTUP_HOOKS",
+    "DOTNET_ADDITIONAL_DEPS",
+    "CORECLR_PROFILER",
+    "CORECLR_PROFILER_PATH",
+    "CORECLR_ENABLE_PROFILING",
+    "COR_ENABLE_PROFILING",
+    "COR_PROFILER",
+    "COR_PROFILER_PATH",
+    "COR_PROFILER_PATH_32",
+    "COR_PROFILER_PATH_64",
+    "ZDOTDIR",
+    "PYTHONUSERBASE",
+    "RUBYGEMS_GEMDEPS",
+    "SHELLOPTS",
+    "PS4",
+    "COMSPEC",
+    "PERL5SHELL",
+    "RUBYSHELL",
+    "XDG_CONFIG_HOME",
+    "USERPROFILE",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "PROGRAMDATA",
+    "SSH_ASKPASS",
+    "SSH_ASKPASS_REQUIRE",
+    "VISUAL",
+    "EDITOR",
+    "GOFLAGS",
+    "GOENV",
+    "GOROOT",
+    "GOTOOLCHAIN",
+    "GOPATH",
+    "GOBIN",
+    "GOPROXY",
+    "GOSUMDB",
+    "GONOSUMDB",
+    "GONOSUMCHECK",
+    "GOINSECURE",
+    "GOPRIVATE",
+    "GOMODCACHE",
+    "GOCACHE",
+    "PSMODULEPATH"
+   ],
+   "count": 94,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2455712,
+   "category": "other"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "ActivityIndicator",
+    "Alert",
+    "Any",
+    "Application",
+    "Browser",
+    "Button",
+    "Cell",
+    "CheckBox",
+    "CollectionView",
+    "ColorWell",
+    "ComboBox",
+    "DatePicker",
+    "DecrementArrow",
+    "Dialog",
+    "DisclosureTriangle",
+    "DockItem",
+    "Drawer",
+    "GenericElement",
+    "Grid",
+    "Group",
+    "Handle",
+    "Heading",
+    "HelpTag",
+    "Icon",
+    "Image",
+    "IncrementArrow",
+    "Key",
+    "Keyboard",
+    "LayoutArea",
+    "LayoutItem",
+    "LevelIndicator",
+    "Link",
+    "Map",
+    "MapArea",
+    "MapItem",
+    "Matte",
+    "Menu",
+    "MenuBar",
+    "MenuBarItem",
+    "MenuButton",
+    "MenuItem",
+    "NavigationBar",
+    "Other",
+    "Outline",
+    "OutlineRow",
+    "PageIndicator",
+    "Picker",
+    "PickerWheel",
+    "PopUpButton",
+    "Popover",
+    "ProgressIndicator",
+    "RadioButton",
+    "RadioGroup",
+    "RatingIndicator",
+    "RelevanceIndicator",
+    "Ruler",
+    "RulerMarker",
+    "ScrollArea",
+    "ScrollBar",
+    "ScrollView",
+    "SearchField",
+    "SecureTextField",
+    "SegmentedControl",
+    "Sheet",
+    "Slider",
+    "SplitGroup",
+    "Splitter",
+    "StaticText",
+    "StatusBar",
+    "StatusItem",
+    "Stepper",
+    "Switch",
+    "Tab",
+    "TabBar",
+    "TabButton",
+    "TabGroup",
+    "Table",
+    "TableColumn",
+    "TableRow",
+    "TextArea",
+    "TextField",
+    "TextView",
+    "Timeline",
+    "Toggle",
+    "Toolbar",
+    "ToolbarButton",
+    "TouchBar",
+    "ValueIndicator",
+    "WebArea",
+    "WebView",
+    "Window"
+   ],
+   "count": 91,
+   "file": "index.chunk-CwIQU-8Y.js",
+   "offset": 4263,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "error_message",
+    "error",
+    "errorMessage",
+    "error_description",
+    "error_detail",
+    "error_line",
+    "diagnostic_error",
+    "folder_grant_refusal_reasons",
+    "folder_grant_recorded_count",
+    "folder_grant_refused_count",
+    "sub_hourly_cron",
+    "activation",
+    "ms_to_answer_bucket",
+    "not_offered_reason",
+    "worktree_hook",
+    "front_after_restore",
+    "decision_reason",
+    "cli_stderr_tail",
+    "shipit_stderr_tail",
+    "raw_output",
+    "raw_output_prefix",
+    "console_tail",
+    "kernel_console_tail",
+    "service_log_tail",
+    "kernel_context",
+    "vm_stat_output",
+    "vz_footprint_output",
+    "coworkd_upstream_error",
+    "bridge_url",
+    "inference_base_url",
+    "linkUrl",
+    "host",
+    "http_status_text",
+    "ssh_platform",
+    "detail",
+    "inference_host",
+    "nest_local_user",
+    "session_allowed",
+    "ext_saw",
+    "once_approved",
+    "worktree_path",
+    "session_cwd",
+    "fallback_cwd",
+    "previous_cwd",
+    "new_cwd",
+    "cwd",
+    "addedDirs",
+    "shell",
+    "mcp_cmd",
+    "override_label",
+    "scrubbed_main_log",
+    "scrubbed_claude_ai_web_log",
+    "scrubbed_custom3p_setup_log",
+    "scrubbed_vm_log",
+    "system_info",
+    "os_build_and_updates",
+    "config_snapshot",
+    "reachability",
+    "edr_signature_expires_epoch_s"
+   ],
+   "count": 59,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1025188,
+   "category": "other"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "launch_config_missing",
+    "launch_config_unreadable",
+    "launch_config_invalid",
+    "launch_config_name_not_found",
+    "launch_cwd_missing",
+    "command_not_found",
+    "spawn_permission_denied",
+    "spawn_failed",
+    "server_exited_during_startup",
+    "port_in_use",
+    "find_cache_missing",
+    "page_access_denied",
+    "user_declined",
+    "blocklist_check_failed",
+    "navigation_failed",
+    "js_execution_error",
+    "action_failed",
+    "unknown_exception",
+    "cdp_timeout",
+    "capture_timeout",
+    "navigation_denied_or_failed",
+    "needs_request_access",
+    "pane_not_open",
+    "no_page_in_tab",
+    "policy_check_pending",
+    "browser_disabled",
+    "session_verify_failed",
+    "input_invalid",
+    "needs_screenshot",
+    "coordinate_out_of_bounds",
+    "ref_stale",
+    "page_loading",
+    "empty_capture",
+    "capture_failed",
+    "batch_invalid",
+    "not_a_url",
+    "file_open_unavailable",
+    "popup_blocked",
+    "tab_gone",
+    "pane_state_reset",
+    "page_moved_during_check",
+    "not_available_here",
+    "stale_server_id",
+    "script_error",
+    "script_timeout",
+    "wait_timeout",
+    "sandbox_failed",
+    "unclassified"
+   ],
+   "count": 48,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4658367,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "product",
+    "item",
+    "sku",
+    "part",
+    "model",
+    "article",
+    "catalog",
+    "category",
+    "course",
+    "event",
+    "plan",
+    "type",
+    "job",
+    "country",
+    "region",
+    "state",
+    "province",
+    "city",
+    "area",
+    "post",
+    "postal",
+    "zip",
+    "dial",
+    "airport",
+    "iata",
+    "lang",
+    "language",
+    "locale",
+    "currency",
+    "status",
+    "error",
+    "reason",
+    "result",
+    "response",
+    "return",
+    "exit",
+    "http",
+    "decline",
+    "failure",
+    "char",
+    "key",
+    "color",
+    "colour",
+    "size"
+   ],
+   "count": 44,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4623133,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "ENOENT",
+    "EACCES",
+    "EPERM",
+    "EBUSY",
+    "EEXIST",
+    "EISDIR",
+    "ENOTDIR",
+    "ELOOP",
+    "EXDEV",
+    "ENOTSUP",
+    "EINVAL",
+    "EIO",
+    "ENXIO",
+    "EMFILE",
+    "ENFILE",
+    "ENAMETOOLONG",
+    "ENOSPC",
+    "ENOTEMPTY",
+    "EROFS",
+    "EAGAIN",
+    "EDEADLK",
+    "ETIMEDOUT",
+    "ENOMEM",
+    "ESTALE",
+    "EOPNOTSUPP",
+    "ECANCELED",
+    "ECONNRESET",
+    "ENOTCONN",
+    "ENETDOWN",
+    "ENETUNREACH",
+    "EHOSTDOWN",
+    "EHOSTUNREACH",
+    "EUNKNOWN",
+    "UNKNOWN",
+    "ERR_SAFE_FS_ROOT",
+    "ERR_SAFE_FS_ESCAPE",
+    "ERR_SAFE_FS_SYMLINK",
+    "ERR_SAFE_FS_MULTILINK",
+    "ERR_SAFE_FS_NOT_REGULAR",
+    "ERR_SAFE_FS_SIZE",
+    "ERR_SAFE_FS_DISPOSED"
+   ],
+   "count": 41,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6551951,
+   "category": "other"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "rubberDuckEnabled",
+    "hushedHeronKey",
+    "remoteSessionFolderGrants",
+    "routineFolderGrants",
+    "coworkLegacyRootGrantsPruned",
+    "coworkHasBoundRoutineSeeded",
+    "remoteChatFolderGrants",
+    "remoteChatFolderAccessReports",
+    "remoteChatFolderAdoptionChecked",
+    "remoteFolderConsentMemory",
+    "remoteFolderConsentFromSettings",
+    "selfHostedGrantsHost",
+    "folderTccProbeResults",
+    "localAgentModeTrustedFolders",
+    "coworkDisabledTools",
+    "secureVmFeaturesEnabled",
+    "launchPreviewPersistedWorkspaces",
+    "launchPreviewSessionScopedSessions",
+    "launchPreviewAllowedOrigins",
+    "launchPreviewAllowedDomainTransitions",
+    "launchPreviewPrivateNetworkReadOrigins",
+    "launchPreviewPrivateNetworkReadPins",
+    "launchPreviewPrivateNetworkTrustedOrigins",
+    "launchPreviewPrivateNetworkTrustPins",
+    "ccSshHostToolGrants",
+    "previewJitlessKillSwitchEngaged",
+    "coworkProjectsToolProvenFor",
+    "growthBookHybridAuthedOrigins",
+    "windowsAppJobLatched",
+    "httpCacheZstdLatched",
+    "userDataOutsidePackageAnswer",
+    "coworkLocalTasksOffLatched",
+    "sentryDwocDropDisabledLatched",
+    "sentryHoldDisabledLatched",
+    "simulatorDeviceConsent",
+    "simulatorAccessibilityAutomationAsserted",
+    "simulatorAppAccessibilityAsserted",
+    "remoteControlExcludedFolders",
+    "remoteControlPinnedFolders",
+    "ancientJournal"
+   ],
+   "count": 40,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6743443,
+   "category": "other"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "EACCES",
+    "EPERM",
+    "ENOENT",
+    "ENOTDIR",
+    "EISDIR",
+    "ENAMETOOLONG",
+    "ELOOP",
+    "EINVAL",
+    "EIO",
+    "EBUSY",
+    "EAGAIN",
+    "EDEADLK",
+    "ETIMEDOUT",
+    "EMFILE",
+    "ENFILE",
+    "ENOMEM",
+    "ENOSPC",
+    "EDQUOT",
+    "EROFS",
+    "EEXIST",
+    "ENOTEMPTY",
+    "EXDEV",
+    "EFBIG",
+    "EOVERFLOW",
+    "ESTALE",
+    "ENXIO",
+    "ENODEV",
+    "ENOTSUP",
+    "EOPNOTSUPP",
+    "ENOTCONN",
+    "EHOSTDOWN",
+    "EHOSTUNREACH",
+    "ENETDOWN",
+    "ENETUNREACH",
+    "ECANCELED",
+    "ECONNRESET",
+    "EPIPE",
+    "UNKNOWN",
+    "EUNKNOWN"
+   ],
+   "count": 39,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2963524,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "already-exists",
+    "bad-args",
+    "bad-regex",
+    "baseline-mismatch",
+    "corrupt-output",
+    "docm-package-misnamed",
+    "docm-reexport-fell-back",
+    "docx-error",
+    "docx-needs-baseline",
+    "export-unsupported",
+    "file-not-found",
+    "hash-mismatch",
+    "ingest-failed",
+    "ingest-only-format",
+    "invalid-doc-id",
+    "io-error",
+    "markdown-write-unsupported",
+    "not-a-directory",
+    "not-utf8",
+    "overwrite-stale",
+    "page-out-of-range",
+    "parent-dir-missing",
+    "path-outside-roots",
+    "path-resolve-failed",
+    "pdf-export-failed",
+    "pdf-ingest-unsupported",
+    "permission-denied",
+    "selector-invalid",
+    "selector-not-found",
+    "selector-not-spliceable",
+    "symlink-refused",
+    "unknown-format",
+    "unknown-tool",
+    "changed-underneath",
+    "whole-doc-replace-stale",
+    "foreign-changes-present",
+    "section-changed-underneath"
+   ],
+   "count": 37,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 171729,
+   "category": "other"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "Button",
+    "Link",
+    "TabButton",
+    "ToolbarButton",
+    "Tab",
+    "ComboBox",
+    "ColorWell",
+    "DisclosureTriangle",
+    "TextArea",
+    "IncrementArrow",
+    "DecrementArrow",
+    "PageIndicator",
+    "Handle",
+    "ScrollBar",
+    "Switch",
+    "Toggle",
+    "Slider",
+    "Stepper",
+    "TextField",
+    "SecureTextField",
+    "SearchField",
+    "TextView",
+    "Cell",
+    "MenuItem",
+    "MenuButton",
+    "PopUpButton",
+    "RadioButton",
+    "CheckBox",
+    "SegmentedControl",
+    "Picker",
+    "PickerWheel",
+    "DatePicker",
+    "Key",
+    "Icon",
+    "Map",
+    "WebView"
+   ],
+   "count": 36,
+   "file": "index.chunk-CwIQU-8Y.js",
+   "offset": 7494,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "PreToolUse",
+    "PostToolUse",
+    "PostToolUseFailure",
+    "PostToolBatch",
+    "Notification",
+    "UserPromptSubmit",
+    "UserPromptExpansion",
+    "SessionStart",
+    "SessionEnd",
+    "Stop",
+    "StopFailure",
+    "SubagentStart",
+    "SubagentStop",
+    "PreCompact",
+    "PostCompact",
+    "PreModelSwitch",
+    "PostModelSwitch",
+    "PermissionRequest",
+    "PermissionDenied",
+    "Setup",
+    "TeammateIdle",
+    "TaskCreated",
+    "TaskCompleted",
+    "Elicitation",
+    "ElicitationResult",
+    "ConfigChange",
+    "WorktreeCreate",
+    "WorktreeRemove",
+    "InstructionsLoaded",
+    "CwdChanged",
+    "FileChanged",
+    "DirectoryAdded",
+    "MessageDisplay"
+   ],
+   "count": 33,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 62117,
+   "category": "hook-events"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "firefox",
+    "firefox-bin",
+    "firefox-esr",
+    "chrome",
+    "google-chrome",
+    "chromium",
+    "chromium-browser",
+    "brave",
+    "msedge",
+    "microsoft-edge",
+    "opera",
+    "vivaldi-bin",
+    "librewolf",
+    "zen",
+    "zen-bin",
+    "epiphany",
+    "falkon",
+    "konqueror",
+    "vivaldi",
+    "browser",
+    "edge",
+    "librewolf-community",
+    "floorp",
+    "waterfox",
+    "mullvadbrowser",
+    "torbrowser-launcher",
+    "ungoogled_chromium",
+    "thorium",
+    "palemoon",
+    "midori",
+    "qutebrowser",
+    "nyxt"
+   ],
+   "count": 32,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3673550,
+   "category": "other"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "browser_batch",
+    "click",
+    "computer",
+    "domain_transition",
+    "execute_javascript",
+    "file_upload",
+    "find",
+    "form_input",
+    "get_page_text",
+    "gif_creator",
+    "javascript_tool",
+    "list_connected_browsers",
+    "navigate",
+    "plan_approval",
+    "read_console_messages",
+    "read_network_requests",
+    "read_page",
+    "read_page_content",
+    "remote_mcp",
+    "resize_window",
+    "select_browser",
+    "shortcuts_execute",
+    "shortcuts_list",
+    "submit_credentials",
+    "switch_browser",
+    "tabs_close_mcp",
+    "tabs_context_mcp",
+    "tabs_create_mcp",
+    "type",
+    "unknown",
+    "upload_image"
+   ],
+   "count": 31,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 122006,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "AskUserQuestion",
+    "Bash",
+    "BashOutput",
+    "Edit",
+    "ExitPlanMode",
+    "Glob",
+    "Grep",
+    "JavaScript",
+    "KillBash",
+    "MultiEdit",
+    "NotebookEdit",
+    "Read",
+    "REPL",
+    "SendUserMessage",
+    "Skill",
+    "Task",
+    "TaskCreate",
+    "TaskGet",
+    "TaskList",
+    "TaskStop",
+    "TaskUpdate",
+    "Tmux",
+    "TodoWrite",
+    "ToolSearch",
+    "WebFetch",
+    "WebSearch",
+    "Workflow",
+    "Write",
+    "unknown"
+   ],
+   "count": 29,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 121617,
+   "category": "other"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "pdf",
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "webp",
+    "avif",
+    "mp4",
+    "webm",
+    "m4v",
+    "mov",
+    "ogv",
+    "html",
+    "htm",
+    "svg",
+    "txt",
+    "md",
+    "markdown",
+    "json",
+    "jsonl",
+    "log",
+    "csv",
+    "tsv",
+    "yaml",
+    "yml",
+    "toml",
+    "xml",
+    "ini",
+    "conf"
+   ],
+   "count": 29,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3114536,
+   "category": "other"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "init",
+    "status",
+    "api_retry",
+    "compact_boundary",
+    "hook_started",
+    "hook_progress",
+    "hook_response",
+    "informational",
+    "local_command_output",
+    "notification",
+    "task_started",
+    "task_progress",
+    "task_updated",
+    "task_notification",
+    "background_tasks_changed",
+    "commands_changed",
+    "session_state_changed",
+    "thinking_tokens",
+    "control_request_progress",
+    "memory_recall",
+    "mirror_error",
+    "model_refusal_fallback",
+    "model_refusal_no_fallback",
+    "permission_denied",
+    "plugin_install",
+    "files_persisted",
+    "elicitation_complete",
+    "worker_shutting_down"
+   ],
+   "count": 28,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 61244,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "ar",
+    "ar-SA",
+    "cs-CZ",
+    "da-DK",
+    "de-AT",
+    "de-CH",
+    "de-DE",
+    "el-GR",
+    "es-ES",
+    "es-MX",
+    "fi-FI",
+    "fr-BE",
+    "fr-CH",
+    "fr-FR",
+    "he-IL",
+    "hu-HU",
+    "it-IT",
+    "ko-KR",
+    "nb-NO",
+    "pt-PT",
+    "ru-RU",
+    "sv-SE",
+    "th-TH",
+    "tr-TR",
+    "uk-UA",
+    "zh-Hant-TW",
+    "zh-Hant-Zhuyin"
+   ],
+   "count": 27,
+   "file": "index.chunk-B0WAWLOW.js",
+   "offset": 75522,
+   "category": "other"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "git_entry_unreadable",
+    "git_leads_elsewhere",
+    "own_record_mismatch",
+    "own_record_unresolved",
+    "unopened_repository",
+    "reviewed_repository_hook",
+    "anchor_under_worktree",
+    "anchor_under_temp_root",
+    "anchor_temp_root_unverifiable",
+    "anchor_settings_unknown",
+    "anchor_retained_incomplete",
+    "anchor_name_rule",
+    "anchor_worktree_spelling",
+    "anchor_worktree_entry",
+    "anchor_trusted_as_other",
+    "anchor_chain_unverified",
+    "anchor_refused_unspecified",
+    "root_changed",
+    "git_entry_walk_refused",
+    "commondir_planted",
+    "reflog_guard_refused",
+    "tracking_ref_untrusted",
+    "backlink_unverified",
+    "anchor_recorded_repository",
+    "anchor_folder_tree",
+    "anchor_submodule",
+    "new_tree_unconfirmed"
+   ],
+   "count": 27,
+   "file": "index.chunk-BBUs8uvY.js",
+   "offset": 5361,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "caller_not_visible",
+    "window_hidden",
+    "expired",
+    "user_typing",
+    "pane_in_use",
+    "sidebar_in_use",
+    "popout_has_no_panes",
+    "popout_has_no_sidebar",
+    "split_unavailable",
+    "no_room",
+    "popout_unavailable",
+    "dialog_open",
+    "not_opened_by_you",
+    "no_split_to_close",
+    "sidebar_constrained",
+    "sidebar_locked",
+    "page_unavailable",
+    "page_error",
+    "already_in_pane",
+    "already_in_primary",
+    "already_in_window",
+    "already_collapsed",
+    "already_expanded",
+    "focused_pane",
+    "replaced_caller",
+    "missing_target",
+    "unknown_command"
+   ],
+   "count": 27,
+   "file": "index.chunk-M6SkuaH9.js",
+   "offset": 356286,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "limit",
+    "offset",
+    "page",
+    "page_size",
+    "page_token",
+    "after_id",
+    "per_page",
+    "cursor",
+    "sort_by",
+    "sort_order",
+    "order_by",
+    "start_date",
+    "end_date",
+    "date",
+    "target_date",
+    "days",
+    "metric",
+    "type",
+    "granularity",
+    "severity",
+    "bound_only",
+    "thread_roots_only",
+    "tab",
+    "mode",
+    "step",
+    "cache_bust"
+   ],
+   "count": 26,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 123103,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "dot-split",
+   "items": [
+    "product_surface",
+    "desktop_variant",
+    "deployment_mode",
+    "config_source",
+    "config_source_remote",
+    "inference_provider",
+    "inference_host_kind",
+    "app_version",
+    "commit_hash",
+    "platform",
+    "arch",
+    "os_version",
+    "os_release",
+    "os_build",
+    "linux_distro_id",
+    "linux_distro_version_id",
+    "linux_session_type",
+    "linux_desktop_environment",
+    "cpu_model",
+    "app_session_id",
+    "organization_id",
+    "vm_network_mode",
+    "error_code",
+    "error_kind",
+    "backend_error_code",
+    "nest_local_user"
+   ],
+   "count": 26,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1018456,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "batchmode",
+    "controlmaster",
+    "controlpath",
+    "controlpersist",
+    "clearallforwardings",
+    "localforward",
+    "remoteforward",
+    "dynamicforward",
+    "permitremoteopen",
+    "forwardagent",
+    "forwardx11",
+    "tunnel",
+    "permitlocalcommand",
+    "localcommand",
+    "remotecommand",
+    "requesttty",
+    "sessiontype",
+    "stdinnull",
+    "forkafterauthentication",
+    "gssapidelegatecredentials",
+    "escapechar",
+    "loglevel",
+    "logverbose",
+    "serveraliveinterval",
+    "serveralivecountmax"
+   ],
+   "count": 25,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 111197,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "chrome.exe",
+    "msedge.exe",
+    "firefox.exe",
+    "brave.exe",
+    "opera.exe",
+    "vivaldi.exe",
+    "chrome_proxy.exe",
+    "msedge_proxy.exe",
+    "vivaldi_proxy.exe",
+    "chromium.exe",
+    "thorium.exe",
+    "qutebrowser.exe",
+    "palemoon.exe",
+    "midori.exe",
+    "arc.exe",
+    "duckduckgo.exe",
+    "zen.exe",
+    "librewolf.exe",
+    "waterfox.exe",
+    "mullvadbrowser.exe",
+    "floorp.exe",
+    "comet.exe",
+    "prismaaccessbrowser.exe",
+    "prismabrowser.exe",
+    "island.exe"
+   ],
+   "count": 25,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3672166,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "2SetHangul",
+    "Arabic",
+    "Belgian",
+    "Czech",
+    "Danish",
+    "Finnish",
+    "French",
+    "German",
+    "Greek",
+    "Hebrew",
+    "Hungarian",
+    "Italian - Pro",
+    "Latin American",
+    "Norwegian",
+    "Portuguese",
+    "Russian",
+    "Spanish - ISO",
+    "Swedish - Pro",
+    "Swiss French",
+    "Swiss German",
+    "Thai",
+    "Turkish-QWERTY-PC",
+    "Ukrainian-PC",
+    "Zhuyin Bopomofo"
+   ],
+   "count": 24,
+   "file": "index.chunk-B0WAWLOW.js",
+   "offset": 75212,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "code",
+    "auth",
+    "key",
+    "sig",
+    "hash",
+    "hmac",
+    "mac",
+    "salt",
+    "otp",
+    "pin",
+    "pass",
+    "pwd",
+    "pw",
+    "totp",
+    "sid",
+    "assertion",
+    "nonce",
+    "magic",
+    "jwt",
+    "bearer",
+    "ssn",
+    "cvv",
+    "cvc",
+    "cc"
+   ],
+   "count": 24,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4622956,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "conftest.py",
+    "sitecustomize.py",
+    "usercustomize.py",
+    "mise.toml",
+    ".mise.toml",
+    "mise.local.toml",
+    ".mise.local.toml",
+    ".mise",
+    ".rtx.toml",
+    ".tool-versions",
+    "rust-toolchain",
+    "rust-toolchain.toml",
+    ".pnpmfile.cjs",
+    "bunfig.toml",
+    ".hg",
+    ".rprofile",
+    ".renviron",
+    ".ghci",
+    ".pryrc",
+    ".octaverc",
+    "mise",
+    "lefthook.yml",
+    "lefthook.yaml",
+    "pyrightconfig.json"
+   ],
+   "count": 24,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6694459,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "process_crashed",
+    "managed_sideload_disabled",
+    "sandbox_required_unavailable",
+    "managed_settings_refused",
+    "gateway_signin_required",
+    "gateway_access_denied",
+    "remote_settings_required_unavailable",
+    "org_credential_not_allowed",
+    "org_pin_mismatch",
+    "proxy_invalid",
+    "temp_dir_unusable",
+    "session_held_by_background",
+    "worktree_unverified",
+    "worktree_resume_refused",
+    "cli_version_too_old",
+    "org_config_required_unavailable",
+    "org_config_refused",
+    "launcher_failed",
+    "remote_host_exhausted",
+    "remote_spawn_refused",
+    "bun_crash",
+    "bun_stack_overflow",
+    "segfault",
+    "cli_fastfail"
+   ],
+   "count": 24,
+   "file": "index.chunk-M6SkuaH9.js",
+   "offset": 529324,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "com.tinyspeck.slackmacgap",
+    "us.zoom.xos",
+    "com.microsoft.teams2",
+    "com.microsoft.teams",
+    "com.apple.MobileSMS",
+    "com.apple.mail",
+    "com.microsoft.Word",
+    "com.microsoft.Excel",
+    "com.microsoft.Powerpoint",
+    "com.microsoft.Outlook",
+    "com.apple.iWork.Pages",
+    "com.apple.iWork.Numbers",
+    "com.apple.iWork.Keynote",
+    "com.google.GoogleDocs",
+    "notion.id",
+    "com.apple.Notes",
+    "md.obsidian",
+    "com.linear",
+    "com.figma.Desktop",
+    "com.github.GitHubDesktop",
+    "com.apple.finder",
+    "com.apple.iCal",
+    "com.apple.systempreferences"
+   ],
+   "count": 23,
+   "file": "index.chunk-M6SkuaH9.js",
+   "offset": 38691,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "dwm",
+    "winlogon",
+    "csrss",
+    "smss",
+    "wininit",
+    "services",
+    "lsass",
+    "svchost",
+    "spoolsv",
+    "taskhost",
+    "taskhostw",
+    "conhost",
+    "audiodg",
+    "fontdrvhost",
+    "sihost",
+    "runtimebroker",
+    "searchui",
+    "searchapp",
+    "searchhost",
+    "startmenuexperiencehost",
+    "shellexperiencehost",
+    "applicationframehost"
+   ],
+   "count": 22,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5373326,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "okta.com",
+    "oktapreview.com",
+    "okta-emea.com",
+    "onelogin.com",
+    "auth0.com",
+    "duosecurity.com",
+    "pingidentity.com",
+    "pingone.com",
+    "microsoftonline.com",
+    "live.com",
+    "microsoft.com",
+    "office.com",
+    "apple.com",
+    "icloud.com",
+    "1password.com",
+    "1password.eu",
+    "1password.ca",
+    "lastpass.com",
+    "bitwarden.com",
+    "dashlane.com",
+    "keepersecurity.com"
+   ],
+   "count": 21,
+   "file": "index.chunk-BMFhTup2.js",
+   "offset": 19795,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "scheduled",
+    "routines",
+    "dispatch",
+    "apps",
+    "dev",
+    "mobile",
+    "search",
+    "claim-credit",
+    "sessions",
+    "hub",
+    "agents",
+    "new",
+    "onboarding",
+    "disabled",
+    "enroll",
+    "family",
+    "share",
+    "security",
+    "memory",
+    "artifacts",
+    "artifact"
+   ],
+   "count": 21,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3033093,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "com.apple.Terminal",
+    "com.googlecode.iterm2",
+    "com.microsoft.VSCode",
+    "dev.warp.Warp-Stable",
+    "com.github.wez.wezterm",
+    "org.alacritty",
+    "io.alacritty",
+    "net.kovidgoyal.kitty",
+    "co.zeit.hyper",
+    "com.mitchellh.ghostty",
+    "com.todesktop.230313mzl4w4u92",
+    "com.vscodium",
+    "com.exafunction.windsurf",
+    "dev.zed.Zed",
+    "org.tabby",
+    "com.jetbrains.intellij",
+    "com.jetbrains.pycharm",
+    "com.raphaelamorim.rio",
+    "org.contourterminal.Contour",
+    "com.neovide.neovide"
+   ],
+   "count": 20,
+   "file": "index.chunk-CLDnJbh1.js",
+   "offset": 3561,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "USER_MISMATCH",
+    "GATEWAY_SIGNED_OUT",
+    "EXPORT_NOT_AVAILABLE",
+    "ORG_EXPORT_DISABLED",
+    "ORG_EXPORT_BLOCKED",
+    "ORG_MISMATCH",
+    "RATE_LIMITED",
+    "TEMPORARILY_UNAVAILABLE",
+    "POLICY_BLOCKED",
+    "ACCOUNT_BANNED",
+    "ACCOUNT_NEEDS_VERIFICATION",
+    "EXPORT_TOO_LARGE",
+    "TOKEN_MISSING_ORG",
+    "EXPORT_NOT_FOUND",
+    "EXPORT_EXPIRED",
+    "EXPORT_CONSUMED",
+    "EXPORT_HELD",
+    "EXPORT_EMAIL_ONLY",
+    "SIGNIN_TIMED_OUT",
+    "CLI_NOT_READY"
+   ],
+   "count": 20,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1583662,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "pairing_disabled",
+    "not_signed_in",
+    "managed_org_missing",
+    "malformed",
+    "unknown_kid",
+    "jwks_unavailable",
+    "bad_signature",
+    "wrong_issuer_or_audience",
+    "expired",
+    "not_yet_valid",
+    "wrong_peer_kind",
+    "key_binding_mismatch",
+    "account_mismatch",
+    "org_mismatch",
+    "org_not_permitted",
+    "bad_key_confirmation",
+    "attest_failed",
+    "rate_limited",
+    "unsupported_peer",
+    "unknown_pairing"
+   ],
+   "count": 20,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3327368,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "claude-3-5-haiku",
+    "claude-3-5-sonnet",
+    "claude-3-7-sonnet",
+    "claude-haiku-4-5",
+    "claude-sonnet-4-0",
+    "claude-sonnet-4-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-5",
+    "claude-opus-4-0",
+    "claude-opus-4-1",
+    "claude-opus-4-5",
+    "claude-opus-4-6",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-fable-5",
+    "claude-fable-5-1",
+    "claude-mythos-5",
+    "claude-mythos-5-1"
+   ],
+   "count": 19,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3062299,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "SIGABRT",
+    "SIGALRM",
+    "SIGBUS",
+    "SIGFPE",
+    "SIGHUP",
+    "SIGILL",
+    "SIGINT",
+    "SIGKILL",
+    "SIGPIPE",
+    "SIGQUIT",
+    "SIGSEGV",
+    "SIGSYS",
+    "SIGTERM",
+    "SIGTRAP",
+    "SIGUSR1",
+    "SIGUSR2",
+    "SIGXCPU",
+    "SIGXFSZ"
+   ],
+   "count": 18,
+   "file": "index.chunk-CcveFAuE.js",
+   "offset": 15251,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "event_id",
+    "timestamp",
+    "release",
+    "dist",
+    "level",
+    "environment",
+    "platform",
+    "transaction",
+    "type",
+    "mechanism",
+    "deployment_mode",
+    "linux_distro",
+    "linux_distro_version",
+    "linux_session_type",
+    "linux_desktop_environment",
+    "gpu_compositing",
+    "gpu_compositing_raw",
+    "hw_accel_user_disabled"
+   ],
+   "count": 18,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 973371,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "return",
+    "enter",
+    "kp_enter",
+    "escape",
+    "tab",
+    "up",
+    "down",
+    "left",
+    "right",
+    "home",
+    "end",
+    "delete",
+    "backspace",
+    "forwarddelete",
+    "pageup",
+    "pagedown",
+    "page_up",
+    "page_down"
+   ],
+   "count": 18,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3665724,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "meta+q",
+    "shift+meta+q",
+    "alt+shift+meta+q",
+    "alt+meta+escape",
+    "meta+tab",
+    "shift+meta+tab",
+    "meta+space",
+    "alt+meta+space",
+    "ctrl+meta+q",
+    "ctrl+f2",
+    "ctrl+f3",
+    "ctrl+f8",
+    "ctrl+f1",
+    "ctrl+f7",
+    "ctrl+up",
+    "ctrl+down",
+    "alt+f11",
+    "alt+f8"
+   ],
+   "count": 18,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3678093,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ctrl+alt+delete",
+    "alt+f4",
+    "alt+tab",
+    "alt+shift+tab",
+    "ctrl+alt+tab",
+    "ctrl+alt+shift+tab",
+    "meta+l",
+    "meta+d",
+    "meta+r",
+    "meta+e",
+    "meta+s",
+    "meta+q",
+    "ctrl+escape",
+    "meta+i",
+    "meta+u",
+    "meta+x",
+    "alt+f11",
+    "alt+f8"
+   ],
+   "count": 18,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3678334,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "auth_publickey_rejected",
+    "auth_key_unusable",
+    "auth_key_missing",
+    "auth_key_rejected",
+    "auth_no_key_offered",
+    "auth_agent_refused",
+    "auth_too_many_keys",
+    "auth_key_algorithm_refused",
+    "auth_key_sign_failed",
+    "auth_agent_keys_not_used",
+    "auth_key_unprotected",
+    "auth_key_public_half",
+    "auth_key_putty_format",
+    "auth_key_not_private_key",
+    "auth_key_invalid_format",
+    "auth_key_read_blocked",
+    "auth_key_protected_folder",
+    "auth_key_rsa_not_accepted"
+   ],
+   "count": 18,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5690486,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "navigate",
+    "computer",
+    "find",
+    "read_page",
+    "get_page_text",
+    "form_input",
+    "javascript_tool",
+    "read_console_messages",
+    "read_network_requests",
+    "upload_image",
+    "file_upload",
+    "gif_creator",
+    "tabs_context_mcp",
+    "tabs_create_mcp",
+    "tabs_close_mcp",
+    "resize_window",
+    "browser_batch"
+   ],
+   "count": 17,
+   "file": "index.chunk-0q54qGlJ.js",
+   "offset": 7015,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "key",
+    "type",
+    "mouse_move",
+    "left_click",
+    "left_click_drag",
+    "right_click",
+    "middle_click",
+    "double_click",
+    "triple_click",
+    "scroll",
+    "hold_key",
+    "screenshot",
+    "zoom",
+    "cursor_position",
+    "left_mouse_down",
+    "left_mouse_up",
+    "wait"
+   ],
+   "count": 17,
+   "file": "index.chunk-CLDnJbh1.js",
+   "offset": 217674,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "branch",
+    "cat-file",
+    "check-attr",
+    "check-ignore",
+    "diff",
+    "for-each-ref",
+    "hash-object",
+    "log",
+    "ls-files",
+    "ls-tree",
+    "merge-base",
+    "remote",
+    "rev-list",
+    "rev-parse",
+    "show",
+    "status",
+    "symbolic-ref"
+   ],
+   "count": 17,
+   "file": "index.chunk-DVtfwF6X.js",
+   "offset": 3577,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "appearance-based",
+    "light",
+    "dark",
+    "titlebar",
+    "selection",
+    "menu",
+    "popover",
+    "sidebar",
+    "header",
+    "sheet",
+    "window",
+    "hud",
+    "fullscreen-ui",
+    "tooltip",
+    "content",
+    "under-window",
+    "under-page"
+   ],
+   "count": 17,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4096760,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "claude-vscode",
+    "claude-desktop",
+    "claude-desktop-3p",
+    "local-agent",
+    "local_agent",
+    "remote",
+    "remote_desktop",
+    "remote_mobile",
+    "remote_projects",
+    "remote_cowork",
+    "ssh-remote",
+    "claude-in-slack",
+    "claude_in_slack",
+    "claude-in-teams",
+    "claude-coworker",
+    "claude-coworker-terminal"
+   ],
+   "count": 16,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 689989,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ScrollView",
+    "ScrollArea",
+    "Table",
+    "CollectionView",
+    "WebArea",
+    "Sheet",
+    "Alert",
+    "Dialog",
+    "Popover",
+    "Drawer",
+    "Menu",
+    "Keyboard",
+    "TabBar",
+    "Toolbar",
+    "NavigationBar",
+    "StatusBar"
+   ],
+   "count": 16,
+   "file": "index.chunk-CwIQU-8Y.js",
+   "offset": 7897,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "type",
+    "format",
+    "pattern",
+    "maxLength",
+    "minLength",
+    "maxProperties",
+    "minProperties",
+    "maxItems",
+    "minItems",
+    "maximum",
+    "minimum",
+    "uniqueItems",
+    "multipleOf",
+    "required",
+    "enum",
+    "const"
+   ],
+   "count": 16,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 41941,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "doc",
+    "docx",
+    "gif",
+    "jpg",
+    "mp3",
+    "mp4",
+    "ogg",
+    "pdf",
+    "png",
+    "pptx",
+    "wav",
+    "webm",
+    "webp",
+    "xls",
+    "xlsx",
+    "zip"
+   ],
+   "count": 16,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 125274,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "timeout_upgrade",
+    "timeout_open",
+    "timeout_auth",
+    "upgrade_5xx",
+    "upgrade_4xx",
+    "dns",
+    "tcp",
+    "tls",
+    "proxy",
+    "network_changed",
+    "other",
+    "closed",
+    "bridge_rejected",
+    "no_token",
+    "handler_error",
+    "connect_error"
+   ],
+   "count": 16,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1720712,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "preview_screenshot",
+    "preview_snapshot",
+    "preview_inspect",
+    "preview_click",
+    "preview_fill",
+    "preview_eval",
+    "preview_network",
+    "preview_resize",
+    "read_page",
+    "computer",
+    "form_input",
+    "find",
+    "get_page_text",
+    "javascript_tool",
+    "read_network_requests",
+    "resize_window"
+   ],
+   "count": 16,
+   "file": "index.chunk-yKIwpGVf.js",
+   "offset": 16695,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "set_model",
+    "set_permission_mode",
+    "interrupt",
+    "stop_task",
+    "background_tasks",
+    "cancel_async_message",
+    "set_max_thinking_tokens",
+    "rename_session",
+    "set_color",
+    "mcp_authenticate",
+    "mcp_oauth_callback_url",
+    "mcp_reconnect",
+    "apply_flag_settings",
+    "side_question",
+    "reload_plugins"
+   ],
+   "count": 15,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 714505,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "pattern",
+    "path",
+    "glob",
+    "output_mode",
+    "-B",
+    "-A",
+    "-C",
+    "context",
+    "-n",
+    "-i",
+    "-o",
+    "type",
+    "head_limit",
+    "offset",
+    "multiline"
+   ],
+   "count": 15,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 1338873,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "invalid",
+    "too_large",
+    "too_many",
+    "read",
+    "not_signed_in",
+    "disabled",
+    "rate_limited",
+    "wall_clock",
+    "upload_http",
+    "upload_network",
+    "attach_4xx",
+    "attach_other",
+    "unsupported_type",
+    "session_files_full",
+    "path_too_deep"
+   ],
+   "count": 15,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1767283,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "closed",
+    "focused",
+    "blurred",
+    "maximized",
+    "unmaximized",
+    "minimized",
+    "restored",
+    "enterFullscreen",
+    "leaveFullscreen",
+    "boundsChanged",
+    "userCloseRequested",
+    "displayChanged",
+    "ready",
+    "shown",
+    "hidden"
+   ],
+   "count": 15,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4100593,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".next",
+    ".nuxt",
+    ".turbo",
+    ".cache",
+    ".yarn",
+    ".pnpm-store",
+    ".venv",
+    ".tox",
+    ".gradle",
+    ".terraform",
+    ".dart_tool",
+    ".parcel-cache",
+    ".svelte-kit",
+    ".angular"
+   ],
+   "count": 14,
+   "file": "index.chunk-Dd4cATog.js",
+   "offset": 25498,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "claude-code-marketplace",
+    "claude-code-plugins",
+    "claude-plugins-official",
+    "anthropic-marketplace",
+    "anthropic-plugins",
+    "agent-skills",
+    "anthropic-agent-skills",
+    "life-sciences",
+    "knowledge-work-plugins",
+    "claude-for-legal",
+    "claude-for-financial-services",
+    "financial-services-plugins",
+    "first-party-plugins",
+    "claude-tag-plugins"
+   ],
+   "count": 14,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 845278,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ENOSPC",
+    "EDQUOT",
+    "EROFS",
+    "EPERM",
+    "EACCES",
+    "EBUSY",
+    "EBADF",
+    "ECONNREFUSED",
+    "ENOTFOUND",
+    "ETIMEDOUT",
+    "ECONNRESET",
+    "EAI_AGAIN",
+    "ENETUNREACH",
+    "PROXY_INTERCEPTED"
+   ],
+   "count": 14,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4483975,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".txt",
+    ".md",
+    ".markdown",
+    ".json",
+    ".jsonl",
+    ".log",
+    ".csv",
+    ".tsv",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".xml",
+    ".ini",
+    ".conf"
+   ],
+   "count": 14,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4962154,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "hid_send_timeout",
+    "hid_send_stale_port",
+    "hid_connect_timeout",
+    "hid_connect_stale_port",
+    "hid_adoption",
+    "oversize_frame",
+    "displaced",
+    "start_abandoned",
+    "device_not_booted",
+    "surface_replaced",
+    "surface_gone",
+    "stop",
+    "unexpected"
+   ],
+   "count": 13,
+   "file": "index.chunk-B0WAWLOW.js",
+   "offset": 35020,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "google.com",
+    "gmail.com",
+    "googlemail.com",
+    "outlook.com",
+    "hotmail.com",
+    "yahoo.com",
+    "ymail.com",
+    "proton.me",
+    "protonmail.com",
+    "fastmail.com",
+    "hey.com",
+    "zoho.com",
+    "icloud.com"
+   ],
+   "count": 13,
+   "file": "index.chunk-BMFhTup2.js",
+   "offset": 20132,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "addin_context_update",
+    "addin_disconnected",
+    "addin_ready",
+    "available_addins",
+    "context_response",
+    "error",
+    "focus_desktop",
+    "handoff_delivery_ack",
+    "paired",
+    "permission_request",
+    "ping",
+    "tool_call_result",
+    "waiting"
+   ],
+   "count": 13,
+   "file": "index.chunk-BWI7goHJ.js",
+   "offset": 63588,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "AXButton",
+    "AXTextField",
+    "AXTextArea",
+    "AXComboBox",
+    "AXSearchField",
+    "AXLink",
+    "AXRadioButton",
+    "AXCheckBox",
+    "AXPopUpButton",
+    "AXMenuButton",
+    "AXTab",
+    "AXDisclosureTriangle",
+    "AXMenuItem"
+   ],
+   "count": 13,
+   "file": "index.chunk-CLDnJbh1.js",
+   "offset": 100274,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "exec_error",
+    "channel_closed",
+    "channel_closed_dial_failed",
+    "channel_closed_after_output",
+    "bridge_startup_timeout",
+    "reply_timeout",
+    "token_read_timeout",
+    "peer_refused_other_namespace",
+    "peer_refused_unreadable",
+    "peer_refused_lookup_failed",
+    "peer_refused_unknown",
+    "reply_too_large",
+    "unknown"
+   ],
+   "count": 13,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 340924,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "validate",
+    "serialize",
+    "parse",
+    "wrapper",
+    "root",
+    "schema",
+    "keyword",
+    "pattern",
+    "formats",
+    "validate$data",
+    "func",
+    "obj",
+    "Error"
+   ],
+   "count": 13,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 70330,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "up",
+    "down",
+    "left",
+    "right",
+    "home",
+    "end",
+    "delete",
+    "backspace",
+    "forwarddelete",
+    "pageup",
+    "pagedown",
+    "page_up",
+    "page_down"
+   ],
+   "count": 13,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3665590,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "focus",
+    "blur",
+    "minimize",
+    "maximize",
+    "unmaximize",
+    "close",
+    "forceClose",
+    "setBounds",
+    "setTitle",
+    "enterFullscreen",
+    "exitFullscreen",
+    "show",
+    "hide"
+   ],
+   "count": 13,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4100256,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "no_credential",
+    "user_mismatch",
+    "upstream_400",
+    "upstream_401",
+    "upstream_403",
+    "upstream_413",
+    "upstream_4xx",
+    "upstream_529",
+    "upstream_error",
+    "network_error",
+    "malformed_response",
+    "duplicate_device_id",
+    "device_name_in_use"
+   ],
+   "count": 13,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5300434,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "disable-gpu",
+    "disable-gpu-compositing",
+    "disable-gpu-rasterization",
+    "disable-software-rasterizer",
+    "disable-accelerated-2d-canvas",
+    "disable-accelerated-video-decode",
+    "disable-accelerated-video-encode",
+    "use-angle",
+    "use-gl",
+    "ignore-gpu-blocklist",
+    "disable-direct-composition",
+    "force-color-profile",
+    "disable-color-correct-rendering"
+   ],
+   "count": 13,
+   "file": "index.pre.js",
+   "offset": 917259,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ETIMEDOUT",
+    "ECONNRESET",
+    "ECONNREFUSED",
+    "EHOSTUNREACH",
+    "EHOSTDOWN",
+    "ENETUNREACH",
+    "ENETDOWN",
+    "ENOTFOUND",
+    "EADDRNOTAVAIL",
+    "EACCES",
+    "EPIPE",
+    "EAI_AGAIN"
+   ],
+   "count": 12,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 15474,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "metadata.google.internal",
+    "metadata.goog",
+    "metadata",
+    "instance-data",
+    "instance-data.ec2.internal",
+    "ip6-localhost",
+    "ip6-loopback",
+    "localhost.localdomain",
+    "localhost4",
+    "localhost4.localdomain4",
+    "localhost6",
+    "localhost6.localdomain6"
+   ],
+   "count": 12,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 828081,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "--show-current",
+    "--list",
+    "-l",
+    "--remotes",
+    "-r",
+    "--all",
+    "-a",
+    "--contains",
+    "--no-contains",
+    "--merged",
+    "--no-merged",
+    "--points-at"
+   ],
+   "count": 12,
+   "file": "index.chunk-DVtfwF6X.js",
+   "offset": 5121,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "create_group",
+    "rename_group",
+    "delete_group",
+    "move_sessions",
+    "set_pinned",
+    "set_unread",
+    "mark_completed",
+    "set_view",
+    "list_sections",
+    "create_section",
+    "rename_section",
+    "delete_section"
+   ],
+   "count": 12,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1831958,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "sdk_binary_missing",
+    "sdk_binary_arch_mismatch",
+    "library_error",
+    "sandbox_deps_missing",
+    "filesystem_error",
+    "endpoint_security_blocked",
+    "segfault",
+    "process_interrupted",
+    "cli_fastfail",
+    "dll_not_found",
+    "bun_crash",
+    "bun_stack_overflow"
+   ],
+   "count": 12,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2030487,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "00000003-0000-0000-c000-000000000000",
+    "00000002-0000-0000-c000-000000000000",
+    "797f4846-ba00-4fd7-ba43-dac1f8f63013",
+    "00000002-0000-0ff1-ce00-000000000000",
+    "00000003-0000-0ff1-ce00-000000000000",
+    "e406a681-f3d4-42a8-90b6-c2b029497af1",
+    "499b84ac-1321-427f-aa17-267ca6975798",
+    "00000009-0000-0000-c000-000000000000",
+    "0000000a-0000-0000-c000-000000000000",
+    "00000007-0000-0000-c000-000000000000",
+    "cfa8b339-82a2-471a-a3c9-0fc0be7a4093",
+    "fb60f99c-7a34-4190-8149-302f77469936"
+   ],
+   "count": 12,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2519683,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Command",
+    "Cmd",
+    "Control",
+    "Ctrl",
+    "CommandOrControl",
+    "CmdOrCtrl",
+    "Alt",
+    "Option",
+    "AltGr",
+    "Shift",
+    "Super",
+    "Meta"
+   ],
+   "count": 12,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3187149,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "not_found",
+    "load_failed",
+    "bridge_disconnected",
+    "bridge_offline",
+    "bridge_computer_unreachable",
+    "bridge_never_connected",
+    "bridge_host_exit",
+    "bridge_remote_control_disabled",
+    "bridge_owner_changed",
+    "environment_deleted",
+    "worker_auth_expired",
+    "session_init_failed"
+   ],
+   "count": 12,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3279414,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "computer",
+    "navigate",
+    "read_page",
+    "find",
+    "form_input",
+    "get_page_text",
+    "javascript_tool",
+    "read_console_messages",
+    "read_network_requests",
+    "file_upload",
+    "upload_image",
+    "browser_batch"
+   ],
+   "count": 12,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3583951,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "com.webull.desktop.v1",
+    "com.webull.trade.mac.v1",
+    "com.tastytrade.desktop",
+    "com.tradingview.tradingviewapp.desktop",
+    "com.fidelity.activetrader",
+    "com.fmr.activetrader",
+    "com.install4j.5889-6375-8446-2021",
+    "com.binance.BinanceDesktop",
+    "com.electron.exodus",
+    "org.pythonmac.unspecified.Electrum",
+    "com.ledger.live",
+    "io.trezor.TrezorSuite"
+   ],
+   "count": 12,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3669913,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "cache",
+    "code cache",
+    "config.json",
+    "declarative_performance_observer.db",
+    "dips",
+    "local storage",
+    "network",
+    "preferences",
+    "sentry",
+    "session storage",
+    "shared dictionary",
+    "webstorage"
+   ],
+   "count": 12,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5126947,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "escape",
+    "up",
+    "down",
+    "left",
+    "right",
+    "home",
+    "end",
+    "pageup",
+    "pagedown",
+    "page_up",
+    "page_down"
+   ],
+   "count": 11,
+   "file": "index.chunk-CLDnJbh1.js",
+   "offset": 76680,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "per_task_limit",
+    "global_limit",
+    "sign_in_required",
+    "host_unavailable",
+    "host_not_allowed",
+    "connection_removed",
+    "folder_not_trusted",
+    "folder_missing",
+    "start_failed",
+    "not_available",
+    "not_run_before_update"
+   ],
+   "count": 11,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1904345,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "APPDATA",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "LOCALAPPDATA",
+    "PATH",
+    "PROCESSOR_ARCHITECTURE",
+    "SYSTEMDRIVE",
+    "SYSTEMROOT",
+    "TEMP",
+    "USERNAME",
+    "USERPROFILE"
+   ],
+   "count": 11,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2144644,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "login.microsoftonline.com",
+    "login.microsoftonline.us",
+    "login.microsoftonline.de",
+    "login-us.microsoftonline.com",
+    "login.partner.microsoftonline.cn",
+    "login.chinacloudapi.cn",
+    "sts.chinacloudapi.cn",
+    "login.usgovcloudapi.net",
+    "login.microsoft.com",
+    "login.windows.net",
+    "sts.windows.net"
+   ],
+   "count": 11,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2522644,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".avif",
+    ".mp4",
+    ".webm",
+    ".m4v",
+    ".mov",
+    ".ogv"
+   ],
+   "count": 11,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3113925,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Cache",
+    "Code Cache",
+    "GPUCache",
+    "DawnCache",
+    "DawnGraphiteCache",
+    "DawnWebGPUCache",
+    "GrShaderCache",
+    "Service Worker",
+    "ShaderCache",
+    "Shared Dictionary",
+    "blob_storage"
+   ],
+   "count": 11,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4733226,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "detach",
+    "continue",
+    "pause",
+    "wait_for_stop",
+    "backtrace",
+    "variables",
+    "status",
+    "breakpoint_set",
+    "breakpoint_delete",
+    "breakpoint_list"
+   ],
+   "count": 10,
+   "file": "index.chunk-B0WAWLOW.js",
+   "offset": 140580,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "user",
+    "assistant",
+    "system",
+    "result",
+    "stream_event",
+    "tool_use_summary",
+    "tool_progress",
+    "auth_status",
+    "prompt_suggestion",
+    "rate_limit_event"
+   ],
+   "count": 10,
+   "file": "index.chunk-BeZcR6Nl.js",
+   "offset": 3407,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "node_modules",
+    ".venv",
+    "venv",
+    "env",
+    ".env",
+    "virtualenv",
+    ".tox",
+    ".nox",
+    ".direnv",
+    "__pypackages__"
+   ],
+   "count": 10,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 250694,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "org_credential_not_allowed",
+    "org_pin_mismatch",
+    "proxy_invalid",
+    "temp_dir_unusable",
+    "session_held_by_background",
+    "worktree_unverified",
+    "worktree_resume_refused",
+    "org_config_required_unavailable",
+    "org_config_refused",
+    "remote_host_exhausted"
+   ],
+   "count": 10,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 71233,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "SIGTERM",
+    "SIGKILL",
+    "SIGINT",
+    "SIGHUP",
+    "SIGQUIT",
+    "SIGABRT",
+    "SIGSEGV",
+    "SIGBUS",
+    "SIGPIPE",
+    "SIGILL"
+   ],
+   "count": 10,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 24421,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "read_page",
+    "computer",
+    "form_input",
+    "navigate",
+    "find",
+    "get_page_text",
+    "javascript_tool",
+    "read_console_messages",
+    "read_network_requests",
+    "resize_window"
+   ],
+   "count": 10,
+   "file": "index.chunk-CzLc7P9j.js",
+   "offset": 1403,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "url",
+    "github",
+    "git",
+    "npm",
+    "file",
+    "directory",
+    "skills-dir",
+    "hostPattern",
+    "pathPattern",
+    "settings"
+   ],
+   "count": 10,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 868122,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "checkout",
+    "fetch",
+    "grep",
+    "ls-files",
+    "pull",
+    "push",
+    "read-tree",
+    "reset",
+    "restore",
+    "switch"
+   ],
+   "count": 10,
+   "file": "index.chunk-DVtfwF6X.js",
+   "offset": 5264,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "explorer.exe",
+    "searchhost.exe",
+    "searchapp.exe",
+    "searchui.exe",
+    "startmenuexperiencehost.exe",
+    "shellexperiencehost.exe",
+    "taskmgr.exe",
+    "powertoys.powerlauncher.exe",
+    "powerlauncher.exe",
+    "microsoft.cmdpal.ui.exe"
+   ],
+   "count": 10,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3673201,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "button",
+    "link",
+    "textbox",
+    "checkbox",
+    "radio",
+    "combobox",
+    "menuitem",
+    "tab",
+    "heading",
+    "img"
+   ],
+   "count": 10,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4662444,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Bash",
+    "PowerShell",
+    "Read",
+    "Write",
+    "Edit",
+    "MultiEdit",
+    "NotebookEdit",
+    "Grep",
+    "Glob",
+    "WebFetch"
+   ],
+   "count": 10,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5698963,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "org_credential_not_allowed",
+    "org_pin_mismatch",
+    "proxy_invalid",
+    "temp_dir_unusable",
+    "session_held_by_background",
+    "worktree_unverified",
+    "worktree_resume_refused",
+    "cli_version_too_old",
+    "org_config_required_unavailable",
+    "org_config_refused"
+   ],
+   "count": 10,
+   "file": "index.chunk-M6SkuaH9.js",
+   "offset": 534850,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "local",
+    "user",
+    "project",
+    "dynamic",
+    "enterprise",
+    "claudeai",
+    "managed",
+    "agent",
+    "flag"
+   ],
+   "count": 9,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 695912,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "application data",
+    "local settings",
+    "start menu",
+    "cookies",
+    "nethood",
+    "printhood",
+    "recent",
+    "sendto",
+    "templates"
+   ],
+   "count": 9,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 992928,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "promptCount",
+    "replyCount",
+    "lineCount",
+    "activeGenChatCount",
+    "auditChatCount",
+    "chatOnlyInOldFiles",
+    "chatOnlyInOldUnstamped",
+    "scannedFiles",
+    "unscannedFiles"
+   ],
+   "count": 9,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 35077,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "screenshot",
+    "zoom",
+    "cursor_position",
+    "wait",
+    "read_clipboard",
+    "write_clipboard",
+    "list_granted_applications",
+    "request_access",
+    "switch_display"
+   ],
+   "count": 9,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 175869,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".mcp.json",
+    ".gitconfig",
+    ".gitmodules",
+    ".bashrc",
+    ".bash_profile",
+    ".zshrc",
+    ".zprofile",
+    ".profile",
+    ".ripgreprc"
+   ],
+   "count": 9,
+   "file": "index.chunk-CnkTpwso.js",
+   "offset": 33529,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "dns_unresolved",
+    "connection_refused",
+    "connection_timeout",
+    "host_unreachable",
+    "proxy_failed",
+    "network_other",
+    "handshake_timeout",
+    "handshake_failed",
+    "auth_prompts_withheld"
+   ],
+   "count": 9,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 119046,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "cwd",
+    "model",
+    "permissionMode",
+    "settings",
+    "additionalDirectories",
+    "systemPrompt",
+    "env",
+    "mcpServers",
+    "hooks"
+   ],
+   "count": 9,
+   "file": "index.chunk-D5gwoNxg.js",
+   "offset": 30747,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "mcpServers",
+    "managedMcpServers",
+    "lspServers",
+    "pluginConfigs",
+    "enabledPlugins",
+    "extraKnownMarketplaces",
+    "env",
+    "skillOverrides",
+    "modelSettings"
+   ],
+   "count": 9,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 839339,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "clientId",
+    "clientSecret",
+    "clientSecretHelper",
+    "authorizationServer",
+    "tenantId",
+    "callbackHost",
+    "callbackPort",
+    "authorizationUrl",
+    "tokenUrl"
+   ],
+   "count": 9,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 606621,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "new_right",
+    "new_below",
+    "focus_next",
+    "focus_previous",
+    "close",
+    "move_left",
+    "move_right",
+    "move_up",
+    "move_down"
+   ],
+   "count": 9,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1719489,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "bootstrap",
+    "gateway-sso",
+    "external-idp",
+    "vertex",
+    "bedrock-sso",
+    "anthropic-console",
+    "aws-profile",
+    "foundry-entra",
+    "vertex-workforce"
+   ],
+   "count": 9,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1757000,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "prepare",
+    "probe",
+    "stage",
+    "aside",
+    "place",
+    "backup",
+    "clear",
+    "write",
+    "verify"
+   ],
+   "count": 9,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2671836,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ok",
+    "unsupported",
+    "open_failed",
+    "identity_mismatch",
+    "exited",
+    "query_failed",
+    "no_regions",
+    "prefetch_failed",
+    "deadline"
+   ],
+   "count": 9,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3024332,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "contents",
+    "skills",
+    "commands",
+    "agents",
+    "connectors",
+    "hooks",
+    "monitors",
+    "language-servers",
+    "id"
+   ],
+   "count": 9,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3287551,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "tabs_context_mcp",
+    "tabs_create_mcp",
+    "tabs_close_mcp",
+    "shortcuts_list",
+    "shortcuts_execute",
+    "resize_window",
+    "switch_browser",
+    "list_connected_browsers",
+    "gif_creator"
+   ],
+   "count": 9,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3411535,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "plex.exe",
+    "plexamp.exe",
+    "plex htpc.exe",
+    "plexmediaplayer",
+    "plexamp",
+    "plex-htpc",
+    "plex-desktop",
+    "plexdesktop",
+    "plexhtpc"
+   ],
+   "count": 9,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3671230,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "service_admission_off",
+    "service_policy_unset",
+    "service_policy_invalid",
+    "service_request_mismatch",
+    "service_not_system_drive",
+    "service_share_not_drive_root",
+    "service_install_args_unreadable",
+    "service_install_args_invalid",
+    "service_error"
+   ],
+   "count": 9,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4264931,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "left_click",
+    "right_click",
+    "double_click",
+    "triple_click",
+    "hover",
+    "type",
+    "key",
+    "scroll",
+    "left_click_drag"
+   ],
+   "count": 9,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5502945,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "realpath",
+    "lstat",
+    "stat",
+    "fstat",
+    "readlink",
+    "open",
+    "read",
+    "write",
+    "scandir"
+   ],
+   "count": 9,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6552393,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "remote_settings_required_unavailable",
+    "org_config_required_unavailable",
+    "org_config_refused",
+    "launcher_failed",
+    "remote_host_exhausted",
+    "remote_spawn_refused",
+    "session_held_by_background",
+    "worktree_unverified",
+    "cli_version_too_old"
+   ],
+   "count": 9,
+   "file": "index.chunk-M6SkuaH9.js",
+   "offset": 535232,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "code",
+    "errno",
+    "syscall",
+    "errorClass",
+    "exitCode",
+    "signal",
+    "status",
+    "statusCode",
+    "kind"
+   ],
+   "count": 9,
+   "file": "index.pre.js",
+   "offset": 859441,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "SIGSEGV",
+    "SIGABRT",
+    "SIGBUS",
+    "SIGILL",
+    "SIGTRAP",
+    "SIGKILL",
+    "SIGTERM",
+    "SIGPIPE"
+   ],
+   "count": 8,
+   "file": "index.chunk-B0WAWLOW.js",
+   "offset": 34154,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".git",
+    ".hg",
+    ".claude",
+    ".husky",
+    ".githooks",
+    "githooks",
+    ".lefthook",
+    ".lefthook-local"
+   ],
+   "count": 8,
+   "file": "index.chunk-BFgHcLgq.js",
+   "offset": 642,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "SFTP_UNAVAILABLE",
+    "SFTP_NOT_STARTED",
+    "EXEC_NO_INPUT",
+    "SESSION_LIMIT",
+    "CLI_UNRESPONSIVE",
+    "ENOSPC",
+    "EDQUOT",
+    "EROFS"
+   ],
+   "count": 8,
+   "file": "index.chunk-BgSwqbzh.js",
+   "offset": 5485,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "-C",
+    "--git-dir",
+    "--work-tree",
+    "--namespace",
+    "--super-prefix",
+    "--config-env",
+    "--attr-source",
+    "--exec-path"
+   ],
+   "count": 8,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 475400,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "stdio",
+    "sse",
+    "http",
+    "ws",
+    "sdk",
+    "sse-ide",
+    "ws-ide",
+    "claudeai-proxy"
+   ],
+   "count": 8,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 695797,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ENOENT",
+    "EACCES",
+    "ETIMEDOUT",
+    "ECONNRESET",
+    "EPIPE",
+    "Error",
+    "RPCCallError",
+    "SyntaxError"
+   ],
+   "count": 8,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 846660,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "doc_create",
+    "doc_edit",
+    "doc_resolve_changes",
+    "doc_export",
+    "doc_read",
+    "doc_outline",
+    "doc_search",
+    "doc_check_layout"
+   ],
+   "count": 8,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 171427,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Read",
+    "Write",
+    "Edit",
+    "MultiEdit",
+    "NotebookEdit",
+    "Glob",
+    "Grep",
+    "WebFetch"
+   ],
+   "count": 8,
+   "file": "index.chunk-CEkgISQ-.js",
+   "offset": 726,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ENOSPC",
+    "EDQUOT",
+    "EROFS",
+    "ENOTDIR",
+    "EISDIR",
+    "EACCES",
+    "EPERM",
+    "ENOENT"
+   ],
+   "count": 8,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 300037,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "process_crashed",
+    "bun_crash",
+    "bun_stack_overflow",
+    "segfault",
+    "cli_fastfail",
+    "renderer_cascade",
+    "process_interrupted",
+    "stream_ended_no_result"
+   ],
+   "count": 8,
+   "file": "index.chunk-CPzeH_V9.js",
+   "offset": 2245,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "EACCES",
+    "EPERM",
+    "EBUSY",
+    "EAGAIN",
+    "EIO",
+    "EMFILE",
+    "ENFILE",
+    "ETIMEDOUT"
+   ],
+   "count": 8,
+   "file": "index.chunk-DvdZaxqH.js",
+   "offset": 14394,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "read",
+    "push",
+    "pushProbe",
+    "fetch",
+    "scrub",
+    "populate",
+    "hydrate",
+    "merge"
+   ],
+   "count": 8,
+   "file": "index.chunk-DVtfwF6X.js",
+   "offset": 1902,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "claude-code-marketplace",
+    "claude-code-plugins",
+    "claude-plugins-official",
+    "anthropic-marketplace",
+    "anthropic-plugins",
+    "agent-skills",
+    "life-sciences",
+    "knowledge-work-plugins"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 115530,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "outlook_send_mail",
+    "outlook_send_draft",
+    "outlook_forward_mail",
+    "outlook_create_event",
+    "outlook_update_event",
+    "teams_send_chat_message",
+    "teams_send_channel_message",
+    "teams_reply_channel_message"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 602811,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "merge_pull_request",
+    "push_files",
+    "create_or_update_file",
+    "delete_file",
+    "run_workflow",
+    "rerun_workflow_run",
+    "rerun_failed_jobs",
+    "delete_workflow_run_logs"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 603024,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "process_exited_nonzero",
+    "process_killed_by_signal",
+    "process_error",
+    "spawn_failed",
+    "executable_not_found",
+    "executable_launch_failed",
+    "error_result",
+    "aborted"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 938814,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "never",
+    "pending",
+    "ok",
+    "stale",
+    "auth",
+    "parse",
+    "unreachable",
+    "http"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1577430,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "healthy",
+    "invalid_config",
+    "auth_failed",
+    "unreachable",
+    "provider_error",
+    "not_testable",
+    "bootstrap_error",
+    "config_model_rejected"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1579543,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "bad-path",
+    "bad-args",
+    "spawn-failed",
+    "aborted",
+    "timed-out",
+    "non-zero-exit",
+    "tcc-denied",
+    "empty"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1580578,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "closed",
+    "pong_timeout",
+    "wake",
+    "planned",
+    "bridge_error",
+    "off",
+    "starting",
+    "other"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1720367,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "dns",
+    "tcp",
+    "tls",
+    "proxy",
+    "network_changed",
+    "upgrade_4xx",
+    "upgrade_5xx",
+    "other"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1720579,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "available_now",
+    "deleted",
+    "unreadable",
+    "other_org",
+    "loading",
+    "signed_out",
+    "not_loaded",
+    "not_found"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1752193,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ok",
+    "invalid",
+    "loopback",
+    "exists",
+    "blocked",
+    "org-blocked",
+    "unavailable",
+    "declined"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1800307,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "diff",
+    "file",
+    "terminal",
+    "pr",
+    "tasks",
+    "plan",
+    "artifact",
+    "preview"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1880802,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "invalid_env_var",
+    "invalid_authorization_url",
+    "invalid_token_url",
+    "token_exchange_http_error",
+    "token_response_bad_json",
+    "token_response_missing_access_token",
+    "refresh_response_parse_error",
+    "refresh_response_missing_access_token"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2465712,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "microsoft",
+    "microsoftonline",
+    "windows",
+    "office",
+    "office365",
+    "dynamics",
+    "azure",
+    "sharepoint"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2520166,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "keydown",
+    "keypress",
+    "keyup",
+    "beforeinput",
+    "input",
+    "compositionstart",
+    "compositionupdate",
+    "compositionend"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3022218,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "character",
+    "enter",
+    "backspace",
+    "shortcut",
+    "modifier",
+    "navigation",
+    "ime",
+    "other"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3022407,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "pill",
+    "retry_row",
+    "near_top",
+    "auto_empty_pane",
+    "sparse_tail_drain",
+    "anchor_restore",
+    "minimap",
+    "find"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3023452,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "get_device_info",
+    "device_list_dir",
+    "device_stage_files",
+    "device_commit_files",
+    "device_request_folder_access",
+    "create_artifact",
+    "update_artifact",
+    "list_artifacts"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3164895,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "mode",
+    "subcommandResults",
+    "permissionPromptTool",
+    "asyncAgent",
+    "sandboxOverride",
+    "workingDir",
+    "safetyCheck",
+    "other"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3685132,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "enabled",
+    "enabled_readback",
+    "enabled_on",
+    "enabled_force_on",
+    "disabled_software",
+    "unavailable_software",
+    "disabled_off",
+    "unavailable_off"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3958275,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "normal",
+    "floating",
+    "torn-off-menu",
+    "modal-panel",
+    "main-menu",
+    "status",
+    "pop-up-menu",
+    "screen-saver"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4096498,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "http",
+    "https",
+    "git+http",
+    "git+https",
+    "git",
+    "ssh",
+    "git+ssh",
+    "ssh+git"
+   ],
+   "count": 8,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5909695,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".claude.json",
+    "config.json",
+    "claude_desktop_config.json",
+    "developer_settings.json",
+    "settings.json",
+    "settings.local.json",
+    "main.log",
+    "window-state.json"
+   ],
+   "count": 8,
+   "file": "index.pre.js",
+   "offset": 906820,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "initialize",
+    "file_suggestions",
+    "read_file",
+    "get_workspace_diff",
+    "get_context_usage",
+    "get_usage",
+    "mcp_status"
+   ],
+   "count": 7,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 694579,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "message_start",
+    "message_delta",
+    "message_stop",
+    "content_block_start",
+    "content_block_delta",
+    "content_block_stop",
+    "ping"
+   ],
+   "count": 7,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 778508,
+   "category": "stream-events"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "assistant",
+    "user",
+    "result",
+    "stream_event",
+    "tool_progress",
+    "tool_use_summary",
+    "system"
+   ],
+   "count": 7,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 54975,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "sidebar",
+    "keyboard",
+    "list_tap",
+    "deeplink",
+    "push",
+    "tab_switch",
+    "create"
+   ],
+   "count": 7,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 58196,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "xcode_not_found",
+    "xcode_not_selected",
+    "xcode_clt_only",
+    "xcode_components_missing",
+    "ios_platform_missing",
+    "xcode_not_found_diag",
+    "adb_not_found"
+   ],
+   "count": 7,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 77293,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "local",
+    "user",
+    "project",
+    "flag",
+    "enterprise",
+    "managed",
+    "agent"
+   ],
+   "count": 7,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 697342,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ENOENT",
+    "EACCES",
+    "EPERM",
+    "ENOTDIR",
+    "ELOOP",
+    "ENAMETOOLONG",
+    "EROFS"
+   ],
+   "count": 7,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 798002,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "untrusted_device",
+    "session_stale_relogin",
+    "device_key_missing",
+    "bind_attestation_stale",
+    "bind_attestation_invalid",
+    "bind_attestation_missing",
+    "bind_device_not_found"
+   ],
+   "count": 7,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 118394,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "connection_timeout",
+    "host_unreachable",
+    "network_other",
+    "dns_unresolved",
+    "connection_refused",
+    "proxy_failed",
+    "handshake_timeout"
+   ],
+   "count": 7,
+   "file": "index.chunk-CcveFAuE.js",
+   "offset": 6271,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "SIGABRT",
+    "SIGBUS",
+    "SIGFPE",
+    "SIGILL",
+    "SIGSEGV",
+    "SIGSYS",
+    "SIGTRAP"
+   ],
+   "count": 7,
+   "file": "index.chunk-CcveFAuE.js",
+   "offset": 15835,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".git",
+    ".hg",
+    ".svn",
+    "_svn",
+    ".bzr",
+    ".jj",
+    "cvs"
+   ],
+   "count": 7,
+   "file": "index.chunk-CdsxofPO.js",
+   "offset": 7449,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "verified",
+    "verified_by_gate",
+    "verified_keyless_device",
+    "service_vouched",
+    "absent",
+    "invalid",
+    "unchecked"
+   ],
+   "count": 7,
+   "file": "index.chunk-CfYHAcpH.js",
+   "offset": 7086,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "nautilus",
+    "dolphin",
+    "nemo",
+    "thunar",
+    "caja",
+    "pcmanfm",
+    "pcmanfm-qt"
+   ],
+   "count": 7,
+   "file": "index.chunk-CLDnJbh1.js",
+   "offset": 5497,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "gnome-control-center",
+    "systemsettings",
+    "cinnamon-settings",
+    "xfce4-settings-manager",
+    "mate-control-center",
+    "gnome-tweaks",
+    "org.gnome.tweaks"
+   ],
+   "count": 7,
+   "file": "index.chunk-CLDnJbh1.js",
+   "offset": 5577,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "click",
+    "type",
+    "key",
+    "scroll",
+    "drag",
+    "screenshot",
+    "zoom"
+   ],
+   "count": 7,
+   "file": "index.chunk-CLDnJbh1.js",
+   "offset": 97557,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "publickey",
+    "password",
+    "keyboard-interactive",
+    "hostbased",
+    "gssapi-with-mic",
+    "gssapi-keyex",
+    "none"
+   ],
+   "count": 7,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 31325,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "id_rsa",
+    "id_ecdsa",
+    "id_ecdsa_sk",
+    "id_ed25519",
+    "id_ed25519_sk",
+    "id_xmss",
+    "id_dsa"
+   ],
+   "count": 7,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 87498,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "SIGSEGV",
+    "SIGBUS",
+    "SIGABRT",
+    "SIGILL",
+    "SIGFPE",
+    "SIGSYS",
+    "SIGTRAP"
+   ],
+   "count": 7,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 96081,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "auth_publickey_rejected",
+    "auth_key_rejected",
+    "auth_no_key_offered",
+    "auth_no_credentials",
+    "auth_agent_keys_not_used",
+    "auth_too_many_keys",
+    "auth_prompts_withheld"
+   ],
+   "count": 7,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 118870,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "tap",
+    "swipe",
+    "touch_path",
+    "touch2_path",
+    "text",
+    "button",
+    "inspect"
+   ],
+   "count": 7,
+   "file": "index.chunk-CwIQU-8Y.js",
+   "offset": 68425,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "string",
+    "number",
+    "integer",
+    "boolean",
+    "null",
+    "object",
+    "array"
+   ],
+   "count": 7,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 26815,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "npm",
+    "url",
+    "github",
+    "git-subdir",
+    "archive",
+    "command",
+    "unsupported"
+   ],
+   "count": 7,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 888769,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "$comment",
+    "deprecated",
+    "description",
+    "examples",
+    "readOnly",
+    "title",
+    "writeOnly"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1136454,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "closed",
+    "packaging",
+    "ready",
+    "exporting",
+    "sending",
+    "sent",
+    "saved"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1590239,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "none",
+    "paragraph",
+    "code",
+    "list",
+    "table",
+    "blockquote",
+    "math"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1722421,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "idle",
+    "checking",
+    "downloading",
+    "ready",
+    "error",
+    "install-failed",
+    "available"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1727195,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "closed",
+    "scanning",
+    "scan_failed",
+    "empty",
+    "confirming",
+    "running",
+    "done"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1738646,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "loaded",
+    "restored",
+    "partial",
+    "read_failed",
+    "parse_failed",
+    "vanished",
+    "set_aside"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1747767,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "sessions-running",
+    "target-invalid",
+    "target-unc",
+    "target-inside-current",
+    "target-not-writable",
+    "copy-failed",
+    "state-write-failed"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1770216,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "written",
+    "partial",
+    "store_unavailable",
+    "credential_refused",
+    "org_refused",
+    "write_refused",
+    "failed"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1778725,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "downloads",
+    "documents",
+    "pictures",
+    "music",
+    "videos",
+    "desktop",
+    "home"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1792167,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "running",
+    "pinned",
+    "losable_work",
+    "live_children",
+    "on_screen",
+    "awaiting_input",
+    "exempt"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1808526,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "unavailable",
+    "auth",
+    "rateLimit",
+    "notFound",
+    "network",
+    "forbidden",
+    "unknown"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1887426,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "unsupported",
+    "open_failed",
+    "query_failed",
+    "prefetch_failed",
+    "deadline_turned_off",
+    "native_error",
+    "unknown"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3024466,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "tool_execution_exception",
+    "execution_error",
+    "navigation_blocked_mid_call",
+    "find_exception",
+    "navigate_exception",
+    "tab_create_exception",
+    "tab_close_exception"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3318656,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "webull.exe",
+    "tradingview.exe",
+    "tws.exe",
+    "thinkorswim.exe",
+    "binance.exe",
+    "ledger live.exe",
+    "trezor suite.exe"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3673425,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "cli_token_not_logged_in",
+    "cli_token_session_stale_relogin",
+    "cli_token_sign_in_revoked",
+    "cli_token_subscription_past_due",
+    "cli_token_empty_token",
+    "cli_token_network_error",
+    "cli_token_timeout"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4484188,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "left_click",
+    "right_click",
+    "double_click",
+    "triple_click",
+    "type",
+    "key",
+    "left_click_drag"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4615734,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "image/bmp",
+    "image/x-icon",
+    "image/vnd.microsoft.icon"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4773735,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "--filter",
+    "-F",
+    "-w",
+    "--workspace",
+    "--workspaces",
+    "-r",
+    "--recursive"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5445809,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "path",
+    "kind",
+    "redirected",
+    "sha256",
+    "minted",
+    "type",
+    "shim"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5615698,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "claude-code-remote",
+    "bf7c680d-5fdc-5ef4-b4a0-abadb619bf0a",
+    "ccr-slack-thread",
+    "cowork",
+    "projects",
+    "remote-devices",
+    "slackbot"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5625852,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "no_window",
+    "timeout",
+    "no_key",
+    "not_registered",
+    "row_mismatch",
+    "sign_failed",
+    "sign_timeout"
+   ],
+   "count": 7,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6205360,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "task-notification",
+    "peer",
+    "channel",
+    "coordinator",
+    "observer",
+    "observer-activity",
+    "auto-continuation"
+   ],
+   "count": 7,
+   "file": "index.chunk-M6SkuaH9.js",
+   "offset": 28120,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "archived",
+    "refused",
+    "ended",
+    "cancelled",
+    "no_turn",
+    "restarted",
+    "send_failed"
+   ],
+   "count": 7,
+   "file": "index.chunk-M6SkuaH9.js",
+   "offset": 165528,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "pending",
+    "running",
+    "completed",
+    "failed",
+    "killed",
+    "paused"
+   ],
+   "count": 6,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 62044,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "process_crashed",
+    "bun_crash",
+    "bun_stack_overflow",
+    "segfault",
+    "cli_fastfail",
+    "cli_shutdown_crash_benign"
+   ],
+   "count": 6,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 504027,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "user",
+    "interrupt_timeout",
+    "interrupt_failed",
+    "clear",
+    "rewind",
+    "discard"
+   ],
+   "count": 6,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 582293,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "picked",
+    "env",
+    "settings",
+    "persisted",
+    "default",
+    "deferred"
+   ],
+   "count": 6,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 1376651,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "click",
+    "drag",
+    "type",
+    "chord",
+    "scroll",
+    "appSwitch"
+   ],
+   "count": 6,
+   "file": "index.chunk-BpoRyh_b.js",
+   "offset": 933,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "memory_read",
+    "memory_list",
+    "memory_write",
+    "memory_str_replace",
+    "memory_append",
+    "memory_delete"
+   ],
+   "count": 6,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 85879,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "http:",
+    "https:",
+    "ssh:",
+    "git+ssh:",
+    "ssh+git:",
+    "git:"
+   ],
+   "count": 6,
+   "file": "index.chunk-C6OBlOlX.js",
+   "offset": 2848,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "queued",
+    "left",
+    "expired",
+    "cut",
+    "unsent",
+    "invalid"
+   ],
+   "count": 6,
+   "file": "index.chunk-CcveFAuE.js",
+   "offset": 3109,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Cyrillic",
+    "Greek",
+    "Armenian",
+    "Cherokee",
+    "Lisu",
+    "Coptic"
+   ],
+   "count": 6,
+   "file": "index.chunk-Ck3ee-gJ.js",
+   "offset": 10650,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "sdk_binary_missing",
+    "sdk_binary_corrupt",
+    "sdk_binary_arch_mismatch",
+    "spawn_failed",
+    "app_control_blocked",
+    "dll_not_found"
+   ],
+   "count": 6,
+   "file": "index.chunk-CnkTpwso.js",
+   "offset": 7216,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "WSAETIMEDOUT",
+    "0x8007274c",
+    "WSAENOBUFS",
+    "0x80072747",
+    "E_UNEXPECTED",
+    "0x8000ffff"
+   ],
+   "count": 6,
+   "file": "index.chunk-CPUoh-Ta.js",
+   "offset": 614,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "E_FAIL",
+    "ERROR_FILE_NOT_FOUND",
+    "ERROR_PATH_NOT_FOUND",
+    "0x80004005",
+    "0x80070002",
+    "0x80070003"
+   ],
+   "count": 6,
+   "file": "index.chunk-CPUoh-Ta.js",
+   "offset": 3572,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Button",
+    "Link",
+    "TabButton",
+    "Adjustable",
+    "KeyboardKey",
+    "Toggle"
+   ],
+   "count": 6,
+   "file": "index.chunk-CwIQU-8Y.js",
+   "offset": 7416,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "screenshot",
+    "wait",
+    "scroll",
+    "zoom",
+    "scroll_to",
+    "hover"
+   ],
+   "count": 6,
+   "file": "index.chunk-CzLc7P9j.js",
+   "offset": 14058,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "memory",
+    "tiny_memory",
+    "bagel",
+    "cloud-snapshots",
+    "bridge-pointer.json",
+    ".session-aliases"
+   ],
+   "count": 6,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 484347,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "API_FORCE_IDLE_TIMEOUT",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+    "CLAUDE_CODE_DISABLE_WEB_FETCH",
+    "DISABLE_ERROR_REPORTING",
+    "DISABLE_TELEMETRY",
+    "DO_NOT_TRACK"
+   ],
+   "count": 6,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 816181,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "queued",
+    "started",
+    "completed",
+    "cancelled",
+    "discarded",
+    "refused"
+   ],
+   "count": 6,
+   "file": "index.chunk-LqLRvaib.js",
+   "offset": 714,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "openid",
+    "profile",
+    "email",
+    "address",
+    "phone",
+    "offline_access"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 612557,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "properties",
+    "patternProperties",
+    "$defs",
+    "definitions",
+    "dependentSchemas",
+    "dependencies"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1092652,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "authorization",
+    "content-type",
+    "mcp-protocol-version",
+    "mcp-method",
+    "mcp-name",
+    "mcp-session-id"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1381425,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "anthropic",
+    "gateway",
+    "vertex",
+    "bedrock",
+    "mantle",
+    "foundry"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1576533,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "new",
+    "chat",
+    "project",
+    "cowork",
+    "code",
+    "other"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1721908,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "lt_4",
+    "4-19",
+    "20-99",
+    "100-999",
+    "1k-9999",
+    "ge_10k"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1722107,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "lt_200",
+    "200-999",
+    "1k-3999",
+    "4k-31999",
+    "32k-1m",
+    "ge_1m"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1722211,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "stable",
+    "latest",
+    "cancelled",
+    "busy",
+    "failed",
+    "unavailable"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1728008,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ok",
+    "cancelled",
+    "partial",
+    "error",
+    "unavailable",
+    "overridden"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1738312,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "added",
+    "already_trusted",
+    "cancelled",
+    "rejected",
+    "unavailable",
+    "disabled"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1765739,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "saved",
+    "not_found",
+    "busy",
+    "too_large",
+    "restricted",
+    "failed"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1777633,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "hipaa_restricted",
+    "deployment_mode",
+    "server_refused",
+    "project_paused",
+    "enterprise",
+    "plan"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1778581,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "starting",
+    "history",
+    "project",
+    "files",
+    "memory",
+    "finishing"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1781838,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "unsupported_build",
+    "not_registered",
+    "no_key",
+    "bad_input",
+    "sign_failed",
+    "sign_timeout"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1785959,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "default",
+    "acceptEdits",
+    "plan",
+    "bypassPermissions",
+    "dontAsk",
+    "auto"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1806813,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "on",
+    "strict",
+    "failed",
+    "off",
+    "partial",
+    "unknown"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1811192,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "query_active",
+    "resume_in_flight",
+    "rewind_pending",
+    "conversation_changed",
+    "clear_generation_changed",
+    "not_eligible"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1869165,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "disabled",
+    "expired",
+    "already-running",
+    "not-loaded",
+    "offline",
+    "not-recorded"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1915337,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "get_layout",
+    "open_in_split",
+    "open_in_window",
+    "focus",
+    "close_split",
+    "set_sidebar_collapsed"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1918718,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "claude.ai",
+    "www.claude.ai",
+    "preview.claude.ai",
+    "claude.com",
+    "www.claude.com",
+    "preview.claude.com"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1983088,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "returnTo",
+    "freeReturnTo",
+    "state",
+    "retryPath",
+    "redirect_url",
+    "origin"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1985698,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "displayName",
+    "icon",
+    "oauth",
+    "commands",
+    "env",
+    "network"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2460671,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "local_override",
+    "preseed_in_place",
+    "required_version",
+    "fallback_version",
+    "none",
+    "pinned_version"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2594062,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ECONNREFUSED",
+    "ETIMEDOUT",
+    "EHOSTUNREACH",
+    "ENETUNREACH",
+    "ECONNRESET",
+    "EPIPE"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2961708,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "classic-script",
+    "module-script",
+    "event-listener",
+    "user-callback",
+    "resolve-promise",
+    "reject-promise"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3022503,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "http",
+    "https",
+    "mailto",
+    "tel",
+    "sms",
+    "claude"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3217347,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+    "unset"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3551667,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "no_client",
+    "not_connected",
+    "peer_unsupported",
+    "not_allowlisted",
+    "multiple_browsers",
+    "no_target"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3571042,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Microsoft.MicrosoftEdge.Stable_8wekyb3d8bbwe!MSEDGE",
+    "Microsoft.MicrosoftEdge.Beta_8wekyb3d8bbwe!MSEDGE",
+    "Microsoft.MicrosoftEdge.Dev_8wekyb3d8bbwe!MSEDGE",
+    "Microsoft.MicrosoftEdge.Canary_8wekyb3d8bbwe!MSEDGE",
+    "Mozilla.Firefox_n80bbvh6b1yt2!App",
+    "TheBrowserCompany.Arc_ttt1ap7aakyb4!App"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3671662,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "addRules",
+    "replaceRules",
+    "removeRules",
+    "setMode",
+    "addDirectories",
+    "removeDirectories"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3690012,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "close",
+    "error",
+    "stopped",
+    "paused",
+    "archived",
+    "deleted"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3813968,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "IFRAME",
+    "FRAME",
+    "OBJECT",
+    "EMBED",
+    "FENCEDFRAME",
+    "PORTAL"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4627906,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "surface",
+    "rest",
+    "park",
+    "park_helper",
+    "jog",
+    "cdp_unparked"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4659821,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "written",
+    "already_there",
+    "replaced",
+    "conflict",
+    "rejected",
+    "too_large"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5103001,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "remote_probe_failed",
+    "remote_install_failed",
+    "remote_deploy_write_failed",
+    "remote_channel_failed",
+    "remote_platform_unsupported",
+    "filesystem_error"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5689583,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "host_unavailable",
+    "host_not_allowed",
+    "connection_removed",
+    "folder_not_trusted",
+    "folder_missing",
+    "start_failed"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5692141,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".docx",
+    ".doc",
+    ".pptx",
+    ".ppt",
+    ".xlsx",
+    ".xls"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5874026,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "served",
+    "registering",
+    "register_failed",
+    "missing",
+    "limit",
+    "folded"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5899325,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "undo",
+    "redo",
+    "cut",
+    "copy",
+    "paste",
+    "selectAll"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6244418,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "head",
+    "config",
+    "objects",
+    "refs",
+    "commondir",
+    "gitdir"
+   ],
+   "count": 6,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6725665,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "screen",
+    "edge",
+    "control_bar",
+    "keyboard",
+    "bezel",
+    "native_window"
+   ],
+   "count": 6,
+   "file": "index.chunk-M4RyjaHM.js",
+   "offset": 13654,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "project",
+    "user",
+    "local",
+    "plugin",
+    "managed",
+    "enterprise"
+   ],
+   "count": 6,
+   "file": "index.chunk-M6SkuaH9.js",
+   "offset": 33658,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "preview_click",
+    "preview_fill",
+    "preview_eval",
+    "computer",
+    "form_input",
+    "javascript_tool"
+   ],
+   "count": 6,
+   "file": "index.chunk-yKIwpGVf.js",
+   "offset": 12075,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "extensions off",
+    "Developer Mode off",
+    "organization's restrictions",
+    "signatures required",
+    "organization's policy"
+   ],
+   "count": 5,
+   "file": "index.chunk-BF0qZsid.js",
+   "offset": 4858,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "http",
+    "https",
+    "ws",
+    "wss",
+    "ftp"
+   ],
+   "count": 5,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 342043,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "content",
+    "_meta",
+    "structuredContent",
+    "structuredContentOmitted",
+    "resourceLinks"
+   ],
+   "count": 5,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 734019,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "fence",
+    "limit",
+    "off",
+    "protocol",
+    "content"
+   ],
+   "count": 5,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 783577,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "success",
+    "error_during_execution",
+    "error_max_turns",
+    "error_max_budget_usd",
+    "error_max_structured_output_retries"
+   ],
+   "count": 5,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 61727,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "private-user-images.githubusercontent.com",
+    "user-images.githubusercontent.com",
+    "avatars.githubusercontent.com",
+    "raw.githubusercontent.com",
+    "objects.githubusercontent.com"
+   ],
+   "count": 5,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 367152,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max"
+   ],
+   "count": 5,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 1376601,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "segmentation fault",
+    "bus error",
+    "aborted",
+    "illegal instruction",
+    "floating point exception"
+   ],
+   "count": 5,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 103648,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "EBUSY",
+    "EPERM",
+    "EACCES",
+    "ENOTEMPTY",
+    "present-after-rm"
+   ],
+   "count": 5,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 438897,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "script",
+    "style",
+    "template",
+    "noscript",
+    "title"
+   ],
+   "count": 5,
+   "file": "index.chunk-BYMGAPtw.js",
+   "offset": 405164,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "resume",
+    "online",
+    "gate",
+    "identity",
+    "my_access"
+   ],
+   "count": 5,
+   "file": "index.chunk-C6OBlOlX.js",
+   "offset": 28597,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "auth_no_key_offered",
+    "auth_agent_refused",
+    "auth_key_sign_failed",
+    "auth_key_passphrase_needed",
+    "auth_key_public_half"
+   ],
+   "count": 5,
+   "file": "index.chunk-CcveFAuE.js",
+   "offset": 87496,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "alt+d",
+    "ctrl+l",
+    "f2",
+    "f4",
+    "shift+f10"
+   ],
+   "count": 5,
+   "file": "index.chunk-CLDnJbh1.js",
+   "offset": 6602,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "startmenuexperiencehost.exe",
+    "shellexperiencehost.exe",
+    "searchui.exe",
+    "searchapp.exe",
+    "searchhost.exe"
+   ],
+   "count": 5,
+   "file": "index.chunk-CLDnJbh1.js",
+   "offset": 53315,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "managed_sideload_disabled",
+    "managed_settings_refused",
+    "gateway_signin_required",
+    "gateway_access_denied",
+    "remote_settings_required_unavailable"
+   ],
+   "count": 5,
+   "file": "index.chunk-CnkTpwso.js",
+   "offset": 9254,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "network",
+    "handshake",
+    "auth",
+    "hostkey",
+    "local_client"
+   ],
+   "count": 5,
+   "file": "index.chunk-CnkTpwso.js",
+   "offset": 9636,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "settings.json",
+    "settings.local.json",
+    "launch.json",
+    "loop.md",
+    "scheduled_tasks.json"
+   ],
+   "count": 5,
+   "file": "index.chunk-CnkTpwso.js",
+   "offset": 33430,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "stopped",
+    "none",
+    "terminated",
+    "killed",
+    "survivor"
+   ],
+   "count": 5,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 7218,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "connection_closed",
+    "connection_reset",
+    "connection_aborted",
+    "connection_timed_out",
+    "broken_pipe"
+   ],
+   "count": 5,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 95970,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "SIGSEGV",
+    "SIGABRT",
+    "SIGBUS",
+    "SIGILL",
+    "SIGTRAP"
+   ],
+   "count": 5,
+   "file": "index.chunk-CQQIsj7r.js",
+   "offset": 96462,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "node_modules",
+    "__pycache__",
+    ".git",
+    ".venv",
+    "venv"
+   ],
+   "count": 5,
+   "file": "index.chunk-CrblwMDh.js",
+   "offset": 1856,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "prewarm",
+    "pane_open",
+    "new_tab",
+    "inline_run",
+    "mcp"
+   ],
+   "count": 5,
+   "file": "index.chunk-DA534R-L.js",
+   "offset": 16880,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "zsh",
+    "bash",
+    "sh",
+    "dash",
+    "ash"
+   ],
+   "count": 5,
+   "file": "index.chunk-DA534R-L.js",
+   "offset": 17522,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "string",
+    "number",
+    "integer",
+    "boolean",
+    "null"
+   ],
+   "count": 5,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 28704,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "$ref",
+    "$recursiveRef",
+    "$recursiveAnchor",
+    "$dynamicRef",
+    "$dynamicAnchor"
+   ],
+   "count": 5,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 42224,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "properties",
+    "patternProperties",
+    "enum",
+    "dependencies",
+    "definitions"
+   ],
+   "count": 5,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 57800,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "user",
+    "assistant",
+    "attachment",
+    "system",
+    "progress"
+   ],
+   "count": 5,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 528575,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "http:",
+    "https:",
+    "git:",
+    "git+http:",
+    "git+https:"
+   ],
+   "count": 5,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 869299,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "filesystem.denyRead",
+    "filesystem.denyWrite",
+    "network.deniedDomains",
+    "credentials.files",
+    "credentials.envVars"
+   ],
+   "count": 5,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 1124476,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "EBUSY",
+    "EMFILE",
+    "ENFILE",
+    "ENOTEMPTY",
+    "EPERM"
+   ],
+   "count": 5,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 1203921,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "fetch",
+    "push",
+    "pushProbe",
+    "scrub",
+    "merge"
+   ],
+   "count": 5,
+   "file": "index.chunk-DVtfwF6X.js",
+   "offset": 1986,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "--quiet",
+    "-q",
+    "--no-track",
+    "-B",
+    "--no-recurse-submodules"
+   ],
+   "count": 5,
+   "file": "index.chunk-DVtfwF6X.js",
+   "offset": 5368,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "--short",
+    "--no-short",
+    "--quiet",
+    "-q",
+    "--no-recurse"
+   ],
+   "count": 5,
+   "file": "index.chunk-DVtfwF6X.js",
+   "offset": 5441,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "run",
+    "--auto",
+    "--quiet",
+    "--task=loose-objects",
+    "--task=incremental-repack"
+   ],
+   "count": 5,
+   "file": "index.chunk-DVtfwF6X.js",
+   "offset": 10548,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "check-attr",
+    "check-ignore",
+    "diff",
+    "ls-files",
+    "status"
+   ],
+   "count": 5,
+   "file": "index.chunk-FiyCjals.js",
+   "offset": 12936,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".synced",
+    ".in_use",
+    ".orphaned_at",
+    ".links_materialized",
+    ".claude-plugin-link"
+   ],
+   "count": 5,
+   "file": "index.chunk-G9_mRSUx.js",
+   "offset": 3686,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "local",
+    "user",
+    "project",
+    "enterprise",
+    "managed"
+   ],
+   "count": 5,
+   "file": "index.chunk-ilWIs3r6.js",
+   "offset": 8488,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "opus",
+    "sonnet",
+    "haiku",
+    "fable",
+    "mythos"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 925020,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "default",
+    "reset",
+    "none",
+    "gray",
+    "grey"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 926689,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "access_denied",
+    "unauthorized_client",
+    "invalid_client",
+    "permission_error",
+    "billing_error"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 932683,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "tools/list",
+    "prompts/list",
+    "resources/list",
+    "resources/templates/list",
+    "server/discover"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1337943,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "installed",
+    "not_installed",
+    "needs_repair",
+    "blocked",
+    "unavailable"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1572154,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ok",
+    "cancelled",
+    "blocked",
+    "unavailable",
+    "fs_error"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1572406,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "mobileconfig",
+    "reg",
+    "admx",
+    "profileManifest",
+    "organizationSharingOpenApi"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1573726,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "signed-out",
+    "awaiting-approval",
+    "awaiting-browser",
+    "signed-in",
+    "failed"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1583536,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "terminal",
+    "diff",
+    "preview",
+    "side_chat",
+    "files"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1719317,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "lt_200",
+    "200-999",
+    "1k-3999",
+    "4k-7999",
+    "ge_8k"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1722321,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "notDetermined",
+    "denied",
+    "authorized",
+    "provisional",
+    "ephemeral"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1725831,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "granted",
+    "denied",
+    "not-determined",
+    "not-supported",
+    "restricted"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1741221,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "managed_root_overlap",
+    "protected_path",
+    "protected_path_ancestor",
+    "policy",
+    "invalid"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1765511,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "user_cancelled",
+    "gate_timeout",
+    "no_visible_window",
+    "session_cleared",
+    "no_account"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1765866,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "completed",
+    "partial",
+    "failed",
+    "nothing_to_migrate",
+    "refused"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1778466,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "written",
+    "skipped_unchanged",
+    "too_large",
+    "rejected",
+    "failed"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1778878,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "written",
+    "none",
+    "unknown",
+    "failed",
+    "not_saved"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1781160,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "approved",
+    "not_provided",
+    "invalid",
+    "unavailable",
+    "transport_error"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1796007,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "desktop",
+    "documents",
+    "downloads",
+    "icloud",
+    "cloudStorage"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1846687,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "vscode",
+    "cursor",
+    "zed",
+    "windsurf",
+    "xcode"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1851070,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ok",
+    "notFound",
+    "tooLarge",
+    "readError",
+    "outsideSessionFolders"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1852593,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "running",
+    "liveness_unknown",
+    "workspace_untrusted",
+    "folder_missing",
+    "failed"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1874455,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "admin",
+    "development",
+    "normal",
+    "sideload",
+    "other"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2233239,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".ds_store",
+    ".localized",
+    "desktop.ini",
+    "thumbs.db",
+    "ehthumbs.db"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2257438,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "chat",
+    "raven",
+    "raven_enterprise",
+    "claude_pro",
+    "claude_max"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2441851,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "op",
+    "match",
+    "flag",
+    "unless_flag",
+    "description"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2458174,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "UnrecognizedClientException",
+    "InvalidSignatureException",
+    "IncompleteSignature",
+    "ExpiredTokenException",
+    "TokenRefreshRequired"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2567492,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "set",
+    "update",
+    "delete",
+    "str_replace",
+    "batch"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3683286,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "click",
+    "close",
+    "dismiss",
+    "timeout",
+    "allow_once"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3875937,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".html",
+    ".htm",
+    ".svg",
+    ".txt",
+    ".md"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4724692,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "dns",
+    "tcp",
+    "tls",
+    "proxy",
+    "network_changed"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5300156,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "cu_preference_change",
+    "cu_gate_reconcile",
+    "browser_pane_reconcile",
+    "folder_access_announce_reconcile",
+    "delete_permission_gate_reconcile"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5364926,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "screenshot",
+    "zoom",
+    "hover",
+    "scroll",
+    "scroll_to"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5502770,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "google_docs",
+    "google_sheets",
+    "google_slides",
+    "google_drive",
+    "google_folder"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5579144,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "not_started",
+    "not_eligible",
+    "project_created",
+    "folder_bound",
+    "memory_seeding"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5579545,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Mon",
+    "Tue",
+    "Wed",
+    "Thu",
+    "Fri"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5676546,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "auth",
+    "hostkey",
+    "policy",
+    "deploy_terminal",
+    "local_client"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5689509,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "auth_key_rejected",
+    "auth_no_key_offered",
+    "auth_agent_refused",
+    "auth_publickey_rejected",
+    "auth_key_public_half"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5691430,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "remove_marketplace",
+    "refresh_marketplace",
+    "install_plugin",
+    "update_plugin",
+    "uninstall_plugin"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6157783,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "file",
+    "javascript",
+    "data",
+    "vbscript",
+    "blob"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6256041,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "application/json",
+    "application/xml",
+    "application/javascript",
+    "application/typescript",
+    "image/svg+xml"
+   ],
+   "count": 5,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6265595,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "read_page",
+    "find",
+    "get_page_text",
+    "read_console_messages",
+    "read_network_requests"
+   ],
+   "count": 5,
+   "file": "index.chunk-yKIwpGVf.js",
+   "offset": 12176,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".sl",
+    ".jj",
+    ".bzr",
+    "_darcs",
+    ".svn"
+   ],
+   "count": 5,
+   "file": "heavy-work-worker/heavyWorkWorker.js",
+   "offset": 369375,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".com",
+    ".exe",
+    ".bat",
+    ".cmd"
+   ],
+   "count": 4,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 476815,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "EPIPE",
+    "ECONNRESET",
+    "ENOTCONN",
+    "EOF"
+   ],
+   "count": 4,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 489442,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "type",
+    "properties",
+    "required",
+    "additionalProperties"
+   ],
+   "count": 4,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 659337,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "bash_command",
+    "update_environment_variables",
+    "assistant",
+    "system"
+   ],
+   "count": 4,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 717183,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "user",
+    "assistant",
+    "attachment",
+    "system"
+   ],
+   "count": 4,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 735234,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "committed",
+    "threw",
+    "empty_refused",
+    "empty_accepted"
+   ],
+   "count": 4,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 58412,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "cache",
+    "network",
+    "none",
+    "retained"
+   ],
+   "count": 4,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 58496,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "cold",
+    "warm_mem",
+    "warm_disk",
+    "back"
+   ],
+   "count": 4,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 58546,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "no_booted_simulator",
+    "consent_required",
+    "consent_declined",
+    "consent_pending"
+   ],
+   "count": 4,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 77452,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "trust_required",
+    "imported_needs_resume_confirm",
+    "repository_review_needed",
+    "spawn_task_unavailable"
+   ],
+   "count": 4,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 632312,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Bash",
+    "PowerShell",
+    "Agent",
+    "Task"
+   ],
+   "count": 4,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 759869,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "auth_sign_in_needed",
+    "auth_prompt_cancelled",
+    "auth_key_passphrase_needed",
+    "hostkey_confirm_needed"
+   ],
+   "count": 4,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 1323253,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "file_path",
+    "offset",
+    "limit",
+    "pages"
+   ],
+   "count": 4,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 1338820,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "no_target",
+    "refused_unreadable",
+    "refused_excluded",
+    "refused_read_only"
+   ],
+   "count": 4,
+   "file": "index.chunk-BN7PaJ_P.js",
+   "offset": 23454,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "localhost",
+    "local",
+    "internal",
+    "localdomain"
+   ],
+   "count": 4,
+   "file": "index.chunk-BQf2i5CR.js",
+   "offset": 901,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "clarkdown",
+    "clarkdown-mcp",
+    "documents",
+    "documents-mcp"
+   ],
+   "count": 4,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 53773,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".claude.json",
+    ".claude-staging-oauth.json",
+    ".claude-local-oauth.json",
+    ".claude-custom-oauth.json"
+   ],
+   "count": 4,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 72050,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "internal_error",
+    "manifest_unreadable",
+    "invalid_env_var",
+    "duplicate_env_var"
+   ],
+   "count": 4,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 103557,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "doc_edit",
+    "doc_create",
+    "doc_resolve_changes",
+    "doc_export"
+   ],
+   "count": 4,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 171557,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "changed-underneath",
+    "hash-mismatch",
+    "overwrite-stale",
+    "whole-doc-replace-stale"
+   ],
+   "count": 4,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 172404,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "initializing",
+    "archived",
+    "running",
+    "stopping"
+   ],
+   "count": 4,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 500605,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "auth",
+    "network",
+    "rate_limited",
+    "server"
+   ],
+   "count": 4,
+   "file": "index.chunk-C6OBlOlX.js",
+   "offset": 28760,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "connection_timeout",
+    "host_unreachable",
+    "connection_refused",
+    "dns_unresolved"
+   ],
+   "count": 4,
+   "file": "index.chunk-CcveFAuE.js",
+   "offset": 6414,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "presence",
+    "focus",
+    "input",
+    "agent"
+   ],
+   "count": 4,
+   "file": "index.chunk-CcveFAuE.js",
+   "offset": 87136,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "send_message",
+    "interrupt",
+    "dialog_answer",
+    "manual"
+   ],
+   "count": 4,
+   "file": "index.chunk-CcveFAuE.js",
+   "offset": 87430,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp"
+   ],
+   "count": 4,
+   "file": "index.chunk-CdsxofPO.js",
+   "offset": 1524,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "verified",
+    "verified_by_gate",
+    "verified_keyless_device",
+    "service_vouched"
+   ],
+   "count": 4,
+   "file": "index.chunk-CfYHAcpH.js",
+   "offset": 7307,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "EPERM",
+    "EACCES",
+    "ENOENT",
+    "UNKNOWN"
+   ],
+   "count": 4,
+   "file": "index.chunk-CGwsahND.js",
+   "offset": 952,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Latin",
+    "Han",
+    "Hiragana",
+    "Katakana"
+   ],
+   "count": 4,
+   "file": "index.chunk-Ck3ee-gJ.js",
+   "offset": 10529,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "main",
+    "master",
+    "staging",
+    "warm"
+   ],
+   "count": 4,
+   "file": "index.chunk-CnkTpwso.js",
+   "offset": 30500,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "hostkey",
+    "policy",
+    "deploy_terminal",
+    "local_client"
+   ],
+   "count": 4,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 14954,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "auth_no_key_offered",
+    "auth_publickey_rejected",
+    "auth_key_rejected",
+    "auth_key_passphrase_needed"
+   ],
+   "count": 4,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 120486,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "auth_key_algorithm_refused",
+    "auth_key_invalid_format",
+    "auth_key_unusable",
+    "auth_key_rsa_not_accepted"
+   ],
+   "count": 4,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 230568,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "outlook",
+    "sharepoint",
+    "onedrive",
+    "teams"
+   ],
+   "count": 4,
+   "file": "index.chunk-CTyoJC3M.js",
+   "offset": 25553,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "preview_start",
+    "preview_stop",
+    "preview_list",
+    "preview_logs"
+   ],
+   "count": 4,
+   "file": "index.chunk-CzLc7P9j.js",
+   "offset": 1329,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "tabs_context",
+    "tabs_create",
+    "tabs_select",
+    "tabs_close"
+   ],
+   "count": 4,
+   "file": "index.chunk-CzLc7P9j.js",
+   "offset": 13212,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "EBUSY",
+    "EMFILE",
+    "ENFILE",
+    "ENOTEMPTY"
+   ],
+   "count": 4,
+   "file": "index.chunk-Dd4cATog.js",
+   "offset": 48101,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "hooks",
+    "commands",
+    "agents",
+    ".mcp.json"
+   ],
+   "count": 4,
+   "file": "index.chunk-DLqLwOmD.js",
+   "offset": 20019,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "EXDEV",
+    "EPERM",
+    "EEXIST",
+    "EBUSY"
+   ],
+   "count": 4,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 518741,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "dns",
+    "unix",
+    "ipv4",
+    "ipv6"
+   ],
+   "count": 4,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 1031528,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "--no-skip-worktree",
+    "--no-assume-unchanged",
+    "--skip-worktree",
+    "--assume-unchanged"
+   ],
+   "count": 4,
+   "file": "index.chunk-DVtfwF6X.js",
+   "offset": 5024,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "--refmap=",
+    "--no-prune",
+    "--no-tags",
+    "--no-prune-tags"
+   ],
+   "count": 4,
+   "file": "index.chunk-DVtfwF6X.js",
+   "offset": 8791,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "app_bring_to_current_space",
+    "request_full_control",
+    "request_access",
+    "request_teach_access"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 121899,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "EPERM",
+    "EBADF",
+    "EACCES",
+    "EBUSY"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 262411,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "EXDEV",
+    "EPERM",
+    "UNKNOWN",
+    "EBADF"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 267161,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "CredentialNeedsInteractiveError",
+    "CredentialSupersededDuringWriteError",
+    "ModelsNotDiscoveredError",
+    "AllModelsRestrictedError"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 860651,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "interaction_required",
+    "login_required",
+    "consent_required",
+    "account_selection_required"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 934057,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "const",
+    "enum",
+    "default",
+    "examples"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1092601,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "string",
+    "integer",
+    "boolean",
+    "number"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1130862,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "patternProperties",
+    "dependentSchemas",
+    "$defs",
+    "definitions"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1132499,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "openid",
+    "profile",
+    "email",
+    "offline_access"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1457994,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "enabled",
+    "notRegistered",
+    "requiresApproval",
+    "notFound"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1573137,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "none",
+    "hold",
+    "armed",
+    "committing"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1581617,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "export",
+    "send",
+    "reveal",
+    "cancel"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1590358,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "local",
+    "cloud",
+    "bridge",
+    "ssh"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1718733,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "not_installed",
+    "updating",
+    "ready",
+    "download_failed"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1733525,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "user",
+    "project",
+    "projectLocal",
+    "managed"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1734156,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "forced",
+    "policy",
+    "settings",
+    "off"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1737782,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "start",
+    "start_from_menu",
+    "stop",
+    "close"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1738771,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "completed",
+    "stopped",
+    "identity_changed",
+    "failed"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1738961,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Chrome",
+    "Edge",
+    "Prisma",
+    "Island"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1741009,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "dead",
+    "no_text",
+    "unsupported",
+    "unknown"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1742993,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "saved",
+    "already_present",
+    "skipped",
+    "failed"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1768819,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "blocked_by_policy",
+    "needs_sign_in",
+    "not_connected",
+    "read_failed"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1769727,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "started",
+    "cancelled",
+    "needs-mac-permissions",
+    "remote-session-unsupported"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1777101,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "opened",
+    "nothing_to_open",
+    "refused",
+    "failed"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1781061,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "session_synced_file_put",
+    "session_archive",
+    "session_delete",
+    "session_composer_notice_dismiss"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1786472,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "starting",
+    "running",
+    "error",
+    "stopped"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1796286,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "sent",
+    "gone",
+    "unreadable",
+    "unsent"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1810209,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "trusted",
+    "declined",
+    "stale",
+    "unavailable"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1846591,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "sessionFolder",
+    "cliTemp",
+    "cliPlans",
+    "outside"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1852907,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "desktop",
+    "user_settings",
+    "managed_settings",
+    "coder"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1854250,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "discarded",
+    "not_kept",
+    "busy",
+    "failed"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1875875,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "show_pane",
+    "close_pane",
+    "get_layout",
+    "set_transcript_view"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1880921,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "unavailable",
+    "org_policy",
+    "signed_out",
+    "unverified"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1893668,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "conflict",
+    "validation",
+    "zip_extraction",
+    "security_violation"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1900106,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "unknown",
+    "reachable",
+    "probably_unreachable",
+    "unreachable"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1916271,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "done",
+    "noop",
+    "refused",
+    "failed"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1919242,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "anthropic",
+    "vertex",
+    "bedrock",
+    "mantle"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2110563,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "effort",
+    "mode",
+    "effort_and_mode",
+    "none"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2429914,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "gateway SSO device grant cancelled",
+    "external IdP grant cancelled",
+    "Bedrock SSO grant cancelled",
+    "Foundry Entra device grant cancelled"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2529399,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".DS_Store",
+    "__MACOSX",
+    "Thumbs.db",
+    "desktop.ini"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2605534,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ENOENT",
+    "ENOTDIR",
+    "EISDIR",
+    "ELOOP"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2673640,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "application/json",
+    "application/x-ndjson",
+    "text/event-stream",
+    "text/plain"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2774394,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "member_unreadable",
+    "member_absent",
+    "models_unreadable",
+    "settings_unreadable"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2799049,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "EBADF",
+    "ERR_SAFE_FS_SYMLINK",
+    "ERR_SAFE_FS_MULTILINK",
+    "ERR_SAFE_FS_NOT_REGULAR"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2967017,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "not_installed",
+    "stopped",
+    "start_pending",
+    "stop_pending"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2972621,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "localhost",
+    "127.0.0.1",
+    "::1",
+    "[::1]"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2999116,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "cache",
+    "ladder",
+    "buffer",
+    "buffer_fallback"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3022340,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "local",
+    "remote",
+    "bridge",
+    "cli"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3023569,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "cursor_recovered",
+    "cursor_lost",
+    "discarded_in_flight",
+    "nothing_above"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3023616,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "write-direct",
+    "defer-to-hidden",
+    "activate-popout",
+    "open-inline-pane"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3023702,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "low",
+    "medium",
+    "high",
+    "xhigh"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3083973,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ENOENT",
+    "EPERM",
+    "EACCES",
+    "ENOTDIR"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3119981,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "org_settings",
+    "account_settings",
+    "org_disabled",
+    "account_disabled"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3120934,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "category0",
+    "category1",
+    "category2",
+    "category3"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3121084,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ENOTFOUND",
+    "ENODATA",
+    "ENONAME",
+    "EBADNAME"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3121965,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "request_access",
+    "request_teach_access",
+    "teach_step",
+    "teach_batch"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3164326,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "low",
+    "medium",
+    "high",
+    "max"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3551624,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App",
+    "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App",
+    "Microsoft.PowerShell_8wekyb3d8bbwe!App",
+    "Microsoft.CommandPalette_8wekyb3d8bbwe!App"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3671966,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "claude.ai",
+    "claude.com",
+    "preview.claude.ai",
+    "preview.claude.com"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4026576,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "default",
+    "hidden",
+    "hiddenInset",
+    "customButtonsOnHover"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4096651,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "terminal",
+    "workspace",
+    "office",
+    "visualize"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4521423,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "preview_start",
+    "navigate",
+    "computer",
+    "form_input"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4534075,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "not_open",
+    "hidden",
+    "not_fronted",
+    "displayed"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4659646,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "focused",
+    "visible",
+    "minimized",
+    "hidden"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4659707,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "hardware",
+    "software",
+    "disabled",
+    "unknown"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4659763,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Edit",
+    "Write",
+    "MultiEdit",
+    "NotebookEdit"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4999720,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "rawKeyDown",
+    "keyDown",
+    "keyUp",
+    "char"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5166610,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "connected",
+    "working",
+    "editing",
+    "disconnected"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5188446,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "npm",
+    "yarn",
+    "pnpm",
+    "bun"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5445305,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "--prefix",
+    "--cwd",
+    "-C",
+    "--dir"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5445762,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "start",
+    "test",
+    "stop",
+    "restart"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5446578,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "not_started",
+    "not_eligible",
+    "project_created",
+    "folder_bound"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5579639,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Write",
+    "Edit",
+    "MultiEdit",
+    "NotebookEdit"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5699562,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "http:",
+    "https:",
+    "mailto:",
+    "tel:"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5842929,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "served",
+    "registering",
+    "register_failed",
+    "missing"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6173771,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "in",
+    "out",
+    "fit",
+    "physical"
+   ],
+   "count": 4,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6244337,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "copy_image",
+    "annotate",
+    "add_to_chat",
+    "close"
+   ],
+   "count": 4,
+   "file": "index.chunk-M4RyjaHM.js",
+   "offset": 7471,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "unavailable",
+    "no_device",
+    "tool_error",
+    "invalid_input"
+   ],
+   "count": 4,
+   "file": "index.chunk-M4RyjaHM.js",
+   "offset": 11680,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "sending",
+    "queued",
+    "delivered",
+    "undelivered"
+   ],
+   "count": 4,
+   "file": "index.chunk-M6SkuaH9.js",
+   "offset": 165469,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "exhausted",
+    "too_few_groups",
+    "aborted",
+    "media_unstrippable"
+   ],
+   "count": 4,
+   "file": "index.chunk-M6SkuaH9.js",
+   "offset": 525667,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "launcher_failed",
+    "launcher_version_mismatch",
+    "remote_host_exhausted",
+    "remote_spawn_refused"
+   ],
+   "count": 4,
+   "file": "index.chunk-M6SkuaH9.js",
+   "offset": 534743,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "not_found",
+    "not_available",
+    "scan_not_served",
+    "withheld"
+   ],
+   "count": 4,
+   "file": "index.chunk-Vdvw6mum.js",
+   "offset": 2458,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "http",
+    "fetch",
+    "xhr",
+    "electron.net"
+   ],
+   "count": 4,
+   "file": "index.pre.js",
+   "offset": 895798,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "claude-desktop",
+    "claude-desktop-3p",
+    "local-agent",
+    "local_agent"
+   ],
+   "count": 4,
+   "file": "heavy-work-worker/heavyWorkWorker.js",
+   "offset": 140468,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "CLAUDE_CODE_SHELL",
+    "CLAUDE_CODE_SHELL_PREFIX",
+    "CODER_HEADER_COMMAND",
+    "CODER_HEADER"
+   ],
+   "count": 4,
+   "file": "shell-path-worker/shellPathWorker.js",
+   "offset": 7082,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "select_browser",
+    "switch_browser",
+    "list_connected_browsers"
+   ],
+   "count": 3,
+   "file": "index.chunk-0q54qGlJ.js",
+   "offset": 7293,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "DOWN",
+    "MOVE",
+    "UP"
+   ],
+   "count": 3,
+   "file": "index.chunk-B0WAWLOW.js",
+   "offset": 1408,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "xcrun",
+    "xcodebuild",
+    "plutil"
+   ],
+   "count": 3,
+   "file": "index.chunk-B0WAWLOW.js",
+   "offset": 22270,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "stopVideo",
+    "detach",
+    "stopSurfaceShare"
+   ],
+   "count": 3,
+   "file": "index.chunk-B0WAWLOW.js",
+   "offset": 33645,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "attach",
+    "launch",
+    "detach"
+   ],
+   "count": 3,
+   "file": "index.chunk-B0WAWLOW.js",
+   "offset": 139882,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "OWNER",
+    "MEMBER",
+    "COLLABORATOR"
+   ],
+   "count": 3,
+   "file": "index.chunk-BAEQpeU2.js",
+   "offset": 781,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "EPERM",
+    "EBUSY",
+    "EACCES"
+   ],
+   "count": 3,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 250645,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "string",
+    "number",
+    "symbol"
+   ],
+   "count": 3,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 599117,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "can_use_tool",
+    "request_user_dialog",
+    "elicitation"
+   ],
+   "count": 3,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 720641,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "workflow_launch",
+    "queued_notification",
+    "session_notice"
+   ],
+   "count": 3,
+   "file": "index.chunk-BlEfqh4Z.js",
+   "offset": 886354,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "event_origin",
+    "event_origin_server",
+    "host_keys_suppressed"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 14712,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "cancelled",
+    "refused",
+    "discarded"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 32946,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "cwd_not_found",
+    "cwd_too_long",
+    "remote_cwd_missing"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 51709,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ok",
+    "ipc_failed",
+    "timeout"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 51871,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "navigated_away",
+    "superseded",
+    "user_cancelled"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 58282,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ok",
+    "error",
+    "not_found"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 58343,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "idle",
+    "running",
+    "requires_action"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 61895,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "completed",
+    "failed",
+    "stopped"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 61999,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "dismissed",
+    "evicted",
+    "orphaned"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 72366,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "inside_root",
+    "home",
+    "nothing_writable"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 120772,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "_feedbackMessage",
+    "_keepForSshHost",
+    "_targetMode"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 147598,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Read",
+    "Grep",
+    "Glob"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 162383,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "GITLAB_TOKEN",
+    "GITLAB_ACCESS_TOKEN",
+    "OAUTH_TOKEN"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 362580,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "admin",
+    "maintain",
+    "write"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 383981,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".DS_Store",
+    "desktop.ini",
+    "Thumbs.db"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 601903,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "needs-auth",
+    "failed",
+    "connected"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 697240,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "FORCE_AUTOUPDATE_PLUGINS",
+    "CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS",
+    "CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 844691,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "process_interrupted",
+    "renderer_cascade",
+    "cli_shutdown_crash_benign"
+   ],
+   "count": 3,
+   "file": "index.chunk-Bn6onBlX.js",
+   "offset": 1333202,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "skills",
+    "mcpServers",
+    "plugins"
+   ],
+   "count": 3,
+   "file": "index.chunk-BPjIr-mn.js",
+   "offset": 5556,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "already_imported",
+    "import_made",
+    "one_shot"
+   ],
+   "count": 3,
+   "file": "index.chunk-BPjIr-mn.js",
+   "offset": 11004,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "not_registered",
+    "no_key",
+    "sign_failed"
+   ],
+   "count": 3,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 121617,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "doc_edit",
+    "doc_create",
+    "doc_resolve_changes"
+   ],
+   "count": 3,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 171630,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "teach_step",
+    "teach_batch",
+    "request_teach_access"
+   ],
+   "count": 3,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 175758,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "EPERM",
+    "EACCES",
+    "EBUSY"
+   ],
+   "count": 3,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 438858,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "running",
+    "idle",
+    "stopping"
+   ],
+   "count": 3,
+   "file": "index.chunk-BvMaI6NQ.js",
+   "offset": 500676,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ssh:",
+    "git+ssh:",
+    "ssh+git:"
+   ],
+   "count": 3,
+   "file": "index.chunk-C6OBlOlX.js",
+   "offset": 2764,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "served",
+    "registering",
+    "register_failed"
+   ],
+   "count": 3,
+   "file": "index.chunk-C6OBlOlX.js",
+   "offset": 28688,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "dns_unresolved",
+    "connection_refused",
+    "proxy_failed"
+   ],
+   "count": 3,
+   "file": "index.chunk-CcveFAuE.js",
+   "offset": 6506,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "structuredContent",
+    "structured_content",
+    "_meta"
+   ],
+   "count": 3,
+   "file": "index.chunk-CdsxofPO.js",
+   "offset": 24771,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "__proto__",
+    "constructor",
+    "prototype"
+   ],
+   "count": 3,
+   "file": "index.chunk-CiZj5wKe.js",
+   "offset": 10437,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Latin",
+    "Han",
+    "Bopomofo"
+   ],
+   "count": 3,
+   "file": "index.chunk-Ck3ee-gJ.js",
+   "offset": 10576,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Latin",
+    "Han",
+    "Hangul"
+   ],
+   "count": 3,
+   "file": "index.chunk-Ck3ee-gJ.js",
+   "offset": 10612,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "session_start",
+    "recovery",
+    "side_session"
+   ],
+   "count": 3,
+   "file": "index.chunk-Ck3ee-gJ.js",
+   "offset": 12321,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Edit",
+    "RichEdit20W",
+    "RICHEDIT50W"
+   ],
+   "count": 3,
+   "file": "index.chunk-CLDnJbh1.js",
+   "offset": 6404,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "Address Band Root",
+    "Breadcrumb Parent",
+    "msctls_addressbar"
+   ],
+   "count": 3,
+   "file": "index.chunk-CLDnJbh1.js",
+   "offset": 6452,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "UniversalSearchBand",
+    "Search Box",
+    "SearchEditBoxWrapperClass"
+   ],
+   "count": 3,
+   "file": "index.chunk-CLDnJbh1.js",
+   "offset": 6525,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "return",
+    "enter",
+    "kp_enter"
+   ],
+   "count": 3,
+   "file": "index.chunk-CLDnJbh1.js",
+   "offset": 7983,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "delete",
+    "backspace",
+    "forwarddelete"
+   ],
+   "count": 3,
+   "file": "index.chunk-CLDnJbh1.js",
+   "offset": 8025,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "rate_limit",
+    "cli_resume_not_found",
+    "cli_rewind_target_not_found"
+   ],
+   "count": 3,
+   "file": "index.chunk-CnkTpwso.js",
+   "offset": 27305,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "sandbox_required_unavailable",
+    "managed_settings_refused",
+    "gateway_access_denied"
+   ],
+   "count": 3,
+   "file": "index.chunk-CnkTpwso.js",
+   "offset": 28913,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "userknownhostsfile",
+    "globalknownhostsfile",
+    "revokedhostkeys"
+   ],
+   "count": 3,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 114625,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "WSL_VM_START_FAILED",
+    "WSL_SERVICE_ERROR",
+    "WSL_EXIT_UNEXPLAINED"
+   ],
+   "count": 3,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 130363,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ENOSPC",
+    "EDQUOT",
+    "EROFS"
+   ],
+   "count": 3,
+   "file": "index.chunk-CPEA6dKA.js",
+   "offset": 303080,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "DYLD",
+    "CODESIGNING",
+    "SIGNAL"
+   ],
+   "count": 3,
+   "file": "index.chunk-CQQIsj7r.js",
+   "offset": 16100,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "thumbs.db",
+    "ehthumbs.db",
+    "desktop.ini"
+   ],
+   "count": 3,
+   "file": "index.chunk-CrblwMDh.js",
+   "offset": 2043,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "EBUSY",
+    "EPERM",
+    "EACCES"
+   ],
+   "count": 3,
+   "file": "index.chunk-Dd4cATog.js",
+   "offset": 90286,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".DS_Store",
+    "Thumbs.db",
+    "desktop.ini"
+   ],
+   "count": 3,
+   "file": "index.chunk-DLqLwOmD.js",
+   "offset": 1737,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "close",
+    "paused",
+    "stopped"
+   ],
+   "count": 3,
+   "file": "index.chunk-DMEJLiDO.js",
+   "offset": 1098,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "sdk-cli",
+    "sdk-ts",
+    "sdk-py"
+   ],
+   "count": 3,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 360215,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "http",
+    "streamable-http",
+    "sse"
+   ],
+   "count": 3,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 824235,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "100.100.100.200",
+    "168.63.129.16",
+    "192.0.0.192"
+   ],
+   "count": 3,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 828327,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "metadata",
+    "mcpServers",
+    "lspServers"
+   ],
+   "count": 3,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 839497,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "claude-community",
+    "claude-plugins-community",
+    "healthcare"
+   ],
+   "count": 3,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 845204,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "default",
+    "dontAsk",
+    "plan"
+   ],
+   "count": 3,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 995638,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "bypassPermissions",
+    "auto",
+    "acceptEdits"
+   ],
+   "count": 3,
+   "file": "index.chunk-DNyequwM.js",
+   "offset": 1120132,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "--json",
+    "-n",
+    "--name-only"
+   ],
+   "count": 3,
+   "file": "index.chunk-DVtfwF6X.js",
+   "offset": 3367,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "--literal-pathspecs",
+    "--no-optional-locks",
+    "--no-pager"
+   ],
+   "count": 3,
+   "file": "index.chunk-DVtfwF6X.js",
+   "offset": 3844,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "error",
+    "error_description",
+    "error_uri"
+   ],
+   "count": 3,
+   "file": "index.chunk-DyYrY1NN.js",
+   "offset": 15204,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "hook.command",
+    "hook.event",
+    "hook.enabled"
+   ],
+   "count": 3,
+   "file": "index.chunk-I9bAj080.js",
+   "offset": 1251,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "__proto__",
+    "prototype",
+    "constructor"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 322952,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "undefined",
+    "symbol",
+    "function"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 492857,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "EISDIR",
+    "ELOOP",
+    "ENOTDIR"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 536801,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "UNKNOWN",
+    "EBUSY",
+    "EIO"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 536843,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "127.0.0.1",
+    "localhost",
+    "[::1]"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 562644,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "api.anthropic.com",
+    "api-staging.anthropic.com",
+    "api.claude.ai"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 837951,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "start_session",
+    "warm_session",
+    "side_chat"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 859881,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "managed",
+    "local",
+    "none"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1573415,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "darwin",
+    "win32",
+    "linux"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1573648,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "3p",
+    "1p",
+    "clear"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1576646,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "none",
+    "mdm",
+    "local"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1577550,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "success",
+    "warning",
+    "failed"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1580408,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "bare-token",
+    "json",
+    "unrecognized"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1580490,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "list",
+    "managed",
+    "mixed"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1591203,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "system",
+    "light",
+    "dark"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1717047,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "chats",
+    "tasks",
+    "sessions"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1718337,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "chat",
+    "task",
+    "page"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1718417,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "slept",
+    "blocked",
+    "parked"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1719818,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "keyed",
+    "keyless",
+    "none"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1720501,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "granted",
+    "denied",
+    "error"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1725948,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "not-found",
+    "exec-blocked",
+    "startup-failed"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1733752,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "signed_out",
+    "account_unavailable",
+    "other"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1738865,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "succeeded",
+    "skipped",
+    "error"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1740636,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "app",
+    "display",
+    "browser"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1741560,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ask",
+    "skip_all_permission_checks",
+    "follow_a_plan"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1743220,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "allow",
+    "blocked",
+    "ask"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1753307,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "granted",
+    "denied",
+    "not-supported"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1759477,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ok",
+    "refused",
+    "gone"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1775633,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "memory_file",
+    "history",
+    "scheduled_tasks"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1778371,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "uploaded",
+    "skipped_unchanged",
+    "failed"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1780030,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ok",
+    "blocked",
+    "failed"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1800230,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "allow",
+    "card",
+    "deny"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1800692,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "financial",
+    "identity",
+    "email"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1801468,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ok",
+    "conflict",
+    "denied"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1852295,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "full",
+    "page",
+    "tail"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1867975,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "running",
+    "not_running",
+    "unknown"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1873995,
+   "category": "task-states"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "restarted",
+    "busy",
+    "applies_on_next_start"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1875220,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "invalid_path",
+    "not_a_socket",
+    "connect_failed"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1875668,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "normal",
+    "thinking",
+    "verbose"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1881034,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "primary",
+    "split",
+    "popout"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1881117,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "cloud_targets",
+    "ensure_trust",
+    "ensure_folder_trust"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1882041,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "dirty",
+    "clean",
+    "unknown"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1884440,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "30",
+    "60",
+    "90"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1915269,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "accepted",
+    "declined",
+    "unset"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1915467,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "written",
+    "declined",
+    "unavailable"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1915550,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "not_downloaded",
+    "downloading",
+    "ready"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1915936,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "offline",
+    "booting",
+    "ready"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1916028,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "console.anthropic.com",
+    "console-staging.anthropic.com",
+    "anthropic.com"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1987859,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "/oauth/authorize",
+    "/oauth/code",
+    "/oauth/device"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1993358,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "mailto:",
+    "tel:",
+    "sms:"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 1997040,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "invalid_refresh_token",
+    "expired_refresh_token",
+    "token_expired"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2171453,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "neutral",
+    "accent",
+    "warning"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2359004,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "UV_THREADPOOL_SIZE",
+    "UV_USE_IO_URING",
+    "UV_NO_IO_URING"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2456890,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".gitkeep",
+    ".keep",
+    ".gitignore"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 2615547,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "address",
+    "class",
+    "class_fallback"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3024196,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "bypassPermissions",
+    "auto",
+    "dontAsk"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3071646,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "file",
+    "http",
+    "https"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3114499,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "transcript_emptied",
+    "transcript_shrank",
+    "rescan"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3279737,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "localhost",
+    "127.0.0.1",
+    "[::1]"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3328506,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "external_message",
+    "external_message_result",
+    "external_config"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3383040,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "switch_browser",
+    "list_connected_browsers",
+    "select_browser"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3412068,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "authPromptDeniedByUser",
+    "authPromptTimedOut",
+    "authPromptRateLimited"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3558658,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "relayUnavailable",
+    "channel",
+    "config"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3590792,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "get",
+    "list",
+    "query"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 3683250,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "check_interval_ticks",
+    "target",
+    "spread_hours"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4014312,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "attributeUnsupported",
+    "actionUnsupported",
+    "notImplemented"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4057847,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "NO_PROXY"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4357587,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "DISABLE_AUTOUPDATER",
+    "DISABLE_UPDATES",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4362864,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "net::ERR_NETWORK_CHANGED",
+    "net::ERR_NETWORK_IO_SUSPENDED",
+    "net::ERR_INTERNET_DISCONNECTED"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4386829,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "read_page",
+    "get_page_text",
+    "find"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4534025,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "none",
+    "presentation",
+    "generic"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4662548,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "document",
+    "spreadsheets",
+    "presentation"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4707641,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "editor",
+    "signin",
+    "switch-account"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 4707697,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "written",
+    "already_there",
+    "replaced"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5101586,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "org_tainted",
+    "not_served",
+    "import_pending"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5103261,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "mouseMove",
+    "pointerMove",
+    "pointerRawUpdate"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5166663,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "excel",
+    "powerpoint",
+    "word"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5188546,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ready",
+    "connected",
+    "disconnected"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5204669,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "create",
+    "update",
+    "fork"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5231979,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "load",
+    "render",
+    "run"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5404202,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "npx",
+    "pnpx",
+    "bunx"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5445346,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "workspace",
+    "workspaces",
+    "recursive"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5445893,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "run-p",
+    "run-s",
+    "npm-run-all"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5446533,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "npm",
+    "yarn",
+    "pnpm"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5531413,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    ".html",
+    ".htm",
+    ".svg"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5552065,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "memory_done",
+    "tasks_moved",
+    "complete"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5579866,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "serving",
+    "paused",
+    "offline"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5899076,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "ssh",
+    "git+ssh",
+    "ssh+git"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 5909875,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "blocked_by_org_admin",
+    "blocked_by_org_tier",
+    "blocked_by_entitlement"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6118040,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "cooldown",
+    "presence_unknown",
+    "still_held"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6527961,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "conversations",
+    "projects",
+    "light_metadata"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6612484,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "claude.ai",
+    "claude.com",
+    "staging.claude.ai"
+   ],
+   "count": 3,
+   "file": "index.chunk-lzaSYO3Q.js",
+   "offset": 6782923,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "install_xcode",
+    "select_xcode",
+    "install_ios_runtime"
+   ],
+   "count": 3,
+   "file": "index.chunk-M4RyjaHM.js",
+   "offset": 6880,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "install_android_sdk",
+    "install_system_image",
+    "create_avd"
+   ],
+   "count": 3,
+   "file": "index.chunk-M4RyjaHM.js",
+   "offset": 6952,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "shown",
+    "hidden",
+    "expanded"
+   ],
+   "count": 3,
+   "file": "index.chunk-M4RyjaHM.js",
+   "offset": 10217,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "button",
+    "shortcut",
+    "context_menu"
+   ],
+   "count": 3,
+   "file": "index.chunk-M4RyjaHM.js",
+   "offset": 15462,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "open_url",
+    "build",
+    "build_status"
+   ],
+   "count": 3,
+   "file": "index.chunk-M4RyjaHM.js",
+   "offset": 15835,
+   "category": "enum-lowercase"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "resourceUri",
+    "visibility",
+    "prefersBorder"
+   ],
+   "count": 3,
+   "file": "index.chunk-M6SkuaH9.js",
+   "offset": 35179,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "AXPopUpButton",
+    "AXMenuButton",
+    "AXComboBox"
+   ],
+   "count": 3,
+   "file": "index.chunk-MT_AbdGg.js",
+   "offset": 837,
+   "category": "enum-pascal"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "node_modules",
+    ".venv",
+    "vendor"
+   ],
+   "count": 3,
+   "file": "heavy-work-worker/heavyWorkWorker.js",
+   "offset": 369329,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "echo.log",
+    "echo1.log",
+    "traces"
+   ],
+   "count": 3,
+   "file": "heavy-work-worker/heavyWorkWorker.js",
+   "offset": 674808,
+   "category": "other"
+  },
+  {
+   "kind": "array",
+   "items": [
+    "x64",
+    "ia32",
+    "arm64"
+   ],
+   "count": 3,
+   "file": "msal-broker-worker/msalBrokerWorker.js",
+   "offset": 4148,
+   "category": "other"
+  }
+ ]
+}

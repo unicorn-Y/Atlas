@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Desktop 逆向图谱 · v2.42304.0</title>
+<style>
+:root{
+  --bg:#0d1117; --bg2:#161b22; --bg3:#1c2129; --line:#30363d;
+  --fg:#e6edf3; --dim:#8b949e; --acc:#d97757; --acc2:#58a6ff;
+  --ok:#3fb950; --warn:#d29922; --bad:#f85149; --pur:#bc8cff;
+  --mono:ui-monospace,SFMono-Regular,"Cascadia Code",Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg);color:var(--fg);
+  font:14px/1.6 -apple-system,"Segoe UI","Noto Sans SC",sans-serif;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+/* ---------- top bar ---------- */
+header{
+  display:flex;align-items:center;gap:16px;padding:0 18px;height:52px;
+  background:linear-gradient(180deg,#1a1f27,#141920);
+  border-bottom:1px solid var(--line);flex:0 0 auto;
+}
+.logo{font-weight:700;letter-spacing:.4px;font-size:15px}
+.logo b{color:var(--acc)}
+.ver{font:11px/1 var(--mono);color:var(--dim);
+  background:var(--bg3);border:1px solid var(--line);padding:4px 7px;border-radius:5px}
+.pills{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+.pill{
+  font:11px/1 var(--mono);color:var(--dim);background:var(--bg3);
+  border:1px solid var(--line);padding:5px 8px;border-radius:20px;white-space:nowrap;
+}
+.pill b{color:var(--acc2);font-weight:600}
+/* ---------- layout ---------- */
+main{display:flex;flex:1;min-height:0}
+nav{
+  width:216px;flex:0 0 auto;background:var(--bg2);border-right:1px solid var(--line);
+  padding:10px 0;overflow-y:auto;
+}
+nav button{
+  display:flex;align-items:center;gap:9px;width:100%;padding:9px 16px;
+  background:none;border:0;border-left:2px solid transparent;color:var(--dim);
+  font:13px inherit;cursor:pointer;text-align:left;
+}
+nav button:hover{background:var(--bg3);color:var(--fg)}
+nav button.on{background:var(--bg3);color:var(--fg);border-left-color:var(--acc);font-weight:600}
+nav button .ic{width:16px;text-align:center;opacity:.85}
+nav button .ct{margin-left:auto;font:10px var(--mono);color:var(--dim);
+  background:var(--bg);border:1px solid var(--line);padding:1px 5px;border-radius:9px}
+nav .grp{font:10px/1 var(--mono);color:#586069;text-transform:uppercase;
+  letter-spacing:1px;padding:14px 16px 6px}
+section{flex:1;min-width:0;display:flex;flex-direction:column}
+/* ---------- search ---------- */
+.searchbar{
+  display:flex;gap:10px;padding:12px 18px;background:var(--bg2);
+  border-bottom:1px solid var(--line);flex:0 0 auto;
+}
+.searchbar input{
+  flex:1;background:var(--bg);border:1px solid var(--line);color:var(--fg);
+  padding:9px 12px;border-radius:7px;font:13px var(--mono);outline:none;
+}
+.searchbar input:focus{border-color:var(--acc2)}
+.searchbar .hint{font:11px/1.5 var(--mono);color:#586069;align-self:center;white-space:nowrap}
+/* ---------- content ---------- */
+#view{flex:1;overflow-y:auto;padding:20px 24px 60px}
+h1{font-size:19px;margin:0 0 4px;letter-spacing:.2px}
+.sub{color:var(--dim);font-size:12.5px;margin-bottom:18px;
+  border-bottom:1px solid var(--line);padding-bottom:12px}
+h2{font-size:14.5px;margin:26px 0 10px;color:var(--fg);
+  display:flex;align-items:center;gap:8px}
+h2::before{content:"";width:3px;height:14px;background:var(--acc);border-radius:2px}
+h3{font-size:13px;margin:16px 0 7px;color:var(--dim);font-weight:600}
+p{margin:8px 0;color:#c9d1d9}
+code{font-family:var(--mono);font-size:12px;background:var(--bg3);
+  border:1px solid var(--line);padding:1px 5px;border-radius:4px;color:#e6b8a2}
+a.src{font:11px var(--mono);color:var(--acc2);text-decoration:none;cursor:pointer}
+a.src:hover{text-decoration:underline}
+/* ---------- cards / grids ---------- */
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.card{
+  background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:13px 15px;
+  cursor:pointer;transition:.12s;position:relative;
+}
+.card:hover{border-color:var(--acc);transform:translateY(-1px)}
+.card.static{cursor:default}
+.card.static:hover{transform:none;border-color:var(--line)}
+.card .t{font-weight:600;font-size:13px;margin-bottom:5px}
+.card .n{font:22px/1.2 var(--mono);color:var(--acc);font-weight:600}
+.card .d{font-size:11.5px;color:var(--dim);margin-top:5px;line-height:1.5}
+.card .bar{height:3px;background:var(--bg);border-radius:2px;margin-top:9px;overflow:hidden}
+.card .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--pur))}
+/* ---------- tables ---------- */
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin:10px 0}
+th{text-align:left;padding:8px 10px;background:var(--bg3);color:var(--dim);
+  font:11px var(--mono);text-transform:uppercase;letter-spacing:.6px;
+  border-bottom:1px solid var(--line);position:sticky;top:0}
+td{padding:7px 10px;border-bottom:1px solid #21262d;vertical-align:top}
+tr:hover td{background:#161b22}
+td.num{font-family:var(--mono);text-align:right;color:var(--acc2);white-space:nowrap}
+td.mono{font-family:var(--mono);font-size:11.5px;color:#c9d1d9;word-break:break-all}
+/* ---------- misc ---------- */
+.tag{display:inline-block;font:10.5px/1 var(--mono);padding:3px 6px;border-radius:4px;
+  background:var(--bg3);border:1px solid var(--line);color:var(--dim);margin:2px 3px 2px 0}
+.tag.s{color:var(--ok);border-color:#238636}
+.tag.r{color:var(--acc2);border-color:#1f6feb}
+.tag.d{color:var(--pur);border-color:#8957e5}
+.tag.i{color:var(--warn);border-color:#9e6a03}
+.tag.u{color:var(--bad);border-color:#da3633}
+.ev{font:10px/1 var(--mono);padding:2px 5px;border-radius:3px;font-weight:700}
+.ev.S{background:#238636;color:#fff}
+.ev.R{background:#1f6feb;color:#fff}
+.ev.D{background:#8957e5;color:#fff}
+.ev.I{background:#9e6a03;color:#fff}
+.ev.U{background:#da3633;color:#fff}
+pre{background:var(--bg2);border:1px solid var(--line);border-left:3px solid var(--acc);
+  padding:12px 14px;border-radius:6px;overflow-x:auto;font:11.5px/1.65 var(--mono);
+  color:#c9d1d9;margin:10px 0}
+.badge{display:inline-block;font:10px var(--mono);padding:2px 7px;border-radius:10px;
+  background:var(--bg3);border:1px solid var(--line);color:var(--dim)}
+.empty{color:var(--dim);font-style:italic;padding:30px 0;text-align:center}
+ul.clean{margin:8px 0;padding-left:20px}
+ul.clean li{margin:5px 0;color:#c9d1d9}
+.kv{display:grid;grid-template-columns:190px 1fr;gap:3px 14px;font-size:12.5px;
+  background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:13px 16px}
+.kv dt{color:var(--dim);font-family:var(--mono);font-size:11.5px}
+.kv dd{margin:0;color:#c9d1d9;font-family:var(--mono);font-size:11.5px;word-break:break-all}
+.kvgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:7px}
+.kvgrid>div{display:flex;justify-content:space-between;gap:10px;padding:7px 11px;
+  background:var(--bg2);border:1px solid var(--line);border-radius:6px;
+  font-family:var(--mono);font-size:11.5px}
+.kvgrid span{color:var(--dim)}
+.kvgrid b{color:var(--acc2)}
+/* ---------- demo ---------- */
+.demo{border:1px solid var(--line);border-radius:10px;overflow:hidden;
+  background:#f9f9f7;margin:14px 0}
+.demo .chrome{background:#e8e6e1;padding:7px 11px;display:flex;gap:6px;align-items:center;
+  border-bottom:1px solid #d5d2cb}
+.demo .dot{width:9px;height:9px;border-radius:50%}
+.demo .pad{padding:16px}
+.demo .topbar{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+.demo .topbar .nm{font-weight:600;color:#3d3929;font-size:14px}
+.demo .topbar button{background:none;border:1px solid #ccc8bf;border-radius:5px;
+  padding:3px 8px;font-size:11px;cursor:pointer;color:#5c574a}
+.demo .breadcrumb{font-size:11.5px;color:#8a8578;margin-bottom:18px;
+  display:flex;align-items:center;gap:7px;position:relative}
+.demo .breadcrumb .ex{color:#c96442;cursor:pointer;border-bottom:1px dashed #c96442}
+.demo .menu{position:absolute;top:22px;left:0;background:#fff;border:1px solid #ddd8cf;
+  border-radius:7px;box-shadow:0 6px 18px rgba(0,0,0,.13);padding:5px;min-width:210px;z-index:9}
+.demo .menu div{padding:7px 11px;font-size:12px;color:#3d3929;border-radius:5px;cursor:pointer}
+.demo .menu div:hover{background:#f2efe9}
+.demo h4{color:#3d3929;font-size:17px;margin:0 0 9px;font-weight:600}
+.demo p.body{color:#5c574a;font-size:12.5px;line-height:1.65;margin:0 0 15px}
+.demo .cta{background:#c96442;color:#fff;border:0;border-radius:6px;padding:8px 15px;
+  font-size:12px;cursor:pointer}
+.demo .browser{border-top:1px solid #ddd8cf;margin-top:16px;padding-top:12px;
+  font-size:10.5px;color:#8a8578}
+.demo .browser b{color:#5c574a}
+.note{background:#1a2029;border-left:3px solid var(--acc2);padding:10px 14px;
+  border-radius:5px;font-size:12.5px;color:#c9d1d9;margin:12px 0}
+.note b{color:var(--acc2)}
+.warnbox{background:#211b12;border-left:3px solid var(--warn);padding:10px 14px;
+  border-radius:5px;font-size:12.5px;color:#c9d1d9;margin:12px 0}
+.warnbox b{color:var(--warn)}
+input[type=checkbox]{accent-color:var(--acc);cursor:pointer}
+.chk{display:flex;align-items:center;gap:7px;padding:5px 0;font-size:12.5px;
+  color:#c9d1d9;cursor:pointer}
+.chk:hover{color:#fff}
+.flagrow{display:flex;align-items:center;gap:8px;padding:4px 0;font:11.5px var(--mono);
+  color:#c9d1d9}
+.exported{font:11px var(--mono);color:var(--ok)}
+@media(max-width:760px){
+  nav{width:56px}
+  nav button span.lb,nav .grp,nav button .ct{display:none}
+  .kv{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Claude Desktop <b>逆向图谱</b></div>
+  <div class="ver">v2.42304.0 · win-x64 MSIX</div>
+  <div class="pills" id="pills"></div>
+</header>
+
+<main>
+  <nav id="nav"></nav>
+  <section>
+    <div class="searchbar">
+      <input id="q" placeholder="搜索：IPC 方法 / 类名 / feature flag / 枚举 / 工具 / Go 符号 …" autocomplete="off">
+      <span class="hint" id="qhint">Ctrl+K</span>
+    </div>
+    <div id="view"></div>
+  </section>
+</main>
+
+<script src="data.js"></script>
+<script src="coverage.js"></script>
+<script>
+"use strict";
+const D = window.ATLAS;
+const D_COV = window.ATLAS_COVERAGE;
+const $ = s => document.querySelector(s);
+const V = $("#view"), Q = $("#q");
+
+/* ============================ helpers ============================ */
+const esc = s => String(s).replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const num = n => n.toLocaleString("en-US");
+const kb  = n => n < 1024 ? n+" B"
+  : n < 1048576 ? (n/1024).toFixed(1)+" KB"
+  : (n/1048576).toFixed(1)+" MB";
+const ev = l => `<span class="ev ${l}">${l}</span>`;
+
+/* persistent check / favourite state */
+const LS = "atlas-cd-v1";
+let ST = JSON.parse(localStorage.getItem(LS) || '{"fav":[],"done":[]}');
+const save = () => localStorage.setItem(LS, JSON.stringify(ST));
+const isFav = k => ST.fav.includes(k);
+const isDone = k => ST.done.includes(k);
+function toggle(kind, k){
+  const a = ST[kind], i = a.indexOf(k);
+  i < 0 ? a.push(k) : a.splice(i, 1);
+  save(); render();
+}
+
+/* ============================ navigation ============================ */
+const PAGES = [
+  { grp: "总览" },
+  { id:"home",   ic:"◈", lb:"概览",           ct: null },
+  { id:"chain",  ic:"⇄", lb:"执行链",         ct: null },
+  { grp: "界面" },
+  { id:"ui",     ic:"▣", lb:"界面与工作流",   ct: null },
+  { id:"demo",   ic:"▶", lb:"可操作复刻",     ct: null },
+  { grp: "后端" },
+  { id:"ipc",    ic:"⇢", lb:"IPC 服务面",     ct: D.counts.ipc_methods },
+  { id:"modules",ic:"▤", lb:"主进程模块",     ct: D.counts.build_modules },
+  { id:"vm",     ic:"⬢", lb:"Cowork VM",      ct: D.counts.go_symbols },
+  { id:"agent",  ic:"⟳", lb:"Agent 引擎",     ct: null },
+  { id:"mcp",    ic:"⊞", lb:"MCP / Skills",   ct: null },
+  { id:"sec",    ic:"⛨", lb:"安全边界",       ct: null },
+  { grp: "索引" },
+  { id:"flags",  ic:"⚑", lb:"Feature Flags",  ct: D.counts.flags },
+  { id:"enums",  ic:"≡", lb:"内部枚举",       ct: D.counts.enums },
+  { id:"tools",  ic:"⚒", lb:"工具清单",       ct: D.counts.tools },
+  { id:"env",    ic:"$", lb:"环境与开关",     ct: D.counts.env_vars },
+  { grp: "交付" },
+  { id:"cov",    ic:"◎", lb:"覆盖率与边界",   ct: null },
+  { id:"mark",   ic:"★", lb:"我的标记",       ct: null },
+];
+
+let cur = "home";
+function go(id){
+  cur = id; Q.value = "";
+  if (location.hash.slice(1) !== id) location.hash = id;
+  render();
+  $("#view").scrollTop = 0;
+}
+
+function renderNav(){
+  $("#nav").innerHTML = PAGES.map(p =>
+    p.grp ? `<div class="grp">${p.grp}</div>`
+    : `<button class="${p.id===cur?'on':''}" onclick="go('${p.id}')">
+         <span class="ic">${p.ic}</span><span class="lb">${p.lb}</span>
+         ${p.ct!=null?`<span class="ct">${p.ct}</span>`:""}
+       </button>`).join("");
+}
+
+function renderPills(){
+  const c = D.counts;
+  $("#pills").innerHTML = [
+    ["MSIX 成员", num(c.msix_members)],
+    ["主进程模块", c.build_modules],
+    ["IPC 方法", num(c.ipc_methods)],
+    ["Go 符号", num(c.go_symbols)],
+    ["枚举", c.enums],
+    ["Flags", c.flags],
+  ].map(([k,v]) => `<span class="pill">${k} <b>${num(v)}</b></span>`).join("");
+}
+
+/* ============================ pages ============================ */
+const P = {};
+
+/* ---------------------------------------------------------------- home */
+P.home = () => `
+<h1>Claude Desktop 逆向图谱</h1>
+<div class="sub">
+  样本 <code>claude-desktop-x64-2bf309665f.msix</code> ·
+  ${num(D.counts.msix_bytes)} 字节 ·
+  SHA256 <code>2bf309665f0d…fa24ee</code>（已校验）
+</div>
+
+<div class="note">
+<b>怎么用这个图谱</b>：左侧按域浏览 —— 界面、后端、索引。
+顶部搜索框可跨 IPC 方法、类名、feature flag、内部枚举、工具名、Go 符号全文检索（Ctrl+K）。
+每个条目右侧的 <span class="ev S">S</span> <span class="ev R">R</span>
+<span class="ev D">D</span> <span class="ev I">I</span> <span class="ev U">U</span>
+是证据等级，含义见下方。条目可勾选「已核对」、可标星收藏，状态保存在浏览器本地。
+</div>
+
+<h2>证据等级</h2>
+<table>
+<tr><th>等级</th><th>含义</th><th>本图谱中的用法</th></tr>
+<tr><td>${ev("S")}</td><td>源码 / 符号直接可见</td><td>从 asar、ion-dist、Go 符号表读出的确定事实</td></tr>
+<tr><td>${ev("R")}</td><td>运行时实际观测</td><td>实际启动进程、截图、UIA 树、stderr</td></tr>
+<tr><td>${ev("D")}</td><td>官方文档</td><td>Anthropic 帮助中心文章</td></tr>
+<tr><td>${ev("I")}</td><td>推断</td><td>由命名 / 结构推断，未经运行时验证</td></tr>
+<tr><td>${ev("U")}</td><td>不可获得</td><td>服务端实现、区域门禁后的界面</td></tr>
+</table>
+
+<h2>四个可执行体</h2>
+<div class="grid">
+  <div class="card static">
+    <div class="t">claude.exe</div>
+    <div class="n">${kb(245756240)}</div>
+    <div class="d">Electron 主进程 + Chromium。窗口、菜单、托盘、更新、全部 IPC 服务端。</div>
+  </div>
+  <div class="card static">
+    <div class="t">cowork-svc.exe</div>
+    <div class="n">${kb(13761360)}</div>
+    <div class="d">Go 二进制。Hyper-V / HCS 虚拟机运行时，hvsock RPC，EDR 门禁。
+      <a class="src" onclick="go('vm')">展开 →</a></div>
+  </div>
+  <div class="card static">
+    <div class="t">claude-ssh-*.exe</div>
+    <div class="n">3</div>
+    <div class="d">askpass / broker / proxy，SSH 子系统。</div>
+  </div>
+  <div class="card static">
+    <div class="t">chrome-native-host.exe</div>
+    <div class="n">1</div>
+    <div class="d">浏览器扩展 ↔ 桌面端原生消息宿主。</div>
+  </div>
+</div>
+
+<h2>规模</h2>
+<div class="grid">
+  ${[
+    ["MSIX 成员", D.counts.msix_members, "解包后共 4,443 个成员"],
+    ["主进程 JS 模块", D.counts.build_modules, ".vite/build 下的 chunk"],
+    ["IPC 方法", D.counts.ipc_methods, `${D.counts.ipc_classes} 个服务类`],
+    ["Go 符号", D.counts.go_symbols, `cowork-svc，${D.counts.go_packages} 个自有包`],
+    ["内部枚举", D.counts.enums, "从产品代码恢复的分类表"],
+    ["Feature Flags", D.counts.flags, "含大量未公开代号"],
+    ["工具名", D.counts.tools, "内置工具词表"],
+    ["偏好项", D.counts.prefs, "带 .meta 分类的 schema 项"],
+  ].map(([t,n,d]) => `
+    <div class="card static">
+      <div class="t">${t}</div>
+      <div class="n">${num(n)}</div>
+      <div class="d">${d}</div>
+    </div>`).join("")}
+</div>
+
+<h2>最重要的结论</h2>
+<ul class="clean">
+  <li><b>Agent Loop 不在桌面端。</b>桌面端把引擎作为子进程拉起，用 stdio 上的
+    NDJSON 通信，自己只做权限决策与 UI。
+    <a class="src" onclick="go('agent')">看执行链 →</a></li>
+  <li><b>产品逻辑大部分在 Web 包里。</b><code>ion-dist</code> 是 4,224 个文件的
+    claude.ai 前端构建产物，桌面端负责"能力供给"。</li>
+  <li><b>Cowork 是真实虚拟机。</b>Hyper-V + HCS + gVisor + hvsock 签名校验，
+    不是容器也不是普通沙箱。<a class="src" onclick="go('vm')">看 VM →</a></li>
+  <li><b>CDP 被 Ed25519 签名锁死。</b>私钥不在客户端，所以运行时内省只能走
+    UI Automation。<a class="src" onclick="go('sec')">看安全模型 →</a></li>
+  <li><b>有大量未公开代号功能。</b>130 个 feature flag 里
+    <code>quietPenguin</code>、<code>sableOtter</code>、<code>yukonSilver</code>、
+    <code>copperLark</code> 等代号默认关闭且在文档中不存在。
+    <a class="src" onclick="go('flags')">看全部 →</a></li>
+</ul>
+`;
+
+/* --------------------------------------------------------------- chain */
+P.chain = () => `
+<h1>执行链：一次对话到底走了什么</h1>
+<div class="sub">Cowork 本地模式全链路。${ev("S")} 参数与顺序均来自源码</div>
+
+<h2>① 用户输入 → IPC</h2>
+<p>渲染进程（<code>ion-dist</code>）通过 <code>$eipc_message$_…</code> 通道发起调用。
+命名为 <code>&lt;module&gt;_$_&lt;Class&gt;_$_&lt;method&gt;</code>，
+全库共 <b>${num(D.counts.ipc_methods)}</b> 个方法、<b>${D.counts.ipc_classes}</b> 个类。</p>
+<pre>$eipc_message$_6010a08f-a0fa-48b4-99da-0689b9e2de7b_$_claude.web_$_LocalSessions_$_sendMessage
+                    └──────────── 服务域 UUID ────────────┘  └module┘ └─── 类 ───┘ └─ 方法 ─┘</pre>
+
+<h2>② 主进程组装 SDK options</h2>
+<p><code>ProcessTransport</code> 按 30+ 条规则把 options 翻译成命令行。基础参数固定为：</p>
+<pre>--output-format stream-json --verbose --input-format stream-json</pre>
+<p>这三者共同定义了 <b>双向 NDJSON over stdio</b> 的通信协议。</p>
+
+<h2>③ spawn 子进程</h2>
+<pre>env.CLAUDE_CODE_ENTRYPOINT = "sdk-ts"      ← 告诉引擎「你是被 SDK 拉起的」
+delete env.NODE_OPTIONS                     ← 防止外部注入
+delete env.DEBUG                            ← 除非显式开启
+spawn(command, args, { cwd, env, signal })</pre>
+
+<h2>④ 引擎内部跑 agent loop</h2>
+<div class="mark" style="margin:10px 0">
+<pre>while (stop_reason === "tool_use") {
+    stream assistant content
+    if (tool_use) {
+        ask host for permission   ──►  --permission-prompt-tool=stdio
+        run hooks                 ──►  PreToolUse 可返回 updatedInput 改写入参
+        execute tool
+        run PostToolUse
+    }
+}</pre>
+</div>
+<p>这个循环<b>不在本样本内</b>：它在引擎二进制里。桌面端只看到流事件。</p>
+
+<h2>⑤ 权限回宿主</h2>
+<p>argv 里加 <code>--permission-prompt-tool=stdio</code>，引擎就把权限问题写成一条
+stdio 消息。桌面端 <code>ToolPermissionBroker</code> 接住，弹出 <code>host_dialog</code>，
+用户选 <code>once</code> / <code>always</code> / <code>scheduled</code> / <code>deny</code>，</p>
+<pre>{ behavior: "allow" | "deny",
+  updatedInput: {...},
+  updatedPermissions: [{ type:"setMode", mode, destination:"session" }],
+  decisionClassification: "user_reject" | "user_temporary" | "user_permanent",
+  approvalSurface: "host_dialog" }</pre>
+
+<h2>⑥ 流回与渲染</h2>
+<p>引擎输出 <b>28 种</b>流事件（<code>init</code>、<code>api_retry</code>、
+<code>compact_boundary</code>、<code>hook_started</code>、<code>task_progress</code>、
+<code>permission_denied</code>、<code>worker_shutting_down</code> …），
+主进程转成 IPC 推给渲染进程。</p>
+
+<h2>⑦ 状态机与终止</h2>
+<table>
+<tr><th>层</th><th>状态</th></tr>
+<tr><td>会话</td><td class="mono">idle → running → requires_action → running → … → idle</td></tr>
+<tr><td>后台任务</td><td class="mono">pending / running / completed / failed / killed / paused</td></tr>
+<tr><td>终止原因</td><td class="mono">success / error_during_execution / error_max_turns /
+  error_max_budget_usd / error_max_structured_output_retries</td></tr>
+<tr><td>进程失败</td><td class="mono">spawn_failed / process_error / process_exited_nonzero /
+  process_killed_by_signal / aborted</td></tr>
+</table>
+
+<h2>⑧ 工具执行位置</h2>
+<table>
+<tr><th>工具类别</th><th>执行位置</th><th>证据</th></tr>
+<tr><td>文件读写 / Grep / Glob</td><td>宿主机或 VM 内（取决于模式）</td><td>${ev("S")}</td></tr>
+<tr><td>Bash / PowerShell</td><td>VM 内（Cowork）或宿主（本地模式）</td><td>${ev("S")}</td></tr>
+<tr><td>浏览器工具（31 个）</td><td>内置浏览器 / 远程浏览器</td><td>${ev("S")}</td></tr>
+<tr><td>MCP 工具</td><td>独立进程 <code>directMcpHost.js</code></td><td>${ev("S")}</td></tr>
+<tr><td>Skill</td><td>引擎侧，入参为技能名</td><td>${ev("S")}</td></tr>
+<tr><td>Workflow</td><td>动态生成，首次需人工审核</td><td>${ev("S")}</td></tr>
+</table>
+`;
+
+/* ----------------------------------------------------------------- ui */
+P.ui = () => `
+<h1>界面与工作流</h1>
+<div class="sub">能实际看到的部分（${ev("R")}）与结构推断（${ev("I")}）分开标注</div>
+
+<div class="warnbox">
+<b>边界先说清楚</b>：本环境所在区域被产品主动限制，登录后的真实界面
+（聊天、Cowork 标签、artifact）<b>无法触达</b>。下面所有「真实截图」都是
+区域限制页；产品主界面的结构由<b>窗口角色枚举</b>与<b>IPC 方法面</b>推断，
+每条都标了 <span class="ev I">I</span>。没有伪造任何界面。
+</div>
+
+<h2>真实截图 · 区域限制页 ${ev("R")}</h2>
+<p>实际启动 <code>claude.exe</code> 后用 <code>PrintWindow</code> 抓取，616×608：</p>
+<img src="../screenshots/live/00-launch-window.png" alt="region gate"
+     style="max-width:100%;border:1px solid var(--line);border-radius:8px;margin:10px 0">
+
+<h3>逐元素来源标注</h3>
+<table>
+<tr><th>界面元素</th><th>可见文本</th><th>实现来源</th><th>证据</th></tr>
+<tr><td>顶栏应用名</td><td class="mono">Claude</td><td>主窗口顶栏，对应 flag <code>desktopTopBar</code></td><td>${ev("R")}</td></tr>
+<tr><td>菜单按钮</td><td class="mono">Toggle menu</td><td>原生菜单，<code>MenuEvents</code> 类 21 个方法</td><td>${ev("R")}</td></tr>
+<tr><td>面包屑</td><td class="mono">App unavailable in region</td><td>多层级视图导航</td><td>${ev("R")}</td></tr>
+<tr><td>下拉触发器</td><td class="mono">Explore here ▾</td><td>页面操作菜单</td><td>${ev("R")}</td></tr>
+<tr><td>主标题</td><td class="mono">App unavailable</td><td>错误态视图</td><td>${ev("R")}</td></tr>
+<tr><td>说明正文</td><td class="mono">Unfortunately, Claude is only available…</td><td>区域策略文案</td><td>${ev("R")}</td></tr>
+<tr><td>CTA 按钮</td><td class="mono">View supported countries</td><td>打开外部链接</td><td>${ev("R")}</td></tr>
+<tr><td>下方浏览器区</td><td class="mono">claude.ai 营销页脚</td><td><code>IN_APP_BROWSER</code> 窗口角色</td><td>${ev("R")}</td></tr>
+</table>
+
+<h2>真实截图 · Explore here 弹层 ${ev("R")}</h2>
+<p>点击后 UIA 从 248 个元素增至 254，多出的正是菜单项：</p>
+<img src="../screenshots/live/01-explore-here.png" alt="explore here menu"
+     style="max-width:100%;border:1px solid var(--line);border-radius:8px;margin:10px 0">
+<table>
+<tr><th>菜单项</th><th>后端方法</th><th>作用</th></tr>
+<tr><td class="mono">Ask questions about this page</td>
+    <td class="mono">previewModelScreenshot / getPreviewLastFrame</td>
+    <td>抓当前页画面，作为上下文喂给模型</td></tr>
+<tr><td class="mono">Copy as markdown</td>
+    <td class="mono">getPageText / capturePreviewScreenshot</td>
+    <td>把当前页转成 Markdown 进剪贴板</td></tr>
+</table>
+
+<h2>窗口角色全集 ${ev("S")}</h2>
+<p>主进程里有一份硬编码枚举，直接说明产品有几个独立窗口：</p>
+<table>
+<tr><th>角色</th><th>字符串</th><th>说明</th></tr>
+<tr><td>CLAUDE_AI_WEB</td><td class="mono">claude.ai-web</td><td>主界面，加载 ion-dist</td></tr>
+<tr><td>MAIN_WINDOW</td><td class="mono">main-window</td><td>主窗口</td></tr>
+<tr><td>QUICK_ENTRY</td><td class="mono">quick-entry-window</td><td>全局快捷键唤起的悬浮输入框</td></tr>
+<tr><td>IN_APP_BROWSER</td><td class="mono">in-app-browser</td><td>侧栏内置浏览器</td></tr>
+<tr><td>FIND_IN_PAGE</td><td class="mono">find-in-page</td><td>页内查找</td></tr>
+<tr><td>ABOUT</td><td class="mono">about</td><td>关于窗口</td></tr>
+<tr><td>CUSTOM3P_SETUP</td><td class="mono">custom3p-setup</td><td>第三方推理端点配置</td></tr>
+<tr><td>CUSTOM3P_DEVICE_CODE</td><td class="mono">custom3p-device-code</td><td>设备码登录</td></tr>
+</table>
+
+<h2>推断的主界面结构 ${ev("I")}</h2>
+<p>依据：窗口角色 + 339 个 <code>LocalSessions</code> 方法 + 130 个 flag +
+254 个 UIA 节点观察到的骨架。错误页保留了完整 chrome，说明主界面是同一骨架换内容区。</p>
+<pre>┌──────────────────────────────────────────────────────┐
+│ ① 顶栏   Claude                    [Toggle menu]      │  desktopTopBar
+├────────────┬─────────────────────────────────────────┤
+│ ② 侧栏     │ ③ 主内容区                               │
+│  Chat      │    会话流 / 空态引导                      │
+│  Cowork    │                                          │
+│  Code      │                                          │
+│  ─────     │                                          │
+│  会话列表   │                                          │
+│            ├─────────────────────────────────────────┤
+│            │ ④ 底部输入区（ProseMirror + TipTap）      │
+│            │    [/ 命令] [@ 提及] [附件] [模型] [模式] │
+├────────────┴─────────────────────────────────────────┤
+│ ⑤ 内置浏览器侧栏（可折叠）  ← IN_APP_BROWSER          │
+└──────────────────────────────────────────────────────┘</pre>
+<table>
+<tr><th>区域</th><th>推断依据</th></tr>
+<tr><td>① 顶栏</td><td>错误页实际存在；<code>desktopTopBar</code> flag</td></tr>
+<tr><td>② 侧栏</td><td><code>chatTab</code> / <code>coworkTabEnabled</code> / <code>chatTabEnabled</code> 三态开关</td></tr>
+<tr><td>③ 主内容区</td><td><code>artifactsPane</code> flag + <code>CoworkArtifacts</code> 25 个方法</td></tr>
+<tr><td>④ 输入区</td><td><code>vendor-prosemirror</code> 214 KB + <code>vendor-tiptap</code> 150 KB</td></tr>
+<tr><td>⑤ 浏览器侧栏</td><td><code>IN_APP_BROWSER</code> 窗口角色 + <code>Launch</code> 111 个方法</td></tr>
+</table>
+
+<h2>可交互复刻</h2>
+<p>错误页可以真实操作 —— 点下拉看菜单：</p>
+<div id="demohost"></div>
+<p><a class="src" onclick="go('demo')">进入完整可操作复刻 →</a></p>
+`;
+
+/* ----------------------------------------------------------------- demo */
+P.demo = () => `
+<h1>可操作复刻</h1>
+<div class="sub">不是截图，是可以点的 HTML。行为按 ${ev("R")} 观测结果实现</div>
+
+<div class="note">
+这些复刻刻意只做<b>实际观测到的</b>交互。登录后的产品界面没有观测到，
+所以不画假界面 —— 这里只有区域限制页和它真实的两个菜单项。
+</div>
+
+<h2>区域限制页 + Explore here 弹层</h2>
+<div id="demohost"></div>
+
+<h2>复刻元素与真实实现的对应</h2>
+<table>
+<tr><th>复刻元素</th><th>真实文本（逐字）</th><th>真实实现</th></tr>
+<tr><td>应用名</td><td class="mono">Claude</td><td>主窗口顶栏</td></tr>
+<tr><td>菜单按钮</td><td class="mono">Toggle menu</td><td>原生菜单，UIA 类型 <code>Toggle</code></td></tr>
+<tr><td>面包屑</td><td class="mono">App unavailable in region</td><td>文档标题同名字段</td></tr>
+<tr><td>下拉</td><td class="mono">Explore here ▾</td><td>页面操作菜单</td></tr>
+<tr><td>菜单项 1</td><td class="mono">Ask questions about this page</td><td><code>previewModelScreenshot</code></td></tr>
+<tr><td>菜单项 2</td><td class="mono">Copy as markdown</td><td><code>getPageText</code></td></tr>
+<tr><td>标题</td><td class="mono">App unavailable</td><td>错误态视图</td></tr>
+<tr><td>正文</td><td class="mono">Unfortunately, Claude is only available in certain regions right now. Please contact support if you think you're getting this message in error.</td><td>区域策略文案</td></tr>
+<tr><td>按钮</td><td class="mono">View supported countries</td><td>打开外部链接</td></tr>
+<tr><td>下方页脚</td><td class="mono">Claude · Claude Code · Claude Cowork · @Claude · Claude Science</td><td>内置浏览器加载的 claude.ai 页脚</td></tr>
+</table>
+
+<div class="warnbox">
+<b>未复刻的部分</b>：<code>Toggle menu</code> 的原生菜单内容 —— 该控件不支持
+InvokePattern，脚本缺合成点击回退，本次未取到。
+这条记在 <a class="src" onclick="go('cov')">覆盖率与边界</a> 里，不掩盖。
+</div>
+`;
+
+/* ------------------------------------------------------------------ ipc */
+let ipcSort = "n";
+P.ipc = () => {
+  const rows = [...D.ipc].sort((a,b) =>
+    ipcSort === "n" ? b.n - a.n : a.cls.localeCompare(b.cls));
+  const total = D.counts.ipc_methods;
+  const maxN = rows[0]?.n || 1;
+  return `
+<h1>IPC 服务面</h1>
+<div class="sub">${D.counts.ipc_classes} 个服务类 · ${num(total)} 个方法 ·
+  全部从 <code>$eipc_message$_</code> 通道名恢复 ${ev("S")}</div>
+
+<h2>通道命名规则</h2>
+<pre>$eipc_message$_&lt;服务域 UUID&gt;_$_&lt;module&gt;_$_&lt;Class&gt;_$_&lt;method&gt;</pre>
+<p>两个服务域 UUID：</p>
+<table>
+<tr><th>UUID</th><th>承载</th></tr>
+<tr><td class="mono">6010a08f-a0fa-48b4-99da-0689b9e2de7b</td>
+    <td><code>claude.*</code> 全域：settings / web / telemetry / skills / officeAddin /
+        engineSurface / simulator / designPdf / hybrid / buddy / coworkArtifact /
+        internal.{ui,computerUse,sableOtter,findInPage,localExecConsent}</td></tr>
+<tr><td class="mono">fcb91d11-972d-4fd6-b90b-72739699bff5</td>
+    <td><code>electron_window.WindowManager</code>（7 方法）</td></tr>
+</table>
+
+<h3>排序</h3>
+<p><button class="src" onclick="ipcSort='n';render()">按方法数</button> ·
+   <button class="src" onclick="ipcSort='a';render()">按名称</button></p>
+
+<table>
+<tr><th style="width:44px"></th><th>服务类</th><th style="width:86px">方法数</th>
+    <th style="width:200px">相对规模</th><th>代表方法</th></tr>
+${rows.map((r,i) => `
+<tr>
+  <td><input type="checkbox" ${isDone("ipc:"+r.cls)?"checked":""}
+       onchange="toggle('done','ipc:${r.cls}')"></td>
+  <td class="mono">${esc(r.cls)}</td>
+  <td class="num">${r.n}</td>
+  <td><div class="bar" style="background:#0d1117;height:4px;border-radius:2px">
+      <i style="display:block;height:100%;width:${Math.round(r.n/maxN*100)}%;
+         background:linear-gradient(90deg,var(--acc),var(--pur));border-radius:2px"></i></div></td>
+  <td class="mono" style="color:#8b949e;font-size:11px">
+      ${esc(r.methods.slice(0,6).join(", "))}${r.methods.length>6?" …":""}</td>
+</tr>`).join("")}
+</table>
+
+<h2>最大的三个类</h2>
+${D.ipc.slice(0,3).map(r => `
+<h3>${esc(r.cls)} — ${r.n} 个方法</h3>
+<div style="max-height:230px;overflow-y:auto;background:var(--bg2);
+     border:1px solid var(--line);border-radius:7px;padding:10px 13px">
+  ${r.methods.map(m => `<span class="tag">${esc(m)}</span>`).join("")}
+</div>`).join("")}
+`;
+};
+
+/* -------------------------------------------------------------- modules */
+P.modules = () => {
+  const maxB = D.modules[0]?.bytes || 1;
+  return `
+<h1>主进程模块</h1>
+<div class="sub"><code>.vite/build/</code> 下 ${D.counts.build_modules} 个 JS 模块 ·
+  按体积降序 ${ev("S")}</div>
+
+<div class="note">
+体积不是随机的 —— 最大的几个 chunk 正好对应最重的子系统。
+每个模块下面列出它内部出现最多的功能签名计数，用来判断职责。
+</div>
+
+<table>
+<tr><th style="width:44px"></th><th>模块</th><th style="width:80px">体积</th>
+    <th style="width:170px">相对</th><th>主要签名（出现次数）</th></tr>
+${D.modules.map(m => {
+  const sig = Object.entries(m.sig).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  return `<tr>
+    <td><input type="checkbox" ${isDone("mod:"+m.name)?"checked":""}
+         onchange="toggle('done','mod:${m.name}')"></td>
+    <td class="mono">${esc(m.name)}</td>
+    <td class="num">${kb(m.bytes)}</td>
+    <td><div class="bar" style="background:#0d1117;height:4px;border-radius:2px">
+        <i style="display:block;height:100%;width:${Math.round(m.bytes/maxB*100)}%;
+           background:var(--acc);border-radius:2px"></i></div></td>
+    <td>${sig.map(([k,v])=>`<span class="tag">${esc(k)} ${v}</span>`).join("")}</td>
+  </tr>`;
+}).join("")}
+</table>
+
+<h2>独立 worker 进程</h2>
+<p>每个都是独立进程，不是主进程内的模块 ${ev("S")}：</p>
+<table>
+<tr><th>目录</th><th>入口文件</th><th style="width:80px">体积</th></tr>
+${D.workers.map(w => `<tr>
+  <td class="mono">${esc(w.dir)}</td>
+  <td class="mono">${esc(w.file)}</td>
+  <td class="num">${kb(w.bytes)}</td></tr>`).join("")}
+</table>
+<p>其中 <code>mcp-runtime</code> 的服务名是 <code>"Custom 3P MCP Host"</code>，
+源码注释写明「Desktop and CLI share the same MCP host process」—— 这是权限边界，不是性能选择。</p>
+`;
+};
+
+/* ------------------------------------------------------------------- vm */
+P.vm = () => `
+<h1>Cowork 本地运行时</h1>
+<div class="sub"><code>cowork-svc.exe</code> · Go 二进制 · ${kb(13761360)} ·
+  ${num(D.counts.go_symbols)} 个自有符号 · ${D.counts.go_packages} 个自有包 ${ev("S")}</div>
+
+<div class="note">
+判定为 Go 的依据：字符串表含
+<code>github.com/anthropics/cowork-win32-service</code> 模块路径，
+以及标准 Go 构建残留。
+</div>
+
+<h2>六个 package</h2>
+<div class="grid">
+${[["vm",531,"Hyper-V / HCS 计算系统生命周期、VHDX、vsock 连接"],
+   ["pipe",244,"hvsock RPC 传输、帧编解码"],
+   ["edrgate",42,"EDR 端点检测门禁"],
+   ["edrpolicy",29,"EDR 策略求值"],
+   ["logsink",17,"日志汇聚到宿主"],
+   ["win-httpproxy",8,"客户机内 HTTP 代理"]]
+ .map(([k,n,d]) => `<div class="card static">
+   <div class="t">${k}</div><div class="n">${n}</div><div class="d">${d}</div></div>`).join("")}
+</div>
+
+<h2>启动时序 ${ev("S")}</h2>
+<pre>app start
+ └► scheduleStartupBundleSweep()          扫描/清理旧 bundle
+ └► isVMBundlePresent() / isVMDownloaded()
+ └► 若缺：下载 → dispatchDownloadProgress
+ └► startVM(sessionId, memoryGB, cpuCount, "gvisor", probeTarget, …)
+      ├─ [win32] 等 5s → 等网络/服务（上限 5s）
+      ├─ 复制 smol-bin.&lt;arch&gt;.vhdx → bundle/smol-bin.vhdx
+      │     └─ EBUSY/EACCES/EPERM 时跳过（VM 在跑）
+      ├─ g.configure()  → 注册/启动 cowork-svc.exe
+      └─ g.startVM(...)
+            └─ CreateComputeSystem (HCS)
+            └─ CreateDynamicVHDX
+            └─ 挂 efivars.fd
+            └─ mountSharesInGuest
+            └─ hvsock 监听 NetworkVsockServiceGUID
+ └► 状态 = Booting
+ └► 轮询 hvsock 直到客户机就绪（VerifySignature 验签）
+ └► 状态 = Ready → dispatchRunningStatusChanged
+ └► 运行期：WriteStdinParams / SubscribeEventsParams
+ └► stopVM() → Stopped
+      └─ lam_vm_shutdown_failed { vm_instance_id, bundle_version, duration_ms, trigger }</pre>
+
+<h2>关键符号</h2>
+<table>
+<tr><th>符号</th><th>语义</th></tr>
+<tr><td class="mono">CreateComputeSystem</td><td>HCS 创建虚拟机</td></tr>
+<tr><td class="mono">EnumerateComputeSystems</td><td>枚举现有 VM</td></tr>
+<tr><td class="mono">CreateDynamicVHDX</td><td>动态扩展磁盘</td></tr>
+<tr><td class="mono">NetworkVsockServiceGUID</td><td>hvsock 服务标识</td></tr>
+<tr><td class="mono">VsockPortToServiceGUID</td><td>端口 → 服务固定映射</td></tr>
+<tr><td class="mono">VMIDForSession</td><td>每会话一个 VM 标识</td></tr>
+<tr><td class="mono">sessionHash</td><td>由 session 派生</td></tr>
+<tr><td class="mono">GetClientTokenFromConn</td><td>连接级取令牌</td></tr>
+<tr><td class="mono">VerifySignature</td><td>客户机验签，防冒充</td></tr>
+<tr><td class="mono">mountSharesInGuest</td><td>宿主目录挂进客户机</td></tr>
+<tr><td class="mono">InstallCACertificatesResult</td><td>向客户机装 CA，允许审计</td></tr>
+<tr><td class="mono">Guarded</td><td>EDR 门禁入口</td></tr>
+</table>
+
+<h2>bundle 目录结构</h2>
+<pre>&lt;userData&gt;/vm_bundles/claudevm.bundle/
+    ├── smol-bin.vhdx        ← 根镜像（安装包里 37,748,736 B = 36 MB）
+    ├── efivars.fd           ← UEFI 变量
+    └── .cowork-adopted      ← 采纳标记</pre>
+
+<h2>VM 不可用原因 ${ev("S")}</h2>
+<table>
+<tr><th>原因</th><th>平台</th><th>含义</th></tr>
+<tr><td class="mono">not_enabled</td><td>Windows</td><td>Hyper-V 未启用</td></tr>
+<tr><td class="mono">os_version_too_new</td><td>Windows</td><td>系统过新，HCS 行为变更</td></tr>
+<tr><td class="mono">kvm_permission_denied</td><td>Linux</td><td>/dev/kvm 权限不足</td></tr>
+<tr><td class="mono">vhost_vsock_module_missing</td><td>Linux</td><td>内核模块缺失</td></tr>
+<tr><td class="mono">vhost_vsock_kernel_unsupported</td><td>Linux</td><td>内核不支持</td></tr>
+</table>
+
+<h2>包结构（六个自有包，共 ${num(D.counts.go_symbols)} 个函数）</h2>
+<table>
+<tr><th>包</th><th style="width:80px">函数数</th><th>函数（样例）</th></tr>
+${D.go.map(g => `<tr>
+  <td class="mono">${esc(g.sym.replace("cowork-win32-service/",""))}</td>
+  <td class="num">${g.n}</td>
+  <td class="mono" style="color:#8b949e;font-size:11px">
+    ${esc(g.fns.slice(0,6).join(", "))}${g.n>6?" …":""}</td>
+</tr>`).join("")}
+</table>
+
+<h3>命中关键函数的包</h3>
+<table>
+<tr><th>关键函数</th><th>所属包</th></tr>
+${(() => {
+  const want = ["CreateComputeSystem","CreateDynamicVHDX","VerifySignature",
+                "InstallCACertificatesResult","mountSharesInGuest","Guarded",
+                "InitSignatureVerification","EnumerateComputeSystems"];
+  return want.map(w => {
+    for (const g of D.go)
+      for (const f of g.fns)
+        if (f.includes("."+w) || f.startsWith(w))
+          return `<tr><td class="mono">${esc(f)}</td>
+                  <td class="mono">${esc(g.sym.replace("cowork-win32-service/",""))}</td></tr>`;
+    return `<tr><td class="mono">${esc(w)}</td>
+            <td style="color:var(--warn);font-size:11.5px">符号表中未精确匹配</td></tr>`;
+  }).join("");
+})()}
+</table>
+
+<div class="warnbox">
+<b>未做</b>：<code>cowork-svc.exe</code> 的原生反编译。Ghidra 可用，但本次只做到
+<b>符号级</b>（871 个函数名 + 6 个 package 结构）。函数体级证据未产出，
+明确记为缺口，不计入覆盖率。
+</div>
+`;
+
+/* ---------------------------------------------------------------- agent */
+P.agent = () => `
+<h1>Agent 引擎接入层</h1>
+<div class="sub">桌面端如何把引擎当子进程用 ${ev("S")}</div>
+
+<div class="note">
+<b>结构判断</b>：桌面端<b>没有</b>实现 agent loop。
+它把引擎作为子进程拉起，用 stdio 上的 NDJSON 双向通信，
+自己负责权限决策、hook 执行、UI 渲染。
+</div>
+
+<h2>命令行参数构建规则</h2>
+<p>基础三项固定：</p>
+<pre>--output-format stream-json --verbose --input-format stream-json</pre>
+<p>然后按 30+ 条条件追加。完整的规则表：</p>
+<table>
+<tr><th>触发</th><th>参数</th></tr>
+${[["thinking=adaptive","--thinking=adaptive"],
+   ["thinking 有预算","--max-thinking-tokens &lt;n&gt;"],
+   ["thinking 展示","--thinking-display &lt;mode&gt;"],
+   ["effort","--effort &lt;level&gt;"],
+   ["maxTurns","--max-turns &lt;n&gt;"],
+   ["maxBudgetUsd","--max-budget-usd &lt;n&gt;"],
+   ["model","--model &lt;m&gt;"],
+   ["agent","--agent &lt;name&gt;"],
+   ["betas","--betas a,b,c"],
+   ["jsonSchema","--json-schema &lt;json&gt;"],
+   ["canUseTool 存在","--permission-prompt-tool=stdio"],
+   ["continue","--continue"],
+   ["resume","--resume &lt;id&gt;"],
+   ["allowedTools","--allowedTools a,b"],
+   ["disallowedTools","--disallowedTools a,b"],
+   ["mcpServers","--mcp-config &lt;json&gt;"],
+   ["settingSources","--setting-sources a,b"],
+   ["strictMcpConfig","--strict-mcp-config"],
+   ["permissionMode","--permission-mode &lt;m&gt;"],
+   ["bypassPermissions","--allow-dangerously-skip-permissions"],
+   ["fallbackModel","--fallback-model &lt;m&gt;（与主模型相同则抛错）"],
+   ["includeHookEvents","--include-hook-events"],
+   ["includePartialMessages","--include-partial-messages"],
+   ["forkSession","--fork-session"],
+   ["sessionId","--session-id &lt;id&gt;"],
+   ["persistSession=false","--no-session-persistence"],
+   ["managedSettings","--managed-settings &lt;v&gt;"],
+   ["plugins 本地","--plugin-dir &lt;p&gt; 或 --plugin-dir-no-mcp &lt;p&gt;"],
+   ["plugins 非本地","抛错 Unsupported plugin type"]]
+ .map(([a,b])=>`<tr><td class="mono">${a}</td><td class="mono">${b}</td></tr>`).join("")}
+</table>
+
+<h2>Skill 授权的真实机制</h2>
+<pre>skills: "all"          → --allowedTools 追加 "Skill"
+skills: ["docx","pdf"] → --allowedTools 追加 "Skill(docx)","Skill(pdf)"</pre>
+<p>即技能在引擎侧是<b>一个叫 Skill 的工具</b>，具体技能是它的参数。</p>
+
+<h2>35 个 hook 事件</h2>
+<p>从 <code>new Set("…".split("."))</code> 恢复，全部为产品实际支持：</p>
+<div style="background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:12px 14px">
+${(D.enums.find(e=>e.items.includes("PreToolUse"))?.items || []).map(h=>`<span class="tag">${esc(h)}</span>`).join("")}
+</div>
+<p style="margin-top:12px">返回值形状：</p>
+<pre>{ hookSpecificOutput: {
+    hookEventName: "PreToolUse",
+    permissionDecision: "allow" | "deny",
+    permissionDecisionReason: &lt;string&gt;,
+    updatedInput: &lt;object&gt;      ← 能改写工具入参
+} }</pre>
+
+<h2>流事件</h2>
+<div style="background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:12px 14px">
+${(D.enums.find(e=>e.items.includes("api_retry"))?.items || []).map(h=>`<span class="tag">${esc(h)}</span>`).join("")}
+</div>
+<p style="margin-top:10px">共 ${D.enums.find(e=>e.items.includes("api_retry"))?.n || 0} 种流事件类型。</p>
+
+<h2>进程失败归因</h2>
+<table>
+<tr><th>情形</th><th>errorClass</th></tr>
+<tr><td>spawn 失败</td><td class="mono">spawn_failed</td></tr>
+<tr><td>其他进程错误</td><td class="mono">process_error</td></tr>
+<tr><td>退出码非 0</td><td class="mono">process_exited_nonzero</td></tr>
+<tr><td>被信号杀死</td><td class="mono">process_killed_by_signal</td></tr>
+<tr><td>用户中止</td><td class="mono">aborted</td></tr>
+</table>
+
+<h2>工具词表（${D.tools.length} 个）</h2>
+<div style="background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:12px 14px">
+${D.tools.map(t=>`<span class="tag">${esc(t)}</span>`).join("")}
+</div>
+<p style="margin-top:10px">另有浏览器/Cowork 专用工具词表 31 个
+（<code>browser_batch</code>、<code>computer</code>、<code>navigate</code>、
+<code>read_page</code>、<code>gif_creator</code>、<code>tabs_create_mcp</code> …），
+以及 48 个浏览器错误码、27 个窗格命令错误码，全部在
+<a class="src" onclick="go('enums')">内部枚举</a> 里。</p>
+`;
+
+/* ------------------------------------------------------------------ mcp */
+P.mcp = () => `
+<h1>MCP / Skills / 企业集成</h1>
+<div class="sub">三条独立 MCP 通道 + 6 个内置技能 ${ev("S")}</div>
+
+<h2>MCP 的三层结构</h2>
+<table>
+<tr><th>层</th><th>宿主</th><th>证据</th></tr>
+<tr><td>内置引擎 MCP</td><td>引擎子进程</td><td class="mono">--mcp-config &lt;json&gt; 内联参数</td></tr>
+<tr><td>独立 MCP 宿主</td><td class="mono">mcp-runtime/directMcpHost.js</td>
+    <td class="mono">serviceName: "Custom 3P MCP Host"</td></tr>
+<tr><td>插件 MCP</td><td class="mono">PluginBridgeMcp</td>
+    <td class="mono">plugin:\${cliName}:\${toolName}</td></tr>
+</table>
+
+<h2>MCP 传输类型 ${ev("S")}</h2>
+<table>
+<tr><th>类型</th><th>字段</th></tr>
+<tr><td class="mono">ws-ide</td>
+    <td class="mono">url, ideName, authToken, ideRunningInWindows, timeout, alwaysLoad, role</td></tr>
+<tr><td class="mono">http / streamable-http</td>
+    <td class="mono">url, headers, headersHelper, oauth, timeout, request_timeout_ms,
+        tools, alwaysLoad, bareElicitationCapability, discoveryCache, role, toolPermissions</td></tr>
+</table>
+<ul class="clean">
+  <li><code>streamable-http</code> 被 <code>transform</code> 成 <code>http</code> —— 外部两种写法，内部一种。</li>
+  <li><code>headersHelper</code> —— header 可以是可执行助手，用于动态 token。</li>
+  <li><code>discoveryCache</code> —— <code>tools/list</code> 昂贵，有缓存。</li>
+  <li><code>bareElicitationCapability</code> —— 向用户追问的能力是可选协商的。</li>
+  <li><code>ideRunningInWindows</code> —— WSL 场景需要区分宿主平台。</li>
+</ul>
+
+<h2>内置技能 6 个 ${ev("S")}</h2>
+<p><code>resources/bundled-skills/manifest.json</code>，
+<code>agentSkillsRef: "1792020044"</code>：</p>
+<table>
+<tr><th>技能</th><th>tier</th><th>职责</th></tr>
+<tr><td class="mono">docx</td><td class="mono">always</td><td>Word 文档创建/读取/编辑</td></tr>
+<tr><td class="mono">pdf</td><td class="mono">always</td><td>PDF 创建/合并/拆分/水印/表单/加密/OCR</td></tr>
+<tr><td class="mono">pdf-reading</td><td class="mono">always</td><td>PDF 读取/抽取/光栅化/策略选择</td></tr>
+<tr><td class="mono">pptx</td><td class="mono">always</td><td>PowerPoint</td></tr>
+<tr><td class="mono">xlsx</td><td class="mono">always</td><td>Excel</td></tr>
+<tr><td class="mono">frontend-design</td><td class="mono">—</td><td>前端设计</td></tr>
+</table>
+<p><code>tier: "always"</code> 表示<b>常驻上下文</b>，不按需加载。</p>
+
+<div class="note">
+技能描述里写死了<b>优先级裁决规则</b>，例如 docx 的描述里写明：
+「若用户没有指定文件格式，且会话提供了 Claude 自己的文档能力，则优先用后者」。
+这说明技能触发是<b>纯语义匹配</b>，没有硬编码路由。
+</div>
+
+<h2>第三方历史导入 ${ev("S")}</h2>
+<p>独立子系统 <code>index.chunk-BPjIr-mn.js</code>（50 KB），把竞品会话历史搬进 Claude。</p>
+<dl class="kv">
+  <dt>遥测事件</dt><dd>desktop_third_party_history_import</dd>
+  <dt>Sentry debug id</dt><dd>sentry-dbid-9cf4e251-4f17-48c2-88cd-201ac3410330</dd>
+  <dt>环境变量</dt><dd>CLAUDE_DESKTOP_SIBLING_IMPORT_ORG</dd>
+  <dt>IPC 类</dt><dd>HistoryImport（15 个方法）</dd>
+</dl>
+<h3>组织策略判定结果</h3>
+<pre>allowed (managed configuration)
+allowed (organization setting)
+key present but not honoured: names another organization
+not enabled for this organization</pre>
+<p>第二条特别值得注意：配置里带的组织标识<b>不是当前组织</b>时会被忽略 —— 防跨组织配置串用。</p>
+
+<h2>定时任务 ${ev("S")}</h2>
+<p>独立调度 chunk <code>index.chunk-1lJXcT8c.js</code>（41 KB，<code>cron</code> 出现 133 次）。
+IPC 类 <code>CCDScheduledTasks</code>（13 方法）。</p>
+<p>偏好里有一组状态位，讲了一个完整故事 —— 定时任务需要<b>唤醒机器</b>：</p>
+<pre>wakeSchedulerApprovedThisCycle         本周期是否已批准
+wakeSchedulerRegisteredAtVersion       注册时的版本
+wakeSchedulerCourtesyFlippedKeepAwake  是否已转为 keepAwake
+wakeSchedulerDisableEmitted            是否已发出禁用提示</pre>
+
+<h2>三套遥测并存 ${ev("S")}</h2>
+<table>
+<tr><th>SDK</th><th>chunk 体积</th><th>用途</th></tr>
+<tr><td class="mono">Datadog</td><td class="num">148,766</td><td>RUM 真实用户监控</td></tr>
+<tr><td class="mono">Sentry</td><td class="num">—</td><td>错误上报</td></tr>
+<tr><td class="mono">GrowthBook</td><td class="num">42,836</td><td>特性开关 + 服务端配置</td></tr>
+</table>
+
+<h2>产物渲染库 ${ev("S")}</h2>
+<p><code>resources/artifact-libs/</code> 预打包，模型生成的 HTML artifact 可直接引用、不需联网：</p>
+<div>${["chart.js","gridjs","mermaid"].map(x=>`<span class="tag">${x}</span>`).join("")}</div>
+`;
+
+/* ------------------------------------------------------------------ sec */
+P.sec = () => `
+<h1>安全模型与信任边界</h1>
+<div class="sub">这是逆向中防御设计证据最密集的部分 ${ev("S")}</div>
+
+<h2>启动守卫：拒绝调试与网络改写</h2>
+<p>16 个禁用的命令行开关，命中即拒绝启动：</p>
+<div style="background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:12px 14px">
+${D.forbidden.map(f=>`<span class="tag">${esc(f)}</span>`).join("")}
+</div>
+<pre>JZ(e) = e.replace(/^(?:--|-|\\/)/, "").toLowerCase().split("=", 1)[0]
+if (YZ(process.argv) &amp;&amp; !iQ()) {
+    stderr("Claude: refusing to start — a debugging or network-override switch is present")
+    process.exit(1)
+}</pre>
+<div class="note">
+<b>这是我在运行时实际撞到的</b> ${ev("R")}：
+<pre style="margin:8px 0;border-left-color:var(--warn)">$ claude.exe --remote-debugging-port=9333
+Claude: refusing to start — a debugging or network-override switch is present on the command line.
+[exit code: 1]</pre>
+归一化识别 <code>--</code> / <code>-</code> / <code>/</code> 三种前缀，大小写不敏感。
+</div>
+
+<h2>唯一的逃生门：Ed25519 签名的 CDP 授权</h2>
+<p><code>iQ()</code> 必须<b>同时</b>满足：</p>
+<table>
+<tr><th>条件</th><th>细节</th></tr>
+<tr><td>两个环境变量</td><td class="mono">CLAUDE_CDP_AUTH + CLAUDE_USER_DATA_DIR</td></tr>
+<tr><td>token 结构</td><td class="mono">正好 3 段，点分：ts.payload.sig</td></tr>
+<tr><td>payload 绑定</td><td class="mono">base64 解码后必须 <b>正好等于</b> userData 路径</td></tr>
+<tr><td>时间窗口</td><td class="mono">0 ≤ now−ts ≤ 300000 ms（5 分钟）</td></tr>
+<tr><td>签名</td><td class="mono">Ed25519 over "${'{'}ts{'}'}.${'{'}payload{'}'}"</td></tr>
+<tr><td>固定公钥（SPKI）</td>
+    <td class="mono">MCowBQYDK2VwAyEAxONNYxuoQ4/PkjI7rdBmfpsWn1Ohfuqx9VMIsLwlTQY=</td></tr>
+</table>
+<p>DER 前缀 <code>MCowBQYDK2VwAyEA</code> 解出来是
+<code>SEQUENCE { SEQUENCE { OID 1.3.101.112 } BIT STRING }</code>，
+OID 1.3.101.112 即 Ed25519，后 32 字节是公钥。</p>
+
+<div class="warnbox">
+<b>安全评估</b>：Ed25519 无已知实用攻击；5 分钟窗口抗重放；token 绑死 userData 路径，
+换目录即失效；<b>私钥不在客户端</b>（不在安装包、不在任何提取出的文件中）。
+结论：只有持 Anthropic 私钥的内部构建才可能开启 CDP。
+这就是本项目运行时内省只能走 UI Automation 的原因 —— 不是偷懒，是设计上不可能。
+</div>
+
+<h2>子进程环境变量清洗 ${ev("S")}</h2>
+<pre>if (app.isPackaged &amp;&amp; !iQ()) {
+    delete process.env.CLAUDE_USER_DATA_DIR;
+    delete process.env.SSLKEYLOGFILE;
+    delete process.env.sslkeylogfile;
+}
+globalThis.ignoredUserDataDirEnv = /* 原始值 */</pre>
+<p><code>SSLKEYLOGFILE</code> 的删除尤其重要 —— 它是 Wireshark 解密 TLS 的标准手段。</p>
+
+<h2>启动硬化参数 ${ev("S")}</h2>
+<pre>--enable-features=IsolatesPriorityUseProcessPriority
+--dnsPrefetchingEnabled=false          ← 减少侧信道泄漏
+--disable-features=ConnectionAllowlists
+process.env.NoDefaultCurrentDirectoryInExePath = "1"   ← 防 DLL 搜索路径劫持
+Error.stackTraceLimit = 20</pre>
+
+<h2>六类隔离边界</h2>
+<table>
+<tr><th>边界</th><th>机制</th></tr>
+<tr><td>Web 内容 ↔ 主进程</td><td><code>contextBridge</code>，19 个暴露节点，无 nodeIntegration</td></tr>
+<tr><td>模型产物 ↔ 宿主</td><td><code>cowork</code> bridge + <code>navigator.userActivation.isActive</code> 门控</td></tr>
+<tr><td>引擎进程 ↔ 主进程</td><td>子进程 + stdio NDJSON + env 清洗</td></tr>
+<tr><td>MCP 宿主 ↔ 主进程</td><td>独立进程 <code>directMcpHost.js</code></td></tr>
+<tr><td>Cowork 代码 ↔ 宿主机</td><td>Hyper-V VM + gVisor + hvsock + <code>VerifySignature</code></td></tr>
+<tr><td>EDR ↔ VM 启动</td><td><code>edrgate</code> / <code>edrpolicy</code> 门禁</td></tr>
+</table>
+
+<h2>企业管控面 ${ev("S")}</h2>
+<p>策略来源四条通道：</p>
+<div>${["MDM profile","GPO registry policy","/etc/claude-desktop/managed-settings.json","managed configuration"]
+  .map(x=>`<span class="tag">${esc(x)}</span>`).join("")}</div>
+<h3>界面面开关</h3>
+<pre>standard:  { chat: true,  fileAnalysis: true,  cowork: true  }
+simple:    { chat: true,  fileAnalysis: true,  cowork: false }
+"no-vm":   { chat: true,  fileAnalysis: true,  cowork: false }
+off:       { chat: false, fileAnalysis: false, cowork: false }</pre>
+<p>强制约束：<code>"At least one surface must remain enabled; ${'$'}{x} has been re-enabled."</code>
+—— 管理员不能把三个面全关。</p>
+
+<h2>内置浏览器的权限模型 ${ev("S")}</h2>
+<p>8 个偏好键给出完整图景：</p>
+<pre>launchPreviewAllowedOrigins                     源白名单
+launchPreviewAllowedDomainTransitions           域名跳转白名单（防 SSRF 式重定向）
+launchPreviewPrivateNetworkReadOrigins          私有网络访问 —— 来源
+launchPreviewPrivateNetworkReadPins             私有网络访问 —— pin
+launchPreviewPrivateNetworkTrustedOrigins       私有网络访问 —— 信任来源
+launchPreviewPrivateNetworkTrustPins            私有网络访问 —— 信任 pin
+launchPreviewPersistedWorkspaces                工作区持久化
+launchPreviewSessionScopedSessions              会话级隔离</pre>
+<p>后四个键合起来是 <b>PNA（Private Network Access）</b> 防护 —— 防止模型让浏览器
+访问内网 <code>192.168.x.x</code> 或 <code>localhost</code>。</p>
+<p>另有 <code>isJitlessForced</code> + <code>previewJitlessKillSwitchEngaged</code>：
+<b>强制 JIT-less 模式</b>，针对 JIT 喷射类漏洞的缓解措施。</p>
+
+<h2>未公开的代号安全特性 ${ev("S")} ${ev("I")}</h2>
+<table>
+<tr><th>偏好键</th><th>默认</th><th>可推断语义</th></tr>
+<tr><td class="mono">hardwareBuddyEnabled</td><td>false</td><td>硬件伙伴设备（有 <code>Buddy</code> IPC 14 方法）</td></tr>
+<tr><td class="mono">sableOtterEnabled</td><td>false</td><td>系统级语音/听写助手，8 个子配置</td></tr>
+<tr><td class="mono">quietPenguinEnabled</td><td>false</td><td>—</td></tr>
+<tr><td class="mono">louderPenguinEnabled</td><td>false</td><td>—</td></tr>
+<tr><td class="mono">rubberDuckEnabled</td><td>false</td><td>—</td></tr>
+<tr><td class="mono">velvetFinchEnabled</td><td>false</td><td>—</td></tr>
+<tr><td class="mono">hushedHeronKey</td><td>"off"</td><td>快捷键绑定，schema 为 off 或 {accelerator, account}</td></tr>
+<tr><td class="mono">chillingSlothLocation</td><td>"default"</td><td>位置策略</td></tr>
+</table>
+<h3>sableOtter 的配置面</h3>
+<pre>sableOtterTalkHold        = "right-control+right-shift"   按住说话
+sableOtterCardHold        = "right-option"                按住唤卡片
+sableOtterDictateHold     = "right-control"               按住听写
+sableOtterWindowContext   = "ask"                         是否读窗口上下文
+sableOtterExcludedApps    = []                            可排除应用
+sableOtterTerms           = []                            自定义词表</pre>
+<p><code>right-option</code> 是 <b>macOS 专属命名</b>（Windows 叫 Alt）。
+所以这套是跨平台共享代码，Windows 包里也有。</p>
+
+<div class="warnbox">
+<b>边界</b>：<code>rubberDuck</code> / <code>velvetFinch</code> / <code>quietPenguin</code> /
+<code>louderPenguin</code> / <code>yukonSilver</code> / <code>copperLark</code> 等代号
+<b>只能确认存在</b>，语义为 ${ev("I")}/${ev("U")}。
+flag 表没有描述字段，偏好只有布尔默认值。不编造。
+</div>
+
+<h2>启动拒绝类错误 ${ev("S")}</h2>
+<div style="background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:12px 14px">
+${["process_crashed","managed_sideload_disabled","sandbox_required_unavailable",
+   "managed_settings_refused","gateway_signin_required","gateway_access_denied",
+   "remote_settings_required_unavailable","org_*"]
+  .map(x=>`<span class="tag">${esc(x)}</span>`).join("")}
+</div>
+<p style="margin-top:10px">
+<code>sandbox_required_unavailable</code> —— 强制沙箱但沙箱不可用时<b>拒绝启动</b>，
+fail-closed 而不是降级运行。</p>
+`;
+
+/* ---------------------------------------------------------------- flags */
+let flagQ = "";
+P.flags = () => {
+  const q = flagQ.toLowerCase();
+  return `
+<h1>Feature Flags</h1>
+<div class="sub">${D.counts.flags} 个 flag · ${D.counts.prefs} 个偏好 schema 项 ·
+  全部从主进程的 flag 构建器与 zod schema 恢复 ${ev("S")}</div>
+
+<div class="note">
+这份表是判断「产品到底有哪些功能」最可靠的单一来源。
+<b>未公开的代号功能</b>（<code>quietPenguin</code>、<code>sableOtter</code>、
+<code>yukonSilver</code>、<code>copperLark</code>、<code>violinBow</code>、
+<code>epitaxyMcpApps</code> …）全部在里面，默认关闭，文档中不存在。
+</div>
+
+<h2>过滤</h2>
+<input id="fq" value="${esc(flagQ)}" placeholder="输入片段过滤 flag，例如 cowork / ccd / penguin"
+  style="width:340px;background:var(--bg);border:1px solid var(--line);color:var(--fg);
+  padding:8px 11px;border-radius:6px;font:12px var(--mono);outline:none"
+  oninput="flagQ=this.value;render()">
+
+${D.flag_groups.map(g => {
+  const items = q ? g.flags.filter(f=>f.toLowerCase().includes(q)) : g.flags;
+  if (!items.length) return "";
+  return `<h2>${esc(g.label)} <span class="badge">${items.length}</span></h2>
+  <div style="background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:11px 14px">
+  ${items.map(f=>`<span class="tag" style="cursor:pointer"
+      onclick="toggle('fav','flag:${esc(f)}')">${isFav("flag:"+f)?"★ ":""}${esc(f)}</span>`).join("")}
+  </div>`;
+}).join("")}
+
+<h2>偏好 schema（按产品自己的分类）</h2>
+<table>
+<tr><th style="width:44px"></th><th>分类</th><th>偏好键</th><th>校验器</th></tr>
+${[...D.prefs].sort((a,b)=>a.category.localeCompare(b.category)).map(p => `
+<tr>
+  <td><input type="checkbox" ${isDone("pref:"+p.name)?"checked":""}
+       onchange="toggle('done','pref:${esc(p.name)}')"></td>
+  <td><span class="tag">${esc(p.category)}</span></td>
+  <td class="mono">${esc(p.name)}</td>
+  <td class="mono" style="color:#8b949e;font-size:11px">${esc(p.validator)}</td>
+</tr>`).join("")}
+</table>
+
+<h2>偏好写入路径 ${ev("S")}</h2>
+<pre>$Rt = async (e, t) => {
+    let n = ZRt[e];                       // 每键校验器
+    if (n &amp;&amp; await n(t) === false) return;  // 校验失败直接丢弃
+    let r = { ...Mg().preferences ?? {}, [e]: t },
+        i = await Fg("preferences", r);
+    bv.emit(e, t);                        // 事件广播
+    dispatchPreferencesChanged(QRt(tzt(r)));
+    return i;
+}</pre>
+<p>即<b>逐键校验 → 全量落盘 → 事件广播 → 通知渲染进程</b>。</p>
+`;
+};
+
+/* ---------------------------------------------------------------- enums */
+let enumKind = "all";
+P.enums = () => {
+  const kinds = [...new Set(D.enums.map(e=>e.kind))].sort();
+  const rows = enumKind === "all" ? D.enums : D.enums.filter(e=>e.kind===enumKind);
+  const pick = [
+    ["hook 事件","PreToolUse"],["流事件","api_retry"],
+    ["工具词表","AskUserQuestion"],["浏览器错误","cdp_timeout"],
+    ["窗格错误","pane_in_use"],["崩溃分类","segfault"],
+  ];
+  const find = m => D.enums.find(e=>e.items.includes(m));
+  return `
+<h1>内部枚举</h1>
+<div class="sub">${D.enum_total} 个内部分类表从 <code>new Set(...)</code> / 字符串数组恢复
+  ${ev("S")} · 下方展示 ${D.enums.length} 个</div>
+
+<h2>关键分类表</h2>
+<table>
+<tr><th>名称</th><th style="width:60px">条目</th><th>内容</th></tr>
+${pick.map(([lb,marker])=>{
+  const e = find(marker);
+  if (!e) return `<tr><td>${lb}</td><td class="num">—</td><td>未找到</td></tr>`;
+  return `<tr><td>${lb}</td><td class="num">${e.n}</td>
+    <td>${e.items.slice(0,14).map(x=>`<span class="tag">${esc(x)}</span>`).join("")}
+    ${e.n>14?`<span class="badge">+${e.n-14}</span>`:""}</td></tr>`;
+}).join("")}
+</table>
+
+<h2>全部枚举</h2>
+<p>按类型过滤：
+${["all",...kinds].map(k=>`<button class="src" onclick="enumKind='${k}';render()"
+  style="${enumKind===k?'color:var(--acc);font-weight:700':''}">${k}</button>`).join(" · ")}
+</p>
+<p style="color:var(--dim);font-size:12px">当前显示 ${rows.length} 个</p>
+<table>
+<tr><th style="width:110px">类型</th><th style="width:56px">条目</th><th>内容</th><th style="width:150px">来源</th></tr>
+${rows.map(e=>`<tr>
+  <td><span class="tag">${esc(e.kind)}</span></td>
+  <td class="num">${e.n}</td>
+  <td>${e.items.slice(0,12).map(x=>`<span class="tag">${esc(x)}</span>`).join("")}
+      ${e.n>12?`<span class="badge">+${e.n-12}</span>`:""}</td>
+  <td class="mono" style="color:#8b949e;font-size:10.5px">${esc(e.file)}<br>@${num(e.offset)}</td>
+</tr>`).join("")}
+</table>
+`;
+};
+
+/* ---------------------------------------------------------------- tools */
+P.tools = () => {
+  const main = D.tool_lists[0];
+  const fsAll = D.enums.find(e => e.n === 10 && e.items.includes("PowerShell"));
+  const fsEng = D.enums.find(e => e.n === 8 && e.items.includes("MultiEdit"));
+  const lists = [
+    { lb: "引擎广播给 UI 的工具名全集", t: main },
+    { lb: "文件类工具（宿主侧，含 PowerShell）", t: fsAll },
+    { lb: "文件类工具（引擎侧）", t: fsEng },
+  ].filter(x => x.t);
+  return `
+<h1>工具清单</h1>
+<div class="sub">产品内部有多个不同口径的工具表，混用会得出错误结论 ${ev("S")}</div>
+
+${lists.map(x => `
+<h2>${x.lb} <span class="badge">${x.t.n}</span></h2>
+<p class="src" style="display:block;margin-bottom:8px">
+  ${esc(x.t.file)} @${num(x.t.offset)}</p>
+<div style="background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:12px 14px">
+${x.t.items.map(i=>`<span class="tag">${esc(i)}</span>`).join("")}
+</div>`).join("")}
+
+<h2>三份表为什么不一样</h2>
+<ul class="clean">
+  <li>第一份 <b>${main.n} 个</b>是引擎启动时<b>广播给 UI</b> 的全集 ——
+      UI 用它决定渲染哪种工具卡片。</li>
+  <li>第二份 <b>${fsAll?.n||0} 个</b>多了 <code>PowerShell</code>，
+     少了 <code>Task*</code> / <code>Tmux</code> / <code>REPL</code> 等 ——
+      它是<b>需要文件权限</b>的工具子集，用于权限判定。</li>
+  <li>第三份 <b>${fsEng?.n||0} 个</b>更窄，是引擎侧最小文件工具集。</li>
+</ul>
+<p>结论：<code>PowerShell</code> 不在广播表里，但在权限表里 —— 说明它是
+<b>Windows 专属工具</b>，由宿主注入而非引擎内置。</p>
+
+<h2>桌面端代码中没有实现引用的工具</h2>
+<p>这些工具名在主进程 JS 里<b>只出现在广播表中</b>，没有执行逻辑：</p>
+<div>${["Tmux","REPL","SendUserMessage","ToolSearch","JavaScript"]
+  .map(t=>`<span class="tag">${t}</span>`).join("")}</div>
+<p style="margin-top:10px">它们由引擎侧实现，桌面端只负责显示。
+这是「agent loop 不在桌面端」这一结论的又一佐证。</p>
+
+<h2>浏览器 / Cowork 专用工具（31 个）</h2>
+<div style="background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:12px 14px">
+${["browser_batch","click","computer","domain_transition","execute_javascript",
+   "file_upload","find","form_input","get_page_text","gif_creator","javascript_tool",
+   "list_connected_browsers","navigate","plan_approval","read_console_messages",
+   "read_network_requests","read_page","read_page_content","remote_mcp","resize_window",
+   "select_browser","shortcuts_execute","shortcuts_list","submit_credentials",
+   "switch_browser","tabs_close_mcp","tabs_context_mcp","tabs_create_mcp","type",
+   "unknown","upload_image"]
+  .map(x=>`<span class="tag">${esc(x)}</span>`).join("")}
+</div>
+<p style="margin-top:10px"><code>gif_creator</code> 和 <code>resize_window</code> 的存在说明
+浏览器自动化是<b>面向演示</b>设计的 —— 不只是抓数据，还要产出可展示的内容。</p>
+
+<h2>权限模式</h2>
+<table>
+<tr><th>模式</th><th style="width:70px">出现次数</th><th>含义</th></tr>
+<tr><td class="mono">default</td><td class="num">24</td><td>每次询问</td></tr>
+<tr><td class="mono">auto</td><td class="num">21</td><td>自动判定</td></tr>
+<tr><td class="mono">ask</td><td class="num">18</td><td>询问</td></tr>
+<tr><td class="mono">bypassPermissions</td><td class="num">4</td><td>跳过全部，需 <code>--allow-dangerously-skip-permissions</code></td></tr>
+<tr><td class="mono">acceptEdits</td><td class="num">2</td><td>自动接受文件编辑</td></tr>
+<tr><td class="mono">plan</td><td class="num">2</td><td>计划模式（只读）</td></tr>
+</table>
+`;
+};
+
+/* ------------------------------------------------------------------ env */
+P.env = () => `
+<h1>环境变量与启动开关</h1>
+<div class="sub">从包里恢复的全部环境变量读取点与全局对象 ${ev("S")}</div>
+
+<h2>引擎侧环境变量</h2>
+<div style="background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:12px 14px">
+${["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC","CLAUDE_CODE_HOST_WORKTREE",
+   "CLAUDE_CODE_HOST_WORKTREE_FENCE","CLAUDE_CODE_OAUTH_TOKEN",
+   "CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS","CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS",
+   "CLAUDE_CODE_SIMPLE","CLAUDE_CODE_STARTUP_FAILURE_RESULTS","CLAUDE_CONFIG_DIR",
+   "CLAUDE_E2E_WORKTREE_WRITE_GUARD_OFF","CLAUDE_SSH_FORK_KEPT_EXISTING"]
+  .map(x=>`<span class="tag">${esc(x)}</span>`).join("")}
+</div>
+
+<h2>应用侧环境变量</h2>
+<div style="background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:12px 14px">
+${["CLAUDE_AI_URL","CLAUDE_CDP_AUTH","CLAUDE_E2E_PKCE_LOG","CLAUDE_ENABLE_LOGGING",
+   "CLAUDE_HARNESS_RESIZE","CLAUDE_HYBRID_BOOTSTRAP_URL","CLAUDE_USER_DATA_DIR",
+   "DESKTOP_LOG_LEVEL","CLAUDE_DESKTOP_SIBLING_IMPORT_ORG"]
+  .map(x=>`<span class="tag">${esc(x)}</span>`).join("")}
+</div>
+
+<h2>全部读取点（${D.counts.env_vars} 个）</h2>
+<p>这些是代码里实际读过（<code>process.env.X</code>）的全部变量名：</p>
+<div style="background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:12px 14px">
+${D.env_vars.map(x=>`<span class="tag">${esc(x)}</span>`).join("")}
+</div>
+
+<h2>全局对象</h2>
+<div style="background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:12px 14px">
+${D.globals.map(x=>`<span class="tag">${esc(x)}</span>`).join("")}
+</div>
+
+<h2>禁止的启动开关（16 个）</h2>
+<p>命中任一项且无有效 CDP 令牌 → 拒绝启动：</p>
+<table>
+<tr><th>开关</th><th>封的是什么攻击面</th></tr>
+${[["remote-debugging-port","DevTools 远程控制"],
+   ["remote-debugging-pipe","DevTools 管道"],
+   ["ignore-certificate-errors","TLS 中间人"],
+   ["ssl-key-log-file","TLS 密钥导出（Wireshark）"],
+   ["host-resolver-rules","DNS 劫持"],
+   ["host-rules","主机路由改写"],
+   ["disable-web-security","同源策略绕过"],
+   ["log-net-log","网络日志导出"],
+   ["net-log-capture-mode","网络日志模式"],
+   ["renderer-cmd-prefix","渲染进程注入"],
+   ["utility-cmd-prefix","工具进程注入"],
+   ["gpu-launcher","GPU 进程注入"],
+   ["zygote-cmd-prefix","zygote 注入"],
+   ["ppapi-plugin-launcher","插件进程注入"],
+   ["nacl-loader-cmd-prefix","NaCl 加载器注入"],
+   ["browser-subprocess-path","子进程二进制替换"]]
+ .map(([k,v])=>`<tr><td class="mono">${k}</td><td>${v}</td></tr>`).join("")}
+</table>
+
+<h2>其他重要常量</h2>
+<dl class="kv">
+  <dt>CDP 时间窗口</dt><dd>300000 ms（5 分钟）</dd>
+  <dt>CDP 公钥（SPKI）</dt><dd>MCowBQYDK2VwAyEAxONNYxuoQ4/PkjI7rdBmfpsWn1Ohfuqx9VMIsLwlTQY=</dd>
+  <dt>网络断开宽限</dt><dd>30000 ms</dd>
+  <dt>VM 启动等待</dt><dd>5000 ms</dd>
+  <dt>应用 channel 名</dt><dd>["claude","claude-nest","claude-dev","claude-nest-dev"]</dd>
+  <dt>浏览器扩展 ID</dt><dd>fcoeoabgfenejglbffodgkkbkcdhcgfn / dngcpimnedloihjnnfngkgjoidhnaolf</dd>
+  <dt>原生消息宿主</dt><dd>com.anthropic.claude_browser_extension</dd>
+</dl>
+`;
+
+/* ------------------------------------------------------------------ cov */
+P.cov = () => {
+  const M = D_COV.metrics, DT = D_COV.detail,
+        MECH = D_COV.mechanisms, DYN = D_COV.dynamic, UIS = D_COV.ui;
+  const row = (k) => {
+    const m = M[k];
+    const cls = m.percent >= 99.5 ? "ev S" : m.percent >= 60 ? "ev D" : "ev I";
+    return `<tr>
+      <td><b>${k}</b></td>
+      <td class="num">${num(m.numerator)} / ${num(m.denominator)}</td>
+      <td><span class="${cls}">${m.percent}%</span></td>
+      <td style="color:var(--dim);font-size:12px">${esc(m.scope)}</td>
+    </tr>`;
+  };
+  return `
+<h1>覆盖率与边界</h1>
+<div class="sub">每一项都给出分子、分母和统计口径。唯一达到 100% 的是文件登记。</div>
+
+<div class="warnbox">
+<b>口径声明</b>：分母是本样本（MSIX 2.42304.0）内<b>可枚举</b>的对象数量。
+「不可获得」的对象（Anthropic 服务端实现、区域门禁后的界面）<b>不计入分母</b>，
+单独列在最后的「边界」一节。这样覆盖率反映的是「在本样本内做到了多少」，
+而不是用不可达目标稀释比例，也不是用可枚举目标冲高比例。
+</div>
+
+<h2>六项覆盖率（自动生成自 coverage.json）</h2>
+<table>
+<tr><th style="width:170px">指标</th><th style="width:120px">分子 / 分母</th>
+    <th style="width:80px">比例</th><th>统计口径</th></tr>
+${["文件登记覆盖率","文件内容解析覆盖率","符号/函数枚举覆盖率",
+   "深度机制解释覆盖率","动态验证覆盖率","界面可视化覆盖率"].map(row).join("")}
+</table>
+
+${["文件登记覆盖率","文件内容解析覆盖率","符号/函数枚举覆盖率",
+   "深度机制解释覆盖率","动态验证覆盖率","界面可视化覆盖率"].map(k =>
+  `<div class="note"><b>${k}</b>：${esc(M[k].note)}</div>`).join("")}
+
+<h2>样本规模（分母的构成）</h2>
+<div class="kvgrid">
+${[["MSIX 成员", num(DT.msix_members)],
+   ["MSIX 字节", kb(DT.msix_bytes)],
+   ["asar 文件", num(DT.asar_files)],
+   ["asar 归档字节", kb(DT.asar_bytes)],
+   ["IPC 服务类", num(DT.ipc_classes)],
+   ["IPC 方法", num(DT.ipc_methods)],
+   ["Go 自有函数", num(DT.go_own_functions)],
+   ["Go 标准库函数", num(DT.go_stdlib_functions)],
+   ["Go 自有包", num(DT.go_packages)],
+   ["内部枚举", num(DT.enums)],
+   ["Feature Flags", num(DT.flags)],
+   ["偏好项 schema", num(DT.prefs)]]
+ .map(([k,v])=>`<div><span>${k}</span><b>${v}</b></div>`).join("")}
+</div>
+
+<h2>深度机制解释：逐项判定（${MECH.filter(m=>m.explained).length} / ${MECH.length}）</h2>
+<table>
+<tr><th style="width:210px">机制</th><th style="width:90px">已解释</th>
+    <th style="width:80px">证据</th><th>位置</th></tr>
+${MECH.map(m=>`<tr>
+  <td>${esc(m.name)}</td>
+  <td>${m.explained ? '<span class="ev S">是</span>' : '<span class="ev U">否</span>'}</td>
+  <td>${m.evidence.split("+").map(e=>ev(e)).join(" ")}</td>
+  <td style="color:var(--dim);font-size:11.5px" class="mono">${esc(m.where)}</td>
+</tr>`).join("")}
+</table>
+
+<h2>动态验证：逐项判定（${DYN.filter(d=>d.done).length} / ${DYN.length}）</h2>
+<table>
+<tr><th>项目</th><th style="width:90px">已完成</th></tr>
+${DYN.map(d=>`<tr><td>${esc(d.check)}</td>
+  <td>${d.done ? '<span class="ev R">是</span>' : '<span class="ev U">否</span>'}</td></tr>`).join("")}
+</table>
+
+<h2>界面可视化：逐项判定（${UIS.filter(u=>u.captured).length} / ${UIS.length}）</h2>
+<table>
+<tr><th style="width:230px">界面入口</th><th style="width:90px">已取得</th><th>产物 / 原因</th></tr>
+${UIS.map(u=>`<tr><td>${esc(u.surface)}</td>
+  <td>${u.captured ? '<span class="ev R">是</span>' : '<span class="ev U">否</span>'}</td>
+  <td style="color:var(--dim);font-size:12px" class="mono">${esc(u.artefact)}</td></tr>`).join("")}
+</table>
+
+<h2>明确不可获得（不计入分母）</h2>
+<table>
+<tr><th style="width:250px">对象</th><th>原因</th></tr>
+<tr><td>Anthropic 服务端实现</td><td>网络服务，不在客户端样本内</td></tr>
+<tr><td>模型调用的服务端协议</td><td>同上</td></tr>
+<tr><td>云端 Cowork 执行环境</td><td>同上</td></tr>
+<tr><td>组织策略的签名与下发</td><td>同上</td></tr>
+<tr><td>CDP 授权私钥</td><td>设计上就不在客户端</td></tr>
+<tr><td>agent loop / 工具实现 / 压缩算法</td>
+    <td>在 Claude Code 引擎二进制内，本样本不含（任务书明确不做独立 CLI 逆向）</td></tr>
+<tr><td>cowork-svc.exe 函数体</td>
+    <td>只做到符号级；Ghidra 已就绪但本次未跑原生反编译，记为缺口</td></tr>
+<tr><td>区域门禁后的产品界面</td><td>产品主动限制，不是技术障碍</td></tr>
+<tr><td>Consumer Setup 安装器</td><td>下载端点返回 403 region_unavailable</td></tr>
+<tr><td>ion-dist 的 4,026 个前端资源</td>
+    <td>已解包并做特征普查，未逐文件进入解析覆盖率分子</td></tr>
+</table>
+
+<h2>为什么没有 GIF / 视频</h2>
+<p>ffmpeg 8.1.2 可用，但<b>本次未录制</b>。可交互范围只有错误页和一个两项下拉菜单，
+录 GIF 的信息增量接近于零，反而会制造「看起来很完整」的假象。</p>
+<p>替代方案是 <a class="src" onclick="go('demo')">可操作 HTML 复刻</a> ——
+能真实点击、每个元素标注真实来源，比录一段假动画信息量高得多。
+这是明确的取舍，不是遗漏。若后续拿到登录态，GIF 录制脚本可直接补上。</p>
+`;
+};
+
+/* ----------------------------------------------------------------- mark */
+P.mark = () => {
+  const fav = ST.fav, done = ST.done;
+  return `
+<h1>我的标记</h1>
+<div class="sub">勾选「已核对」的条目与标星的条目，保存在浏览器本地存储</div>
+
+<h2>已核对 <span class="badge">${done.length}</span></h2>
+${done.length ? `<table><tr><th>类别</th><th>标识</th><th style="width:70px"></th></tr>
+${done.map(k=>{
+  const [kind,...rest] = k.split(":");
+  const name = rest.join(":");
+  return `<tr>
+    <td><span class="tag">${esc(kind)}</span></td>
+    <td class="mono">${esc(name)}</td>
+    <td><button class="src" onclick="toggle('done','${esc(k)}')">移除</button></td>
+  </tr>`;
+}).join("")}</table>` : `<div class="empty">还没有勾选任何条目</div>`}
+
+<h2>已收藏 <span class="badge">${fav.length}</span></h2>
+${fav.length ? `<div style="background:var(--bg2);border:1px solid var(--line);
+  border-radius:7px;padding:12px 14px">
+${fav.map(k=>`<span class="tag" style="cursor:pointer"
+  onclick="toggle('fav','${esc(k)}')">★ ${esc(k.split(":").slice(1).join(":"))}</span>`).join("")}
+</div>` : `<div class="empty">还没有标星任何条目</div>`}
+
+<h2>导出</h2>
+<p>把标记导出成 JSON，方便贴进报告或交接：</p>
+<pre id="expo">${esc(JSON.stringify({favourites:fav, reviewed:done}, null, 2))}</pre>
+<p><button class="src" onclick="copyExport()">复制到剪贴板</button>
+   <span id="cpo" class="exported"></span></p>
+
+<h2>清空</h2>
+<p><button class="src" onclick="if(confirm('清空全部标记？')){ST={fav:[],done:[]};save();render()}">
+  清空全部标记</button></p>
+`;
+};
+
+function copyExport(){
+  const t = $("#expo").textContent;
+  navigator.clipboard.writeText(t).then(()=>{
+    $("#cpo").textContent = " 已复制";
+    setTimeout(()=>$("#cpo").textContent = "", 1800);
+  });
+}
+
+/* ============================ search ============================ */
+function search(q){
+  q = q.trim().toLowerCase();
+  if (q.length < 2) { render(); return; }
+  const hits = [];
+  const add = (kind, name, extra) => hits.push({kind, name, extra});
+
+  D.ipc.forEach(r => {
+    if (r.cls.toLowerCase().includes(q)) add("IPC 类", r.cls, `${r.n} 个方法`);
+    r.methods.forEach(m => { if (m.toLowerCase().includes(q)) add("IPC 方法", m, r.cls); });
+  });
+  D.flag_groups.forEach(g => g.flags.forEach(f => {
+    if (f.toLowerCase().includes(q)) add("Feature Flag", f, g.label);
+  }));
+  D.prefs.forEach(p => {
+    if (p.name.toLowerCase().includes(q)) add("偏好项", p.name, p.category);
+  });
+  D.enums.forEach(e => {
+    e.items.forEach(it => {
+      if (String(it).toLowerCase().includes(q))
+        add("枚举条目", String(it), `${e.kind} · ${e.n} 项 · ${e.file}`);
+    });
+  });
+  D.modules.forEach(m => {
+    if (m.name.toLowerCase().includes(q)) add("模块", m.name, kb(m.bytes));
+  });
+  D.tools.forEach(t => { if (t.toLowerCase().includes(q)) add("工具", t, "工具词表"); });
+  D.env_vars.forEach(v => { if (v.toLowerCase().includes(q)) add("环境变量", v, ""); });
+  D.go.forEach(g => {
+    if (g.sym.toLowerCase().includes(q)) add("Go 符号组", g.sym, `${g.n} 个函数`);
+    g.fns.forEach(f => { if (f.toLowerCase().includes(q)) add("Go 函数", f, g.sym); });
+  });
+
+  const seen = new Set(), uniq = [];
+  for (const h of hits){
+    const k = h.kind + "|" + h.name;
+    if (!seen.has(k)) { seen.add(k); uniq.push(h); }
+  }
+
+  V.innerHTML = `
+<h1>搜索 “${esc(q)}”</h1>
+<div class="sub">${uniq.length} 条结果${uniq.length>=400?"（只显示前 400 条）":""}</div>
+${uniq.length === 0 ? `<div class="empty">没有匹配项</div>` : `
+<table>
+<tr><th style="width:120px">类别</th><th>命中</th><th>上下文</th></tr>
+${uniq.slice(0,400).map(h=>`<tr>
+  <td><span class="tag">${esc(h.kind)}</span></td>
+  <td class="mono">${esc(h.name)}</td>
+  <td style="color:var(--dim);font-size:11.5px">${esc(h.extra||"")}</td>
+</tr>`).join("")}
+</table>`}`;
+}
+
+/* ============================ demo widget ============================ */
+function mountDemo(){
+  const host = document.getElementById("demohost");
+  if (!host) return;
+  host.innerHTML = `
+<div class="demo">
+  <div class="chrome">
+    <span class="dot" style="background:#ff5f57"></span>
+    <span class="dot" style="background:#febc2e"></span>
+    <span class="dot" style="background:#28c840"></span>
+    <span style="margin-left:8px;font-size:11px;color:#8a8578">
+      Claude — App unavailable in region</span>
+  </div>
+  <div class="pad">
+    <div class="topbar">
+      <span class="nm">Claude</span>
+      <button onclick="demoMenu()">☰ Toggle menu</button>
+      <span id="demomenuout" style="font-size:11px;color:#c96442"></span>
+    </div>
+    <div class="breadcrumb">
+      <span>App unavailable in region</span>
+      <span class="ex" onclick="demoToggle()">Explore here ▾</span>
+      <div class="menu" id="demomenu" style="display:none">
+        <div onclick="demoPick('Ask questions about this page')">Ask questions about this page</div>
+        <div onclick="demoPick('Copy as markdown')">Copy as markdown</div>
+      </div>
+    </div>
+    <h4>App unavailable</h4>
+    <p class="body">Unfortunately, Claude is only available in certain regions right now.
+      Please contact support if you think you're getting this message in error.</p>
+    <button class="cta">View supported countries</button>
+    <div class="browser">
+      <b>Products:</b> Claude · Claude Code · Claude Cowork · @Claude · Claude Science
+      &nbsp;|&nbsp; Privacy · Usage Policy · DPA
+    </div>
+  </div>
+</div>
+<p style="font-size:11.5px;color:var(--dim)">
+  点 <span style="color:#c96442">Explore here ▾</span> 展开真实的两项菜单。
+  点 <b>Toggle menu</b> 会显示说明 —— 该控件的原生菜单本次未取到，不伪造。
+</p>`;
+}
+function demoToggle(){
+  const m = document.getElementById("demomenu");
+  m.style.display = m.style.display === "none" ? "block" : "none";
+}
+function demoPick(t){
+  document.getElementById("demomenu").style.display = "none";
+  let out = document.getElementById("demopick");
+  if (!out){
+    out = document.createElement("div");
+    out.id = "demopick";
+    out.style.cssText = "background:#f2efe9;border-left:3px solid #c96442;" +
+      "padding:9px 12px;border-radius:5px;font-size:12px;color:#5c574a;margin-top:12px";
+    document.querySelector(".demo .pad").appendChild(out);
+  }
+  out.textContent =
+    `选择「${t}」→ 真实实现会调用 Launch 子系统：` +
+    (t.startsWith("Ask") ? "previewModelScreenshot / getPreviewLastFrame（抓当前页画面喂给模型）"
+                         : "getPageText / capturePreviewScreenshot（转 Markdown 进剪贴板）");
+}
+function demoMenu(){
+  const o = document.getElementById("demomenuout");
+  o.textContent = "（原生菜单未取到 —— Toggle 控件不支持 InvokePattern，见覆盖率页）";
+}
+
+/* ============================ router ============================ */
+function render(){
+  renderNav();
+  const fn = P[cur] || P.home;
+  V.innerHTML = fn();
+  mountDemo();
+}
+Q.addEventListener("input", e => {
+  const v = e.target.value;
+  if (v.trim().length >= 2) search(v); else { render(); }
+});
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k"){
+    e.preventDefault(); Q.focus(); Q.select();
+  }
+  if (e.key === "Escape" && document.activeElement === Q){
+    Q.value = ""; render(); Q.blur();
+  }
+});
+window.go = go;
+window.toggle = toggle;
+window.render = render;
+window.demoToggle = demoToggle;
+window.demoPick = demoPick;
+window.demoMenu = demoMenu;
+window.P = P;
+window.D = D;
+
+/* deep links: index.html#ipc etc. */
+window.addEventListener("hashchange", () => {
+  const h = location.hash.slice(1);
+  if (h && P[h] && h !== cur) { cur = h; Q.value = ""; render(); }
+});
+const H0 = location.hash.slice(1);
+if (H0 && P[H0]) cur = H0;
+
+renderPills();
+render();
+</script>
+</body>
+</html>
