@@ -62,3 +62,7 @@ The shipped `sdk-tools.d.ts` gives explicit child-agent isolation/model/name/bac
 
 ## E. What source alone does not prove
 Despite exact package and help evidence, no native executable function body/call graph, actual spawned daemon process tree, mailbox operation, native event trace, interactive terminal frame, compaction algorithm, authenticated model request routing, or crash-recovery invariant has been observed. PE imports like ConPTY/named pipes/Job Objects are runtime dependencies and do not prove product flow without call xrefs. Likewise Atlas frontend components existing does not establish end-to-end parity. A controlled synthetic authenticated run and a bytecode-aware call trace remain required.
+
+## 2026-10-19 mailbox and isolated runtime checkpoint
+
+`evidence/15-native-mailbox-source.md` extends the static chain through exact embedded method bodies: `Zw` validates, locks, appends an unread record, and atomically writes; `S8e` reads/parses/validates; `RRr` and `gOe` remove acknowledged records under lock and atomically persist survivors; `WWn` clears. `END-TO-END-TRACES.md` provides the call chain and new isolated process attempt. This is source-grounded S, not proof of live delivery. The controlled process emitted `system/init` and then returned HTTP 401 before any assistant/tool event, so task scheduling, child spawn and parent notification remain U.

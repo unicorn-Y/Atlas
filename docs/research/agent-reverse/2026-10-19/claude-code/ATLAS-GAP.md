@@ -65,3 +65,7 @@ The same evidence discipline now applies to team messaging: `evidence/14-native-
 4. Confirm whether Atlas's own worktree finalizer preserves unpushed commits under comparable disposal conditions; Claude help names the controls but does not prove their failure semantics.
 
 No Atlas business code was changed by this lane. None of these differences were resolved by UI resemblance or a library name; statuses distinguish source existence from contract equivalence.
+
+## Forced G0–G7 checkpoint
+
+See `ATLAS-IMPLEMENTATION-BACKLOG.md` for the mechanism-by-mechanism backlog and `FINISH-GATES.md` for gate status. Mailbox writer/reader/ack source is now present at exact offsets in `evidence/15-native-mailbox-source.md`; this strengthens the Claude-side mechanism trace but does not change the Atlas classification above. Atlas room state and notification inbox remain related, distinct mechanisms. The synthetic CLI run stopped at HTTP 401 before Agent execution; lifecycle parity items depending on runtime event/task behavior remain PARTIAL or U.

@@ -65,3 +65,7 @@ Evidence: `evidence/11-cli-probes.md`, executable SHA `3ab075f78998efef8b87f491c
 
 ## U boundaries for interactive UI
 The interactive terminal renderer, input editing, focus/navigation, live task/status panels, status transitions and error/cancel rendering were not operated. Windows ConPTY imports and console subsystem are structural evidence only. Treat the documented /agent view or TUI behavior as D, and the exact command registration as R; visual details stay U.
+
+## Synthetic isolated runtime attempt
+
+The pinned binary ran in a newly-created scratch Git repo with isolated `CLAUDE_CONFIG_DIR`; it reached `system/init`, reported version/tools/skills/plugins/capabilities, and then repeated HTTP 401 `authentication_failed` responses. No UI action, assistant response or tool event followed. See exact command and limits in `END-TO-END-TRACES.md`. Earlier statements that R is only help/version probes are superseded: R now includes initialization and an authentication blocker, not a successful Agent run.

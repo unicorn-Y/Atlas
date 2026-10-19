@@ -54,7 +54,7 @@ Documentation can evolve independently of npm 2.1.302 and is **not native-S evid
 ## E3 — remaining gap register
 - **Resolved here:** core package metadata/wrapper, exact PE header/section/import/resource maps, bounded strings with byte offsets, native help registration, version/help execution.
 - **Partially resolved statically:** embedded client source traces supervisor upgrade/retirement/recovery/adoption; schema builders declare message/task/event shapes; `SendMessage` traces local target resolution, inbox/wake and evicted-child resume. See `evidence/12-14`.
-- **Still missing:** native function/call graph, broader `Agent` tool/model loop, TUI frames, daemon socket envelope/durable registry transaction and runtime process tree, actual session/task/mailbox contents, HTTP routing/wire captures, authenticated model/agent turns, operation failures and crash recovery.
+- **Still missing:** full native function/call graph and embedded-module inventory, broader `Agent` tool/model loop, TUI frames, daemon socket envelope/durable registry transaction and runtime process tree, actual session/task/mailbox contents and event ordering, HTTP routing/wire captures, authenticated model/agent turns, operation failures and crash recovery.
 - **Reason:** the readable Bun source recovery is bounded and does not resolve native control-flow edges or all application paths; model/daemon/agent operations require controlled authenticated runtime evidence. A full PE inventory attempt exceeded the provider's 330-second analysis deadline; no partial result was treated as success.
 - **Unlock:** use a bytecode-aware Bun/Ghidra workflow on the pinned file SHA and a fresh synthetic project/account run without reading pre-existing profile or chat data. Keep all raw binaries/strings local; upload only bounded sanitized evidence.
 - **Scope excluded:** Claude Desktop/Cowork app.asar or its internal services, cloud server implementation, other products' source inferred as Claude's native code, authentication bypass/DRM and credentials.
@@ -66,6 +66,14 @@ Documentation can evolve independently of npm 2.1.302 and is **not native-S evid
 - `evidence/05-native-header.md` — PE structure, imports/resources; `06-native-string-index.jsonl` — selected byte-offset strings tied to executable SHA; `08-native-call-anchors.md` — symbol/module anchors and limits.
 - `evidence/07-native-registrations.md`, `11-cli-probes.md` — exact binary help and command exit/output summary.
 - `evidence/09-native-state-schema.md`, `10-unknowns.md` — bounded observed types/keys and remaining unknowns.
-- `evidence/12-native-supervisor-source.md`, `13-native-message-task-schemas.md`, `14-native-sendmessage-source.md` — exact-PE static source traces with byte offsets and Atlas comparisons; no raw package/binary is included.
-- Current package evidence totals: 2 exact archives / 11 extracted members independently hashed; 19 curated native string offsets; 11 version/help commands exit 0. Code S exists for package/wrapper/PE/string/type facts. R exists only for binary version/help output. Agent operation R remains 0.
-- Static source S now additionally covers the methods/schemas in `evidence/12-14`; this does not change agent operation R=0 and must not be described as dynamic behavior proof.
+- `evidence/12-native-supervisor-source.md`, `13-native-message-task-schemas.md`, `14-native-sendmessage-source.md`, `15-native-mailbox-source.md` — exact-PE static source traces with byte offsets and Atlas comparisons; no raw package/binary is included.
+- Current package evidence totals: 2 exact archives / 11 extracted members independently hashed; 19 curated native string offsets; 11 version/help commands previously exit 0. A new isolated synthetic `--print` process emitted `system/init` and then returned repeated 401 authentication failures. Its request did not produce an Agent/tool event.
+- Static source S now covers the full locally traced SendMessage→mailbox append→read→ack path in the named helper methods. R covers startup/init and the explicit 401 only; Agent operation R remains 0.
+
+## E5 — forced G0–G7 checkpoint (2026-10-19)
+
+- Required work products: `COVERAGE.md`, `SURFACE-MAP.tsv`, `END-TO-END-TRACES.md`, `ATLAS-IMPLEMENTATION-BACKLOG.md`, `FINISH-GATES.md`.
+- New `evidence/15-native-mailbox-source.md` adds bounded source from exact PE offsets 248019409–248027467 for inbox path, reader, writer, single/bulk ack and clear.
+- Runtime attempted in a new scratch repository with isolated `CLAUDE_CONFIG_DIR`; first event `system/init`, model request failed with HTTP 401 `authentication_failed`. Exact command and facts are in `END-TO-END-TRACES.md`. No valid credentials were read or requested.
+- Full PE inventory timed out at 330 seconds; focused REA literal lookup stalled >5 minutes; direct byte-local source extraction was used to continue. Full embedded module/command handler inventory remains open.
+- Lane status remains WORK IN PROGRESS: G0 PASS; G1–G3, G5–G6 PARTIAL; G4 BLOCKED-401 for model/task execution; G7 prohibits completion while local code coverage and source traces remain available.

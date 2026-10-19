@@ -31,3 +31,5 @@ Coverage is partial: native package and unauthenticated CLI were analyzed, but a
 
 `14-native-sendmessage-source.md` adds source-level team-message behavior and precise Atlas group/notification comparisons. It does not claim the file-based mailbox path or cross-session services were independently reconstructed.
 
+`15-native-mailbox-source.md` adds exact-PE byte-offset source excerpts for the inbox path, writer, reader, single/bulk acknowledgement and clear operations. See `../END-TO-END-TRACES.md` for the connected code path and isolated process attempt; the model request returned HTTP 401 before an Agent/tool event.
+
