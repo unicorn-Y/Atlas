@@ -52,6 +52,7 @@
 | 传输层注册点（原始） | 1,609 |
 | Electron channel 级配对闭合 | 3 / 1,232 —— **已解释**：单 channel 多路复用，正确单位是方法级 |
 | `contextBridge` 暴露 | 52 |
+| MCP 工具声明（从二进制恢复） | **200**（github 137 / office365 60 / runtime 3） |
 | `webContents` 原生事件 | 60（非 IPC，无需配对） |
 
 ## 5. UI 覆盖
@@ -94,11 +95,11 @@
 
 | 状态 | 数量 | 类别分布 |
 |---|---:|---|
-| RESOLVED（本轮内已解决） | 3 | WASM 身份、gated-imports、scc.json |
-| PARTIAL（部分解释） | 14 | 代号服务、协议细节、SPA 组件树、两版 diff 等 |
+| RESOLVED（本轮内已解决） | **7** | 3 个 WASM 身份、gated-imports、scc.json、handleEvent 事件名、帧协议/10MiB/100MiB、handlePassthrough 目标、nodeHost vs directMcpHost |
+| PARTIAL（部分解释） | 14 | 代号服务、SPA 组件树、两版 diff、Claude Code CLI 参数等 |
 | CLOUD-UNAVAILABLE | 2 | 服务端 agent loop、1P 远程 UI |
 | UNKNOWN | 5 | 若干构建标记与小文件语义 |
-| **合计** | **24** | — |
+| **合计** | **28** | — |
 
 ## 9. 独立审计（从原始包重新生成，不看本报告结论）
 
@@ -137,7 +138,7 @@
 |---|---|---|
 | 文件登记率 100%（含嵌套容器） | **PASS** | 4,443 + 548 + 188 + 18 全登记 |
 | 每个注册点/界面入口有状态与证据 | **PASS** | 1,332 RPC 全配对；27 界面全带文件+偏移锚点 |
-| 重要业务机制端到端链 | **PARTIAL** | Chat（3P 本地可闭合，1P 云端不可）、Cowork（VM 链路完整）、Artifact（24 方法全）、Scheduler（3 服务）、MCP（101 方法）、Service/VM（15,181 函数）、状态/恢复（4 条路径）——**但均为静态链，无运行时闭合** |
+| 重要业务机制端到端链 | **PARTIAL（但 Service/VM 已达指令级）** | Chat（3P 本地可闭合，1P 云端不可）、Cowork（VM 链路完整）、Artifact（24 方法全）、Scheduler（3 服务）、MCP（101 方法）、Service/VM（15,181 函数，管道分发表与帧格式已指令级证实）、状态/恢复（4 条路径）——**但均为静态链，无运行时闭合** |
 | 独立复查新发现 | **PASS** | 本轮新挖出：195 MB 内置 SPA、c2pa/clarkdown/tree-sitter WASM、EDR 接入、gVisor 网络栈、7 路推理后端、1,062 环境变量 |
 | 不把"已登记"升级为"全部逆向" | **PASS** | 明确区分 CLOUD-UNAVAILABLE 与 PARTIAL |
 | 仍有可做项时不得宣布结束 | **见下** | 仍有明确可做项（见 §11） |

@@ -23,3 +23,7 @@ U-021	code	LocalSessions 的 329 个方法逐条语义	PARTIAL	S	方法名与参
 U-022	code	custom-3p-gated-imports.json 的语义	RESOLVED	S	内容为 {"buildId":"spa-dev","imports":{}}，即 3P 构建无额外门控导入	—
 U-023	code	scc.json 的语义	RESOLVED	S	构建期模块图统计：chunks 3548、edges 44988、multiChunkSccs 0、sccs []（无循环依赖）	—
 U-024	code	ion-dist 的 data-build-id="spa-dev" 含义	UNKNOWN	S/U	说明是开发构建标记	对比正式版是否不同
+U-025	code	Go 1.25 structtype 字段数组解码未收敛	PARTIAL	S/U	91 个 json 字段标签全部恢复，但未把标签逐一归到所属结构体	需要实现 Go 1.25 structtype 的字段数组解码，或按类型名交叉比对
+U-026	code	SSH helper 的中继管道路径	UNKNOWN	U	路径作为参数传入，不在任何二进制中作为字面量出现	追踪 claude-ssh-broker 的命令行参数构造点
+U-027	code	napi-rs 原生模块的参数 schema	PARTIAL	S/U	恢复了 109 个 napi 导出名与 1 个 PE 导出，但参数类型不在二进制中	读取 JS 侧调用点推断签名
+U-028	code	chrome-native-host.exe 的协议	PARTIAL	S/U	仅提取了导入表，未做协议分析	分析其 stdin/stdout native messaging 帧格式
