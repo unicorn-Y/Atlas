@@ -1,6 +1,6 @@
 # EXTRACTION REQUEST — execute mechanically on local Windows with Codex
 
-**Status: MECHANICAL PACKAGE COLLECTION RESOLVED; DYNAMIC/DECOMPILATION GATES REMAIN.** The original blocker statement immediately below records the prior web-session context and is historical. This request has now been executed against the exact pinned assets. Results are in `evidence/00-11*` and `evidence/INDEX.md`; see each file for precise scope. The remaining work is not another mechanical extraction: it is function-level Bun analysis and a controlled authenticated runtime sample, described in `evidence/10-unknowns.md`.
+**Status: PACKAGE COLLECTION AND BOUNDED STATIC SOURCE TRACES RESOLVED; DYNAMIC/NATIVE-CALL-GRAPH GATES REMAIN.** The original blocker statement immediately below records the prior web-session context and is historical. This request has now been executed against the exact pinned assets. Results are in `evidence/00-14*` and `evidence/INDEX.md`; see each file for precise scope. The lane recovered readable embedded source for supervisor, message/task schemas, and SendMessage routing, so it is no longer string-only. Remaining work is the broader native call graph and controlled authenticated runtime sample, described in `evidence/10-unknowns.md`.
 
 **Historical original blocker:** This ChatGPT GitHub connector could read repository text but rejected the 132 MB native executable as binary; the earlier container could not reach npm. This was a targeted evidence collection request, not a delegation of the research.
 

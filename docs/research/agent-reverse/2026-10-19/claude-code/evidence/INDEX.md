@@ -18,6 +18,7 @@ Bounded report bundle for Claude Code CLI 2.1.302. Captured 2026-10-19 HKT. Raw 
 | `11-cli-probes.md` | isolated command lines, exit codes and output snippets | see git |
 | `12-native-supervisor-source.md` | bounded readable JS embedded in exact PE, with offsets for supervisor/respawn/retirement/adoption methods | see git |
 | `13-native-message-task-schemas.md` | exact-PE source for CLI message, stream, result, tool-progress and task event schemas, plus Atlas adapter comparison | see git |
+| `14-native-sendmessage-source.md` | exact-PE SendMessage tool path: validation, permissions, target resolution, inbox write/wake, route branches; compared with Atlas groups and notification inbox | see git |
 | `core-readable/excerpts.md` | short path-and-line excerpts from wrapper, install script, shell stub and package metadata | see git |
 
 Verified input archives: core `29,082` bytes SHA256 `ac1a6a3364c467392bc40a8a405490e821575e3e858d3013b11258862c01dfc8`; win32-x64 `132,494,857` bytes SHA256 `cd077f50f24f5155c28800a3658a58c89b5d1ccae2f95a2e096a16ab250a544d`. Executable SHA256 is separately pinned in `03-native-file-tree.txt`.
@@ -27,4 +28,6 @@ Coverage is partial: native package and unauthenticated CLI were analyzed, but a
 `12-native-supervisor-source.md` upgrades background supervisor findings from symbol-cluster-only to visible application-source logic embedded in the exact Bun PE. This remains static shipped-code evidence, not runtime observation or a recovered complete persistence schema.
 
 `13-native-message-task-schemas.md` upgrades event findings from field-name clusters to embedded wire-schema definitions. It records protocol fields and semantics without claiming a live event trace or a stable public contract.
+
+`14-native-sendmessage-source.md` adds source-level team-message behavior and precise Atlas group/notification comparisons. It does not claim the file-based mailbox path or cross-session services were independently reconstructed.
 

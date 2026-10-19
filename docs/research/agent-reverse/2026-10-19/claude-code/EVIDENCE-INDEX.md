@@ -2,7 +2,7 @@
 
 ## 2026-10-19 exact-package follow-up overrides the original extraction blocker
 
-The text below under E0/E3 records the earlier web-session state; it is **historical** and no longer describes this local Codex pass. Both cached release TGZs were SHA256/size verified, fully listed and extracted, and the native PE was inspected and invoked for isolated help/version probes. Current evidence is indexed in `evidence/INDEX.md`; the older D/U statements remain valid only for claims outside that package/help scope.
+The text below under E0/E3 records the earlier web-session state; it is **historical** and no longer describes this local Codex pass. Both cached release TGZs were SHA256/size verified, fully listed and extracted, and the native PE was inspected and invoked for isolated help/version probes. Current evidence is indexed in `evidence/INDEX.md`; older D/U statements remain valid only for claims not resolved by package, bounded embedded-source, or CLI/help evidence.
 
 ## E0 — fixed artifact provenance (collection snapshot, not binary analysis)
 - Source: unicorn-Y/Atlas, research/agent-reverse-dispatch-20261019, docs/research/agent-clients/2026-10-19/manifest.json and indexes/claude-codex-index.txt.
@@ -53,8 +53,9 @@ Documentation can evolve independently of npm 2.1.302 and is **not native-S evid
 
 ## E3 — remaining gap register
 - **Resolved here:** core package metadata/wrapper, exact PE header/section/import/resource maps, bounded strings with byte offsets, native help registration, version/help execution.
-- **Still missing:** native disassembly/decompiled call graph, exact agent tool/event grammar, TUI frames, daemon socket protocol and runtime process tree, native session/task schema, HTTP routing/wire captures, authenticated model/agent turns, operation failures and crash recovery.
-- **Reason:** Bun-compiled code was not decompiled; model/daemon/agent operations require a controlled authenticated test or reliable native function analysis. A full PE inventory attempt exceeded the provider's 330-second analysis deadline; no partial result was treated as success.
+- **Partially resolved statically:** embedded client source traces supervisor upgrade/retirement/recovery/adoption; schema builders declare message/task/event shapes; `SendMessage` traces local target resolution, inbox/wake and evicted-child resume. See `evidence/12-14`.
+- **Still missing:** native function/call graph, broader `Agent` tool/model loop, TUI frames, daemon socket envelope/durable registry transaction and runtime process tree, actual session/task/mailbox contents, HTTP routing/wire captures, authenticated model/agent turns, operation failures and crash recovery.
+- **Reason:** the readable Bun source recovery is bounded and does not resolve native control-flow edges or all application paths; model/daemon/agent operations require controlled authenticated runtime evidence. A full PE inventory attempt exceeded the provider's 330-second analysis deadline; no partial result was treated as success.
 - **Unlock:** use a bytecode-aware Bun/Ghidra workflow on the pinned file SHA and a fresh synthetic project/account run without reading pre-existing profile or chat data. Keep all raw binaries/strings local; upload only bounded sanitized evidence.
 - **Scope excluded:** Claude Desktop/Cowork app.asar or its internal services, cloud server implementation, other products' source inferred as Claude's native code, authentication bypass/DRM and credentials.
 - **Historical coverage line:** the prior web-only session had Claude package first-hand coverage 0 files/0 bytes, S=0, R=0. Current local package/help coverage is in E4 and supersedes that snapshot. This lane remains partial rather than complete.
@@ -65,4 +66,6 @@ Documentation can evolve independently of npm 2.1.302 and is **not native-S evid
 - `evidence/05-native-header.md` — PE structure, imports/resources; `06-native-string-index.jsonl` — selected byte-offset strings tied to executable SHA; `08-native-call-anchors.md` — symbol/module anchors and limits.
 - `evidence/07-native-registrations.md`, `11-cli-probes.md` — exact binary help and command exit/output summary.
 - `evidence/09-native-state-schema.md`, `10-unknowns.md` — bounded observed types/keys and remaining unknowns.
+- `evidence/12-native-supervisor-source.md`, `13-native-message-task-schemas.md`, `14-native-sendmessage-source.md` — exact-PE static source traces with byte offsets and Atlas comparisons; no raw package/binary is included.
 - Current package evidence totals: 2 exact archives / 11 extracted members independently hashed; 19 curated native string offsets; 11 version/help commands exit 0. Code S exists for package/wrapper/PE/string/type facts. R exists only for binary version/help output. Agent operation R remains 0.
+- Static source S now additionally covers the methods/schemas in `evidence/12-14`; this does not change agent operation R=0 and must not be described as dynamic behavior proof.

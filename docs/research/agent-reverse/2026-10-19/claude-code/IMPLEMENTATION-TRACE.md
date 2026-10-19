@@ -1,14 +1,14 @@
 # Implementation traces — bounded by actual source
 
 ## A. Native Claude 2.1.302 execution: partial trace from exact packages
-The two pinned npm assets are now extracted and hashed; `evidence/` records bytes and bounded evidence. The Node wrapper-to-native launch path and the console command surface are directly established. The Bun-compiled application logic is not decompiled; do not infer control flow from a symbol string alone. Remaining native traces are:
+The two pinned npm assets are now extracted and hashed; `evidence/` records bytes and bounded evidence. The Node wrapper-to-native launch path and console command surface are directly established. Selected readable Bun-embedded application-JS source has been recovered and statically traced for supervisor lifecycle, wire-schema construction and SendMessage routing (`evidence/12-14`); the full application and native function/call graph are not decompiled. Do not infer control flow from a symbol string alone. Remaining traces are:
 
 1. Entry executable -> command/flag dispatcher -> mode selection (interactive / -p / daemon / attach).
 2. Turn constructor -> model request/stream reader -> tool call parser -> permission/hook -> scheduler -> tool result -> next model turn -> stop.
 3. Agent tool -> child spawn/selection -> foreground/background queue -> messages/notifications -> completion/error -> cleanup/resume.
 4. Worker/supervisor -> socket/IPC -> durable registry -> restart/reconnect/respawn.
 5. Transcript/log writer -> session ID -> fork/rewind -> compaction -> summary and budget accounting.
-6. Interactive state changes -> TUI rendering/diff/status; noninteractive stream-json full event envelopes.
+6. Interactive state changes -> TUI rendering/diff/status; noninteractive stream-json full event envelopes. Exact shipped client schema builders are statically traced in `evidence/13`; actual execution/order remains unobserved.
 
 For each remaining path, publish decoded file/function/offset and exact short string evidence with confidence. Only the wrapper/binary boundary and CLI registration have runtime evidence; there is still no completed model/tool invocation trace.
 
