@@ -1,6 +1,6 @@
 # 机制吸收候选：能直接学到什么、落到 Atlas 哪一层
 
-版本声明：下列均以 ZCode 3.15.1 的真实源码作为参考，**不是 3.15.3 的直接实物验收**。以源码路径确定真实工作方式，优先吸收可靠的执行语义与组件边界，避免“界面看上去有了、后端没有接线”。用户要求的充分授权/最大并发指的是 Atlas 本体已授权的执行；不应让第三方网页插件拿到未授权主机接口。
+版本声明：表中可映射的源码仍是 ZCode 3.15.1；本轮另对 3.15.3 verified CJS 与部分 retained desktop bundles 作了静态实物分析，证据在 `extracted-3153/`。它们不是 R 级运行验收，3.15.1 源路径不得冒充 3.15.3 源码。优先吸收可靠的执行语义与组件边界，避免“界面看上去有了、后端没有接线”。用户要求的充分授权/最大并发指 Atlas 本体已授权的执行；不应让第三方网页插件拿到未授权主机接口。
 
 | 机制候选 | ZCode 可看的成熟实现和核心算法 | Atlas 建议接入点 | 为什么先做 / 不能照搬的地方 |
 |---|---|---|---|
@@ -33,4 +33,6 @@
 
 ## 尚不能直接复用的部分
 
-3.15.3 Agent Runtime 与 desktop IPC 的实际符号和模块版本、部分隐藏能力与实验开关、具体 provider endpoint/账号策略、真实 Windows 工具调用路径仍是 U；由 EXTRACTION-REQUEST.md 补机械证据后再确定低成本的逐文件复制/改写清单。假装已获取同版完整源码会直接导致下一轮“抄错版本”的问题。
+**本轮没有新增可以逐字复用的 3.15.3 implementation source candidate。** Runtime 是无 source map 的压缩 CJS；desktop MCP Apps host/UI 是压缩 bundle，虽已发现 app registry、CSP/partition/permission、typed mcp/ui RPC 的实物机制，但没有可维护的同版原始 TS 源文件或 Apache 文件级授权链。可吸收的是协议与设计语义，再按 Atlas 权限/架构用自己的实现重写。旧表中已有候选都需回到其标明的 3.15.1 Apache-2.0 源文件重新核许可证和目标版本；不得直接将这些路径声称为 3.15.3。
+
+残余 U/partial：同版 app.asar 的逐文件可信性、server/provider 外部服务、隐藏能力与实验开关、具体账号策略、UI attach/consent、app tools 向模型 context 注册/结果返回、运行 Windows 工具调用路径。假装已获取同版完整源码会直接导致下一轮“抄错版本”的问题。

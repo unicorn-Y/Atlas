@@ -4,9 +4,9 @@
 
 研究派工源：research/agent-reverse-dispatch-20261019/tasks/research/agent-reverse/2026-10-19/{PROTOCOL.md,sessions/zcode.md}。Atlas main HEAD：aa6196f550098cc46081dc6db2c376cb87ddffa5；ZCode 上游固定 commit：aac4755666d09fdcd70272fcf063c077a639015f（root package.json=3.15.1）。
 
-- S：**实际读取** ZCode 3.15.1 真实源码正文与 Atlas main 正文，具有定位。DISCOVERY-LEDGER 的 ZCODE-001..025 为 S。
+- S：实际读取 3.15.1 源码/Atlas main 正文；且在本轮取得并解析已 SHA-verified 的 3.15.3 CJS 包字节及部分 desktop bundles，具有精确定位。ZCODE-001..025 为 3.15.1；ZCODE-028..037 是 3.15.3 package/desktop 或当前 main source observation。
 - D：zcode.z.ai/en/changelog 发布说明。ZCODE-026 为 D。
-- U：3.15.3 CJS / app.asar 内容无法直接在本会话取出。ZCODE-027 为 U。
+- U：ZCODE-027 原始旧结论为 U（完成真实包分析前的状态）；本轮已有 CJS 和部分 desktop bundle 的 S 证据，但完整可信 app.asar graph、desktop runtime UI/IPC 全链与动态验收依然 U/partial。
 - R：没有 Windows 进程、操作、动态日志、抓包；**0 条 R**。函数源码存在不等于动态行为已通过。
 
 固定源码快速访问前缀：
@@ -35,7 +35,7 @@
 - REA evidence ev_b8b2fd3fa4a83e172dd4680e7c32e7b59a25a4c293615f1af2633d64fa08bfcb 对 resources/glm 目录：root SHA 3d777334938a6657c9e1e87601588faa80469e3e9f61dda2fb6ecef926401352；360 relevant files、294 parsed JS、186 modules、1,292,029 visited AST nodes、0 parse failures、semantic graph partial/truncated；CJS inventory node exact artifact hash 31965ce1...506a54，但 REA 的 parse_status=null，专门 CJS AST 数来自 Acorn 而非 REA。
 - PE evidence ev_711f8e6d9a5a21e984b06cd0da188d083ad3c6819aa6c451cfbda0bfb7f7a854：7 segments、269 procedures、239 strings；仅 static overview，不解释 NSIS/运行逻辑。
 - ASAR integrity boundary：对完整 application tree 的严格 REA 初次失败，原文报出 resources/app.asar/node_modules/node-pty/prebuilds/win32-x64/conpty_console_list.node 声明 integrity 与 companion file bytes 不符。record-and-continue 重试超出 MCP 300s 等待时间；不能称为完整、可信 ASAR 图，也不能把该 native companion 当 verified。安装包从未执行。
-- app.asar 同版入口清单：resources/app.asar.extracted/package.json（来自留存的 ASAR 索引文件）明示 main=out/main/index.js 以及 Electron host/service/provider packages；resources/glm/.node-bundle-meta.json 明示 runtime bundle metadata。该 manifest 不是同版 renderer/IPC 实现链证据。
+- app.asar 同版入口清单：resources/app.asar.extracted/package.json（来自留存 ASAR 索引文件）明示 main=out/main/index.js 和 Electron host/service/provider packages；resources/glm/.node-bundle-meta.json 明示 runtime metadata。本轮进一步从留存 `out` bundles 静态检查到 typed service facade、host MessagePort RPC client、plugin sandbox preload bridge 以及 navigation schemas，见 `extracted-3153/DESKTOP-IPC-ANCHORS.md`。这些 bundle 本身已 rehash，但未逐个同 ASAR index integrity 核验；不能宣称完整可信 IPC/renderer 图。
 
 ### 精确 UTF-8 byte-offset 锚点
 

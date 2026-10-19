@@ -17,6 +17,6 @@ See ASSET-HASHES.txt. Three Release assets match the manifest byte-for-byte by s
 
 ## Outputs and limits
 
-Current outputs are an evidence checkpoint, not a complete inventory. CJS-MODULE-INDEX.tsv, CJS-STRING-OFFSETS.tsv, CJS-SLICES.md, CJS-FAMILY-HITS.json, RUNTIME-DIFF-ANCHORS.md, ASSET-HASHES.txt, RELEASE-METADATA.md, and EXTRACTION-LOG.md are present. Full FILETREE/PACKAGES inventory and the same-version desktop IPC/UI surfaces remain in progress. No source maps were found in the captured collection index. No R-level runtime result exists.
+Current outputs are an evidence checkpoint, not a complete inventory. CJS-MODULE-INDEX.tsv, CJS-STRING-OFFSETS.tsv, CJS-SLICES.md, CJS-FAMILY-HITS.json, RUNTIME-DIFF-ANCHORS.md, DESKTOP-IPC-ANCHORS.md, IPC-CHANNELS.tsv, UI-SURFACES.tsv, TRACE-3153-AGENT.md, TRACE-3153-WORKFLOW.md, TRACE-3153-PLUGIN-UI.md, ASSET-HASHES.txt, RELEASE-METADATA.md, and EXTRACTION-LOG.md are present. Same-version desktop service/transport, MCP App registry/sandbox and navigation-schema anchors were found; full FILETREE/PACKAGES inventory, ASAR-entry verification, UI/runtime call-chain closure remain in progress. No source maps were found in the captured collection index. No R-level runtime result exists.
 
-App ASAR semantic analysis is still pending after a long REA call. We have not verified that each desktop code path is reached in the installed app or that the workflow database is actually initialized.
+App ASAR semantic analysis and a separate REA open-binary call both timed out. We have not verified each extracted file against ASAR integrity entries, that each desktop code path is reached in the installed app, or that the workflow database is actually initialized.

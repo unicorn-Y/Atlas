@@ -1,5 +1,7 @@
 # 3.15.3 实物补证 — 本地 Codex 精确机械提取任务
 
+> **执行状态（2026-10-19 checkpoint）：PARTIAL, committed on the lane branch.** 三个 release asset 的大小/SHA 已重新核验；真实 3.15.3 CJS 已 Acorn 解析并记录 AST/UTF-8 byte-offset；retained app.asar extracted `out` 中部分 main/host/preload/plugin-sandbox bundles 已重哈希并静态追踪到 typed host RPC 与 MCP Apps sandbox registry。输出在 `extracted-3153/`，其中 `EXTRACTION-LOG.md` 写出完整限制。全量 file/package inventory、ASAR per-entry integrity、完整 renderer/UI 调用链、运行验收仍待补；REA app.asar/whole-app 分析与独立 open_binary 均 300s timeout，另已发现一个 unpacked node-pty integrity mismatch。禁止因此把本工作改写为已完成全包验证。
+
 > **执行者：用户本地拥有完整 Release 资产及 Windows 文件系统的 Codex。作用仅是补完机械证据；禁止修改 Atlas main/正式业务文件、禁止由提取者冒充已经完成整体架构研究。** 结果提交到独立分支 research/agent-reverse-20261019-zcode，目录 docs/research/agent-reverse/2026-10-19/zcode/extracted-3153/；若此研究分支已有其他修改，只新增机器索引和提取记录，不覆写本报告。需自行开独立 worktree。
 
 ## 一、下载/输入资产的确切身份（未核验即停止提取并报告）

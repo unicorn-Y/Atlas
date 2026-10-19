@@ -4,11 +4,11 @@
 
 ## 研究基线、产物与边界
 
-- 目标：ZCode Desktop Windows x64 **3.15.3**，安装包 SHA256 **bc8100ba4377256fbe1531d549b4775f18e3ba21768b6294ca50751cd461faca**；内嵌 resources/glm/zcode.cjs 15,127,039 bytes，SHA256 **31965ce1d5d4a808ef156784f67996de42ccab335591d2386a61ea8f6f506a54**。这是收集分支索引的机械提取记录，不是本会话亲自解析 CJS 的结果。
+- 目标：ZCode Desktop Windows x64 **3.15.3**，安装包 SHA256 **bc8100ba4377256fbe1531d549b4775f18e3ba21768b6294ca50751cd461faca**；内嵌 resources/glm/zcode.cjs 15,127,039 bytes，SHA256 **31965ce1d5d4a808ef156784f67996de42ccab335591d2386a61ea8f6f506a54**。本会话独立重算三资产 SHA/大小并实际解析 CJS，同时静态检查 retained main/host/preload/scheduler bundles；来源/完整性边界见 EVIDENCE-INDEX。
 - 本次**实际读取并分析**：zai-org/ZCode 固定源码提交 **aac4755666d09fdcd70272fcf063c077a639015f**（root package.json 为 3.15.1）；Atlas main **aa6196f550098cc46081dc6db2c376cb87ddffa5**；以及官方 3.15.3 Windows x64 安装包和其中 `resources/glm/zcode.cjs` 的真实字节。
 - 研究分支从 research/agent-reverse-dispatch-20261019 建立；**没有修改 Atlas 业务源码**。
 - 覆盖：3.15.1 核心 turn loop、subagent、dynamic workflow、SQLite journal、上下文、MCP、插件、Electron 进程、UI、后台调度，以及 Atlas main 对照；3.15.3 CJS AST 统计和字节偏移锚点；PE 资源静态清单。REA 对 `resources/glm` 扫描含 360 个相关文件、294 个成功解析 JS、186 个模块、0 个 parse failure；语义图 coverage partial。没有运行未知 EXE，也没有启动 Electron；R=0。
-- 尚欠：app.asar 同版 renderer/main 深度模块与 IPC 图、全 UI surface、runtime 全功能调用链、与 3.15.1 的逐符号 diff、Windows 运行/恢复实操。全 application 目录 REA 因超时未产出完整记录；严格 ASAR 校验先发现 unpacked `node-pty` companion integrity mismatch，record-and-continue 重试未在 MCP 等待期限内返回，须保持该构件不可信/未解决。
+- 已发现但尚欠闭环：retained `app.asar.extracted/out` 真实含 main/host/preload/renderer/scheduler 与 plugin-sandbox bundle；本轮核到 typed service facade、host MessagePort RPC、sandbox ipc bridge、部分导航 schema。尚欠逐文件 ASAR entry integrity 对照、进程调用者/端口转移的入口链、完整 UI surface / host event subscriptions、3.15.1 同名源码映射及运行恢复。全 application 目录 REA 与单独 app.asar 调用均超时；严格 ASAR 校验发现 unpacked `node-pty` companion integrity mismatch，必须保留未解决状态。
 
 ## 报告导航
 
@@ -21,6 +21,11 @@
 | [EVIDENCE-INDEX.md](EVIDENCE-INDEX.md) | 包 SHA、源码固定路径与行号、调查范围和未触达部分 |
 | [EXTRACTION-REQUEST.md](EXTRACTION-REQUEST.md) | 给本地 Codex 的限定式、可机械执行的 3.15.3 取证/上传任务 |
 | [REUSE-CANDIDATES.md](REUSE-CANDIDATES.md) | Apache-2.0 源码复用边界与 Python/Electron 适配建议 |
+| [extracted-3153/DESKTOP-IPC-ANCHORS.md](extracted-3153/DESKTOP-IPC-ANCHORS.md) | 同版 retained desktop bundle 的 hash、main/host/preload RPC 和 sandbox 静态锚点 |
+| [ATLAS-GAP.md](ATLAS-GAP.md) | 本轮按 Atlas main 实际代码复核的 Agent、事件、journal、retry 与 MCP Apps 对照 |
+| [extracted-3153/TRACE-3153-PLUGIN-UI.md](extracted-3153/TRACE-3153-PLUGIN-UI.md) | 3.15.3 MCP Apps host/RPC/registry/sandbox 的逐节点部分链和 UNKNOWN 边界 |
+| [extracted-3153/TRACE-3153-AGENT.md](extracted-3153/TRACE-3153-AGENT.md) | 3.15.3 tool queue/execute 与 background child 的字节锚点 |
+| [extracted-3153/TRACE-3153-WORKFLOW.md](extracted-3153/TRACE-3153-WORKFLOW.md) | 3.15.3 journal migration/replay helper 的字节锚点 |
 
 ## 重要结论与可行动作
 
@@ -32,6 +37,6 @@
 
 ## 交付状态
 
-**静态源码阶段：初轮 25 个 ZCODE-001..025（3.15.1）+ 已新增 3.15.3 包内观察 ZCODE-028..033。** 3.15.3 真实 Runtime 与 PE 已取得和静态解析；桌面 app.asar 完整模块图以及动态验收仍是 partial/U，不能宣称穷尽。各证据层级在 `extracted-3153/` 区分。
+**静态源码阶段：初轮 25 个 ZCODE-001..025（3.15.1）+ 已新增 3.15.3 包内观察 ZCODE-028..039。** 3.15.3 真实 Runtime 与 PE 已取得和静态解析；桌面 app.asar 完整模块图以及动态验收仍是 partial/U，不能宣称穷尽。各证据层级在 `extracted-3153/` 区分。
 
 源代码固定快照：[ZCode v3.15.1](https://github.com/zai-org/ZCode/tree/aac4755666d09fdcd70272fcf063c077a639015f) · [Atlas main 基准](https://github.com/unicorn-Y/Atlas/tree/aa6196f550098cc46081dc6db2c376cb87ddffa5) · [原包归档](https://github.com/unicorn-Y/Atlas/releases/tag/agent-client-packages-20261019)
