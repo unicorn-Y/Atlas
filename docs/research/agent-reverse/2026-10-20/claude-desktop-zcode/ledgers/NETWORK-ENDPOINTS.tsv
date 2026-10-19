@@ -1,0 +1,406 @@
+url	host	class	seen_in_files	file_count
+https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json	cdn.jsdelivr.net	cdn	.vite/build/index.chunk-BYMGAPtw.js	1
+https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json	cdn.jsdelivr.net	cdn	.vite/build/index.chunk-BYMGAPtw.js	1
+https://cdn.jsdelivr.net/npm/datamaps@0.5.10/src/js/data/{iso3}.topo.json	cdn.jsdelivr.net	cdn	.vite/build/index.chunk-BYMGAPtw.js	1
+https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json').then(us	cdn.jsdelivr.net	cdn	.vite/build/index.chunk-BYMGAPtw.js	1
+https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.42.0/dist/tabler-icons.min.css	cdn.jsdelivr.net	cdn	.vite/build/index.chunk-BYMGAPtw.js	1
+https://cdn.jsdelivr.net	cdn.jsdelivr.net	cdn	.vite/build/index.chunk-BYMGAPtw.js	1
+https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js	cdn.jsdelivr.net	cdn	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://cdn.jsdelivr.net/npm/gridjs@5.0.2/dist/gridjs.umd.js	cdn.jsdelivr.net	cdn	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://cdn.jsdelivr.net/npm/mermaid@11.17.2/dist/mermaid.min.js	cdn.jsdelivr.net	cdn	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://cdn.jsdelivr.net/npm/gridjs@5.0.2/dist/theme/mermaid.min.css	cdn.jsdelivr.net	cdn	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://cdnjs.cloudflare.com/ajax/libs/...	cdnjs.cloudflare.com	cdn	.vite/build/index.chunk-BYMGAPtw.js	1
+https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js	cdnjs.cloudflare.com	cdn	.vite/build/index.chunk-BYMGAPtw.js	1
+https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js	cdnjs.cloudflare.com	cdn	.vite/build/index.chunk-BYMGAPtw.js	1
+https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js	cdnjs.cloudflare.com	cdn	.vite/build/index.chunk-BYMGAPtw.js	1
+https://cdnjs.cloudflare.com	cdnjs.cloudflare.com	cdn	.vite/build/index.chunk-BYMGAPtw.js | .vite/build/index.chunk-lzaSYO3Q.js	2
+https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js	cdnjs.cloudflare.com	cdn	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://anthropic.enterprise.slack.com	anthropic.enterprise.slack.com	first-party-api	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://api-staging.anthropic.com	api-staging.anthropic.com	first-party-api	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://api.anthropic.com	api.anthropic.com	first-party-api	.vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DyYrY1NN.js | .vite/build/index.chunk-lzaSYO3Q.js	3
+https://api.anthropic.com/api/oauth/claude_cli/create_api_key	api.anthropic.com	first-party-api	.vite/build/index.chunk-DNyequwM.js	1
+https://api.anthropic.com/api/oauth/claude_cli/roles	api.anthropic.com	first-party-api	.vite/build/index.chunk-DNyequwM.js	1
+https://assets-proxy.anthropic.com	assets-proxy.anthropic.com	first-party-api	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://beacon.claude-ai.staging.ant.dev	beacon.claude-ai.staging.ant.dev	first-party-api	.vite/build/index.chunk-DNyequwM.js	1
+https://claude-ai.staging.ant.dev	claude-ai.staging.ant.dev	first-party-api	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://claude-ai.staging.ant.dev/desktop/callback	claude-ai.staging.ant.dev	first-party-api	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://claude-staging.fedstart.com	claude-staging.fedstart.com	first-party-api	.vite/build/index.chunk-DNyequwM.js	1
+https://claude.fedstart.com	claude.fedstart.com	first-party-api	.vite/build/index.chunk-DNyequwM.js	1
+https://console.anthropic.com/oauth/code/callback	console.anthropic.com	first-party-api	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://console.staging.ant.dev/oauth/code/callback	console.staging.ant.dev	first-party-api	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://docs.anthropic.com/en/docs/resources/model-deprecations	docs.anthropic.com	first-party-api	.vite/build/index.chunk-DyYrY1NN.js	1
+https://mcp-proxy.anthropic.com	mcp-proxy.anthropic.com	first-party-api	.vite/build/index.chunk-DNyequwM.js	1
+https://preview.claude-ai.staging.ant.dev	preview.claude-ai.staging.ant.dev	first-party-api	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://support.anthropic.com	support.anthropic.com	first-party-api	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://www.anthropic.com/news/fable-mythos-access	www.anthropic.com	first-party-api	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://assets.claude.ai/Fonts/AnthropicSerif-Text-Regular-Static.otf	assets.claude.ai	first-party-web	.vite/build/index.chunk-BYMGAPtw.js	1
+https://assets.claude.ai/Fonts/AnthropicSerif-Text-RegularItalic-Static.otf	assets.claude.ai	first-party-web	.vite/build/index.chunk-BYMGAPtw.js	1
+https://assets.claude.ai/Fonts/AnthropicSerif-Text-Medium-Static.otf	assets.claude.ai	first-party-web	.vite/build/index.chunk-BYMGAPtw.js	1
+https://assets.claude.ai/Fonts/AnthropicSerif-Text-MediumItalic-Static.otf	assets.claude.ai	first-party-web	.vite/build/index.chunk-BYMGAPtw.js	1
+https://assets.claude.ai/Fonts/AnthropicSerif-Text-Semibold-Static.otf	assets.claude.ai	first-party-web	.vite/build/index.chunk-BYMGAPtw.js	1
+https://assets.claude.ai/Fonts/AnthropicSerif-Text-SemiboldItalic-Static.otf	assets.claude.ai	first-party-web	.vite/build/index.chunk-BYMGAPtw.js	1
+https://assets.claude.ai/Fonts/AnthropicSerif-Text-Bold-Static.otf	assets.claude.ai	first-party-web	.vite/build/index.chunk-BYMGAPtw.js	1
+https://assets.claude.ai/Fonts/AnthropicSerif-Text-BoldItalic-Static.otf	assets.claude.ai	first-party-web	.vite/build/index.chunk-BYMGAPtw.js	1
+https://claude.ai	claude.ai	first-party-web	.vite/build/aboutWindow.js | .vite/build/buddy.js | .vite/build/designWindow.js | .vite/build/findInPage.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mainView.js | .vite/build/mainWindow.js | .vite/build/quickWindow.js	9
+https://claude.ai/download?open_in_browser=1	claude.ai	first-party-web	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://claude.ai/	claude.ai	first-party-web	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://claude.ai/desktop/callback	claude.ai	first-party-web	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://claude.com	claude.com	first-party-web	.vite/build/aboutWindow.js | .vite/build/buddy.js | .vite/build/designWindow.js | .vite/build/findInPage.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mainView.js | .vite/build/mainWindow.js | .vite/build/quickWindow.js	8
+https://claude.com/claude-code	claude.com	first-party-web	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js	2
+https://claude.com/download	claude.com	first-party-web	.vite/build/index.chunk-B17ncv_E.js	1
+https://claude.com/claude-code)_	claude.com	first-party-web	.vite/build/index.chunk-BAEQpeU2.js	1
+https://claude.com/cai/oauth/authorize	claude.com	first-party-web	.vite/build/index.chunk-DNyequwM.js	1
+https://claude.com/docs/third-party/claude-desktop	claude.com	first-party-web	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://claude.com/cai	claude.com	first-party-web	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://claude.com/cai/	claude.com	first-party-web	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://claude.com/docs/third-party/claude-desktop/overview.	claude.com	first-party-web	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://code.claude.com/docs/en	code.claude.com	first-party-web	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js	2
+https://code.claude.com/docs/en/hooks	code.claude.com	first-party-web	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js	2
+https://code.claude.com/docs/en/settings#sandbox-settings).	code.claude.com	first-party-web	.vite/build/index.chunk-DNyequwM.js	1
+https://code.claude.com/docs/en/chrome	code.claude.com	first-party-web	.vite/build/index.chunk-M6SkuaH9.js	1
+https://downloads.claude.ai/model-catalog/v1/catalog.json	downloads.claude.ai	first-party-web	.vite/build/index.chunk-DllGAjvd.js | .vite/build/index.chunk-lzaSYO3Q.js	2
+https://downloads.claude.ai/releases/darwin/universal/${e}/vm_hash	downloads.claude.ai	first-party-web	.vite/build/index.chunk-DRb1afDC.js	1
+https://downloads.claude.ai/vms/linux/${s}/${e}/${c}	downloads.claude.ai	first-party-web	.vite/build/index.chunk-DRb1afDC.js	1
+https://downloads.claude.ai/claude-code-releases	downloads.claude.ai	first-party-web	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://downloads.claude.ai/claude-ssh-releases	downloads.claude.ai	first-party-web	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://downloads.claude.ai/model-catalog/v1/schema.json	downloads.claude.ai	first-party-web	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://downloads.claude.ai/vms/linux/${aK()}/${QB.sha}	downloads.claude.ai	first-party-web	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://microsoft365.mcp.claude.com/mcp	microsoft365.mcp.claude.com	first-party-web	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://pivot.claude.ai/manifest.xml	pivot.claude.ai	first-party-web	.vite/build/index.chunk-BWI7goHJ.js	1
+https://platform.claude.com/oauth/authorize	platform.claude.com	first-party-web	.vite/build/index.chunk-DNyequwM.js	1
+https://platform.claude.com/v1/oauth/token	platform.claude.com	first-party-web	.vite/build/index.chunk-DNyequwM.js	1
+https://platform.claude.com/buy_credits?returnUrl=/oauth/code/success%3Fapp%3Dclaude-code	platform.claude.com	first-party-web	.vite/build/index.chunk-DNyequwM.js	1
+https://platform.claude.com/oauth/code/success?app=claude-code	platform.claude.com	first-party-web	.vite/build/index.chunk-DNyequwM.js	1
+https://platform.claude.com/oauth/code/callback	platform.claude.com	first-party-web	.vite/build/index.chunk-DNyequwM.js	1
+https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking	platform.claude.com	first-party-web	.vite/build/index.chunk-DyYrY1NN.js	1
+https://preview.claude.ai	preview.claude.ai	first-party-web	.vite/build/aboutWindow.js | .vite/build/buddy.js | .vite/build/designWindow.js | .vite/build/findInPage.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mainView.js | .vite/build/mainWindow.js | .vite/build/quickWindow.js	8
+https://preview.claude.com	preview.claude.com	first-party-web	.vite/build/aboutWindow.js | .vite/build/buddy.js | .vite/build/designWindow.js | .vite/build/findInPage.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mainView.js | .vite/build/mainWindow.js | .vite/build/quickWindow.js	8
+https://support.claude.com/en/articles/12622667-enterprise-configuration	support.claude.com	first-party-web	.vite/build/index.chunk-B17ncv_E.js	1
+https://support.claude.com/en/articles/9015913-how-to-get-support	support.claude.com	first-party-web	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://[${a.value}]	[${a.value}]	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+http://[${e}]	[${e}]	other	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/mcp-runtime/directMcpHost.js	7
+http://[${r}]	[${r}]	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+http://[${t}]/	[${t}]	other	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://169.254.169.254/metadata/instance/compute/location	169.254.169.254	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+http://169.254.169.254${rIt}	169.254.169.254x	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+http://2x.io	2x.io	other	node_modules/ws/package.json	1
+https://a/c%20d?a=1&c=3	a	other	resources/office365-mcp/pdf.worker.mjs | resources/office365-mcp/pdfExtractorProcess.mjs	2
+https://aka.ms/msal.js.errors#${e}	aka.ms	other	.vite/build/msal-broker-worker/msalBrokerWorker.js	1
+https://aka.ms/msal.js.errors#${t}	aka.ms	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://aka.ms/azsdk/js/identity/serviceprincipalauthentication/troubleshoot.	aka.ms	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://api.${e}	api.x	other	.vite/build/index.chunk-B2Vbqvd-.js	1
+https://api.${e}/graphql	api.x	other	.vite/build/index.chunk-B2Vbqvd-.js	1
+https://base-ui.com/production-error	base-ui.com	other	.vite/renderer/find_in_page/assets/asHTMLElement-B2Zv_iii.js	1
+https://bedrock-mantle.us-east-1.api.aws/anthropic	bedrock-mantle.us-east-1.api.aws	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://cds-relative-href.invalid	cds-relative-href.invalid	other	.vite/renderer/find_in_page/assets/asHTMLElement-B2Zv_iii.js	1
+http://cds-relative-href.invalid	cds-relative-href.invalid	other	.vite/renderer/find_in_page/assets/asHTMLElement-B2Zv_iii.js	1
+https://chevrotain.io/docs/guide/resolving_lexer_errors.html#COMPLEMENT	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/guide/resolving_lexer_errors.html#REGEXP_PARSING	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/guide/resolving_lexer_errors.html#UNICODE_OPTIMIZE	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/guide/resolving_lexer_errors.html#CUSTOM_OPTIMIZE	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/guide/resolving_lexer_errors.html#ANCHORS	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/guide/resolving_lexer_errors.html#UNREACHABLE	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/guide/resolving_lexer_errors.html#LINE_BREAKS	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/guide/resolving_lexer_errors.html#IDENTIFY_TERMINATOR	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/guide/resolving_lexer_errors.html#CUSTOM_LINE_BREAK	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/guide/resolving_grammar_errors.html#AMBIGUOUS_ALTERNATIVES	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/guide/resolving_lexer_errors.html#MISSING_LINE_TERM_CHARS	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/FAQ.html#NUMERICAL_SUFFIXES	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/guide/resolving_grammar_errors.html#COMMON_PREFIX	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/changes/BREAKING_CHANGES.html#_6-0-0	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/changes/BREAKING_CHANGES.html#_4-0-0	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/guide/internals.html#grammar-recording	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://chevrotain.io/docs/guide/resolving_grammar_errors.html#IGNORING_AMBIGUITIES	chevrotain.io	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://cr-buildbucket.appspot.com/prpc/buildbucket.v2.Builds/SearchBuilds	cr-buildbucket.appspot.com	other	.vite/build/index.chunk-Bn6onBlX.js	1
+http://custom-3p-unused.invalid	custom-3p-unused.invalid	other	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://d-1234567890.awsapps.com/start	d-1234567890.awsapps.com	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://docs.expo.dev/versions/latest/sdk/expo/#expofetch-api	docs.expo.dev	other	.vite/build/index.chunk-DyYrY1NN.js	1
+https://en.wikipedia.org/wiki/LL_parser#Left_factoring.	en.wikipedia.org	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+http://en.wikipedia.org/wiki/MIT_License	en.wikipedia.org	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+http://engelschall.com	engelschall.com	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs	esm.sh	other	.vite/build/index.chunk-BYMGAPtw.js	1
+https://esm.sh/htmlparser2@9.1.0	esm.sh	other	.vite/build/index.chunk-BYMGAPtw.js	1
+https://esm.sh/domhandler@5.0.3	esm.sh	other	.vite/build/index.chunk-BYMGAPtw.js	1
+https://esm.sh/dom-serializer@2.0.0	esm.sh	other	.vite/build/index.chunk-BYMGAPtw.js	1
+https://esm.sh/morphdom@2.7.8	esm.sh	other	.vite/build/index.chunk-BYMGAPtw.js	1
+https://esm.sh	esm.sh	other	.vite/build/index.chunk-BYMGAPtw.js	1
+https://evilmartians.com/chronicles/postcss-8-plugin-migration	evilmartians.com	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://example.invalid/recorded/origin.git	example.invalid	other	.vite/build/index.chunk-Dd4cATog.js	1
+https://f.a.k/e	f.a.k	other	.vite/build/index.pre.js	1
+https://feross.org/opensource	feross.org	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://foo.bar	foo.bar	other	resources/office365-mcp/pdfExtractorProcess.mjs	1
+https://formatjs.github.io/docs/tooling/babel-plugin	formatjs.github.io	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/renderer/about_window/assets/main-tJY2FsYJ.js | .vite/renderer/buddy_window/assets/main-DeOnnb9G.js | .vite/renderer/find_in_page/assets/main-hLSpBHWq.js | .vite/renderer/main_window/assets/react-intl-CW2bLHOS.js | .vite/renderer/quick_window/assets/main-DFyKxPTW.js	6
+https://formatjs.github.io/docs/tooling/ts-transformer	formatjs.github.io	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/renderer/about_window/assets/main-tJY2FsYJ.js | .vite/renderer/buddy_window/assets/main-DeOnnb9G.js | .vite/renderer/find_in_page/assets/main-hLSpBHWq.js | .vite/renderer/main_window/assets/react-intl-CW2bLHOS.js | .vite/renderer/quick_window/assets/main-DFyKxPTW.js	6
+https://formatjs.github.io/docs/tooling/linter#enforce-id	formatjs.github.io	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/renderer/about_window/assets/main-tJY2FsYJ.js | .vite/renderer/buddy_window/assets/main-DeOnnb9G.js | .vite/renderer/find_in_page/assets/main-hLSpBHWq.js | .vite/renderer/main_window/assets/react-intl-CW2bLHOS.js | .vite/renderer/quick_window/assets/main-DFyKxPTW.js	6
+https://formatjs.github.io/docs/getting-started/message-distribution	formatjs.github.io	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/renderer/about_window/assets/main-tJY2FsYJ.js | .vite/renderer/buddy_window/assets/main-DeOnnb9G.js | .vite/renderer/find_in_page/assets/main-hLSpBHWq.js | .vite/renderer/main_window/assets/react-intl-CW2bLHOS.js | .vite/renderer/quick_window/assets/main-DFyKxPTW.js	6
+https://formatjs.github.io/docs/react-intl#runtime-requirements	formatjs.github.io	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/renderer/about_window/assets/main-tJY2FsYJ.js | .vite/renderer/buddy_window/assets/main-DeOnnb9G.js | .vite/renderer/find_in_page/assets/main-hLSpBHWq.js | .vite/renderer/main_window/assets/react-intl-CW2bLHOS.js | .vite/renderer/quick_window/assets/main-DFyKxPTW.js	6
+https://formatjs.github.io/docs/react-intl/api#intlshape	formatjs.github.io	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/renderer/about_window/assets/main-tJY2FsYJ.js | .vite/renderer/buddy_window/assets/main-DeOnnb9G.js | .vite/renderer/find_in_page/assets/main-hLSpBHWq.js | .vite/renderer/main_window/assets/react-intl-CW2bLHOS.js | .vite/renderer/quick_window/assets/main-DFyKxPTW.js	6
+https://git-scm.com/download/win	git-scm.com	other	.vite/build/index.chunk-Dd4cATog.js	1
+https://git.new/pathToRegexpError	git.new	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://html.spec.whatwg.org/multipage/comms.html#the-websocket-interface	html.spec.whatwg.org	other	node_modules/ws/lib/websocket.js	1
+https://jimmy.warting.se/opensource	jimmy.warting.se	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://jquery.org/license/	jquery.org	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+http://json-schema.org/draft-07/schema#	json-schema.org	other	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/mcp-runtime/directMcpHost.js | resources/office365-mcp/office365-mcp-stdio.mjs	8
+http://json-schema.org/draft-07/schema	json-schema.org	other	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js | resources/office365-mcp/office365-mcp-stdio.mjs	5
+http://json-schema.org/schema	json-schema.org	other	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js | resources/office365-mcp/office365-mcp-stdio.mjs	5
+https://json-schema.org/draft/2020-12/schema	json-schema.org	other	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/mcp-runtime/directMcpHost.js | resources/office365-mcp/office365-mcp-stdio.mjs	8
+http://json-schema.org/draft-04/schema#	json-schema.org	other	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/mcp-runtime/directMcpHost.js	7
+https://json-schema.org/draft/2019-09/schema#	json-schema.org	other	.vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs	3
+http://json-schema.org/draft/2020-12/schema	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2019-09/schema	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+http://json-schema.org/draft/2019-09/schema	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft-07/schema	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft-06/schema	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+http://json-schema.org/draft-06/schema	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2019-09/vocab/core	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2019-09/vocab/applicator	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2019-09/vocab/validation	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2019-09/vocab/meta-data	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2019-09/vocab/format	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2019-09/vocab/content	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2019-09/meta/applicator	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2019-09/meta/content	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2019-09/meta/core	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2019-09/meta/format	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2019-09/meta/meta-data	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2019-09/meta/validation	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2020-12/vocab/core	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2020-12/vocab/applicator	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2020-12/vocab/unevaluated	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2020-12/vocab/validation	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2020-12/vocab/meta-data	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2020-12/vocab/format-annotation	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2020-12/vocab/content	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2020-12/meta/applicator	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2020-12/meta/unevaluated	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2020-12/meta/content	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2020-12/meta/core	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2020-12/meta/format-annotation	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2020-12/meta/meta-data	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://json-schema.org/draft/2020-12/meta/validation	json-schema.org	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js	2
+https://langium.org/docs/reference/configuration-services/#resolving-cyclic-dependencies');return	langium.org	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://lodash.com/	lodash.com	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://lodash.com/license	lodash.com	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://login.chinacloudapi.cn	login.chinacloudapi.cn	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://login.windows-ppe.net	login.windows-ppe.net	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://mcp.figma.com/	mcp.figma.com	other	.vite/build/index.chunk-M6SkuaH9.js	1
+http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default	metadata.google.internal	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://model-catalog.invalid/unreadable	model-catalog.invalid	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://modelcontextprotocol.io/docs/tools/debugging	modelcontextprotocol.io	other	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://n8.io/	n8.io	other	node_modules/agent-base/package.json	1
+http://ns.adobe.com/xdp/pdf/	ns.adobe.com	other	resources/office365-mcp/pdf.worker.mjs	1
+http://ns.adobe.com/xdp/	ns.adobe.com	other	resources/office365-mcp/pdf.worker.mjs	1
+http://ns.adobe.com/xfdf/	ns.adobe.com	other	resources/office365-mcp/pdf.worker.mjs	1
+http://ns.adobe.com/xmpmeta/	ns.adobe.com	other	resources/office365-mcp/pdf.worker.mjs	1
+https://oidc.us-east-1.amazonaws.com	oidc.us-east-1.amazonaws.com	other	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://openjsf.org/	openjsf.org	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+http://opensource.org/licenses/MIT	opensource.org	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://pinned-proxy-check.invalid/	pinned-proxy-check.invalid	other	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://r.invalid	r.invalid	other	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://r.invalid	r.invalid	other	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://raw.githubusercontent.com/ajv-validator/ajv/master/lib/refs/data.json#	raw.githubusercontent.com	other	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/mcp-runtime/directMcpHost.js | resources/office365-mcp/office365-mcp-stdio.mjs	5
+https://react.dev/errors/	react.dev	other	.vite/renderer/about_window/assets/main-tJY2FsYJ.js | .vite/renderer/buddy_window/assets/main-DeOnnb9G.js | .vite/renderer/find_in_page/assets/main-hLSpBHWq.js | .vite/renderer/main_window/assets/attachReactWithSelector-Bf7MO2XB.js | .vite/renderer/quick_window/assets/main-DFyKxPTW.js	5
+http://schemas.openxmlformats.org/officeDocument/2006/relationships	schemas.openxmlformats.org	other	.vite/build/index.chunk-BWI7goHJ.js	1
+http://schemas.openxmlformats.org/package/2006/relationships	schemas.openxmlformats.org	other	.vite/build/index.chunk-BWI7goHJ.js	1
+http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties	schemas.openxmlformats.org	other	.vite/build/index.chunk-BWI7goHJ.js	1
+http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes	schemas.openxmlformats.org	other	.vite/build/index.chunk-BWI7goHJ.js	1
+http://schemas.openxmlformats.org/officeDocument/2006/custom-properties	schemas.openxmlformats.org	other	.vite/build/index.chunk-BWI7goHJ.js	1
+https://sts.windows.net/tenant-id/	sts.windows.net	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://stuk.github.io/jszip/documentation/howto/read_zip.html	stuk.github.io	other	.vite/build/index.chunk-BkZ4tpDY.js	1
+https://tailwindcss.com	tailwindcss.com	other	.vite/renderer/about_window/about.html | .vite/renderer/buddy_window/buddy.html | .vite/renderer/find_in_page/find-in-page.html | .vite/renderer/main_window/assets/MainWindowPage-DTxMhyWF.css | .vite/renderer/quick_window/quick-window.html	5
+https://tldrlegal.com/license/mit-license	tldrlegal.com	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://tool-policy-endpoint.invalid/unreadable	tool-policy-endpoint.invalid	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://tools.ietf.org/html/rfc6455#section-9.1	tools.ietf.org	other	node_modules/ws/lib/extension.js	1
+http://underscorejs.org/LICENSE	underscorejs.org	other	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://unpkg.com	unpkg.com	other	.vite/build/index.chunk-BYMGAPtw.js	1
+https://vpce-0123-abcd.bedrock-runtime.us-east-1.vpce.amazonaws.com	vpce-0123-abcd.bedrock-runtime.us-east-1.vpce.amazonaws.com	other	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+http://web.mit.edu/gnu/doc/html/screen_20.html	web.mit.edu	other	node_modules/node-pty/lib/unixTerminal.js	1
+http://www.apache.org/licenses/LICENSE-2.0	www.apache.org	other	resources/office365-mcp/pdf.worker.mjs	1
+http://www.apple.com/DTDs/PropertyList-1.0.dtd	www.apple.com	other	.vite/build/index.chunk-B17ncv_E.js	1
+https://www.chartjs.org	www.chartjs.org	other	resources/artifact-libs/npm_chart.js@4.5.0_dist_chart.umd.js	1
+https://www.cl.cam.ac.uk/%7Emgk25/ucs/utf8_check.c	www.cl.cam.ac.uk	other	node_modules/ws/lib/validation.js	1
+http://www.mozilla.org/newlayout/xml/parsererror.xml	www.mozilla.org	other	.vite/build/index.chunk-BYMGAPtw.js	1
+http://www.w3.org/1999/xhtml	www.w3.org	other	.vite/build/index.chunk-B17ncv_E.js | .vite/build/index.chunk-BYMGAPtw.js | .vite/build/mainView.js | resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js | resources/office365-mcp/pdf.worker.mjs	5
+http://www.w3.org/2000/svg	www.w3.org	other	.vite/build/index.chunk-B17ncv_E.js | .vite/build/index.chunk-BYMGAPtw.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/renderer/about_window/about.html | .vite/renderer/about_window/assets/main-tJY2FsYJ.js | .vite/renderer/buddy_window/assets/main-DeOnnb9G.js | .vite/renderer/buddy_window/buddy.html | .vite/renderer/find_in_page/assets/FindInPage-CfNQSgeo.js | .vite/renderer/find_in_page/assets/main-hLSpBHWq.js | .vite/renderer/find_in_page/find-in-page.html | .vite/renderer/main_window/assets/attachReactWithSelector-Bf7MO2XB.js | .vite/renderer/main_window/assets/clawdQuestEngine-C2Z1JudX.css | .vite/renderer/main_window/assets/clawdQuestEngine-CdvdlRdl.js | .vite/renderer/main_window/assets/MainWindowPage-BM1J3SeB.js | .vite/renderer/main_window/assets/MainWindowPage-DTxMhyWF.css | .vite/renderer/quick_window/assets/main-DFyKxPTW.js | .vite/renderer/quick_window/quick-window.html | resources/artifact-libs/npm_gridjs@5.0.2_dist_gridjs.umd.js | resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js | resources/office365-mcp/pdf.worker.mjs | resources/office365-mcp/pdfExtractorProcess.mjs	21
+http://www.w3.org/XML/1998/namespace	www.w3.org	other	.vite/build/index.chunk-B17ncv_E.js | .vite/renderer/about_window/assets/main-tJY2FsYJ.js | .vite/renderer/buddy_window/assets/main-DeOnnb9G.js | .vite/renderer/find_in_page/assets/main-hLSpBHWq.js | .vite/renderer/main_window/assets/attachReactWithSelector-Bf7MO2XB.js | .vite/renderer/quick_window/assets/main-DFyKxPTW.js | resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	7
+http://www.w3.org/2000/xmlns/	www.w3.org	other	.vite/build/index.chunk-B17ncv_E.js | resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	2
+http://www.w3.org/2001/XMLSchema	www.w3.org	other	.vite/build/index.chunk-B17ncv_E.js	1
+http://www.w3.org/2001/XMLSchema-instance	www.w3.org	other	.vite/build/index.chunk-B17ncv_E.js	1
+http://www.w3.org/1999/xlink	www.w3.org	other	.vite/build/index.chunk-BYMGAPtw.js | .vite/renderer/about_window/assets/main-tJY2FsYJ.js | .vite/renderer/buddy_window/assets/main-DeOnnb9G.js | .vite/renderer/find_in_page/assets/main-hLSpBHWq.js | .vite/renderer/main_window/assets/attachReactWithSelector-Bf7MO2XB.js | .vite/renderer/quick_window/assets/main-DFyKxPTW.js | resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	7
+http://www.w3.org/2000/svg'%3e%3cpath	www.w3.org	other	.vite/renderer/about_window/about.html | .vite/renderer/buddy_window/buddy.html | .vite/renderer/find_in_page/find-in-page.html | .vite/renderer/main_window/assets/MainWindowPage-DTxMhyWF.css | .vite/renderer/quick_window/quick-window.html	5
+http://www.w3.org/2000/svg'%3e%3ccircle	www.w3.org	other	.vite/renderer/about_window/about.html | .vite/renderer/buddy_window/buddy.html | .vite/renderer/find_in_page/find-in-page.html | .vite/renderer/main_window/assets/MainWindowPage-DTxMhyWF.css | .vite/renderer/quick_window/quick-window.html	5
+http://www.w3.org/2000/svg%27%20viewBox=%270%200%2016%2016%27%3E%3Cpath%20d=%27M4.5%2011.5%2011.5%204.5M8.5%2011.5%2011.5%208.5%27%20stroke=%27%23898781%27%20stroke-width=%271.5%27%20stroke-linecap=%27round%	www.w3.org	other	.vite/renderer/about_window/about.html | .vite/renderer/buddy_window/buddy.html | .vite/renderer/find_in_page/find-in-page.html | .vite/renderer/main_window/assets/MainWindowPage-DTxMhyWF.css | .vite/renderer/quick_window/quick-window.html	5
+http://www.w3.org/1998/Math/MathML	www.w3.org	other	.vite/renderer/about_window/assets/main-tJY2FsYJ.js | .vite/renderer/buddy_window/assets/main-DeOnnb9G.js | .vite/renderer/find_in_page/assets/main-hLSpBHWq.js | .vite/renderer/main_window/assets/attachReactWithSelector-Bf7MO2XB.js | .vite/renderer/quick_window/assets/main-DFyKxPTW.js | resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	6
+http://www.w3.org/2000/09/xmldsig#	www.w3.org	other	resources/office365-mcp/pdf.worker.mjs	1
+http://www.w3.org/1999/XSL/Transform	www.w3.org	other	resources/office365-mcp/pdf.worker.mjs	1
+https://www.w3ctech.com/topic/2226	www.w3ctech.com	other	resources/office365-mcp/office365-mcp-stdio.mjs	1
+http://www.xfa.org/schema/xci/	www.xfa.org	other	resources/office365-mcp/pdf.worker.mjs	1
+http://www.xfa.org/schema/xfa-connection-set/	www.xfa.org	other	resources/office365-mcp/pdf.worker.mjs	1
+http://www.xfa.org/schema/xfa-data/	www.xfa.org	other	resources/office365-mcp/pdf.worker.mjs	1
+http://www.xfa.org/schema/xfa-form/	www.xfa.org	other	resources/office365-mcp/pdf.worker.mjs	1
+http://www.xfa.org/schema/xfa-locale-set/	www.xfa.org	other	resources/office365-mcp/pdf.worker.mjs	1
+http://www.xfa.org/schema/xfa-source-set/	www.xfa.org	other	resources/office365-mcp/pdf.worker.mjs	1
+http://www.xfa.org/schema/xfa-template/	www.xfa.org	other	resources/office365-mcp/pdf.worker.mjs	1
+http://www.xfa.org/schema/xdc/	www.xfa.org	other	resources/office365-mcp/pdf.worker.mjs	1
+http://www.xfa.org/schema/xfa-data/1.0/	www.xfa.org	other	resources/office365-mcp/pdf.worker.mjs	1
+https://127.0.0.1/	127.0.0.1	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://127.0.0.1:1	127.0.0.1:1	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://127.0.0.1:3000/oauth/code/callback	127.0.0.1:3000	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://127.0.0.1:33418/callback	127.0.0.1:33418	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://127.0.0.1:4000	127.0.0.1:4000	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://127.0.0.1:40342/metadata/identity/oauth2/token	127.0.0.1:40342	placeholder	resources/office365-mcp/office365-mcp-stdio.mjs	1
+http://127.0.0.1:8000	127.0.0.1:8000	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://app.localhost:3000	app.localhost:3000	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://auth.example.com	auth.example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://claude-sessions.example.com	claude-sessions.example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://config.example.com/claude-desktop	config.example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://example.com	example.com	placeholder	.vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-lzaSYO3Q.js	2
+http://example.com	example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/pdfExtractorProcess.mjs	2
+https://example.com/1	example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://example.com/2	example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://example.com:3000/	example.com:3000	placeholder	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://github.example.com	github.example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://hooks.example.com/*	hooks.example.com	placeholder	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js	2
+https://intranet.example.com/usage-policy	intranet.example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://llm-gateway.example.com	llm-gateway.example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://llm-gateway.example.com/foundry	llm-gateway.example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+http://localhost	localhost	placeholder	.vite/build/index.chunk-BlEfqh4Z.js	1
+http://localhost:	localhost	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://localhost	localhost	placeholder	resources/office365-mcp/office365-mcp-stdio.mjs	1
+http://localhost:${e.port}	localhost:${e.port}	placeholder	resources/office365-mcp/office365-mcp-stdio.mjs	1
+http://localhost:${e}	localhost:${e}	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://localhost:${l.port}	localhost:${l.port}	placeholder	.vite/build/index.chunk-yKIwpGVf.js	1
+http://localhost:${l.port}.	localhost:${l.port}.	placeholder	.vite/build/index.chunk-yKIwpGVf.js	1
+http://localhost:${r}	localhost:${r}	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://localhost:${t}	localhost:${t}	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://localhost:3000	localhost:3000	placeholder	.vite/build/index.chunk-DNyequwM.js	1
+http://localhost:3000/oauth/code/callback	localhost:3000	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://localhost:4000	localhost:4000	placeholder	.vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js	2
+http://localhost:4000/desktop/callback	localhost:4000	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://localhost:5173/src/App.tsx?t=1	localhost:5173	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://localhost:8000	localhost:8000	placeholder	.vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js	2
+http://localhost:8205	localhost:8205	placeholder	.vite/build/index.chunk-DNyequwM.js	1
+https://localhost:8443/	localhost:8443	placeholder	.vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-lzaSYO3Q.js	2
+https://localhost:8443	localhost:8443	placeholder	.vite/build/index.chunk-lzaSYO3Q.js	1
+http://localhost:9999	localhost:9999	placeholder	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://mirror.example.com/model-catalog/v1/catalog.json	mirror.example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://npm.example.com/api/npm/internal/	npm.example.com	placeholder	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js	2
+https://otel.example.com	otel.example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://policy.example.com/tool-call	policy.example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+http://proxy.example.com:8080	proxy.example.com:8080	placeholder	.vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	3
+https://reviews.example.com/{owner}/{repo}/pull/{number}	reviews.example.com	placeholder	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js	2
+https://share.example.com/publish	share.example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://tools.example.com/claude/submissions	tools.example.com	placeholder	.vite/build/index.chunk-TIxUOzMy.js	1
+http://wpad.example.com/proxy.pac	wpad.example.com	placeholder	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://docs.sentry.io/platforms/javascript/best-practices/browser-extensions/	docs.sentry.io	telemetry	.vite/build/aboutWindow.js | .vite/build/findInPage.js | .vite/build/mainWindow.js | .vite/build/quickWindow.js | .vite/renderer/about_window/assets/main-tJY2FsYJ.js | .vite/renderer/buddy_window/assets/main-DeOnnb9G.js | .vite/renderer/find_in_page/assets/main-hLSpBHWq.js | .vite/renderer/main_window/assets/main-9C0encc1.js | .vite/renderer/quick_window/assets/main-DFyKxPTW.js	9
+https://api.box.com	api.box.com	third-party-box	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://mcp.box.com	mcp.box.com	third-party-box	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://api.github.com	api.github.com	third-party-github	.vite/build/index.chunk-B2Vbqvd-.js	1
+https://api.github.com/graphql	api.github.com	third-party-github	.vite/build/index.chunk-B2Vbqvd-.js	1
+https://api.github.com/user	api.github.com	third-party-github	.vite/build/index.chunk-DCgdwyFw.js	1
+https://cli.github.com	cli.github.com	third-party-github	.vite/build/index.chunk-Bn6onBlX.js	1
+https://git-lfs.github.com/spec/	git-lfs.github.com	third-party-github	.vite/build/index.chunk-Dd4cATog.js	1
+https://github.com/jprichardson/node-fs-extra/issues/269	github.com	third-party-github	.vite/build/heavy-work-worker/dist-CI9lzb1v.js | .vite/build/index.chunk-lzaSYO3Q.js	2
+https://github.com/dchest/tweetnacl-util-js	github.com	third-party-github	.vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-Dig-VUnE.js	2
+https://github.com/apps/${encodeURIComponent(t.login.slice(0,-5))}	github.com	third-party-github	.vite/build/index.chunk-Bn6onBlX.js	1
+https://github.com/${encodeURIComponent(t.login)}	github.com	third-party-github	.vite/build/index.chunk-Bn6onBlX.js	1
+https://github.com/modelcontextprotocol/modelcontextprotocol/issues/986	github.com	third-party-github	.vite/build/index.chunk-CTyoJC3M.js | .vite/build/index.chunk-DNyequwM.js | resources/office365-mcp/office365-mcp-stdio.mjs	3
+https://github.com	github.com	third-party-github	.vite/build/index.chunk-DCgdwyFw.js	1
+http://github.com/mscdex/ssh2/raw/master/LICENSE	github.com	third-party-github	.vite/build/index.chunk-Dig-VUnE.js	1
+http://github.com/mscdex/ssh2.git	github.com	third-party-github	.vite/build/index.chunk-Dig-VUnE.js	1
+https://github.com/mscdex/ssh2/issues	github.com	third-party-github	.vite/build/index.chunk-Dig-VUnE.js	1
+https://github.com/${r}	github.com	third-party-github	.vite/build/index.chunk-DPuRWdEL.js	1
+https://github.com/${c.owner}/${c.repo}	github.com	third-party-github	.vite/build/index.chunk-DRFAz7zF.js	1
+https://github.com/anthropics/anthropic-sdk-typescript#streaming-responses	github.com	third-party-github	.vite/build/index.chunk-DyYrY1NN.js	1
+https://github.com/anthropics/anthropic-sdk-typescript#long-requests	github.com	third-party-github	.vite/build/index.chunk-DyYrY1NN.js	1
+https://github.com/winstonjs/winston.git	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | resources/office365-mcp/office365-mcp-stdio.mjs	3
+https://github.com/winstonjs/winston/blob/master/UPGRADE-3.0.md	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | resources/office365-mcp/office365-mcp-stdio.mjs	3
+https://github.com/winstonjs/winston/tree/master/UPGRADE-3.0.md	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | resources/office365-mcp/office365-mcp-stdio.mjs	3
+https://github.com/astral-sh/uv/releases/download/${Nb}/uv-x86_64-unknown-linux-gnu.tar.gz	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://github.com/astral-sh/uv/releases/download/${Nb}/uv-aarch64-unknown-linux-gnu.tar.gz	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://github.com/astral-sh/uv/releases/download/${Nb}/uv-aarch64-apple-darwin.tar.gz	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://github.com/astral-sh/uv/releases/download/${Nb}/uv-x86_64-apple-darwin.tar.gz	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://github.com/astral-sh/uv/releases/download/${Nb}/uv-aarch64-pc-windows-msvc.zip	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://github.com/astral-sh/uv/releases/download/${Nb}/uv-x86_64-pc-windows-msvc.zip	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://github.com/${e.source.repo}	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://github.com/broofa/mime/blob/main/README.md#custom-mime-instances	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://github.com/${t}	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://github.com/${e.repo}.git	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://github.com/${i[1]}	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://github.com/${o[1]}	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://github.com/${e}/${n}/tree/${r}	github.com	third-party-github	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://github.com/owner/repo/pull/123.	github.com	third-party-github	.vite/build/index.chunk-M6SkuaH9.js	1
+https://github.com/${i}	github.com	third-party-github	.vite/build/index.chunk-vYnAlWmT.js	1
+https://github.com/${x.repo}	github.com	third-party-github	.vite/build/index.chunk-vYnAlWmT.js	1
+https://github.com/nodejs/require-in-the-middle/issues	github.com	third-party-github	.vite/build/index.pre.js	1
+https://github.com/anthropics/claude-desktop-buddy	github.com	third-party-github	.vite/renderer/buddy_window/assets/BuddyWindow-_Jgif_qX.js	1
+https://github.com/TooTallNate/proxy-agents.git	github.com	third-party-github	node_modules/agent-base/package.json	1
+https://github.com/microsoft/node-pty/issues/833	github.com	third-party-github	node_modules/node-pty/lib/unixTerminal.js	1
+https://github.com/microsoft/node-pty/issues/375	github.com	third-party-github	node_modules/node-pty/lib/windowsConoutConnection.js	1
+https://github.com/microsoft/vscode/issues/76548	github.com	third-party-github	node_modules/node-pty/lib/windowsConoutConnection.js	1
+https://github.com/microsoft/terminal/issues/1810	github.com	third-party-github	node_modules/node-pty/lib/windowsConoutConnection.js	1
+https://github.com/microsoft/node-pty/issues/763	github.com	third-party-github	node_modules/node-pty/lib/windowsPtyAgent.js	1
+https://github.com/microsoft/node-pty	github.com	third-party-github	node_modules/node-pty/package.json	1
+https://github.com/microsoft/node-pty/issues	github.com	third-party-github	node_modules/node-pty/package.json	1
+https://github.com/STRML/async-limiter	github.com	third-party-github	node_modules/ws/lib/limiter.js	1
+https://github.com/nodejs/node/issues/8871#issuecomment-250915913	github.com	third-party-github	node_modules/ws/lib/permessage-deflate.js	1
+https://github.com/websockets/ws/issues/1202	github.com	third-party-github	node_modules/ws/lib/permessage-deflate.js	1
+https://github.com/websockets/ws/issues/1869.	github.com	third-party-github	node_modules/ws/lib/websocket.js	1
+https://github.com/websockets/ws/issues/1940.	github.com	third-party-github	node_modules/ws/lib/websocket.js	1
+https://github.com/websockets/ws	github.com	third-party-github	node_modules/ws/package.json	1
+https://github.com/websockets/ws/issues	github.com	third-party-github	node_modules/ws/package.json	1
+https://github.com/websockets/ws.git	github.com	third-party-github	node_modules/ws/package.json	1
+https://github.com/kurkle/color#readme	github.com	third-party-github	resources/artifact-libs/npm_chart.js@4.5.0_dist_chart.umd.js	1
+https://github.com/markedjs/marked.	github.com	third-party-github	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://github.com/mermaid-js/mermaid/issues	github.com	third-party-github	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://github.com/mermaid-js/mermaid/releases/tag/v11.0.0	github.com	third-party-github	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://github.com/chevrotain/chevrotain/issues	github.com	third-party-github	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://github.com/chevrotain/chevrotain/issues/564#issuecomment-349062346	github.com	third-party-github	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://github.com/mermaid-js/mermaid/issues.	github.com	third-party-github	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://github.com/jquery/jquery/blob/master/src/event.js	github.com	third-party-github	resources/artifact-libs/npm_mermaid@11.17.2_dist_mermaid.min.js	1
+https://github.com/apostrophecms/sanitize-html/issues/547	github.com	third-party-github	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://github.com/microsoftgraph/msgraph-sdk-javascript/blob/dev/docs/CustomAuthenticationProvider.md	github.com	third-party-github	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://github.com/bitinn/node-fetch	github.com	third-party-github	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://github.com/ashtuchkin/iconv-lite/wiki/Use-Buffers-when-decoding	github.com	third-party-github	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://github.com/jonschlinkert/is-plain-object	github.com	third-party-github	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://github.com/zloirock/core-js/blob/v3.44.0/LICENSE	github.com	third-party-github	resources/office365-mcp/pdf.worker.mjs | resources/office365-mcp/pdfExtractorProcess.mjs	2
+https://github.com/zloirock/core-js	github.com	third-party-github	resources/office365-mcp/pdf.worker.mjs | resources/office365-mcp/pdfExtractorProcess.mjs	2
+https://accounts.google.com	accounts.google.com	third-party-google	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://accounts.google.com/o/oauth2/v2/auth	accounts.google.com	third-party-google	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://accounts.google.com/ServiceLogin	accounts.google.com	third-party-google	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://accounts.google.com/AccountChooser	accounts.google.com	third-party-google	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://chromewebstore.google.com/detail/${ZI}	chromewebstore.google.com	third-party-google	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://clients2.google.com/service/update2/crx?response=redirect&acceptformat=crx2,crx3&x=id%3D${n}%26uc&prodversion=${process.versions.chrome}	clients2.google.com	third-party-google	.vite/build/index.chunk-BkZ4tpDY.js	1
+https://clients2.google.com/service/update2/crx	clients2.google.com	third-party-google	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://fonts.googleapis.com	fonts.googleapis.com	third-party-google	.vite/build/index.chunk-BYMGAPtw.js	1
+https://fonts.gstatic.com	fonts.gstatic.com	third-party-google	.vite/build/index.chunk-BYMGAPtw.js	1
+https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts	iamcredentials.googleapis.com	third-party-google	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://oauth2.googleapis.com/token	oauth2.googleapis.com	third-party-google	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://oauth2.googleapis.com/revoke	oauth2.googleapis.com	third-party-google	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://sts.googleapis.com	sts.googleapis.com	third-party-google	.vite/build/index.chunk-C15e1VST.js	1
+https://www.googleapis.com/auth/cloud-platform	www.googleapis.com	third-party-google	.vite/build/index.chunk-C15e1VST.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	3
+https://www.googleapis.com/oauth2/v4/token	www.googleapis.com	third-party-google	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://cognitiveservices.azure.com/.default	cognitiveservices.azure.com	third-party-ms	.vite/build/index.chunk-Hph4NgNJ.js	1
+https://docs.microsoft.com/en-us/windows/console/closepseudoconsole	docs.microsoft.com	third-party-ms	node_modules/node-pty/lib/windowsConoutConnection.js	1
+https://graph.microsoft.com/.default	graph.microsoft.com	third-party-ms	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://graph.microsoft.com/	graph.microsoft.com	third-party-ms	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://graph.microsoft.com/v1.0	graph.microsoft.com	third-party-ms	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://learn.microsoft.com/en-us/azure/service-fabric/configure-existing-cluster-enable-managed-identity-token-service.	learn.microsoft.com	third-party-ms	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://learn.microsoft.com/partner-center/find-ids-and-domain-names.	learn.microsoft.com	third-party-ms	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://login.microsoftonline.com	login.microsoftonline.com	third-party-ms	.vite/build/index.chunk-Hph4NgNJ.js | resources/office365-mcp/office365-mcp-stdio.mjs	2
+https://login.microsoftonline.com/TENANT/v2.0	login.microsoftonline.com	third-party-ms	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js	2
+https://login.microsoftonline.com/${e.tenantId}/v2.0	login.microsoftonline.com	third-party-ms	.vite/build/index.chunk-lzaSYO3Q.js	1
+https://login.microsoftonline.com/common/oauth2/nativeclient	login.microsoftonline.com	third-party-ms	.vite/build/msal-broker-worker/msalBrokerWorker.js | resources/office365-mcp/office365-mcp-stdio.mjs	2
+https://login.microsoftonline.com/common/	login.microsoftonline.com	third-party-ms	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://login.microsoftonline.com/${VSn}/	login.microsoftonline.com	third-party-ms	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://login.microsoftonline.de	login.microsoftonline.de	third-party-ms	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://login.microsoftonline.us	login.microsoftonline.us	third-party-ms	resources/office365-mcp/office365-mcp-stdio.mjs	1
+https://msdn.microsoft.com/en-us/library/windows/desktop/bb776391(v=vs.85).aspx	msdn.microsoft.com	third-party-ms	node_modules/node-pty/lib/index.js	1
+https://msdn.microsoft.com/en-us/library/17w5ykft.aspx	msdn.microsoft.com	third-party-ms	node_modules/node-pty/lib/index.js	1
+https://msdn.microsoft.com/en-us/library/windows/desktop/ms683156.aspx	msdn.microsoft.com	third-party-ms	node_modules/node-pty/lib/index.js	1
+http://schemas.microsoft.com/office/webextensions/webextension/2010/11	schemas.microsoft.com	third-party-ms	.vite/build/index.chunk-BWI7goHJ.js	1
+http://schemas.microsoft.com/office/webextensions/taskpanes/2010/11	schemas.microsoft.com	third-party-ms	.vite/build/index.chunk-BWI7goHJ.js	1
+http://schemas.microsoft.com/office/2011/relationships/webextension	schemas.microsoft.com	third-party-ms	.vite/build/index.chunk-BWI7goHJ.js	1
+http://schemas.microsoft.com/office/2011/relationships/webextensiontaskpanes	schemas.microsoft.com	third-party-ms	.vite/build/index.chunk-BWI7goHJ.js	1
+http://www.microsoft.com/GroupPolicy/PolicyDefinitions	www.microsoft.com	third-party-ms	.vite/build/index.chunk-B17ncv_E.js	1
+https://anthropic.slack.com	anthropic.slack.com	third-party-slack	.vite/build/index.chunk-lzaSYO3Q.js	1
