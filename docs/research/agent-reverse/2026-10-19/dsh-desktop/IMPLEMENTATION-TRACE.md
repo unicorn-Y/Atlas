@@ -2,6 +2,8 @@
 
 三套源基线：A 6a63b973；B 0aea85f；官方 O 687f282e；所有结论为 S（源代码）。
 
+**实物来源边界**：A 实际发行源码 ZIP 是 `dsh-desktop-anywhere-labs-03d18d13bb.zip`（222,488,979 bytes；SHA-256 `03d18d13bb4a5bbfe79e3cd340d465d415a24f69968828c045efb5ea234b0a31`）；B 是 `dsh-desktop-dongdong-agent-1dd3b7ded3.zip`（5,400,611 bytes；SHA-256 `1dd3b7ded3646abf5245f46b76e214d33908ac563d1c796d1a9baf592a9f5dc6`）。两包均 CRC 完整并解包检查；资产核验及完整路径索引见 `extracted/ASSET-VERIFICATION.md`、`*-package-tree.tsv`。A ZIP 内 `vendor/dsh-runtime/0.2.1-rc.2/manifest.json` 列出 343 个官方 `@deepseek-ai/*` tarballs；逐个 SHA 与清单全匹配。它们是 Next `2.0.19-next` 实际随包 runtime 依赖，不是被误认作随仓库携带源码的 `deepseek-harness` gitlink（解包目录为空）。研究结论因此可锚定已发布源包所带的 JS runtime；仍未启动桌面 app，不能宣称实际 UI/运行表现。A 旧 stable/beta profile 与 Next 的版本/激活配置并非同一概念。
+
 ## A：Electron/Node Host 与 DSH Profile
 
 **入口**：dsh-desktop-next/package.json 指向 lib/main.js，src/main.ts 为 Electron UI/托盘/主进程 IPC；src/desktop-runtime.ts:102 的 NextDesktopRuntime.start() 调用 DesktopBackendController.start()（src/backend-controller.ts:33-172）；先准备 Profile，串行 Host 创建，失败清理，不把未完全退出的旧 Host 和新 Host 无序重叠；src/host-process.ts:228-319 用 Node spawn 创建 child，stdio=['ignore','pipe','pipe','ipc']，登记 child error/close 与 IPC。
@@ -13,6 +15,10 @@
 **失败与关停**：BackendController 有 starting/ready/error 与 failure 原对象；start 并发共享 pending，stop 会取消 pending 并 await cleanup，失败可为 AggregateError。HostProcess 捕获 stderr 最近 64KiB，校验 IPC 事件结构，遇 close/invalid event 进入失败并拒绝所有尚未答复的请求。stop() 先 child.shutdown，等待 shutdown-complete；超时升级 SIGTERM 和 SIGKILL；更新使用 requireGraceful，收不到干净 ACK 或 exit 非0则拒绝切安装。src/desktop-runtime.ts:85-145 的 Safe Mode 使用独立临时 home/最小 Profile；src/recovery.ts 的 checkpoint 主要快照 package.json、cordis.patch.yml、desktop-next.features.json。**这只能证明桌面配置恢复，不证明 Agent turn 自动续跑**。
 
 **UI**：src/client/index.ts:31-100 将 Desktop Settings / Settings Actions / Settings Requests / Safe Mode 注入官方 Cordis slots；插件 UI、native picker/onboarding 也是嵌入官方 client。A 的本机 terminal、LAN HTTPS、market Host routes、payload checksum/update-install 分别位于 src/desktop-terminal.ts、src/lan-https-*、dsh-community-market/src/host/routes.ts、src/runtime-tree.ts。早期 dsh-plugin-desktop 与 Next 属另一个应用变种，本研究没有混合版本路径。
+
+**官方 DSH 持久队列（随 A 包实际携带）**：`vendor/dsh-runtime/0.2.1-rc.2/deepseek-ai-dsh-agent-loop-0.2.1-rc.2.tgz`（48,508 bytes；SHA-256 `b24947a735958f3633311a8ecb01122df3520ed7784f5ded82222587d5883bde`）的 `lib/index.js` 内 `ReactLoopInbox`（70-204）将待办分为 `next-turn` 与 `next-step`，用 session event `agent/inbox/spliced` 记录追加/插入/替换/删除，`claim()` 在边界消费并发 `agent/inbox/claimed`；`DefaultAgent.followup()` 写 next-turn、`steer()` 写 next-step（约 806-813），abort 后唤醒可把下一条改入 next-turn。JSONL persistence 是同版本 `dsh-session-persistence-jsonl` tarball（204,364 bytes；SHA-256 `0ac07d4cf13452fd28fc3c70721ebaf9c8a1d9d34d102f095abf7f0a7f47482f`）；队列状态来自可重放 session event projection，而非 Electron renderer 本地队列。
+
+**UI/API → 冷 Agent → 持久队列变更**：同版本 `dsh-api-session-controller` tarball（272,969 bytes；SHA-256 `17aebd23ddbd1b146aa2dbebe443b2e6b96928c43560ff0495c50288e0e3eb22`）`lib/index.js:925-950` 的 `prompt()` 先 `resolveAgent(sessionId)`、去重 requestId、校验图像模型/上传收据并记录 user source，再按 steer/followup 入 inbox。其 `updateQueue()` (`1004-1054`) 在 Agent 不在内存时调用 `resolveAgent` 冷恢复；仅接受仍在两条 inbox 队列中的 itemId，拒绝陈旧 ID；edit 仅支持非空文本，remove 同时 retire 上传收据，steer 仅允许运行中的 Agent 上 next-turn 条目并原位转为 next-step。接口以 `@Remote("updateQueue")` 发布 (`2689`)，transport schema 的 `lib/typert.remote-client.js:1912-1938` 为 `session/updateQueue`；client wrapper `lib/client.js:2415-2418` 注入 sessionId/itemId/action。UI chat 包 `lib/client.js:2757-2847` 消费 inbox projection，将服务端 next-step steer 与本地 pending submission 合并并按 RPC ID 去重，`5391+` 显示本地回显直到持久投影到达。静态包中看到 inbox 列表 projection/乐观回显及 RPC 暴露；**没有足够证据将某个具体按钮逐项连到 edit/remove/steer 操作**，故这里只确认 API/controller/store 闭环，具体控件映射留 U。源码 anchors 与内嵌 tarball SHA 见 `extracted/A-runtime-symbol-index.md`。
 
 ## B：Tauri/Rust/React 管理壳到官方 WebUI
 

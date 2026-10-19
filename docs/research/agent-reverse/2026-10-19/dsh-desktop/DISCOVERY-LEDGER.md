@@ -50,6 +50,15 @@ S：固定 commit 源码；D：固定文档；I：推断；U：本轮未确认�
 | DSH_DESKTOP-032 | 工具/请求/消息轨迹映射、检索、时间轴与历史分页 | O packages/client/ui-trajectory/src/client/TrajectoryView.tsx；trajectory-event-projection.ts | S |
 | DSH_DESKTOP-033 | 官方 packages/subagent,experimental/agent-team,mcp,skill,jobs,session 等存在 | O 对应 package 树 | S 文件存在，不等于默认装载 |
 
+## A 内嵌官方 runtime：已验证资产新增发现
+
+| ID | 归属及能力 | 实物包路径 / 符号 | 证据 |
+|---|---|---|---|
+| DSH_DESKTOP-034 | Next 2.0.19-next 实际随包携带官方 `@deepseek-ai/*@0.2.1-rc.2` runtime，而非只引用空 deepseek-harness gitlink | ZIP `vendor/dsh-runtime/0.2.1-rc.2/manifest.json` 343/343 tarball SHA 匹配；`A-runtime-symbol-index.md` | S（包内元数据+tarball digest） |
+| DSH_DESKTOP-035 | Agent Inbox 为两路 event-sourced 队列：`next-turn` 和 `next-step`；claim 消费并记录生命周期事件 | `@deepseek-ai/dsh-agent-loop@0.2.1-rc.2` tar `lib/index.js:70-204,806-813`；事件 `agent/inbox/spliced` | S（真实 A 源包内嵌 tarball） |
+| DSH_DESKTOP-036 | UI projection/RPC/controller 具备队列回显、request-ID 去重、edit/remove/steer 变更；冷 Agent 会 resolve/restore 后再改 durable inbox | `@deepseek-ai/dsh-client-ui-chat` `lib/client.js:2757-2847`；`dsh-api-session-controller` `lib/index.js:925-950,1004-1054,2689`，wire `typert.remote-client.js:1912-1938` | S；具体按钮到 RPC 的映射 U |
+| DSH_DESKTOP-037 | 随 A 包的 Agents Anywhere 存在多版并行 tarballs；`provenance.json` 指向的 `.c39b82d4fffb1...tgz` SHA 与 provenance 声明 `f1b117...` 一致，但同目录还有其他同版不同 commit 构件，不能只按 package semver 认定运行时选中了哪份 | A `vendor/agents-anywhere/provenance.json` + `*.tgz`；详见 `A-vendor-package-index.tsv` | S 文件/哈希；Profiles 默认关 AA bridge；运行加载 U |
+
 ## 未证 / 不可冒充完整
 
-A 的 experimental Agent team、AA 远控、默认插件实际激活、所有 Host 重启后持久 turn 恢复；B 自研 Agent UI、每子 Agent 精确计费、所有三平台体验；官方外部子代理 leaf 可点击进入聊天；两个归档原字节校验、Windows 真实运行、WS trace：本轮统统 **U**。
+A 的 experimental Agent team、AA 远控和默认插件实际激活、桌面关闭/重启后的当前 Agent turn 恢复；B 自研 Agent UI、每子 Agent精确计费、所有三平台体验；官方 external 子代理 leaf 可点击进入聊天；UI inbox action 的具体控件到 RPC 映射、Windows 真实运行、WS trace：本轮统统 **U**。A/B 指定归档身份校验已完成，不再列为 U。

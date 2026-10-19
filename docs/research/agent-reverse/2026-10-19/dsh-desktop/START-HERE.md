@@ -1,6 +1,6 @@
 # DSH 社区 Desktop 双项目逆向研究 — 入口
 
-**状态：静态源码研究已有实质结果；仍为 PARTIAL（归档 ZIP 本地二进制回读及动态运行未完成）。**
+**状态：真实发布源码归档已独立下载、核 SHA/CRC、完整解包并静态拆解；研究报告已据实物补充。动态应用运行仍 NOT-RUN，故整体保持 PARTIAL，不能视为完整 runtime acceptance。**
 **研究分支：research/agent-reverse-20261019-dsh-desktop**
 **Atlas main 基线：aa6196f550098cc46081dc6db2c376cb87ddffa5**
 
@@ -21,7 +21,7 @@
 
 ## 本轮证据与边界
 
-已经读取派工任务书、PROTOCOL、采集 manifest/index，且通过 GitHub 工具以固定 commit 读取两个项目主入口/宿主/调用/IPC/状态/恢复源文件、官方子代理真实 UI TSX 与 Atlas main 对照路径。**S=源码证据，D=仓库说明，I=推断，U=尚未核实；本轮没有 R=运行证据。** 两份 ZIP 虽已归档，因当前 GitHub 接口仅可提取文本，未在本会话独立下载原二进制、校验 SHA 或解包，故需按 EXTRACTION-REQUEST 补采；更不能假称实时实测。
+已从 Atlas Release 取得两份任务书指定 ZIP：A 222,488,979 bytes / SHA-256 `03d18d13bb4a5bbfe79e3cd340d465d415a24f69968828c045efb5ea234b0a31`；B 5,400,611 bytes / SHA-256 `1dd3b7ded3646abf5245f46b76e214d33908ac563d1c796d1a9baf592a9f5dc6`。ZIP CRC、路径与重复名检查通过并完整解包；A 包内 DSH 0.2.1-rc.2 runtime 清单的 343 个 tarball SHA 全部匹配。本轮因此新增已发布包中官方 Agent Inbox durable queue 和 `session/updateQueue` 冷恢复/编辑删除 steer 的静态实物证据，以及 Atlas main renderer follow-up queue 的实际差异。**S=实物包中静态源码，D=仓库说明，I=推断，U=尚未核实；没有 R=运行证据。** 归档与符号证据见 `extracted/`；ZIP 与解包树仅在 worktree 外 scratch，没有提交 upstream payload。
 
 ## 报告入口
 

@@ -1,0 +1,398 @@
+# B archive source symbol map
+
+Generated from the independently SHA-verified release ZIP extraction. Each row is an exact in-archive source path and 1-based line; snippets are bounded for identification, not a substitute for opening the file.
+
+## `src/App.tsx`
+- `src/App.tsx:1` — `import { useCallback, useEffect, useRef, useState } from "react";`
+- `src/App.tsx:12` — `import { findExistingInstanceInfo, waitEngineBusinessReady, onEngineHealth, stopEngine, loadVerifiedVersions, restartEngineOnPort, getEnginePort } from "./lib/dshEngine";`
+- `src/App.tsx:13` — `import { buildEngineAuth, readBrowserSessionSecret } from "./lib/engineAuth";`
+- `src/App.tsx:23` — `const health = useEngineStore((s) => s.health);`
+- `src/App.tsx:36` — `const [manageMode, setManageMode] = useState(() => {`
+- `src/App.tsx:58` — `// manageMode 上面已按同一标记初始化，故这里只负责清地址栏。`
+- `src/App.tsx:59` — `useEffect(() => {`
+- `src/App.tsx:100` — `useEffect(() => {`
+- `src/App.tsx:149` — `useEffect(() => {`
+- `src/App.tsx:153` — `unlisten = await appWindow.onCloseRequested((event) => {`
+- `src/App.tsx:165` — `useEffect(() => {`
+- `src/App.tsx:168` — `// 引擎地址变化 → 下方导航 effect 依赖 engineUrl，会自动重新打开引擎界面`
+- `src/App.tsx:173` — `useEffect(() => {`
+- `src/App.tsx:178` — `useEffect(() => {`
+- `src/App.tsx:182` — `// 端口就绪 ≠ 业务就绪：这条路径绕过 startEngine，而「引擎已在跑、客户端复用」`
+- `src/App.tsx:184` — `// 必须与 startEngine 的三条出口一样过业务就绪闸门（unavailable/超时自动放行）。`
+- `src/App.tsx:201` — `useEffect(() => {`
+- `src/App.tsx:203` — `port: health.status === "running" ? health.port : null,`
+- `src/App.tsx:205` — `}, [health.status, health.port]);`
+- `src/App.tsx:210` — `useEffect(() => {`
+- `src/App.tsx:217` — `await restartEngineOnPort(target);`
+- `src/App.tsx:219` — `setManageMode(false);`
+- `src/App.tsx:221` — `/* 失败状态已通过 health 广播；停在管理模式即可看到错误并重试 */`
+- `src/App.tsx:228` — `const running = health.status === "running";`
+- `src/App.tsx:229` — `const engineUrl = health.url || `http://127.0.0.1:${health.port}`;`
+- `src/App.tsx:258` — `useEffect(() => {`
+- `src/App.tsx:259` — `if (!running || manageMode) return;`
+- `src/App.tsx:262` — `const secret = await readBrowserSessionSecret();`
+- `src/App.tsx:263` — `const auth = secret ? await buildEngineAuth(health.port, secret) : null;`
+- `src/App.tsx:278` — `await invoke("open_engine_in_main", { url: engineUrl, authJs: auth?.js ?? "" });`
+- `src/App.tsx:295` — `}, [running, engineUrl, health.port, manageMode]);`
+- `src/App.tsx:326` — `{manageMode ? (`
+- `src/App.tsx:342` — `onClick={() => setManageMode(false)}`
+- `src/App.tsx:391` — `onCloseWindow={() => {`
+- `src/App.tsx:400` — `await stopEngine();`
+- `src/App.tsx:409` — `{keyManagerOpen && <KeyManagerDialog onClose={() => setKeyManagerOpen(false)} />}`
+
+## `src/lib/dshEngine.ts`
+- `src/lib/dshEngine.ts:29` — `const DIAG_LOG = "C:\\Windows\\Temp\\dsh-spawn.log";`
+- `src/lib/dshEngine.ts:31` — `function diag(...parts: unknown[]) {`
+- `src/lib/dshEngine.ts:43` — `async function httpFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {`
+- `src/lib/dshEngine.ts:51` — `const DEFAULT_PORT = 17800;`
+- `src/lib/dshEngine.ts:53` — `const KNOWN_DHS_PORTS = [3080, 8080, 8081, 3000, 5173, 17800, 18080];`
+- `src/lib/dshEngine.ts:64` — `* 拉长不会让"真失败"变慢：候选进程**退出**会被立即感知（见 startEngine 里的 close/error 监听），`
+- `src/lib/dshEngine.ts:72` — `const MAX_START_WAIT_MS = 600_000;`
+- `src/lib/dshEngine.ts:75` — `const NPX_CLI_JS = "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npx-cli.js";`
+- `src/lib/dshEngine.ts:84` — `const DEFAULT_VERIFIED_VERSIONS = ["0.1.0-rc.7"];`
+- `src/lib/dshEngine.ts:90` — `async function verifiedVersionsPath(): Promise<string> {`
+- `src/lib/dshEngine.ts:95` — `export async function loadVerifiedVersions(): Promise<string[]> {`
+- `src/lib/dshEngine.ts:111` — `export async function addVerifiedVersion(v: string): Promise<string[]> {`
+- `src/lib/dshEngine.ts:126` — `export function pinEngineVersion(v: string | null): void {`
+- `src/lib/dshEngine.ts:132` — `export function getPinnedEngineVersion(): string | null {`
+- `src/lib/dshEngine.ts:137` — `export function isVerifiedVersion(v: string): boolean {`
+- `src/lib/dshEngine.ts:142` — `export function rollbackVersion(): string | null {`
+- `src/lib/dshEngine.ts:161` — `async function findDshBinJs(targetVersion?: string | null): Promise<string | null> {`
+- `src/lib/dshEngine.ts:248` — `const MANAGED_CREDENTIAL_KEYS = [`
+- `src/lib/dshEngine.ts:259` — `export async function managedCredentialEnv(): Promise<Record<string, string>> {`
+- `src/lib/dshEngine.ts:279` — `const LOCK_CLEAN_SCRIPT = [`
+- `src/lib/dshEngine.ts:320` — `export async function clearStaleProfileLocks(): Promise<StaleLockCleanupResult> {`
+- `src/lib/dshEngine.ts:326` — `diag("残留锁清理：无输出（node 不可用或脚本未执行）code=", out.code, out.stderr.slice(0, 200));`
+- `src/lib/dshEngine.ts:348` — `function candidateCommands(args: string[], localBin: string | null): Array<[string, string[]]> {`
+- `src/lib/dshEngine.ts:373` — `export async function checkEnvironment(): Promise<DshEnvironment> {`
+- `src/lib/dshEngine.ts:381` — `// Command.create("node") 在 Tauri WebView 里可能因 PATH 差异失败导致误报缺失。`
+- `src/lib/dshEngine.ts:402` — `const c = Command.create("node", ["--version"]);`
+- `src/lib/dshEngine.ts:404` — `env.nodeVersion = (out.stdout || out.stderr || "").trim();`
+- `src/lib/dshEngine.ts:410` — `const c = Command.create("node", [NPX_CLI_JS, "--version"]);`
+- `src/lib/dshEngine.ts:412` — `env.npxAvailable = /^\d+\.\d+/.test((out.stdout || out.stderr || "").trim());`
+- `src/lib/dshEngine.ts:419` — `const c = Command.create("node", [localBin, "--version"]);`
+- `src/lib/dshEngine.ts:421` — `env.localDshAvailable = /^\d+\.\d+/.test((out.stdout || out.stderr || "").trim());`
+- `src/lib/dshEngine.ts:431` — `export async function installNode(): Promise<{ ok: boolean; output: string }> {`
+- `src/lib/dshEngine.ts:433` — `const c = Command.create("winget", [`
+- `src/lib/dshEngine.ts:442` — `return { ok: out.code === 0, output: (out.stdout || out.stderr || "").slice(-300) };`
+- `src/lib/dshEngine.ts:449` — `export async function installDsh(): Promise<{ ok: boolean; output: string }> {`
+- `src/lib/dshEngine.ts:451` — `const c = Command.create("npm.cmd", ["install", "-g", "@deepseek-ai/dsh"]);`
+- `src/lib/dshEngine.ts:453` — `return { ok: out.code === 0, output: (out.stdout || out.stderr || "").slice(-300) };`
+- `src/lib/dshEngine.ts:461` — `const listeners = new Set<(h: EngineHealth) => void>();`
+- `src/lib/dshEngine.ts:463` — `function emit(health: EngineHealth) {`
+- `src/lib/dshEngine.ts:474` — `export function onEngineHealth(fn: (h: EngineHealth) => void): () => void {`
+- `src/lib/dshEngine.ts:482` — `export async function probePort(port: number, timeoutMs = 1500): Promise<boolean> {`
+- `src/lib/dshEngine.ts:495` — `diag("probePort 401（引擎已监听但需会话鉴权）:", port);`
+- `src/lib/dshEngine.ts:507` — `export async function findExistingInstance(): Promise<number | null> {`
+- `src/lib/dshEngine.ts:509` — `KNOWN_DHS_PORTS.map((p) => probePort(p, 900).then((ok) => (ok ? p : null))),`
+- `src/lib/dshEngine.ts:518` — `export function parsePortOwnerPid(netstatStdout: string, port: number): number | null {`
+- `src/lib/dshEngine.ts:532` — `async function getPortOwnerPid(port: number): Promise<number | null> {`
+- `src/lib/dshEngine.ts:534` — `const out = await Command.create("netstat", ["-ano"]).execute();`
+- `src/lib/dshEngine.ts:542` — `export const INSTANCE_RECORD_FILENAME = "engine-instance.json";`
+- `src/lib/dshEngine.ts:544` — `export const INSTANCE_OWNER_TAG = "dsh-desktop";`
+- `src/lib/dshEngine.ts:556` — `export function parseEngineInstanceRecord(raw: string): EngineInstanceRecord | null {`
+- `src/lib/dshEngine.ts:580` — `export function isOwnedEngineInstance(`
+- `src/lib/dshEngine.ts:590` — `export async function readEngineInstanceRecord(): Promise<EngineInstanceRecord | null> {`
+- `src/lib/dshEngine.ts:601` — `async function writeEngineInstanceRecord(rec: EngineInstanceRecord): Promise<void> {`
+- `src/lib/dshEngine.ts:628` — `export async function findExistingInstanceInfo(): Promise<ExistingInstanceInfo | null> {`
+- `src/lib/dshEngine.ts:632` — `const owned = isOwnedEngineInstance(rec, port, ownerPid);`
+- `src/lib/dshEngine.ts:640` — `export async function engineGuardStatus(): Promise<{`
+- `src/lib/dshEngine.ts:650` — `const found = await findExistingInstanceInfo();`
+- `src/lib/dshEngine.ts:672` — `* 首次 heal profiles 的漫长时间由 MAX_START_WAIT_MS 覆盖，在 probePort 之前）。`
+- `src/lib/dshEngine.ts:676` — `const BUSINESS_READY_BUDGET_MS = 30_000;`
+- `src/lib/dshEngine.ts:681` — `* 为什么 probePort 不够：引擎 ≥0.1.5 起，端口开始应答 401 就被当「就绪」，但那只是`
+- `src/lib/dshEngine.ts:697` — `* 为什么不改 probePort 本身：它还被 findFreePort 当「端口是否空闲」用——把 401 从`
+- `src/lib/dshEngine.ts:700` — `export async function probeEngineReady(port: number): Promise<EngineBusinessReady> {`
+- `src/lib/dshEngine.ts:741` — `* - 所有 running 出口统一走这里：startEngine 内的三条（复用已有实例 / 复用首选端口 /`
+- `src/lib/dshEngine.ts:746` — `export async function waitEngineBusinessReady(port: number): Promise<void> {`
+- `src/lib/dshEngine.ts:748` — `let state = await probeEngineReady(port);`
+- `src/lib/dshEngine.ts:751` — `state = await probeEngineReady(port);`
+- `src/lib/dshEngine.ts:765` — `export async function findFreePort(start: number): Promise<number> {`
+- `src/lib/dshEngine.ts:767` — `if (!(await probePort(p))) return p;`
+- `src/lib/dshEngine.ts:773` — `export function clearDshVersionCache(): void {`
+- `src/lib/dshEngine.ts:780` — `const VERSION_PROBE_TIMEOUT_MS = 15_000;`
+- `src/lib/dshEngine.ts:782` — `export async function getDshVersion(): Promise<string> {`
+- `src/lib/dshEngine.ts:787` — `const v = out?.stdout?.trim() || out?.stderr?.trim() || "";`
+- `src/lib/dshEngine.ts:793` — `diag("版本探测候选失败:", prog, cmdArgs[0], "code=", out.code, out.stderr.slice(0, 200));`
+- `src/lib/dshEngine.ts:811` — `export function buildEngineArgs(port: number, patchPaths: (string | null)[]): string[] {`
+- `src/lib/dshEngine.ts:834` — `* ——强杀时引擎来不及释放锁（见 startEngine 超时分支里的 clearStaleProfileLocks）。`
+- `src/lib/dshEngine.ts:836` — `async function killProcessTree(pid: number | undefined): Promise<void> {`
+- `src/lib/dshEngine.ts:839` — `await Command.create("taskkill", ["/PID", String(pid), "/T", "/F"]).execute();`
+- `src/lib/dshEngine.ts:855` — `* @param force 强制启动：跳过「复用已有实例」探测（restartEngine 专用——先杀旧进程再传 true，`
+- `src/lib/dshEngine.ts:858` — `export async function startEngine(preferredPort = DEFAULT_PORT, force = false): Promise<EngineHealth> {`
+- `src/lib/dshEngine.ts:861` — `//    复用外部实例时护栏不在场，UI 必须报真话（见 findExistingInstanceInfo 注释）。`
+- `src/lib/dshEngine.ts:862` — `const existing = await findExistingInstanceInfo();`
+- `src/lib/dshEngine.ts:866` — `// 过早导航会触发「会话指针被清空」的冷启动故障链（见 waitEngineBusinessReady 注释）。`
+- `src/lib/dshEngine.ts:867` — `await waitEngineBusinessReady(currentPort);`
+- `src/lib/dshEngine.ts:879` — `if (await probePort(preferredPort, 800)) {`
+- `src/lib/dshEngine.ts:881` — `await waitEngineBusinessReady(currentPort);`
+- `src/lib/dshEngine.ts:887` — `owned: isOwnedEngineInstance(rec, currentPort, await getPortOwnerPid(currentPort)),`
+- `src/lib/dshEngine.ts:918` — `/** 引擎最近的输出（stdout+stderr 合并的环形缓冲）——失败时给用户看最后几行真因 */`
+- `src/lib/dshEngine.ts:930` — `const c = Command.create(prog, cmdArgs, { env: managedEnv });`
+- `src/lib/dshEngine.ts:946` — `c.stderr.on("data", (line) => {`
+- `src/lib/dshEngine.ts:948` — `// 引擎的真实错误（如 `atomic-write: timed out waiting for the writer lock`）走 stderr，`
+- `src/lib/dshEngine.ts:951` — `diag("引擎stderr:", String(line).trim().slice(0, 300));`
+- `src/lib/dshEngine.ts:954` — `child = await c.spawn();`
+- `src/lib/dshEngine.ts:961` — `if (await probePort(port, 600)) {`
+- `src/lib/dshEngine.ts:963` — `await waitEngineBusinessReady(port);`
+- `src/lib/dshEngine.ts:965` — `await writeEngineInstanceRecord({`
+- `src/lib/dshEngine.ts:1018` — `export async function stopEngine(): Promise<void> {`
+- `src/lib/dshEngine.ts:1035` — `async function killPortOwner(port: number): Promise<void> {`
+- `src/lib/dshEngine.ts:1039` — `await Command.create("taskkill", ["/PID", String(pid), "/F"]).execute();`
+- `src/lib/dshEngine.ts:1046` — `if (!(await probePort(port, 400))) return;`
+- `src/lib/dshEngine.ts:1058` — `* 外部实例（如旧版 GUI 留下的进程），child 为 null，stopEngine 杀不掉它，`
+- `src/lib/dshEngine.ts:1059` — `* startEngine 又命中 findExistingInstance 直接复用 → 版本/配置永远不更新。`
+- `src/lib/dshEngine.ts:1060` — `* 现在改用 killPortOwner 强杀端口进程（netstat+taskkill，不分内外），`
+- `src/lib/dshEngine.ts:1063` — `export async function restartEngine(preferredPort = DEFAULT_PORT): Promise<EngineHealth> {`
+- `src/lib/dshEngine.ts:1078` — `await killPortOwner(targetPort);`
+- `src/lib/dshEngine.ts:1081` — `return startEngine(targetPort, true);`
+- `src/lib/dshEngine.ts:1087` — `* 为什么不能直接调 `restartEngine(port)`：它的目标端口取自 `currentPort || preferredPort`，`
+- `src/lib/dshEngine.ts:1094` — `export async function restartEngineOnPort(port: number): Promise<EngineHealth> {`
+- `src/lib/dshEngine.ts:1096` — `return restartEngine(port);`
+- `src/lib/dshEngine.ts:1100` — `export function getEnginePort(): number {`
+
+## `src/lib/engineAuth.ts`
+- `src/lib/engineAuth.ts:2` — `// 引擎（dsh web）浏览器会话鉴权：自签 Cookie`
+- `src/lib/engineAuth.ts:5` — `//   - 未携带会话 Cookie 的请求一律 401（"dsh web authentication required"）；`
+- `src/lib/engineAuth.ts:7` — `//     该请求 303 并下发 SameSite=Strict 的 HttpOnly Cookie；`
+- `src/lib/engineAuth.ts:9` — `//     iframe 加载 127.0.0.1 属于跨站上下文，Strict Cookie 不会随请求发送。`
+- `src/lib/engineAuth.ts:13` — `//   一份引擎能校验通过的 Cookie，注入到承载引擎页面的子 webview 里`
+- `src/lib/engineAuth.ts:14` — `//   （子 webview 是顶层文档，站点为 127.0.0.1，Cookie 生效）。`
+- `src/lib/engineAuth.ts:26` — `/** Cookie 名前缀（与引擎一致） */`
+- `src/lib/engineAuth.ts:54` — `export async function readBrowserSessionSecret(): Promise<string | null> {`
+- `src/lib/engineAuth.ts:80` — `/** 自签结果：Cookie 名/值，以及注入子 webview 的「缺 Cookie 就补上并重载」脚本 */`
+- `src/lib/engineAuth.ts:88` — `* 生成引擎可校验的会话 Cookie 与注入脚本。`
+- `src/lib/engineAuth.ts:93` — `export async function buildEngineAuth(port: number, secretB64Url: string): Promise<EngineAuth | null> {`
+- `src/lib/engineAuth.ts:121` — `// 幂等：已经有该 Cookie 且页面已不是 401 文案时不动；否则写入 Cookie 并重新加载根路径。`
+- `src/lib/engineAuth.ts:123` — `// 2026-09-16 修复：旧判据只看「Cookie 是否存在」。若 Cookie 存在但**已失效**`
+- `src/lib/engineAuth.ts:124` — `// （签名密钥轮换 / Cookie 被写到了别的域 / 手动清过引擎数据），脚本就会认定`
+- `src/lib/engineAuth.ts:127` — `// **只要落地页仍是 401 文案，就无条件重设 Cookie 并重载**（脚本本身幂等，重复执行安全）。`
+- `src/lib/engineAuth.ts:134` — `// 通道就是这份注入脚本（与引擎页同源，可带 Cookie fetch /api）。`
+- `src/lib/engineAuth.ts:136` — `// POST /api/session/list，body 为 ClientRequest 信封，`result.ok === true` 才算就绪。`
+- `src/lib/engineAuth.ts:147` — `method: "session/list",`
+- `src/lib/engineAuth.ts:155` — `"var has=document.cookie.indexOf(n+'=')!==-1;",`
+- `src/lib/engineAuth.ts:158` — `"if(!has||unauthorized){document.cookie=n+'='+v+'; path=/; max-age=" +`
+- `src/lib/engineAuth.ts:159` — `COOKIE_MAX_AGE_SECONDS + "';location.replace(u);return;}",`
+- `src/lib/engineAuth.ts:168` — `"function probe(){",`
+- `src/lib/engineAuth.ts:169` — `"fetch('/api/session/list',{method:'POST',credentials:'same-origin'," +`
+
+## `src/lib/enginePatch.ts`
+- `src/lib/enginePatch.ts:7` — `//   dsh web bundle 的 `directory-picker` 行挂的是 host-directory-picker-auto，`
+- `src/lib/enginePatch.ts:34` — `export const ENGINE_PATCH_FILENAME = "directory-picker-browse.patch.yml";`
+- `src/lib/enginePatch.ts:37` — `export const TAURI_DIR_PICKER_BUNDLE = "dsh-tauri-dir-picker";`
+- `src/lib/enginePatch.ts:45` — `export const DIRECTORY_PICKER_PIN_PATCH = `# DSH Desktop 生成（引擎启动覆盖层，勿手改；由 src/lib/enginePatch.ts 对应）`
+- `src/lib/enginePatch.ts:51` — `- id: directory-picker`
+- `src/lib/enginePatch.ts:54` — `- id: directory-picker-browse`
+- `src/lib/enginePatch.ts:55` — `name: '@deepseek-ai/dsh-host-directory-picker-browse'`
+- `src/lib/enginePatch.ts:56` — `- id: ui-directory-picker-browse`
+- `src/lib/enginePatch.ts:57` — `name: '@deepseek-ai/dsh-client-ui-directory-picker-browse'`
+- `src/lib/enginePatch.ts:66` — `export async function isTauriDirPickerMounted(): Promise<boolean> {`
+- `src/lib/enginePatch.ts:84` — `export async function ensureEnginePatchFile(): Promise<string | null> {`
+- `src/lib/enginePatch.ts:85` — `if (await isTauriDirPickerMounted()) return null;`
+- `src/lib/enginePatch.ts:109` — `// `@deepseek-ai/dsh-web-search-deepseek` 把端点**写死**为`
+- `src/lib/enginePatch.ts:113` — `// 而 @deepseek-ai/dsh-base 自带的 cordis.patch.yml 把 dsh-web 的`
+- `src/lib/enginePatch.ts:127` — `/** 联网搜索后端的注册 id（@deepseek-ai/dsh-base/cordis.patch.yml 里挂上官方端点的就是它） */`
+- `src/lib/enginePatch.ts:128` — `export const WEB_SEARCH_PLUGIN_ID = "web-search-deepseek";`
+- `src/lib/enginePatch.ts:131` — `export const BILLING_GUARD_FILENAME = "official-billing-guard.patch.yml";`
+- `src/lib/enginePatch.ts:134` — `export const OFFICIAL_BILLING_SETTING_FILENAME = "official-billing.json";`
+- `src/lib/enginePatch.ts:137` — `export function officialBillingGuardPatch(allowOfficialBilling: boolean): string {`
+- `src/lib/enginePatch.ts:156` — `export async function readOfficialBillingAllowed(): Promise<boolean> {`
+- `src/lib/enginePatch.ts:170` — `export async function setOfficialBillingAllowed(allow: boolean): Promise<boolean> {`
+- `src/lib/enginePatch.ts:184` — `export async function ensureOfficialBillingGuardPatch(): Promise<string | null> {`
+- `src/lib/enginePatch.ts:186` — `return ensurePatchFile(BILLING_GUARD_FILENAME, officialBillingGuardPatch(allow));`
+
+## `src/lib/updater.ts`
+- `src/lib/updater.ts:7` — `//   - 安装：npm install --prefix <内核目录>/<version> @deepseek-ai/dsh@<version>`
+- `src/lib/updater.ts:8` — `//     内核目录 = %APPDATA%\com.dsh.desktop\kernel\<version>\（Tauri appDataDir()）`
+- `src/lib/updater.ts:10` — `//   - 冒烟：装完后 node bin.js --version，从输出中提取版本号与目标版本【精确】比对`
+- `src/lib/updater.ts:12` — `//   - 并发安全：installKernel 模块级互斥锁，标题栏升级与状态栏回滚不会同时执行`
+- `src/lib/updater.ts:20` — `/** npm registry latest 端点（返回 {"version":"0.1.1-rc.2",...}） */`
+- `src/lib/updater.ts:26` — `/** npm install 超时（dsh 依赖树 500+ 包，metadata 拉取阶段实测就要 5-15 分钟——放宽到 20 分钟） */`
+- `src/lib/updater.ts:28` — `/** 冒烟校验（node bin.js --version）超时 */`
+- `src/lib/updater.ts:53` — `export function isValidDshVersion(v: string): boolean {`
+- `src/lib/updater.ts:58` — `export function normalizeDshVersion(v: string): string {`
+- `src/lib/updater.ts:78` — `export function compareVersions(a: string, b: string): number {`
+- `src/lib/updater.ts:107` — `export async function kernelRootDir(): Promise<string> {`
+- `src/lib/updater.ts:112` — `export async function listInstalledKernels(): Promise<string[]> {`
+- `src/lib/updater.ts:130` — `export async function removeKernel(version: string): Promise<{ ok: boolean; error?: string }> {`
+- `src/lib/updater.ts:133` — `await remove(`${root}\\${normalizeDshVersion(version)}`, { recursive: true });`
+- `src/lib/updater.ts:141` — `export async function kernelBinPath(version: string): Promise<string> {`
+- `src/lib/updater.ts:142` — `return `${await kernelRootDir()}\\${version}\\node_modules\\@deepseek-ai\\dsh\\lib\\bin.js`;`
+- `src/lib/updater.ts:146` — `export async function isKernelInstalled(version: string): Promise<boolean> {`
+- `src/lib/updater.ts:148` — `return await exists(await kernelBinPath(version));`
+- `src/lib/updater.ts:157` — `let latestCache: { version: string; ts: number } | null = null;`
+- `src/lib/updater.ts:160` — `export function clearLatestVersionCache(): void {`
+- `src/lib/updater.ts:165` — `export async function fetchLatestVersion(): Promise<string> {`
+- `src/lib/updater.ts:167` — `return latestCache.version;`
+- `src/lib/updater.ts:182` — `const data = (await res.json()) as { version?: unknown };`
+- `src/lib/updater.ts:183` — `if (typeof data.version !== "string" || !isValidDshVersion(data.version)) {`
+- `src/lib/updater.ts:184` — `throw new Error("npm registry 响应缺少有效的 version 字段");`
+- `src/lib/updater.ts:186` — `latestCache = { version: data.version, ts: Date.now() };`
+- `src/lib/updater.ts:187` — `return data.version;`
+- `src/lib/updater.ts:201` — `/** 测试版候选：version = dist-tags 指向的版本号，channel = 来自哪个预发布频道 */`
+- `src/lib/updater.ts:203` — `version: string;`
+- `src/lib/updater.ts:204` — `channel: string;`
+- `src/lib/updater.ts:211` — `export function clearPrereleaseCache(): void {`
+- `src/lib/updater.ts:224` — `export async function fetchPrereleaseUpdate(current: string): Promise<PrereleaseInfo | null> {`
+- `src/lib/updater.ts:244` — `const channels: Array<[string, string]> = [`
+- `src/lib/updater.ts:249` — `for (const [channel, raw] of channels) {`
+- `src/lib/updater.ts:253` — `if (best && compareVersions(v, best.version) <= 0) continue;`
+- `src/lib/updater.ts:255` — `best = { version: v, channel };`
+- `src/lib/updater.ts:266` — `export async function checkForUpdate(currentVersion: string): Promise<KernelUpdateInfo> {`
+- `src/lib/updater.ts:286` — `export async function runCommand(`
+- `src/lib/updater.ts:359` — `/** 内核安装互斥锁：标题栏升级与状态栏回滚不会同时执行（两个 npm install --prefix 并发会互相破坏） */`
+- `src/lib/updater.ts:360` — `let installBusy = false;`
+- `src/lib/updater.ts:363` — `export function isKernelInstalling(): boolean {`
+- `src/lib/updater.ts:364` — `return installBusy;`
+- `src/lib/updater.ts:392` — `* 装完执行冒烟：node bin.js --version 输出中提取的版本号必须与目标版本精确相等`
+- `src/lib/updater.ts:397` — `export async function installKernel(`
+- `src/lib/updater.ts:398` — `version: string,`
+- `src/lib/updater.ts:402` — `if (installBusy) return { ok: false, error: "已有内核安装任务进行中，请稍候" };`
+- `src/lib/updater.ts:403` — `installBusy = true;`
+- `src/lib/updater.ts:405` — `if (await isKernelInstalled(version)) return { ok: true };`
+- `src/lib/updater.ts:407` — `const target = `${root}\\${version}`;`
+- `src/lib/updater.ts:416` — `progress(`使用 ${pm} 安装 dsh@${version}（依赖较多，可能需要数分钟）…`);`
+- `src/lib/updater.ts:417` — `const install =`
+- `src/lib/updater.ts:422` — `["add", "--dir", target, `${DSH_PKG}@${version}`, "--reporter=append-only"],`
+- `src/lib/updater.ts:428` — `["install", "--prefix", target, `${DSH_PKG}@${version}`, "--no-audit", "--no-fund", "--loglevel=error"],`
+- `src/lib/updater.ts:432` — `if (install.code !== 0) {`
+- `src/lib/updater.ts:433` — `return { ok: false, error: (install.stdout || install.stderr || "").slice(-300) || `${pm} 安装退出码 ${install.code}` };`
+- `src/lib/updater.ts:435` — `// 冒烟校验：node bin.js --version，从输出中提取版本号精确比对`
+- `src/lib/updater.ts:437` — `const bin = await kernelBinPath(version);`
+- `src/lib/updater.ts:438` — `const smoke = await runCommand("node", [bin, "--version"], SMOKE_TIMEOUT_MS);`
+- `src/lib/updater.ts:442` — `if (smoke.code !== 0 || !detected || compareVersions(detected, version) !== 0) {`
+- `src/lib/updater.ts:449` — `installBusy = false;`
+
+## `src-tauri/src/lib.rs`
+- `src-tauri/src/lib.rs:25` — `#[tauri::command]`
+- `src-tauri/src/lib.rs:37` — `/// netstat -ano 找 LISTENING 在该端口的 PID → taskkill /PID <pid> /T /F（连同子进程）。`
+- `src-tauri/src/lib.rs:43` — `let Ok(out) = std::process::Command::new("netstat")`
+- `src-tauri/src/lib.rs:59` — `let _ = std::process::Command::new("taskkill")`
+- `src-tauri/src/lib.rs:68` — `/// 非 Windows 平台无 netstat / taskkill 语义，退化为只退出 GUI。`
+- `src-tauri/src/lib.rs:76` — `/// 2026-09-16 补：托盘「完全退出」强杀引擎**必留**此锁（taskkill 不给引擎释放机会），`
+- `src-tauri/src/lib.rs:147` — `#[tauri::command]`
+- `src-tauri/src/lib.rs:153` — `#[tauri::command]`
+- `src-tauri/src/lib.rs:154` — `fn close_devtools(window: tauri::WebviewWindow) {`
+- `src-tauri/src/lib.rs:169` — `#[tauri::command]`
+- `src-tauri/src/lib.rs:170` — `async fn open_engine_in_main(`
+- `src-tauri/src/lib.rs:178` — `window.navigate(target).map_err(|e| e.to_string())?;`
+- `src-tauri/src/lib.rs:183` — `// 旧实现丢弃了落地结果却**照样执行 `window.eval(auth_js)`**。`document.cookie` 只能写`
+- `src-tauri/src/lib.rs:208` — `window.eval(auth_js).map_err(|e| e.to_string())`
+- `src-tauri/src/lib.rs:214` — `#[tauri::command]`
+- `src-tauri/src/lib.rs:215` — `fn quit_app(app: tauri::AppHandle) {`
+- `src-tauri/src/lib.rs:241` — `#[tauri::command]`
+- `src-tauri/src/lib.rs:242` — `async fn probe_engine_ready(port: u16, cookie: String) -> Result<EngineProbeResult, String> {`
+- `src-tauri/src/lib.rs:305` — `.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {`
+- `src-tauri/src/lib.rs:312` — `.invoke_handler(tauri::generate_handler![`
+- `src-tauri/src/lib.rs:364` — `.on_menu_event(|app, event| match event.id.as_ref() {`
+- `src-tauri/src/lib.rs:385` — `let _ = w.navigate(u);`
+- `src-tauri/src/lib.rs:416` — `let _ = w.navigate(u);`
+- `src-tauri/src/lib.rs:433` — `let _ = w.navigate(u);`
+- `src-tauri/src/lib.rs:447` — `.on_tray_icon_event(|tray, event| {`
+
+## `src/stores/engineStore.ts`
+- `src/stores/engineStore.ts:1` — `import { create } from "zustand";`
+- `src/stores/engineStore.ts:2` — `import type { EngineHealth } from "../lib/types";`
+- `src/stores/engineStore.ts:5` — `health: EngineHealth;`
+- `src/stores/engineStore.ts:16` — `status: "stopped",`
+- `src/stores/engineStore.ts:17` — `port: 17800,`
+- `src/stores/engineStore.ts:21` — `export const useEngineStore = create<EngineState>()((set) => ({`
+- `src/stores/engineStore.ts:22` — `health: initialHealth,`
+- `src/stores/engineStore.ts:23` — `setHealth: (h) => set({ health: h }),`
+
+## `tools/dsh-balance/package.json`
+- `tools/dsh-balance/package.json:1` — `{`
+- `tools/dsh-balance/package.json:2` — `"name": "dsh-balance",`
+- `tools/dsh-balance/package.json:3` — `"description": "对话输入框下方显示 DeepSeek 官方账户余额",`
+- `tools/dsh-balance/package.json:4` — `"version": "1.0.0",`
+- `tools/dsh-balance/package.json:5` — `"license": "MIT",`
+- `tools/dsh-balance/package.json:6` — `"type": "module",`
+- `tools/dsh-balance/package.json:7` — `"main": "lib/index.js",`
+- `tools/dsh-balance/package.json:8` — `"exports": {`
+- `tools/dsh-balance/package.json:9` — `".": "./lib/index.js",`
+- `tools/dsh-balance/package.json:10` — `"./client": "./lib/client.js",`
+- `tools/dsh-balance/package.json:11` — `"./package.json": "./package.json"`
+- `tools/dsh-balance/package.json:12` — `},`
+- `tools/dsh-balance/package.json:13` — `"dsh": {`
+- `tools/dsh-balance/package.json:14` — `"bundle": {`
+- `tools/dsh-balance/package.json:15` — `"patch": "./cordis.patch.yml"`
+- `tools/dsh-balance/package.json:16` — `},`
+- `tools/dsh-balance/package.json:17` — `"client": {`
+- `tools/dsh-balance/package.json:18` — `"platform": "web"`
+- `tools/dsh-balance/package.json:19` — `}`
+- `tools/dsh-balance/package.json:20` — `},`
+- `tools/dsh-balance/package.json:21` — `"files": [`
+- `tools/dsh-balance/package.json:22` — `"lib",`
+- `tools/dsh-balance/package.json:23` — `"cordis.patch.yml",`
+- `tools/dsh-balance/package.json:24` — `"dsh.plugin.json",`
+- `tools/dsh-balance/package.json:25` — `"README.md"`
+- `tools/dsh-balance/package.json:26` — `],`
+- `tools/dsh-balance/package.json:27` — `"scripts": {`
+- `tools/dsh-balance/package.json:28` — `"build": "node build.mjs",`
+- `tools/dsh-balance/package.json:29` — `"check": "node build.mjs"`
+- `tools/dsh-balance/package.json:30` — `},`
+- `tools/dsh-balance/package.json:31` — `"devDependencies": {`
+- `tools/dsh-balance/package.json:32` — `"esbuild": "^0.28.1"`
+- `tools/dsh-balance/package.json:33` — `}`
+- `tools/dsh-balance/package.json:34` — `}`
+
+## `tools/dsh-tauri-dir-picker/package.json`
+- `tools/dsh-tauri-dir-picker/package.json:1` — `{`
+- `tools/dsh-tauri-dir-picker/package.json:2` — `"name": "dsh-tauri-dir-picker",`
+- `tools/dsh-tauri-dir-picker/package.json:3` — `"description": "工作区目录选择：桌面壳(Tauri)内走原生文件夹选择框，外部浏览器回落到应用内浏览对话框",`
+- `tools/dsh-tauri-dir-picker/package.json:4` — `"version": "0.1.0",`
+- `tools/dsh-tauri-dir-picker/package.json:5` — `"license": "MIT",`
+- `tools/dsh-tauri-dir-picker/package.json:6` — `"type": "module",`
+- `tools/dsh-tauri-dir-picker/package.json:7` — `"main": "lib/index.js",`
+- `tools/dsh-tauri-dir-picker/package.json:8` — `"exports": {`
+- `tools/dsh-tauri-dir-picker/package.json:9` — `".": "./lib/index.js",`
+- `tools/dsh-tauri-dir-picker/package.json:10` — `"./client": "./lib/client.js",`
+- `tools/dsh-tauri-dir-picker/package.json:11` — `"./package.json": "./package.json"`
+- `tools/dsh-tauri-dir-picker/package.json:12` — `},`
+- `tools/dsh-tauri-dir-picker/package.json:13` — `"dsh": {`
+- `tools/dsh-tauri-dir-picker/package.json:14` — `"bundle": {`
+- `tools/dsh-tauri-dir-picker/package.json:15` — `"patch": "./cordis.patch.yml"`
+- `tools/dsh-tauri-dir-picker/package.json:16` — `},`
+- `tools/dsh-tauri-dir-picker/package.json:17` — `"client": {`
+- `tools/dsh-tauri-dir-picker/package.json:18` — `"platform": "web"`
+- `tools/dsh-tauri-dir-picker/package.json:19` — `}`
+- `tools/dsh-tauri-dir-picker/package.json:20` — `},`
+- `tools/dsh-tauri-dir-picker/package.json:21` — `"files": [`
+- `tools/dsh-tauri-dir-picker/package.json:22` — `"lib",`
+- `tools/dsh-tauri-dir-picker/package.json:23` — `"cordis.patch.yml",`
+- `tools/dsh-tauri-dir-picker/package.json:24` — `"README.md"`
+- `tools/dsh-tauri-dir-picker/package.json:25` — `],`
+- `tools/dsh-tauri-dir-picker/package.json:26` — `"scripts": {`
+- `tools/dsh-tauri-dir-picker/package.json:27` — `"build": "node build.mjs",`
+- `tools/dsh-tauri-dir-picker/package.json:28` — `"check": "node build.mjs"`
+- `tools/dsh-tauri-dir-picker/package.json:29` — `},`
+- `tools/dsh-tauri-dir-picker/package.json:30` — `"devDependencies": {`
+- `tools/dsh-tauri-dir-picker/package.json:31` — `"esbuild": "^0.28.1"`
+- `tools/dsh-tauri-dir-picker/package.json:32` — `}`
+- `tools/dsh-tauri-dir-picker/package.json:33` — `}`
+
+## `tools/dsh-balance/src/client.ts`
+- `tools/dsh-balance/src/client.ts:2` — `* dsh-balance client:把 DeepSeek 官方余额挂在输入卡片下方的那条 dock 上。`
+- `tools/dsh-balance/src/client.ts:6` — `* 本插件用 id 'balance'、order 100 追加在自己的格子里,不替换官方任何内容。`
+- `tools/dsh-balance/src/client.ts:8` — `* 数据来自宿主同源只读路由 GET /api/dsh/balance(见 src/index.ts),客户端不接触密钥。`
+- `tools/dsh-balance/src/client.ts:14` — `export const name = 'dsh-balance'`
+- `tools/dsh-balance/src/client.ts:18` — `const SLOT_ID = 'balance'`
+- `tools/dsh-balance/src/client.ts:22` — `const ENDPOINT = '/api/dsh/balance'`
+- `tools/dsh-balance/src/client.ts:97` — `const response = await fetch(ENDPOINT, {`
+- `tools/dsh-balance/src/client.ts:98` — `credentials: 'same-origin',`
+- `tools/dsh-balance/src/client.ts:126` — `return el('div', { style: { ...LINE_STYLE, color: 'var(--dsw-alias-label-tertiary)' }, 'data-dsh-balance': 'unavailable' }, 'DeepSeek 余额不可用')`
+- `tools/dsh-balance/src/client.ts:145` — `'data-dsh-balance': payload.stale === true ? 'stale' : 'fresh',`
+- `tools/dsh-balance/src/client.ts:168` — `slots.inject('conversation.composer.dock', () =>`
+- `tools/dsh-balance/src/client.ts:169` — `slots.register(`
+
+## `src/lib/enginePatch.ts`
+- `src/lib/enginePatch.ts:7` — `//   dsh web bundle 的 `directory-picker` 行挂的是 host-directory-picker-auto，`
+- `src/lib/enginePatch.ts:22` — `// 例外（2026-09-22）：当 profile 已挂载 tools/dsh-tauri-dir-picker（bundle 自带`
+- `src/lib/enginePatch.ts:36` — `/** 接管目录选择流程的 profile bundle（tools/dsh-tauri-dir-picker） */`
+- `src/lib/enginePatch.ts:61` — `* 检测 web profile 是否已挂载 dsh-tauri-dir-picker bundle。`
+- `src/lib/enginePatch.ts:62` — `* 判据：~/.dsh/profiles/web/package.json 的 dsh.profile.bundles 数组含该包名`
+- `src/lib/enginePatch.ts:66` — `export async function isTauriDirPickerMounted(): Promise<boolean> {`
+- `src/lib/enginePatch.ts:70` — `const bundles: unknown = JSON.parse(txt)?.dsh?.profile?.bundles;`
+- `src/lib/enginePatch.ts:71` — `return Array.isArray(bundles) && bundles.includes(TAURI_DIR_PICKER_BUNDLE);`
+- `src/lib/enginePatch.ts:84` — `export async function ensureEnginePatchFile(): Promise<string | null> {`
+- `src/lib/enginePatch.ts:85` — `if (await isTauriDirPickerMounted()) return null;`

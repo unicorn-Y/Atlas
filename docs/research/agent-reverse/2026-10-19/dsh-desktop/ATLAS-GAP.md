@@ -16,6 +16,14 @@
 | 引擎版本 pin / rollback | B updater.ts、kernelRootDir、verifiedVersions | Atlas 为自身 Hermes engine / model provider 路由；不可套 dsh/npm CLI 版本表 | 可吸收多版本并存的理念，直接复制不兼容（P3） |
 | 浏览器 WS 动态撤权 | A webserver.ts 控制 registerUpgrade 和 browserSockets | Atlas FastAPI /ws/chat 与 Electron 进程，尚未全链检查动态撤权与 origin | **未证（U）**，不判缺失 |
 
+## 本轮从实物包确认的队列差异（Atlas main `aa6196f550098cc46081dc6db2c376cb87ddffa5`）
+
+随 A `2.0.19-next` ZIP 嵌入的官方 `@deepseek-ai/dsh-agent-loop@0.2.1-rc.2` 用 session event projection 持久保存 Agent 自己的双队列：`next-turn` (完整后续 turn) 和 `next-step` (运行中下一边界 steer)。同包 `@deepseek-ai/dsh-api-session-controller@0.2.1-rc.2` 对正在运行和冷恢复的 Agent 暴露 `session/updateQueue`，支持对仍 pending 的项 edit/remove/steer，并对过期 ID、子代理所有权、附件及运行状态作校验。详见 `IMPLEMENTATION-TRACE.md` 与 `extracted/A-runtime-symbol-index.md`。
+
+Atlas 当前 UI 的 `frontend/src/renderer/store/useAtlasStore.ts:74-78,291` 把 follow-up queue、pause flag、pending steer 保存在 renderer Zustand state；`:228-230` 的 localStorage helper 存设置，初始化行将这三个队列 state 置空。`sendMessage` (`:623-635`) 会在 queue/steer 间选择；`removeQueued`、`sendQueuedNow`、`steerQueued`、`resumeQueue` (`:686-714`) 管理当前客户端队列；确认事件及 run 结束时的补偿在 `:571-600`。运行中的 steer 实际由 runtime `backend.steerRun` (`:971-975`) 发送。检查到的这条 Atlas 常规 Chat follow-up 队列不是 session 持久 event/冷 Agent 队列，renderer 重建后也没有从后端恢复该队列的逻辑。Atlas 子代理则另有 `delegate_task` / parallel delegation 和 steer/cancel API，不应与用户会话 follow-up 混为一谈。
+
+判定：Atlas 已有本机前端排队、移除、置顶立即执行、运行中 steer 及未确认 steer 回退机制；差别是队列身份/变更是否由后端 session event 持久化并能按 session cold-restore。将 DSH 机制映射到 Atlas 前应先决定是否需要跨 renderer/backend restart 保留用户排队意图，并定义 queue-item 与 run/session 的存储和确认语义。未做 Atlas 运行中重启实验，以上是 main 静态源码比较，不是运行行为证明。
+
 ## 明确需解决的实质差距
 
 **不是继续加按钮，而是可寻址的子 Agent 执行实体**：官方 DSH 每个可本地导航的 child 有 direct-parent address、SessionReference、独立投影与 composer 继续/只读行为，点击与侧栏实际使用同一个 Conversation 渲染器。Atlas UI 的现有 ForkTree 是人工会话分叉，ConversationActivity 则是父 run 下的子任务轨迹；两者不自动构成 DSH 那种 child session 用户体验。

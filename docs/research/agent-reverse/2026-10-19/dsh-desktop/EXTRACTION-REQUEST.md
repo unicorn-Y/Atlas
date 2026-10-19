@@ -1,4 +1,8 @@
-# 精确原始归档/发行物补采任务书 — 给本地 Codex
+# 精确原始归档/发行物补采任务书 — 状态追记
+
+**状态（2026-10-19）：源码归档采集及静态机械提取已完成；动态运行仍 NOT-RUN。** 任务书指定的 A/B ZIP 均按精确 URL 下载，byte size / SHA-256 与 manifest 一致，ZIP CRC、路径规范、重复名检查通过，已完整解包至 lane worktree 外 scratch。报告分支只含压缩包元数据、文件摘要、符号索引与原创分析，不含源包或上游源码 payload。详细核验见 `extracted/ASSET-VERIFICATION.md` 和 `extracted/READ-ME-FIRST.md`。
+
+下方原始采集规范作为可复核的任务输入留存；除动态运行与源文件控件级 UI 映射仍 U 外，不再是待执行下载任务。
 
 **执行仓库** unicorn-Y/Atlas。
 **唯一提交分支** research/agent-reverse-20261019-dsh-desktop。

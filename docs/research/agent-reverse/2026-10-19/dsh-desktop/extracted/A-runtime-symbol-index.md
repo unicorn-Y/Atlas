@@ -1,0 +1,363 @@
+# Selected official runtime packages nested in the A desktop archive
+
+These are independently manifest-listed package tarballs from A’s `vendor/dsh-runtime/0.2.1-rc.2/` payload. The archive manifest SHA-256 values were recomputed with zero mismatches. File paths below are package-local paths and line numbers in the extracted tarball payload; this index is a discovery aid.
+
+## `dsh-agent-loop`
+- `dsh-agent-loop/lib/index.js:1` — `import { Service } from "@deepseek-ai/cordis";`
+- `dsh-agent-loop/lib/index.js:6` — `import { AssistantStreamAccumulator, BlockAssembler, LlmAttemptId, LlmError, createAssistantMessage, createDeveloperMessage, createSystemMessage, createToolResultMessage, createUserMessage, `
+- `dsh-agent-loop/lib/index.js:7` — `import { SessionLogOffset, SessionPreparation, SessionSeq, ToolCallRecovery, canonicalHeader, headerEquals, interruptedTurnClosers, isReplacementSurfaceEvent } from "@deepseek-ai/dsh-session`
+- `dsh-agent-loop/lib/index.js:13` — `import { TOOL_ABORTED_BEFORE_DISPATCH, TOOL_RUNTIME_SCHEDULER } from "@deepseek-ai/dsh-tools";`
+- `dsh-agent-loop/lib/index.js:14` — `//#region lib/types/inbox.js`
+- `dsh-agent-loop/lib/index.js:16` — `* Driver-owned durable agent inbox projection and command facade.`
+- `dsh-agent-loop/lib/index.js:18` — `* @module @deepseek-ai/dsh-agent-loop/inbox`
+- `dsh-agent-loop/lib/index.js:20` — `/** Wire validation for pending agent input reconstructed from durable inbox splices. */`
+- `dsh-agent-loop/lib/index.js:21` — `const inboxProjectionSchema = z$1.object({`
+- `dsh-agent-loop/lib/index.js:22` — `"next-turn": z$1.array(z$1.custom()).readonly(),`
+- `dsh-agent-loop/lib/index.js:26` — `const inboxProjectionDefinition = {`
+- `dsh-agent-loop/lib/index.js:27` — `key: "inbox",`
+- `dsh-agent-loop/lib/index.js:28` — `stateSchema: inboxProjectionSchema,`
+- `dsh-agent-loop/lib/index.js:30` — `"next-turn": [],`
+- `dsh-agent-loop/lib/index.js:34` — `if (event.type !== "agent/inbox/spliced") return state;`
+- `dsh-agent-loop/lib/index.js:37` — `const inbox = state[splice.target];`
+- `dsh-agent-loop/lib/index.js:39` — `if (!Number.isSafeInteger(splice.start) || splice.start < 0 || splice.start > inbox.length || !Number.isSafeInteger(removedCount) || removedCount < 0 || splice.start + removedCount > inbox.l`
+- `dsh-agent-loop/lib/index.js:40` — `const next = inbox.toSpliced(splice.start, removedCount, ...splice.inserted);`
+- `dsh-agent-loop/lib/index.js:42` — `for (const message of splice.target === "next-turn" ? [...next, ...state["next-step"]] : [...state["next-turn"], ...next]) {`
+- `dsh-agent-loop/lib/index.js:46` — `return splice.target === "next-turn" ? {`
+- `dsh-agent-loop/lib/index.js:47` — `"next-turn": next,`
+- `dsh-agent-loop/lib/index.js:50` — `"next-turn": state["next-turn"],`
+- `dsh-agent-loop/lib/index.js:54` — `throw new Error(`invalid persisted inbox splice at session seq ${event.seq}`, { cause: error });`
+- `dsh-agent-loop/lib/index.js:58` — `viewSchema: inboxProjectionSchema,`
+- `dsh-agent-loop/lib/index.js:64` — `* Driver-owned durable Inbox implementation used by ReactLoopAgent and focused`
+- `dsh-agent-loop/lib/index.js:66` — `* @param projections - registry with the standard Inbox projection registered by AgentLoop.`
+- `dsh-agent-loop/lib/index.js:68` — `* @param dispatch - agent-scoped notifications for Inbox lifecycle events.`
+- `dsh-agent-loop/lib/index.js:70` — `var ReactLoopInbox = class {`
+- `dsh-agent-loop/lib/index.js:79` — `/** Prompts awaiting individual turns. */`
+- `dsh-agent-loop/lib/index.js:80` — `get nextTurn() {`
+- `dsh-agent-loop/lib/index.js:81` — `return this.current()["next-turn"];`
+- `dsh-agent-loop/lib/index.js:85` — `return this.current()["next-step"];`
+- `dsh-agent-loop/lib/index.js:90` — `return state["next-turn"].length > 0 || state["next-step"].length > 0;`
+- `dsh-agent-loop/lib/index.js:92` — `/** Durably cancel all pending input, clearing next-step before next-turn. */`
+- `dsh-agent-loop/lib/index.js:95` — `this.splice("next-turn", 0, this.nextTurn.length, []);`
+
+## `dsh-api-session-controller`
+- `dsh-api-session-controller/lib/client.js:4` — `var module = { exports: {} };`
+- `dsh-api-session-controller/lib/client.js:5` — `var exports = module.exports;`
+- `dsh-api-session-controller/lib/client.js:6` — `Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });`
+- `dsh-api-session-controller/lib/client.js:11` — `/** The one Remote failure class shared by owners, the Gateway, and consumers. */`
+- `dsh-api-session-controller/lib/client.js:19` — `var RemoteError = class extends Error {`
+- `dsh-api-session-controller/lib/client.js:37` — `/** Generic invocation-owned values returned by synchronous Client Context resolvers. */`
+- `dsh-api-session-controller/lib/client.js:44` — `* @returns an owned payload disposed after invocation and reply settlement.`
+- `dsh-api-session-controller/lib/client.js:46` — `function typertOwnedValue(value, release) {`
+- `dsh-api-session-controller/lib/client.js:48` — `return {`
+- `dsh-api-session-controller/lib/client.js:52` — `if (!active) return;`
+- `dsh-api-session-controller/lib/client.js:64` — `* @returns the same record array with typed inner events.`
+- `dsh-api-session-controller/lib/client.js:66` — `function historyEntries(records) {`
+- `dsh-api-session-controller/lib/client.js:67` — `return records;`
+- `dsh-api-session-controller/lib/client.js:72` — `* @returns inclusive first Session sequence.`
+- `dsh-api-session-controller/lib/client.js:74` — `function historyRecordFirstSeq(record) {`
+- `dsh-api-session-controller/lib/client.js:75` — `return record.event.seq;`
+- `dsh-api-session-controller/lib/client.js:80` — `* @returns inclusive final Session sequence.`
+- `dsh-api-session-controller/lib/client.js:82` — `function historyRecordLastSeq(record) {`
+- `dsh-api-session-controller/lib/client.js:83` — `return record.event.seq;`
+- `dsh-api-session-controller/lib/client.js:90` — `* @returns the same number with the requested compile-time brand.`
+- `dsh-api-session-controller/lib/client.js:92` — `function brandNumber(value) {`
+- `dsh-api-session-controller/lib/client.js:93` — `return value;`
+- `dsh-api-session-controller/lib/client.js:96` — `//#region ../../core/session/lib/types/types.js`
+- `dsh-api-session-controller/lib/client.js:100` — `* @returns the same number with the Session-sequence brand.`
+- `dsh-api-session-controller/lib/client.js:102` — `function SessionSeq(value) {`
+- `dsh-api-session-controller/lib/client.js:104` — `return brandNumber(value);`
+- `dsh-api-session-controller/lib/client.js:109` — `* @returns the same number with the Session-log-offset brand.`
+- `dsh-api-session-controller/lib/client.js:111` — `function SessionLogOffset(value) {`
+- `dsh-api-session-controller/lib/client.js:113` — `return brandNumber(value);`
+- `dsh-api-session-controller/lib/client.js:116` — `//#region ../../core/session/lib/types/known-event-types.js`
+- `dsh-api-session-controller/lib/client.js:118` — `* GENERATED by `scripts/gen-persistence-catalog.ts` — do not edit by hand; run`
+- `dsh-api-session-controller/lib/client.js:119` — `* `pnpm run gen-persistence-catalog` to regenerate (verified fresh by`
+- `dsh-api-session-controller/lib/client.js:120` — `* `pnpm run verify-persistence-catalog`, part of `doc-sync`).`
+- `dsh-api-session-controller/lib/client.js:121` — `* @module @deepseek-ai/dsh-session/known-event-types`
+- `dsh-api-session-controller/lib/client.js:130` — `* Downstream (out-of-repo) plugin events are outside this list by`
+
+## `dsh-session-persistence-jsonl`
+- `dsh-session-persistence-jsonl/lib/index.js:2` — `import { SessionFormatUnsupportedMigrationError, createSessionFormatCatalogWithChildren, historicalSessionFormatCatalog, sessionFormatCatalog } from "@deepseek-ai/dsh-session-format-catalog"`
+- `dsh-session-persistence-jsonl/lib/index.js:4` — `import { link, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rm, stat, truncate } from "node:fs/promises";`
+- `dsh-session-persistence-jsonl/lib/index.js:10` — `import { SessionAlreadyExistsError, SessionAlreadyOwnedError, SessionFormatUnsupportedError, SessionHandleClosedError, SessionPersistence, SessionPersistenceCorruptionError, SessionPersisten`
+- `dsh-session-persistence-jsonl/lib/index.js:11` — `import { BlockAssembler, errorChain, expandAssistantStream } from "@deepseek-ai/dsh-llm";`
+- `dsh-session-persistence-jsonl/lib/index.js:12` — `import { tryLockExclusive } from "@deepseek-ai/node-addon-system/flock";`
+- `dsh-session-persistence-jsonl/lib/index.js:15` — `import { assertReleasedV4Relationships, assertV4RowAdmission, historicalChildCatalogSource } from "@deepseek-ai/dsh-session-format-v3-to-v4";`
+- `dsh-session-persistence-jsonl/lib/index.js:20` — `import { currentSessionMessageProjections } from "@deepseek-ai/dsh-session-format-catalog/message-projections";`
+- `dsh-session-persistence-jsonl/lib/index.js:23` — `* The JSONL session handle. Mutations serialize on a per-handle promise`
+- `dsh-session-persistence-jsonl/lib/index.js:26` — `* window and drain through the same chain as explicit appends.`
+- `dsh-session-persistence-jsonl/lib/index.js:28` — `var JsonlSessionHandle = class {`
+- `dsh-session-persistence-jsonl/lib/index.js:102` — `/** Read one current physical generation and enforce this handle's monotonic view. */`
+- `dsh-session-persistence-jsonl/lib/index.js:113` — `* Durably append a contiguous batch; see the seam contract.`
+- `dsh-session-persistence-jsonl/lib/index.js:117` — `async append(events, options) {`
+- `dsh-session-persistence-jsonl/lib/index.js:118` — `this.assertOpen("append");`
+- `dsh-session-persistence-jsonl/lib/index.js:119` — `const batch = materializeAppendBatch(events);`
+- `dsh-session-persistence-jsonl/lib/index.js:120` — `return this.run("append", async () => {`
+- `dsh-session-persistence-jsonl/lib/index.js:127` — `* appended yet, so an explicitly flushed empty session survives this process.`
+- `dsh-session-persistence-jsonl/lib/index.js:144` — `* unwinds first; a drain or lock-release failure still frees the in-process`
+- `dsh-session-persistence-jsonl/lib/index.js:168` — `/* v8 ignore next -- lock releases reject with Error */`
+- `dsh-session-persistence-jsonl/lib/index.js:172` — `if (failures.length > 1) throw new AggregateError(failures, `session "${this.id}": close failed to drain and to release its write lock`);`
+- `dsh-session-persistence-jsonl/lib/index.js:214` — `await this.persistContiguous(materializeAppendBatch(batch));`
+- `dsh-session-persistence-jsonl/lib/index.js:222` — `/** The shared durable-append body: contiguity, ownership, torn-tail repair, storage write, state advance. */`
+- `dsh-session-persistence-jsonl/lib/index.js:224` — `if (this.access !== "write") throw new SessionReadOnlyError(this.id, "append");`
+- `dsh-session-persistence-jsonl/lib/index.js:228` — `if (this.state.tornTruncateTo !== void 0) {`
+- `dsh-session-persistence-jsonl/lib/index.js:229` — `await this.storage.truncateTornTail(this.header, this.state.tornTruncateTo);`
+- `dsh-session-persistence-jsonl/lib/index.js:230` — `this.state.tornTruncateTo = void 0;`
+- `dsh-session-persistence-jsonl/lib/index.js:232` — `if (this.state.recoveredTail !== void 0) {`
+- `dsh-session-persistence-jsonl/lib/index.js:233` — `if (this.state.recoveredTail.length > 0) await this.storage.persistBatch(this.header, this.state.recoveredTail, this.state.materialized, this.state.inheritedEventCount);`
+- `dsh-session-persistence-jsonl/lib/index.js:234` — `this.state.recoveredTail = void 0;`
+- `dsh-session-persistence-jsonl/lib/index.js:243` — `* Hold the cross-process write lock before this session's first durable`
+- `dsh-session-persistence-jsonl/lib/index.js:271` — `* The JSONL backend's in-process bookkeeping: the single active writer per`
+- `dsh-session-persistence-jsonl/lib/index.js:276` — `var JsonlBackendTracker = class {`
+- `dsh-session-persistence-jsonl/lib/index.js:293` — `* process to open; the handle takes the cross-process lock at its first`
+- `dsh-session-persistence-jsonl/lib/index.js:447` — `* Windows durable namespace helpers for the JSONL backend.`
+- `dsh-session-persistence-jsonl/lib/index.js:456` — `* @module dsh-session-persistence-jsonl/win32`
+
+## `dsh-jobs-local`
+- `dsh-jobs-local/lib/index.js:6` — `//#region lib/types/events.js`
+- `dsh-jobs-local/lib/index.js:8` — `* Event routing for the local registry: subscriptions file by filter, and`
+- `dsh-jobs-local/lib/index.js:10` — `* @module @deepseek-ai/dsh-jobs-local/events`
+- `dsh-jobs-local/lib/index.js:18` — `var JobLayer = class {`
+- `dsh-jobs-local/lib/index.js:28` — `* Routes events to subscriptions. `{ owner }` and `{ owners: 'all' }``
+- `dsh-jobs-local/lib/index.js:29` — `* subscriptions are evaluated against every event regardless of where they`
+- `dsh-jobs-local/lib/index.js:34` — `var JobEventHub = class {`
+- `dsh-jobs-local/lib/index.js:49` — `* @param filter - which owners' events to deliver.`
+- `dsh-jobs-local/lib/index.js:50` — `* @param listener - receives each matching event.`
+- `dsh-jobs-local/lib/index.js:58` — `if ("owners" in filter && filter.owners === "scope") return this.layers.effect(ctx, (layer) => layer.scoped.append(subscription), { label: "jobs.events.subscribe()" });`
+- `dsh-jobs-local/lib/index.js:64` — `}, "jobs.events.subscribe()");`
+- `dsh-jobs-local/lib/index.js:67` — `* Deliver one event to every matching subscription, containing each`
+- `dsh-jobs-local/lib/index.js:69` — `* @param event - the event to deliver.`
+- `dsh-jobs-local/lib/index.js:72` — `emit(event, owner) {`
+- `dsh-jobs-local/lib/index.js:77` — `this.deliver(subscription, event);`
+- `dsh-jobs-local/lib/index.js:79` — `for (const subscription of this.layers.global.scoped.values()) this.deliver(subscription, event);`
+- `dsh-jobs-local/lib/index.js:81` — `for (const layer of this.layers.chainLayers(scope)) for (const subscription of layer.scoped.values()) this.deliver(subscription, event);`
+- `dsh-jobs-local/lib/index.js:83` — `deliver(subscription, event) {`
+- `dsh-jobs-local/lib/index.js:85` — `subscription.listener(event);`
+- `dsh-jobs-local/lib/index.js:87` — `this.warn(`jobs: event listener threw on ${event.type}: ${String(error)}`);`
+- `dsh-jobs-local/lib/index.js:92` — `//#region lib/types/pump.js`
+- `dsh-jobs-local/lib/index.js:94` — `* The registry-owned pull pump: copies a job's {@link JobOutputSource}s into`
+- `dsh-jobs-local/lib/index.js:101` — `* @module @deepseek-ai/dsh-jobs-local/pump`
+- `dsh-jobs-local/lib/index.js:112` — `* The wait holds constant resources however long the job runs: one`
+- `dsh-jobs-local/lib/index.js:113` — `* subscription on `until` for the whole run and one pending timer at a time.`
+- `dsh-jobs-local/lib/index.js:114` — `* @param sources - producer streams, each pumped at its own offset.`
+- `dsh-jobs-local/lib/index.js:120` — `function startPump(sources, sink, pollMs, until) {`
+- `dsh-jobs-local/lib/index.js:121` — `if (!Number.isFinite(pollMs) || pollMs <= 0) throw new Error(`invalid pump pollMs: expected a positive finite number of milliseconds, got ${JSON.stringify(pollMs)}`);`
+- `dsh-jobs-local/lib/index.js:178` — `function utf8Tail(text, maxBytes) {`
+- `dsh-jobs-local/lib/index.js:189` — `var OutputRing = class {`
+- `dsh-jobs-local/lib/index.js:275` — `* disposal cancels live work and awaits compliant producers; a throwing`
+- `dsh-jobs-local/lib/index.js:276` — `* teardown cancel force-fails only the record and reports a possible orphan.`
+- `dsh-jobs-local/lib/index.js:310` — `function fail(e) {`
+- `dsh-jobs-local/lib/index.js:315` — `function next() {`
+- `dsh-jobs-local/lib/index.js:337` — `/** Timeout code that distinguishes a bounded wait from caller cancellation. */`
+
+## `dsh-host-webserver`
+- `dsh-host-webserver/lib/index.js:2` — `import { createServer } from "node:http";`
+- `dsh-host-webserver/lib/index.js:3` — `import { createServer as createServer$1 } from "node:https";`
+- `dsh-host-webserver/lib/index.js:22` — `function escapeHtmlAttribute(value) {`
+- `dsh-host-webserver/lib/index.js:25` — `function assertNever(row) {`
+- `dsh-host-webserver/lib/index.js:29` — `function renderRow(row) {`
+- `dsh-host-webserver/lib/index.js:59` — `function splice(html, at, markup) {`
+- `dsh-host-webserver/lib/index.js:79` — `function renderIndexInjections(html, rows) {`
+- `dsh-host-webserver/lib/index.js:102` — `* @deepseek-ai/dsh-host-webserver — node:http route registration — node:https`
+- `dsh-host-webserver/lib/index.js:107` — `* Route handlers retain direct response ownership.`
+- `dsh-host-webserver/lib/index.js:117` — `* IPv4-mapped form `::ffff:0:1`, while `getaddrinfo` — and so `listen` — reads`
+- `dsh-host-webserver/lib/index.js:122` — `function withHexTail(host) {`
+- `dsh-host-webserver/lib/index.js:130` — `* `node:net` decides what a value must look like for `listen` to accept it, and`
+- `dsh-host-webserver/lib/index.js:132` — `* before parsing; the value handed to `listen` keeps its zone.`
+- `dsh-host-webserver/lib/index.js:134` — `function parseIpLiteral(host) {`
+- `dsh-host-webserver/lib/index.js:141` — `function notLiteralError(value) {`
+- `dsh-host-webserver/lib/index.js:145` — `function isWildcardAddress(parsed) {`
+- `dsh-host-webserver/lib/index.js:153` — `function isWildcardHost(host) {`
+- `dsh-host-webserver/lib/index.js:162` — `function isLoopbackHost(host) {`
+- `dsh-host-webserver/lib/index.js:169` — `* value. The text names the address `listen` binds, so `::0.0.0.1` reads as`
+- `dsh-host-webserver/lib/index.js:175` — `function normalizeBindAddress(host) {`
+- `dsh-host-webserver/lib/index.js:182` — `* text, so browsers treat them as local, trustworthy origins: a mapped literal`
+- `dsh-host-webserver/lib/index.js:189` — `function bindUrlHost(host) {`
+- `dsh-host-webserver/lib/index.js:196` — `function createGzipMiddleware(config) {`
+- `dsh-host-webserver/lib/index.js:225` — `* silently accepts it, which would bind a listener that can never complete a`
+- `dsh-host-webserver/lib/index.js:231` — `async function readTlsFile(field, path) {`
+- `dsh-host-webserver/lib/index.js:242` — `* The browser HTTP carrier service. Activation loads any configured TLS`
+- `dsh-host-webserver/lib/index.js:243` — `* material, then listens immediately; a material or listen failure rejects`
+- `dsh-host-webserver/lib/index.js:244` — `* initialization, and the boot process reports the failed fiber. Route`
+- `dsh-host-webserver/lib/index.js:245` — `* registration order does not affect requests because configured named routes`
+- `dsh-host-webserver/lib/index.js:247` — `* during startup with 404 until its owner registers.`
+- `dsh-host-webserver/lib/index.js:249` — `var WebServer = class extends Service {`
+- `dsh-host-webserver/lib/index.js:269` — `upgrades = /* @__PURE__ */ new Map();`
+- `dsh-host-webserver/lib/index.js:270` — `upgradedSockets = /* @__PURE__ */ new Set();`
+- `dsh-host-webserver/lib/index.js:272` — `* Raw connections of a TLS listener, held until they close. A TLS connection`
+- `dsh-host-webserver/lib/index.js:273` — `* joins closeAllConnections()'s table only once its handshake completes, so a`
+
+## `dsh-session-reference`
+- `dsh-session-reference/lib/index.js:5` — `import { TextRetainer } from "@deepseek-ai/dsh-output-retention";`
+- `dsh-session-reference/lib/index.js:10` — `/** Full projected transcripts and model-visible spill outcomes for bounded reference previews. */`
+- `dsh-session-reference/lib/index.js:23` — `async function prepareReferenceOmission(store, ownerId, source, inputIndex) {`
+- `dsh-session-reference/lib/index.js:57` — `function omission(source, fullSnapshot) {`
+- `dsh-session-reference/lib/index.js:66` — `function renderTranscript(data, capturedFormatVersion) {`
+- `dsh-session-reference/lib/index.js:100` — `var SessionReferenceError = class extends Error {`
+- `dsh-session-reference/lib/index.js:106` — `this.name = "SessionReferenceError";`
+- `dsh-session-reference/lib/index.js:111` — `/** Tag-safe JSON serialization for the model-visible reference envelope. */`
+- `dsh-session-reference/lib/index.js:117` — `function stringifyTagSafeJson(value) {`
+- `dsh-session-reference/lib/index.js:126` — `function projectSessionConversation(snapshot) {`
+- `dsh-session-reference/lib/index.js:166` — `* @returns full projected data, retained preview and stats, or `undefined` when fixed data cannot fit.`
+- `dsh-session-reference/lib/index.js:168` — `function retainReferencedSession(snapshot, label, maxBytes) {`
+- `dsh-session-reference/lib/index.js:170` — `const retained = original.map((item) => ({ ...item }));`
+- `dsh-session-reference/lib/index.js:178` — `conversation: retained.map(({ role, text }) => ({`
+- `dsh-session-reference/lib/index.js:186` — `const newestIndex = retained.length - 1;`
+- `dsh-session-reference/lib/index.js:187` — `const dropIndex = retained.findIndex((item, index) => !item.checkpoint && index !== newestIndex);`
+- `dsh-session-reference/lib/index.js:189` — `const removed = retained.splice(dropIndex, 1)[0];`
+- `dsh-session-reference/lib/index.js:198` — `for (const [index, item] of retained.entries()) {`
+- `dsh-session-reference/lib/index.js:208` — `const item = retained[longestIndex];`
+- `dsh-session-reference/lib/index.js:213` — `if (shortened.text === retained[longestIndex]?.text) return void 0;`
+- `dsh-session-reference/lib/index.js:214` — `retained[longestIndex] = {`
+- `dsh-session-reference/lib/index.js:221` — `const omittedBytes = retained.reduce((sum, item) => sum + item.omittedBytes, 0) + droppedOmittedBytes;`
+- `dsh-session-reference/lib/index.js:228` — `retainedMessages: retained.length,`
+- `dsh-session-reference/lib/index.js:235` — `function textContent(content) {`
+- `dsh-session-reference/lib/index.js:238` — `function truncateWithNotice(text, maxOutputBytes) {`
+- `dsh-session-reference/lib/index.js:251` — `const retainedBytes = Math.floor((low + high) / 2);`
+- `dsh-session-reference/lib/index.js:252` — `const retainer = new TextRetainer({`
+- `dsh-session-reference/lib/index.js:254` — `headBytes: Math.ceil(retainedBytes / 2),`
+- `dsh-session-reference/lib/index.js:255` — `tailBytes: Math.floor(retainedBytes / 2)`
+- `dsh-session-reference/lib/index.js:257` — `retainer.push(text);`
+- `dsh-session-reference/lib/index.js:258` — `const result = retainer.finish();`
+- `dsh-session-reference/lib/index.js:259` — `/* v8 ignore next 3 -- complete-string TextRetainer input cannot report a lower bound. */`
+- `dsh-session-reference/lib/index.js:268` — `low = retainedBytes + 1;`
+- `dsh-session-reference/lib/index.js:269` — `} else high = retainedBytes - 1;`
+- `dsh-session-reference/lib/index.js:283` — `function encodeSessionReferenceUri(sessionId) {`
+
+## `dsh-api-gateway`
+- `dsh-api-gateway/lib/client.browser.js:4` — `var module = { exports: {} };`
+- `dsh-api-gateway/lib/client.browser.js:5` — `var exports = module.exports;`
+- `dsh-api-gateway/lib/client.browser.js:6` — `Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });`
+- `dsh-api-gateway/lib/client.browser.js:9` — `/** The one Remote failure class shared by owners, the Gateway, and consumers. */`
+- `dsh-api-gateway/lib/client.browser.js:17` — `var RemoteError = class extends Error {`
+- `dsh-api-gateway/lib/client.browser.js:42` — `function remoteErrorOf(value) {`
+- `dsh-api-gateway/lib/client.browser.js:53` — `function isTypertOwnedValue(value) {`
+- `dsh-api-gateway/lib/client.browser.js:66` — `function isRemoteJsonValue(value) {`
+- `dsh-api-gateway/lib/client.browser.js:76` — `function isRemoteUplinkItem(value) {`
+- `dsh-api-gateway/lib/client.browser.js:79` — `function visitJsonValue(value, ancestors) {`
+- `dsh-api-gateway/lib/client.browser.js:104` — `/** Wire messages for Gateway-owned Remote streams and event-result RPCs. */`
+- `dsh-api-gateway/lib/client.browser.js:107` — `/** Gateway-internal logical stream carrying application-selected Cordis events. */`
+- `dsh-api-gateway/lib/client.browser.js:108` — `const REMOTE_EVENT_STREAM_ENDPOINT = "$events";`
+- `dsh-api-gateway/lib/client.browser.js:109` — `/** Gateway-internal unary endpoint returning one Client Remote Event outcome. */`
+- `dsh-api-gateway/lib/client.browser.js:110` — `const REMOTE_EVENT_RESULT_ENDPOINT = "$events/result";`
+- `dsh-api-gateway/lib/client.browser.js:111` — `/** Empty standard Remote payload used to open the forwarded-event stream. */`
+- `dsh-api-gateway/lib/client.browser.js:112` — `const REMOTE_EVENT_STREAM_PAYLOAD = { args: {} };`
+- `dsh-api-gateway/lib/client.browser.js:118` — `function projectRemoteEventRejection(reason) {`
+- `dsh-api-gateway/lib/client.browser.js:132` — `* Recognize a non-empty Remote Event correlation id at a wire boundary.`
+- `dsh-api-gateway/lib/client.browser.js:134` — `* @returns whether the value is a valid Remote Event id.`
+- `dsh-api-gateway/lib/client.browser.js:136` — `function isRemoteEventId(value) {`
+- `dsh-api-gateway/lib/client.browser.js:140` — `* Recognize a non-empty Remote Event Client id at a wire boundary.`
+- `dsh-api-gateway/lib/client.browser.js:142` — `* @returns whether the value identifies one event-stream generation.`
+- `dsh-api-gateway/lib/client.browser.js:144` — `function isRemoteEventClientId(value) {`
+- `dsh-api-gateway/lib/client.browser.js:148` — `* Recognize the direct Agent identity used by a scoped Remote Event.`
+- `dsh-api-gateway/lib/client.browser.js:152` — `function isRemoteEventAgentId(value) {`
+- `dsh-api-gateway/lib/client.browser.js:160` — `function parseRemoteStreamServerMessage(text) {`
+- `dsh-api-gateway/lib/client.browser.js:180` — `function parseMessage(text, validate) {`
+- `dsh-api-gateway/lib/client.browser.js:190` — `function isRecord(value) {`
+- `dsh-api-gateway/lib/client.browser.js:193` — `function exactKeys(value, expected) {`
+- `dsh-api-gateway/lib/client.browser.js:196` — `function validId(value) {`
+- `dsh-api-gateway/lib/client.browser.js:199` — `function stringProperty(value, key) {`
+- `dsh-api-gateway/lib/client.browser.js:216` — `var Deque = class {`
+- `dsh-api-gateway/lib/client.browser.js:295` — `function randomUUID() {`
+- `dsh-api-gateway/lib/client.browser.js:306` — `var RemoteStreamCarrierError = class extends Error {`
+
+## `dsh-cordis-host-runner`
+- `dsh-cordis-host-runner/lib/index.js:4` — `import { Context, Service } from "@deepseek-ai/cordis";`
+- `dsh-cordis-host-runner/lib/index.js:8` — `import { Script, createContext, runInContext } from "node:vm";`
+- `dsh-cordis-host-runner/lib/index.js:13` — `* `harness.registerTool` pair, the `harness.handle` invoke-handler normalizer, the SANDBOX CONTEXT`
+- `dsh-cordis-host-runner/lib/index.js:14` — `* FAÇADE a running plugin's `apply` receives in place of the real `ctx`, and the plugin-shape`
+- `dsh-cordis-host-runner/lib/index.js:16` — `* lifecycle-safe verbs and declared services; framework internals and context-valued service`
+- `dsh-cordis-host-runner/lib/index.js:22` — `* @module @deepseek-ai/dsh-cordis-host-runner/guard`
+- `dsh-cordis-host-runner/lib/index.js:24` — `const DYNAMIC_TOOL = Symbol("cordis-host-runner.dynamic-tool");`
+- `dsh-cordis-host-runner/lib/index.js:42` — `function isPlainRecord(value) {`
+- `dsh-cordis-host-runner/lib/index.js:48` — `function hasIntrinsicConstructor(prototype, name) {`
+- `dsh-cordis-host-runner/lib/index.js:52` — `return constructor.name === name && constructor.prototype === prototype && Function.prototype.toString.call(constructor) === `function ${name}() { [native code] }`;`
+- `dsh-cordis-host-runner/lib/index.js:58` — `function hasPlainArrayPrototype(value) {`
+- `dsh-cordis-host-runner/lib/index.js:65` — `function isDensePlainArray(value) {`
+- `dsh-cordis-host-runner/lib/index.js:71` — `function assertSchemaContainerKeys(value, path) {`
+- `dsh-cordis-host-runner/lib/index.js:75` — `function cloneJson(value, path) {`
+- `dsh-cordis-host-runner/lib/index.js:95` — `throw new Error(`${at} must be lossless JSON data (objects, arrays, strings, numbers, booleans, null) — not a class instance, function, Map/Set, Date, or undefined. Return a plain object bui`
+- `dsh-cordis-host-runner/lib/index.js:181` — `function copyAnnotations(value, output, path) {`
+- `dsh-cordis-host-runner/lib/index.js:188` — `function assertSchemaKeys(value, path, allowed) {`
+- `dsh-cordis-host-runner/lib/index.js:197` — `function normalizeParameterSchemaSpec(value, path = "parameters") {`
+- `dsh-cordis-host-runner/lib/index.js:221` — `function normalizeRequiredNames(value, properties, path) {`
+- `dsh-cordis-host-runner/lib/index.js:234` — `function assignNormalizedValue(destination, value) {`
+- `dsh-cordis-host-runner/lib/index.js:245` — `function assignNormalizedMap(destination, value) {`
+- `dsh-cordis-host-runner/lib/index.js:250` — `function normalizePropertyMap(entries, path, requiredNames, raw) {`
+- `dsh-cordis-host-runner/lib/index.js:424` — `/* v8 ignore next 2 -- SCHEMA_TYPES narrows this closed switch before dispatch. */`
+- `dsh-cordis-host-runner/lib/index.js:431` — `function markDynamicTool(tool) {`
+- `dsh-cordis-host-runner/lib/index.js:435` — `function assertDynamicTool(tool) {`
+- `dsh-cordis-host-runner/lib/index.js:442` — `* downstream consumer dispatches on `type` and falls through unknowns.`
+- `dsh-cordis-host-runner/lib/index.js:444` — `function isContentBlockShape(value) {`
+- `dsh-cordis-host-runner/lib/index.js:457` — `function describeReturn(value) {`
+- `dsh-cordis-host-runner/lib/index.js:464` — `function assertRenderedContent(value) {`
+- `dsh-cordis-host-runner/lib/index.js:477` — `function sandboxDefineTool(options) {`
+- `dsh-cordis-host-runner/lib/index.js:483` — `if (output.presentationMeta !== void 0 && typeof output.presentationMeta !== "function") throw new Error("harness.defineTool output.presentationMeta must be a function when present");`
+- `dsh-cordis-host-runner/lib/index.js:517` — `* method name must be a non-empty string and the handler a function whose`
+- `dsh-cordis-host-runner/lib/index.js:525` — `function normalizeHandler(method, fn) {`
+- `dsh-cordis-host-runner/lib/index.js:527` — `if (typeof fn !== "function") throw new Error(`harness.handle("${method}") needs a handler function as its second argument`);`
+- `dsh-cordis-host-runner/lib/index.js:536` — `* marker-verified dynamic tool on the given context's registry.`
+
+## `dsh-jobs`
+- `dsh-jobs/lib/index.js:1` — `import { Service } from "@deepseek-ai/cordis";`
+- `dsh-jobs/lib/index.js:2` — `//#region lib/types/archive-admission.js`
+- `dsh-jobs/lib/index.js:4` — `* The `job` family of the Workspace registry's archive admission: the`
+- `dsh-jobs/lib/index.js:5` — `* background jobs a Session owns that have not settled, and their kill when`
+- `dsh-jobs/lib/index.js:6` — `* the Session is archived with its work. Installed by every registry`
+- `dsh-jobs/lib/index.js:10` — `* @module @deepseek-ai/dsh-jobs`
+- `dsh-jobs/lib/index.js:13` — `* Answer `workspace/session-activity` with the running or stopping jobs the`
+- `dsh-jobs/lib/index.js:19` — `function installJobArchiveAdmission(ctx, registry) {`
+- `dsh-jobs/lib/index.js:21` — `const jobs = runningJobs(registry, sessionId);`
+- `dsh-jobs/lib/index.js:23` — `if (jobs.length === 0) return rest;`
+- `dsh-jobs/lib/index.js:25` — `kind: "job",`
+- `dsh-jobs/lib/index.js:26` — `items: jobs.map((job) => ({`
+- `dsh-jobs/lib/index.js:27` — `id: job.id,`
+- `dsh-jobs/lib/index.js:28` — `label: job.label`
+- `dsh-jobs/lib/index.js:33` — `for (const job of runningJobs(registry, sessionId)) try {`
+- `dsh-jobs/lib/index.js:34` — `registry.kill(job.id, sessionId, "session archived");`
+- `dsh-jobs/lib/index.js:36` — `ctx.logger.warn(`jobs: killing "${job.id}" for an archived Session failed: ${String(error)}`);`
+- `dsh-jobs/lib/index.js:40` — `/** The jobs the Session owns that have not settled; unowned jobs in the same listing belong to nobody. */`
+- `dsh-jobs/lib/index.js:41` — `function runningJobs(registry, owner) {`
+- `dsh-jobs/lib/index.js:42` — `return registry.list(owner).filter((job) => job.owner === owner && (job.status === "running" || job.status === "stopping"));`
+- `dsh-jobs/lib/index.js:47` — `* dsh-jobs' owned branded id, carried across the registry, the model-facing`
+- `dsh-jobs/lib/index.js:55` — `* @module @deepseek-ai/dsh-jobs/brand`
+- `dsh-jobs/lib/index.js:58` — `* Brand a string as a {@link JobId}.`
+- `dsh-jobs/lib/index.js:59` — `* @param id - the raw job-id string (the registry generates 16 UUID hex characters after the kind).`
+- `dsh-jobs/lib/index.js:62` — `function JobId(id) {`
+- `dsh-jobs/lib/index.js:68` — `* The background-job Service Definition (`ctx.jobs`). It owns the contract for`
+- `dsh-jobs/lib/index.js:69` — `* job ids, session-scoped access, lifecycle state, the per-job output ring —`
+- `dsh-jobs/lib/index.js:72` — `* event stream announcing every commit, while producers retain their`
+- `dsh-jobs/lib/index.js:74` — `* `@deepseek-ai/dsh-jobs-local`.`
+- `dsh-jobs/lib/index.js:75` — `* @module @deepseek-ai/dsh-jobs`
+- `dsh-jobs/lib/index.js:78` — `* Abstract background job registry. Subclass, implement the abstract members,`
+- `dsh-jobs/lib/index.js:79` — `* and load the subclass as a plugin — it registers as `ctx.jobs` (one`
+- `dsh-jobs/lib/index.js:81` — `* standard duplicate-service behavior).`
+- `dsh-jobs/lib/index.js:85` — `*   service disposal cancel live work and await compliant producers; a`
+- `dsh-jobs/lib/index.js:86` — `*   throwing teardown cancel force-fails only the record. Such settlements`
+
+## `dsh-experimental-agent-team-profile`
+- `dsh-experimental-agent-team-profile/lib/index.js:1` — `export {};`
+- `dsh-experimental-agent-team-profile/locale/en.json:3` — `"title": "Agent Teams",`
+- `dsh-experimental-agent-team-profile/locale/en.json:4` — `"description": "Enable team collaboration, team tools, the member roster, and the shared task board."`
+- `dsh-experimental-agent-team-profile/package.json:2` — `"name": "@deepseek-ai/dsh-experimental-agent-team-profile",`
+- `dsh-experimental-agent-team-profile/package.json:3` — `"description": "Agent Teams collaboration, tools, and Web UI in one experimental bundle",`
+- `dsh-experimental-agent-team-profile/package.json:12` — `"directory": "packages/experimental/agent-team-profile"`
+- `dsh-experimental-agent-team-profile/package.json:17` — `"exports": {`
+- `dsh-experimental-agent-team-profile/package.json:36` — `"bundle": {`
+- `dsh-experimental-agent-team-profile/package.json:41` — `"@deepseek-ai/dsh-experimental-agent-team": "0.2.1-rc.2",`
+- `dsh-experimental-agent-team-profile/package.json:42` — `"@deepseek-ai/dsh-experimental-client-ui-agent-team": "0.2.1-rc.2",`
+- `dsh-experimental-agent-team-profile/package.json:43` — `"@deepseek-ai/dsh-experimental-tool-agent-team": "0.2.1-rc.2"`
+- `dsh-experimental-agent-team-profile/package.json:49` — `"@deepseek-ai/cordis-plugin-include": "~1.0.10",`
+
+# Durable Inbox / queue mutation chain (actual A Next vendor tarballs)
+
+All tarballs below are entries in `work/extracted-A/vendor/dsh-runtime/0.2.1-rc.2/manifest.json`; manifest-listed tarball SHA-256 matches the bytes in the A archive. The `work/` prefix here describes external scratch and is not committed. Package scope/version: A `dsh-desktop-next@2.0.19-next` -> bundled official DSH `@deepseek-ai/*@0.2.1-rc.2`.
+
+| Package tarball (SHA-256) | Internal source path:symbol:anchor | Evidence |
+|---|---|---|
+| `deepseek-ai-dsh-agent-loop-0.2.1-rc.2.tgz` (`b24947a735958f3633311a8ecb01122df3520ed7784f5ded82222587d5883bde`) | `package/lib/index.js:70-204` `ReactLoopInbox`; `:99-125` claim and consumed events; `:194-204` mutate appends `agent/inbox/spliced`; `:806-813` `followup` -> `next-turn`, `steer` -> `next-step`, `inject` -> next-step without wake | Two queues are event-backed; IDs unique across both. `claim()` consumes all next-step then at most one next-turn. Clear records removals. |
+| `deepseek-ai-dsh-session-persistence-jsonl-0.2.1-rc.2.tgz` (`0ac07d4cf13452fd28fc3c70721ebaf9c8a1d9d34d102f095abf7f0a7f47482f`) | persistence package; events consumed by the Agent projection | Durable session event source; do not confuse with client-only state. |
+| `deepseek-ai-dsh-api-session-controller-0.2.1-rc.2.tgz` (`17aebd23ddbd1b146aa2dbebe443b2e6b96928c43560ff0495c50288e0e3eb22`) | `package/lib/index.js:925-950` `prompt`; `:1004-1054` `updateQueue`; `:2689` `Remote("updateQueue")`; `:3241-3246` facade; `package/lib/typert.remote-client.js:1912-1938` wire method/schema; `package/lib/client.js:2415-2418` client wrapper | Cold Agent calls `resolveAgent`; pending ID must still exist. Edit accepts text only, remove retires upload receipt, steer requires running next-turn and moves item into steer path. |
+| `deepseek-ai-dsh-client-ui-chat-0.2.1-rc.2.tgz` (`0cadb2e326b60474515fa3b92324e89bcbab8ea31cfee8371753b77fe1e5bd71`) | `package/lib/client.js:2757` inbox projection; `:2815-2847` next-step and pending submission merge/request-ID dedupe; `:5391+` pending steering echo | Static UI state/projection behavior only. Exact UI control invoking each action was not resolved from these bundle files; control-to-RPC remains U. |
+
+The community Electron project does not author these loop/session semantics: its `dsh-desktop-next/src/host/index.ts` invokes official `runProfile`, and its actual archive includes the tarballs above. Runtime execution remains NOT-RUN.

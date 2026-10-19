@@ -1,5 +1,9 @@
 # 证据索引与证据限制
 
+## 实际归档核验与新增队列证据
+
+指定 A/B 归档已在本地独立 SHA/size 核验并完整 ZIP CRC 检查；证据表、ZIP tree、代码摘要、符号索引和许可清单位于 `extracted/`。重点官方 DSH runtime 包及 SHA/内部路径/line anchors 见 `extracted/A-runtime-symbol-index.md`：`dsh-agent-loop@0.2.1-rc.2`、`dsh-api-session-controller@0.2.1-rc.2`、`dsh-session-persistence-jsonl@0.2.1-rc.2` 和 `dsh-client-ui-chat@0.2.1-rc.2`。A `2.0.19-next` ZIP 内完整 343 包 runtime 清单均 SHA 匹配。资产字节只证明包身份，不能代替 R=运行观察；`extracted/RUNTIME-OBSERVATIONS.md` 明确 NOT-RUN。
+
 ## 固定资产身份
 
 | 来源 | 真实 git /版本 | 压缩包 SHA-256（采集 manifest 宣告，非本会话独立计算） |
@@ -50,4 +54,4 @@ Manifest：https://github.com/unicorn-Y/Atlas/blob/research/agent-reverse-dispat
 
 ## 证据缺口（显式 U）
 
-没有独立对 222MB A zip 或 5.4MB B zip 做 hash/unzip（两份 SHA 来源是已读采集 manifest）；未启动已打包应用、未抓 OS 进程/WS frame/真正 session 状态截图，所以 **R=0**；未将所有 A legacy/beta 包及 AA vendored tgz 全部机械解出；未追官方 Agent Host 中所有 prompt/interrupt 权限边；未穷尽 Atlas main 所有 parent-child 持久映射。缺失研究不能借他人 D/README 充当行为证据。具体补采见 EXTRACTION-REQUEST。
+已对指定 ZIP 实际 hash/unzip，并抽取 A runtime manifest 343 个 tarball hash；但没有启动桌面应用、抓 OS 进程/WS frame/真实 Session UI，因此 **R=0**。未将所有历史 stable/beta profile 的每包 tarball 内容全部反编译，也未追官方 Agent Host 所有 prompt/interrupt 权限边。A 中具体 edit/remove/steer 图标到 RPC 的控件调用点未定位。Atlas 子代理 persistent mapping 的全仓完整性仍有 U。详见 `RUNTIME-OBSERVATIONS.md` 及 `EXTRACTION-REQUEST.md` 状态追记。

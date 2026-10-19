@@ -27,3 +27,10 @@
 - O packages/client/ui-trajectory/src/client/TrajectoryView.tsx 提供工具、请求、消息轨迹、搜索、时间维度与加载较老记录；各项目看到的“高级轨迹视图”不等于社区自己实现。
 
 **仍未验证**：两者真实安装后的可点入体验、子代理多路并发、token/cost 到账明细、从休眠或强退恢复后的实际 UI 状态、发行包内 bundled 版本是否与源码等价。
+# 随发行包实际携带的 Inbox 工作流（官方 DSH 0.2.1-rc.2）
+
+A Next 包中 `@deepseek-ai/dsh-client-ui-chat@0.2.1-rc.2` 的 `lib/client.js:2757-2847` 从 `inbox` projection 读取 Agent 队列状态，将 next-step 内容作为 steer 展示，并合并本地 pending submission 回显；按 request/RPC ID 去重，避免本地回显与服务端 durable message 重复。更新后的 durable projection 是最终状态来源。
+
+同包 `@deepseek-ai/dsh-api-session-controller@0.2.1-rc.2` client `lib/client.js:2415-2418` 将 `updateQueue(itemId, action)` 调用转为 `session/updateQueue` RPC。controller `lib/index.js:1004-1054` 对 cold Agent 先恢复，再执行 edit/remove/steer；不能编辑非文本内容，不能修改已被消费/删除的旧队列 ID，删除会退役关联上传收据，steer 必须命中运行中的 next-turn。Agent loop `@deepseek-ai/dsh-agent-loop@0.2.1-rc.2` 的 `lib/index.js:70-204` 将两类 Inbox 项以 `agent/inbox/spliced` session event 持久化；`:806-813` 定义 followup/steer 的不同目标队列。
+
+本次对打包 JS 确认了 inbox projection、回显、RPC client 和后端 mutation 语义；**没能将具体 edit/remove/steer 图标或按钮可靠映射到 UI 组件**，因此这部分控件级路径仍记为 U。应用未启动，所有展示/交互结论均为 S，不是 R。

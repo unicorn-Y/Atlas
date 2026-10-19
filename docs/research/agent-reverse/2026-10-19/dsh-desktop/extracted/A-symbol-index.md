@@ -1,0 +1,486 @@
+# A archive source symbol map
+
+Generated from the independently SHA-verified release ZIP extraction. Each row is an exact in-archive source path and 1-based line; snippets are bounded for identification, not a substitute for opening the file.
+
+## `src/main.ts`
+- `src/main.ts:213` — `function assertDesktopSender(event: Pick<IpcMainInvokeEvent, 'sender' | 'senderFrame'>): void {`
+- `src/main.ts:243` — `function createWindow(preload: string, primary = false): BrowserWindow {`
+- `src/main.ts:298` — `window.webContents.setWindowOpenHandler(({ url }) => { openExternal(url); return { action: 'deny' } })`
+- `src/main.ts:321` — `function openControls(page: 'general' | 'profiles' | 'create-profile' | 'tools' | 'recovery' | 'permissions' = 'general'): void {`
+- `src/main.ts:448` — `async function command(value: unknown, source: 'app' | 'shell' | 'native' = 'app'): Promise<void> {`
+- `src/main.ts:471` — `async function performCommand(input: Record<string, unknown>, type: string, source: 'app' | 'shell' | 'native'): Promise<void> {`
+- `src/main.ts:788` — `await app.whenReady()`
+- `src/main.ts:826` — `ipcMain.handle(IPC.boot, async event => {`
+- `src/main.ts:832` — `ipcMain.handle(IPC.failed, (event, message: unknown) => {`
+- `src/main.ts:837` — `ipcMain.handle(IPC.state, event => { assertDesktopSender(event); return state() })`
+- `src/main.ts:838` — `ipcMain.handle('dsh-desktop:setup-onboarding', async (event, request: unknown) => {`
+- `src/main.ts:871` — `ipcMain.handle(IPC.settingsTake, event => {`
+- `src/main.ts:877` — `ipcMain.handle(IPC.browserLinks, event => { assertDesktopSender(event); return runtime.browserLinks() })`
+- `src/main.ts:878` — `ipcMain.handle(IPC.browserAcquire, (event, workspace: unknown) => {`
+- `src/main.ts:883` — `ipcMain.handle(IPC.browserRelease, (event, lease: unknown) => {`
+- `src/main.ts:887` — `ipcMain.handle(IPC.permissionQuery, (event, permission: unknown) => { assertDesktopSender(event); return permissions.query(permission) })`
+- `src/main.ts:895` — `ipcMain.handle(IPC.permissionRequest, async (event, permission: unknown) => {`
+- `src/main.ts:898` — `ipcMain.handle(IPC.permissionSettings, async (event, permission: unknown) => {`
+- `src/main.ts:914` — `ipcMain.handle(IPC.material, event => { assertSender(event, mainWindow, APP_URL); return windowMaterial(runtime.preferences) })`
+- `src/main.ts:915` — `ipcMain.handle(IPC.command, (event, value: unknown) => { assertDesktopSender(event); return command(value, event.sender === shellWindow?.webContents ? 'shell' : 'app') })`
+- `src/main.ts:917` — `ipcMain.handle(IPC.directory, event => {`
+- `src/main.ts:938` — `ipcMain.on(IPC.nativeThemeSet, (event, source: unknown) => {`
+- `src/main.ts:942` — `ipcMain.on(IPC.locale, (event, language: unknown) => {`
+- `src/main.ts:952` — `ipcMain.handle(IPC.localeRead, event => {`
+- `src/main.ts:985` — `ipcMain.handle(IPC.windowsMenu, (event, name: unknown, x: unknown, y: unknown) => {`
+- `src/main.ts:1006` — `ipcMain.on(IPC.windowsAppearance, (event, language: unknown, sidebarFill: unknown, symbolColor: unknown) => {`
+- `src/main.ts:1017` — `app.on('activate', openMain)`
+- `src/main.ts:1018` — `app.on('window-all-closed', () => { if (process.platform !== 'darwin' && !native.available && !replacingWindow) app.quit() })`
+- `src/main.ts:1021` — `app.on('before-quit', event => {`
+- `src/main.ts:1085` — `app.on('child-process-gone', (_event, details) => runtime.diagnostics.record({ source: 'electron', event: 'child-process-gone', level: 'error',`
+
+## `src/preload-app.ts`
+- `src/preload-app.ts:2` — `import { contextBridge, ipcRenderer, webUtils } from 'electron'`
+- `src/preload-app.ts:20` — `contextBridge.exposeInMainWorld('dshOnboarding', {`
+- `src/preload-app.ts:21` — `setActive: (active: boolean) => { void ipcRenderer.invoke('dsh-desktop:setup-onboarding', { action: 'active', active }).catch(() => {}) },`
+- `src/preload-app.ts:23` — `contextBridge.exposeInMainWorld('dshDesktopSetup', {`
+- `src/preload-app.ts:24` — `read: () => ipcRenderer.invoke('dsh-desktop:setup-onboarding', { action: 'read' }),`
+- `src/preload-app.ts:25` — `dismissAccount: (profile: string) => ipcRenderer.invoke('dsh-desktop:setup-onboarding', { action: 'dismiss-account', profile }),`
+- `src/preload-app.ts:26` — `finish: (profile: string, selection?: unknown) => ipcRenderer.invoke('dsh-desktop:setup-onboarding', { action: 'finish', profile, selection }),`
+- `src/preload-app.ts:28` — `contextBridge.exposeInMainWorld('desktopNext', {`
+- `src/preload-app.ts:31` — `state: () => ipcRenderer.invoke(IPC.state),`
+- `src/preload-app.ts:32` — `browserLinks: () => ipcRenderer.invoke(IPC.browserLinks),`
+- `src/preload-app.ts:33` — `command: (command: unknown) => ipcRenderer.invoke(IPC.command, command),`
+- `src/preload-app.ts:37` — `contextBridge.exposeInMainWorld('dshDesktop', { protocolVersion: 1, browser: createDesktopBrowserBridge(), ...createDesktopKeyboardBridge() })`
+- `src/preload-app.ts:38` — `contextBridge.exposeInMainWorld('dshDesktopBoot', {`
+- `src/preload-app.ts:39` — `ready: () => ipcRenderer.invoke(IPC.boot),`
+- `src/preload-app.ts:40` — `failed: (message: string) => ipcRenderer.invoke(IPC.failed, message),`
+- `src/preload-app.ts:42` — `contextBridge.exposeInMainWorld('__DSH_DIRECTORY_PICKER__', { pick: () => ipcRenderer.invoke(IPC.directory) })`
+- `src/preload-app.ts:46` — `contextBridge.exposeInMainWorld('__DSH_HOST_PATHS__', { pathFor: (file: File) => webUtils.getPathForFile(file) })`
+
+## `src/ipc.ts`
+- `src/ipc.ts:1` — `export const IPC = {`
+- `src/ipc.ts:16` — `export const APP_URL = 'dsh-app://app/'`
+- `src/ipc.ts:17` — `export const SHELL_URL = 'dsh-app://shell/index.html'`
+
+## `src/host-process.ts`
+- `src/host-process.ts:12` — `readonly type: 'ready'`
+- `src/host-process.ts:67` — `type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | PlatformLoginEvent | InjectionsEvent | { type: 'permission'; requestId: number; action: DesktopPermissionAc`
+- `src/host-process.ts:68` — `readonly type: 'update-tasks'`
+- `src/host-process.ts:80` — `case 'shutdown-complete':`
+- `src/host-process.ts:82` — `case 'ready':`
+- `src/host-process.ts:84` — `case 'platform-session': {`
+- `src/host-process.ts:101` — `case 'platform-login':`
+- `src/host-process.ts:103` — `case 'fatal':`
+- `src/host-process.ts:105` — `case 'notification':`
+- `src/host-process.ts:107` — `case 'permission':`
+- `src/host-process.ts:111` — `case 'desktop-action':`
+- `src/host-process.ts:113` — `case 'update-tasks':`
+- `src/host-process.ts:116` — `case 'logging-config':`
+- `src/host-process.ts:117` — `case 'browser-access':`
+- `src/host-process.ts:119` — `case 'injections':`
+- `src/host-process.ts:129` — `const timeout = new Promise<false>((resolve) => {`
+- `src/host-process.ts:174` — `private readyResolve!: (ready: DesktopHostReady) => void`
+- `src/host-process.ts:175` — `private readyReject!: (error: Error) => void`
+- `src/host-process.ts:176` — `private readonly readyPromise = new Promise<DesktopHostReady>((resolve, reject) => {`
+- `src/host-process.ts:177` — `this.readyResolve = resolve`
+- `src/host-process.ts:178` — `this.readyReject = reject`
+- `src/host-process.ts:184` — `private shutdownCompleted = false`
+- `src/host-process.ts:229` — `if (this.child !== undefined) return this.readyPromise`
+- `src/host-process.ts:231` — `const child = spawn(this.node, [`
+- `src/host-process.ts:251` — `child.on('message', (message: unknown) => {`
+- `src/host-process.ts:257` — `this.diagnostic({ source: 'host.ipc', event: 'received', developer: true, pid: child.pid, fields: { type: message.type, ...('requestId' in message ? { requestId: message.requestId `
+- `src/host-process.ts:258` — `if (message.type === 'ready') this.readyResolve({ url: message.url, injections: message.injections })`
+- `src/host-process.ts:259` — `else if (message.type === 'platform-session') this.onPlatformSession?.(message.session)`
+- `src/host-process.ts:260` — `else if (message.type === 'platform-login') {`
+- `src/host-process.ts:265` — `else if (message.type === 'shutdown-complete') {`
+- `src/host-process.ts:266` — `if (this.stopping) this.shutdownCompleted = true`
+- `src/host-process.ts:267` — `else this.fail(new Error('dsh desktop host acknowledged an unrequested shutdown'))`
+- `src/host-process.ts:269` — `else if (message.type === 'fatal') this.fail(new DesktopHostFatalError(message.message, message.diagnostic))`
+- `src/host-process.ts:270` — `else if (message.type === 'notification') {`
+- `src/host-process.ts:273` — `else if (message.type === 'permission') {`
+- `src/host-process.ts:274` — `const reply = (result: object): void => {`
+- `src/host-process.ts:275` — `if (child.connected && !this.stopping && !this.failureReported) child.send({ type: 'permission-result', requestId: message.requestId, ...result }, () => {})`
+- `src/host-process.ts:280` — `}).then(snapshot => reply({ snapshot }), () => reply({ error: 'Desktop permissions are unavailable' }))`
+- `src/host-process.ts:282` — `else if (message.type === 'desktop-action') {`
+- `src/host-process.ts:288` — `else if (message.type === 'logging-config') {`
+- `src/host-process.ts:293` — `else if (message.type === 'browser-access') {`
+- `src/host-process.ts:298` — `else if (message.type === 'injections') {`
+- `src/host-process.ts:309` — `child.once('error', (error) => { this.fail(error) })`
+- `src/host-process.ts:310` — `this.exitPromise = new Promise<void>((resolve) => {`
+- `src/host-process.ts:311` — `child.once('close', (code, signal) => {`
+- `src/host-process.ts:312` — `this.diagnostic({ source: 'host.process', event: 'exit', pid: child.pid, level: this.stopping && code === 0 ? 'info' : 'error', fields: { exitCode: code, signal, expected: this.sto`
+- `src/host-process.ts:319` — `return this.readyPromise`
+- `src/host-process.ts:345` — `await new Promise<void>((resolve, reject) => {`
+- `src/host-process.ts:348` — `child.send({ type: 'logging-config', requestId, ...value }, error => { if (error) reject(error) })`
+- `src/host-process.ts:361` — `await new Promise<void>((resolve, reject) => {`
+- `src/host-process.ts:364` — `child.send({ type: 'browser-access', requestId, enabled }, error => { if (error) reject(error) })`
+- `src/host-process.ts:382` — `return await new Promise<readonly unknown[]>((resolve, reject) => {`
+- `src/host-process.ts:385` — `child.send({ type: 'injections', requestId }, error => { if (error !== null) reject(error) })`
+- `src/host-process.ts:402` — `const end = this.controlOperation('update-tasks', requestId)`
+- `src/host-process.ts:405` — `return await new Promise<boolean>((resolve, reject) => {`
+- `src/host-process.ts:408` — `child.send({ type: 'update-tasks', requestId, action }, (error) => { if (error !== null) reject(error) })`
+- `src/host-process.ts:426` — `this.diagnostic({ source: 'host.process', event: 'shutdown.request', pid: child.pid })`
+- `src/host-process.ts:428` — `if (child.connected) child.send({ type: 'shutdown' }, (error) => { if (error !== null) this.fail(error) })`
+- `src/host-process.ts:432` — `if (!graceful) { this.diagnostic({ source: 'host.process', event: 'shutdown.escalate', level: 'warn', pid: child.pid, fields: { signal: 'SIGTERM' } }); child.kill('SIGTERM') }`
+- `src/host-process.ts:434` — `this.diagnostic({ source: 'host.process', event: 'shutdown.escalate', level: 'warn', pid: child.pid, fields: { signal: 'SIGKILL' } })`
+- `src/host-process.ts:441` — `if (requireGraceful && (!graceful || child.exitCode !== 0 || !this.shutdownCompleted)) {`
+- `src/host-process.ts:443` — `throw new DesktopHostUncleanExitError(`desktop update: Host did not complete graceful task teardown (exit ${String(child.exitCode)}, signal ${String(child.signalCode)}, shutdown ac`
+- `src/host-process.ts:449` — `this.readyReject(error)`
+
+## `src/backend-controller.ts`
+- `src/backend-controller.ts:7` — `| { readonly phase: 'starting' }`
+- `src/backend-controller.ts:8` — `| { readonly phase: 'ready' }`
+- `src/backend-controller.ts:10` — `| { readonly phase: 'error'; readonly message: string; readonly failure: unknown }`
+- `src/backend-controller.ts:20` — `start(): Promise<unknown>`
+- `src/backend-controller.ts:22` — `stop(): Promise<void>`
+- `src/backend-controller.ts:33` — `export class DesktopBackendController<Host extends DesktopBackendHost> {`
+- `src/backend-controller.ts:34` — `private current: DesktopBackendState = { phase: 'starting' }`
+- `src/backend-controller.ts:53` — `get host(): Host | undefined { return !this.closed && !this.attempt?.cancelled && this.current.phase === 'ready' ? this.attempt?.host : undefined }`
+- `src/backend-controller.ts:60` — `start(prepare: () => Promise<void>): Promise<void> {`
+- `src/backend-controller.ts:64` — `if (this.current.phase === 'ready') return Promise.resolve()`
+- `src/backend-controller.ts:70` — `this.update({ phase: 'starting' })`
+- `src/backend-controller.ts:71` — `const pending = Promise.resolve().then(async () => {`
+- `src/backend-controller.ts:80` — `// stop() can cancel this attempt while preparation is pending.`
+- `src/backend-controller.ts:85` — `await host.start()`
+- `src/backend-controller.ts:87` — `// stop() can cancel this attempt while the child starts.`
+- `src/backend-controller.ts:89` — `if (!attempt.cancelled) this.update({ phase: 'ready' })`
+- `src/backend-controller.ts:98` — `if (cleanupError !== error) failure = new AggregateError([error, cleanupError], 'desktop backend startup and cleanup failed')`
+- `src/backend-controller.ts:103` — `}).finally(() => { if (this.pending === pending) this.pending = undefined })`
+- `src/backend-controller.ts:112` — `stop(): Promise<void> {`
+- `src/backend-controller.ts:116` — `if (!this.closed) this.update({ phase: 'starting' })`
+- `src/backend-controller.ts:125` — `}).finally(() => { if (this.stopping === stopping) this.stopping = undefined })`
+- `src/backend-controller.ts:136` — `return this.stop()`
+- `src/backend-controller.ts:141` — `const cleanup = Promise.resolve().then(async () => { await attempt.host?.stop() }).catch((error: unknown) => {`
+- `src/backend-controller.ts:155` — `if (this.current.phase !== 'ready') return`
+- `src/backend-controller.ts:160` — `if (this.attempt === attempt) this.update(errorState(new AggregateError([error, cleanupError], 'Desktop backend failed and could not stop')))`
+
+## `src/host/index.ts`
+- `src/host/index.ts:7` — `import { runProfile } from '@deepseek-ai/dsh/profile-boot'`
+- `src/host/index.ts:10` — `import { loadNextProfile, NEXT_PACKAGE, readNextProfilePatches } from '../profiles.ts'`
+- `src/host/index.ts:13` — `import { configureNextBrowserAccess } from '../desktop-browser-access.ts'`
+- `src/host/index.ts:35` — `if (!runtimeDir || !projectDir || !home || !process.send) throw new Error('Next Host requires runtime, profile, home and IPC')`
+- `src/host/index.ts:55` — `const profile = loadNextProfile(projectDir, home)`
+- `src/host/index.ts:61` — `// runProfile installs the outbound proxy policy from this environment before any plugin mounts.`
+- `src/host/index.ts:65` — `const application = runProfile({`
+- `src/host/index.ts:82` — `if (!process.connected || !process.send) return resolveSend()`
+- `src/host/index.ts:83` — `process.send(value, error => error ? reject(error) : resolveSend())`
+- `src/host/index.ts:88` — `const end = hostOperation('host', 'shutdown')`
+- `src/host/index.ts:91` — `try { await running?.shutdown.shutdown(0); end() } catch (error) { end(error); throw error }`
+- `src/host/index.ts:92` — `await send({ type: 'shutdown-complete' })`
+- `src/host/index.ts:96` — `process.on('message', (value: unknown) => {`
+- `src/host/index.ts:104` — `if (typeof value === 'object' && value !== null && 'type' in value && value.type === 'shutdown') void stop().catch(fatal)`
+- `src/host/index.ts:113` — `await send({ type: 'injections', requestId: query.requestId, injections: ctx.webServer.collectIndexInjections() })`
+- `src/host/index.ts:117` — `if (typeof value !== 'object' || value === null || !('type' in value) || value.type !== 'browser-access') return`
+- `src/host/index.ts:124` — `await send({ type: 'browser-access', requestId: request.requestId })`
+- `src/host/index.ts:125` — `}).catch(async () => { await send({ type: 'browser-access', requestId: request.requestId, error: 'Could not update browser access' }) }).catch(fatal)`
+- `src/host/index.ts:127` — `process.once('disconnect', () => { void stop().catch(fatal) })`
+- `src/host/index.ts:135` — `try { await ctx.plugin(desktopOffice, office); mounted() } catch (error) { mounted(error); throw error }`
+- `src/host/index.ts:137` — `hostLog({ source: 'host', event: 'process.ready' })`
+- `src/host/index.ts:138` — `await send({ type: 'ready', url: ctx.connection.authenticatedUrl(`http://127.0.0.1:${ctx.webServer.port}`),`
+- `src/host/index.ts:139` — `injections: ctx.webServer.collectIndexInjections() })`
+- `src/host/index.ts:151` — `function fatal(error: unknown): void {`
+- `src/host/index.ts:157` — `if (process.connected) process.send?.({ type: 'fatal', message, diagnostic }, () => { if (process.connected) process.disconnect() })`
+
+## `src/profiles.ts`
+- `src/profiles.ts:12` — `import { pluginMarketPatch } from './profile-plugin-market.ts'`
+- `src/profiles.ts:13` — `import { RETIRED_SCHEDULE_BUNDLE, retiredSchedulePatch } from './profile-schedule.ts'`
+- `src/profiles.ts:18` — `export const WEB_BUNDLES = [...PROFILE_TEMPLATES.web!.bundles]`
+- `src/profiles.ts:19` — `const NEXT_BUNDLE_PATCH = fileURLToPath(new URL('../cordis.patch.yml', import.meta.url))`
+- `src/profiles.ts:21` — `export const COMMUNITY_MARKET_PACKAGE = 'dsh-community-market'`
+- `src/profiles.ts:22` — `export const DSH_MARKET_PACKAGE = 'dshmarket'`
+- `src/profiles.ts:23` — `export const OFFICIAL_MARKET_PACKAGE = '@deepseek-ai/dsh-experimental-plugin-market-bundle'`
+- `src/profiles.ts:24` — `/** Legacy shell shape, now projected from the standard Profile bundle selection. */`
+- `src/profiles.ts:25` — `export interface Features { remoteControl: boolean; market: boolean; dshMarket?: boolean; officialMarket?: boolean }`
+- `src/profiles.ts:27` — `export const DEFAULT_FEATURES: Readonly<Features> = { remoteControl: false, market: false }`
+- `src/profiles.ts:34` — `* rc.2 optional bundle, 2 retired that bundle once upstream removed it.`
+- `src/profiles.ts:38` — `/** Names recovery removed from `profile.bundles`; a UI ledger, never a policy. */`
+- `src/profiles.ts:40` — `profile: { bundles: string[] }`
+- `src/profiles.ts:45` — `function applyFeatures(manifest: ProfileManifest, features: Features): void {`
+- `src/profiles.ts:47` — `manifest.dsh.profile.bundles = [...manifest.dsh.profile.bundles.filter(name => !optional.includes(name)),`
+- `src/profiles.ts:48` — `...(features.market ? [COMMUNITY_MARKET_PACKAGE] : []), ...(features.dshMarket ? [DSH_MARKET_PACKAGE] : []),`
+- `src/profiles.ts:49` — `...(features.officialMarket ? [OFFICIAL_MARKET_PACKAGE] : []), ...(features.remoteControl ? [AA_PACKAGE] : [])]`
+- `src/profiles.ts:53` — `export function profileName(value: unknown): string {`
+- `src/profiles.ts:61` — `export function parseFeatures(value: unknown): Features {`
+- `src/profiles.ts:64` — `if (typeof features.remoteControl !== 'boolean' || typeof features.market !== 'boolean'`
+- `src/profiles.ts:67` — `|| Object.keys(features).some(key => !['remoteControl', 'market', 'dshMarket', 'officialMarket'].includes(key))) throw new Error('Invalid Next features')`
+- `src/profiles.ts:69` — `remoteControl: features.remoteControl,`
+- `src/profiles.ts:70` — `market: features.market,`
+- `src/profiles.ts:103` — `const value = JSON.parse(readPrivateFile(join(this.directory(name), 'package.json')) ?? 'null') as { dsh?: { profile?: { bundles?: unknown } } } | null`
+- `src/profiles.ts:104` — `const bundles = value?.dsh?.profile?.bundles`
+- `src/profiles.ts:106` — `return Array.isArray(bundles) && bundles.every(item => typeof item === 'string')`
+- `src/profiles.ts:107` — `&& PROFILE_TEMPLATES.web!.bundles.every(bundle => bundles.includes(bundle))`
+- `src/profiles.ts:121` — `if (!existing) initProfile(dir, WEB_BUNDLES)`
+- `src/profiles.ts:124` — `if (manifest.dsh.profile.bundles.includes('dsh-desktop-next')) {`
+- `src/profiles.ts:127` — `new NextRecovery(this).backup(name, 'before-next-bundle-removal')`
+- `src/profiles.ts:130` — `migrated.dsh.profile.bundles = migrated.dsh.profile.bundles.filter(bundle => bundle !== 'dsh-desktop-next')`
+- `src/profiles.ts:141` — `initProfile(dir, WEB_BUNDLES)`
+- `src/profiles.ts:148` — `if (manifest.dsh.desktopNextPlugins === 1 || !manifest.dsh.profile.bundles.includes('dsh-desktop-next')) {`
+- `src/profiles.ts:149` — `const bundles = manifest.dsh.profile.bundles`
+- `src/profiles.ts:150` — `return { remoteControl: bundles.includes(AA_PACKAGE), market: bundles.includes(COMMUNITY_MARKET_PACKAGE),`
+- `src/profiles.ts:151` — `...(bundles.includes(DSH_MARKET_PACKAGE) ? { dshMarket: true } : {}),`
+- `src/profiles.ts:152` — `...(bundles.includes(OFFICIAL_MARKET_PACKAGE) ? { officialMarket: true } : {}) }`
+- `src/profiles.ts:179` — `return computerUsePatch(readPrivateFile(join(this.directory(name), 'cordis.patch.yml')) ?? '[]\n').enabled`
+- `src/profiles.ts:181` — `/** Save choices before completion. Skip preserves both bundles and the user's patch verbatim. */`
+- `src/profiles.ts:192` — `if ([features.market, features.dshMarket, features.officialMarket].filter(Boolean).length > 1) throw new Error('Select only one plugin market')`
+- `src/profiles.ts:220` — `dshMarket: manifest.dsh.profile.bundles.includes(DSH_MARKET_PACKAGE),`
+- `src/profiles.ts:221` — `officialMarket: manifest.dsh.profile.bundles.includes(OFFICIAL_MARKET_PACKAGE),`
+- `src/profiles.ts:225` — `* Once per Profile: upstream retired the Scheduled Tasks bundle and the Web`
+- `src/profiles.ts:226` — `* composition now mounts Schedule. Drop the bundle (app-boot would on load,`
+- `src/profiles.ts:237` — `const bundles = manifest.dsh.profile.bundles.filter(bundle => bundle !== RETIRED_SCHEDULE_BUNDLE)`
+- `src/profiles.ts:238` — `if (patch !== undefined || bundles.length !== manifest.dsh.profile.bundles.length) {`
+- `src/profiles.ts:239` — `new NextRecovery(this).backup(name, 'before-schedule-bundle-retirement')`
+- `src/profiles.ts:243` — `manifest.dsh.profile.bundles = bundles`
+- `src/profiles.ts:249` — `if (!value || !Array.isArray(value.dsh?.profile?.bundles) || value.dsh.profile.bundles.some((item: unknown) => typeof item !== 'string')) throw new Error('Invalid Next Profile mani`
+- `src/profiles.ts:265` — `manifest.dsh = { profile: { bundles: WEB_BUNDLES },`
+- `src/profiles.ts:269` — `this.setFeatures(name, { remoteControl: false, market: false })`
+- `src/profiles.ts:283` — `function retireLinkProjections(projectDir: string): void {`
+- `src/profiles.ts:292` — `export function loadNextProfile(projectDir: string, home: string, installAnchor = NEXT_PACKAGE): Profile {`
+- `src/profiles.ts:297` — `// Upstream bundle discovery walks physical node_modules before installing its`
+- `src/profiles.ts:298` — `// runtime resolver. Project only this application's bundle, not its dependency`
+- `src/profiles.ts:304` — `if (existingModules && !existingModules.isDirectory()) throw new Error('Next bundle fallback must be a real directory')`
+- `src/profiles.ts:310` — `if (existingLink && !existingLink.isSymbolicLink()) throw new Error('Next bundle fallback is occupied by an unmanaged package')`
+- `src/profiles.ts:315` — `patchPaths: [NEXT_BUNDLE_PATCH], patches: loadOverlayPatches('dsh-desktop-next', NEXT_BUNDLE_PATCH) })`
+- `src/profiles.ts:324` — `// The official manager still owns per-Profile bundle/row enablement.`
+- `src/profiles.ts:330` — `* Paths the AA bridge cannot derive once it runs from app.asar: it copies its bundled Connector`
+- `src/profiles.ts:335` — `function archivedAgentsAnywhereConfig(installAnchor: string): { connectorSourceDir?: string; uvPath?: string } {`
+- `src/profiles.ts:340` — `const config: { connectorSourceDir: string; uvPath?: string } = { connectorSourceDir: unpackedPath(join(packageDir, 'lib', 'bundled-connector')) }`
+- `src/profiles.ts:344` — `} catch { /* No bundled uv for this platform; the bridge searches PATH as before. */ }`
+- `src/profiles.ts:349` — `export function readNextProfilePatches(projectDir: string, home: string, overlays: readonly string[], profilePatches?: readonly Profile['patches'][number][]) {`
+- `src/profiles.ts:352` — `patchPaths: [NEXT_BUNDLE_PATCH], patches: loadOverlayPatches('dsh-desktop-next', NEXT_BUNDLE_PATCH) })`
+- `src/profiles.ts:353` — `profile.patches = profilePatches === undefined`
+- `src/profiles.ts:355` — `: [...profilePatches]`
+
+## `src/webserver.ts`
+- `src/webserver.ts:1` — `/** Keep upstream HTTP routing while requiring Host credentials for Market routes. */`
+- `src/webserver.ts:10` — `private readonly browserSockets = new Set<Duplex>()`
+- `src/webserver.ts:13` — `setBrowserAccess(enabled: boolean): void {`
+- `src/webserver.ts:18` — `for (const socket of this.browserSockets) socket.destroy()`
+- `src/webserver.ts:19` — `this.browserSockets.clear()`
+- `src/webserver.ts:23` — `private permits(request: Parameters<WebRoute['handler']>[0]): boolean {`
+- `src/webserver.ts:28` — `override register(route: WebRoute): () => void {`
+- `src/webserver.ts:29` — `return super.register({ ...route, handler: this.observeHttp(route.path, async (request, response) => {`
+- `src/webserver.ts:31` — `if (route.path !== '/api/community-market' && !route.path.startsWith('/api/community-market/')) {`
+- `src/webserver.ts:32` — `await route.handler(request, response); return`
+- `src/webserver.ts:41` — `await route.handler(request, response)`
+- `src/webserver.ts:45` — `private observeHttp(route: string, handler: WebRoute['handler']): WebRoute['handler'] {`
+- `src/webserver.ts:47` — `const end = hostOperation('host.http', 'request', { route, method: request.method ?? '' }, true)`
+- `src/webserver.ts:50` — `try { await handler(request, response) } catch (error) { response.off('finish', finish); response.off('close', finish); end(error); throw error }`
+- `src/webserver.ts:54` — `override registerFallback(handler: WebRoute['handler']): () => void {`
+- `src/webserver.ts:57` — `await handler(request, response)`
+- `src/webserver.ts:61` — `override registerUpgrade(route: WebUpgradeRoute): () => void {`
+- `src/webserver.ts:62` — `return super.registerUpgrade({ ...route, handler: (request, socket, head) => {`
+- `src/webserver.ts:63` — `hostLog({ source: 'host.http', event: 'upgrade', fields: { route: route.path }, developer: true })`
+- `src/webserver.ts:64` — `if (!this.permits(request)) { socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); return }`
+- `src/webserver.ts:67` — `this.browserSockets.add(socket)`
+- `src/webserver.ts:68` — `socket.once('close', () => this.browserSockets.delete(socket))`
+- `src/webserver.ts:70` — `return route.handler(request, socket, head)`
+
+## `src/recovery.ts`
+- `src/recovery.ts:3` — `import { lstatSync, readdirSync, renameSync, unlinkSync } from 'node:fs'`
+- `src/recovery.ts:7` — `import { NextProfiles, profileName, WEB_BUNDLES, NEXT_PACKAGE } from './profiles.ts'`
+- `src/recovery.ts:14` — `profile: string`
+- `src/recovery.ts:22` — `export class NextRecovery {`
+- `src/recovery.ts:24` — `constructor(readonly profiles: NextProfiles) { this.directory = join(profiles.home, 'recovery') }`
+- `src/recovery.ts:27` — `const dir = this.profiles.directory(name)`
+- `src/recovery.ts:37` — `atomicJson(join(target, 'snapshot.json'), { version: 1, profile: name, created: new Date().toISOString(), reason, healthy, files } satisfies Snapshot)`
+- `src/recovery.ts:41` — `latest(name: string): { directory: string; created: string } | null { return this.checkpoints(name)[0] ?? null }`
+- `src/recovery.ts:43` — `checkpoints(name: string): { directory: string; created: string; id: string; fileCount: number; totalBytes: number }[] {`
+- `src/recovery.ts:45` — `profileName(name)`
+- `src/recovery.ts:52` — `const snapshot = this.readSnapshot(directory, name)`
+- `src/recovery.ts:53` — `if (snapshot.healthy) {`
+- `src/recovery.ts:55` — `result.push({ directory, id: entry, created: snapshot.created, fileCount: contents.filter(text => text !== undefined).length, totalBytes: contents.reduce((sum, text) => sum + Buffe`
+- `src/recovery.ts:58` — `} catch { /* A partial or corrupt backup cannot become a restore target. */ }`
+- `src/recovery.ts:63` — `checkpoint(name: string): void {`
+- `src/recovery.ts:68` — `const text = readPrivateFile(join(this.profiles.directory(name), file))`
+- `src/recovery.ts:75` — `async restore(name: string, id?: string): Promise<void> {`
+- `src/recovery.ts:76` — `const latest = id === undefined ? this.latest(name) : this.checkpoints(name).find(item => item.id === id)`
+- `src/recovery.ts:78` — `const dir = this.profiles.directory(name)`
+- `src/recovery.ts:79` — `await withFileLock(join(dir, 'lock'), async () => {`
+- `src/recovery.ts:80` — `const snapshot = this.readSnapshot(latest.directory, name)`
+- `src/recovery.ts:81` — `// Verify the complete snapshot before making any change.`
+- `src/recovery.ts:84` — `const saved = snapshot.files[file]`
+- `src/recovery.ts:98` — `const manifest = JSON.parse(readPrivateFile(join(this.profiles.directory(name), 'package.json')) ?? '{}')`
+- `src/recovery.ts:99` — `const bundles: unknown = manifest.dsh?.profile?.bundles`
+- `src/recovery.ts:104` — `// and official extensions must never become recovery uninstall targets.`
+- `src/recovery.ts:120` — `status: 'active' as const, owner: 'profile' as const, action: 'uninstall' as const, toggle: 'disable' as const })),`
+- `src/recovery.ts:122` — `status: 'disabled' as const, owner: 'profile' as const, action: 'uninstall' as const, toggle: 'enable' as const })),`
+- `src/recovery.ts:127` — `* Select or deselect one eligible bundle in `dsh.profile.bundles`. Nothing is`
+- `src/recovery.ts:134` — `const dir = this.profiles.directory(name)`
+- `src/recovery.ts:135` — `await withFileLock(join(dir, 'lock'), async () => {`
+- `src/recovery.ts:138` — `const bundles: unknown = manifest.dsh?.profile?.bundles`
+- `src/recovery.ts:140` — `manifest.dsh.profile.bundles = selected`
+- `src/recovery.ts:158` — `for (const entry of readdirSync(this.profiles.home)) {`
+- `src/recovery.ts:159` — `if (['recovery', 'electron-user-data', 'desktop-next-location.json'].includes(entry)) continue`
+- `src/recovery.ts:160` — `renameSync(join(this.profiles.home, entry), join(backup, entry))`
+- `src/recovery.ts:166` — `const path = join(this.profiles.home, 'cordis.patch.yml')`
+- `src/recovery.ts:177` — `const source = this.profiles.directory(name)`
+- `src/recovery.ts:178` — `if (!this.profiles.list().includes(name)) throw new Error('Profile does not exist')`
+- `src/recovery.ts:180` — `const removed = join(this.directory, 'removed-profiles')`
+- `src/recovery.ts:182` — `renameSync(source, join(removed, `${name}-${Date.now()}-${randomUUID()}`))`
+- `src/recovery.ts:186` — `const value = JSON.parse(readPrivateFile(join(directory, 'snapshot.json'), 16_384) ?? 'null') as Snapshot | null`
+- `src/recovery.ts:187` — `if (!value || value.version !== 1 || value.profile !== name || typeof value.healthy !== 'boolean'`
+- `src/recovery.ts:191` — `throw new Error('Invalid recovery backup')`
+
+## `src/desktop-contract.ts`
+- `src/desktop-contract.ts:7` — `export const DEFAULT_PROFILE = 'desktop'`
+- `src/desktop-contract.ts:32` — `jobCompleted: boolean`
+- `src/desktop-contract.ts:33` — `jobFailed: boolean`
+- `src/desktop-contract.ts:38` — `export const DEFAULT_PREFERENCES: Readonly<DesktopPreferences> = Object.freeze({`
+- `src/desktop-contract.ts:41` — `notifications: true, turnCompleted: true, turnFailed: true, jobCompleted: false, jobFailed: false,`
+- `src/desktop-contract.ts:47` — `...DEFAULT_PREFERENCES, macosMaterial: 'off', windowsMaterial: 'off', linuxMaterial: 'off',`
+- `src/desktop-contract.ts:49` — `notifications: false, turnCompleted: false, turnFailed: false, jobCompleted: false, jobFailed: false,`
+- `src/desktop-contract.ts:53` — `export interface DesktopState {`
+- `src/desktop-contract.ts:59` — `phase: 'starting' | 'ready' | 'error' | 'recovery'`
+- `src/desktop-contract.ts:62` — `safeMode: boolean`
+- `src/desktop-contract.ts:94` — `export type DesktopCommand =`
+- `src/desktop-contract.ts:113` — `state(): Promise<DesktopState>`
+
+## `src/client/index.ts`
+- `src/client/index.ts:13` — `import { NextDesktopSettings, NextDesktopActions } from './settings.tsx'`
+- `src/client/index.ts:61` — `permissions: window.desktopNext?.permissions,`
+- `src/client/index.ts:75` — `if (window.desktopNext) {`
+- `src/client/index.ts:76` — `const permissions = window.desktopNext.permissions`
+- `src/client/index.ts:82` — `const adapter = new NextSettingsAdapter(window.desktopNext)`
+- `src/client/index.ts:85` — `ctx.slots.inject('settings.section', () => ctx.slots.register({`
+- `src/client/index.ts:86` — `name: 'settings.section', id: 'desktop', order: 100, locale: 'desktop-next', label: () => t('settings'),`
+- `src/client/index.ts:89` — `ctx.slots.inject('settings.action', () => ctx.slots.register({`
+- `src/client/index.ts:90` — `name: 'settings.action', id: 'desktop-native-actions', order: 1, locale: 'desktop-next', inject: () => ({ adapter }),`
+- `src/client/index.ts:92` — `ctx.slots.inject('shell.overlay', () => ctx.slots.register({`
+- `src/client/index.ts:93` — `name: 'shell.overlay', id: 'desktop-next-settings-requests', order: 90, locale: 'desktop-next',`
+- `src/client/index.ts:95` — `ctx.slots.inject('shell.overlay', () => ctx.slots.register({`
+- `src/client/index.ts:96` — `name: 'shell.overlay', id: 'desktop-next-safe-mode', order: 100, locale: 'desktop-next',`
+- `src/client/index.ts:163` — `void window.desktopNext?.state().then(state => { if (!disposed) setSafe(state.safeMode) }).catch(() => {})`
+- `src/client/index.ts:169` — `createElement('button', { type: 'button', onClick: () => { void window.desktopNext?.command({ type: 'controls', page: 'recovery' }).catch(() => {}) } }, t('recovery')),`
+- `src/client/index.ts:173` — `function DesktopSettings({ t, adapter, close, openPlugins }: PropsLocale<'desktop-next'> & PropsRuntime<'settings.section'> & { adapter: NextSettingsAdapter; openPlugins(): void })`
+
+## `src/client/plugin-controls.tsx`
+- `src/client/plugin-controls.tsx:12` — `import { Choice, MARKET_OPTIONS, marketBody, marketTitle } from '../../../dsh-plugin-desktop-beta/src/client/DesktopSettingsSection.tsx'`
+- `src/client/plugin-controls.tsx:16` — `BUILT_IN_MARKET_SOURCES, COMMUNITY_MARKET as COMMUNITY, configureSingleMarketToOfficial, DSH_MARKET as MARKET,`
+- `src/client/plugin-controls.tsx:17` — `importMarketSourcesToOfficial, marketToggleTargets, OFFICIAL_CONFIGURABLE_MARKET_SOURCES, OFFICIAL_MARKET,`
+- `src/client/plugin-controls.tsx:22` — `const REMOTE = '@agents-anywhere/dsh-bridge-next'`
+- `src/client/plugin-controls.tsx:23` — `const COMPUTER_ITEM = 'desktop-next-computer-use'`
+- `src/client/plugin-controls.tsx:39` — `const community = official?.find(row => row.name === COMMUNITY)`
+- `src/client/plugin-controls.tsx:40` — `const market = official?.find(row => row.name === MARKET)`
+- `src/client/plugin-controls.tsx:41` — `const preferredMarket: MarketName = market?.enabled && !community?.enabled ? MARKET : COMMUNITY`
+- `src/client/plugin-controls.tsx:53` — `const community = official.find(row => row.name === COMMUNITY)`
+- `src/client/plugin-controls.tsx:54` — `const market = official.find(row => row.name === MARKET)`
+- `src/client/plugin-controls.tsx:55` — `if (market?.enabled && !community?.enabled) entry.preferredMarket = MARKET`
+- `src/client/plugin-controls.tsx:56` — `else if (community?.enabled && !market?.enabled) entry.preferredMarket = COMMUNITY`
+- `src/client/plugin-controls.tsx:70` — `const community = result.value.find(row => row.name === COMMUNITY)`
+- `src/client/plugin-controls.tsx:71` — `const market = result.value.find(row => row.name === MARKET)`
+- `src/client/plugin-controls.tsx:72` — `if (market?.enabled && !community?.enabled) cache.preferredMarket = MARKET`
+- `src/client/plugin-controls.tsx:73` — `else if (community?.enabled && !market?.enabled) cache.preferredMarket = COMMUNITY`
+- `src/client/plugin-controls.tsx:81` — `inner.slots.inject('plugins.overview', () => {`
+- `src/client/plugin-controls.tsx:82` — `const dispose = inner.slots.register({ name: 'plugins.overview', id: 'desktop-next', order: 0,`
+- `src/client/plugin-controls.tsx:85` — `const hidden = [COMMUNITY, MARKET, REMOTE].map(key => inner.slots.register({ name: 'plugins.bundle.hidden', key }, () => null))`
+- `src/client/plugin-controls.tsx:86` — `const item = inner.slots.register({ name: 'plugins.item', id: COMPUTER_ITEM, label: 'Computer Use',`
+- `src/client/plugin-controls.tsx:89` — `const hiddenItem = inner.slots.register({ name: 'plugins.item.hidden', key: COMPUTER_ITEM }, () => null)`
+- `src/client/plugin-controls.tsx:90` — `const actions = inner.slots.register({ name: 'plugins.detail.actions', id: COMPUTER_ITEM,`
+- `src/client/plugin-controls.tsx:98` — `function PluginControls({ context, t: translate, onOpenBundle, onOpenItem }: PropsLocale<'desktop-next'> & PropsRuntime<'plugins.overview'> & { context: Context }) {`
+- `src/client/plugin-controls.tsx:136` — `const community = bundles.find(row => row.name === COMMUNITY)`
+- `src/client/plugin-controls.tsx:137` — `const market = bundles.find(row => row.name === MARKET)`
+- `src/client/plugin-controls.tsx:138` — `const remoteRow = bundles.find(row => row.name === REMOTE)`
+- `src/client/plugin-controls.tsx:141` — `cache.preferredMarket = COMMUNITY`
+- `src/client/plugin-controls.tsx:142` — `setPreferredMarket(COMMUNITY)`
+- `src/client/plugin-controls.tsx:145` — `cache.preferredMarket = MARKET`
+- `src/client/plugin-controls.tsx:146` — `setPreferredMarket(MARKET)`
+- `src/client/plugin-controls.tsx:162` — `if (enabled && (name === COMMUNITY || name === MARKET)) {`
+- `src/client/plugin-controls.tsx:191` — `{MARKET_OPTIONS.filter(option => option.id !== 'disabled').map(option => {`
+- `src/client/plugin-controls.tsx:196` — `disabled={locked(row)} action={() => { void change([isCommunity ? COMMUNITY : MARKET], true) }} />`
+- `src/client/plugin-controls.tsx:203` — `icon={<PluginArtworkDefault size={36} />} onOpen={() => { onOpenBundle(REMOTE) }}>`
+- `src/client/plugin-controls.tsx:208` — `icon={<PluginArtworkDefault size={36} />} onOpen={() => { onOpenItem(COMPUTER_ITEM) }}>`
+- `src/client/plugin-controls.tsx:251` — `const communityEnabled = bundles.find(row => row.name === COMMUNITY)?.enabled === true`
+- `src/client/plugin-controls.tsx:252` — `const dshMarketEnabled = bundles.find(row => row.name === MARKET)?.enabled === true`
+- `src/client/plugin-controls.tsx:253` — `const officialRow = bundles.find(row => row.name === OFFICIAL_MARKET)`
+- `src/client/plugin-controls.tsx:303` — `const activeMarketDef = BUILT_IN_MARKET_SOURCES.find(item => item.key === resolution.marketKey) ?? BUILT_IN_MARKET_SOURCES[0]!`
+- `src/client/plugin-controls.tsx:310` — `const result = await context.remote.pluginManager.setBundleEnabled(OFFICIAL_MARKET, enabled)`
+- `src/client/plugin-controls.tsx:401` — `{resolution.enabled && activeMarketDef.bundle === COMMUNITY && <Tag>Beta</Tag>}`
+- `src/client/plugin-controls.tsx:425` — `{officialEnabled && <code className="dshNextMarketSourceUrl">{OFFICIAL_MARKET}</code>}`
+- `src/client/plugin-controls.tsx:449` — `{officialEnabled && OFFICIAL_CONFIGURABLE_MARKET_SOURCES.map(marketDef => {`
+- `src/client/plugin-controls.tsx:459` — `<Tag>{marketDef.bundle === COMMUNITY ? t('社区插件市场', 'Community Market') : t('dsh-market', 'dsh-market')}</Tag>`
+- `src/client/plugin-controls.tsx:460` — `{marketDef.bundle === COMMUNITY && <Tag>Beta</Tag>}`
+- `src/client/plugin-controls.tsx:519` — `function ComputerUseItem({ context, t, view }: PropsLocale<'desktop-next'> & PropsRuntime<'plugins.item'> & { context: Context }) {`
+- `src/client/plugin-controls.tsx:525` — `function ComputerUseActions({ context, t, subject }: PropsLocale<'desktop-next'> & PropsRuntime<'plugins.detail.actions'> & { context: Context }) {`
+- `src/client/plugin-controls.tsx:526` — `if (subject.kind !== 'item' || subject.id !== COMPUTER_ITEM) return null`
+- `src/client/plugin-controls.tsx:557` — `const result = await context.remote.pluginManager.setBundleEnabled(REMOTE, enabled)`
+- `src/client/plugin-controls.tsx:631` — `const entries = slots?._core?.entries?.('plugins.tab')`
+
+## `src/desktop-runtime.ts`
+- `src/desktop-runtime.ts:1` — `/** Headless owner of the Host, desktop preferences, Profiles and recovery. */`
+- `src/desktop-runtime.ts:9` — `import { DEFAULT_FEATURES, NextProfiles } from './profiles.ts'`
+- `src/desktop-runtime.ts:12` — `import { NextRecovery } from './recovery.ts'`
+- `src/desktop-runtime.ts:23` — `/** Disposable desktop settings; recovery continues to address the original home. */`
+- `src/desktop-runtime.ts:35` — `onRestart(): void`
+- `src/desktop-runtime.ts:42` — `export class NextDesktopRuntime {`
+- `src/desktop-runtime.ts:43` — `readonly profiles: NextProfiles`
+- `src/desktop-runtime.ts:44` — `readonly recovery: NextRecovery`
+- `src/desktop-runtime.ts:47` — `readonly backend: DesktopBackendController<{ start(): Promise<void>; stop(): Promise<void> }>`
+- `src/desktop-runtime.ts:50` — `safeMode = false`
+- `src/desktop-runtime.ts:51` — `recoveryMode = false`
+- `src/desktop-runtime.ts:63` — `this.profiles = new NextProfiles(options.home)`
+- `src/desktop-runtime.ts:64` — `this.recovery = new NextRecovery(this.profiles)`
+- `src/desktop-runtime.ts:84` — `try { this.selected = this.profiles.active } catch (error) {`
+- `src/desktop-runtime.ts:85` — `if (this.safeMode) this.diagnostics.append(`Original Profile selection is unavailable: ${String(error)}`, 'warn')`
+- `src/desktop-runtime.ts:88` — `if (this.safeMode) this.preferences = { ...SAFE_MODE_PREFERENCES }`
+- `src/desktop-runtime.ts:102` — `start(): Promise<void> {`
+- `src/desktop-runtime.ts:103` — `this.recoveryMode = false`
+- `src/desktop-runtime.ts:105` — `this.startup = this.backend.start(async () => {`
+- `src/desktop-runtime.ts:106` — `if (this.safeMode && !this.safeHome) {`
+- `src/desktop-runtime.ts:107` — `privateDirectory(this.recovery.directory)`
+- `src/desktop-runtime.ts:108` — `this.safeHome = mkdtempSync(join(this.recovery.directory, 'safe-runtime-'))`
+- `src/desktop-runtime.ts:113` — `if (this.safeMode) this.preferences = { ...SAFE_MODE_PREFERENCES }`
+- `src/desktop-runtime.ts:114` — `if (!this.safeMode) this.profiles.ensure(this.selected)`
+- `src/desktop-runtime.ts:121` — `async restart(change: () => void | Promise<void> = () => {}): Promise<void> {`
+- `src/desktop-runtime.ts:122` — `await this.backend.stop()`
+- `src/desktop-runtime.ts:124` — `const wasSafe = this.safeMode`
+- `src/desktop-runtime.ts:126` — `if (!this.safeMode) {`
+- `src/desktop-runtime.ts:130` — `await this.start()`
+- `src/desktop-runtime.ts:134` — `terminalTarget(repair = false): { homeDir: string; profileDir: string; profileName: string; mode: 'normal' | 'safe' | 'recovery' } {`
+- `src/desktop-runtime.ts:136` — `const safe = this.safeMode && !repair`
+- `src/desktop-runtime.ts:139` — `const profileName = safe ? DEFAULT_PROFILE : this.selected`
+- `src/desktop-runtime.ts:140` — `return { homeDir, profileName, profileDir: new NextProfiles(homeDir).directory(profileName),`
+- `src/desktop-runtime.ts:141` — `mode: safe ? 'safe' : repair || this.recoveryMode ? 'recovery' : 'normal' }`
+- `src/desktop-runtime.ts:145` — `if (this.safeMode) throw new Error('Desktop preferences are fixed in Safe Mode')`
+- `src/desktop-runtime.ts:174` — `if (this.backend.state.phase === 'starting' && !this.recoveryMode && !this.safeMode) await this.startup.catch(() => {})`
+- `src/desktop-runtime.ts:179` — `if (!host || !lan || !this.auth || this.safeMode || this.backend.state.phase !== 'ready') {`
+- `src/desktop-runtime.ts:200` — `await this.backend.stop()`
+- `src/desktop-runtime.ts:207` — `state(): Pick<DesktopState, 'selected' | 'profiles' | 'unavailableProfiles' | 'features' | 'preferences' | 'phase' | 'busy' | 'failure' | 'safeMode' | 'home' | 'browserUrl' | 'lan'`
+- `src/desktop-runtime.ts:209` — `let profiles: string[] = []`
+- `src/desktop-runtime.ts:210` — `let checkpoint: DesktopState['checkpoint'] = null`
+- `src/desktop-runtime.ts:212` — `try { profiles = this.profiles.list() } catch (error) { failure ||= maskSecrets(String(error)) }`
+- `src/desktop-runtime.ts:213` — `if (!this.safeMode) try { features = this.profiles.features(this.selected) } catch (error) { failure ||= maskSecrets(String(error)) }`
+- `src/desktop-runtime.ts:214` — `try { const saved = this.recovery.latest(this.selected); if (saved) checkpoint = { created: saved.created } } catch { /* Recovery remains usable without backups. */ }`
+- `src/desktop-runtime.ts:215` — `return { selected: this.selected, profiles, unavailableProfiles: profiles.filter(name => !this.profiles.selectable(name)), features, preferences: { ...this.preferences }, phase: th`
+- `src/desktop-runtime.ts:216` — `busy: this.busy, failure, safeMode: this.safeMode, home: this.options.home,`
+- `src/desktop-runtime.ts:217` — `browserUrl: this.auth && this.preferences.browserAccess && !this.safeMode ? new URL(this.auth.url).origin : null,`
+- `src/desktop-runtime.ts:218` — `lan: this.lan?.snapshot() ?? null, checkpoint, logs: this.diagnostics.snapshot() }`
+- `src/desktop-runtime.ts:222` — `if (!this.auth || this.closing || this.recoveryMode || this.backend.state.phase !== 'ready' || !this.preferences.browserAccess || this.safeMode) return { localUrl: null, lanUrls: [`
+- `src/desktop-runtime.ts:264` — `this.diagnostics.append(`Safe mode temporary directory cleanup failed (${home}): ${String(error)}`, 'warn')`
+- `src/desktop-runtime.ts:270` — `const actualHome = this.safeMode ? this.safeHome! : options.home`
+- `src/desktop-runtime.ts:271` — `const profile = this.safeMode ? DEFAULT_PROFILE : this.selected`
+- `src/desktop-runtime.ts:272` — `const effective = this.safeMode ? { ...SAFE_MODE_PREFERENCES } : this.preferences`
+- `src/desktop-runtime.ts:279` — `const host = new DesktopHostProcess(options.executable, options.root, new NextProfiles(actualHome).directory(profile), undefined,`
+- `src/desktop-runtime.ts:283` — `...(this.safeMode ? { DSH_TELEMETRY_DISABLED: '1' } : {}) },`
+- `src/desktop-runtime.ts:291` — `const started = this.diagnostics.operation('desktop', 'host.start', { profile, safeMode: this.safeMode })`
+- `src/desktop-runtime.ts:293` — `const ready = await Promise.race([host.start(), new Promise<never>((_resolve, reject) => {`
+- `src/desktop-runtime.ts:306` — `if (stopped) { await lan.stop(); started(); return }`
+- `src/desktop-runtime.ts:307` — `// The optional LAN edge must not turn a ready loopback Host into recovery mode.`
+- `src/desktop-runtime.ts:310` — `if (!this.safeMode) {`
+- `src/desktop-runtime.ts:311` — `try { this.recovery.checkpoint(this.selected) } catch (error) { this.diagnostics.append(`Recovery checkpoint: ${String(error)}`, 'warn') }`
+- `src/desktop-runtime.ts:314` — `this.diagnostics.append(`Host ready: ${profile}${this.safeMode ? ' (safe mode)' : ''}`)`
+- `src/desktop-runtime.ts:321` — `try { await lan.stop(); edgeStopped() } catch (error) { edgeStopped(error); throw error }`
+- `src/desktop-runtime.ts:323` — `try { await host.stop(); hostStopped() } catch (error) { hostStopped(error); throw error }`
+
+## `src/asar-archive-policy.ts`
+- `src/asar-archive-policy.ts:6` — `const ARCHIVE_SEGMENT = /(?:^|[\\/])[^\\/]*\.asar(?:\.unpacked)?(?:[\\/]|$)/iu`
+- `src/asar-archive-policy.ts:8` — `/** The archive segment alone; `app.asar.unpacked` is a real directory and does not match. */`
+- `src/asar-archive-policy.ts:9` — `const PACKED_SEGMENT = /(^|[\\/])([^\\/]*\.asar)(?=[\\/]|$)/iu`
+- `src/asar-archive-policy.ts:17` — `* Turn off Electron's transparent `.asar` archive view for this process.`
+- `src/asar-archive-policy.ts:20` — `* ELECTRON_RUN_AS_NODE children so that any path ending in `.asar` reads as a`
+- `src/asar-archive-policy.ts:21` — `* directory. A workspace file named `*.asar` then stats as a directory whose`
+- `src/asar-archive-policy.ts:23` — `* "Cannot mix BigInt and other types"), and a `*.asar` file that is not an`
+- `src/asar-archive-policy.ts:30` — `* packaged Next runs its Host from `app.asar` and keeps the view, as upstream`
+- `src/asar-archive-policy.ts:36` — `export function disableAsarArchiveView(moduleUrl: string, proc: AsarArchiveProcess = process): boolean {`
+- `src/asar-archive-policy.ts:45` — `* @returns true inside `app.asar`; false for the physical `app.asar.unpacked` sibling and ordinary directories.`
+- `src/asar-archive-policy.ts:47` — `export function insideArchive(path: string): boolean {`
+- `src/asar-archive-policy.ts:53` — `* Only Electron's own `fs` sees files inside `app.asar`; a child process, a shell PATH`
+- `src/asar-archive-policy.ts:54` — `* entry and `nativeImage` need the `app.asar.unpacked` copy that `asarUnpack` produced.`
+- `src/asar-archive-policy.ts:55` — `* @param path - Absolute path that may run through `app.asar`.`
+- `src/asar-archive-policy.ts:56` — `* @returns The same path under `app.asar.unpacked`, or the path unchanged outside an archive.`
+- `src/asar-archive-policy.ts:58` — `export function unpackedPath(path: string): string {`

@@ -12,6 +12,7 @@
 | R-06 B kernel 多版本管理 | B src/lib/updater.ts、src/lib/enginePatch.ts、TitleBar.tsx、StatusBar.tsx；已验证版本、回滚、patch overlay 与错误展示 | Atlas 外部 Engine/Provider 的真实版本选择，借 pin / rollback 的机制，不把 npm dsh 包管理强行植入 Hermes engine | B 有 Windows hardcoded Path 和“强杀任意端口占用者”的问题；这部分不借 |
 | R-07 A 原生 UI slots 与状态反馈 | A src/client/index.ts ctx.slots.inject、src/desktop-contract.ts DesktopState、dsh-community-market/src/client/MarketSettingsTab.tsx | 让 Atlas Plugin/Skills 市场从真实注册/启用/失败状态派生展示，避免“UI 有开关=已接线” | A 的官方 Cordis Slot API、AA remote bridge 仍为第三方依赖，不能未经协议/许可证审查复制 |
 | R-08 官方 Trajectory durable projections | O packages/client/ui-trajectory/src/client/TrajectoryView.tsx + trajectory-event-projection.ts | Atlas 已有 runtime events 和 800 条缓存上限；补历史分页/子会话独立 time & usage 投影，而不是只显示父 run 内存尾部 | 不因“工具事件展示”存在就认定支持全量可追溯轨迹；要后端持久日志配合 |
+| R-09 官方 Agent Inbox durable next-turn/next-step 与 queue mutation contract | A ZIP 实际嵌入 `@deepseek-ai/dsh-agent-loop@0.2.1-rc.2` tarball：`lib/index.js:70-204,806-813`；controller `@deepseek-ai/dsh-api-session-controller@0.2.1-rc.2` `lib/index.js:1004-1054`，支持冷恢复后 edit/remove/steer；UI projection/client request-ID dedupe 在 `dsh-client-ui-chat/lib/client.js:2757-2847` | Atlas `useAtlasStore.ts` 已有 follow-up 排队、取消、运行 steer、失败回退；若产品要求 renderer/backend 重启后仍保留排队意图，可将 durable queue item + session-event mutation/claim 当作设计参考 | Atlas 当前队列是 UI store state，应该先确认是否要跨进程恢复；不要直接复制 DSH event types 或其 session engine。DSH UI button-to-RPC 具体映射本次也未证实 |
 
 ## 具体优先级与停止条件
 
