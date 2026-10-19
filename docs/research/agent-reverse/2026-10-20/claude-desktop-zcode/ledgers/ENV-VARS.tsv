@@ -1,0 +1,1063 @@
+var	family	file_count	files
+ANTHROPIC_API_KEY	ANTHROPIC	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DyYrY1NN.js | .vite/build/index.chunk-ilWIs3r6.js
+ANTHROPIC_AUTHORED_MARKETPLACE_NAMES	ANTHROPIC	1	.vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_AUTH_TOKEN	ANTHROPIC	8	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-ClUXMtQ7.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_AWS_API_KEY	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_AWS_BASE_URL	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_AWS_WORKSPACE_ID	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_BASE_URL	ANTHROPIC	6	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DyYrY1NN.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_BEDROCK_BASE_URL	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_BEDROCK_MANTLE_BASE_URL	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_BEDROCK_REGION_PREFIX	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_BEDROCK_SERVICE_TIER	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_BETAS	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_CONFIG_DIR	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_CUSTOM_HEADERS	ANTHROPIC	8	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_CUSTOM_MODEL_OPTION	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_CUSTOM_MODEL_OPTION_NAME	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_CUSTOM_MODEL_OPTION_SUPPORTED_CAPABILITIES	ANTHROPIC	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_DEFAULT_	ANTHROPIC	1	.vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_DEFAULT_FABLE_MODEL	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_DEFAULT_FABLE_MODEL_DESCRIPTION	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_DEFAULT_FABLE_MODEL_NAME	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_DEFAULT_FABLE_MODEL_SUPPORTED_CAPABILITIES	ANTHROPIC	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_DEFAULT_HAIKU_MODEL	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES	ANTHROPIC	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_DEFAULT_MODEL	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_DEFAULT_MYTHOS_MODEL	ANTHROPIC	1	.vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_DEFAULT_OPUS_MODEL	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_DEFAULT_OPUS_MODEL_NAME	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES	ANTHROPIC	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_DEFAULT_SONNET_MODEL	ANTHROPIC	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_DEFAULT_SONNET_MODEL_NAME	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES	ANTHROPIC	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_ENVIRONMENT_ID	ANTHROPIC	1	.vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_ENVIRONMENT_KEY	ANTHROPIC	1	.vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_FEDERATION_RULE_ID	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_FOUNDRY_API_KEY	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_FOUNDRY_AUTH_TOKEN	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_FOUNDRY_BASE_URL	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_FOUNDRY_RESOURCE	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_GOOGLE_CLOUD_BASE_URL	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_GOOGLE_CLOUD_LOCATION	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_GOOGLE_CLOUD_PROJECT	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_GOOGLE_CLOUD_WORKSPACE_ID	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_IDENTITY_TOKEN	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_IDENTITY_TOKEN_FILE	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_LOG	ANTHROPIC	1	.vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_MODEL	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_ORGANIZATION_ID	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_PROFILE	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_SCOPE	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_SERVICE_ACCOUNT_ID	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_SESSION_ID	ANTHROPIC	1	.vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_SMALL_FAST_MODEL	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_UNIX_SOCKET	ANTHROPIC	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+ANTHROPIC_VERTEX_BASE_URL	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_VERTEX_PROJECT_ID	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+ANTHROPIC_WEBHOOK_SIGNING_KEY	ANTHROPIC	1	.vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_WORKSPACE_ID	ANTHROPIC	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_WORK_ID	ANTHROPIC	1	.vite/build/index.chunk-DyYrY1NN.js
+ANTHROPIC_WORK_SECRET	ANTHROPIC	1	.vite/build/index.chunk-DyYrY1NN.js
+CLAUDE_AFK_COUNTDOWN_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AFK_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AFTER_LAST_COMPACT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AGENTS_SELECT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AGENT_SDK_CLIENT_APP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AGENT_SDK_DISABLE_MCP_MANIFESTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AGENT_SDK_MCP_NO_PREFIX	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_AGENT_SDK_VERSION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AI_AUTHORIZE_URL	CLAUDE	1	.vite/build/index.chunk-DNyequwM.js
+CLAUDE_AI_IMPORT_DEFAULTS	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_AI_ORIGIN	CLAUDE	1	.vite/build/index.chunk-DNyequwM.js
+CLAUDE_AI_URL	CLAUDE	2	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+CLAUDE_AI_WEB	CLAUDE	2	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+CLAUDE_ARTIFACT_HOST_GRANT	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AUTOCOMPACT_PCT_OVERRIDE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AUTO_BACKGROUND_TASKS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AX_ANNOUNCEMENT_HOLD_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AX_PREPARK_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AX_REWRITE_HELD_ANNOUNCEMENT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AX_SCREEN_READER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_AX_STARTUP_QUIET_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_BG_AUTH_SNAPSHOT_PATH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_AUTO_MEMORY_OFF	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_BACKEND	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_CARRIED_PROMPTS_SHA256	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_CLAIM_AUTH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_DISPATCHER_RATE_LIMIT_TIER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_DISPATCHER_SUBSCRIPTION_TYPE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_ISOLATION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_MEMORY_TOGGLED_OFF	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_POST_CLEAR_RESPAWN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_PTY_AUTH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_RENDEZVOUS_SOCK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_RV_AUTH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_SESSION_PERMISSION_RULES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_SOCKET_TOKENS_PATH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_SOURCE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_STARTUP_WEDGE_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_TCC_DISCLAIMED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BG_WORKSPACE_TRUSTED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BRIDGE_BASE_URL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BRIDGE_OAUTH_TOKEN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BRIDGE_REATTACH_GROUPING	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BRIDGE_REATTACH_NO_BACKFILL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BRIDGE_REATTACH_OUTBOUND_ONLY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BRIDGE_REATTACH_OWNER_ACCT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BRIDGE_REATTACH_OWNER_ORG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BRIDGE_REATTACH_SEQ	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BRIDGE_REATTACH_SESSION	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-5wlbAX53.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BRIDGE_SESSION_INGRESS_URL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_BROWSER_BRIDGE	CLAUDE	2	.vite/build/index.chunk-CxUAVDxD.js | .vite/build/index.chunk-VeAh16Bs.js
+CLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CDP_AUTH	CLAUDE	2	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+CLAUDE_CHROME_CLASSIFIER_FLOOR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CHROME_PAIRED_DEVICE_ID	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CHROME_PERMISSION_MODE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CHROME_TAB_GROUP_KEY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CLIENT_PRESENCE_FILE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_3P_PROBE_WROTE_HAIKU_DEFAULT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_3P_PROBE_WROTE_OPUS_DEFAULT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_3P_PROBE_WROTE_SONNET_DEFAULT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_3P_SEEDED_OPUS_DEFAULT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_3P_SEEDED_SONNET_DEFAULT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ACCESSIBILITY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ACCOUNT_TAGGED_ID	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ACCOUNT_UUID	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_ACTION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ACT_DONT_REDERIVE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ADDITIONAL_PROTECTION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ADOPT_UNDERIVABLE_PARKED_PERMISSION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_AGENT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_AGENT_PROGRESS_SUMMARIES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_AGENT_PROXY_GH_SHIM	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_AGENT_PROXY_GIT_CONFIG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_AGENT_PROXY_GIT_HOSTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ALT_SCREEN_FULL_REPAINT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ALWAYS_ENABLE_EFFORT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_AMBER_ASTROLABE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_API_BASE_URL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_API_KEY_HELPER_TTL_MS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_APPEND_PROMPT_HEAD	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACTS_API_BASE_URL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACTS_API_TOKEN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_ASSETS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_ASSET_BASE_URL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_AUTO_OPEN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_COMMENTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_COMMENTS_AUTOREACT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_COMMENT_FAST_ACK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_COMMENT_FAST_ACK_FIXED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_COMMENT_RESPONDER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_DB	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_DB_STR_REPLACE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_DELETE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_FRESH_READ	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_HOT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_LIVE_BASE_URL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_MULTI_FILE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_OPENING_PREFETCH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_OPEN_ACTION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_PATH_PIN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_PIN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_PRESENCE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_PREVIEW	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_PREVIEW_EMULATOR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_PUBLISH_EDITS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_QUICKSTART	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_REPL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_ROOM	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_SHARE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_START_KIT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_SYNC_BASE_URL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_TOOLSET	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_TYPES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_TYPE_CATALOG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_TYPE_CLOUD_CREATE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_VERIFY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_VERSIONS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ARTIFACT_VIEWER_BASE_URL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ATTRIBUTION_ANNOUNCEMENT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ATTRIBUTION_HEADER	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_ATTRIBUTION_STATUS_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_AUTH_FAIL_EXIT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_AUTOUPDATER_DISABLED_BY_HOST	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_AUTO_COMPACT_WINDOW	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_AUTO_CONNECT_IDE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_AUTO_MODE_EXTERNAL_PERMISSIONS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_AUTO_MODE_MODEL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_AUTO_MODE_SERVER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_AUTO_MODE_TIER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_AWS_CHAIN_RESOLVE_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BASALT_COVE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BASE_REF	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BASE_REFS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BASH_EDIT_DIFF	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BASH_OUTPUT_AUDIENCE_NOTE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BASH_SANDBOX_SHOW_INDICATOR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BENCH_LIVE_COUNTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BG_CLASSIFIER_MODEL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BG_TASKS_REPORT_RUNNING	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BISON_CAIRN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BREEZY_HORIZON	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BRIDGE_CHILD_ARTIFACT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BRIDGE_CHILD_AUTO_DEFAULT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BRIDGE_CHILD_MACHINE_SETTINGS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BRIDGE_MCP_CARRIER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BRIDGE_OWNER_ACCOUNT_UUID	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BRIDGE_OWNER_ORG_UUID	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BRIDGE_PROMPT_SHA256	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BRIDGE_SESSION_ID	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BRIDGE_SOURCE_DIR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BRIEF	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BRIEF_UPLOAD	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BUBBLEWRAP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_BYOC_ENABLE_DATADOG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CALM_MOCHI	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CCR_EARLY_HYDRATE_PREFETCH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CCR_EARLY_PLUGINS_SYNC	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CCR_EARLY_REMOTE_CONNECT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CCR_EARLY_SKILLS_SYNC	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CCR_FOLD_FIRST_TURN_RESCAN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CCR_SKIP_FRESH_MIGRATIONS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CCR_SURFACE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CCR_WORKER_SOCKET	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CERT_STORE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CHILD_SESSION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CHROME_MCP_ORG_DENIED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CLASSIFIER_SUMMARY	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CLIENT_CERT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CLIENT_DATA_URL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CLIENT_KEY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CLIENT_KEY_PASSPHRASE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_COLD_COMPACT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CONFIG_PROBE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CONFIG_WATCH_EVENTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CONTAINER_ID	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_COORDINATOR_FORCE_WORKER_INHERIT_MODEL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_COORDINATOR_SKILL_GUIDANCE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_COWORK_FRAME_ARTIFACTS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_COZY_TEAPOT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CURRIED_TRINKET	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_CUSTOM_OAUTH_URL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DAEMON_COLD_START	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DATADOG_FLUSH_INTERVAL_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DD_ERROR_TRACKING_FLUSH_INTERVAL_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DEBUG_LOGS_DIR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DEBUG_LOG_LEVEL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DEBUG_REPAINTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DECSTBM	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DESIGN_OAUTH_CLIENT_ID	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DESKTOP_APP_VERSION	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_DESKTOP_SKILL_SWITCHES	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_DEV_RAW_CHANGELOG_URL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DIAGNOSTICS_FILE	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_DISABLE_1M_CONTEXT	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_ADMIN_ENV_UNION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_ADVISOR_TOOL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_AGENTS_FLEET	CLAUDE	1	.vite/build/index.chunk-BvMaI6NQ.js
+CLAUDE_CODE_DISABLE_AGENT_VIEW	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_ARTIFACT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_ATTACHMENTS	CLAUDE	6	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BbK5vSxh.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_DISABLE_ATTRIBUTION_BASELINE_REUSE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_ATTRIBUTION_CROSS_REPO	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_AUTH_REFRESH_LOCK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_AUTO_MEMORY	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_AWAITING_USER_IDLE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_BACKGROUND_TASKS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_BEDROCK_CONTENT_TYPE_DEFAULT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_BEDROCK_CONTENT_TYPE_GUARD	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_BG_EXIT_HANDOFF	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_BG_STABLE_PATH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_BUNDLED_SKILLS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_DISABLE_CFC_PROMPT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_CLAUDE_API_SKILL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_CLAUDE_CODE_SKILL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_CLAUDE_MDS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_CRON	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_DISABLE_DANGEROUS_RM_TIMEOUT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_FAST_MODE	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-ClUXMtQ7.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_FILE_MENTIONS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_HOOK_FORWARDING	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_INLINE_SHELL_RM_PROMPT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_LAUNCH_COMPOSER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_LEGACY_MODEL_REMAP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_MEMORY_BULK_INFLATE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_MEMORY_MASS_DELETE_HOLD	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_MEMORY_PERIODIC_RESYNC	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_MEMORY_RO_UNSAVED_NOTICE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_MEMORY_STREAM_LIST	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_MODEL_ACCESS_FALLBACK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_MOUSE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_MOUSE_CLICKS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_MTLS_RELOAD_ON_STALE_CONNECTION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_NESTED_CHAIN_IDLE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_NESTED_USER_REPAIR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC	CLAUDE	6	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-ClUXMtQ7.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_NOTIFICATION_PRESENCE_CHECK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_DISABLE_ORG_MEMORY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_PERMISSION_PROMPT_NOTIFY_HOOKS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_PLUGIN_FORWARDING	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_POLICY_SKILLS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_POWERSHELL_CMD_RM_DENY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_PRECOMPACT_SKIP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_PROACTIVITY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_REFUSAL_RETRY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_STARTUP_WORK_GATE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_STRUCTURED_OUTPUTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_SUBSTITUTION_RM_PROMPT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_TERMINAL_TITLE	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_DISABLE_THINKING	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_TURN_HANDOFF	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_VIRTUAL_SCROLL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_VITALS_EMITTER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_WEB_FETCH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_WINDOWS_SHELL_LAUNCHER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_WORKFLOWS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DISABLE_WORKING_SYNC	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DONT_INHERIT_ENV	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_DOWNLOAD_DEADLINE_MS_FOR_TESTING	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_EAGER_FLUSH	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_EDITOR_CODELIVERY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_EFFORT_LEVEL	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-DvQd8RR7.js
+CLAUDE_CODE_ELEGANT_MEADOW	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_EMIT_STARTUP_TIMING	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_EMIT_TOOL_USE_SUMMARIES	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_ENABLE_APPEND_SUBAGENT_PROMPT	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-CS97pYxF.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_ASK_USER_QUESTION_TOOL	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_ENABLE_AUTO_MODE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_ENABLE_AWAY_SUMMARY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_BACKGROUND_PLUGIN_REFRESH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_BG_SHELL_PRESSURE_REAP	CLAUDE	1	.vite/build/index.chunk-Bn6onBlX.js
+CLAUDE_CODE_ENABLE_CFC	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_DESIGN_SYNC	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_EXPERIMENTAL_ADVISOR_TOOL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_FEEDBACK_SURVEY_FOR_OTEL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_FUNCTION_HOOKS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_LAUNCH_COMPOSER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_MENU_KIND_LANES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_PROXY_AUTH_HELPER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_REFRESH_MCP_TOOLS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_REMOTE_RECAP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_SHARE_BUNDLE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_TASKS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_TELEMETRY	CLAUDE	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+CLAUDE_CODE_ENABLE_TODO_TOOLS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_TOKEN_USAGE_ATTACHMENT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENABLE_XAA	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENHANCED_TELEMETRY_BETA	CLAUDE	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+CLAUDE_CODE_ENTRYPOINT	CLAUDE	6	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BbK5vSxh.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_ENVIRONMENT_KIND	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ENVIRONMENT_RUNNER_VERSION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_EVAL_CONFINED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_EVAL_INTERVIEW_SESSION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_EXIT_AFTER_FIRST_RENDER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_EXIT_AFTER_STOP_DELAY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_EXTRA_BODY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_EXTRA_METADATA	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FEDERATION_CACHE_DIR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FLAG_FETCH_WAIT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FLEETVIEW_SIMPLE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FOOTER_INDICATOR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FORCE_BRIDGE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FORCE_EVALUATE_MEMORY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FORCE_FULLSCREEN_UPSELL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FORCE_MEMORY_SURVEY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FORCE_MID_CONVERSATION_SYSTEM	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FORCE_SESSION_PERSISTENCE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FORCE_STRIKETHROUGH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FORCE_SYNC_OUTPUT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FORCE_TERMINAL_IMAGES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FORCE_TIP_ID	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FORCE_WINDOWS_CREDMAN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FORK_SUBAGENT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FORWARD_SUBAGENT_TEXT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FORWARD_USER_INTENT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FRAME_TIMING_LOG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_FRAME_TIMING_SAMPLE_EVERY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GATEWAY_HINT_HEADERS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GATEWAY_MODEL_DISCOVERY_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GATEWAY_TOKEN_FILE_DESCRIPTOR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GB_BASE_URL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GB_DISK_CACHE_WHEN_TELEMETRY_OFF	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GB_REFRESH_INTERVAL_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GENTLE_PARASOL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GIT_BASH_PATH	CLAUDE	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-CnkTpwso.js | .vite/build/index.chunk-DA534R-L.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-I9bAj080.js
+CLAUDE_CODE_GLOB_HIDDEN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GLOB_NO_IGNORE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GLOB_TIMEOUT_SECONDS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GOAL_CHECKIN_MINUTES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GORSE_PLOVER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GROWTHBOOK_KICK_FROM_INIT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GROWTHBOOK_KICK_ON_WARM_CACHE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GZIP_CCR_REQUEST_BODIES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GZIP_DATADOG_LOGS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GZIP_REQUEST_BODIES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GZIP_REQUEST_BODY_BLOCKS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_GZIP_REQUEST_BODY_LEVEL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HARBOR_KITE	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HARBOR_KITE_CLOUD	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HARBOR_KITE_PACING_OFF	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HARMONIC_RIDDLE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HFI_BEARER_TOKEN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HIDE_CWD	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HIDE_SETTINGS_HINT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HOLD_REPORT_PARK_AT_INIT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HOME_SEED_HOLD_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HOME_SEED_VERDICT_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HOOKS_SAME_THREAD	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HOSTED_DESKTOP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HOST_AUTH_ENV_VAR	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-ClUXMtQ7.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_HOST_AUTH_REFRESH_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HOST_CREDS_FILE	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_HOST_GATEWAY_LINEAGE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HOST_PLATFORM	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_HOST_PROMPT_SUPERSEDES_RECORD	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HOST_SCHEDULED_RUN	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-B2Vbqvd-.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HOST_SESSION_ID	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-D5gwoNxg.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HOST_SKILL_CATALOG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HOST_WORKTREE	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HOST_WORKTREE_FENCE	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HOVER_REST	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_HUMBLE_HAMMOCK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_IDE_HOST_OVERRIDE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_IDE_SKIP_VALID_CHECK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_IDLE_THRESHOLD_MINUTES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_IDLE_TOKEN_THRESHOLD	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_INCLUDE_PARTIAL_MESSAGES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_INLINE_TOOLS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_IS_COWORK	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_JIT_POLICY_AFTER_STARTUP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_JUNIPER_SUNDIAL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_KB_COHESION_FIXES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_LANTERN_PRISM	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_LARCH_CISTERN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_LAZY_ENV_GETTERS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_LEGACY_BUNDLE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_LOCAL_BINARY	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_LOOP_KEEPALIVE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_LOOP_PERSISTENT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MANAGED_CONFIG_PREFETCH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MANAGED_SETTINGS_PATH	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-CIspABeP.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MAX_CONTEXT_TOKENS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MAX_EFFORT_REMINDER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MAX_OUTPUT_TOKENS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_MAX_RETRIES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION	CLAUDE	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MAX_TURNS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MAX_WEB_SEARCHES_PER_SESSION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MCP_ALLOWLIST_ENV	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MCP_ALWAYS_LOAD_JOIN_BEFORE_INPUT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MCP_APPS_HOST	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MCP_CONNECTOR_PREWAIT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MCP_MEMORY_CGROUP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MCP_PREWAIT_SERVERS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MCP_PREWAIT_SERVERS_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MCP_STARTUP_WAIT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MEMORY_API_BASE_URL	CLAUDE	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MEMORY_API_TOKEN	CLAUDE	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MEMORY_PUSH_DELETE_MODE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MEMORY_SUBAGENT_APPEND	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MOCK_REMOTE_SETTINGS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MOCK_TRIAL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MODEL_CAPABILITIES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_MODEL_CATALOG	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_MODEL_CATALOG_URL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_NANKEEN_KESTREL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_NATIVE_CURSOR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_NEW_INIT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_NONBLOCKING_STDOUT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_NONSTREAMING_TIMEOUT_RETRIES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_NO_FLICKER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_NO_MODEL_FALLBACK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_OAUTH_401_WAIT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_OAUTH_CLIENT_ID	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_OAUTH_CONFIGS	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_OAUTH_REFRESH_TOKEN	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_OAUTH_SCOPES	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_OAUTH_TOKEN	CLAUDE	10	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BFxRKxih.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-D5gwoNxg.js
+CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_ORGANIZATION_UUID	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_OTEL_CONTENT_MAX_LENGTH	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_OTEL_DIAG_STDERR	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_OTEL_FLUSH_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_OTEL_HEADERS_HELPER_DEBOUNCE_MS	CLAUDE	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+CLAUDE_CODE_OTEL_SHUTDOWN_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_OVERLOADED_RETRY_BASE_DELAY_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_OVERLOADED_RETRY_MAX_DELAY_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_OVERRIDE_DATE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PARKED_PERMISSION_WAIT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PARKED_RUN_BEFORE_CLEAR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PARKED_STOP_RETIRES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PARSED_WILLOW	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PERFETTO_TRACE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PERFETTO_WRITE_INTERVAL_S	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PERFORCE_MODE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PEWTER_OWL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PEWTER_OWL_TOOL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PLAN_MODE_REQUIRED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PLAN_V2_AGENT_COUNT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PLAN_V2_EXPLORE_AGENT_COUNT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PLUGIN_ATTRIBUTION	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_PLUGIN_BINARY_ASSETS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PLUGIN_CACHE_DIR	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PLUGIN_DIRS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PLUGIN_DIR_WATCH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PLUGIN_PREFER_HTTPS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PLUGIN_SEED_DIR	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PLUGIN_USE_ZIP_CACHE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_POLISHED_DEWDROP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_POLL_EVENTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_POLL_EVENT_DECLARATIONS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_POST_TURN_MEMORY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_POST_TURN_MEMORY_CONFIG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_POST_TURN_MEMORY_SYNC	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_POWERSHELL_RESPECT_EXECUTION_POLICY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_POWERUP_ONBOARDING	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PROACTIVE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PROCESS_WRAPPER	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-CcveFAuE.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_PROFILE_STARTUP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PROJECTS_SESSION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PROJECT_DIR_NAME	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PROMPT_CACHE_TTL	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PROPAGATE_TRACEPARENT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-ClUXMtQ7.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_PROXY_AUTH_HELPER_TTL_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PROXY_RESOLVES_HOSTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_PWSH_PARSE_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_QUESTION_EXTENDED	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_QUESTION_OPTIONAL_DESCRIPTIONS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_QUESTION_PREVIEW_FORMAT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RATE_LIMIT_TIER	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-D8RdLxk8.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_REFUSAL_FALLBACK_CATCH_ALL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RELAUNCH_HOME_TRUST	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RELAUNCH_PROACTIVITY_BASELINE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RELAUNCH_PROACTIVITY_DECIDED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RELAUNCH_PROACTIVITY_EVER_ON	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RELAUNCH_PROACTIVITY_LEVEL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RELAUNCH_TERMINAL_SIZE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE_HERMETIC_MODE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE_MCP_CONFIG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE_MEMORY_DIR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE_RAW_EVENTS_FILE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE_SDK_URL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE_SEND_KEEPALIVES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE_SESSION_ID	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE_SESSION_ORIGIN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE_SETTINGS_PATH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE_SETTINGS_POLL_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE_TOOLS_FORWARD	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE_TOOLS_HOST_ALLOWS_UNATTENDED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOTE_TOOLS_PIN_STORED_LOGIN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REMOVE_PROMPT_STRINGS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REPL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REPORT_FINDINGS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_REPO_CHECKOUTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RESTRICTED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RESTRICT_PERSONAL_CONFIG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RESULT_NONCE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RESUME_FROM_SESSION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RESUME_INTERRUPTED_TURN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RESUME_PROMPT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RESUME_REASON	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RESUME_SESSIONSTART_HOOKS_WAIT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RESUME_SOURCE_ALIVE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RESUME_THRESHOLD_MINUTES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RESUME_TOKEN_THRESHOLD	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RESUME_TOLERATES_CONTEXT_APPENDS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RESUME_TOLERATES_CONTEXT_SEEDS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RETRY_WATCHDOG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RIPPLING_TULIP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_RUSTLING_PIXEL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SAFE_MODE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SANDBOXED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SANDBOX_LEAVE_DENIES_TO_SRT_WIN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SANDBOX_LEAVE_PARENT_FOLDERS_ALONE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SCRIPT_CAPS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SCROLL_SPEED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BFxRKxih.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_SDK_READS_SESSION_STATE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SEND_FEEDBACK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SESSION_ACCESS_TOKEN	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-D5gwoNxg.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SESSION_ATTENDED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SESSION_ID	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BBUs8uvY.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SESSION_KIND	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SESSION_LOG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SESSION_NAME	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-D5gwoNxg.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SESSION_ORIGIN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SESSION_START_ANNOUNCEMENTS_BEFORE_PROMPT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SETTLE_TOUCHED_FILES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SHELL	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/shell-path-worker/shellPathWorker.js
+CLAUDE_CODE_SHELL_PREFIX	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/shell-path-worker/shellPathWorker.js
+CLAUDE_CODE_SILENT_TURN_REMINDER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SILENT_TURN_REMINDER_SECONDS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SILENT_TURN_REMINDER_TEXT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SILENT_TURN_REMINDER_TURNS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SIMPLE	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SIMULATE_PROXY_USAGE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SKILL_ATTRIBUTION	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_SKILL_PROPOSALS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SKIP_ANTHROPIC_AWS_AUTH	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_SKIP_ANTHROPIC_GOOGLE_CLOUD_AUTH	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_SKIP_AWS_CRED_CACHE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SKIP_BEDROCK_AUTH	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_SKIP_FAST_MODE_NETWORK_ERRORS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SKIP_FOUNDRY_AUTH	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_SKIP_HFI_VERSION_CHECK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SKIP_MANTLE_AUTH	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_SKIP_MODEL_ACCESS_MEMORY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SKIP_PLUGIN_MCP_SERVERS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SKIP_PLUGIN_MCP_SERVERS_EXCEPT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SKIP_PRECOMPACT_LOAD	CLAUDE	1	.vite/build/index.chunk-BvMaI6NQ.js
+CLAUDE_CODE_SKIP_PROJECT_BACKFILL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SKIP_PROMPT_HISTORY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SKIP_REPO_UPLOAD	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SKIP_VERTEX_AUTH	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_SLEEP_COMPACT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SLEEP_COMPACT_AFTER_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SLOW_OPERATION_THRESHOLD_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SNAPPY_PELICAN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SPAWN_TIMESTAMP_MS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SQUISHY_NEWT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SSE_PORT	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_STALL_TIMEOUT_MS_FOR_TESTING	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_STARTUP_FAILURE_RESULTS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_STELLAR_DRIFT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_STOP_HOOK_BLOCK_CAP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_STREAMED_BUMBLEBEE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_STREAMED_BUMBLEBEE_TEXT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_STRICT_INLINE_SHELL_RM_PROMPT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SUBAGENT_CACHE_EVICT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SUBAGENT_CONFIG_WARNING	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SUBAGENT_MODEL	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_SUBAGENT_MODEL_FORCE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SUBAGENT_PROMPT_SNAPSHOT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SUBPROCESS_ENV_SCRUB	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_SUBSCRIPTION_TYPE	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-D8RdLxk8.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_SUPERVISED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SUPPRESS_SESSION_ATTRIBUTION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SYNC_PLUGINS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SYNC_PLUGINS_BUFFERED_DOWNLOAD	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SYNC_PLUGINS_DOWNLOAD_STALL_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SYNC_PLUGINS_INSTALL_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SYNC_PLUGINS_MCP_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SYNC_PLUGIN_INSTALL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SYNC_PLUGIN_INSTALL_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SYNC_REUSE_WITHIN_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SYNC_SESSION_REFS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SYNC_SKILLS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SYNC_SKILLS_INSTALL_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SYNC_SKILLS_WAIT_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SYNTAX_HIGHLIGHT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_SYSTEM_PROMPT_GB_FEATURE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TAGS	CLAUDE	9	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BbK5vSxh.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-D8RdLxk8.js
+CLAUDE_CODE_TAG_ISMETA_MESSAGES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TASK_LIST_ID	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TEAM_TEARDOWN_PARK_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TEE_SDK_STDOUT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TERMINAL_MCP_TOOLS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TERMINAL_RECORDING	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TEST_ALLOW_REAL_NETWORK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TEST_FIXTURES_ROOT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TEST_FORCE_DENY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TEST_NO_GIT_BASH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TEST_NO_PWSH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_THINKING_DISPLAY_UPDATES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_THISTLE_GREBE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_THRIFTY_SONIC	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TMPDIR	CLAUDE	8	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-CPEA6dKA.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TMUX_PREFIX	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TMUX_PREFIX_CONFLICTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TMUX_SESSION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TMUX_TRUECOLOR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TOASTY_THIMBLE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TODO_REMINDER_MODE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TOOL_MEMORY_CGROUP_EXCLUDE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TOOL_MEMORY_LIMIT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TOTAL_TOKENS_REMINDER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TOTAL_TOKENS_REMINDER_AFTER_USER_TURN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TOTAL_TOKENS_REMINDER_BUDGET	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TRANSCRIPT_LOCAL_GC	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TRANSCRIPT_SLIM_TOOL_RESULTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TRIGGER_ID	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TUI_JUST_SWITCHED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TUI_TRIAL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TURN_UPDATES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_TWO_STAGE_CLASSIFIER	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ULTRAREVIEW_PREFLIGHT_FIXTURE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_ULTRAREVIEW_QUOTA_FIXTURE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_USER_DIALOG_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_USER_EMAIL	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_USE_ANTHROPIC_AWS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_USE_BEDROCK	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+CLAUDE_CODE_USE_COWORK_PLUGINS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_USE_FOUNDRY	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+CLAUDE_CODE_USE_GATEWAY	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_CODE_USE_MANTLE	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+CLAUDE_CODE_USE_NATIVE_FILE_SEARCH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_USE_POWERSHELL_TOOL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_USE_VERTEX	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+CLAUDE_CODE_VOICE_FORWARD_INTERIMS_TYPED	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WEBFETCH_CACHE_TTL_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WEBFETCH_DEADLINE_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WEBFETCH_USE_CCR_PROXY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WEBSEARCH_CITATIONS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WEBSEARCH_USE_CCR_PROXY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WEBSOCKET_AUTH_FILE_DESCRIPTOR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WEB_FETCH_AGENT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WEB_SEARCH_FAST_ARG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WEB_SEARCH_REFILLS_PER_HOUR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WHIMSICAL_ELEPHANT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WILLOW_TERN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WISE_COMET	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WORKER_CHECKIN_SCHEDULE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WORKER_EPOCH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WORKFLOWS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WORKFLOW_PREFIX_STAGGER_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WORKFLOW_SIZE_WARNING_AGENTS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WORKFLOW_SIZE_WARNING_TOKENS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CODE_WORKSPACE_HOST_PATHS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CONFIG_DIR	CLAUDE	9	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-CPEA6dKA.js
+CLAUDE_COWORK_MEMORY_EXTRA_GUIDELINES	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_COWORK_MEMORY_GUIDELINES	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_COWORK_MEMORY_INDEX_CONTENT	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_COWORK_MEMORY_PATH_OVERRIDE	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_CUSTOM3P_REFRESH_FLOOR_MS	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_DEBUG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_DESKTOP_ALLOW_WSL1	CLAUDE	1	.vite/build/index.chunk-C1l855wQ.js
+CLAUDE_DESKTOP_BACKGROUND_LAUNCH	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_DESKTOP_GITHUB_MCP_BINARY	CLAUDE	1	.vite/build/index.chunk-CQr0Ee4m.js
+CLAUDE_DESKTOP_LOCAL_FRAME_SHELL	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_DESKTOP_RESOLVING_ENVIRONMENT	CLAUDE	1	.vite/build/shell-path-worker/shellPathWorker.js
+CLAUDE_DESKTOP_SIBLING_IMPORT_ORG	CLAUDE	1	.vite/build/index.chunk-BPjIr-mn.js
+CLAUDE_DESKTOP_SSH_ASKPASS_HELPER	CLAUDE	1	.vite/build/index.chunk-BWl4h9Ko.js
+CLAUDE_DESKTOP_SSH_CHANNEL_MODE	CLAUDE	1	.vite/build/index.chunk-DINXX5S-.js
+CLAUDE_DESKTOP_SSH_CONNECT_FASTPATH	CLAUDE	1	.vite/build/index.chunk-DINXX5S-.js
+CLAUDE_DESKTOP_SSH_E2E_MANAGED_SETTINGS_DIR	CLAUDE	1	.vite/build/index.chunk-DINXX5S-.js
+CLAUDE_DESKTOP_SSH_LEAN_RECONNECT	CLAUDE	1	.vite/build/index.chunk-DINXX5S-.js
+CLAUDE_DESKTOP_SSH_MASTER_TRACE	CLAUDE	1	.vite/build/index.chunk-DINXX5S-.js
+CLAUDE_DESKTOP_SSH_REATTACH	CLAUDE	1	.vite/build/index.chunk-D5gwoNxg.js
+CLAUDE_DESKTOP_SSH_SINGLE_EXEC_REATTACH	CLAUDE	1	.vite/build/index.chunk-DINXX5S-.js
+CLAUDE_DESKTOP_SSH_TRANSPORT	CLAUDE	1	.vite/build/index.chunk-DINXX5S-.js
+CLAUDE_DESKTOP_TERMINAL_HEADLESS	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_DESKTOP_TERMINAL_HOOKS	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_DESKTOP_TERMINAL_NONCE_FILE	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_DESKTOP_TERMINAL_PROBE	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_DESKTOP_TERMINAL_SHELL	CLAUDE	1	.vite/build/index.chunk-DA534R-L.js
+CLAUDE_DESKTOP_USER_ZDOTDIR	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_DESKTOP_ZDOTDIR	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_DEV_FORCE_GATES	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_DEV_TOOLS	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_DISABLE_ADOPT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_E2E_1P_USERDATA	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_3P_USERDATA	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_ASSUME_VM_SUPPORTED	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_BOOTSTRAP_POLL_MS	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_CIC_EXTERNAL_RELAY_ECHO_ID	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_CIC_SOCKET_USER	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_CONFIG_RELAUNCH_IDLE_MS	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_COPPER_HARBOR	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_EXPORT_BASE_URL	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_EXPORT_DIR	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_EXPORT_HOLD_HINT_MS	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_IDP_BASE_URL	CLAUDE	3	.vite/build/index.chunk-B4iWTRPf.js | .vite/build/index.chunk-Hph4NgNJ.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_IMPORT_EXTRAS_ANSWER	CLAUDE	1	.vite/build/index.chunk-CVOteD6E.js
+CLAUDE_E2E_IMPORT_PICKED_FOLDER	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_IMPORT_SIBLING_PARENT	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_IMPORT_ZIP	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_INFERENCE_BASE_URL	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_LOCAL_PAIRING_BEARER	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_LOCAL_PAIRING_ISSUER_BASE_URL	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_LOCAL_PAIRING_ORG	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_MANAGED_PLIST	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_PKCE_LOG	CLAUDE	1	.vite/build/index.pre.js
+CLAUDE_E2E_RELAUNCH_EXIT_ONLY	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_SKIP_NATIVE_HOST_INSTALL	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_SSH_LOOPBACK_PROVIDER	CLAUDE	1	.vite/build/index.chunk-D5gwoNxg.js
+CLAUDE_E2E_SSH_PLAINTEXT_CONTROLLER_TOKEN	CLAUDE	1	.vite/build/index.chunk-CPEA6dKA.js
+CLAUDE_E2E_SSH_PLAINTEXT_SAVED_PASSWORDS	CLAUDE	1	.vite/build/index.chunk-CcveFAuE.js
+CLAUDE_E2E_STS_BASE_URL	CLAUDE	1	.vite/build/index.chunk-C15e1VST.js
+CLAUDE_E2E_VM_SMOKE_COMMAND	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_VM_SPAWN_FAULT_FILE	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_WATCH_PERSON_PRESENT	CLAUDE	1	.vite/build/index.chunk-CcveFAuE.js
+CLAUDE_E2E_WINDOW_COMMANDS_BASE_URL	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_E2E_WORKTREE_WRITE_GUARD_OFF	CLAUDE	1	.vite/build/index.chunk-Bn6onBlX.js
+CLAUDE_ENABLE_BYTE_WATCHDOG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_ENABLE_BYTE_WATCHDOG_BEDROCK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_ENABLE_LOGGING	CLAUDE	2	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+CLAUDE_ENABLE_STREAM_WATCHDOG	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_ENV_FILE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_EXTRA_HEADERS_TOKEN	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_FORCE_DISPLAY_SURVEY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_FORCE_HOST_LOOP	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_GATEWAY_ALLOW_LOOPBACK	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_GATEWAY_DRAIN_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_GATEWAY_LOG_LEVEL	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_GATEWAY_PROXY_IS_EGRESS_BOUNDARY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_GENERATE_COMPILE_CACHE	CLAUDE	1	.vite/build/index.pre.js
+CLAUDE_HARNESS_RESIZE	CLAUDE	12	.vite/build/aboutWindow.js | .vite/build/findInPage.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/mainWindow.js
+CLAUDE_HELPER_CONTEXT	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_HELPER_MANUAL_RUN	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_HOST_CLI_LAUNCHER_NOTE	CLAUDE	1	.vite/build/index.chunk-VeAh16Bs.js
+CLAUDE_HYBRID_BOOTSTRAP_URL	CLAUDE	2	.vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+CLAUDE_IMPORT_CONVERSATIONS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_INTERNAL_ASSISTANT_TEAM_NAME	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_INTERNAL_FC_OVERRIDES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_JOB_DIR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_LOCAL_OAUTH_API_BASE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_LOCAL_OAUTH_APPS_BASE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_LOCAL_OAUTH_CONSOLE_BASE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_MEMORY_STORES	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_MOCK_HEADERLESS_429	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_PLUGIN_DATA	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_PLUGIN_OPTION_	CLAUDE	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_PLUGIN_ROOT	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DLqLwOmD.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_PREVIEW_CLASSIFIER_FLOOR	CLAUDE	2	.vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-BvMaI6NQ.js
+CLAUDE_PROJECT_DIR	CLAUDE	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BBUs8uvY.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_PROJECT_TOOL	CLAUDE	1	.vite/build/index.chunk-BvMaI6NQ.js
+CLAUDE_PROJECT_UUID	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_PTY_HEARTBEAT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_PTY_HOST_EXEC	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_PTY_HOST_NO_STABLE_PATH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_PTY_ORPHAN_CHECK_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_PTY_RECORD	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_RELAUNCH_SESSION_ADD_DIRS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_REMOTE_TOOLS_BRIDGE_URL	CLAUDE	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_REMOTE_WORKFLOW_ARGS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_REMOTE_WORKFLOW_SCRIPT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_RUNNER_ACTIVITY_FD	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_RUNNER_DISABLE_AWAITING_ACTION_OVERRIDE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_RUNNER_FETCH_DEPTH	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_RUNNER_FETCH_SERVER_PROGRESS_CAP_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_SDK_CAN_USE_TOOL_SHADOWED	CLAUDE	1	.vite/build/index.chunk-DNyequwM.js
+CLAUDE_SDK_MCP_TOOL_SCHEMA_UNCONVERTIBLE	CLAUDE	1	.vite/build/index.chunk-DNyequwM.js
+CLAUDE_SECURESTORAGE_CONFIG_DIR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_SERVE_DRAIN_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_SESSION_INGRESS_TOKEN_FILE	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_SESSION_RETENTION_DEV	CLAUDE	1	.vite/build/index.chunk-zDwQxd00.js
+CLAUDE_SIM_SANDBOX	CLAUDE	1	.vite/build/index.chunk-B0WAWLOW.js
+CLAUDE_SIM_TOUCH_SERIAL	CLAUDE	1	.vite/build/index.chunk-CQQIsj7r.js
+CLAUDE_SKILL_DIR	CLAUDE	1	.vite/build/index.chunk-DLqLwOmD.js
+CLAUDE_SLOW_FIRST_BYTE_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_SNIP	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_SSH_ASKPASS_BROKER	CLAUDE	1	.vite/build/index.chunk-CPEA6dKA.js
+CLAUDE_SSH_ASKPASS_RELAY	CLAUDE	1	.vite/build/index.chunk-CPEA6dKA.js
+CLAUDE_SSH_DAEMON_CHILD	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_SSH_E2E_MANAGED_SETTINGS_DIR	CLAUDE	1	.vite/build/index.chunk-CPEA6dKA.js
+CLAUDE_SSH_FORK_KEPT_EXISTING	CLAUDE	1	.vite/build/index.chunk-Bn6onBlX.js
+CLAUDE_SSH_FORK_PATH	CLAUDE	1	.vite/build/index.chunk-Bn6onBlX.js
+CLAUDE_SSH_LOCAL_BINARY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_SSH_MANAGED_LAUNCHER	CLAUDE	1	.vite/build/index.chunk-CPEA6dKA.js
+CLAUDE_SSH_NO_LOGIN_PATH_WARM	CLAUDE	1	.vite/build/index.chunk-CPEA6dKA.js
+CLAUDE_SSH_PEER_CHECK	CLAUDE	1	.vite/build/index.chunk-CPEA6dKA.js
+CLAUDE_SSH_RUN_DIR	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_SSH_VERSION	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_STAGE_FILE_ROOT	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_STORAGE_SKIP_CTIME	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_STREAM_FIRST_BYTE_TIMEOUT_MS	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_STREAM_IDLE_TIMEOUT_MS	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_TMPDIR	CLAUDE	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_TRUSTED_DEVICE_TOKEN	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+CLAUDE_UPDATER_TOKEN	CLAUDE	1	.vite/build/index.chunk-lzaSYO3Q.js
+CLAUDE_USER_DATA_DIR	CLAUDE	3	.vite/build/index.chunk-DD2qsWbt.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+CLAUDE_WORKFLOW_NAME_ONLY	CLAUDE	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+COWORK_3P_HYBRID_OAUTH_CONFIGS	COWORK	1	.vite/build/index.chunk-lzaSYO3Q.js
+COWORK_3P_HYBRID_OAUTH_SCOPE	COWORK	1	.vite/build/index.chunk-lzaSYO3Q.js
+COWORK_3P_OAUTH_CONFIGS	COWORK	2	.vite/build/index.chunk-B4iWTRPf.js | .vite/build/index.chunk-lzaSYO3Q.js
+COWORK_CU_ONLY	COWORK	2	.vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-M6SkuaH9.js
+COWORK_OAUTH_CONFIGS	COWORK	1	.vite/build/index.chunk-lzaSYO3Q.js
+COWORK_PROFILE_TURNS	COWORK	1	.vite/build/index.chunk-lzaSYO3Q.js
+COWORK_SCHEDULED_COLLAPSED	COWORK	1	.vite/build/index.chunk-lzaSYO3Q.js
+COWORK_SHARED_PREVIEW_WORKSPACE_ID	COWORK	1	.vite/build/index.chunk-lzaSYO3Q.js
+COWORK_SPACE_STARRED_COLLAPSED	COWORK	1	.vite/build/index.chunk-lzaSYO3Q.js
+COWORK_STARRED_COLLAPSED	COWORK	1	.vite/build/index.chunk-lzaSYO3Q.js
+COWORK_VM_DEBUG	COWORK	1	.vite/build/index.chunk-lzaSYO3Q.js
+MCP_ALLOWED_ORIGINS	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_AUTHORIZE_PROMPT_MODE	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_AUTH_ALLOWED_CLIENTS	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_AUTH_ALLOWED_CLIENTS_FILE	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_AUTH_CLIENT_ASSERTION_FILE	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_AUTH_CLIENT_CERT_PATH	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_AUTH_CLIENT_CHECK_MODE	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_AUTH_CLIENT_SECRET	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_AUTH_CONFIDENTIAL_CLIENT_ID	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_AUTH_MODE	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_AUTH_PUBLIC_CLIENT_ID	MCP	2	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_AUTH_SCOPES_SUPPORTED	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_AUTH_TENANT_ID	MCP	2	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_AUTH_URL	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_AZURE_CLOUD	MCP	2	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_BROKER_REDIRECT_URI	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_CLIENT_SECRET	MCP	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+MCP_CONNECTION_NONBLOCKING	MCP	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+MCP_CONNECT_TIMEOUT_MS	MCP	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js
+MCP_CREATE_SCHEDULED_TASK	MCP	1	.vite/build/index.chunk-lzaSYO3Q.js
+MCP_DELETE_SCHEDULED_TASK	MCP	1	.vite/build/index.chunk-lzaSYO3Q.js
+MCP_DESTINATION_PRECHECK_MS	MCP	1	.vite/build/index.chunk-lzaSYO3Q.js
+MCP_DISCOVERY_CACHE	MCP	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+MCP_DISCOVERY_CACHE_MAX_STALE_S	MCP	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+MCP_DISCOVERY_CACHE_STRIKES	MCP	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+MCP_DISCOVERY_CACHE_TTL_S	MCP	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+MCP_ENDPOINT_PATH	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_EVENT_LOOP_STATS_INTERVAL_SECONDS	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_GRANTED_DELEGATED_SCOPES	MCP	2	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_GRANTED_SCOPES_TOOL_ENABLED	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_HTTP_HOST	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_HTTP_PORT	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_LIST_SCHEDULED_TASKS	MCP	1	.vite/build/index.chunk-lzaSYO3Q.js
+MCP_LIST_TASK_RUNS	MCP	1	.vite/build/index.chunk-lzaSYO3Q.js
+MCP_LOCAL_AUTH_BROKER_DISABLE	MCP	2	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_LOCAL_AUTH_BROKER_HOST	MCP	2	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_LOCAL_AUTH_BROKER_MODE	MCP	2	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_LOCAL_AUTH_CACHE	MCP	2	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_LOCAL_AUTH_CACHE_HOST	MCP	2	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_LOCAL_AUTH_CACHE_PATH	MCP	2	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_LOCAL_AUTH_CAE_DISABLE	MCP	2	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_LOCAL_AUTH_NO_INTERACTIVE	MCP	2	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_LOCAL_AUTH_SCOPES	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_LOG_SALT	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_OAUTH_CALLBACK_PORT	MCP	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+MCP_OAUTH_CLIENT_METADATA_URL	MCP	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+MCP_PARENT_WINDOW_HANDLE	MCP	2	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_PROTOCOL_NEGOTIATION	MCP	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+MCP_PROXY_PATH	MCP	1	.vite/build/index.chunk-DNyequwM.js
+MCP_PROXY_URL	MCP	1	.vite/build/index.chunk-DNyequwM.js
+MCP_PUBLIC_BASE_URL	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_REMOTE_SERVER_CONNECTION_BATCH_SIZE	MCP	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+MCP_RUN_SCHEDULED_TASK	MCP	1	.vite/build/index.chunk-lzaSYO3Q.js
+MCP_SDK_GENERATION	MCP	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+MCP_SENSITIVITY_LABELS	MCP	2	.vite/build/index.chunk-lzaSYO3Q.js | resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_SERVER_CONNECTION_BATCH_SIZE	MCP	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+MCP_START_WATCHING	MCP	1	.vite/build/index.chunk-lzaSYO3Q.js
+MCP_STOP_WATCHING	MCP	1	.vite/build/index.chunk-lzaSYO3Q.js
+MCP_TIMEOUT	MCP	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+MCP_TOOL_PREFIX	MCP	1	.vite/build/index.chunk-lzaSYO3Q.js
+MCP_TOOL_TIMEOUT	MCP	6	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+MCP_TRANSPORT	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_TRUNCATION_PROMPT_OVERRIDE	MCP	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+MCP_UPDATE_SCHEDULED_TASK	MCP	1	.vite/build/index.chunk-lzaSYO3Q.js
+MCP_WRITE_TOOLS_ENABLED	MCP	1	resources/office365-mcp/office365-mcp-stdio.mjs
+MCP_XAA_IDP_CLIENT_SECRET	MCP	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+OTEL_ATTRIBUTE_COUNT_LIMIT	OTEL	1	.vite/build/index.pre.js
+OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT	OTEL	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_EXPORTER_OTLP_	OTEL	3	.vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE	OTEL	4	.vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/shell-path-worker/shellPathWorker.js
+OTEL_EXPORTER_OTLP_CLIENT_KEY	OTEL	4	.vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/shell-path-worker/shellPathWorker.js
+OTEL_EXPORTER_OTLP_COMPRESSION	OTEL	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+OTEL_EXPORTER_OTLP_ENDPOINT	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_EXPORTER_OTLP_HEADERS	OTEL	8	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-ilWIs3r6.js | .vite/build/index.chunk-lzaSYO3Q.js
+OTEL_EXPORTER_OTLP_INSECURE	OTEL	1	.vite/build/index.chunk-lzaSYO3Q.js
+OTEL_EXPORTER_OTLP_LOGS_CLIENT_CERTIFICATE	OTEL	4	.vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/shell-path-worker/shellPathWorker.js
+OTEL_EXPORTER_OTLP_LOGS_CLIENT_KEY	OTEL	4	.vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/shell-path-worker/shellPathWorker.js
+OTEL_EXPORTER_OTLP_LOGS_COMPRESSION	OTEL	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+OTEL_EXPORTER_OTLP_LOGS_ENDPOINT	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_EXPORTER_OTLP_LOGS_HEADERS	OTEL	8	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-ilWIs3r6.js | .vite/build/index.chunk-lzaSYO3Q.js
+OTEL_EXPORTER_OTLP_LOGS_PROTOCOL	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_EXPORTER_OTLP_METRICS_CLIENT_CERTIFICATE	OTEL	4	.vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/shell-path-worker/shellPathWorker.js
+OTEL_EXPORTER_OTLP_METRICS_CLIENT_KEY	OTEL	4	.vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/shell-path-worker/shellPathWorker.js
+OTEL_EXPORTER_OTLP_METRICS_COMPRESSION	OTEL	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+OTEL_EXPORTER_OTLP_METRICS_ENDPOINT	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_EXPORTER_OTLP_METRICS_HEADERS	OTEL	8	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-ilWIs3r6.js | .vite/build/index.chunk-lzaSYO3Q.js
+OTEL_EXPORTER_OTLP_METRICS_PROTOCOL	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE	OTEL	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+OTEL_EXPORTER_OTLP_PROTOCOL	OTEL	8	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-BvMaI6NQ.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+OTEL_EXPORTER_OTLP_TRACES_CLIENT_CERTIFICATE	OTEL	4	.vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/shell-path-worker/shellPathWorker.js
+OTEL_EXPORTER_OTLP_TRACES_CLIENT_KEY	OTEL	4	.vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/shell-path-worker/shellPathWorker.js
+OTEL_EXPORTER_OTLP_TRACES_COMPRESSION	OTEL	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_EXPORTER_OTLP_TRACES_HEADERS	OTEL	8	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-ilWIs3r6.js | .vite/build/index.chunk-lzaSYO3Q.js
+OTEL_EXPORTER_OTLP_TRACES_PROTOCOL	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_LOGRECORD_ATTRIBUTE_VALUE_LENGTH_LIMIT	OTEL	4	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js
+OTEL_LOGS_EXPORTER	OTEL	9	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-M6SkuaH9.js
+OTEL_LOGS_EXPORT_INTERVAL	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_LOG_ASSISTANT_RESPONSES	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_LOG_LEVEL	OTEL	1	resources/office365-mcp/office365-mcp-stdio.mjs
+OTEL_LOG_LEVELS	OTEL	1	resources/office365-mcp/office365-mcp-stdio.mjs
+OTEL_LOG_MANAGED_SETTINGS	OTEL	3	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js
+OTEL_LOG_RAW_API_BODIES	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_LOG_TOOL_CONTENT	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_LOG_TOOL_DETAILS	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_LOG_USER_PROMPTS	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_METRICS_EXPORTER	OTEL	9	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-M6SkuaH9.js
+OTEL_METRICS_INCLUDE_ACCOUNT_UUID	OTEL	6	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/shell-path-worker/shellPathWorker.js
+OTEL_METRICS_INCLUDE_ENTRYPOINT	OTEL	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+OTEL_METRICS_INCLUDE_REPOSITORY	OTEL	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+OTEL_METRICS_INCLUDE_RESOURCE_ATTRIBUTES	OTEL	2	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-DNyequwM.js
+OTEL_METRICS_INCLUDE_SESSION_ID	OTEL	6	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/shell-path-worker/shellPathWorker.js
+OTEL_METRICS_INCLUDE_VERSION	OTEL	6	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/shell-path-worker/shellPathWorker.js
+OTEL_METRIC_EXPORT_INTERVAL	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_RESOURCE_ATTRIBUTES	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_SERVICE_NAME	OTEL	6	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js | .vite/build/shell-path-worker/shellPathWorker.js
+OTEL_SPAN_ATTRIBUTE_COUNT_LIMIT	OTEL	1	.vite/build/index.pre.js
+OTEL_SPAN_ATTRIBUTE_PER_EVENT_COUNT_LIMIT	OTEL	1	.vite/build/index.pre.js
+OTEL_SPAN_ATTRIBUTE_PER_LINK_COUNT_LIMIT	OTEL	1	.vite/build/index.pre.js
+OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT	OTEL	5	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_SPAN_EVENT_COUNT_LIMIT	OTEL	1	.vite/build/index.pre.js
+OTEL_SPAN_LINK_COUNT_LIMIT	OTEL	1	.vite/build/index.pre.js
+OTEL_STATUS_CODE_VALUE_ERROR	OTEL	1	.vite/build/index.pre.js
+OTEL_STATUS_CODE_VALUE_OK	OTEL	1	.vite/build/index.pre.js
+OTEL_TRACES_EXPORTER	OTEL	9	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-Bn6onBlX.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-M6SkuaH9.js
+OTEL_TRACES_EXPORT_INTERVAL	OTEL	7	.vite/build/file-index-worker/fileIndexWorker.js | .vite/build/heavy-work-worker/heavyWorkWorker.js | .vite/build/index.chunk-BlEfqh4Z.js | .vite/build/index.chunk-DNyequwM.js | .vite/build/index.chunk-lzaSYO3Q.js | .vite/build/index.pre.js
+OTEL_TRACES_SAMPLER	OTEL	1	.vite/build/index.pre.js
+OTEL_TRACES_SAMPLER_ARG	OTEL	1	.vite/build/index.pre.js

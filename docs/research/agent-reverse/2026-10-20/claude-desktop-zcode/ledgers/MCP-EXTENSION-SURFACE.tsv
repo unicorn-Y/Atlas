@@ -1,0 +1,102 @@
+service	method	params	file
+MCP	isLocalDevMcpEnabled		.vite/build/index.chunk-lzaSYO3Q.js
+MCP	setMcpServerConfigs	configs	.vite/build/index.chunk-lzaSYO3Q.js
+MCP	getMcpServersConfig	forceReload	.vite/build/index.chunk-lzaSYO3Q.js
+MCP	getMcpServersConfigWithStatus		.vite/build/index.chunk-lzaSYO3Q.js
+MCP	revealConfig		.vite/build/index.chunk-lzaSYO3Q.js
+MCP	revealLogs		.vite/build/index.chunk-lzaSYO3Q.js
+MCP	revealServerLog	serverName	.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	isExtensionsEnabled		.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	isLocalExtensionInstallAllowed		.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	isDirectoryEnabled		.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	isDesktopExtensionSignatureRequired		.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	isDesktopExtensionDirectoryEnabled		.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	getInstalledExtensionsWithState		.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	getIsUpdateAvailable	extensionId	.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	getManifestCompatibilityResult	manifest	.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	getAvailableExtensionRuntimes		.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	getExtensionSettings	extensionId	.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	setExtensionSettings	extensionId	.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	installDxt	extensionId	.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	installDxtUnpacked	folderPath	.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	installDxtFromDirectory	extensionId	.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	handleDxtFile	dxtPath	.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	showInstallDxtDialog		.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	deleteExtension	extensionId	.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	openExtensionsFolder		.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	openExtensionSettingsFolder		.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	getDirectoryUrl		.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	getExtension	request	.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	getExtensionVersions	request	.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	installExtensionFromPreview	extensionId	.vite/build/index.chunk-lzaSYO3Q.js
+Extensions	refreshAllowlistCheck		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	exportConfig	config	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	relaunchApp		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	relaunchAppWithSessionGuard		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	probeEgressHosts	hosts	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	scanOrgPlugins		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	probeMcpServer	config	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	authorizeAndProbeMcpServer	config	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	forgetMcpOAuth	serverName	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	getLoginDesktop3pStatus		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	getConfigHealth		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	recheckConfigHealth		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	retryModelDiscovery		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	setDeploymentMode	mode	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	openSetupWindow		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	signInWithAnthropicApi		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	applyAnthropicApiShortcut		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	openDeviceCodeWindowForE2e		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	listConfigs		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	getMergedConfig		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	readConfig	id	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	writeConfig	id	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	createConfig	name	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	duplicateConfig	sourceId	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	renameConfig	id	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	deleteConfig	id	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	setAppliedConfig	id	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	revealConfig	id	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	triggerBootstrapAuth	args	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	commitHybridTransition		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	cancelHybridTransition		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	resolverLandedTainted	orgUuid	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	setHybridOrgList	uuids	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	switchOrgAndRelaunch	targetOrgUuid	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	listSwitchableProfiles		.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pSetup	switchProfile	target	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pHelperRun	runCredentialHelper	helperPath	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pHelperRun	probeInference	config	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pHelperRun	discoverModels	config	.vite/build/index.chunk-lzaSYO3Q.js
+Custom3pUsage	getSummary	windowDays	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	getPlugins	options	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	getDownloadedRemotePlugins	pluginContext	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	syncRemotePlugins	pluginContext	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	materializeEnabledPlugins	pluginContext	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	listSkillFiles	pluginId	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	uploadPlugin	filename	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	deletePlugin	pluginId	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	setPluginEnabled	pluginId	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	startPluginOAuthFlow	pluginId	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	revokePluginOAuth	pluginId	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	getPluginCliStatus	pluginId	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	setPluginEnvVars	pluginId	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	setPluginOAuthClient	pluginId	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	getPluginShimOps	pluginId	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	getPluginCliBatch	pluginIds	.vite/build/index.chunk-lzaSYO3Q.js
+LocalPlugins	setPluginShimPermission	pluginId	.vite/build/index.chunk-lzaSYO3Q.js
+PluginBridgeMcp	listServers		.vite/build/index.chunk-lzaSYO3Q.js
+CustomPlugins	addMarketplace	input	.vite/build/index.chunk-lzaSYO3Q.js
+CustomPlugins	removeMarketplace	name	.vite/build/index.chunk-lzaSYO3Q.js
+CustomPlugins	refreshMarketplace	name	.vite/build/index.chunk-lzaSYO3Q.js
+CustomPlugins	listMarketplaces	egressAllowedDomains	.vite/build/index.chunk-lzaSYO3Q.js
+CustomPlugins	installPlugin	pluginId	.vite/build/index.chunk-lzaSYO3Q.js
+CustomPlugins	updatePlugin	pluginId	.vite/build/index.chunk-lzaSYO3Q.js
+CustomPlugins	uninstallPlugin	pluginId	.vite/build/index.chunk-lzaSYO3Q.js
+CustomPlugins	listAvailablePlugins	egressAllowedDomains	.vite/build/index.chunk-lzaSYO3Q.js
+CustomPlugins	listRemotePluginsPage	limit	.vite/build/index.chunk-lzaSYO3Q.js
+CustomPlugins	checkPluginHasLocalChanges	pluginId	.vite/build/index.chunk-lzaSYO3Q.js
+CustomPlugins	getAndClearMigrationIssues		.vite/build/index.chunk-lzaSYO3Q.js
+CustomPlugins	listLocalOrgPlugins		.vite/build/index.chunk-lzaSYO3Q.js
+CustomPlugins	installLocalOrgPlugin	name	.vite/build/index.chunk-lzaSYO3Q.js
+CustomPlugins	syncLocalOrgPlugins		.vite/build/index.chunk-lzaSYO3Q.js

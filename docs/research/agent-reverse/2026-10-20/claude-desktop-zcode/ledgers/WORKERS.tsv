@@ -1,0 +1,9 @@
+worker_dir	file_count	bytes	files
+file-index-worker	1	906737	file-index-worker/fileIndexWorker.js
+heavy-work-worker	3	1133689	heavy-work-worker/dist-CI9lzb1v.js | heavy-work-worker/heavyWorkWorker.js | heavy-work-worker/rolldown-runtime-CI_2c2Xz.js
+mcp-runtime	2	619607	mcp-runtime/directMcpHost.js | mcp-runtime/nodeHost.js
+msal-broker-worker	1	21601	msal-broker-worker/msalBrokerWorker.js
+pty-host	1	12018	pty-host/ptyHostWorker.js
+shell-path-worker	1	9575	shell-path-worker/shellPathWorker.js
+stall-sampler-worker	1	2033	stall-sampler-worker/stallSamplerWorker.js
+transcript-search-worker	1	35452	transcript-search-worker/transcriptSearchWorker.js
