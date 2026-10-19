@@ -1,0 +1,108 @@
+[
+ {
+  "name": "codex-app-tools",
+  "category": "Developer Tools",
+  "version": "0.1.6",
+  "skills": [],
+  "hooks": [],
+  "mcpServers": "./.mcp.json",
+  "description": "Exposes Codex desktop app tools through one local MCP server."
+ },
+ {
+  "name": "browser",
+  "category": "Engineering",
+  "version": "26.1013.40934",
+  "skills": "./skills/",
+  "hooks": [
+   "Interrupt",
+   "SubagentStop",
+   "Stop"
+  ],
+  "mcpServers": null,
+  "description": "Browser / browser-use plugin\n\nAliases: @browser, @browser-use, browser-use, Browser, in-app browser.\n\nUse Browser, the ChatGPT in-app browser, when the user asks to open, inspect, navigate, test, clic"
+ },
+ {
+  "name": "unified-computer-use",
+  "category": "Engineering",
+  "version": "26.1013.40934",
+  "skills": [],
+  "hooks": [
+   "Interrupt",
+   "SubagentStop",
+   "Stop"
+  ],
+  "mcpServers": "./.mcp.json",
+  "description": "App-managed browser automation runtime."
+ },
+ {
+  "name": "chrome",
+  "category": "Productivity",
+  "version": "26.1013.40934",
+  "skills": "./skills/",
+  "hooks": [
+   "Interrupt",
+   "SubagentStop",
+   "Stop"
+  ],
+  "mcpServers": null,
+  "description": "Chrome automation for tasks that depend on the user's existing Chrome state: tabs, logged-in sessions, cookies, extensions, and ChatGPT Chrome Extension setup. Prefer purpose-built connectors, APIs, o"
+ },
+ {
+  "name": "computer-use",
+  "category": "Productivity",
+  "version": "26.1013.40934",
+  "skills": "./skills/",
+  "hooks": [
+   "Interrupt",
+   "SubagentStop",
+   "Stop"
+  ],
+  "mcpServers": null,
+  "description": "Control desktop apps on Windows from ChatGPT through Computer Use."
+ },
+ {
+  "name": "latex",
+  "category": "Education & Research",
+  "version": "0.2.8",
+  "skills": "./skills/",
+  "hooks": [],
+  "mcpServers": null,
+  "description": "Compile LaTeX with bundled Tectonic for simple projects and TeX Live or MacTeX for full projects."
+ },
+ {
+  "name": "code-review",
+  "category": "Developer Tools",
+  "version": "26.1013.40934",
+  "skills": [],
+  "hooks": [],
+  "mcpServers": "./.mcp.json",
+  "description": "Review and manage GitHub pull requests from Codex."
+ },
+ {
+  "name": "deep-research",
+  "category": "Research",
+  "version": "0.1.1",
+  "skills": "./skills/",
+  "hooks": [],
+  "mcpServers": null,
+  "description": "Conduct multi-pass, source-backed research and deliver a cited, visually verified DOCX report."
+ },
+ {
+  "name": "visualize",
+  "category": "Productivity",
+  "version": "1.0.50",
+  "skills": "./skills/",
+  "hooks": [],
+  "mcpServers": null,
+  "description": "Create interactive charts, maps, diagrams, simulations, 3D models, data explorers, and UI previews directly in Codex."
+ },
+ {
+  "name": "image-guided-assets",
+  "category": "Design",
+  "version": "0.1.2",
+  "skills": "./skills/",
+  "hooks": [],
+  "mcpServers": null,
+  "description": "Create SVG and 3D assets from visual references, then render, compare, and refine them."
+ }
+]
