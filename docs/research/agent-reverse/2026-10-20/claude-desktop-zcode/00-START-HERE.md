@@ -108,8 +108,8 @@ CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL
 | PE 二进制 | **18 / 18**（含签名与版本资源） | ✅ |
 | 技能内部文件 | **188 / 188**（6 个 ZIP） | ✅ |
 | RPC 条目配对 | **1,332 / 1,332** | ✅ 0 未配对 |
-| 界面对象 | **27**（14 LOCAL / 7 REMOTE / 5 NATIVE） | ✅ 已登记 |
-| 菜单 / 快捷键 | 99 / 58 | ✅ |
+| 界面对象 | **26**（12 window / 6 offscreen / 2 popup / 2 dialog / 2 tray / 2 menu） | ✅ 已登记 |
+| 菜单 / 快捷键 | 99 / 57 | ✅ |
 | 路由 | 64（远程 62 + 本地 2）＋ SPA 内 716 | ✅ |
 | Feature flags | 380 条 / 186 唯一键 | ✅ |
 | 环境变量 | 1,062 | ✅ |

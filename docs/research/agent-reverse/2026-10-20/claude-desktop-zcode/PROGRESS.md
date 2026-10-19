@@ -1,61 +1,89 @@
-# PROGRESS — Claude Desktop 全量解剖（ZCode 执行）
+# PROGRESS — Claude Desktop 全量静态解剖
 
 **分支**：`research/zcode-claude-desktop-anatomy-20261020`  
 **报告目录**：`docs/research/agent-reverse/2026-10-20/claude-desktop-zcode/`  
 **本地研究目录**：`D:\Atlas\_research\claude-desktop\2026-10-20\`  
-**固定样本**：Claude Desktop Windows x64 enterprise **2.42304.0**，MSIX SHA256 `2bf309665f0de4eaa76a7e64033594e6f73ceb6413c60080f72f3ce640fa24ee`  
-**总体状态**：IN-PROGRESS
+**固定样本**：Claude Desktop Windows x64 enterprise **2.42304.0**  
+**MSIX SHA256**：`2bf309665f0de4eaa76a7e64033594e6f73ceb6413c60080f72f3ce640fa24ee`  
+**执行模式**：纯静态离线逆向（任务书 commit `3e2b27b9` 纠偏后）  
+**总体状态**：**PARTIAL**
 
 ---
 
 ## 阶段状态
 
-| 阶段 | 状态 | 本轮实际产出 |
+| 阶段 | 状态 | 产出 |
 |---|---|---|
-| P0 包/版本/哈希/文件总账 | ✅ DONE | `P0-PACKAGE-AUTHENTICITY.md`, `VERSION-MATRIX.md`, 8 份机器账 |
-| P1 静态代码全覆盖 | ⬜ TODO | — |
-| P2 前端/窗口/交互 | ⬜ TODO | — |
-| P3 IPC/RPC/事件配对 | ⬜ TODO | — |
-| P4 Chat/Cowork/Agent 运行机制 | ⬜ TODO | — |
-| P5 Windows 原生宿主/cowork-svc | ⬜ TODO | — |
-| P6 旁支/扩展/技能/flag | ⬜ TODO | — |
-| P7 运行时取证 | ⏸ BLOCKED | 本机未安装 Claude Desktop（无 Appx/进程/服务） |
-| P8 解剖目录/viewer/独立审计 | ⬜ TODO | — |
+| P0 包/版本/哈希/文件总账 | ✅ DONE | `P0-PACKAGE-AUTHENTICITY.md`、`VERSION-MATRIX.md`、8 份机器账 |
+| P1 静态代码全覆盖 | ✅ DONE | `P1-STATIC-CODE-INVENTORY.md`、`MODULE-CLASSIFICATION.tsv`(506/506)、`SYMBOLS.tsv`(59,658) |
+| **P1b 内置 SPA 修正** | ✅ DONE | `P1B-ION-DIST-CORRECTION.md`、`ION-MODULES.tsv`(3,588)、`ION-ROUTES.tsv`(716) |
+| P2 前端/窗口/交互 | ✅ DONE | `P2-UI-AND-WINDOWS.md`、`UI-SURFACES.tsv`(26)、`MENUS.tsv`(99)、`HOTKEYS.tsv`(57) |
+| P3 IPC/RPC/事件配对 | ✅ DONE | `P3-IPC-RPC-EVENTS.md`、`RPC-REGISTRY.tsv`(1,332/1,332)、`NETWORK-ENDPOINTS.tsv`(405) |
+| P4 Chat/Cowork/Agent | ✅ DONE | `P4-AGENT-RUNTIME.md`、`FEATURE-FLAGS.tsv`(380) |
+| P5 原生宿主/cowork-svc | ✅ DONE | `P5-NATIVE-SERVICE-VM.md`、`GO-FUNCTIONS.tsv`(23,018)、`GO-DEPENDENCIES.tsv` |
+| P6 扩展/技能/worker/环境 | ✅ DONE | `P6-EXTENSIONS-TOOLS-SKILLS.md`、`ENV-VARS.tsv`(1,062)、`WORKERS.tsv`(8) |
+| P7 静态生命周期/状态 | ✅ DONE | `P7-STATIC-LIFECYCLE.md`、`P7-STATIC-STATE-AND-EVENTS.md`、`UNRESOLVED-CALL-EDGES.tsv` |
+| P8 目录/viewer/审计 | ✅ DONE | `00-START-HERE.md`、`01-LAYER-ATLAS.md`、`02-CAPABILITY-CATALOG.md`、`13-COVERAGE-AND-ACCEPTANCE.md`、`viewer/index.html`、`AUDIT-P8.json` |
+| P7 旧版运行时取证 | ⛔ 降级 | 已移入 `out-of-scope/`，不计入完成率 |
 
 ---
 
-## P0 实际完成内容
+## 关键数字（全部可复算）
 
-1. 从原包重新计算（不继承旧结论）：
-   - MSIX 297,191,037 B / SHA `2bf30966…fa24ee` → 与任务书基线完全一致；三份独立副本同哈希。
-   - MSIX 内 `app.asar` 49,338,428 B / SHA `8f4d3dec…da9db`；`cowork-svc.exe` 13,761,360 B / SHA `934e5b67…663ba8f`。
-   - zip 4,443 条目全部读取 + CRC 通过；解包后逐文件重算 SHA 与 SIZE，**mismatch=0**。
-2. 独立解析 ASAR 头（electron asar pickle 格式），得 **548 路径 = 506 文件 + 42 目录**，每条含 offset/size/SHA256/unpacked 标记。
-3. 与 2026-10-19 基线 4,443 行逐行 diff：**added 0 / removed 0 / changed 0**。
-4. 嵌套容器：MSIX → asar → 6 个 `.skill`（ZIP）→ 188 个内部文件，全部哈希登记（`ARCHIVE-NESTING.tsv` 202 行）。
-5. PE 18 个全部登记：架构 x64、PE32+、子系统、版本资源、Authenticode（全部 `Valid`，签名主体 `CN="Anthropic, PBC"`）。
-6. Go 二进制识别：`cowork-svc.exe`、`claude-ssh-{broker,proxy,askpass}.exe` 均为 **Go 1.25.14**，含 `Go buildinf:`。
-7. 发行通道实测：Squirrel `nest-win-x64/RELEASES` = 0.14.10（131,185,172 B，与本地 nupkg 一致）；`claude.ai` 两条下载端点均 `region_unavailable`。
-8. AppxManifest 全部语义登记：3 个 Application 入口、`CoworkVMService`（localSystem/auto/ETW trigger）、11 个注册表虚拟化排除键、4 个文件系统排除目录、防火墙规则、能力声明。
+| 指标 | 数值 |
+|---|---:|
+| MSIX 条目登记 | 4,443 / 4,443 |
+| 哈希独立复验 | 4,443，0 不符 |
+| ASAR 路径 / 文件 / 目录 | 548 / 506 / 42 |
+| ASAR 文件分类 | 506 / 506 |
+| 主进程 JS 解析 | 435 ok / 437（2 个 `.d.ts` 已解释） |
+| 内置 SPA JS 解析 | 3,588 / 3,588，0 失败 |
+| 内置 SPA 容量 | 4,224 文件 / 199,562,129 B（MSIX 条目 95%） |
+| Go 函数 | 23,018（cowork-svc 15,181） |
+| PE 二进制 | 18 |
+| 技能内部文件 | 188 |
+| eipc 服务 / 方法 / 事件 | 97 / 1,170 / 162 |
+| RPC 配对 | 1,332 / 1,332（0 未配对） |
+| 界面对象 | 26 |
+| 菜单 / 快捷键 | 99 / 57 |
+| 路由（外壳 / SPA） | 64 / 716 |
+| Feature flags | 380 条 / 186 唯一键 |
+| 环境变量 | 1,062 |
+| 网络端点 | 405 |
+| 未解项 | 24（3 RESOLVED / 14 PARTIAL / 2 CLOUD-UNAVAILABLE / 5 UNKNOWN） |
 
-## 下一轮待办（按序）
+---
 
-1. **P1**：入口链 `AppxManifest → claude.exe → package.json → .vite/build/index.pre.js → main chunks/preloads/workers → renderer HTML/chunks`；对 369 个 main chunk + 6 套 renderer 建立 `MODULES.tsv` / `SYMBOLS.tsv` / `CALL-EDGES.tsv` / `DYNAMIC-IMPORTS.tsv` / `UNRESOLVED-SYMBOLS.tsv`。
-2. **P3**：重点补旧账缺口（旧 `ipc-map.tsv` 仅 8 行 vs 声称 1,535 条操作）。从 `contextBridge.exposeInMainWorld`、`ipcRenderer`、`ipcMain`、动态 channel builder、utilityProcess、MessagePort 全量枚举。
-3. **P5**：`cowork-svc.exe` Go pclntab 全量函数表 + `\\.\pipe\cowork-vm-service` 帧协议 + Hyper-V 生命周期。
-4. **P2**：6 套 renderer 的窗口/路由/动作；`UI-SURFACES.tsv` 等。
-5. **P6**：6 个 `.skill` 内部（188 文件）语义；github-mcp / office365-mcp；`mcp-runtime`。
-6. **P7**：需先安装 2.42304.0 MSIX 才能采集 R 级证据。
+## 本轮重大发现（相对上一轮基线新增）
 
-## 阻塞清单
+1. **`ion-dist` 199.5 MB 完整 Chat 前端**（此前被归为"资源"）。3,554 JS 全部解析，716 路由。
+2. **部署模式二义**：`getMainWindowUrl()` 在 1P 返回 `claude.ai`、在 3P 返回 `app://localhost`；由 `deploymentMode` 键决定。推翻"UI 全在云上"的简化说法。
+3. **3 个 WASM 身份**：`clarkdown_editor`（Rust 编辑器内核）、`tree-sitter`、`c2pa`（内容溯源签名）。
+4. **VM 网络架构**：Hyper-V HCS + HVSocket + `gvisor-tap-vsock` + gVisor + 第一方 `win-httpproxy` + PAC + 宿主 CA 注入。
+5. **EDR 接入**：`edrgate` / `edrpolicy` 包 + `handleRunEdrExtension`，对应 `coworkEDRIntegration` flag。
+6. **7 路推理后端**：Anthropic / Bedrock / Vertex / Foundry / Gateway / Mantle / Anthropic-AWS-Google（均由环境变量切换）。
+7. **1,062 个环境变量**，含 mTLS（`CLAUDE_CODE_CLIENT_CERT`）、子代理模型（`CLAUDE_CODE_SUBAGENT_MODEL`）、上下文上限覆盖。
+8. **技能执行者错位**：Desktop 只打包并通过环境变量交给 CLI，不自己执行。
 
-| ID | 阻塞 | 具体条件 |
-|---|---|---|
-| B-01 | Consumer MSIX 最新版不可得 | `claude.ai/api/desktop/win32/x64/msix/latest/redirect` → 403 `region_unavailable`；`claude.ai/download` → 302 到 `app-unavailable-in-region` |
-| B-02 | 无运行时证据 | 本机无 Appx 安装、无 `claude*` 进程、无 `CoworkVMService` |
-| B-03 | macOS 平台 | 未取得实物，不做任何跨平台推断 |
-| B-04 | 服务端实现 | 不可得，仅按客户端可观察协议分析，标 CLOUD-UNKNOWN |
+---
 
-## 已登记但需在后续阶段解释的数字差异
+## 剩余明确可做项（未做，不隐藏）
 
-- 旧记录称“437 个 JS parse success”；本轮 ASAR 内实测 `.js` = 431，另有 `.mjs` 4、`.jsc` 3、`.ts` 2。两者口径不同，**不视为一致**，列入 P1 复核项。
+| 项 | 状态 |
+|---|---|
+| `ion-dist` 3,588 文件的 React 组件树展开 | 未做（仅模块级索引） |
+| `cowork-svc` 关键 handler 指令级反汇编（帧字节序、10 MiB 上限） | 未做 |
+| 2.42304.0 MSIX vs 2.42304.2 nupkg 逐文件 diff | 未做 |
+| `nodeHost` vs `directMcpHost` 逐行 diff | 未做 |
+| 5 个代号服务的调用方追踪 | 未做 |
+| 3P 模式完整 UI → RPC 映射 | 未做（SPA 已在包内，可静态完成） |
+
+## 硬阻塞（物理不可得）
+
+| ID | 阻塞 |
+|---|---|
+| B-01 | 服务端 agent loop 实现（`CLOUD-UNAVAILABLE`） |
+| B-02 | 1P 模式远程 UI 组件代码（不在包内） |
+| B-03 | Consumer（Squirrel）线最新版本（`region_unavailable`） |
+| B-04 | macOS 版实物 |
+| B-05 | Claude Code CLI 本体（由 `downloads.claude.ai` 分发，不在包内） |

@@ -9,14 +9,13 @@
 
 | 类型 | 数量 |
 |---|---:|
-| BrowserWindow | 9 |
-| WebContentsView | 5 |
+| window（含 BrowserWindow 与 WebContentsView） | 12 |
+| offscreen | 6 |
 | popup | 2 |
-| offscreen | 5 |
 | dialog | 2 |
 | tray | 2 |
 | menu | 2 |
-| **合计** | **27** |
+| **合计** | **26** |
 
 按内容来源：**LOCAL-UI 14 / REMOTE-UI 7 / NATIVE-CHROME 5**。
 
@@ -61,7 +60,7 @@
 | 应用菜单（File/Edit/View/Go/Help[/Developer]） | 82 |
 | 右键上下文菜单 | 13 |
 | 托盘菜单 | 4 |
-| **快捷键** | **58** |
+| **快捷键** | **57** |
 
 代表性快捷键（S，含冲突处理）：
 
@@ -129,9 +128,9 @@ SPA 与外壳的通信不经过 eipc，而是：
 
 | 项 | 数量/状态 |
 |---|---|
-| 已登记界面 | 27 |
+| 已登记界面 | 26 |
 | 已登记菜单项 | 99（82+13+4） |
-| 已登记快捷键 | 58 |
+| 已登记快捷键 | 57 |
 | 本地 SPA 路由 | 716 |
 | 远程路由 | 62 |
 | **UI→执行链未闭合** | **远程 UI 部分不可静态闭合（UI 代码在服务端）；本地 SPA 部分已定位入口但未逐组件展开** |
@@ -139,10 +138,10 @@ SPA 与外壳的通信不经过 eipc，而是：
 ## 7. 产物
 
 ```
-index/work-P2/UI-SURFACES.tsv         27 行（含文件+字节偏移锚点）
+index/work-P2/UI-SURFACES.tsv         26 行（含文件+字节偏移锚点）
 index/work-P2/UI-ACTIONS.tsv          29 行
 index/work-P2/MENUS.tsv               99 行
-index/work-P2/HOTKEYS.tsv             58 行
+index/work-P2/HOTKEYS.tsv             57 行
 index/work-P2/UI-ROUTES.tsv           64 行
 index/work-P2/IPC-SURFACE-BY-WINDOW.tsv  20 行
 index/ION-MODULES.tsv              3,588 行
