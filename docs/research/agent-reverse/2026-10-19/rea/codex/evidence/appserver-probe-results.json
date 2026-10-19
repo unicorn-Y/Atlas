@@ -1,0 +1,3781 @@
+{
+ "initialize": {
+  "id": 1,
+  "result": {
+   "userAgent": "rea-probe/0.163.0 (Windows 10.0.26200; x86_64) xterm-256color (rea-probe; 1.0)",
+   "codexHome": "D:\\Atlas-Reverse-Lab\\codex\\evidence\\appserver-home",
+   "platformFamily": "windows",
+   "platformOs": "windows"
+  }
+ },
+ "model/list": {
+  "id": 2,
+  "result": {
+   "data": [
+    {
+     "id": "gpt-6.1-sol",
+     "model": "gpt-6.1-sol",
+     "upgrade": null,
+     "upgradeInfo": null,
+     "availabilityNux": {
+      "message": "Maximize usage with GPT-6.1 Sol. Try it on complex work for near-Astra performance at a lower cost."
+     },
+     "displayName": "GPT-6.1-Sol",
+     "description": "Latest workhorse model for coding and everyday work.",
+     "modelSpecialty": null,
+     "hidden": false,
+     "supportedReasoningEfforts": [
+      {
+       "reasoningEffort": "low",
+       "description": "Fast responses with lighter reasoning"
+      },
+      {
+       "reasoningEffort": "medium",
+       "description": "Balances speed and reasoning depth for everyday tasks"
+      },
+      {
+       "reasoningEffort": "high",
+       "description": "Greater reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "xhigh",
+       "description": "Extra high reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "max",
+       "description": "Maximum reasoning depth for the hardest problems"
+      },
+      {
+       "reasoningEffort": "ultra",
+       "description": "Maximum reasoning with automatic task delegation"
+      }
+     ],
+     "defaultReasoningEffort": "low",
+     "inputModalities": [
+      "text",
+      "image"
+     ],
+     "supportsPersonality": false,
+     "multiAgentVersion": "v2",
+     "additionalSpeedTiers": [
+      "fast"
+     ],
+     "serviceTiers": [
+      {
+       "id": "priority",
+       "name": "Fast",
+       "description": "2x speed, increased usage"
+      }
+     ],
+     "defaultServiceTier": null,
+     "availableAccessPrograms": null,
+     "isDefault": true
+    },
+    {
+     "id": "gpt-6-astra",
+     "model": "gpt-6-astra",
+     "upgrade": null,
+     "upgradeInfo": null,
+     "availabilityNux": null,
+     "displayName": "GPT-6-Astra",
+     "description": "Frontier intelligence for the most demanding work.",
+     "modelSpecialty": null,
+     "hidden": false,
+     "supportedReasoningEfforts": [
+      {
+       "reasoningEffort": "low",
+       "description": "Fast responses with lighter reasoning"
+      },
+      {
+       "reasoningEffort": "medium",
+       "description": "Balances speed and reasoning depth for everyday tasks"
+      },
+      {
+       "reasoningEffort": "high",
+       "description": "Greater reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "xhigh",
+       "description": "Extra high reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "max",
+       "description": "Maximum reasoning depth for the hardest problems"
+      },
+      {
+       "reasoningEffort": "ultra",
+       "description": "Maximum reasoning with automatic task delegation"
+      }
+     ],
+     "defaultReasoningEffort": "low",
+     "inputModalities": [
+      "text",
+      "image"
+     ],
+     "supportsPersonality": false,
+     "multiAgentVersion": "v2",
+     "additionalSpeedTiers": [
+      "fast"
+     ],
+     "serviceTiers": [
+      {
+       "id": "priority",
+       "name": "Fast",
+       "description": "2x speed, increased usage"
+      }
+     ],
+     "defaultServiceTier": null,
+     "availableAccessPrograms": null,
+     "isDefault": false
+    },
+    {
+     "id": "gpt-6-sol",
+     "model": "gpt-6-sol",
+     "upgrade": null,
+     "upgradeInfo": null,
+     "availabilityNux": null,
+     "displayName": "GPT-6-Sol",
+     "description": "Previous generation workhorse model.",
+     "modelSpecialty": null,
+     "hidden": false,
+     "supportedReasoningEfforts": [
+      {
+       "reasoningEffort": "low",
+       "description": "Fast responses with lighter reasoning"
+      },
+      {
+       "reasoningEffort": "medium",
+       "description": "Balances speed and reasoning depth for everyday tasks"
+      },
+      {
+       "reasoningEffort": "high",
+       "description": "Greater reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "xhigh",
+       "description": "Extra high reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "max",
+       "description": "Maximum reasoning depth for the hardest problems"
+      },
+      {
+       "reasoningEffort": "ultra",
+       "description": "Maximum reasoning with automatic task delegation"
+      }
+     ],
+     "defaultReasoningEffort": "medium",
+     "inputModalities": [
+      "text",
+      "image"
+     ],
+     "supportsPersonality": false,
+     "multiAgentVersion": "v2",
+     "additionalSpeedTiers": [
+      "fast"
+     ],
+     "serviceTiers": [
+      {
+       "id": "priority",
+       "name": "Fast",
+       "description": "1.5x speed"
+      }
+     ],
+     "defaultServiceTier": "priority",
+     "availableAccessPrograms": null,
+     "isDefault": false
+    },
+    {
+     "id": "gpt-6-luna",
+     "model": "gpt-6-luna",
+     "upgrade": null,
+     "upgradeInfo": null,
+     "availabilityNux": null,
+     "displayName": "GPT-6-Luna",
+     "description": "Fast and affordable model for easier tasks.",
+     "modelSpecialty": null,
+     "hidden": false,
+     "supportedReasoningEfforts": [
+      {
+       "reasoningEffort": "low",
+       "description": "Fast responses with lighter reasoning"
+      },
+      {
+       "reasoningEffort": "medium",
+       "description": "Balances speed and reasoning depth for everyday tasks"
+      },
+      {
+       "reasoningEffort": "high",
+       "description": "Greater reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "xhigh",
+       "description": "Extra high reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "max",
+       "description": "Maximum reasoning depth for the hardest problems"
+      }
+     ],
+     "defaultReasoningEffort": "medium",
+     "inputModalities": [
+      "text",
+      "image"
+     ],
+     "supportsPersonality": false,
+     "multiAgentVersion": "v2",
+     "additionalSpeedTiers": [
+      "fast"
+     ],
+     "serviceTiers": [
+      {
+       "id": "priority",
+       "name": "Fast",
+       "description": "1.5x speed"
+      }
+     ],
+     "defaultServiceTier": "priority",
+     "availableAccessPrograms": null,
+     "isDefault": false
+    },
+    {
+     "id": "gpt-5.6-sol",
+     "model": "gpt-5.6-sol",
+     "upgrade": "gpt-6-sol",
+     "upgradeInfo": {
+      "model": "gpt-6-sol",
+      "upgradeCopy": null,
+      "modelLink": null,
+      "migrationMarkdown": "Meet GPT-6 Sol\n\nOur latest Sol is more intelligent and more efficient so your usage limits go further. This model is a great daily driver for complex tasks, especially coding.\n",
+      "retirementAt": null
+     },
+     "availabilityNux": null,
+     "displayName": "GPT-5.6-Sol",
+     "description": "Older generation workhorse model.",
+     "modelSpecialty": null,
+     "hidden": false,
+     "supportedReasoningEfforts": [
+      {
+       "reasoningEffort": "low",
+       "description": "Fast responses with lighter reasoning"
+      },
+      {
+       "reasoningEffort": "medium",
+       "description": "Balances speed and reasoning depth for everyday tasks"
+      },
+      {
+       "reasoningEffort": "high",
+       "description": "Greater reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "xhigh",
+       "description": "Extra high reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "max",
+       "description": "Maximum reasoning depth for the hardest problems"
+      },
+      {
+       "reasoningEffort": "ultra",
+       "description": "Maximum reasoning with automatic task delegation"
+      }
+     ],
+     "defaultReasoningEffort": "low",
+     "inputModalities": [
+      "text",
+      "image"
+     ],
+     "supportsPersonality": false,
+     "multiAgentVersion": "v2",
+     "additionalSpeedTiers": [
+      "fast"
+     ],
+     "serviceTiers": [
+      {
+       "id": "priority",
+       "name": "Fast",
+       "description": "1.5x speed, increased usage"
+      }
+     ],
+     "defaultServiceTier": null,
+     "availableAccessPrograms": null,
+     "isDefault": false
+    },
+    {
+     "id": "gpt-5.6-terra",
+     "model": "gpt-5.6-terra",
+     "upgrade": "gpt-6-sol",
+     "upgradeInfo": {
+      "model": "gpt-6-sol",
+      "upgradeCopy": null,
+      "modelLink": null,
+      "migrationMarkdown": "Meet GPT-6 Sol\n\nOur latest Sol is more intelligent and more efficient so your usage limits go further. This model is a great daily driver for complex tasks, especially coding.\n",
+      "retirementAt": null
+     },
+     "availabilityNux": null,
+     "displayName": "GPT-5.6-Terra",
+     "description": "Older balanced model for straightforward work.",
+     "modelSpecialty": null,
+     "hidden": false,
+     "supportedReasoningEfforts": [
+      {
+       "reasoningEffort": "low",
+       "description": "Fast responses with lighter reasoning"
+      },
+      {
+       "reasoningEffort": "medium",
+       "description": "Balances speed and reasoning depth for everyday tasks"
+      },
+      {
+       "reasoningEffort": "high",
+       "description": "Greater reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "xhigh",
+       "description": "Extra high reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "max",
+       "description": "Maximum reasoning depth for the hardest problems"
+      },
+      {
+       "reasoningEffort": "ultra",
+       "description": "Maximum reasoning with automatic task delegation"
+      }
+     ],
+     "defaultReasoningEffort": "medium",
+     "inputModalities": [
+      "text",
+      "image"
+     ],
+     "supportsPersonality": false,
+     "multiAgentVersion": "v2",
+     "additionalSpeedTiers": [
+      "fast"
+     ],
+     "serviceTiers": [
+      {
+       "id": "priority",
+       "name": "Fast",
+       "description": "1.5x speed, increased usage"
+      }
+     ],
+     "defaultServiceTier": null,
+     "availableAccessPrograms": null,
+     "isDefault": false
+    },
+    {
+     "id": "gpt-5.6-luna",
+     "model": "gpt-5.6-luna",
+     "upgrade": "gpt-6-luna",
+     "upgradeInfo": {
+      "model": "gpt-6-luna",
+      "upgradeCopy": null,
+      "modelLink": null,
+      "migrationMarkdown": "Meet GPT-6 Luna\n\nOur latest Luna is significantly more efficient, so your usage limits go even further. Reach for it for any job that doesn't require frontier intelligence.\n",
+      "retirementAt": null
+     },
+     "availabilityNux": null,
+     "displayName": "GPT-5.6-Luna",
+     "description": "Older fast and efficient model.",
+     "modelSpecialty": null,
+     "hidden": false,
+     "supportedReasoningEfforts": [
+      {
+       "reasoningEffort": "low",
+       "description": "Fast responses with lighter reasoning"
+      },
+      {
+       "reasoningEffort": "medium",
+       "description": "Balances speed and reasoning depth for everyday tasks"
+      },
+      {
+       "reasoningEffort": "high",
+       "description": "Greater reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "xhigh",
+       "description": "Extra high reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "max",
+       "description": "Maximum reasoning depth for the hardest problems"
+      }
+     ],
+     "defaultReasoningEffort": "medium",
+     "inputModalities": [
+      "text",
+      "image"
+     ],
+     "supportsPersonality": false,
+     "multiAgentVersion": "v1",
+     "additionalSpeedTiers": [
+      "fast"
+     ],
+     "serviceTiers": [
+      {
+       "id": "priority",
+       "name": "Fast",
+       "description": "1.5x speed, increased usage"
+      }
+     ],
+     "defaultServiceTier": null,
+     "availableAccessPrograms": null,
+     "isDefault": false
+    },
+    {
+     "id": "gpt-5.5",
+     "model": "gpt-5.5",
+     "upgrade": "gpt-6-sol",
+     "upgradeInfo": {
+      "model": "gpt-6-sol",
+      "upgradeCopy": null,
+      "modelLink": null,
+      "migrationMarkdown": "Meet GPT-6 Sol\n\nOur latest Sol is more intelligent and more efficient so your usage limits go further. This model is a great daily driver for complex tasks, especially coding.\n",
+      "retirementAt": null
+     },
+     "availabilityNux": null,
+     "displayName": "GPT-5.5",
+     "description": "Legacy coding model.",
+     "modelSpecialty": null,
+     "hidden": false,
+     "supportedReasoningEfforts": [
+      {
+       "reasoningEffort": "low",
+       "description": "Fast responses with lighter reasoning"
+      },
+      {
+       "reasoningEffort": "medium",
+       "description": "Balances speed and reasoning depth for everyday tasks"
+      },
+      {
+       "reasoningEffort": "high",
+       "description": "Greater reasoning depth for complex problems"
+      },
+      {
+       "reasoningEffort": "xhigh",
+       "description": "Extra high reasoning depth for complex problems"
+      }
+     ],
+     "defaultReasoningEffort": "medium",
+     "inputModalities": [
+      "text",
+      "image"
+     ],
+     "supportsPersonality": false,
+     "multiAgentVersion": null,
+     "additionalSpeedTiers": [
+      "fast"
+     ],
+     "serviceTiers": [
+      {
+       "id": "priority",
+       "name": "Fast",
+       "description": "1.5x speed, increased usage"
+      }
+     ],
+     "defaultServiceTier": null,
+     "availableAccessPrograms": null,
+     "isDefault": false
+    }
+   ],
+   "nextCursor": null
+  }
+ },
+ "experimentalFeature/list": {
+  "id": 3,
+  "result": {
+   "data": [
+    {
+     "name": "analytics_plan_history",
+     "stage": "beta",
+     "displayName": "Analytics plan history",
+     "description": "Preview five-hour and weekly allowance history for consumer accounts in /analytics.",
+     "announcement": "",
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "daemon_auto_start",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "transcript_v2",
+     "stage": "deprecated",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "undo",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "shell_tool",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "view_image",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "sleep_tool",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "secret_auth_storage",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "unified_exec",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "unified_exec_tty",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "shell_zsh_fork",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "unified_exec_zsh_fork",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "shell_snapshot",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "login_shell_package_path",
+     "stage": "beta",
+     "displayName": "Bundled tools in login shells",
+     "description": "Keep bundled tools such as ripgrep available when login shell startup resets PATH.",
+     "announcement": "",
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "powershell_shell_version",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "shell_snapshot_v2",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "deferred_executor",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "cwd_relative_turn_diffs",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "js_repl",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "content_item_kinds",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "executed_tool_call_metadata",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "stable_environment_tools",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "code_mode",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "code_mode_tool_search",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "code_mode_buffered_exec",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "code_mode_host",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "code_mode_host_grpc",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "code_mode_prewarm",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "code_mode_interrupt",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "code_mode_tool_description_first",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "instant_interrupt",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "code_mode_only",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "code_mode_only_strict_3p_tools",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "js_repl_tools_only",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "terminal_resize_reflow",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "web_search_request",
+     "stage": "deprecated",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "web_search_cached",
+     "stage": "deprecated",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "standalone_web_search",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "search_tool",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "codex_git_commit",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "runtime_metrics",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "sqlite",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "memories",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "external_agent_memory_import",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "local_thread_store_compression",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "local_thread_store_shared_compression",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "background_paginated_rollout_migration",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "chronicle",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "apply_patch_freeform",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "apply_patch_streaming_events",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "apply_patch_preserve_line_endings",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "exec_permission_approvals",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "write_stdin_approval",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "hooks",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "request_permissions_tool",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "use_linux_sandbox_bwrap",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "use_legacy_landlock",
+     "stage": "deprecated",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "request_rule",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "experimental_windows_sandbox",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "elevated_windows_sandbox",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "windows_sandbox_service",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "prefer_mxc",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "remote_models",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "api_key_model_discovery",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "cli_daybreak",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "api_key_cyber_access_programs",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "enable_request_compression",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "unbounded_connection_retries",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "network_proxy",
+     "stage": "beta",
+     "displayName": "Network proxy",
+     "description": "Apply network proxy restrictions to sandboxed sessions that already have network access.",
+     "announcement": "NEW: Network proxy can now be enabled from /experimental. Restart Codex after enabling it.",
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "credential_masking",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "worktrees",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "respect_system_proxy",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "system_proxy_fallback",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "multi_agent",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "multi_agent_v2",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "model_catalog_in_context",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "multi_agent_v2_dynamic_tools",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "subagent_default_context_limits",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "defer_mailbox_preemption",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "agent_message_board",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "multi_agent_mode",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "enable_fanout",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "apps",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "psp",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "enable_mcp_apps",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "mcp_2026_07_28",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "codex_apps_mcp_2026_07_28",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "mcp_oauth_refresh_coordination",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "use_xaa",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "apps_mcp_path_override",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "tool_search",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "tool_search_always_defer_mcp_tools",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "deferred_tool_world_state",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "incremental_tools",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "non_prefixed_mcp_tool_names",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "unavailable_dummy_tools",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "tool_suggest",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "recommended_plugins",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "plugins",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "executor_capability_discovery",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "skip_host_skill_discovery",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "plugin_hooks",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "in_app_browser",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "browser_annotation_api",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "in_app_chat",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "in_app_dictation",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "in_app_voice",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "in_app_local_automation",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "in_app_updates",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "browser_use",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "browser_use_full_cdp_access",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "browser_use_external",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "computer_use",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "remote_plugin",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "plugin_sharing",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "external_migration",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "image_generation",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "omit_app_server_notification_media",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "image_resize_notice",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "unified_image_budget",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "resize_all_images",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "item_ids",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "concurrent_reasoning_summaries",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "output_token_replay",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "skill_mcp_dependency_install",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "skill_search",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "skill_env_var_dependency_prompt",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "mentions_v2",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "steer",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "default_mode_request_user_input",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "send_async_message",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "send_message_to_user_async",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "terminal_visualization_instructions",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "guardian_approval",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "guardianv2.thread_context",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "guardian_reuse_parent_compaction",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "guardian_root_handoff_context",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "guardian_enhanced_node_repl_transcripts",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "guardian_node_repl_transcript_images",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "guardian_trust_orchestrator_connectors",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "guardian_conversation_history_tools",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "guardianv2",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "guardianv2_decisions_comparison",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "guardian_ext",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "goals",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "token_budget",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "context_management",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "rollout_budget",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "reasoning_effort_override",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "current_time_reminder",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "nonfatal_clock_read_errors",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "collaboration_modes",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "tool_call_mcp_elicitation",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "auth_elicitation",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "bedrock_setup_wizard",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "personality",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "artifact",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "fast_mode",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "ultrafast_mode",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "step_model_switching",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "realtime_conversation",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "remote_control",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "image_detail_original",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "tui_app_server",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "prevent_idle_sleep",
+     "stage": "beta",
+     "displayName": "Prevent sleep while running",
+     "description": "Keep your computer awake while Codex is running a thread.",
+     "announcement": "NEW: Prevent sleep while running is now available in /experimental.",
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "workspace_owner_usage_nudge",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "responses_websockets",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "responses_websockets_v2",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "remote_compaction_v2",
+     "stage": "removed",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "async_compaction",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "compaction_image_budget",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    },
+    {
+     "name": "retain_client_developer_messages",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "retain_client_tool_outputs",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "use_agent_identity",
+     "stage": "underDevelopment",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": false,
+     "defaultEnabled": false
+    },
+    {
+     "name": "workspace_dependencies",
+     "stage": "stable",
+     "displayName": null,
+     "description": null,
+     "announcement": null,
+     "enabled": true,
+     "defaultEnabled": true
+    }
+   ],
+   "nextCursor": null
+  }
+ },
+ "permissionProfile/list": {
+  "id": 4,
+  "result": {
+   "data": [
+    {
+     "id": ":read-only",
+     "description": null,
+     "allowed": true
+    },
+    {
+     "id": ":workspace",
+     "description": null,
+     "allowed": true
+    },
+    {
+     "id": ":danger-full-access",
+     "description": null,
+     "allowed": true
+    }
+   ],
+   "nextCursor": null
+  }
+ },
+ "collaborationMode/list": {
+  "id": 5,
+  "result": {
+   "data": [
+    {
+     "name": "Plan",
+     "mode": "plan",
+     "model": null,
+     "reasoning_effort": "medium"
+    },
+    {
+     "name": "Default",
+     "mode": "default",
+     "model": null,
+     "reasoning_effort": null
+    }
+   ]
+  }
+ },
+ "skills/list": {
+  "id": 6,
+  "result": {
+   "data": [
+    {
+     "cwd": "D:\\Atlas-Reverse-Lab\\codex",
+     "skills": [
+      {
+       "name": "agent-manager-skill",
+       "description": "Manage multiple local CLI agents via tmux sessions (start/stop/monitor/assign) with cron-friendly scheduling.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\agent-manager-skill\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-analyzer",
+       "description": "Validates whether an API request is correct based on provided inputs (method, URL, headers, body, auth, query params). Use this skill whenever a user wants to check, validate, debug, or verify an API call — including when they paste a curl command, show endpoint details, ask \"is this...",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-analyzer\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-and-interface-design",
+       "description": "Guides stable API and interface design. Use when designing APIs, module boundaries, or any public interface. Use when creating REST or GraphQL endpoints, defining type contracts between modules, or establishing boundaries between frontend and backend.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-and-interface-design\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-design-principles",
+       "description": "Master REST and GraphQL API design principles to build intuitive, scalable, and maintainable APIs that delight developers and stand the test of time.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-design-principles\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-designer",
+       "description": "Generates complete, production-ready REST API endpoint specifications for any system or domain the user describes. Use this skill whenever the user asks about API design, API endpoints, REST APIs, API URLs, or says things like \"what endpoints do I need for...\", \"design an API for...\",...",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-designer\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-documentation",
+       "description": "API documentation workflow for generating OpenAPI specs, creating developer guides, and maintaining comprehensive API documentation.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-documentation\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-documentation-generator",
+       "description": "Generate comprehensive, developer-friendly API documentation from code, including endpoints, parameters, examples, and best practices",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-documentation-generator\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-documenter",
+       "description": "Master API documentation with OpenAPI 3.1, AI-powered tools, and modern developer experience practices. Create interactive docs, generate SDKs, and build comprehensive developer portals.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-documenter\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-endpoint-builder",
+       "description": "Builds production-ready REST API endpoints with validation, error handling, authentication, and documentation. Follows best practices for security and scalability.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-endpoint-builder\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-fuzzing-bug-bounty",
+       "description": "Provide comprehensive techniques for testing REST, SOAP, and GraphQL APIs during bug bounty hunting and penetration testing engagements. Covers vulnerability discovery, authentication bypass, IDOR exploitation, and API-specific attack vectors.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-fuzzing-bug-bounty\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-integration",
+       "description": "Designs event-driven architectures, webhook systems, API chaining flows, ETL pipelines, and integration patterns between services. Use whenever the user asks about webhooks, event streaming, API composition, connecting two or more APIs, building pipelines, Pub/Sub, Kafka topics, ETL...",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-integration\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-onboarding",
+       "description": "Reduce time-to-first-API-call (TTFAC) by optimizing every step of the developer onboarding journey. This skill covers authentication simplification, sandbox environments, interactive documentation, and identifying and eliminating common failure points. Trigger phrases: \"API...",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-onboarding\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-patterns",
+       "description": "API design principles and decision-making. REST vs GraphQL vs tRPC selection, response formats, versioning, pagination.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-patterns\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-sdk-generator",
+       "description": "Generates client SDK code, API wrapper libraries, request/response models, and language-specific usage patterns for any REST API. Use whenever the user asks to \"generate an SDK\", \"write a client library\", \"create API wrappers\", \"generate TypeScript types from my API\", \"write a Python...",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-sdk-generator\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-security-best-practices",
+       "description": "Implement secure API design patterns including authentication, authorization, input validation, rate limiting, and protection against common API vulnerabilities",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-security-best-practices\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-security-testing",
+       "description": "API security testing workflow for REST and GraphQL APIs covering authentication, authorization, rate limiting, input validation, and security best practices.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-security-testing\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "api-testing-observability-api-mock",
+       "description": "You are an API mocking expert specializing in realistic mock services for development, testing, and demos. Design mocks that simulate real API behavior and enable parallel development.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\api-testing-observability-api-mock\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "architect-review",
+       "description": "Master software architect specializing in modern architecture",
+       "path": "C:\\Users\\25011\\.agents\\skills\\architect-review\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "architecture",
+       "description": "Architectural decision-making framework. Requirements analysis, trade-off evaluation, ADR documentation. Use when making architecture decisions or analyzing system design.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\architecture\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "architecture-decision-records",
+       "description": "Comprehensive patterns for creating, maintaining, and managing Architecture Decision Records (ADRs) that capture the context and rationale behind significant technical decisions.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\architecture-decision-records\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "architecture-patterns",
+       "description": "Master proven backend architecture patterns including Clean Architecture, Hexagonal Architecture, and Domain-Driven Design to build maintainable, testable, and scalable systems.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\architecture-patterns\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "atlas-contract",
+       "description": "Goal-integrity skill. Use for backend/API/persistence, preserve/do-not-change, tests/validation, mocks, rework, multi-part requests. Emits Goal Contracts, Deviation Notices, Phase Checks, Final Audits. Skip for Q&A or trivial edits.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\atlas-contract\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "atlas-ledger",
+       "description": "Companion to atlas-contract. Auto-invoked by its Final Audit on caught drift; also use after Post Reviews or user requests to record a mistake. Distills drift into WHEN/DON'T/INSTEAD clauses, writes to Atlas.md after confirmation.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\atlas-ledger\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "aws-compliance-checker",
+       "description": "Automated compliance checking against CIS, PCI-DSS, HIPAA, and SOC 2 benchmarks",
+       "path": "C:\\Users\\25011\\.agents\\skills\\security\\aws-compliance-checker\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "aws-iam-best-practices",
+       "description": "IAM policy review, hardening, and least privilege implementation",
+       "path": "C:\\Users\\25011\\.agents\\skills\\security\\aws-iam-best-practices\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "aws-secrets-rotation",
+       "description": "Automate AWS secrets rotation for RDS, API keys, and credentials",
+       "path": "C:\\Users\\25011\\.agents\\skills\\security\\aws-secrets-rotation\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "aws-security-audit",
+       "description": "Comprehensive AWS security posture assessment using AWS CLI and security best practices",
+       "path": "C:\\Users\\25011\\.agents\\skills\\security\\aws-security-audit\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "base",
+       "description": "Database management, forms, reports, and data operations with LibreOffice Base.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\libreoffice\\base\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "bash-defensive-patterns",
+       "description": "Master defensive Bash programming techniques for production-grade scripts. Use when writing robust shell scripts, CI/CD pipelines, or system utilities requiring fault tolerance and safety.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\bash-defensive-patterns\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "bash-linux",
+       "description": "Bash/Linux terminal patterns. Critical commands, piping, error handling, scripting. Use when working on macOS or Linux systems.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\bash-linux\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "bash-pro",
+       "description": "Master of defensive Bash scripting for production automation, CI/CD pipelines, and system utilities. Expert in safe, portable, and testable shell scripts.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\bash-pro\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "bash-scripting",
+       "description": "Bash scripting workflow for creating production-ready shell scripts with defensive patterns, error handling, and testing.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\bash-scripting\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "browser-automation",
+       "description": "Browser automation powers web testing, scraping, and AI agent interactions. The difference between a flaky script and a reliable system comes down to understanding selectors, waiting strategies, and anti-detection patterns.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\browser-automation\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "browser-extension-builder",
+       "description": "Expert in building browser extensions that solve real problems - Chrome, Firefox, and cross-browser extensions. Covers extension architecture, manifest v3, content scripts, popup UIs, monetization strategies, and Chrome Web Store publishing.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\browser-extension-builder\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "browser-harness",
+       "description": "Drive an existing browser through CDP for authenticated, visual, or interactive web automation.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\browser-harness\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "browser-testing-with-devtools",
+       "description": "Test browser apps with Chrome DevTools MCP by inspecting live DOM, console logs, network traffic, screenshots, accessibility, and performance traces.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\browser-testing-with-devtools\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "build",
+       "description": "build",
+       "path": "C:\\Users\\25011\\.agents\\skills\\build\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "c-pro",
+       "description": "Write efficient C code with proper memory management, pointer",
+       "path": "C:\\Users\\25011\\.agents\\skills\\c-pro\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "calc",
+       "description": "Spreadsheet creation, format conversion (ODS/XLSX/CSV), formulas, data automation with LibreOffice Calc.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\libreoffice\\calc\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "codex-fable5",
+       "description": "Apply Fable-inspired discipline to Codex work: inspect first, track goals and findings, ground conclusions in evidence, verify before completion, and adapt Claude/Fable prompt guidance without identity or provider claims.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\codex-fable5\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "codex-profiles",
+       "description": "Use codex-profiles to run Codex CLI or Codex Desktop with isolated CODEX_HOME profiles for separate accounts, projects, and local state.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\codex-profiles\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "codex-review",
+       "description": "Professional code review with auto CHANGELOG generation, integrated with Codex AI. Use when you want professional code review before commits, you need automatic CHANGELOG generation, or reviewing large-scale refactoring.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\codex-review\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "codex-subagent",
+       "description": "Launch Codex CLI as an isolated subagent for bounded coding, review, or verification tasks.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\codex-subagent\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "comfyui-gateway",
+       "description": "REST API gateway for ComfyUI servers. Workflow management, job queuing, webhooks, caching, auth, rate limiting, and image delivery (URL + base64).",
+       "path": "C:\\Users\\25011\\.agents\\skills\\comfyui-gateway\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "computer-use-agents",
+       "description": "Build AI agents that interact with computers like humans do - viewing screens, moving cursors, clicking buttons, and typing text. Covers Anthropic's Computer Use, OpenAI's Operator/CUA, and open-source alternatives.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\computer-use-agents\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "cpp-pro",
+       "description": "Write idiomatic C++ code with modern features, RAII, smart pointers, and STL algorithms. Handles templates, move semantics, and performance optimization.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\cpp-pro\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "daily",
+       "description": "Documentation and capabilities reference for Daily",
+       "path": "C:\\Users\\25011\\.agents\\skills\\daily\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "daily-gift",
+       "description": "Relationship-aware daily gift engine with five-stage creative pipeline — editorial judgment, synthesis, concept generation, visual strategy, and rendering in H5, image, or video",
+       "path": "C:\\Users\\25011\\.agents\\skills\\daily-gift\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "daily-news-report",
+       "description": "Scrapes content based on a preset URL list, filters high-quality technical information, and generates daily Markdown reports.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\daily-news-report\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "debug-buttercup",
+       "description": "All pods run in namespace crs. Use when pods in the crs namespace are in CrashLoopBackOff, OOMKilled, or restarting, multiple services restart simultaneously (cascade failure), or redis is unresponsive or showing AOF warnings.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\debug-buttercup\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "debugger",
+       "description": "Debugging specialist for errors, test failures, and unexpected behavior. Use proactively when encountering any issues.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\debugger\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "debugging-and-error-recovery",
+       "description": "Guides systematic root-cause debugging. Use when tests fail, builds break, behavior doesn't match expectations, or you encounter any unexpected error. Use when you need a systematic approach to finding and fixing the root cause rather than guessing.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\debugging-and-error-recovery\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "debugging-code",
+       "description": "Interactively debug source code — set breakpoints, step through execution line by line, inspect live variable state, evaluate expressions against the running program, and navigate the call stack to trace root causes. Use when a program crashes, raises unexpected exceptions, produces...",
+       "path": "C:\\Users\\25011\\.agents\\skills\\debugging-code\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "debugging-strategies",
+       "description": "Transform debugging from frustrating guesswork into systematic problem-solving with proven strategies, powerful tools, and methodical approaches.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\debugging-strategies\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "debugging-toolkit",
+       "description": "Use when working with debugging toolkit smart debug (Alias for debugging-toolkit-smart-debug)",
+       "path": "C:\\Users\\25011\\.agents\\skills\\debugging-toolkit\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "debugging-toolkit-smart-debug",
+       "description": "Use when working with debugging toolkit smart debug",
+       "path": "C:\\Users\\25011\\.agents\\skills\\debugging-toolkit-smart-debug\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "docker-expert",
+       "description": "You are an advanced Docker containerization expert with comprehensive, practical knowledge of container optimization, security hardening, multi-stage builds, orchestration patterns, and production deployment strategies based on current industry best practices.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\docker-expert\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "draw",
+       "description": "Vector graphics and diagram creation, format conversion (ODG/SVG/PDF) with LibreOffice Draw.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\libreoffice\\draw\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-api-integration-patterns",
+       "description": "Production-ready patterns for integrating frontend applications with backend APIs, including race condition handling, request cancellation, retry strategies, error normalization, and UI state management.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-api-integration-patterns\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-architecture",
+       "description": "A portable, framework-agnostic architecture style for any React or React Native frontend. Organizes apps into feature modules with page/screen directories, a strict server-state vs UI-state split, barrel-only cross-module imports, co-located styles, and clear component-promotion rules....",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-architecture\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-data-contracts",
+       "description": "A portable, framework-agnostic discipline for type safety at the network edge of any React or React Native app. Establishes one typed API client as the single fetch boundary, a parse-don't-validate rule that turns wire JSON into trusted domain types before it enters the app, a single...",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-data-contracts\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-design",
+       "description": "You are a frontend designer-engineer, not a layout generator.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-design\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-dev-guidelines",
+       "description": "You are a senior frontend engineer operating under strict architectural and performance standards. Use when creating components or pages, adding new features, or fetching or mutating data.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-dev-guidelines\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-developer",
+       "description": "Build React components, implement responsive layouts, and handle client-side state management. Masters React 19, Next.js 15, and modern frontend architecture.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-developer\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-lighthouse",
+       "description": "Add a portable Lighthouse CI gate for production frontend builds with Core Web Vitals budgets, category floors, median runs, and CI artifacts.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-lighthouse\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-mobile-development-component-scaffold",
+       "description": "You are a React component architecture expert specializing in scaffolding production-ready, accessible, and performant components. Generate complete component implementations with TypeScript, tests, s",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-mobile-development-component-scaffold\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-mobile-security-xss-scan",
+       "description": "You are a frontend security specialist focusing on Cross-Site Scripting (XSS) vulnerability detection and prevention. Analyze React, Vue, Angular, and vanilla JavaScript code to identify injection poi",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-mobile-security-xss-scan\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-observability",
+       "description": "A portable, framework-agnostic field-side observability system for any React or React Native app. Establishes one typed event taxonomy (canonical event-name constants, never inline strings), a best-effort non-blocking provider fan-out so a failing or absent analytics provider can never...",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-observability\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-optimistic-mutations",
+       "description": "A portable, framework-agnostic discipline for the write path of any React or React Native app using a query/cache layer. Codifies the optimistic-update lifecycle (cancel in-flight queries → snapshot every affected cache → patch instantly → roll back verbatim on error → invalidate on...",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-optimistic-mutations\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-security-coder",
+       "description": "Expert in secure frontend coding practices specializing in XSS prevention, output sanitization, and client-side security patterns.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-security-coder\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-seo",
+       "description": "A portable, framework-agnostic SEO system for any React or React Native-for-web frontend. Centralizes site metadata in one constants module, derives canonical URLs from a single base, builds per-route metadata (title, description, canonical, Open Graph, Twitter/X cards), generates...",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-seo\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-slides",
+       "description": "Create stunning, animation-rich HTML presentations from scratch or by converting PowerPoint files.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-slides\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-slides-frontend-slides",
+       "description": "Create stunning, animation-rich HTML presentations from scratch or by converting PowerPoint files. Use when the user wants to build a presentation, convert a PPT/PPTX to web, or create slides for a talk/pitch. Helps non-designers discover their aesthetic through visual exploration...",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-slides-frontend-slides\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-ui-dark-ts",
+       "description": "A modern dark-themed React UI system using Tailwind CSS and Framer Motion. Designed for dashboards, admin panels, and data-rich applications with glassmorphism effects and tasteful animations.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-ui-dark-ts\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "frontend-ui-engineering",
+       "description": "Builds production-quality UIs. Use when building or modifying user-facing interfaces. Use when creating components, implementing layouts, managing state, or when the output needs to look and feel production-quality rather than AI-generated.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\frontend-ui-engineering\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "git-advanced-workflows",
+       "description": "Master advanced Git techniques to maintain clean history, collaborate effectively, and recover from any situation with confidence.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\git-advanced-workflows\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "git-hooks-automation",
+       "description": "Master Git hooks setup with Husky, lint-staged, pre-commit framework, and commitlint. Automate code quality gates, formatting, linting, and commit message enforcement before code reaches CI.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\git-hooks-automation\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "git-pr-review",
+       "description": "Generate a concise and structured PR description from commit history with minimal token usage",
+       "path": "C:\\Users\\25011\\.agents\\skills\\git-pr-review\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "git-pr-workflows-git-workflow",
+       "description": "Orchestrate a comprehensive git workflow from code review through PR creation, leveraging specialized agents for quality assurance, testing, and deployment readiness. This workflow implements modern g",
+       "path": "C:\\Users\\25011\\.agents\\skills\\git-pr-workflows-git-workflow\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "git-pr-workflows-onboard",
+       "description": "You are an **expert onboarding specialist and knowledge transfer architect** with deep experience in remote-first organizations, technical team integration, and accelerated learning methodologies. You",
+       "path": "C:\\Users\\25011\\.agents\\skills\\git-pr-workflows-onboard\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "git-pr-workflows-pr-enhance",
+       "description": "You are a PR optimization expert specializing in creating high-quality pull requests that facilitate efficient code reviews. Generate comprehensive PR descriptions, automate review processes, and ensu",
+       "path": "C:\\Users\\25011\\.agents\\skills\\git-pr-workflows-pr-enhance\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "git-pushing",
+       "description": "Stage all changes, create a conventional commit, and push to the remote branch. Use when explicitly asks to push changes (\"push this\", \"commit and push\"), mentions saving work to remote (\"save to github\", \"push to remote\"), or completes a feature and wants to share it.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\git-pushing\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "git-workflow-and-versioning",
+       "description": "Structures git workflow practices. Use when making any code change. Use when committing, branching, resolving conflicts, or when you need to organize work across multiple parallel streams.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\git-workflow-and-versioning\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "golang-pro",
+       "description": "Master Go 1.21+ with modern patterns, advanced concurrency, performance optimization, and production-ready microservices.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\golang-pro\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "hermes-diagnostics",
+       "description": "Procedure for diagnosing Hermes desktop agent tool failures, inspecting session state.db, and resolving Python environment dependencies.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\hermes-diagnostics\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "impress",
+       "description": "Presentation creation, format conversion (ODP/PPTX/PDF), slide automation with LibreOffice Impress.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\libreoffice\\impress\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "javascript-mastery",
+       "description": "33+ essential JavaScript concepts every developer should know, inspired by [33-js-concepts](https://github.com/leonardomso/33-js-concepts).",
+       "path": "C:\\Users\\25011\\.agents\\skills\\javascript-mastery\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "javascript-pro",
+       "description": "Master modern JavaScript with ES6+, async patterns, and Node.js APIs. Handles promises, event loops, and browser/Node compatibility.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\javascript-pro\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "javascript-testing-patterns",
+       "description": "Comprehensive guide for implementing robust testing strategies in JavaScript/TypeScript applications using modern testing frameworks and best practices.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\javascript-testing-patterns\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "javascript-typescript-typescript-scaffold",
+       "description": "You are a TypeScript project architecture expert specializing in scaffolding production-ready Node.js and frontend applications. Generate complete project structures with modern tooling (pnpm, Vite, N",
+       "path": "C:\\Users\\25011\\.agents\\skills\\javascript-typescript-typescript-scaffold\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "jq",
+       "description": "Expert jq usage for JSON querying, filtering, transformation, and pipeline integration. Practical patterns for real shell workflows.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\jq\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "k8s-manifest-generator",
+       "description": "Step-by-step guidance for creating production-ready Kubernetes manifests including Deployments, Services, ConfigMaps, Secrets, and PersistentVolumeClaims.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\k8s-manifest-generator\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "k8s-security-policies",
+       "description": "Comprehensive guide for implementing NetworkPolicy, PodSecurityPolicy, RBAC, and Pod Security Standards in Kubernetes.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\k8s-security-policies\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "mermaid-expert",
+       "description": "Create Mermaid diagrams for flowcharts, sequences, ERDs, and architectures. Masters syntax for all diagram types and styling.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\mermaid-expert\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "moyu",
+       "description": "Anti-over-engineering guardrail that activates when an AI coding agent expands scope, adds abstractions, or changes files the user did not request.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\moyu\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "pdf-conversion-router",
+       "description": "Use when converting a PDF into another format such as Markdown, HTML, text, JSON, DOCX, or structured notes and the agent must choose the best extraction route, settings, and cleanup strategy for maximum fidelity and readability.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\pdf-conversion-router\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "pdf-official",
+       "description": "This guide covers essential PDF processing operations using Python libraries and command-line tools. For advanced features, JavaScript libraries, and detailed examples, see reference.md. If you need to fill out a PDF form, read forms.md and follow its instructions.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\pdf-official\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "postgres-best-practices",
+       "description": "Postgres performance optimization and best practices from Supabase. Use this skill when writing, reviewing, or optimizing Postgres queries, schema designs, or database configurations.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\postgres-best-practices\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "postgresql",
+       "description": "Design a PostgreSQL-specific schema. Covers best-practices, data types, indexing, constraints, performance patterns, and advanced features",
+       "path": "C:\\Users\\25011\\.agents\\skills\\postgresql\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "postgresql-cli",
+       "description": "PostgreSQL interactive terminal (psql) reference and usage guide. Use this skill whenever the user mentions psql, PostgreSQL command-line client, backslash commands, meta-commands, \\d commands, database inspection, SQL scripting in PostgreSQL, importing/exporting data with psql, \\copy,...",
+       "path": "C:\\Users\\25011\\.agents\\skills\\postgresql-cli\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "postgresql-optimization",
+       "description": "PostgreSQL database optimization workflow for query tuning, indexing strategies, performance analysis, and production database management.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\postgresql-optimization\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "python-development",
+       "description": "You are a Python project architecture expert specializing in scaffolding production-ready Python applications. Generate complete project structures with modern tooling (uv, FastAPI, Django), type hint (Alias for python-development-python-scaffold)",
+       "path": "C:\\Users\\25011\\.agents\\skills\\python-development\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "python-development-python-scaffold",
+       "description": "You are a Python project architecture expert specializing in scaffolding production-ready Python applications. Generate complete project structures with modern tooling (uv, FastAPI, Django), type hint",
+       "path": "C:\\Users\\25011\\.agents\\skills\\python-development-python-scaffold\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "python-fastapi-development",
+       "description": "Python FastAPI backend development with async patterns, SQLAlchemy, Pydantic, authentication, and production API patterns.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\python-fastapi-development\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "python-packaging",
+       "description": "Comprehensive guide to creating, structuring, and distributing Python packages using modern packaging tools, pyproject.toml, and publishing to PyPI.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\python-packaging\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "python-patterns",
+       "description": "Python development principles and decision-making. Framework selection, async patterns, type hints, project structure. Teaches thinking, not copying.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\python-patterns\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "python-performance-optimization",
+       "description": "Profile and optimize Python code using cProfile, memory profilers, and performance best practices. Use when debugging slow Python code, optimizing bottlenecks, or improving application performance.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\python-performance-optimization\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "python-pptx-generator",
+       "description": "Generate complete Python scripts that build polished PowerPoint decks with python-pptx and real slide content.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\python-pptx-generator\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "python-pro",
+       "description": "Master Python 3.12+ with modern features, async programming, performance optimization, and production-ready practices. Expert in the latest Python ecosystem including uv, ruff, pydantic, and FastAPI.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\python-pro\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "python-testing-patterns",
+       "description": "Implement comprehensive testing strategies with pytest, fixtures, mocking, and test-driven development. Use when writing Python tests, setting up test suites, or implementing testing best practices.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\python-testing-patterns\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "react-best-practices",
+       "description": "Comprehensive performance optimization guide for React and Next.js applications, maintained by Vercel. Use when writing new React components or Next.js pages, implementing data fetching (client or server-side), or reviewing code for performance issues.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\react-best-practices\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "react-component-performance",
+       "description": "Diagnose slow React components and suggest targeted performance fixes.",
+       "interface": {
+        "displayName": "React Component Performance",
+        "shortDescription": "Profile and fix React render issues",
+        "iconSmall": null,
+        "iconLarge": null,
+        "iconSmallUrl": null,
+        "iconLargeUrl": null,
+        "brandColor": null,
+        "defaultPrompt": "Use $react-component-performance to analyze and improve this React component's rendering performance."
+       },
+       "path": "C:\\Users\\25011\\.agents\\skills\\react-component-performance\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "react-flow-architect",
+       "description": "Build production-ready ReactFlow applications with hierarchical navigation, performance optimization, and advanced state management.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\react-flow-architect\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "react-flow-node-ts",
+       "description": "Create React Flow node components following established patterns with proper TypeScript types and store integration.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\react-flow-node-ts\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "react-modernization",
+       "description": "Master React version upgrades, class to hooks migration, concurrent features adoption, and codemods for automated transformation.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\react-modernization\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "react-native-architecture",
+       "description": "Production-ready patterns for React Native development with Expo, including navigation, state management, native modules, and offline-first architecture.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\react-native-architecture\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "react-native-skills",
+       "description": "Use when working with react-native-skills tasks or workflows",
+       "path": "C:\\Users\\25011\\.agents\\skills\\react-native-skills\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "react-nextjs-development",
+       "description": "React and Next.js 14+ application development with App Router, Server Components, TypeScript, Tailwind CSS, and modern frontend patterns.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\react-nextjs-development\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "react-patterns",
+       "description": "Modern React patterns and principles. Hooks, composition, performance, TypeScript best practices.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\react-patterns\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "react-state-management",
+       "description": "Master modern React state management with Redux Toolkit, Zustand, Jotai, and React Query. Use when setting up global state, managing server state, or choosing between state management solutions.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\react-state-management\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "react-ui-patterns",
+       "description": "Modern React UI patterns for loading states, error handling, and data fetching. Use when building UI components, handling async data, or managing UI states.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\react-ui-patterns\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "reverse-engineer-anything",
+       "description": "Reverse engineer native, managed, Electron/JavaScript, packaged, firmware, and browser targets with REA. Use shipped-artifact or requested runtime evidence to explain features, compare versions, decompile code, or guide a reconstruction. Skip REA for ordinary source-repository architecture analysis.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\reverse-engineer-anything\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "rust-async-patterns",
+       "description": "Master Rust async programming with Tokio, async traits, error handling, and concurrent patterns. Use when building async Rust applications, implementing concurrent systems, or debugging async code.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\rust-async-patterns\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "rust-pro",
+       "description": "Master Rust 1.75+ with modern async patterns, advanced type system features, and production-ready systems programming.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\rust-pro\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "security-and-hardening",
+       "description": "Hardens code against vulnerabilities. Use when handling user input, authentication, data storage, or external integrations. Use when building any feature that accepts untrusted data, manages user sessions, or interacts with third-party services.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\security-and-hardening\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "security-audit",
+       "description": "Comprehensive security auditing workflow covering web application testing, API security, penetration testing, vulnerability scanning, and security hardening.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\security-audit\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "security-auditor",
+       "description": "Expert security auditor specializing in DevSecOps, comprehensive cybersecurity, and compliance frameworks.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\security-auditor\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "security-bluebook-builder",
+       "description": "Build a minimal but real security policy for sensitive apps. The output is a single, coherent Blue Book document using MUST/SHOULD/CAN language, with explicit assumptions, scope, and security gates.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\security-bluebook-builder\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "security-compliance-compliance-check",
+       "description": "You are a compliance expert specializing in regulatory requirements for software systems including GDPR, HIPAA, SOC2, PCI-DSS, and other industry standards. Perform comprehensive compliance audits and provide implementation guidance for achieving and maintaining compliance.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\security-compliance-compliance-check\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "security-requirement-extraction",
+       "description": "Derive security requirements from threat models and business context. Use when translating threats into actionable requirements, creating security user stories, or building security test cases.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\security-requirement-extraction\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "security-scanning-security-dependencies",
+       "description": "You are a security expert specializing in dependency vulnerability analysis, SBOM generation, and supply chain security. Scan project dependencies across multiple ecosystems to identify vulnerabilities, assess risks, and provide automated remediation strategies.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\security-scanning-security-dependencies\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "security-scanning-security-hardening",
+       "description": "Coordinate multi-layer security scanning and hardening across application, infrastructure, and compliance controls.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\security-scanning-security-hardening\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "security-scanning-security-sast",
+       "description": "Static Application Security Testing (SAST) for code vulnerability analysis across multiple languages and frameworks",
+       "path": "C:\\Users\\25011\\.agents\\skills\\security-scanning-security-sast\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "sendblue-api",
+       "description": "Send and receive iMessage, SMS, and RCS from application code via the Sendblue HTTP API — text, media, group messages, send styles, reactions, typing indicators, status callbacks, and inbound webhooks.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\sendblue\\sendblue-api\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "sendblue-cli",
+       "description": "Send iMessage and SMS from the shell via the @sendblue/cli npm package — outbound sends, contact management, and account setup with no API client or webhook server required.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\sendblue\\sendblue-cli\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "sendblue-notify",
+       "description": "Text the user's phone when a long-running task, agent turn, or scheduled job finishes — via @sendblue/cli for outbound, optionally wired to a Claude Code Stop hook for automatic fire.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\sendblue\\sendblue-notify\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "skill-creator",
+       "description": "To create new CLI skills following Anthropic's official best practices with zero manual configuration. This skill automates brainstorming, template application, validation, and installation processes while maintaining progressive disclosure patterns and writing style standards.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\skill-creator\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "skill-creator-ms",
+       "description": "Guide for creating effective skills for AI coding agents working with Azure SDKs and Microsoft Foundry services. Use when creating new skills or updating existing skills.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\skill-creator-ms\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "systematic-debugging",
+       "description": "Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes",
+       "path": "C:\\Users\\25011\\.agents\\skills\\systematic-debugging\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "terraform-aws-modules",
+       "description": "Terraform module creation for AWS — reusable modules, state management, and HCL best practices. Use when building or reviewing Terraform AWS infrastructure.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\terraform-aws-modules\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "terraform-infrastructure",
+       "description": "Terraform infrastructure as code workflow for provisioning cloud resources, creating reusable modules, and managing infrastructure at scale.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\terraform-infrastructure\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "terraform-module-library",
+       "description": "Production-ready Terraform module patterns for AWS, Azure, and GCP infrastructure.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\terraform-module-library\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "terraform-skill",
+       "description": "Terraform infrastructure as code best practices",
+       "path": "C:\\Users\\25011\\.agents\\skills\\terraform-skill\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "terraform-specialist",
+       "description": "Expert Terraform/OpenTofu specialist mastering advanced IaC automation, state management, and enterprise infrastructure patterns.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\terraform-specialist\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "test-automator",
+       "description": "Master AI-powered test automation with modern frameworks, self-healing tests, and comprehensive quality engineering. Build scalable testing strategies with advanced CI/CD integration.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\test-automator\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "test-driven-development",
+       "description": "Use when implementing any feature or bugfix, before writing implementation code",
+       "path": "C:\\Users\\25011\\.agents\\skills\\test-driven-development\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "test-fixing",
+       "description": "Systematically identify and fix all failing tests using smart grouping strategies. Use when explicitly asks to fix tests (\"fix these tests\", \"make tests pass\"), reports test failures (\"tests are failing\", \"test suite is broken\"), or completes implementation and wants tests passing.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\test-fixing\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "test-framework-migration-skill",
+       "description": "Migrates and converts test automation scripts between Selenium, Playwright, Puppeteer, and Cypress. Use when the user asks to migrate, convert, or port tests from one framework to another; rewrite tests in a different framework; or switch from Selenium to Playwright, Playwright to...",
+       "path": "C:\\Users\\25011\\.agents\\skills\\test-framework-migration-skill\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "testing-patterns",
+       "description": "Jest testing patterns, factory functions, mocking strategies, and TDD workflow. Use when writing unit tests, creating test factories, or following TDD red-green-refactor cycle.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\testing-patterns\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "testing-qa",
+       "description": "Comprehensive testing and QA workflow covering unit testing, integration testing, E2E testing, browser automation, and quality assurance.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\testing-qa\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "testng-skill",
+       "description": "Generates TestNG tests in Java with groups, data providers, parallel execution, XML suite configuration, and listeners. Use when user mentions \"TestNG\", \"@DataProvider\", \"testng.xml\", \"groups\". Triggers on: \"TestNG\", \"@DataProvider\", \"testng.xml\", \"TestNG suite\", \"parallel tests Java\".",
+       "path": "C:\\Users\\25011\\.agents\\skills\\testng-skill\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "textme",
+       "description": "Text Claude from your phone — set up the njerschow/textme daemon so inbound iMessages drive a Claude Code session on your laptop, with voice notes, image input, code execution, and a phone-number whitelist.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\sendblue\\textme\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "typescript-advanced-types",
+       "description": "Comprehensive guidance for mastering TypeScript's advanced type system including generics, conditional types, mapped types, template literal types, and utility types for building robust, type-safe applications.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\typescript-advanced-types\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "typescript-expert",
+       "description": "TypeScript and JavaScript expert with deep knowledge of type-level programming, performance optimization, monorepo management, migration strategies, and modern tooling.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\typescript-expert\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "typescript-pro",
+       "description": "Master TypeScript with advanced types, generics, and strict type safety. Handles complex type systems, decorators, and enterprise-grade patterns.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\typescript-pro\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "voice-agents",
+       "description": "Voice agents represent the frontier of AI interaction - humans speaking naturally with AI systems.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\voice-agents\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "voice-ai-development",
+       "description": "Expert in building voice AI applications - from real-time voice agents to voice-enabled apps. Covers OpenAI Realtime API, Vapi for voice agents, Deepgram for transcription, ElevenLabs for synthesis, LiveKit for real-time infrastructure, and WebRTC fundamentals.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\voice-ai-development\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "voice-ai-engine-development",
+       "description": "Build real-time conversational AI voice engines using async worker pipelines, streaming transcription, LLM agents, and TTS synthesis with interrupt handling and multi-provider support",
+       "path": "C:\\Users\\25011\\.agents\\skills\\voice-ai-engine-development\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "wgm",
+       "description": "Turns a rough request into working software via a governed build loop: align first, plan, then iterate one task at a time with deterministic backpressure and holdout-scenario judging.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\wgm\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "writer",
+       "description": "Document creation, format conversion (ODT/DOCX/PDF), mail merge, and automation with LibreOffice Writer.",
+       "path": "C:\\Users\\25011\\.agents\\skills\\libreoffice\\writer\\SKILL.md",
+       "scope": "user",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "imagegen",
+       "description": "Generate or edit raster images when the task benefits from AI-created bitmap visuals such as photos, illustrations, textures, sprites, mockups, or transparent-background cutouts. Use when Codex should create a brand-new image, transform an existing image, or derive visual variants from references, and the output should be a bitmap asset rather than repo-native code or vector. Do not use when the task is better handled by editing existing SVG/vector/code-native assets, extending an established icon or logo system, or building the visual directly in HTML/CSS/canvas.",
+       "interface": {
+        "displayName": "Image Gen",
+        "shortDescription": "Generate or edit images for websites, games, and more",
+        "iconSmall": "D:\\Atlas-Reverse-Lab\\codex\\evidence\\appserver-home\\skills\\.system\\imagegen\\assets\\imagegen-small.svg",
+        "iconLarge": "D:\\Atlas-Reverse-Lab\\codex\\evidence\\appserver-home\\skills\\.system\\imagegen\\assets\\imagegen.png",
+        "iconSmallUrl": null,
+        "iconLargeUrl": null,
+        "brandColor": null,
+        "defaultPrompt": "Use $imagegen to make or edit an image for this project."
+       },
+       "path": "D:\\Atlas-Reverse-Lab\\codex\\evidence\\appserver-home\\skills\\.system\\imagegen\\SKILL.md",
+       "scope": "system",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "openai-docs",
+       "description": "Use for Codex models/pricing, scheduled tasks, skills, settings, setup, troubleshooting, customization, automations, and self-knowledge—including 'you,' 'your,' 'this app,' or 'this coding agent' when they refer to Codex—and for OpenAI APIs/products and ChatGPT Work. Also use for model choice/migration, prompting, SDKs, Responses, Realtime, agents, evals, and Chat/Work/Codex comparisons. Do not use for generic app/software tasks that merely mention Codex.",
+       "shortDescription": "Codex models/pricing, scheduled tasks, skills, settings, setup, troubleshooting, and self-knowledge; OpenAI APIs and ChatGPT Work. 'You'/'this app' means Codex only.",
+       "interface": {
+        "displayName": "OpenAI Docs",
+        "shortDescription": "OpenAI and Codex docs for models, skills, tasks, and setup",
+        "iconSmall": "D:\\Atlas-Reverse-Lab\\codex\\evidence\\appserver-home\\skills\\.system\\openai-docs\\assets\\openai-small.svg",
+        "iconLarge": "D:\\Atlas-Reverse-Lab\\codex\\evidence\\appserver-home\\skills\\.system\\openai-docs\\assets\\openai.png",
+        "iconSmallUrl": null,
+        "iconLargeUrl": null,
+        "brandColor": null,
+        "defaultPrompt": "Use OpenAI Docs for official docs lookup, questions about Codex itself or Codex surfaces, model selection, model migration, and prompt-upgrade work."
+       },
+       "path": "D:\\Atlas-Reverse-Lab\\codex\\evidence\\appserver-home\\skills\\.system\\openai-docs\\SKILL.md",
+       "scope": "system",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "review-agent",
+       "description": "Perform a read-only, defect-first review of a specified code change and return every actionable finding. Use when another agent delegates review of uncommitted changes, a base-branch diff, a commit, or custom review instructions.",
+       "interface": {
+        "displayName": "Review Agent",
+        "shortDescription": "Find actionable bugs in code changes",
+        "iconSmall": null,
+        "iconLarge": null,
+        "iconSmallUrl": null,
+        "iconLargeUrl": null,
+        "brandColor": null,
+        "defaultPrompt": "Use $review-agent to review the requested code changes and return actionable findings."
+       },
+       "path": "D:\\Atlas-Reverse-Lab\\codex\\evidence\\appserver-home\\skills\\.system\\review-agent\\SKILL.md",
+       "scope": "system",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "skill-creator",
+       "description": "Create or update a Codex skill with appropriately scoped instructions and any needed supporting resources.",
+       "shortDescription": "Create or update a skill",
+       "interface": {
+        "displayName": "Skill Creator",
+        "shortDescription": "Create or update a skill",
+        "iconSmall": "D:\\Atlas-Reverse-Lab\\codex\\evidence\\appserver-home\\skills\\.system\\skill-creator\\assets\\skill-creator-small.svg",
+        "iconLarge": "D:\\Atlas-Reverse-Lab\\codex\\evidence\\appserver-home\\skills\\.system\\skill-creator\\assets\\skill-creator.png",
+        "iconSmallUrl": null,
+        "iconLargeUrl": null,
+        "brandColor": null,
+        "defaultPrompt": null
+       },
+       "path": "D:\\Atlas-Reverse-Lab\\codex\\evidence\\appserver-home\\skills\\.system\\skill-creator\\SKILL.md",
+       "scope": "system",
+       "enabled": true,
+       "pluginId": null
+      },
+      {
+       "name": "skill-installer",
+       "description": "Install Codex skills into $CODEX_HOME/skills from a curated list or a GitHub repo path. Use when a user asks to list installable skills, install a curated skill, or install a skill from another repo (including private repos).",
+       "shortDescription": "Install curated skills from openai/skills or other repos",
+       "interface": {
+        "displayName": "Skill Installer",
+        "shortDescription": "Install curated skills from openai/skills or other repos",
+        "iconSmall": "D:\\Atlas-Reverse-Lab\\codex\\evidence\\appserver-home\\skills\\.system\\skill-installer\\assets\\skill-installer-small.svg",
+        "iconLarge": "D:\\Atlas-Reverse-Lab\\codex\\evidence\\appserver-home\\skills\\.system\\skill-installer\\assets\\skill-installer.png",
+        "iconSmallUrl": null,
+        "iconLargeUrl": null,
+        "brandColor": null,
+        "defaultPrompt": null
+       },
+       "path": "D:\\Atlas-Reverse-Lab\\codex\\evidence\\appserver-home\\skills\\.system\\skill-installer\\SKILL.md",
+       "scope": "system",
+       "enabled": true,
+       "pluginId": null
+      }
+     ],
+     "errors": []
+    }
+   ]
+  }
+ },
+ "hooks/list": {
+  "id": 7,
+  "result": {
+   "data": [
+    {
+     "cwd": "D:\\Atlas-Reverse-Lab\\codex",
+     "hooks": [],
+     "warnings": [],
+     "errors": []
+    }
+   ]
+  }
+ },
+ "plugin/list": {
+  "id": 8,
+  "result": {
+   "marketplaces": [],
+   "marketplaceLoadErrors": [],
+   "featuredPluginIds": []
+  }
+ },
+ "mcpServerStatus/list": {
+  "id": 9,
+  "result": {
+   "data": [],
+   "nextCursor": null
+  }
+ },
+ "account/read": {
+  "id": 10,
+  "result": {
+   "account": null,
+   "requiresOpenaiAuth": true,
+   "workspaceRouting": null
+  }
+ },
+ "account/rateLimits/read": {
+  "error": {
+   "code": -32600,
+   "message": "codex account authentication required to read rate limits"
+  },
+  "id": 11
+ },
+ "account/usage/read": {
+  "error": {
+   "code": -32600,
+   "message": "codex account authentication required to read token usage"
+  },
+  "id": 12
+ },
+ "remoteControl/status/read": {
+  "id": 13,
+  "result": {
+   "status": "disabled",
+   "serverName": "DESKTOP-2L4DNVQ",
+   "installationId": "1e214e40-1279-4f70-8f85-7c93769c7af0",
+   "environmentId": null
+  }
+ },
+ "thread/list": {
+  "id": 14,
+  "result": {
+   "data": [],
+   "readStates": {},
+   "nextCursor": null,
+   "backwardsCursor": null
+  }
+ },
+ "project/list": {
+  "id": 15,
+  "result": {
+   "data": [],
+   "nextCursor": null
+  }
+ },
+ "threadSection/list": {
+  "id": 16,
+  "result": {
+   "data": [
+    {
+     "id": "01984de2-8f74-7c91-a3b2-5c5e937cf318",
+     "name": "Pinned",
+     "appearance": null
+    }
+   ],
+   "nextCursor": null
+  }
+ },
+ "app/list": {
+  "id": 17,
+  "result": {
+   "data": [],
+   "nextCursor": null
+  }
+ },
+ "marketplace/list": {
+  "error": {
+   "code": -32600,
+   "message": "Invalid request: unknown variant `marketplace/list`, expected one of `initialize`, `server/diagnostics`, `userVerification/status`, `userVerification/enroll`, `userVerification/delete`, `userVerification/verify`, `userVerification/cancel`, `thread/start`, `thread/resume`, `thread/fork`, `thread/archive`, `thread/delete`, `thread/unsubscribe`, `thread/increment_elicitation`, `thread/decrement_elicitation`, `thread/name/set`, `thread/prediction/request`, `thread/goal/set`, `thread/goal/get`, `thread/goal/clear`, `thread/queue/add`, `thread/queue/list`, `thread/queue/update`, `thread/queue/delete`, `thread/queue/reorder`, `thread/queue/start`, `thread/metadata/update`, `thread/attachment/add`, `thread/attachment/list`, `thread/attachmentOwner/list`, `thread/attachment/remove`, `thread/section/move`, `thread/settings/update`, `thread/memoryMode/set`, `memory/status`, `memory/reset`, `rollout/compress`, `thread/unarchive`, `thread/compact/start`, `thread/shellCommand`, `thread/approveGuardianDeniedAction`, `thread/backgroundTerminals/clean`, `thread/backgroundTerminals/list`, `thread/backgroundTerminals/terminate`, `thread/revert`, `thread/list`, `project/list`, `project/read`, `project/create`, `project/import`, `project/update`, `project/move`, `project/delete`, `threadSection/list`, `threadSection/create`, `threadSection/update`, `threadSection/delete`, `thread/search`, `thread/searchOccurrences`, `thread/loaded/list`, `thread/read`, `thread/readState/update`, `thread/turns/list`, `thread/items/list`, `thread/items/read`, `thread/inject_items`, `skills/list`, `skills/extraRoots/set`, `hooks/list`, `marketplace/add`, `marketplace/remove`, `marketplace/upgrade`, `plugin/list`, `plugin/search`, `plugin/installed`, `plugin/reconcile`, `plugin/read`, `plugin/skill/read`, `plugin/share/save`, `plugin/share/updateTargets`, `plugin/share/list`, `plugin/share/checkout`, `plugin/share/delete`, `app/read`, `app/list`, `app/installed`, `fs/readFile`, `fs/writeFile`, `fs/createDirectory`, `fs/getMetadata`, `fs/readDirectory`, `fs/remove`, `fs/copy`, `fs/watch`, `fs/unwatch`, `skills/config/write`, `plugin/install`, `plugin/uninstall`, `turn/start`, `turn/settings/update`, `turn/steer`, `turn/interrupt`, `thread/realtime/start`, `thread/realtime/appendAudio`, `thread/realtime/appendText`, `thread/realtime/appendSpeech`, `thread/realtime/stop`, `thread/timeline/list`, `thread/realtime/listVoices`, `review/start`, `model/list`, `account/gatewayOAuth/read`, `account/gatewayOAuth/login`, `account/gatewayOAuth/cancel`, `modelProvider/capabilities/read`, `experimentalFeature/list`, `permissionProfile/list`, `experimentalFeature/enablement/set`, `remoteControl/enable`, `remoteControl/disable`, `remoteControl/status/read`, `remoteControl/pairing/start`, `remoteControl/pairing/status`, `remoteControl/client/list`, `remoteControl/client/revoke`, `collaborationMode/list`, `mock/experimentalMethod`, `environment/add`, `environment/info`, `environment/status`, `mcpServer/oauth/login`, `config/mcpServer/reload`, `mcpServerStatus/list`, `mcpServer/resource/read`, `mcpServer/event/stream/start`, `mcpServer/event/stream/stop`, `mcpServer/tool/call`, `windowsSandbox/setupStart`, `windowsSandbox/readiness`, `account/login/start`, `account/bedrock/discover`, `account/bedrock/setup`, `account/bedrock/checkGovCloudRequirements`, `account/login/cancel`, `account/logout`, `account/rateLimits/read`, `account/rateLimitResetCredit/consume`, `account/usage/read`, `account/workspaceMessages/read`, `account/sendAddCreditsNudgeEmail`, `feedback/upload`, `command/exec`, `command/exec/write`, `command/exec/terminate`, `command/exec/resize`, `process/spawn`, `process/writeStdin`, `process/kill`, `process/resizePty`, `config/read`, `externalAgentConfig/detect`, `externalAgentConfig/import`, `externalAgentConfig/import/recordHistory`, `externalAgentConfig/import/readHistories`, `config/value/write`, `config/batchWrite`, `configRequirements/read`, `account/read`, `getConversationSummary`, `gitDiffToRemote`, `getAuthStatus`, `fuzzyFileSearch`, `fuzzyFileSearch/sessionStart`, `fuzzyFileSearch/sessionUpdate`, `fuzzyFileSearch/sessionStop`"
+  },
+  "id": 18
+ },
+ "config/read": {
+  "id": 19,
+  "result": {
+   "config": {
+    "model": null,
+    "review_model": null,
+    "model_context_window": null,
+    "model_auto_compact_token_limit": null,
+    "model_auto_compact_token_limit_scope": null,
+    "model_provider": null,
+    "approval_policy": null,
+    "approvals_reviewer": null,
+    "sandbox_mode": null,
+    "sandbox_workspace_write": null,
+    "forced_chatgpt_workspace_id": null,
+    "forced_login_method": null,
+    "web_search": null,
+    "tools": null,
+    "instructions": null,
+    "developer_instructions": null,
+    "compact_prompt": null,
+    "model_reasoning_effort": null,
+    "model_reasoning_summary": null,
+    "model_verbosity": null,
+    "service_tier": null,
+    "analytics": null,
+    "apps": null,
+    "browser_use": null,
+    "computer_use": null,
+    "desktop": null,
+    "project_root_markers": [
+     ".git"
+    ],
+    "experimental_use_unified_exec_tool": null,
+    "project_doc_fallback_filenames": [],
+    "disable_paste_burst": null,
+    "include_collaboration_mode_instructions": true,
+    "goals": null,
+    "plugins": {},
+    "auto_review": null,
+    "mcp_enterprise_managed_auth": null,
+    "profile": null,
+    "experimental_realtime_ws_backend_prompt": null,
+    "tool_output_token_limit": null,
+    "chatgpt_base_url": "https://chatgpt.com/backend-api/",
+    "agents": null,
+    "memories": null,
+    "suppress_unstable_features_warning": null,
+    "shell_environment_policy": {
+     "inherit": null,
+     "ignore_default_excludes": null,
+     "exclude": null,
+     "set": null,
+     "include_only": null,
+     "filters": null,
+     "experimental_use_profile": null
+    },
+    "realtime": null,
+    "experimental_thread_store": null,
+    "hooks": null,
+    "thread_unload_delay_secs": null,
+    "mcp_oauth_callback_port": null,
+    "windows": null,
+    "daybreak": null,
+    "model_providers": {},
+    "file_opener": "vscode",
+    "feedback": null,
+    "openai_base_url": null,
+    "notice": null,
+    "log_dir": null,
+    "experimental_compact_prompt_file": null,
+    "experimental_realtime_ws_base_url": null,
+    "allow_login_shell": true,
+    "js_repl_node_module_dirs": null,
+    "tool_suggest": null,
+    "js_repl_node_path": null,
+    "default_permissions": null,
+    "personality": null,
+    "project_doc_max_bytes": 32768,
+    "history": {
+     "persistence": "save-all",
+     "max_bytes": null
+    },
+    "mcp_optional_startup_grace_ms": null,
+    "model_post_turn_compact_threshold_percent": null,
+    "hide_agent_reasoning": false,
+    "cloud": null,
+    "audio": null,
+    "experimental_realtime_webrtc_call_base_url": null,
+    "tui": null,
+    "oss_provider": null,
+    "include_environment_context_time": true,
+    "model_catalog_json": null,
+    "include_environment_context": true,
+    "show_raw_agent_reasoning": null,
+    "allow_symlinked_codex_home": null,
+    "mcp_servers": {},
+    "notify": null,
+    "experimental_realtime_start_instructions": null,
+    "mcp_oauth_callback_url": null,
+    "model_instructions_file": null,
+    "experimental_realtime_ws_startup_context": null,
+    "skills": null,
+    "background_terminal_max_timeout": 300000,
+    "profiles": {},
+    "apps_mcp_product_sku": null,
+    "responses_api_metadata": null,
+    "experimental_thread_store_endpoint": null,
+    "permissions": null,
+    "marketplaces": {},
+    "features": {
+     "api_key_cyber_access_programs": true,
+     "api_key_model_discovery": true,
+     "auth_elicitation": true,
+     "background_paginated_rollout_migration": false,
+     "codex_apps_mcp_2026_07_28": false,
+     "mcp_2026_07_28": false,
+     "memories": false,
+     "mentions_v2": true,
+     "remote_control": false,
+     "remote_plugin": true,
+     "tool_suggest": true,
+     "windows_sandbox_service": false
+    },
+    "cli_auth_credentials_store": "file",
+    "sqlite_home": null,
+    "plan_mode_reasoning_effort": null,
+    "mcp_oauth_credentials_store": "auto",
+    "include_apps_instructions": true,
+    "experimental_realtime_ws_model": null,
+    "ghost_snapshot": null,
+    "otel": null,
+    "orchestrator": null,
+    "check_for_update_on_startup": null,
+    "projects": null,
+    "include_permissions_instructions": true
+   },
+   "origins": {}
+  }
+ },
+ "configRequirements/read": {
+  "id": 20,
+  "result": {
+   "supportsIndependentSpeedModes": true,
+   "requirements": null
+  }
+ },
+ "windowsSandbox/readiness": {
+  "id": 21,
+  "result": {
+   "status": "notConfigured"
+  }
+ },
+ "server/diagnostics": {
+  "id": 22,
+  "result": {
+   "process": {
+    "id": 14056,
+    "residentMemoryBytes": 51970048,
+    "physicalFootprintBytes": null
+   },
+   "gauges": [
+    {
+     "name": "app.requests.in_flight",
+     "value": 1
+    },
+    {
+     "name": "app.requests.queued",
+     "value": 0
+    }
+   ]
+  }
+ }
+}

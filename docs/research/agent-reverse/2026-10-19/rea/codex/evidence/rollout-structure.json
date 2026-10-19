@@ -1,0 +1,51 @@
+[
+ {
+  "timestamp": "2026-10-19T13:27:50.227Z",
+  "ordinal": 0,
+  "type": "session_meta",
+  "payload": {
+   "session_id": "01a15458-d33d-7100-a9ce-34d990759850",
+   "id": "01a15458-d33d-7100-a9ce-34d990759850",
+   "timestamp": "2026-10-19T13:27:49.842Z",
+   "cwd": "D:\\Atlas-Reverse-Lab\\codex",
+   "runtime_workspace_roots": [
+    "D:\\Atlas-Reverse-Lab\\codex"
+   ],
+   "originator": "rea",
+   "cli_version": "0.163.0",
+   "source": "vscode",
+   "model_provider": "openai",
+   "base_instructions": {
+    "text_length": 18037,
+    "provenance": {
+     "type": "model",
+     "model": "gpt-6-luna"
+    }
+   },
+   "history_mode": "paginated",
+   "context_window": {
+    "window_id": "01a15458-d34c-7b80-93f0-259586bd3ce9"
+   }
+  }
+ },
+ {
+  "timestamp": "2026-10-19T13:27:50.229Z",
+  "ordinal": 1,
+  "type": "event_msg",
+  "payload": {
+   "type": "task_started",
+   "turn_attribution": {
+    "turn_id": "01a15458-d4be-7fe2-b7c5-2c669a6a098b",
+    "turn_trigger": null,
+    "parent_turn_id": null,
+    "initiating_agent_path": null,
+    "root_turn_id": "01a15458-d4be-7fe2-b7c5-2c669a6a098b"
+   },
+   "turn_id": "01a15458-d4be-7fe2-b7c5-2c669a6a098b",
+   "root_turn_id": "01a15458-d4be-7fe2-b7c5-2c669a6a098b",
+   "started_at": 1792416470,
+   "model_context_window": 258400,
+   "collaboration_mode_kind": "default"
+  }
+ }
+]
