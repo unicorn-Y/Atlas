@@ -1,6 +1,6 @@
 # Atlas implementation backlog (research only)
 
-Baseline: Atlas `main@aa6196f550098cc46081dc6db2c376cb87ddffa5` as recorded in `ATLAS-GAP.md`. No Atlas business source is changed by this lane. Suggested priorities remain provisional until the listed Atlas source chains are rechecked against current `origin/main`.
+Baseline: Atlas `main@aa6196f550098cc46081dc6db2c376cb87ddffa5` as recorded in `ATLAS-GAP.md`; `git fetch origin main` during this checkpoint confirmed `origin/main` still resolves to the same SHA. No Atlas business source is changed by this lane. The listed Atlas source chains are grounded in that current main SHA; product priority remains a design suggestion, not a validated roadmap decision.
 
 | Priority | OpenCode mechanism to borrow | Atlas existing path / classification | Atlas work implied | License / cost |
 |---|---|---|---|---|

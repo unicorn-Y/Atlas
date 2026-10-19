@@ -1,6 +1,6 @@
 # OpenCode v2.0.32 / v1.19.3 → Atlas 独立逆向研究
 
-**状态：WORK IN PROGRESS — G0 精确发行物复核通过；新增完整包清单、门槛跟踪、renderer RPC/session inbox 源码链，以及合成 API 会话与 inbox 跨进程重启持久化实测。REAl Electron 窗口可见，但 hook conflict 未捕获 IPC；尚无模型→工具→Agent 实际运行，模块/菜单/事件语义覆盖仍不全。**
+**状态：WORK IN PROGRESS — G0 精确发行物复核通过；新增完整包清单、分批 REA 语法分析、renderer RPC/session inbox 源码链、合成 API inbox 跨进程重启持久化，以及打包 CLI 的 mock-model→read tool→child subagent→parent completion 实测。真实 Electron 窗口可见，但 hook conflict 未捕获 IPC；模块/菜单/事件语义覆盖、后台任务恢复和活动 turn 中断恢复仍不全。**
 
 - 对照基线：Atlas `main@aa6196f550098cc46081dc6db2c376cb87ddffa5`；派工源 `research/agent-reverse-dispatch-20261019@51894bbcc3dfe1ea18a6e4be25483290cbc5a0e1`。
 - 上游 v2 源码 tag：`v2.0.32@843a6c514e606b436a7fe713422ace0a93ad3d61`，归档 SHA256 `0c4dfbc2f94c15e0e94bc1b2b4a8524c3474f5fb6c682d6f96c505ca58a55554`。
