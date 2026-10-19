@@ -1,6 +1,12 @@
 # 官方 Web UI：操作 → 数据 → 执行链（源码静态审查）
 
-审查版本固定官方源码 root `0.2.1-rc.2`，不是已解包的 npm UI `0.0.1-rc.5`。社区 DSH Desktop 完全排除。S 代表已读源码；运行效果/发布版存在性 U。
+后续 UI 操作的组件/源代码路线固定在官方源码 root `0.2.1-rc.2`，不是 standalone npm Web UI `0.0.1-rc.5`。另已安装实际 CLI `0.2.0-rc.2` runtime dependency 图，并静态确认若干旧版 UI/runtime 包含在 graph 中；这不代表组件对应旧 standalone Web build 或已由 default profile mount。社区 DSH Desktop 完全排除。S 代表读过的具体静态文件；运行效果/发布版实际 mount 仍 U。
+
+## 发行 Web 实物检查（新增，静态 S；没有运行）
+
+Release 中的 `@deepseek-ai/dsh-web-frontend@0.0.1-rc.5` 是 Vite 静态产物。实际 index 载入 `assets/index-DYtepzMn.js`，preload `vendor-Cjbwl5VI.js`，再引用两份 CSS；package 内没有 `.map`，也没有 npm 中同版本的 TS 源码。资产逐项 SHA/大小位于 `extracted/web-assets-map.json`，指定产品词搜索含 offset 与各自最多 150-byte 邻域的记录位于 `extracted/web-chunk-symbols.jsonl`。
+
+在此旧发布包的 main entry 中可见 `session` 和 `prompt` 词项；按该证据检索不到 `remote.mux`、`subagent`、`interrupt`、`assistant`、`job`、`usage`、`team`、`trajectory`。其它通用 editor / parser vendor chunk 会命中 `interrupt`、`job`、`session` 等普通字符串。**这些都是静态文本发现，既不能将较新的 0.2.1-rc.2 UI 行为归给 0.0.1-rc.5，也不能仅凭词项缺失声称旧版功能不存在。** REA 对 bundle 的应用图为 partial（main entry semantic 阶段超过工具堆限制），且没有受控运行环境与 Host 接口，所以本篇随后各操作流程仍是固定新源码的 S 级路由追踪，不是旧 npm 的 R 证据。
 
 ## A. 子代理树：查看/进入/侧栏打开
 
@@ -49,4 +55,4 @@
 - `packages/boot/plugin-manager/src/operations.ts`：插件管理作为 Host pnpm profile 变更，UI 可调用服务，但成功安装、reload/HMR 后注册才算功能完成。
 
 ## 发行验证缺口
-固定源码包含 `apps/web` 和 `apps/desktop` 入口，但任务给的 CLI npm 与 Web npm **是不同且更早版本**。当前还不能说旧版 Web UI 的子 Agent tree/inline intervention 或实验 Team 都在正式发包中实际可见；需从两份 tarball 提取 dist 文件、route/slot registry strings 和 source maps，再对照真实启动与交互，见 EXTRACTION-REQUEST.md。
+固定源码包含 `apps/web` 和 `apps/desktop` 入口，但任务给的 CLI npm 与 Web npm **是不同且更早版本**。Web 旧版 dist、chunk 词项及 package metadata 已机械提取，25 个 JS 有 sourceMappingURL marker 但 `.map` 未随包发布。当前还不能说旧版 Web UI 的子 Agent tree/inline intervention 或实验 Team 都在正式发包中实际可见；继续闭环需获取旧版对应 TS 源或同版本构建产物与 Host runtime，再实际启动验证，见 `extracted/version-diff.md`。

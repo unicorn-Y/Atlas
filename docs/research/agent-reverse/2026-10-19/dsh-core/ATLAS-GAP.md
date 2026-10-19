@@ -4,6 +4,8 @@
 
 Atlas `unicorn-Y/Atlas@aa6196f550098cc46081dc6db2c376cb87ddffa5`（main）；DSH `deepseek-ai/deepseek-harness@687f282e8625c6b8d11ff58211a90524be2e4317`（源码 root 0.2.1-rc.2）。**仅根据本阶段已实际打开的 Atlas 模块判断；“未在抽查中发现”≠“全项目没有”。** Atlas 的主干已经有 Hermes Agent engine、SessionDB、WebSocket、子代理工作树、外部 Agent、后台 Hub/DBOS、checkpoint，不可写成空壳；等价机制需要验证真实运行，而非看文件名。
 
+版本边界：DSH npm CLI 0.2.0-rc.2 与 Web 0.0.1-rc.5 均已单独下载、哈希验证和拆包。CLI manifest 的 runtime 依赖另已从 npm 安装，并静态核验精确 `0.2.0-rc.2` 编译包的 loop/session/JSONL/API/subagent/Web glue（证据 DSH_CORE-034）；这些旧版包证据与固定源码 `0.2.1-rc.2` 分开标识，不能把后者的源码细节当旧版实现。当前 UI standalone `0.0.1-rc.5` 与 runtime dependencies `0.2.0-rc.2` 的前端构建对应关系及 profile 默认挂载仍未核实；旧 Web 无 source map 且静态分析 partial。下表的结论是代码中机制存在性静态对照，不等于已在上游实际运行验证。发行包证据与限制见 `extracted/version-diff.md`。
+
 状态：
 - **有实现，机制不同**：代码确认具备用户功能，但运行/持久化/边界不等价；
 - **局部实现 / 缺少证据**：有 UI/API/数据，沿路径某重要闭合点尚未核到；

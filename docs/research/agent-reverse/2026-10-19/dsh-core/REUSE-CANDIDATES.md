@@ -1,6 +1,6 @@
 # DSH 官方源码可吸收机制与许可核查
 
-本表限定于 `deepseek-ai/deepseek-harness@687f282e8625c6b8d11ff58211a90524be2e4317`。固定源码根 `LICENSE:1-14` 为 MIT License (Copyright (c) 2026 DeepSeek)；复制 substantial portions 时须保留版权与许可证。不同依赖及发布产物的第三方 License 需按包单独核查。**本表是移植候选，不表示已复制或已改 Atlas。**
+本表的源码机制限定于 `deepseek-ai/deepseek-harness@687f282e8625c6b8d11ff58211a90524be2e4317`。固定源码根 `LICENSE:1-14` 是 MIT License (Copyright (c) 2026 DeepSeek)；复制 substantial portions 时须保留版权与许可证。已核验发布 CLI npm `0.2.0-rc.2` 的 package manifest 标记 MIT，旧 Web npm `0.0.1-rc.5` 则标记 **BSD-3-Clause**；两者和较新源码快照版本均不同，许可证边界不能互相推定。第三方/传递依赖及每份发行包内其它 LICENSE 的完整合规仍未审计。详见 `extracted/manifest-verified.json`、`source-versions.json`、`version-diff.md`。**本表是移植候选，不表示已复制或已改 Atlas。**
 
 | 优先 | 候选机制/源码符号 | 必要依赖与迁移条件 | Atlas main 对应锚点 |
 |---|---|---|---|

@@ -1,6 +1,16 @@
 # 实现机制与端到端调用链（固定源码 687f282e / 0.2.1-rc.2）
 
-本文所有路径相对官方 `deepseek-ai/deepseek-harness`，均为读取原始固定提交源码后的 **S 级静态证据**；未运行安装包。历史页面或 TypeScript 类名不是部署版本验证。
+版本语义必须分清：后续各章节原仓库 `packages/.../src` 锚点属于固定源码 `687f282e` / `0.2.1-rc.2` 的 **S 级静态证据**；另在本轮从 CLI manifest 实际安装并读了同版本 `0.2.0-rc.2` npm runtime packages（证据文件 `extracted/published-runtime-packages.json`），这部分是发布编译 JS 静态证据。仅 CLI `--version`、`--help` 动态运行成功；没有启动 profile、Agent、服务器或模型。不得把 source 的机制自动等同到旧发布包。
+
+## 0. 实际 CLI/Web 发行物的边界（新增 S）
+
+三包已从 Atlas 固定 release 下载、按全 SHA 校验并解包；逐包元数据见 `extracted/manifest-verified.json`。此处把实物入口与较新的源码追踪分开：
+
+- 发布 `@deepseek-ai/dsh@0.2.0-rc.2` 的 `extracted/cli/bin.js` 真实包含 `parseDshArgs → resolveBoot → runCli`。launcher 解析 `--profile`、profile template、patch 与配置 dump；第一个未识别 token 开始交给 profile app；`plugin` 调用 `runPlugin`。启动 profile 时加载外部 `@deepseek-ai/dsh-app-boot`、Home paths，再动态 import `profile-boot.js`；发生 `StartupError` 时生成 `$DSH_HOME/logs/startup-*.log`，并警告原始诊断可能含配置或凭据值。它是 launcher 机制证据，不是 Agent loop 证据。
+- 发布 CLI manifest 有 82 个 direct dependencies；该 tar 仅带自身 `lib/*` 与 declarations。现已以这份 tar 为 root 执行 `npm install --ignore-scripts`，package-lock registry integrity 固定的旧版 `dsh-agent-loop`, `dsh-session`, `dsh-session-persistence-jsonl`, `dsh-api-session-controller`, `dsh-subagent`, `dsh-web-app`, `dsh-client-ui-*` 包均为 `0.2.0-rc.2`。旧版发布 Agent 路径直接核对已装编译 JS：`dsh-agent-loop/lib/index.js:936-1118` 为 turn/step、tool recovery 与 stream commit；`dsh-session/lib/index.js:801-850,1441-1479,1832-1849` 有 tool-call conservative recovery、append/flush；`dsh-session-persistence-jsonl/lib/index.js:116-171,624-660,2372-2410` 有 append/flush、writer lease 与 JSONL handle；`dsh-api-session-controller/lib/index.js:2578-2600,3091-3184` 注册 prompt/page/follow/projections/control RPC；`dsh-subagent/lib/index.js:961-1100,1754-1917` 覆盖 child create/resume 与冷恢复。这填补了此前“旧引擎包未取得”的证据空缺，但仍是静态编译包审读，尚非动态 profile/Agent 行为验收。
+- 同版 Web 宿主 `dsh-web-app/lib/index.js` 明确是 Cordis glue plugin，解析 bundled frontend dist、挂载 frontend-static owner、注册 host prompt/runtime URL/browser handoff；同版 `dsh-client-ui-subagent`, `...-jobs`, `...-trajectory` 的 npm 包及完整性的 registry records 均出现在安装依赖图/lock 中。它证明这些 UI 包依赖随安装图可用，**不单独证明特定默认 profile 的确 mount 或某页面实际显示**。旧 CLI 实际依赖集合均为 `0.2.0-rc.2`；源码 ZIP 是 `0.2.1-rc.2` 且所列 73 个同名包仍不同版本，不能替代逐行 diff。旧 standalone Web `0.0.1-rc.5` 仍与此宿主中 frontend `0.2.0-rc.2` 属不同包版本，尚无 build identity 证明等价。
+- 发布 Web `0.0.1-rc.5` 的实物入口 `extracted/web/index.html` 是 Vite static SPA：mount `#root`，载入 `index-DYtepzMn.js`、`vendor-Cjbwl5VI.js` 与两份 CSS。dist 有 86 个 asset、25 个 JS、零 `.map`；分析索引 `web-assets-map.json` / `web-chunk-symbols.jsonl` 已覆盖包内静态资源。REA 解析 Web app 目录 25 个 JS、3,448,159 text bytes，但主 entry 在 semantic 阶段耗尽分析 heap，图为 partial。未启动本包，没有运行时路由/API/RPC 观察。
+- Web 包 manifest 是 `0.0.1-rc.5`、BSD-3-Clause；source `apps/web` 是 `0.2.1-rc.2`、MIT。旧 Web bundle 无 sourcemap，故新源码子代理组件等不能一一归给旧 Web build。关键词命中不等于功能：entry 只出现通用 `session` 和 `prompt` 文字；vendor/editor 中的 `interrupt` / `job` 命中是 parser 结构上下文，不支持 DSH Agent 功能结论。没有目标字符串也不能证明功能缺失。
 
 ## 1. 顶层构件和依赖边界
 
@@ -103,6 +113,14 @@ Host Session RPC：`packages/api/session-controller/src/index.ts:118-176,524-603
 - `packages/api/job-controller/src/index.ts:1-8,75-115`：后台 job 运行列表、非消费式按 offset follow 输出、human kill（与模型消费 cursor 分离）；`jobs/jobs-local/src/pump.ts` 截断/spill 行为。**Job 与子代理是不同对象，不要用 jobs 的状态冒充 child tree。**
 - `packages/mcp/mcp-client/src/index.ts:1-14,154-192` + `tools.ts:81-158`：MCP stdio/HTTP，server-qualified tool 名，list change 重新同步，effect dispose 取消与卸载，而不是一开始发现一次后永久保留陈旧列表。
 - `packages/schedule/schedule/src/index.ts:90-118`：持久提醒；`goal/goal-round-driver/src/index.ts:173-255`：自动轮次与子代理等待；`ptc-runtime/ptc-runtime-node/src/index.ts:36-105,186-240`：可隔离子进程执行代码或 owner-scope retained REPL。均需验证发布 profile 装配。
+
+## 10. Profile 装配、模块解析和进程边界（主动新增）
+
+Profile 并非一份全局配置文件，而是有序模块/patch 装配：`apps/cli/src/profile-boot.ts:202-245,306-337` 先读 `dsh.profile.bundles` 所指 bundle patch，再加 profile user patch、home-wide `$DSH_HOME/cordis.patch.yml`、按 argv 顺序的 `--patch` overlays，最后合成 telemetry switch；生成的 `ProfileRuntimeResolution` 在 plugins import 前一次计算。`packages/boot/app-boot/src/profile.ts:179-237,740-840` 定义 `acp/web/headless/sdk/sdk-minimal` shipped templates 与 optional bundles；default template 未显式初始化则首次 `loadProfile` 会建立目录和 bundle list。
+
+Module resolver 为 bundle/plugin 维护 installation 与 profile 两个 anchor；安装包依赖先从安装位置解析，profile 自己的 npm 包从 profile node_modules 进入 resolver table，再由 Node ESM/CJS loader 拦截层按归属解析。源码把无法读/不兼容 bundle 记入 `skippedBundles` 并启动时逐个报告；profile manifest 与用户 patch 解析错误继续 fail startup。证据：`packages/boot/app-boot/src/profile.ts:89-120,492-565,740-840`、`profile-resolution/resolver.ts:86-120`。
+
+另一个发现是 Host 在 mount 任何插件之前取 immutable launch-environment snapshot，通过它安装 HTTP proxy；这解决 Node `fetch` 不自动遵循 `.env` 代理的差异。`SIGTERM` 和 `SIGINT` 在整个 startup window 注册，对 boot fiber + proxy 共用一个 coalesced disposer，分别记退出码 0/130；重复信号会升级退出，最长给清理 5 秒。见 `apps/cli/src/profile-boot.ts:271-341`、`process-shutdown.ts:1-72`。这些是新源码的源码级控制机制，尚未在包上触发信号、切换代理或制造损坏 profile；旧 npm runtime 等价性仍 U。
 
 ## 未闭合链路
 

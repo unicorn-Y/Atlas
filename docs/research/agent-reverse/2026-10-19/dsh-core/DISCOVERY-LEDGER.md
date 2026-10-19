@@ -29,10 +29,20 @@
 | DSH_CORE-024 | schedule 是带持久化 delivery history 的 Host service；Goal round driver 带异步轮次/等待子 Agent | `schedule/schedule/src/index.ts:1-25,90-118`; `goal/goal-round-driver/src/index.ts:1-20,77-103,173-255` | S | 默认启用需证实 |
 | DSH_CORE-025 | PTC node 支持独立 worker process 或保留作用域 REPL 状态；可选 sandbox 由 runtime 约束 | `ptc-runtime/ptc-runtime-node/src/index.ts:1-11,36-105,186-240` | S | 需实际运行验证 |
 | DSH_CORE-026 | 插件以 Cordis effect-scope 注册与卸载；插件管理用 pnpm/profile overlay 与原子写入 | `boot/plugin-manager/src/operations.ts:1-16,285-450`; `mcp/mcp-client/src/index.ts:154-192` | S | 单独官方 host，非社区 Desktop |
+| DSH_CORE-027 | 实际 CLI 发布物将 launcher flags 与 booted profile 的 app flags 分层：首个未知 token 后续 argv 原样交给 app；`plugin` 把包操作转交 pnpm，三种 config dump 互斥，Desktop profile 拒绝 CLI 管理 | `extracted/cli/bin.js` (published 0.2.0-rc.2; `parseDshArgs`, `resolveBoot`, `runCli`); source comparator `apps/cli/src/args.ts`, `bin.ts` (0.2.1-rc.2) | S | 静态发行 JS，不代表实际执行成功 |
+| DSH_CORE-028 | CLI npm 本体只有 launcher lib；其 82 项 direct runtime dependencies 外置，完整 Agent 引擎/profile bundle 不能从 CLI tar 单包推出 | `extracted/cli/package.json`, `cli-tree.txt`; source `apps/cli/package.json` 为 0.2.1-rc.2 / 86 项 workspace dependencies | S | 单独 tar 不足；按该 manifest 安装的 npm runtime 依赖另见 034。Profile 是否按默认配置启动需实际 profile boot |
+| DSH_CORE-029 | Web npm 是 Vite 静态 dist；index preload 两主 JS 和样式，无 `.map`；0.0.1-rc.5 BSD-3-Clause 与 0.2.1-rc.2 源 app MIT/license、版本均不相同 | `extracted/web/index.html`, `web/package.json`, `web-assets-map.json`, `version-diff.md` | S | build-source 一一配对未知；minified 字符搜索不是能力缺失证据 |
+| DSH_CORE-030 | 在 shipped Web 25 个 JS 文件上按指定十词逐项收集命中与 UTF-8 byte offset；入口含 `session`/`prompt` 文本，但其他 chunk 的 `interrupt`/`job` 命中来自通用解析器上下文，不能映射到 Agent 功能 | `extracted/web-chunk-symbols.jsonl` | S | 静态字符串不确认路由、控制、子代理、账单、团队或运行行为；动态 U |
+| DSH_CORE-031 | Profile 是 ordered plugin bundle patch stack：bundle order → profile patch → per-home patch → argv `--patch` order → telemetry derived patch；bundle resolve 优先 installation anchor 后 profile node_modules，用户 profile packages 再经过 Node ESM/CJS runtime resolution | `apps/cli/src/profile-boot.ts:202-245,306-337`; `packages/boot/app-boot/src/profile.ts:179-237,740-840`; `profile-resolution/resolver.ts` | S | 0.2.1-rc.2 source only；旧 npm profile composition U |
+| DSH_CORE-032 | boot 前冻结环境快照供每个插件读取，并从该 snapshot 安装 proxy 再 mount；SIGTERM/SIGINT 在启动过程就开始 teardown，分别返回 0/130，dispose coalesce、5s 后升级强退 | `apps/cli/src/profile-boot.ts:68-79,274-319,330-386`; `apps/cli/src/process-shutdown.ts:1-72` | S | source code path；没有触发 signal / proxy 的 R 证据 |
+| DSH_CORE-033 | 新源码存在 CLI release 82 依赖中的 73 个同名 DSH packages，但源码版本皆为 `0.2.1-rc.2`、CLI tarball pin `0.2.0-rc.2`；Web `dsh-client-web` 同样从发布范围 `^0.0.1-rc.5` 到源码 `0.2.1-rc.2`，无一版本完全吻合 | `extracted/source-versions.json` 的 `release_dependency_pairs`；总结 `extracted/version-diff.md` | S | 可确认包名关系与版本不一致，不可确认源代码逐行变化或 binary equivalence |
+| DSH_CORE-034 | 用已验签 CLI tarball 作为 root 执行 `npm install --ignore-scripts`，精确取得 `0.2.0-rc.2` 的 Agent loop/session/JSONL/API/subagent/Web glue 与 UI 依赖包；这些实际发布 JS 直接确认 durable step/tool recovery、session cursor/control RPC、子代理 cold resume/flush，以及 Web 前端注入型宿主。CLI `--version`/`--help` 在 Node 中真实运行成功 | `extracted/published-runtime-packages.json`（每个包的 registry integrity、入口 SHA/长度及精确 release version）；CLI 实物 `extracted/cli/bin.js`；本地安装包按上述 integrity 对照的入口文件 | S (npm release package static) + R (launcher flags only) | npm 包代码静态读；没有启动 profile、Agent、HTTP/WebSocket 服务或模型，所以 runtime 行为不标 R；`0.2.1-rc.2` 源码仍是不同版本，不能替代逐行版本 diff |
 
 ## 要避免的误判
-- `Agent Teams` 属于 **experimental**；未检查其是否在任一发布 CLI/Web 默认 profile 装配，故不能说所有用户默认具备。
+- `Agent Teams` 属于当前固定源码 **experimental**；源包 CLI/Web 与旧版发布资产不等版本，因此未证明它是否在任一该发布 CLI/Web 默认 profile 装配，不能说所有用户默认具备。
 - `send_message` 只有确认接收，不是 child 的回答；`interrupt_agent` 不会自动级联中止全部后代。
 - `subagent` 的 local continuable 与 external one-shot 行为不能混为一谈。
 - 可查看 token 具体字段 != 实际供应商提供所有这些字段；代码在无充分依据时允许返回 undefined。
 - 源码存在 UI 不代表 `0.0.1-rc.5` 的旧版打包包含同一组件。
+- CLI 发行包的入口 JS 已实物核查；对应 `0.2.0-rc.2` runtime npm 包已按锁定 registry integrity 安装并静态核对（034），因此引擎证据现在来自实际旧版 npm 包，而不是错用 `0.2.1-rc.2` 源码。仍未启动已装 profile / Engine，不能宣称运行时流程已动态通过。
+- 固定 source 在 profile 层明确区分“bundle 载入失败可跳过并报告”与“profile manifest / user patch 错误仍终止”；没有运行已坏 profile 来核验终端表现。

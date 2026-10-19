@@ -1,0 +1,15 @@
+{
+  "method": "npm install --ignore-scripts --no-audit --no-fund of the hash-verified @deepseek-ai/dsh@0.2.0-rc.2 tarball; package-lock v3 registry resolved/integrity plus installed package lib/index.js SHA-256; no package code copied into this report",
+  "runtime_execution": "Only the CLI launcher --version and --help were executed. The installed Agent/Web runtime was statically inspected and not launched.",
+  "packages": [
+    {"name":"@deepseek-ai/dsh-agent-loop","version":"0.2.0-rc.2","integrity":"sha512-Ayi1L7s1LIJAq3iCCRFDCGM9Y2lriGlV6nblIYXhKrq+J8bUFQtOdfBYNE1N39WcYb3CwSvTNHDtzZ4oW6MZ6A==","main":"lib/index.js","main_bytes":72994,"main_sha256":"00c4814d63f3d1e2754eb09144832d19b30499d6ea444730473f740b587948c2"},
+    {"name":"@deepseek-ai/dsh-agent","version":"0.2.0-rc.2","integrity":"sha512-CUkbU+c1G0ETXkpoLkpAFo5midz66FQGtlgQOP9pzvU9H3zJQVl4H5LrhhGVbEXKLFgdbtQiOynEW8hpWn3y0Q==","main":"lib/index.js","main_bytes":28207,"main_sha256":"7b9aa39474de83115cf890dd7f8904cf0d59df0811cb335ab85565a04f1aac93"},
+    {"name":"@deepseek-ai/dsh-session","version":"0.2.0-rc.2","integrity":"sha512-wj+6MeqCYbDcbEvKH3puHyEGdjyu51JwBoN6Ua2tz6griLufDgLM5HpSU40L5xgpbOfrYVhXZs4vRgOrMlFY2g==","main":"lib/index.js","main_bytes":90015,"main_sha256":"87ea85e2fb5318bf1f826db9a1c88c1b26d3ea328027a7f32b211880c4d62b9d"},
+    {"name":"@deepseek-ai/dsh-session-persistence-jsonl","version":"0.2.0-rc.2","integrity":"sha512-iAzXWC8jmiLYjK+wuN/fAKXLniAfClWm0CmEIwSxZnJGVy8c0iy7j5v8UfOqUbwuGfqo5HUWfyLGgxbWH7SG3g==","main":"lib/index.js","main_bytes":142847,"main_sha256":"0845707017acc2b4a8a75eab2244fa3fd88587b8094ab32014321dce7ca1e31b"},
+    {"name":"@deepseek-ai/dsh-web-app","version":"0.2.0-rc.2","integrity":"sha512-pCIMPLfTKVfY942dP4eJSDVw7iUw86pemzfOr/e5DWP7CdCKTfvA82kP0RJAKJcyKJd8s679hqtCue/p4P20Dg==","main":"lib/index.js","main_bytes":10410,"main_sha256":"50c7ce5b93e8a7ac0117e066699cd31b553a5a135d38b7051d6a8364ac691af4"},
+    {"name":"@deepseek-ai/dsh-api-session-controller","version":"0.2.0-rc.2","integrity":"sha512-WDmk1aWOHbzIKRRt7rtHDxSupw/XLB+BgMyKHlzB7QGinXrK/Dnht6JIdgE1iSShnf1RNANGAGh2G94VzDpl5Q==","main":"lib/index.js","main_bytes":124151,"main_sha256":"fb0f7b96130f595db20809eeb77a195b05f4a039f931d1e67692f1f74a4dd269"},
+    {"name":"@deepseek-ai/dsh-subagent","version":"0.2.0-rc.2","integrity":"sha512-33izf4xhq03RzolYUjv223tKmeOBl8fMnvnRN15zZB3GWfNRcBTVUUxuu99rCN8TSRRt5A5ABTwYbObb1Isjqw==","main":"lib/index.js","main_bytes":135247,"main_sha256":"75b50b1c9452a6aeb10d1c859e3f45b05e062ea1fad6ed3bcd9577f2bc912541"},
+    {"name":"@deepseek-ai/dsh-agent-preset-registry","version":"0.2.0-rc.2","integrity":"sha512-Awdhxsnm85ZrQASUc/fLpBHnggAnI2ar7RIJL++Lcy04Hx9q/INqJlFfCKVL68ugZGh14iJNy5/OM+ZfcmbjUw==","main":"lib/index.js","main_bytes":31875,"main_sha256":"ed62d573b8cc6d7ed3e3cb7932dbf5e237f5a603b3cc9d9e586187db00e821cc"},
+    {"name":"@deepseek-ai/dsh-client-ui-subagent","version":"0.2.0-rc.2","integrity":"sha512-n/1dJBhJE/LgC9qFr+sTm70yu8mY/vULcKCZo7rFs1+/GGlycjqBW4NjOF1Rc66QQQRpaMFuWPEGo83RelwiSQ==","main":"lib/index.js","main_bytes":409,"main_sha256":"eb78389cb207434d09bb4d75d80db5c409337e32c249b6ab2dbe17e5f9c6efb9"}
+  ]
+}

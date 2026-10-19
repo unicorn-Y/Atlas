@@ -1,0 +1,44 @@
+{
+  "release": "agent-client-packages-20261019",
+  "captured_at": "2026-10-19T12:10:51.0589661+08:00",
+  "powershell": "7.6.5",
+  "assets": [
+    {
+      "name": "deepseek-harness-npm-cli-bd27847c44.tgz",
+      "url": "https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/deepseek-harness-npm-cli-bd27847c44.tgz",
+      "bytes": 24265,
+      "expected_sha256": "bd27847c445cd68a565ac1f91c06bbbcc7639ef93071f678bb59c5ebaff38859",
+      "actual_sha256": "bd27847c445cd68a565ac1f91c06bbbcc7639ef93071f678bb59c5ebaff38859",
+      "verified": true,
+      "version_or_commit": "0.2.0-rc.2",
+      "expected_bytes": 24265,
+      "byte_count_verified": true
+    },
+    {
+      "name": "deepseek-harness-source-dcc4cf8df9.zip",
+      "url": "https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/deepseek-harness-source-dcc4cf8df9.zip",
+      "bytes": 44386184,
+      "expected_sha256": "dcc4cf8df9c3cbb3d57726b7a1ad5a52c16a754dcdbc2c0a0836788976090d9f",
+      "actual_sha256": "dcc4cf8df9c3cbb3d57726b7a1ad5a52c16a754dcdbc2c0a0836788976090d9f",
+      "verified": true,
+      "version_or_commit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+      "expected_bytes": 44386184,
+      "byte_count_verified": true
+    },
+    {
+      "name": "deepseek-harness-web-frontend-ccadad6dcb.tgz",
+      "url": "https://github.com/unicorn-Y/Atlas/releases/download/agent-client-packages-20261019/deepseek-harness-web-frontend-ccadad6dcb.tgz",
+      "bytes": 1428754,
+      "expected_sha256": "ccadad6dcbb6f9a3c7a57802c3c2bb5958c2104ca33e9fb88135634b6d7b1516",
+      "actual_sha256": "ccadad6dcbb6f9a3c7a57802c3c2bb5958c2104ca33e9fb88135634b6d7b1516",
+      "verified": true,
+      "version_or_commit": "0.0.1-rc.5",
+      "expected_bytes": 1428754,
+      "byte_count_verified": true
+    }
+  ],
+  "archive_tools": {
+    "tar": "bsdtar 3.8.8 - libarchive 3.8.8 zlib/1.2.13.1-motley liblzma/5.8.1 bz2lib/1.0.8 libzstd/1.5.7 cng/2.0 libb2/bundled ",
+    "zip_extractor": "PowerShell Expand-Archive (PowerShell 7.6.5)"
+  }
+}

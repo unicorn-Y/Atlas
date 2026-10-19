@@ -1,0 +1,1039 @@
+vendor\loader\src\index.ts:104:    ctx.on('internal/config', function (this: Fiber, _config, next) {
+vendor\loader\src\index.ts:115:    ctx.on('internal/update', function (config, noSave, next) {
+vendor\loader\src\index.ts:123:    ctx.on('internal/update', function (config, _, next) {
+vendor\loader\src\index.ts:129:    ctx.on('internal/plugin', (fiber) => {
+apps\desktop-host\src\update-tasks.ts:34:  ctx.on('connection/request', async (_request, response, next) => {
+vendor\cordis\src\fiber.ts:97:  /** Human-readable effect label, e.g. `ctx.on("event")` or `ctx.provide("name")`. */
+vendor\cordis\src\events.ts:111:/** Options accepted by `ctx.on()` and `ctx.once()`. */
+vendor\cordis\src\events.ts:300:    const label = `ctx.on(${typeof name === 'string' ? JSON.stringify(name) : name.toString()})`
+vendor\loader\src\config\isolate.ts:91:  ctx.on('loader/entry-init', (entry) => {
+vendor\loader\src\config\isolate.ts:96:  ctx.on('loader/patch-context', (entry, next) => {
+vendor\loader\src\config\isolate.ts:155:  ctx.on('loader/partial-dispose', (entry, legacy, active) => {
+snapshots\acp\escalation-approved\subagent-settlement-marker.ts:10:  ctx.on('subagent/end', () => {
+vendor\include\src\index.ts:190:    ctx.on('internal/update', (config, _, next) => {
+vendor\loader\src\config\group.ts:81:    ctx.on('internal/update', (config) => {
+apps\desktop\scripts\macos-notarization-proxy.ts:68:  const output = ops.command(NETWORKSETUP, [secure ? '-getsecurewebproxy' : '-getwebproxy', service])
+apps\desktop\scripts\macos-notarization-proxy.ts:80:  const route = ops.command('/sbin/route', ['-n', 'get', 'default'])
+apps\desktop\scripts\macos-notarization-proxy.ts:82:  const services = ops.command(NETWORKSETUP, ['-listnetworkserviceorder'])
+apps\desktop\scripts\macos-notarization-proxy.ts:90:  ops.command(NETWORKSETUP, [secure ? '-setsecurewebproxy' : '-setwebproxy', service, state.server, String(state.port), 'off'])
+apps\desktop\scripts\macos-notarization-proxy.ts:91:  ops.command(NETWORKSETUP, [secure ? '-setsecurewebproxystate' : '-setwebproxystate', service, state.enabled ? 'on' : 'off'])
+apps\desktop\scripts\macos-notarization-proxy.ts:101:        ops.command(NETWORKSETUP, [secure ? '-setsecurewebproxystate' : '-setwebproxystate', record.service, 'off'])
+apps\desktop\scripts\macos-notarization-proxy.ts:179:      const pac = ops.command(NETWORKSETUP, ['-getautoproxyurl', service])
+apps\desktop\scripts\macos-notarization-proxy.ts:180:      const discovery = ops.command(NETWORKSETUP, ['-getproxyautodiscovery', service])
+apps\desktop\scripts\macos-notarization-proxy.ts:181:      const socks = ops.command(NETWORKSETUP, ['-getsocksfirewallproxy', service])
+snapshots\session\persistence-provider-unload\provider-unload.ts:34:  ctx.on('session/flush', async (session) => {
+apps\cli\src\args.ts:188:    const plugin = program.command('plugin').description('manage a profile\'s plugins by forwarding the remaining arguments to pnpm in the profile directory')
+packages\core\tools\src\testing.ts:5:import { defineTool } from './schema.ts'
+packages\core\tools\src\testing.ts:32:  return defineTool({
+packages\core\agent\src\index.ts:273:    ctx.on('internal/status', (fiber) => {
+packages\core\tools\src\schema.ts:482:/** Options for {@link defineTool}. */
+packages\core\tools\src\schema.ts:554:export function defineTool<const S extends ParameterSchemaSpec, const O extends ValueSchemaSpec>(
+packages\core\tools\src\schema.ts:575:    throw new Error(`defineTool(${options.name}): timeoutMs must be a positive finite number`)
+packages\core\agent\src\archive-admission.ts:27:  ctx.on('workspace/session-activity', async ({ sessionId }, next) => {
+packages\core\agent\src\archive-admission.ts:34:  ctx.on('workspace/session-stop', ({ sessionId }) => {
+packages\core\tools\src\py-types.ts:315: *   the 181 site. `defineTool` compiles an object root, so the annotation is a
+packages\host\plugin-inventory\src\index.ts:70:  @Remote('list')
+packages\core\tools\src\ptc.ts:25:import { defineTool, parameterSchemaSpecToJsonSchema } from './schema.ts'
+packages\core\tools\src\ptc.ts:334:  const definition = defineTool({
+packages\core\tools\src\ptc.ts:340:    // off this static spec (defineTool closes over it), which is language-
+packages\core\tools\src\ptc.ts:783:    // Recompile through the same spec→schema projection defineTool used, so
+packages\core\tools\src\ptc-calls.ts:22:    ctx.on('session/event', (session, event) => {
+packages\boot\plugin-market\src\tools.ts:5:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\boot\plugin-market\src\tools.ts:71:  ctx.tools.register(defineTool({
+packages\core\tools\src\index.ts:68:  defineTool,
+packages\core\tools\src\index.ts:271:   * `defineTool` arguments are exclusive. This metadata is never model-visible.
+packages\core\tools\src\index.ts:278:   * @param args - parsed arguments; `defineTool` validates before calling.
+packages\boot\plugin-market\src\index.ts:94:    ctx.on('loader/volatile-update', () => {
+packages\boot\plugin-market\src\index.ts:114:  @Remote
+packages\boot\plugin-market\src\index.ts:135:  @Remote
+packages\boot\plugin-market\src\index.ts:163:  @Remote
+packages\context\tmux-context\src\index.ts:246:  ctx.on('agent/pre-step', async (
+packages\context\time-context\src\index.ts:185:  ctx.on('agent/pre-step', async (
+packages\boot\plugin-manager\src\tools.ts:9:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\boot\plugin-manager\src\tools.ts:85:  ctx.tools.register(defineTool({
+packages\boot\plugin-manager\src\index.ts:267:  @Remote
+packages\boot\plugin-manager\src\index.ts:280:  @Remote
+packages\boot\plugin-manager\src\index.ts:291:  @Remote
+packages\boot\plugin-manager\src\index.ts:315:  @Remote
+packages\boot\plugin-manager\src\index.ts:391:  @Remote
+packages\boot\plugin-manager\src\index.ts:407:  @Remote
+packages\boot\plugin-manager\src\index.ts:491:  @Remote
+packages\boot\plugin-manager\src\index.ts:509:  @Remote
+packages\boot\plugin-manager\src\index.ts:528:  @Remote
+packages\boot\plugin-manager\src\index.ts:658:  @Remote
+packages\boot\plugin-manager\src\index.ts:668:  @Remote
+packages\boot\plugin-manager\src\index.ts:685:  @Remote
+packages\api\workspace-files\src\index.ts:233:  @Remote
+packages\api\workspace-files\src\index.ts:257:  @Remote
+packages\api\workspace-files\src\index.ts:290:  @Remote
+packages\api\workspace-files\src\index.ts:303:  @Remote
+packages\api\workspace-files\src\index.ts:340:  @Remote({ mode: 'stream' })
+packages\context\session-reference\src\index.ts:130:    ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
+packages\context\session-reference\src\index.ts:138:    ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecision> => {
+packages\context\session-reference\src\index.ts:289:  @Remote('candidates')
+packages\api\workspace-files\src\changes.ts:22:    ctx.on('fs/observed', (target, observation) => {
+packages\workflow\tool-workflow\src\record.ts:40:  ctx.on('workflow/phase', (info, title) => {
+packages\workflow\tool-workflow\src\record.ts:46:  ctx.on('workflow/log', (info, message) => {
+packages\workflow\tool-workflow\src\record.ts:49:  ctx.on('workflow/agent-start', (info, agent) => {
+packages\workflow\tool-workflow\src\record.ts:52:  ctx.on('workflow/agent-end', (info, agent) => {
+packages\workflow\tool-workflow\src\index.ts:17:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\workflow\tool-workflow\src\index.ts:115:  ctx.on('workflow/agent-start', (info, agent) => {
+packages\workflow\tool-workflow\src\index.ts:127:  ctx.on('workflow/agent-end', (info, agent) => {
+packages\workflow\tool-workflow\src\index.ts:331:  ctx.tools.register(defineTool({
+packages\context\file-reference-local\src\index.ts:93:    ctx.on('agent/created', async ({ agent }) => { await installPrompt(agent) })
+packages\context\file-reference-local\src\index.ts:94:    ctx.on('agent/disposed', ({ agent }) => {
+packages\context\file-reference-local\src\index.ts:99:    ctx.on('session/event', (session, event) => {
+packages\boot\app-boot\src\index.ts:1226:    ctx.on('internal/update', (_config, _noSave, next: () => unknown) => {
+packages\api\workspace-controller\src\index.ts:90:  @Remote('create')
+packages\api\workspace-controller\src\index.ts:103:  @Remote('initializeDefault')
+packages\api\workspace-controller\src\index.ts:119:  @Remote('rename')
+packages\api\workspace-controller\src\index.ts:129:  @Remote('delete')
+packages\api\workspace-controller\src\index.ts:139:  @Remote('insertBefore')
+packages\api\workspace-controller\src\index.ts:149:  @Remote('insertSessionBefore')
+packages\api\workspace-controller\src\index.ts:159:  @Remote('archiveSession')
+packages\api\workspace-controller\src\index.ts:169:  @Remote('unarchiveSession')
+packages\api\workspace-controller\src\index.ts:179:  @Remote('pinSession')
+packages\api\workspace-controller\src\index.ts:189:  @Remote('unpinSession')
+packages\api\workspace-controller\src\index.ts:205:  @Remote({ mode: 'stream' })
+packages\api\workspace-controller\src\feed.ts:64:    ctx.on('domain/changed', (change: DomainChanged) => { this.changed(change) })
+packages\api\workspace-controller\src\directory-picker.ts:54:  @Remote('pick')
+packages\api\workspace-controller\src\directory-picker.ts:71:  @Remote('list')
+packages\api\workspace-controller\src\directory-picker.ts:87:  @Remote('createDirectory')
+packages\context\agent-instructions\src\index.ts:326:  ctx.on('session/event', (session, event) => {
+packages\context\agent-instructions\src\index.ts:334:  ctx.on('agent/pre-step', async (
+packages\context\agent-instructions\src\index.ts:362:  ctx.on('tools/result', (exec: ToolExecution, result: ToolExecutionResult) => {
+packages\core\agent-loop\src\runtime-context.ts:134:    ctx.on('session/event', (subject, event) => {
+packages\core\agent-loop\src\agent.ts:334:        const stopRecovery = this.ctx.on('session/event', (session, event) => {
+packages\api\terminal-controller\src\index.ts:118:  @Remote
+packages\api\terminal-controller\src\index.ts:133:  @Remote
+packages\api\terminal-controller\src\index.ts:144:  @Remote
+packages\api\terminal-controller\src\index.ts:158:  @Remote
+packages\api\terminal-controller\src\index.ts:198:  @Remote({ mode: 'stream' })
+packages\api\terminal-controller\src\index.ts:215:  @Remote({ mode: 'stream' })
+packages\api\terminal-controller\src\index.ts:228:  @Remote
+packages\api\terminal-controller\src\index.ts:240:  @Remote
+packages\compaction\compaction-image-offload\src\index.ts:27:  ctx.on('agent/request-error', ({ agent, failure, signal }, next): Promise<RequestErrorAction> => {
+packages\compaction\compaction-image-offload\src\index.ts:33:  ctx.on('compaction/summary-error', ({ session, sourceEventSeqs, error, signal }, next) => {
+packages\guard\timeout-policy\src\index.ts:56:  ctx.on('tools/execute', async (exec, next): Promise<ToolExecutionResult> => {
+packages\extensions\ui-cordis\src\client\index.ts:81:  ctx.on('connection/reset', () => {
+packages\extensions\ui-cordis\src\client\index.ts:86:  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+packages\extensions\ui-cordis\src\client\index.ts:117:  ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
+packages\extensions\ui-cordis\src\client\index.ts:124:  ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
+packages\extensions\ui-cordis\src\client\index.ts:139:    yield ctx.slots.register({
+packages\extensions\ui-cordis\src\client\index.ts:142:    yield ctx.slots.register({
+packages\api\terminal-controller\src\client\index.ts:62:    ctx.on('connection/reset', () => {
+packages\guard\repeat-tool-reminder\src\index.ts:220:  ctx.on('tools/post-execute', async (exec, _result, next): Promise<PostToolDecision> => {
+packages\guard\repeat-tool-reminder\src\index.ts:236:  ctx.on('agent/pre-step', ({ agent, messages }, next): Promise<PreStepDecision> => {
+packages\extensions\tool-cordis\src\index.ts:5:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\extensions\tool-cordis\src\index.ts:22:  ctx.tools.register(defineTool({
+packages\extensions\tool-cordis\src\index.ts:41:  ctx.tools.register(defineTool({
+packages\goal\tool-goal\src\index.ts:19:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\goal\tool-goal\src\index.ts:195:  ctx.tools.register(defineTool({
+packages\goal\tool-goal\src\index.ts:207:  ctx.tools.register(defineTool({
+packages\goal\tool-goal\src\index.ts:234:  ctx.tools.register(defineTool({
+scripts\gen-client-catalog.ts:4: * through `ctx.slots.register`, and every fact it needs to do that safely —
+scripts\gen-client-catalog.ts:92:  'Contribute UI only through `ctx.slots.register(options, Component)`; declare `inject: [\'slots\']` in your returned plugin (object form) or the seat is withheld.',
+scripts\gen-client-catalog.ts:93:  'Wrap every registration in `ctx.slots.inject(key, () => ctx.slots.register(...))`. A slot exists only while the entry that declared it is mounted, and registering into an undeclared slot throws; `inject` runs your registration when the declaration is (or becomes) live and re-runs it if the owner remounts.',
+scripts\gen-client-catalog.ts:366:    `    ctx.slots.inject('${declaration.key}', () => ctx.slots.register(`,
+packages\extensions\tool-cordis\src\api-catalog.ts:157:        signature: '@Remote(\'list\') async remoteExportList(): Promise<AgentPresetRoster>',
+packages\extensions\tool-cordis\src\api-catalog.ts:169:        signature: '@Remote(\'read\') readDocument(agentPreset: string): Promise<AgentPresetDocument>',
+packages\extensions\tool-cordis\src\api-catalog.ts:205:        signature: '@Remote(\'select\') async select(agent: Agent, agentPreset: string): Promise<string>',
+packages\extensions\tool-cordis\src\api-catalog.ts:570:        signature: '@Remote({ mode: \'stream\' }) watchBand(agent: Agent, signal: AbortSignal): AsyncIterable<SurfaceSnapshot>',
+packages\extensions\tool-cordis\src\api-catalog.ts:576:        signature: '@Remote pressBand(agent: Agent, generation: number, actionId: string): Promise<SurfaceSnapshot>',
+packages\extensions\tool-cordis\src\api-catalog.ts:657:        signature: '@Remote list(agent: Agent): readonly CommandDescriptor[]',
+packages\extensions\tool-cordis\src\api-catalog.ts:669:        signature: '@Remote async execute( agent: Agent, line: string, submittedAttachments: readonly CommandSubmitAttachment[], signal: AbortSignal, ): Promise<CommandExecution | undefined>',
+packages\extensions\tool-cordis\src\api-catalog.ts:816:        signature: '@Remote async limits(signal: AbortSignal): Promise<CotTranslationSnapshot>',
+packages\extensions\tool-cordis\src\api-catalog.ts:822:        signature: '@Remote async translate(request: TranslationRequest, signal: AbortSignal): Promise<string>',
+packages\extensions\tool-cordis\src\api-catalog.ts:893:        signature: '@Remote async describe(refs: string[]): Promise<Record<string, CredentialInfo>>',
+packages\extensions\tool-cordis\src\api-catalog.ts:900:        signature: '@Remote async set(ref: string, value: string): Promise<void>',
+packages\extensions\tool-cordis\src\api-catalog.ts:906:        signature: '@Remote async unset(ref: string): Promise<void>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1036:        signature: '@Remote(\'pick\') async pick(signal: AbortSignal): Promise<string | null>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1042:        signature: '@Remote(\'list\') async list(path: string | undefined, signal: AbortSignal): Promise<DirectoryListing>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1048:        signature: '@Remote(\'createDirectory\') async createDirectory(path: string, name: string): Promise<string>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1080:        signature: '@Remote(\'upload\') upload(agent: Agent, request: EncodedFileUploadRequest, signal: AbortSignal): Promise<FileUploadValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1214:        signature: '@Remote(\'get\') get(agent: Agent): GoalView | undefined',
+packages\extensions\tool-cordis\src\api-catalog.ts:1233:        signature: '@Remote(\'edit\') edit(agent: Agent, ref: GoalRef, request: EditGoalRequest): GoalView',
+packages\extensions\tool-cordis\src\api-catalog.ts:1239:        signature: '@Remote(\'pause\') pause(agent: Agent, ref: GoalRef): GoalView',
+packages\extensions\tool-cordis\src\api-catalog.ts:1245:        signature: '@Remote(\'resume\') resume(agent: Agent, ref: GoalRef): GoalView',
+packages\extensions\tool-cordis\src\api-catalog.ts:1251:        signature: '@Remote(\'complete\') complete(agent: Agent, ref: GoalRef): GoalView',
+packages\extensions\tool-cordis\src\api-catalog.ts:1263:        signature: '@Remote(\'clear\') clear(agent: Agent, ref: GoalRef): GoalRef',
+packages\extensions\tool-cordis\src\api-catalog.ts:1269:        signature: '@Remote(\'create\') remoteExportCreate(agent: Agent, request: CreateGoalRequest): CreateGoalResult',
+packages\extensions\tool-cordis\src\api-catalog.ts:1342:        signature: '@Remote({ mode: \'stream\' }) list(request: JobListRequest, signal: AbortSignal): AsyncIterable<JobListFrame>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1348:        signature: '@Remote({ mode: \'stream\' }) follow(request: JobFollowRequest, signal: AbortSignal): AsyncIterable<JobFollowFrame>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1354:        signature: '@Remote(\'kill\') kill(request: JobKillRequest): JobKillValue',
+packages\extensions\tool-cordis\src\api-catalog.ts:1438:        signature: '@Remote listProviders(): LlmProviderInfo[]',
+packages\extensions\tool-cordis\src\api-catalog.ts:1450:        signature: '@Remote listConfigurableProviders(): LlmConfigurableProvider[]',
+packages\extensions\tool-cordis\src\api-catalog.ts:1468:        signature: '@Remote(\'discoverModels\') async remoteDiscoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal, ): Promise<LlmDiscoveredModel[]>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1568:        signature: '@Remote(\'list\') list(request: MessageFeedbackListRequest): Promise<MessageFeedbackListResult>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1574:        signature: '@Remote(\'put\') put(request: MessageFeedbackPutRequest): Promise<MessageFeedbackPutResult>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1580:        signature: '@Remote(\'delete\') delete(request: MessageFeedbackDeleteRequest): Promise<MessageFeedbackDeleteResult>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1605:        signature: '@Remote async render( workspaceFileScope: WorkspaceFileScope, path: string, priority: OfficeToPdfPriority, signal: AbortSignal, ): Promise<RenderedDocumentBytes>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1611:        signature: '@Remote(\'generation\') getGeneration(signal: AbortSignal): OfficeToPdfGeneration',
+packages\extensions\tool-cordis\src\api-catalog.ts:1643:        signature: '@Remote(\'catalog\') catalog(): PermissionCatalog',
+packages\extensions\tool-cordis\src\api-catalog.ts:1706:        signature: '@Remote listVersionExemptions(): { exemptions: Record<string, string[]>; warnings: string[] }',
+packages\extensions\tool-cordis\src\api-catalog.ts:1712:        signature: '@Remote setVersionExemption(packageVersion: string, runtimeVersion: string, enabled: boolean, acceptRisk?: boolean): Promise<ChangeResult>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1718:        signature: '@Remote async listPlugins(): Promise<PluginInfo[]>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1724:        signature: '@Remote listBundles(): Promise<BundleInfo[]>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1730:        signature: '@Remote async registries(): Promise<PluginRegistries>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1736:        signature: '@Remote async inspect(spec: string, options?: InspectOptions, signal?: AbortSignal): Promise<PluginSpecInspection>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1742:        signature: '@Remote setPluginEnabled(id: PluginEntryId, enabled: boolean): Promise<ChangeResult>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1748:        signature: '@Remote setBundleEnabled(name: string, enabled: boolean): Promise<ChangeResult>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1754:        signature: '@Remote installBundle(spec: string, options?: InstallBundleOptions): Promise<ChangeResult>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1760:        signature: '@Remote async waitForInstall(requestId: PluginInstallRequestId): Promise<ChangeResult | null>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1766:        signature: '@Remote async cancelInstall(requestId: PluginInstallRequestId): Promise<PluginInstallCancellation>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1772:        signature: '@Remote removeBundle(name: string): Promise<ChangeResult>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1785:        signature: '@Remote listIndexes(): MarketIndexSummary[]',
+packages\extensions\tool-cordis\src\api-catalog.ts:1791:        signature: '@Remote async setIndexes(urls: string[]): Promise<void>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1797:        signature: '@Remote async search(url: string, query: MarketQuery): Promise<MarketSearchResult>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1818:        signature: '@Remote async fastest(): Promise<string | null>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1832:        signature: '@Remote enabled(): boolean',
+packages\extensions\tool-cordis\src\api-catalog.ts:1838:        signature: '@Remote({ mode: \'stream\' }) async *watchPolicy(signal: AbortSignal): AsyncIterable<boolean>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1844:        signature: '@Remote async report(event: ProductEvent): Promise<void>',
+packages\extensions\tool-cordis\src\api-catalog.ts:1963:        signature: '@Remote({ mode: \'stream\' }) async *follow(signal: AbortSignal): AsyncIterable<RemoteAccessFrame>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2024:        signature: '@Remote(\'list\') async list(request: ScheduleListRequest): Promise<ScheduleRecord[]>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2030:        signature: '@Remote(\'catalog\') async catalog(): Promise<ScheduleCatalogEntry[]>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2036:        signature: '@Remote(\'history\') async history(request: ScheduleDeliveryHistoryRequest): Promise<ScheduleDeliveryHistoryResult>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2043:        signature: '@Remote(\'delete\') async delete(request: ScheduleDeleteRequest, signal?: AbortSignal): Promise<ScheduleDeleteResult>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2049:        signature: '@Remote(\'update\') async update(request: ScheduleUpdateRequest, signal?: AbortSignal): Promise<ScheduleUpdateResult>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2074:        signature: '@Remote(\'list\') async list(_request: SessionListRequest, signal: AbortSignal): Promise<SessionListValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2080:        signature: '@Remote(\'search\') async search(request: SessionSearchRequest, signal: AbortSignal): Promise<SessionSearchValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2086:        signature: '@Remote(\'create\') create(request: SessionCreateRequest): Promise<SessionCreateValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2092:        signature: '@Remote(\'selectModel\') selectModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2098:        signature: '@Remote async initializeDefaultModel(): Promise<void>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2104:        signature: '@Remote(\'modelCatalog\') modelCatalog(): Promise<ModelCatalog>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2110:        signature: '@Remote canOpenWorkspacePath(): boolean',
+packages\extensions\tool-cordis\src\api-catalog.ts:2122:        signature: '@Remote(\'openWorkspacePath\') async openWorkspacePath( request: SessionOpenWorkspacePathRequest, signal: AbortSignal, ): Promise<SessionOpenWorkspacePathValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2129:        signature: '@Remote(\'workspacePathApplications\') async workspacePathApplications( request: { readonly path: string }, signal: AbortSignal, ): Promise<readonly SessionWorkspacePathApplication[]>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2136:        signature: '@Remote(\'rename\') rename(request: SessionRenameRequest): Promise<SessionRenameValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2142:        signature: '@Remote(\'fork\') async fork(request: SessionForkRequest): Promise<SessionForkValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2148:        signature: '@Remote(\'prompt\') async prompt(request: SessionPromptRequest, signal: AbortSignal): Promise<SessionPromptValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2154:        signature: '@Remote(\'attachment\') attachment(request: SessionAttachmentRequest): Promise<SessionAttachmentValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2160:        signature: '@Remote(\'updateQueue\') updateQueue(request: SessionUpdateQueueRequest): Promise<SessionUpdateQueueValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2166:        signature: '@Remote(\'cancel\') cancel(request: SessionCancelRequest): SessionCancelValue',
+packages\extensions\tool-cordis\src\api-catalog.ts:2172:        signature: '@Remote({ name: \'page\', resources: { session: addressedSession } }) page(request: SessionPageRequest, signal: AbortSignal): Promise<SessionPage>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2178:        signature: '@Remote({ mode: \'stream\', resources: { session: addressedSession } }) follow(request: SessionFollowRequest, signal: AbortSignal): AsyncIterable<SessionFollowFrame>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2184:        signature: '@Remote(\'projections\') async projections(request: SessionProjectionsRequest, signal: AbortSignal): Promise<SessionProjectionsValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2190:        signature: '@Remote({ mode: \'stream\' }) async *control(signal: AbortSignal): AsyncIterable<SessionControlFrame>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2203:        signature: '@Remote(\'record\') record(request: SessionFeedbackRecordRequest): Promise<SessionFeedbackRecordResult>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2216:        signature: '@Remote list( agent: Agent, query: string, signal: AbortSignal, ): Promise<FileReferenceCandidate[]>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2491:        signature: '@Remote(\'candidates\') async remoteExportCandidates( agent: Agent, query: string, signal: AbortSignal, ): Promise<SessionReferenceMentionCandidate[]>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2576:        signature: '@Remote async list(request: SkillListRequest, signal: AbortSignal): Promise<SkillListValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2691:        signature: '@Remote describe(): SettingsDescribeValue',
+packages\extensions\tool-cordis\src\api-catalog.ts:2698:        signature: '@Remote update( ns: string, patch: Record<string, JsonValue>, expectedRevision: number | undefined, ): Promise<SettingsNamespaceView>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2705:        signature: '@Remote replace( ns: string, section: Record<string, JsonValue>, expectedRevision: number | undefined, ): Promise<SettingsNamespaceView>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2712:        signature: '@Remote async mutate( ns: string, ops: SettingsPathOpView[], expectedRevision: number | undefined, ): Promise<SettingsNamespaceView>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2719:        signature: '@Remote async openSettingsDocument(signal: AbortSignal): Promise<SettingsDocumentOpenValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2815:        signature: '@Remote catalog(): SpeechCatalog',
+packages\extensions\tool-cordis\src\api-catalog.ts:2821:        signature: '@Remote({ mode: \'stream\' }) async *follow(signal: AbortSignal): AsyncIterable<SpeechCatalog>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2827:        signature: '@Remote configure(patch: SpeechSelectionPatch): Promise<void>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2833:        signature: '@Remote prepare(providerId: SpeechProviderId, options?: SpeechPreparationOptions): void',
+packages\extensions\tool-cordis\src\api-catalog.ts:2838:        signature: '@Remote cancelPreparation(providerId: SpeechProviderId): Promise<void>',
+packages\extensions\tool-cordis\src\api-catalog.ts:2844:        signature: '@Remote async transcribe(request: TranscriptionRequest, signal: AbortSignal): Promise<Transcript>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3086:        signature: '@Remote(\'prompt\') async prompt(request: SubagentPromptRequest, signal: AbortSignal): Promise<SubagentPromptReceipt>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3093:        signature: '@Remote(\'interruptByParent\') interruptByParent( childSessionId: SessionId, parentSessionId: SessionId, mode: \'continuable\', ): SubagentInterruptReceipt',
+packages\extensions\tool-cordis\src\api-catalog.ts:3218:        signature: '@Remote environment(agent: Agent, signal: AbortSignal): TerminalEnvironment',
+packages\extensions\tool-cordis\src\api-catalog.ts:3224:        signature: '@Remote shells(agent: Agent, signal: AbortSignal): Promise<TerminalShell[]>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3230:        signature: '@Remote list(sessionId: SessionId): WebTerminalInfo[]',
+packages\extensions\tool-cordis\src\api-catalog.ts:3236:        signature: '@Remote async create(agent: Agent, request: TerminalCreateRequest, signal: AbortSignal): Promise<WebTerminalInfo>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3242:        signature: '@Remote({ mode: \'stream\' }) retain(sessionId: SessionId, id: WebTerminalId, signal: AbortSignal): AsyncIterable<TerminalRetentionFrame>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3248:        signature: '@Remote({ mode: \'stream\' }) attach(agent: Agent, id: WebTerminalId, signal: AbortSignal): RemoteStream<TerminalFrame, TerminalInput>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3254:        signature: '@Remote rename(agent: Agent, id: WebTerminalId, title: string): void',
+packages\extensions\tool-cordis\src\api-catalog.ts:3259:        signature: '@Remote async close(agent: Agent, id: WebTerminalId): Promise<void>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3587:        signature: '@Remote answer(agent: Agent, callId: ToolCallId, answer: AskUserQuestionAnswer): boolean',
+packages\extensions\tool-cordis\src\api-catalog.ts:3594:        signature: '@Remote({ mode: \'stream\' }) async *attachWait(agent: Agent, callId: ToolCallId, signal: AbortSignal): AsyncIterable<{ remainingMs: number }>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3805:        signature: '@Remote(\'create\') create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3811:        signature: '@Remote(\'initializeDefault\') async initializeDefault(signal: AbortSignal): Promise<WorkspaceValue | undefined>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3817:        signature: '@Remote(\'rename\') rename(request: WorkspaceRenameRequest): Promise<WorkspaceValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3823:        signature: '@Remote(\'delete\') delete(request: WorkspaceDeleteRequest): Promise<WorkspaceDeleteValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3829:        signature: '@Remote(\'insertBefore\') insertBefore(request: WorkspaceInsertBeforeRequest): Promise<WorkspaceOrderValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3835:        signature: '@Remote(\'insertSessionBefore\') insertSessionBefore(request: WorkspaceInsertSessionBeforeRequest): Promise<WorkspaceValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3841:        signature: '@Remote(\'archiveSession\') archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3847:        signature: '@Remote(\'unarchiveSession\') unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<WorkspaceArchiveValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3853:        signature: '@Remote(\'pinSession\') pinSession(request: WorkspacePinSessionRequest): Promise<WorkspacePinValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3859:        signature: '@Remote(\'unpinSession\') unpinSession(request: WorkspaceUnpinSessionRequest): Promise<WorkspacePinValue>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3865:        signature: '@Remote({ mode: \'stream\' }) async *follow(signal: AbortSignal): AsyncIterable<WorkspaceFollowFrame>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3878:        signature: '@Remote async read( workspaceFileScope: WorkspaceFileScope, path: string, range: WorkspaceFileRange, signal: AbortSignal, ): Promise<WorkspaceFileText>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3884:        signature: '@Remote async readBytes( workspaceFileScope: WorkspaceFileScope, path: string, options: WorkspaceByteReadOptions, signal: AbortSignal, ): Promise<WorkspaceFileBytes>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3890:        signature: '@Remote async stat(workspaceFileScope: WorkspaceFileScope, path: string, signal: AbortSignal): Promise<WorkspaceFileStat>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3896:        signature: '@Remote async list(workspaceFileScope: WorkspaceFileScope, path: string, signal: AbortSignal): Promise<WorkspaceDirectoryListing>',
+packages\extensions\tool-cordis\src\api-catalog.ts:3902:        signature: '@Remote({ mode: \'stream\' }) changes(workspaceFileScope: WorkspaceFileScope, path: string, signal: AbortSignal): AsyncIterable<WorkspaceFileWatchFrame>',
+packages\extensions\tool-cordis\src\api-catalog.ts:5974:    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    imageRequestTarget(provider: string, model: string, image: ImageAttachmentRef): ImageRequestTarget;\n    fileRequestText(ref: FileAttachmentRef): string;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(conf /* …truncated — full shape in source */',
+packages\extensions\tool-cordis\src\api-catalog.ts:7894:    declaration: 'export class SubagentRuntime extends TypertRemoteService {\n    static Config;\n    static inject;\n    constructor(ctx: Context, private config: Config);\n    resolveMaxDepth(configured?: number | \'provider-managed\'): number | undefined;\n    startActivation(spec: SubagentActivationSpec & {\n        readonly childId: SessionId;\n    }): Promise<SubagentActivation & {\n        readonly messageId: MessageId;\n    }>;\n    startActivation(spec: SubagentActivationSpec): Promise<SubagentActivation>;\n    async startActivation(spec: SubagentActivationSpec): Promise<SubagentActivation>;\n    async waitForChildren(parent: Agent): Promise<boolean>;\n    async sendMessage(sender: Agent, targetId: SessionId, content: ContentBlock[], options: SubagentSendMessageOptions): Promise<MessageId>;\n    interrupt(targetSessionId: SessionId, authority: SubagentInterruptAuthority): void;\n    async drainDescendants(parents: readonly Agent[]): Promise<void>;\n    async drainChildren(parent: Agent, childIds: readonly SessionId[]): Promise<void>;\n    listChildren(parentSessionId: SessionId, signal?: AbortSignal): Promise<SubagentCatalogEntry[]>;\n    listDescendants(rootSessionId: SessionId, signal?: AbortSignal): Promise<SubagentDescendantListEntry[]>;\n    @Remote(\'prompt\')\n    async prompt(request: SubagentPromptRequest, signal: AbortSignal): Promise<SubagentPromptReceipt>;\n    @Remote(\'interruptByParent\')\n    interruptByParent(childSessionId: SessionId, parentSessionId: SessionId, mode: \'continuable\'): SubagentIn /* …truncated — full shape in source */',
+packages\api\settings-controller\src\index.ts:97:  @Remote
+packages\api\settings-controller\src\index.ts:115:  @Remote
+packages\api\settings-controller\src\index.ts:132:  @Remote
+packages\api\settings-controller\src\index.ts:151:  @Remote
+packages\api\settings-controller\src\index.ts:166:  @Remote
+packages\web\tool-web\src\search.ts:9:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\web\tool-web\src\search.ts:325:  ctx.tools.register(defineTool({
+packages\api\settings-controller\src\credentials.ts:82:  @Remote
+packages\api\settings-controller\src\credentials.ts:99:  @Remote
+packages\api\settings-controller\src\credentials.ts:112:  @Remote
+packages\web\tool-web\src\fetch.ts:11:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\web\tool-web\src\fetch.ts:456:  ctx.tools.register(defineTool({
+packages\extensions\cordis-host-runner\src\sandbox.ts:105:    harness: { defineTool: sandboxDefineTool, registerTool: sandboxRegisterTool, ...harnessExtras },
+packages\extensions\cordis-host-runner\src\index.ts:244:  @Remote('undefineFromPanel')
+packages\extensions\cordis-host-runner\src\index.ts:342:  @Remote('runHostHalf')
+packages\extensions\cordis-host-runner\src\index.ts:401:  @Remote('getClientCode')
+packages\extensions\cordis-host-runner\src\index.ts:430:  @Remote('resolveRequestRun')
+packages\extensions\cordis-host-runner\src\index.ts:455:  @Remote('settleUserRun')
+packages\extensions\cordis-host-runner\src\index.ts:497:  @Remote('stopFromPanel')
+packages\extensions\cordis-host-runner\src\index.ts:515:  @Remote('syncInspectManifest')
+packages\extensions\cordis-host-runner\src\index.ts:529:  @Remote('resolveInspectQuery')
+packages\extensions\cordis-host-runner\src\index.ts:543:  @Remote('inventory')
+packages\extensions\cordis-host-runner\src\index.ts:702:  @Remote('reportRenderFailure')
+packages\extensions\cordis-host-runner\src\index.ts:736:  @Remote('reportClientGuardFailure')
+packages\extensions\cordis-host-runner\src\index.ts:759:  @Remote('invoke')
+packages\extensions\cordis-host-runner\src\guard.ts:3: * normalization + validation with teaching errors, the marker-guarded `harness.defineTool` /
+packages\extensions\cordis-host-runner\src\guard.ts:19:import { assertSupportedJsonSchema, defineTool } from '@deepseek-ai/dsh-tools'
+packages\extensions\cordis-host-runner\src\guard.ts:82:    throw new Error(`harness.defineTool ${path} must contain only own enumerable string keys`)
+packages\extensions\cordis-host-runner\src\guard.ts:196:  if (Object.hasOwn(value, 'default')) output.default = cloneJson(value.default, `harness.defineTool ${path}.default`)
+packages\extensions\cordis-host-runner\src\guard.ts:197:  if (Object.hasOwn(value, 'examples')) output.examples = cloneJson(value.examples, `harness.defineTool ${path}.examples`)
+packages\extensions\cordis-host-runner\src\guard.ts:204:    if (!allowed.includes(key)) throw new Error(`harness.defineTool ${path}.${key} is not supported by the unified schema DSL`)
+packages\extensions\cordis-host-runner\src\guard.ts:218:    throw new Error(`harness.defineTool ${path} must be a ParameterSchemaSpec object`)
+packages\extensions\cordis-host-runner\src\guard.ts:223:      throw new Error(`harness.defineTool ${path}.properties must be an object of schemas`)
+packages\extensions\cordis-host-runner\src\guard.ts:226:      throw new Error(`harness.defineTool ${path}.additionalProperties must be true or omitted because the implicit parameter root is open`)
+packages\extensions\cordis-host-runner\src\guard.ts:229:      throw new Error(`harness.defineTool ${path}.required must be an array of declared property names`)
+packages\extensions\cordis-host-runner\src\guard.ts:246:    throw new Error(`harness.defineTool ${path} must be an array of declared property names`)
+packages\extensions\cordis-host-runner\src\guard.ts:252:      throw new Error(`harness.defineTool ${path} must be an array of declared property names`)
+packages\extensions\cordis-host-runner\src\guard.ts:255:    if (!Object.hasOwn(properties, name)) throw new Error(`harness.defineTool ${path} names undeclared property ${JSON.stringify(name)}`)
+packages\extensions\cordis-host-runner\src\guard.ts:342:      if (ancestors.has(task.entries)) throw new Error(`harness.defineTool ${task.path} is circular`)
+packages\extensions\cordis-host-runner\src\guard.ts:368:      throw new Error(`harness.defineTool ${path} must be a ParameterSchemaSpec property object`)
+packages\extensions\cordis-host-runner\src\guard.ts:371:    if (ancestors.has(value)) throw new Error(`harness.defineTool ${path} is circular`)
+packages\extensions\cordis-host-runner\src\guard.ts:375:      throw new Error(`harness.defineTool ${path}.required belongs to the containing raw object schema`)
+packages\extensions\cordis-host-runner\src\guard.ts:378:      throw new Error(`harness.defineTool ${path}.required must be true when present`)
+packages\extensions\cordis-host-runner\src\guard.ts:389:        throw new Error(`harness.defineTool ${path}.oneOf must contain at least two schemas`)
+packages\extensions\cordis-host-runner\src\guard.ts:413:      throw new Error(`harness.defineTool ${path} must declare a valid type: ${VALID_TYPES} (got ${JSON.stringify(value.type)})`)
+packages\extensions\cordis-host-runner\src\guard.ts:422:          throw new Error(`harness.defineTool ${path}.additionalProperties must be explicitly true or false`)
+packages\extensions\cordis-host-runner\src\guard.ts:425:          throw new Error(`harness.defineTool ${path}.additionalProperties must be a boolean`)
+packages\extensions\cordis-host-runner\src\guard.ts:428:          throw new Error(`harness.defineTool ${path}.required must be an array of declared property names`)
+packages\extensions\cordis-host-runner\src\guard.ts:433:          if (!isPlainRecord(properties)) throw new Error(`harness.defineTool ${path}.properties must be an object of schemas`)
+packages\extensions\cordis-host-runner\src\guard.ts:472:            throw new Error(`harness.defineTool ${path}.enum must be a non-empty array`)
+packages\extensions\cordis-host-runner\src\guard.ts:474:          prop.enum = cloneJson(value.enum, `harness.defineTool ${path}.enum`)
+packages\extensions\cordis-host-runner\src\guard.ts:476:        if (Object.hasOwn(value, 'const')) prop.const = cloneJson(value.const, `harness.defineTool ${path}.const`)
+packages\extensions\cordis-host-runner\src\guard.ts:483:        throw new Error(`harness.defineTool ${path} must declare a valid type: ${VALID_TYPES}`)
+packages\extensions\cordis-host-runner\src\guard.ts:497:    throw new Error('dynamic tool registration must use a tool returned by harness.defineTool(...)')
+packages\extensions\cordis-host-runner\src\guard.ts:543: * The `harness.defineTool` handed into the sandbox: the real DSL, with `parameters` normalized
+packages\extensions\cordis-host-runner\src\guard.ts:548: * @param options - the standard `defineTool` options; `parameters` may be the ParameterSchemaSpec DSL or a JSON-Schema-style wrapper.
+packages\extensions\cordis-host-runner\src\guard.ts:552:  if (!isPlainRecord(options)) throw new Error('harness.defineTool options must be an object')
+packages\extensions\cordis-host-runner\src\guard.ts:555:    throw new Error('harness.defineTool output must declare { schema, render, presentationMeta? }')
+packages\extensions\cordis-host-runner\src\guard.ts:558:  if (typeof output.render !== 'function') throw new Error('harness.defineTool output.render must be a function')
+packages\extensions\cordis-host-runner\src\guard.ts:560:    throw new Error('harness.defineTool output.presentationMeta must be a function when present')
+packages\extensions\cordis-host-runner\src\guard.ts:562:  if (typeof options.execute !== 'function') throw new Error('harness.defineTool execute must be a function')
+packages\extensions\cordis-host-runner\src\guard.ts:563:  const schema = cloneJson(output.schema, 'harness.defineTool output.schema')
+packages\extensions\cordis-host-runner\src\guard.ts:567:  const erasedDefineTool = defineTool as (definition: unknown) => ToolDefinition
+packages\extensions\cordis-host-runner\src\guard.ts:574:        return assertRenderedContent(cloneJson(rawRender(args, value), 'harness.defineTool output.render result') as JsonValue)
+packages\extensions\cordis-host-runner\src\guard.ts:578:          return cloneJson(rawPresentationMeta(args, value), 'harness.defineTool output.presentationMeta result') as JsonValue
+packages\extensions\cordis-host-runner\src\guard.ts:583:      return cloneJson(await rawExecute(args, exec), 'harness.defineTool execute result') as JsonValue
+scripts\loader-volatile-update.spec.ts:114:    ctx.on('internal/update', globalHook, { global: true })
+scripts\loader-volatile-update.spec.ts:351:  fiber.ctx.on('internal/update', hook)
+scripts\loader-volatile-update.spec.ts:370:  fiber.ctx.on('internal/config', resolveHook)
+scripts\loader-volatile-update.spec.ts:372:  ctx.on('loader/patch-context', contextPatch)
+packages\api\session-controller\src\skill-catalog.ts:35:  @Remote
+packages\api\session-controller\src\index.ts:191:    ctx.on('session/created', (session) => {
+packages\api\session-controller\src\index.ts:194:    ctx.on('session/disposed', (session) => {
+packages\api\session-controller\src\index.ts:202:    ctx.on('agent/created', publishAgentAvailability)
+packages\api\session-controller\src\index.ts:203:    ctx.on('agent/disposed', publishAgentAvailability)
+packages\api\session-controller\src\index.ts:204:    ctx.on('agent/status', ({ agent, status }) => {
+packages\api\session-controller\src\index.ts:207:    ctx.on('agent/error', ({ agent, error }) => {
+packages\api\session-controller\src\index.ts:210:    ctx.on('session/event', (session, event) => {
+packages\api\session-controller\src\index.ts:275:  @Remote('list')
+packages\api\session-controller\src\index.ts:289:  @Remote('search')
+packages\api\session-controller\src\index.ts:300:  @Remote('create')
+packages\api\session-controller\src\index.ts:310:  @Remote('selectModel')
+packages\api\session-controller\src\index.ts:319:  @Remote
+packages\api\session-controller\src\index.ts:337:  @Remote('modelCatalog')
+packages\api\session-controller\src\index.ts:346:  @Remote
+packages\api\session-controller\src\index.ts:367:  @Remote('openWorkspacePath')
+packages\api\session-controller\src\index.ts:397:  @Remote('workspacePathApplications')
+packages\api\session-controller\src\index.ts:430:  @Remote('rename')
+packages\api\session-controller\src\index.ts:442:  @Remote('fork')
+packages\api\session-controller\src\index.ts:461:  @Remote('prompt')
+packages\api\session-controller\src\index.ts:493:  @Remote('attachment')
+packages\api\session-controller\src\index.ts:503:  @Remote('updateQueue')
+packages\api\session-controller\src\index.ts:513:  @Remote('cancel')
+packages\api\session-controller\src\index.ts:524:  @Remote({ name: 'page', resources: { session: addressedSession } })
+packages\api\session-controller\src\index.ts:536:  @Remote({ mode: 'stream', resources: { session: addressedSession } })
+packages\api\session-controller\src\index.ts:547:  @Remote('projections')
+packages\api\session-controller\src\index.ts:598:  @Remote({ mode: 'stream' })
+packages\api\session-controller\src\history.ts:54:    ctx.on('agent/assistant-stream', ({ agent, frame }) => {
+packages\api\session-controller\src\history.ts:62:    ctx.on('agent/disposed', ({ agent }) => {
+packages\api\session-controller\src\history.ts:146:    const disposeEvent = this.ctx.on('session/event', (session, event) => {
+packages\api\session-controller\src\history.ts:151:    const disposeCreated = this.ctx.on('session/created', (session) => {
+packages\api\session-controller\src\history.ts:167:      : this.ctx.on('agent/assistant-stream', ({ agent, frame }) => {
+packages\api\session-controller\src\file-references.ts:32:  @Remote
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:69:  'Contribute UI only through `ctx.slots.register(options, Component)`; declare `inject: [\'slots\']` in your returned plugin (object form) or the seat is withheld.',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:70:  'Wrap every registration in `ctx.slots.inject(key, () => ctx.slots.register(...))`. A slot exists only while the entry that declared it is mounted, and registering into an undeclared slot throws; `inject` runs your registration when the declaration is (or becomes) live and re-runs it if the owner remounts.',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:121:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.approval.detail\', () => ctx.slots.register(\n      { name: \'conversation.approval.detail\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:184:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.assistant-actions\', () => ctx.slots.register(\n      { name: \'conversation.chat.assistant-actions\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:235:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.commandview\', () => ctx.slots.register(\n      { name: \'conversation.chat.commandview\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:281:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.flow\', () => ctx.slots.register(\n      { name: \'conversation.chat.flow\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:327:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.message.images\', () => ctx.slots.register(\n      { name: \'conversation.chat.message.images\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:400:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.node\', () => ctx.slots.register(\n      { name: \'conversation.chat.node\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:443:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.reasoning.body\', () => ctx.slots.register(\n      { name: \'conversation.chat.reasoning.body\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:508:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.turnTail\', () => ctx.slots.register(\n      { name: \'conversation.chat.turnTail\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:554:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.user.images\', () => ctx.slots.register(\n      { name: \'conversation.chat.user.images\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:609:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.composer\', () => ctx.slots.register(\n      { name: \'conversation.composer\', select: owner => null },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:651:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.composer.bar\', () => ctx.slots.register(\n      { name: \'conversation.composer.bar\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:711:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.composer.dock\', () => ctx.slots.register(\n      { name: \'conversation.composer.dock\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:749:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.header\', () => ctx.slots.register(\n      { name: \'conversation.header\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:780:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.header.leading\', () => ctx.slots.register(\n      { name: \'conversation.header.leading\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:820:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.hero.agentPreset\', () => ctx.slots.register(\n      { name: \'conversation.hero.agentPreset\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:851:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.hero.brand.mark\', () => ctx.slots.register(\n      { name: \'conversation.hero.brand.mark\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:908:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.hero.options\', () => ctx.slots.register(\n      { name: \'conversation.hero.options\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:943:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.hero.workspace\', () => ctx.slots.register(\n      { name: \'conversation.hero.workspace\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:977:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.hero.workspace.directoryFlow\', () => ctx.slots.register(\n      { name: \'conversation.hero.workspace.directoryFlow\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1021:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.input.activity\', () => ctx.slots.register(\n      { name: \'conversation.input.activity\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1065:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.input.attachments\', () => ctx.slots.register(\n      { name: \'conversation.input.attachments\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1132:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.input.dock\', () => ctx.slots.register(\n      { name: \'conversation.input.dock\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1189:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.input.left\', () => ctx.slots.register(\n      { name: \'conversation.input.left\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1231:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.input.model\', () => ctx.slots.register(\n      { name: \'conversation.input.model\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1276:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.input.model.label\', () => ctx.slots.register(\n      { name: \'conversation.input.model.label\' },\n      ({ provider, model }) => React.createElement(\'span\', { title: provider.name }, model.name),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1337:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.input.overlay\', () => ctx.slots.register(\n      { name: \'conversation.input.overlay\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1379:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.input.permission\', () => ctx.slots.register(\n      { name: \'conversation.input.permission\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1421:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.input.plan\', () => ctx.slots.register(\n      { name: \'conversation.input.plan\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1478:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.input.right\', () => ctx.slots.register(\n      { name: \'conversation.input.right\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1539:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.plan-review.actions\', () => ctx.slots.register(\n      { name: \'conversation.plan-review.actions\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1579:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.session\', () => ctx.slots.register(\n      { name: \'conversation.session\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1619:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.session.header\', () => ctx.slots.register(\n      { name: \'conversation.session.header\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1683:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.session.header.actions\', () => ctx.slots.register(\n      { name: \'conversation.session.header.actions\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1725:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.session.header.corner\', () => ctx.slots.register(\n      { name: \'conversation.session.header.corner\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1769:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.session.header.lineage\', () => ctx.slots.register(\n      { name: \'conversation.session.header.lineage\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1832:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.session.header.utilities\', () => ctx.slots.register(\n      { name: \'conversation.session.header.utilities\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1878:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.trajectory.images\', () => ctx.slots.register(\n      { name: \'conversation.trajectory.images\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1933:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.user.text.node\', () => ctx.slots.register(\n      { name: \'conversation.user.text.node\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:1997:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.view\', () => ctx.slots.register(\n      { name: \'conversation.view\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2059:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'deliverables.file.actions\', () => ctx.slots.register(\n      { name: \'deliverables.file.actions\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2122:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'deliverables.review.file.actions\', () => ctx.slots.register(\n      { name: \'deliverables.review.file.actions\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2162:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'main\', () => ctx.slots.register(\n      { name: \'main\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2200:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'main.conversation\', () => ctx.slots.register(\n      { name: \'main.conversation\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2252:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'plugins.add.actions\', () => ctx.slots.register(\n      { name: \'plugins.add.actions\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2292:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'plugins.bundle.activation\', () => ctx.slots.register(\n      { name: \'plugins.bundle.activation\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2335:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'plugins.bundle.config\', () => ctx.slots.register(\n      { name: \'plugins.bundle.config\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2387:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'plugins.detail.actions\', () => ctx.slots.register(\n      { name: \'plugins.detail.actions\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2439:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'plugins.detail.badge\', () => ctx.slots.register(\n      { name: \'plugins.detail.badge\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2491:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'plugins.detail.section\', () => ctx.slots.register(\n      { name: \'plugins.detail.section\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2548:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'plugins.item\', () => ctx.slots.register(\n      { name: \'plugins.item\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2588:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'plugins.row.config\', () => ctx.slots.register(\n      { name: \'plugins.row.config\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2642:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'plugins.tab\', () => ctx.slots.register(\n      { name: \'plugins.tab\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2675:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'rightbar\', () => ctx.slots.register(\n      { name: \'rightbar\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2720:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'rightbar.session\', () => ctx.slots.register(\n      { name: \'rightbar.session\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2753:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'root\', () => ctx.slots.register(\n      { name: \'root\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2805:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'settings.action\', () => ctx.slots.register(\n      { name: \'settings.action\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2838:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'settings.close\', () => ctx.slots.register(\n      { name: \'settings.close\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2901:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'settings.general.item\', () => ctx.slots.register(\n      { name: \'settings.general.item\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2934:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'settings.header\', () => ctx.slots.register(\n      { name: \'settings.header\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:2967:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'settings.launcher\', () => ctx.slots.register(\n      { name: \'settings.launcher\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3017:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'settings.models.footer\', () => ctx.slots.register(\n      { name: \'settings.models.footer\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3057:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'settings.models.provider-card\', () => ctx.slots.register(\n      { name: \'settings.models.provider-card\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3088:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'settings.models.sign-in\', () => ctx.slots.register(\n      { name: \'settings.models.sign-in\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3141:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'settings.onboarding\', () => ctx.slots.register(\n      { name: \'settings.onboarding\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3193:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'settings.plugins.tab\', () => ctx.slots.register(\n      { name: \'settings.plugins.tab\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3249:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'settings.section\', () => ctx.slots.register(\n      { name: \'settings.section\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3282:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'settings.trigger\', () => ctx.slots.register(\n      { name: \'settings.trigger\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3313:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'shell.bottom\', () => ctx.slots.register(\n      { name: \'shell.bottom\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3344:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'shell.leading\', () => ctx.slots.register(\n      { name: \'shell.leading\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3404:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'shell.overlay\', () => ctx.slots.register(\n      { name: \'shell.overlay\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3446:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'shell.quota-notice\', () => ctx.slots.register(\n      { name: \'shell.quota-notice\', select: owner => null },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3479:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar\', () => ctx.slots.register(\n      { name: \'sidebar\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3512:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.brand.mark\', () => ctx.slots.register(\n      { name: \'sidebar.brand.mark\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3545:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.brand.name\', () => ctx.slots.register(\n      { name: \'sidebar.brand.name\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3585:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.chat.conversation\', () => ctx.slots.register(\n      { name: \'sidebar.chat.conversation\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3637:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.footer.action\', () => ctx.slots.register(\n      { name: \'sidebar.footer.action\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3690:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.panellist\', () => ctx.slots.register(\n      { name: \'sidebar.panellist\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3746:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.right.pane.tab\', () => ctx.slots.register(\n      { name: \'sidebar.right.pane.tab\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3799:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.right.pane.tab.title\', () => ctx.slots.register(\n      { name: \'sidebar.right.pane.tab.title\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3857:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.right.tab.document\', () => ctx.slots.register(\n      { name: \'sidebar.right.tab.document\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3908:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.right.tab.document.action\', () => ctx.slots.register(\n      { name: \'sidebar.right.tab.document.action\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:3967:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.right.tab.document.actions\', () => ctx.slots.register(\n      { name: \'sidebar.right.tab.document.actions\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4018:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.right.tab.document.office.pdf\', () => ctx.slots.register(\n      { name: \'sidebar.right.tab.document.office.pdf\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4077:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.right.tab.document.unpreviewable\', () => ctx.slots.register(\n      { name: \'sidebar.right.tab.document.unpreviewable\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4136:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.right.tab.files.actions\', () => ctx.slots.register(\n      { name: \'sidebar.right.tab.files.actions\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4181:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.right.tab.guide\', () => ctx.slots.register(\n      { name: \'sidebar.right.tab.guide\', select: owner => null },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4230:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.right.tab.guide.entry\', () => ctx.slots.register(\n      { name: \'sidebar.right.tab.guide.entry\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4291:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.right.tab.menu.item\', () => ctx.slots.register(\n      { name: \'sidebar.right.tab.menu.item\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4345:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.session.row.hover\', () => ctx.slots.register(\n      { name: \'sidebar.session.row.hover\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4399:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.session.row.leading\', () => ctx.slots.register(\n      { name: \'sidebar.session.row.leading\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4432:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.settings\', () => ctx.slots.register(\n      { name: \'sidebar.settings\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4463:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.toggle.badge\', () => ctx.slots.register(\n      { name: \'sidebar.toggle.badge\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4496:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.workspaces\', () => ctx.slots.register(\n      { name: \'sidebar.workspaces\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4530:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.workspaces.directoryFlow\', () => ctx.slots.register(\n      { name: \'sidebar.workspaces.directoryFlow\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4588:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    const copyLabel = \'Copy session title\' // Localize in the contributing package.\n    ctx.slots.inject(\'sidebar.workspaces.session.menu.item\', () => ctx.slots.register(\n      { name: \'sidebar.workspaces.session.menu.item\', id: \'copy-session-title\', order: 500 },\n      ({ displayTitle, useMenuOpenState }) => {\n        const [, setMenuOpen] = useMenuOpenState()\n        return React.createElement(\n          \'button\',\n          {\n            type: \'button\', role: \'menuitem\',\n            onClick: () => { setMenuOpen(false); void navigator.clipboard.writeText(displayTitle) },\n          },\n          copyLabel,\n        )\n      },\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4643:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.workspaces.session.row.action\', () => ctx.slots.register(\n      { name: \'sidebar.workspaces.session.row.action\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4688:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'tool.call.images\', () => ctx.slots.register(\n      { name: \'tool.call.images\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4799:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'tool.call.toolview\', () => ctx.slots.register(\n      { name: \'tool.call.toolview\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4850:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'tool.view.cordis\', () => ctx.slots.register(\n      { name: \'tool.view.cordis\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\slot-catalog.ts:4902:    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'workspace.toast\', () => ctx.slots.register(\n      { name: \'workspace.toast\', key: \'<one key the owner dispatches>\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+packages\extensions\cordis-client-runner\src\client\providers.ts:45:      'ctx.on(name: string, listener: Function): () => void',
+packages\extensions\cordis-client-runner\src\client\index.ts:204:  ctx.on('connection/reset', () => { inspect.publish() })
+packages\extensions\cordis-client-runner\src\client\guard.ts:68: * inside prototype methods (slots.register) must stay the CALLER's ctx so
+packages\extensions\cordis-client-runner\src\client\guard.ts:106:          return rejectGuard(env, 'slots.register(options, component) needs an options object with a `name`')
+packages\fs\tool-str-replace-editor\src\index.ts:15:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\fs\tool-str-replace-editor\src\index.ts:429:  ctx.tools.register(defineTool({
+packages\experimental\webworker-runtime\src\shell\interpret.ts:217:      status = await this.command(stage.command, state, stageIo)
+packages\api\session-controller\src\archived-session-gate.ts:27:    ctx.on('agent/pre-step', (payload, next) =>
+packages\fs\tool-fs-search\src\grep.ts:15:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\fs\tool-fs-search\src\grep.ts:284:  const tool = defineTool({
+packages\fs\tool-fs-search\src\grep.ts:342:  ctx.on('tools/post-execute', async (exec, result, next) => {
+packages\fs\tool-fs-search\src\glob.ts:14:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\fs\tool-fs-search\src\glob.ts:306:  const tool = defineTool({
+packages\fs\tool-fs-search\src\glob.ts:355:  ctx.on('tools/post-execute', async (exec, result, next) => {
+packages\api\remotes\src\index.ts:55:        return ctx.on(event as never, ((...args: unknown[]) => {
+packages\api\remotes\src\index.ts:59:      return ctx.on(event as never, (function (
+packages\goal\goal-round-driver\src\index.ts:262:    ctx.on('agent/error', ({ agent }) => {
+packages\goal\goal-round-driver\src\index.ts:267:    ctx.on('agent/disposed', ({ agent }) => { states.delete(agent) })
+packages\goal\goal-round-driver\src\index.ts:268:    ctx.on('agent/created', ({ agent }) => {
+packages\goal\goal-round-driver\src\index.ts:274:    ctx.on('agent/status', ({ agent, status }) => {
+packages\goal\goal-round-driver\src\index.ts:302:    ctx.on('goal/changed', ({ agent, change }) => {
+packages\goal\goal-round-driver\src\index.ts:315:    ctx.on('agent/inbox/inserted', ({ agent, message }) => {
+packages\goal\goal-round-driver\src\index.ts:323:    ctx.on('agent/inbox/claimed', ({ agent, message }) => {
+packages\goal\goal-round-driver\src\index.ts:330:    ctx.on('agent/inbox/discarded', ({ agent, message }) => {
+packages\goal\goal-round-driver\src\index.ts:338:    ctx.on('session/event', (session: Session, event: SessionEvent) => {
+packages\goal\goal-round-driver\src\index.ts:380:    ctx.on('agent/pre-step', async ({ agent, messages, signal }, next): Promise<PreStepDecision> => {
+packages\fs\tool-fs\src\write.ts:9:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\fs\tool-fs\src\write.ts:73:  ctx.tools.register(defineTool({
+packages\fs\tool-fs\src\read.ts:8:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\fs\tool-fs\src\read.ts:77:  ctx.tools.register(defineTool({
+packages\api\remote-access\src\index.ts:270:  @Remote({ mode: 'stream' })
+packages\fs\tool-fs\src\read-image.ts:19:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\fs\tool-fs\src\read-image.ts:210:  ctx.tools.register(defineTool({
+packages\fs\tool-fs\src\edit.ts:9:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\fs\tool-fs\src\edit.ts:85:  ctx.tools.register(defineTool({
+packages\goal\goal\src\index.ts:255:    ctx.on('agent/created', ({ agent }) => {
+packages\goal\goal\src\index.ts:259:    ctx.on('session/event', (session, event) => {
+packages\goal\goal\src\index.ts:276:  @Remote('get')
+packages\goal\goal\src\index.ts:328:  @Remote('edit')
+packages\goal\goal\src\index.ts:351:  @Remote('pause')
+packages\goal\goal\src\index.ts:363:  @Remote('resume')
+packages\goal\goal\src\index.ts:390:  @Remote('complete')
+packages\goal\goal\src\index.ts:432:  @Remote('clear')
+packages\goal\goal\src\index.ts:646:  @Remote('create')
+packages\fs\fs-observation-policy\src\index.ts:119:  ctx.on('fs/write-intent', (target, actor) => Promise.resolve().then(() => gate.writeIntent(target, actor)))
+packages\fs\fs-observation-policy\src\index.ts:122:  ctx.on('fs/edit-intent', (target, actor) => Promise.resolve().then(() => gate.editIntent(target, actor)))
+packages\fs\fs-observation-policy\src\index.ts:127:  ctx.on('fs/observed', (target, observation, actor) => {
+packages\api\job-controller\src\index.ts:75:  @Remote({ mode: 'stream' })
+packages\api\job-controller\src\index.ts:90:  @Remote({ mode: 'stream' })
+packages\api\job-controller\src\index.ts:109:  @Remote('kill')
+packages\skill\tool-workspace-dependencies\src\index.ts:7:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\skill\tool-workspace-dependencies\src\index.ts:294:  ctx.tools.register(defineTool({
+packages\compaction\compaction-basic\src\index.ts:158:    ctx.on('agent/pre-step', async (
+packages\compaction\compaction-basic\src\index.ts:178:    ctx.on('agent/status', ({ agent, status }) => {
+packages\compaction\compaction-basic\src\index.ts:184:    ctx.on('session/event', (session, event) => {
+packages\compaction\compaction-basic\src\index.ts:190:    ctx.on('agent/request-error', async (
+packages\skill\tool-skill\src\index.ts:12:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\skill\tool-skill\src\index.ts:82:  const skillTool = defineTool({
+packages\skill\tool-skill\src\index.ts:179:  ctx.on('agent/pre-step', async (
+packages\skill\tool-skill\src\index.ts:215:  ctx.on('agent/pre-step', async (
+packages\api\gateway\src\index.ts:239:    ctx.on('internal/service', () => {
+packages\feedback\message-feedback\src\index.ts:154:  @Remote('list')
+packages\feedback\message-feedback\src\index.ts:166:  @Remote('put')
+packages\feedback\message-feedback\src\index.ts:206:  @Remote('delete')
+packages\feedback\command-feedback\src\index.ts:101:  @Remote('record')
+packages\skill\skill-filesystem\src\index.ts:142:  ctx.on('fs/observed', (target, _observation, actor) => {
+packages\api\account-controller\src\index.ts:18:  @Remote
+packages\api\account-controller\src\index.ts:25:  @Remote
+packages\api\account-controller\src\index.ts:34:  @Remote
+packages\api\account-controller\src\index.ts:43:  @Remote
+packages\api\account-controller\src\index.ts:54:  @Remote
+packages\api\account-controller\src\index.ts:65:  @Remote
+packages\api\account-controller\src\index.ts:74:  @Remote
+packages\api\account-controller\src\index.ts:80:  @Remote
+packages\api\account-controller\src\index.ts:89:  @Remote
+packages\api\account-controller\src\index.ts:96:  @Remote({ mode: 'stream' })
+packages\api\account-controller\src\index.ts:100:    const stop = this.ctx.on('deepseek-account/session-expired', () => { pending++; wake?.() })
+packages\api\account-controller\src\index.ts:118:  @Remote({ mode: 'stream' })
+packages\typert\loader\src\index.ts:476:  ctx.on('internal/plugin', (fiber) => {
+packages\acp\acp\src\index.ts:135:  ctx.on('session/event', (session, event) => {
+packages\acp\acp\src\index.ts:140:  ctx.on('agent/inbox/claimed', ({ agent, message, turn }) => {
+packages\acp\acp\src\index.ts:144:  ctx.on('agent/error', ({ agent, error }) => {
+packages\acp\acp\src\index.ts:148:  ctx.on('agent/status', ({ agent, status }) => {
+packages\acp\acp\src\index.ts:152:  ctx.on('llm/adapters-updated', () => {
+packages\acp\acp\src\index.ts:159:  ctx.on('approval/request', (request, next) => {
+packages\shell\tool-pwsh-persistent\src\index.ts:16:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\shell\tool-pwsh-persistent\src\index.ts:427:  ctx.tools.register(defineTool({
+packages\shell\tool-pwsh\src\index.ts:28:import { defineTool, TOOL_ABORTED } from '@deepseek-ai/dsh-tools'
+packages\shell\tool-pwsh\src\index.ts:386:    return defineTool({
+packages\shell\tool-bash-persistent\src\index.ts:14:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\shell\tool-bash-persistent\src\index.ts:414:  ctx.tools.register(defineTool({
+packages\typert\generator\src\analyzer.ts:1443:   * Read the options object of `@Remote` or `@RemoteScope`. `resources`
+packages\shell\tool-bash\src\index.ts:19:import { defineTool, TOOL_ABORTED } from '@deepseek-ai/dsh-tools'
+packages\shell\tool-bash\src\index.ts:368:    return defineTool({
+packages\todo\tool-todo\src\index.ts:12:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\todo\tool-todo\src\index.ts:135:  ctx.tools.register(defineTool({
+packages\ptc-runtime\ptc-runtime-node\src\policy-processes.ts:24:    ctx.on('session/event', (session, event) => {
+packages\client\web\src\boot-client.ts:42:  ctx.on('internal/status', (fiber) => {
+packages\test-support\loader-smoke\src\agent-turn.ts:49:      const dispose = ctx.on('agent/created', () => {
+packages\test-support\loader-smoke\src\agent-turn.ts:80:  const disposeListener = ctx.on('session/event', (session, event) => {
+packages\test-support\llm-replay\src\index.ts:1104:    : ctx.on('llm/stream', (options: GenerateOptions, _next) => replay(options))
+packages\experimental\translator\src\deepseek.ts:160:    unwatch = ctx.on('internal/status', (fiber) => {
+packages\experimental\tool-worktree\src\index.ts:5:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\experimental\tool-worktree\src\index.ts:17:  ctx.tools.register(defineTool({
+packages\settings\settings\src\index.ts:234:    ctx.on('app-boot/config-reload', () => { this.invalidate() })
+packages\client\ui-workspace\src\client\toast\register.ts:22:  ctx.slots.registerFactory({ name: 'workspace.toast.content', scope: 'root' }, WorkspaceToast)
+packages\client\ui-workspace\src\client\toast\register.ts:24:    yield ctx.slots.register({
+packages\client\ui-workspace\src\client\toast\register.ts:30:    yield ctx.slots.register({
+packages\client\ui-workspace\src\client\toast\register.ts:36:    yield ctx.slots.register({
+packages\client\ui-workspace\src\client\toast\register.ts:42:    yield ctx.slots.register({
+packages\client\ui-workspace\src\client\toast\register.ts:48:    yield ctx.slots.register({
+packages\client\ui-workspace\src\client\toast\register.ts:54:    yield ctx.slots.register({
+packages\client\ui-workspace\src\client\toast\register.ts:60:    yield ctx.slots.register({
+packages\client\ui-workspace\src\client\toast\register.ts:68:    yield ctx.slots.register({
+packages\client\ui-workspace\src\client\toast\register.ts:74:    yield ctx.slots.register({
+packages\client\ui-workspace\src\client\toast\register.ts:83:    yield ctx.slots.register({
+packages\client\ui-workspace\src\client\toast\register.ts:93:    yield ctx.slots.register({
+packages\experimental\tool-terminal\src\index.ts:16:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\experimental\tool-terminal\src\index.ts:165:  ctx.tools.register(defineTool({
+packages\experimental\tool-terminal\src\index.ts:202:  ctx.tools.register(defineTool({
+packages\experimental\tool-terminal\src\index.ts:306:  ctx.tools.register(defineTool({
+packages\experimental\tool-terminal\src\index.ts:339:  ctx.tools.register(defineTool({
+packages\experimental\tool-terminal\src\index.ts:364:  ctx.tools.register(defineTool({
+packages\experimental\tool-terminal\src\index.ts:395:  ctx.tools.register(defineTool({
+packages\client\ui-workspace\src\client\index.ts:153:    subscribe: listener => ctx.on('connection/reset', listener),
+packages\client\ui-workspace\src\client\index.ts:292:  ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register(
+packages\client\ui-workspace\src\client\index.ts:317:    yield ctx.slots.register({ name: 'sidebar.workspaces.session.menu.item', id: 'pin', order: 100, locale: NS, inject: pinInjected }, PinSessionMenuItem)
+packages\client\ui-workspace\src\client\index.ts:318:    yield ctx.slots.register({ name: 'sidebar.workspaces.session.menu.item', id: 'rename', order: 200, locale: NS, inject: renameInjected }, RenameSessionMenuItem)
+packages\client\ui-workspace\src\client\index.ts:319:    yield ctx.slots.register({ name: 'sidebar.workspaces.session.menu.item', id: 'fork', order: 300, locale: NS, inject: forkInjected }, ForkSessionMenuItem)
+packages\client\ui-workspace\src\client\index.ts:320:    yield ctx.slots.register({ name: 'sidebar.workspaces.session.menu.item', id: 'archive', order: 400, locale: NS, inject: archiveInjected }, ArchiveSessionMenuItem)
+packages\client\ui-workspace\src\client\index.ts:321:    yield ctx.slots.register({ name: 'sidebar.workspaces.session.menu.item', id: 'session-id', order: 450, locale: NS, inject: sessionIdInjected }, SessionIdMenuItem)
+packages\client\ui-workspace\src\client\index.ts:324:    yield ctx.slots.register({ name: 'sidebar.workspaces.session.row.action', id: 'archive', order: 100, locale: NS, inject: archiveInjected }, ArchiveSessionRowButton)
+packages\client\ui-workspace\src\client\index.ts:325:    yield ctx.slots.register({ name: 'sidebar.workspaces.session.row.action', id: 'pin', order: 200, locale: NS, inject: pinInjected }, PinSessionRowButton)
+packages\client\ui-workspace\src\client\index.ts:330:    yield ctx.slots.register({
+packages\client\ui-workspace\src\client\index.ts:333:    yield ctx.slots.register({
+packages\client\ui-workspace\src\client\index.ts:336:    yield ctx.slots.register({
+packages\client\ui-workspace\src\client\index.ts:341:  ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register(
+packages\preset\agent-preset-registry\src\index.ts:69:    ctx.on('session/event', (session, event) => {
+packages\preset\agent-preset-registry\src\index.ts:194:  @Remote('list')
+packages\preset\agent-preset-registry\src\index.ts:217:  @Remote('read')
+packages\preset\agent-preset-registry\src\index.ts:348:  @Remote('select')
+packages\client\ui-workspace\src\client\contract\slots.ts:154:     *     ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register(
+packages\test-support\client-runtime\src\index.ts:176: * through the REAL `slots.register`, with a caller-supplied minimal frame —
+packages\test-support\client-runtime\src\index.ts:203:      this.disposeEntry = (this.slots.register as ErasedRegister)({ name: 'root', children }, frame)
+packages\test-support\client-runtime\src\index.ts:460:   * outside the runtime's own methods (e.g. a direct `slots.register`).
+packages\experimental\tool-session-query\src\index.ts:10:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\experimental\tool-session-query\src\index.ts:65:  ctx.tools.register(defineTool({
+packages\experimental\tool-session-query\src\index.ts:75:  ctx.tools.register(defineTool({
+packages\experimental\tool-session-query\src\index.ts:85:  ctx.tools.register(defineTool({
+packages\experimental\tool-session-query\src\index.ts:95:  ctx.tools.register(defineTool({
+packages\experimental\tool-session-query\src\index.ts:108:  ctx.tools.register(defineTool({
+packages\experimental\tool-ralph\src\index.ts:13:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\experimental\tool-ralph\src\index.ts:410:  ctx.tools.register(defineTool({
+packages\client\ui-workflow-run\src\client\index.ts:29:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+packages\experimental\inspector\src\shared\cordis\observer.ts:36:    ctx.on('internal/plugin', schedule, { global: true }),
+packages\experimental\inspector\src\shared\cordis\observer.ts:37:    ctx.on('internal/status', schedule, { global: true }),
+packages\experimental\tool-agent-team\src\index.ts:8:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\experimental\tool-agent-team\src\index.ts:148: * @returns the `output` declaration accepted by {@link defineTool}.
+packages\experimental\tool-agent-team\src\index.ts:192:    register(scoped.tools.register(defineTool({
+packages\experimental\tool-agent-team\src\index.ts:221:    register(scoped.tools.register(defineTool({
+packages\experimental\tool-agent-team\src\index.ts:239:    register(scoped.tools.register(defineTool({
+packages\experimental\tool-agent-team\src\index.ts:249:    register(scoped.tools.register(defineTool({
+packages\experimental\tool-agent-team\src\index.ts:285:      register(scoped.tools.register(defineTool({
+packages\experimental\tool-agent-team\src\index.ts:298:    register(scoped.tools.register(defineTool({
+packages\experimental\tool-agent-team\src\index.ts:322:    register(scoped.tools.register(defineTool({
+packages\experimental\tool-agent-team\src\index.ts:354:    register(scoped.tools.register(defineTool({
+packages\experimental\tool-agent-team\src\index.ts:369:    register(scoped.tools.register(defineTool({
+packages\experimental\tool-agent-team\src\index.ts:423:  ctx.on('agent/created', ({ agent }) => { maybeInstall(agent) })
+packages\experimental\tool-agent-team\src\index.ts:424:  ctx.on('agent/disposed', ({ agent }) => {
+packages\experimental\computer-use-cua-driver-native\src\index.ts:55:  ctx.on('internal/plugin', (fiber) => {
+packages\plan\plan-mode\src\index.ts:32:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\plan\plan-mode\src\index.ts:196:    ctx.on('agent/pre-step', async (
+packages\plan\plan-mode\src\index.ts:277:    ctx.tools.register(defineTool({
+packages\client\ui-user-questions\src\client\index.ts:382:  ctx.slots.inject('conversation.composer', () => ctx.slots.register(
+packages\client\ui-user-questions\src\client\index.ts:395:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+packages\session-query\session-log-export\src\client\index.ts:48:  ctx.on('command/executed', (sessionId, commandName, result) => {
+packages\session-query\session-log-export\src\client\index.ts:51:  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+packages\mcp\mcp-resources\src\tools.ts:8:import { defineTool, type ToolExecution } from '@deepseek-ai/dsh-tools'
+packages\mcp\mcp-resources\src\tools.ts:33:    yield ctx.tools.register(defineTool({
+packages\mcp\mcp-resources\src\tools.ts:42:    yield ctx.tools.register(defineTool({
+packages\mcp\mcp-resources\src\tools.ts:51:    yield ctx.tools.register(defineTool({
+packages\terminal\terminal-bash\src\index.ts:52:  owner.ctx.on('internal/dispatch', (_mode, eventName, args) => {
+scripts\slot-walk.ts:3: * that type every slot, and the `slots.register` / `slots.registerFactory`
+scripts\slot-walk.ts:47:/** One `slots.register()` or `slots.registerFactory()` call site. */
+packages\experimental\client-ui-voice-input\src\client\mount.ts:45:  ctx.slots.inject('conversation.input.activity', () => ctx.slots.register({
+packages\experimental\client-ui-voice-input\src\client\mount.ts:48:  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({ name: 'plugins.bundle.config',
+packages\experimental\client-ui-voice-input\src\client\mount.ts:51:  ctx.slots.inject('plugins.bundle.activation', () => ctx.slots.register({ name: 'plugins.bundle.activation',
+packages\experimental\browser-use-runtime\src\mcp.ts:140:          scope.ctx.on('tools/execute', async (exec, next) => {
+packages\experimental\browser-use-runtime\src\mcp.ts:181:  ctx.on('agent/created', async ({ agent, signal }) => {
+packages\experimental\browser-use-runtime\src\mcp.ts:195:  ctx.on('tools/change', refreshBlockedMasks)
+packages\experimental\browser-use-runtime\src\mcp.ts:196:  ctx.on('tools/execute', async (exec, next) => {
+packages\experimental\browser-use-runtime\src\mcp.ts:215:  ctx.on('system-prompt/assemble', async (_assembly, { agent }, next) => {
+packages\session\working-directory\src\index.ts:97:    ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
+packages\mcp\mcp-client\src\index.ts:188:  ctx.on('internal/plugin', (fiber) => {
+packages\session\tool-working-directory\src\index.ts:7:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\session\tool-working-directory\src\index.ts:20:  ctx.tools.register(defineTool({
+packages\experimental\client-ui-cot-translation\src\index.ts:46:  @Remote
+packages\experimental\client-ui-cot-translation\src\index.ts:63:  @Remote
+packages\experimental\speech-to-text\src\index.ts:50:    ctx.on('loader/volatile-update', () => { this.changed() })
+packages\lsp\tool-lsp\src\index.ts:16:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\lsp\tool-lsp\src\index.ts:108:  ctx.tools.register(defineTool({
+packages\experimental\client-ui-cot-translation\src\client\mount.ts:40:  ctx.on('connection/reset', invalidate)
+packages\experimental\client-ui-cot-translation\src\client\mount.ts:101:  ctx.slots.inject('conversation.chat.reasoning.body', () => ctx.slots.register({
+packages\experimental\client-ui-cot-translation\src\client\mount.ts:105:  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+packages\experimental\client-ui-cot-translation\src\client\mount.ts:123:  ctx.on('internal/plugin', (fiber) => { if (fiber === ctx.fiber && fiber.uid === null) lifetime.abort() })
+packages\experimental\auto-review\src\index.ts:684:    const stopListener = ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
+packages\client\ui-trajectory\src\client\index.ts:79:  ctx.slots.inject('conversation.view', () => ctx.slots.register({
+packages\lsp\lsp-stdio\src\index.ts:131:  const stopSetupCancellation = ctx.on('internal/plugin', (fiber) => {
+packages\experimental\api-speech-to-text\src\index.ts:43:  @Remote
+packages\experimental\api-speech-to-text\src\index.ts:53:  @Remote({ mode: 'stream' })
+packages\experimental\api-speech-to-text\src\index.ts:63:  @Remote
+packages\experimental\api-speech-to-text\src\index.ts:71:  @Remote
+packages\experimental\api-speech-to-text\src\index.ts:79:  @Remote
+packages\experimental\api-speech-to-text\src\index.ts:88:  @Remote
+packages\experimental\inspector\src\host\plugin.ts:85:      disposers.push(ctx.on('webserver/index-inject', (table: IndexInjection[]) => {
+packages\session\session-title\src\index.ts:362:    ctx.on('session/event', (session, event) => {
+packages\session\session-title\src\index.ts:374:    ctx.on('llm/stream', (options, next) => {
+packages\session\session-title\src\index.ts:378:    ctx.on('session/disposed', (session) => {
+packages\experimental\client-ui-claude-code-mods\src\client\mount.ts:95:  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+packages\session\session-telemetry-otel\src\index.ts:159:      ctx.on('session/event', (session, event) => {
+packages\session\session-telemetry-otel\src\index.ts:223:    ctx.on('session/event', (session, event) => {
+packages\session\session-telemetry-otel\src\index.ts:233:    ctx.on('feedback/committed', (inspection) => {
+packages\session\session-telemetry\src\coordinator.ts:65: * `ctx.effect()`/`ctx.on()` on the composing fiber, and sweeps already-live
+packages\session\session-telemetry\src\coordinator.ts:93:      ctx.on('session/created', (session) => {
+packages\session\session-telemetry\src\coordinator.ts:98:      ctx.on('session/disposed', (session) => {
+packages\session\session-telemetry\src\coordinator.ts:104:      ctx.on('session/event', (session, event) => {
+packages\session\session-telemetry\src\coordinator.ts:111:      ctx.on('session/flush', (session) => {
+packages\session\session-telemetry\src\coordinator.ts:116:      ctx.on('agent/error', ({ agent, turn, step, error }) => {
+packages\experimental\client-ui-agent-team\src\client\mount.ts:55:    () => ctx.slots.register({
+packages\experimental\agent-team\src\roster.ts:345:      const stopEvent = this.ctx.on('session/event', (candidate) => {
+packages\experimental\agent-team\src\roster.ts:348:      const stopDisposed = this.ctx.on('session/disposed', (candidate) => {
+packages\experimental\agent-team\src\index.ts:93:    ctx.on('agent/created', ({ agent }) => { this.scheduleRecovery(agent) })
+packages\experimental\agent-team\src\index.ts:94:    ctx.on('agent/status', ({ agent }) => {
+packages\llm\token-meter\src\index.ts:120:    ctx.on('session/event', (session) => {
+packages\session\session-projection-cache\src\index.ts:315:    this.ctx.on('session/event', (session: Session, event: SessionEvent) => {
+packages\session\session-projection-cache\src\index.ts:337:    this.ctx.on('session/created', (session: Session) => {
+packages\session\session-projection-cache\src\index.ts:345:    this.ctx.on('session/disposed', (session: Session) => {
+packages\experimental\inspector\src\client\plugin.ts:53:  ctx.on('connection/reset', () => {
+packages\document\office-to-pdf\src\index.ts:159:  @Remote
+packages\document\office-to-pdf\src\index.ts:174:  @Remote('generation')
+packages\experimental\session-inspector\src\client\views\index.ts:33:  ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+packages\experimental\claude-code-mods\src\index.ts:304:    ctx.on('agent/created', async ({ agent, signal }) => {
+packages\experimental\claude-code-mods\src\index.ts:321:    ctx.on('agent/disposed', ({ agent }) => {
+packages\experimental\claude-code-mods\src\index.ts:340:    ctx.on('agent/pre-step', async ({ agent, messages, turn, signal }, next): Promise<PreStepDecision> => {
+packages\experimental\claude-code-mods\src\index.ts:382:    ctx.on('tools/execute', async (exec, next): Promise<ToolExecutionResult> => {
+packages\experimental\claude-code-mods\src\index.ts:434:    ctx.on('tools/result', (exec) => { replacements.delete(exec.token) })
+packages\experimental\claude-code-mods\src\index.ts:436:    ctx.on('tools/post-execute', async (exec, _result, next): Promise<PostToolDecision> => {
+packages\experimental\claude-code-mods\src\index.ts:449:    ctx.on('session/event', (session, event) => {
+packages\experimental\claude-code-mods\src\index.ts:492:  @Remote({ mode: 'stream' })
+packages\experimental\claude-code-mods\src\index.ts:504:  @Remote
+packages\session\session-projection\src\index.ts:209:    ctx.on('session/created', (session: Session) => {
+packages\session\session-projection\src\index.ts:220:    ctx.on('session/event', (session: Session, event: SessionEvent) => {
+packages\subagent\tool-subagent-control\src\list-agents.ts:11:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\subagent\tool-subagent-control\src\list-agents.ts:86:  ctx.tools.register(defineTool({
+packages\subagent\tool-subagent-control\src\index.ts:14:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\subagent\tool-subagent-control\src\index.ts:28:  ctx.tools.register(markAdjacentAgentSendMessageTool(defineTool({
+packages\subagent\tool-subagent-control\src\index.ts:74:  ctx.tools.register(defineTool({
+packages\llm\llm-retry\src\index.ts:243:  const disposeListener = ctx.on('agent/request-error', (
+packages\deliverables\workspace-changes\src\index.ts:145:  ctx.on('session/event', (session, event) => {
+packages\deliverables\workspace-changes\src\index.ts:154:  ctx.on('session/disposed', (session) => { void forget(session) })
+packages\deliverables\workspace-changes\src\index.ts:155:  ctx.on('agent/turn-stopping', async ({ agent, turn }) => {
+packages\deliverables\workspace-changes\src\index.ts:164:  ctx.on('fs/write-intent', async (target, actor, next) => {
+packages\deliverables\workspace-changes\src\index.ts:169:  ctx.on('fs/edit-intent', async (target, actor, next) => {
+packages\deliverables\workspace-changes\src\index.ts:174:  ctx.on('tools/pre-execute', async (exec, next) => {
+packages\session\session-persistence-jsonl\src\storage.ts:549:      yield ctx.on('session/event', (session: Session, event) => {
+packages\session\session-persistence-jsonl\src\storage.ts:554:      yield ctx.on('session/flush', (session: Session) => {
+packages\session\session-persistence-jsonl\src\storage.ts:562:      yield ctx.on('session/disposed', (session: Session) => {
+packages\subagent\tool-subagent\src\list-models.ts:6:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\subagent\tool-subagent\src\list-models.ts:87:  ctx.tools.register(defineTool({
+packages\subagent\tool-subagent\src\index.ts:12:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\subagent\tool-subagent\src\index.ts:187:  ctx.on('subagent/provider-added', (subagentProvider) => {
+packages\subagent\tool-subagent\src\index.ts:212:      const definition = defineTool({
+packages\subagent\tool-subagent\src\index.ts:496:  ctx.on('agent/created', async ({ agent: created }) => {
+packages\subagent\tool-subagent\src\index.ts:499:  ctx.on('agent/disposed', ({ agent: disposed }) => { removeScoped(disposed) })
+packages\subagent\tool-subagent\src\index.ts:503:  ctx.on('tools/change', reconcileComposedAgents)
+packages\deliverables\tool-present\src\index.ts:6:import { defineTool, type ToolExecution } from '@deepseek-ai/dsh-tools'
+packages\deliverables\tool-present\src\index.ts:39:  ctx.tools.register(defineTool({
+packages\deliverables\tool-present\src\index.ts:100:  ctx.on('tools/result', (exec, result) => {
+packages\llm\llm-pi-ai\src\index.ts:177:  ctx.on('internal/config', function (this: import('@deepseek-ai/cordis').Fiber, _raw, next) {
+packages\llm\llm-pi-ai\src\index.ts:315:  ctx.on('loader/volatile-update', () => {
+packages\credentials\deepseek-account-platform\src\index.ts:147:    ctx.on('credentials/record-updated', (key) => {
+packages\experimental\browser-use-stagehand-native\src\index.ts:192:  ctx.on('tools/execute', async (exec, next) => {
+packages\llm\llm-deepseek\src\host.ts:57:  ctx.on('loader/volatile-update', () => {
+packages\experimental\hooks-codex\src\index.ts:188:  ctx.on('agent/created', async ({ agent, source, signal }) => {
+packages\experimental\hooks-codex\src\index.ts:202:  ctx.on('agent/pre-step', async ({ agent, messages, turn, signal }, next): Promise<PreStepDecision> => {
+packages\experimental\hooks-codex\src\index.ts:228:  ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
+packages\experimental\hooks-codex\src\index.ts:237:  ctx.on('tools/post-execute', async (exec, result, next): Promise<PostToolDecision> => {
+packages\experimental\hooks-codex\src\index.ts:263:  ctx.on('agent/turn-stopping', async ({ agent, turn, signal }): Promise<void> => {
+packages\experimental\hooks-claude-code\src\index.ts:209:  ctx.on('agent/created', async ({ agent, source, signal }) => {
+packages\experimental\hooks-claude-code\src\index.ts:225:  ctx.on('agent/pre-step', async ({ agent, messages, turn, signal }, next): Promise<PreStepDecision> => {
+packages\experimental\hooks-claude-code\src\index.ts:244:  ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
+packages\experimental\hooks-claude-code\src\index.ts:253:  ctx.on('tools/post-execute', async (exec, result, next): Promise<PostToolDecision> => {
+packages\experimental\hooks-claude-code\src\index.ts:276:  ctx.on('agent/turn-stopping', async ({ agent, turn, signal }): Promise<void> => {
+packages\experimental\hooks-claude-code\src\index.ts:287:  ctx.on('subagent/start', (info) => {
+packages\experimental\hooks-claude-code\src\index.ts:297:  ctx.on('subagent/end', (info) => {
+packages\credentials\authorization\src\index.ts:386:    const unwatch = this.ctx.on('credentials/record-updated', (key: CredentialKey) => {
+packages\llm\llm\src\index.ts:482:  @Remote
+packages\llm\llm\src\index.ts:554:  @Remote
+packages\llm\llm\src\index.ts:642:  @Remote('discoverModels')
+packages\subagent\subagent\src\archive-admission.ts:23:  ctx.on('workspace/session-activity', async ({ sessionId }, next) => {
+packages\subagent\subagent\src\archive-admission.ts:30:  ctx.on('workspace/session-stop', ({ sessionId }) => {
+packages\subagent\subagent\src\activation.ts:132:  child.ctx.on('agent/error', ({ agent }) => {
+packages\subagent\subagent\src\activation.ts:137:  child.ctx.on('session/event', (session, event) => {
+packages\subagent\subagent\src\structured.ts:97:      // within the same turn, exactly like a schema-validated defineTool call.
+packages\subagent\subagent\src\manager.ts:169:    ctx.on('agent/disposed', ({ agent }) => {
+packages\subagent\subagent\src\manager.ts:952:        activation.handle.agent.ctx.on('agent/inbox/inserted', wakeSettlement)
+packages\subagent\subagent\src\manager.ts:953:        activation.handle.agent.ctx.on('agent/inbox/claimed', wakeSettlement)
+packages\subagent\subagent\src\manager.ts:954:        activation.handle.agent.ctx.on('agent/inbox/discarded', wakeSettlement)
+packages\subagent\subagent\src\index.ts:447:  @Remote('prompt')
+packages\subagent\subagent\src\index.ts:516:  @Remote('interruptByParent')
+packages\experimental\cua\src\application-access.ts:49:    ctx.on('loader/volatile-update', () => { this.reconcile() })
+packages\jobs\tool-jobs\src\index.ts:16:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\jobs\tool-jobs\src\index.ts:213:    ctx.on('agent/inbox/claimed', ({ agent, message }) => {
+packages\jobs\tool-jobs\src\index.ts:221:  ctx.on('tools/pre-execute', (exec, next) => {
+packages\jobs\tool-jobs\src\index.ts:311:  ctx.tools.register(defineTool({
+packages\jobs\tool-jobs\src\index.ts:352:  ctx.tools.register(defineTool({
+packages\jobs\tool-jobs\src\index.ts:372:  ctx.tools.register(defineTool({
+packages\interaction\user-questions\src\index.ts:95:    ctx.on('agent/inbox/claimed', ({ agent, message, turn }) => {
+packages\interaction\user-questions\src\index.ts:107:    ctx.on('agent/inbox/discarded', ({ agent, message }) => {
+packages\interaction\user-questions\src\index.ts:111:    ctx.on('session/event', (session, event) => {
+packages\interaction\user-questions\src\index.ts:164:  @Remote
+packages\interaction\user-questions\src\index.ts:215:  @Remote({ mode: 'stream' })
+packages\interaction\permission-presets\src\index.ts:245:    ctx.on('session/created', (session) => {
+packages\interaction\permission-presets\src\index.ts:292:  @Remote('catalog')
+packages\client\ui-plan\src\client\index.ts:79:  ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
+packages\client\ui-plan\src\client\index.ts:97:  ctx.slots.inject('conversation.plan-review.actions', () => ctx.slots.register({
+packages\client\ui-plan\src\client\index.ts:109:  ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+packages\client\ui-plan\src\client\index.ts:112:  ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register({
+packages\client\ui-plan\src\client\index.ts:116:  ctx.slots.inject('conversation.input.plan', () => ctx.slots.register({
+packages\interaction\commands\src\index.ts:314:  @Remote
+packages\interaction\commands\src\index.ts:360:  @Remote
+packages\interaction\tool-ask-user\src\timed.ts:6:import { defineTool, type ToolExecution } from '@deepseek-ai/dsh-tools'
+packages\interaction\tool-ask-user\src\timed.ts:106:  ctx.tools.register(defineTool({
+packages\interaction\tool-ask-user\src\index.ts:10:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\interaction\tool-ask-user\src\index.ts:38:  ctx.tools.register(defineTool({
+packages\jobs\jobs\src\archive-admission.ts:25:  ctx.on('workspace/session-activity', async ({ sessionId }, next) => {
+packages\jobs\jobs\src\archive-admission.ts:32:  ctx.on('workspace/session-stop', ({ sessionId }) => {
+packages\session\session-checkpoint-policy\src\index.ts:64:  ctx.on('llm/stream', (options, next): AsyncIterable<StreamChunk> => {
+packages\session\session-checkpoint-policy\src\index.ts:70:  ctx.on('tools/execute', async (exec, next): Promise<ToolExecutionResult> => {
+packages\session\session-checkpoint-policy\src\index.ts:79:  ctx.on('agent/pre-step', async ({ agent }, next): Promise<PreStepDecision> => {
+packages\client\ui-permission-presets\src\client\index.ts:126:    const result = await live.command(`/permission ${preset}`)
+packages\client\ui-permission-presets\src\client\index.ts:159:  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+packages\client\ui-permission-presets\src\client\index.ts:167:  ctx.slots.inject('conversation.input.permission', () => ctx.slots.register({
+packages\spill\spill-policy\src\index.ts:133:  ctx.on('tools/post-execute', async (exec, result, next): Promise<PostToolDecision> => {
+packages\spill\spill-policy\src\index.ts:152:  ctx.on('tools/ptc-dispatch-log', async (dispatch, next): Promise<ContentBlock[]> => {
+packages\client\ui-brand-official\src\client\index.ts:20:      yield ctx.slots.register({ name: 'sidebar.brand.mark' }, OfficialBrandMark)
+packages\client\ui-brand-official\src\client\index.ts:21:      yield ctx.slots.register({ name: 'sidebar.brand.name' }, OfficialBrandName)
+packages\client\ui-open-in-app\src\client\index.ts:102:  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+packages\client\ui-open-in-app\src\client\index.ts:106:  ctx.slots.inject('sidebar.right.tab.files.actions', () => ctx.slots.register({
+packages\client\ui-open-in-app\src\client\index.ts:117:  ctx.slots.inject('sidebar.right.tab.document.actions', () => ctx.slots.register({
+packages\client\ui-open-in-app\src\client\index.ts:123:  ctx.slots.inject('sidebar.right.tab.document.unpreviewable', () => ctx.slots.register({
+packages\client\ui-open-in-app\src\client\index.ts:129:  ctx.slots.inject('deliverables.file.actions', () => ctx.slots.register({
+packages\client\ui-open-in-app\src\client\index.ts:132:  ctx.slots.inject('deliverables.review.file.actions', () => ctx.slots.register({
+packages\client\ui-attachment\src\client\index.ts:19:  ctx.slots.registerFactory({
+packages\client\ui-attachment\src\client\index.ts:22:  ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
+packages\client\ui-attachment\src\client\index.ts:26:  ctx.slots.inject('conversation.chat.message.images', () => ctx.slots.register({
+packages\client\ui-attachment\src\client\index.ts:29:  ctx.slots.inject('conversation.chat.user.images', () => ctx.slots.register({
+packages\client\ui-attachment\src\client\index.ts:32:  ctx.slots.inject('conversation.trajectory.images', () => ctx.slots.register({
+packages\client\ui-attachment\src\client\index.ts:35:  ctx.slots.inject('tool.call.images', () => ctx.slots.register({
+packages\client\ui-model-selection\src\client\slots.ts:29:     *     ctx.slots.inject('conversation.input.model.label', () => ctx.slots.register(
+packages\client\ui-model-selection\src\client\service.ts:50:    ctx.on('connection/reset', () => {
+packages\client\ui-model-selection\src\client\index.ts:172:    scope.slots.inject('conversation.input.model', () => scope.slots.register({
+packages\client\locale\src\client\index.ts:583:    ctx.on('locale/change', (snapshot) => { bridge.onChange(snapshot.active) })
+packages\client\locale\src\client\index.ts:615:  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+packages\client\product-analytics\src\index.ts:53:    ctx.on('loader/volatile-update', () => { for (const listener of this.listeners) listener() })
+packages\client\product-analytics\src\index.ts:55:    ctx.on('session/event', (session, event) => {
+packages\client\product-analytics\src\index.ts:66:  @Remote
+packages\client\product-analytics\src\index.ts:74:  @Remote({ mode: 'stream' })
+packages\client\product-analytics\src\index.ts:99:  @Remote
+packages\client\ui-approval\src\client\index.ts:91:  ctx.slots.inject('conversation.composer', () => ctx.slots.register({
+packages\client\modules\src\index.ts:640:    ctx.on('internal/plugin', (fiber) => {
+packages\client\modules\src\index.ts:670:    ctx.on('webserver/index-inject', (table) => {
+packages\client\ui-message-feedback\src\client\index.ts:92:  ctx.on('connection/reset', () => {
+packages\client\ui-message-feedback\src\client\index.ts:98:  ctx.slots.inject('conversation.chat.assistant-actions', () => ctx.slots.register({
+packages\client\ui-message-feedback\src\client\index.ts:115:  ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register({
+packages\client\file-upload\src\index.ts:80:    ctx.on('session/event', (session, event) => { this.observeSessionEvent(session, event) })
+packages\client\file-upload\src\index.ts:81:    ctx.on('session/disposed', (session) => { this.stagedFiles.delete(session) })
+packages\client\file-upload\src\index.ts:104:  @Remote('upload')
+packages\client\ui-agent-preset\src\client\index.ts:166:      ctx.on('connection/reset', refresh),
+packages\client\ui-agent-preset\src\client\index.ts:209:      const chip = scope.slots.register({
+packages\client\ui-agent-preset\src\client\index.ts:214:      const label = scope.slots.register({
+packages\client\ui-agent-preset\src\client\index.ts:229:    scope.slots.inject('plugins.add.actions', () => scope.slots.register({
+packages\client\ui-agent-preset\src\client\index.ts:266:  ctx.slots.inject('settings.section', () => ctx.slots.register({
+packages\client\ui-layout\src\client\index.ts:178:    const disposeRegistration = ctx.slots.register({
+packages\client\ui-layout\src\client\index.ts:221:    const off = ctx.on('theme/change', (snapshot) => { presenter.apply(snapshot) })
+packages\bundle\headless\src\json-stream.ts:319:  const stopSession = ctx.on('session/event', onSessionEvent)
+packages\client\ui-deepseek-model-label-1017\src\client\index.ts:26:  ctx.slots.inject('conversation.input.model.label', () => ctx.slots.register({
+packages\bundle\headless\src\index.ts:122:  const dispose = ctx.on('agent/assistant-stream', ({ agent: subject, frame }) => {
+packages\bundle\headless\src\index.ts:366:  const stopErrors = ctx.on('agent/error', ({ agent: subject, error }) => {
+packages\bundle\headless\src\index.ts:369:  const stopTerminals = ctx.on('session/event', (session, event) => {
+packages\client\ui-goal\src\client\index.ts:75:  ctx.slots.inject('conversation.user.text.node', () => ctx.slots.register({
+packages\client\ui-goal\src\client\index.ts:81:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+packages\client\ui-goal\src\client\index.ts:102:  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+packages\client\ui-goal\src\client\index.ts:128:        subscribeReset: listener => ctx.on('connection/reset', listener),
+packages\client\shortcuts\src\index.ts:16:  ctx.on('webserver/index-inject', (table) => {
+packages\client\ui-conversation\src\client\apply.ts:165:  slots.registerFactory({
+packages\client\ui-conversation\src\client\apply.ts:183:    yield slots.register({ name: 'conversation.user.text.node', key: 'text', priority: 100 }, PlainUserText)
+packages\client\ui-conversation\src\client\apply.ts:184:    yield slots.register({ name: 'conversation.user.text.node', key: 'session', priority: 100 }, SessionReference)
+packages\client\ui-conversation\src\client\apply.ts:196:  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+packages\client\ui-conversation\src\client\apply.ts:329:  const registerConversationRoot = () => slots.register({
+packages\client\ui-conversation\src\client\apply.ts:336:  const registerConversationContent = () => slots.registerFactory({
+packages\client\ui-conversation\src\client\apply.ts:382:  const registerConversationSession = () => slots.register({
+packages\client\ui-conversation\src\client\apply.ts:420:  const registerHeader = () => slots.register({
+packages\client\ui-conversation\src\client\apply.ts:428:  const registerSessionHeader = () => slots.register({
+packages\client\ui-conversation\src\client\apply.ts:448:  const registerComposerBar = () => slots.register({
+packages\client\ui-conversation\src\client\apply.ts:561:    yield slots.register({
+packages\client\ui-commands\src\client\service.ts:130:    ctx.on('connection/reset', () => { this.directory.resetConnected() })
+packages\client\ui-commands\src\client\index.ts:64:    scope.slots.inject('conversation.input.overlay', () => scope.slots.register({
+packages\client\ui-conversation\src\client\input\hub.ts:147:        actx.on('slash/input-begin-command', req =>
+packages\client\ui-conversation\src\client\input\hub.ts:149:        actx.on('slash/input-insert-reference', req =>
+packages\client\ui-conversation\src\client\input\hub.ts:151:        actx.on('slash/input-consume-token', req =>
+packages\client\ui-conversation\src\client\input\hub.ts:153:        actx.on('slash/input-insert-text', req =>
+packages\client\ui-directory-picker-native\src\client\index.ts:31:      yield ctx.slots.register({
+packages\client\ui-directory-picker-native\src\client\index.ts:34:      yield ctx.slots.register({
+packages\client\ui-jobs\src\client\index.ts:37:    () => ctx.slots.register({
+packages\client\ui-directory-picker-browse\src\client\index.ts:88:      yield ctx.slots.register({
+packages\client\ui-directory-picker-browse\src\client\index.ts:91:      yield ctx.slots.register({
+packages\client\ui-tool\src\client\apply.ts:31:    subscribe: listener => ctx.on('connection/reset', listener),
+packages\client\ui-tool\src\client\apply.ts:34:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+packages\client\ui-input-trigger\src\client\service.ts:43:    ctx.on('locale/change', () => {
+packages\client\ui-input-trigger\src\client\index.ts:65:    scope.slots.inject('conversation.input.overlay', () => scope.slots.register({
+packages\client\ui-deliverables\src\client\index.ts:54:  ctx.on('connection/reset', () => {
+packages\client\ui-deliverables\src\client\index.ts:63:    () => ctx.slots.register({
+packages\client\ui-deliverables\src\client\index.ts:82:  ctx.slots.inject('tool.call.toolview', () => ctx.slots.register(
+packages\client\ui-deliverables\src\client\index.ts:87:  ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register(
+packages\client\ui-theme\src\index.ts:54:  ctx.on('webserver/index-inject', (table) => {
+packages\client\ui-settings-account\src\index.ts:50:  ctx.on('webserver/index-inject', (table) => {
+packages\client\ui-theme\src\client\index.ts:560:  ctx.on('theme/change', sync)
+packages\client\ui-theme\src\client\index.ts:570:  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+packages\client\ui-theme\src\client\index.ts:579:  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+packages\client\ui-renderer\src\client\registry.ts:746:    return this.ctx.effect(() => this['_register'](options, component), 'slots.register()')
+packages\client\ui-renderer\src\client\registry.ts:753:    return this.ctx.effect(() => this['_registerFactory'](options, component), 'slots.registerFactory()')
+packages\client\ui-plugin-manager\src\index.ts:50:  @Remote
+packages\client\ui-subagent\src\client\index.ts:76:    () => ctx.slots.register({
+packages\client\ui-subagent\src\client\index.ts:84:    () => ctx.slots.register({
+packages\client\ui-subagent\src\client\index.ts:96:    () => ctx.slots.register({
+packages\client\ui-reference\src\client\index.ts:62:    yield ctx.slots.register({
+packages\client\ui-reference\src\client\index.ts:71:    yield ctx.slots.register({ name: 'conversation.user.text.node', key: 'folder', priority: 100 }, FolderReference)
+packages\client\ui-settings-account\src\client\index.ts:220:        subscribe: listener => ctx.on('theme/change', listener),
+packages\client\ui-settings-account\src\client\index.ts:274:    ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+packages\client\ui-settings-account\src\client\index.ts:290:  ctx.slots.inject('settings.models.sign-in', () => ctx.slots.register({
+packages\client\ui-settings-account\src\client\index.ts:293:  ctx.slots.inject('shell.quota-notice', () => ctx.slots.register({
+packages\client\ui-settings-account\src\client\index.ts:302:    ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+packages\client\ui-settings-account\src\client\index.ts:310:  ctx.slots.inject('settings.launcher', () => ctx.slots.register({
+packages\client\ui-settings-account\src\client\index.ts:317:        unregister ??= ctx.slots.register({
+packages\client\ui-plugin-manager\src\client\index.ts:93:      ctx.on('connection/reset', refresh),
+packages\client\ui-plugin-manager\src\client\index.ts:104:  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+packages\client\ui-plugin-manager\src\client\index.ts:114:    yield ctx.slots.register({
+packages\client\ui-plugin-manager\src\client\index.ts:144:  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+packages\client\ui-settings-plugins\src\client\index.ts:76:  ctx.slots.inject('settings.section', () => ctx.slots.register({
+packages\client\ui-skill\src\client\index.ts:89:  ctx.slots.inject('tool.call.toolview', () => ctx.slots.register(
+packages\client\ui-skill\src\client\index.ts:236:  ctx.slots.inject('conversation.user.text.node', () => ctx.slots.register({
+packages\client\ui-skill\src\client\index.ts:256:  ctx.on('connection/reset', clearAll)
+packages\client\ui-settings\src\client\index.ts:44:      ctx.on('connection/reset', () => { void mirror.load() }),
+packages\client\ui-plugin-market\src\client\index.ts:45:      ctx.on('connection/reset', () => { controller.sourcesChanged() }),
+packages\client\ui-plugin-market\src\client\index.ts:51:  ctx.slots.inject('plugins.tab', () => ctx.slots.register({
+packages\client\ui-settings-plugin-inventory\src\client\index.ts:56:  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
+packages\client\ui-settings-web-search\src\client\index.ts:64:  ctx.effect(() => ctx.configForms.whileServed([WEB_SEARCH_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+packages\client\ui-sidebar-terminal\src\client\index.ts:84:    subscribe: listener => ctx.on('theme/change', listener),
+packages\client\ui-sidebar-terminal\src\client\index.ts:86:  ctx.effect(() => ctx.slots.inject('sidebar.right.tab.guide.entry', () => ctx.slots.register({
+packages\client\ui-sidebar-terminal\src\client\index.ts:94:  ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register(
+packages\client\ui-sidebar-terminal\src\client\index.ts:99:  ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register(
+packages\client\ui-sidebar-terminal\src\client\index.ts:102:  // ctx.effect(() => ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register({
+packages\client\ui-sidebar-terminal\src\client\index.ts:123:  // ctx.effect(() => ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+packages\client\ui-settings-models\src\index.ts:15:  ctx.on('webserver/index-inject', (table) => {
+packages\client\ui-secret-mask\src\client\index.ts:30:  ctx.slots.inject('conversation.user.text.node', () => ctx.slots.register({
+packages\client\ui-settings-subagent\src\client\index.ts:81:    () => ctx.on('connection/reset', () => { models.resetConnection() }),
+packages\client\ui-settings-subagent\src\client\index.ts:85:  ctx.effect(() => ctx.configForms.whileServed([SUBAGENT_NS, SUBAGENT_MODEL_SELECTION_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+packages\client\ui-settings-general\src\client\index.ts:80:  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+packages\client\ui-settings-general\src\client\index.ts:88:  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+packages\client\ui-settings-general\src\client\index.ts:96:  ctx.slots.inject('sidebar.toggle.badge', () => ctx.slots.register({
+packages\client\ui-settings-general\src\client\index.ts:202:    const disposeSlot = ctx.slots.register({
+packages\client\ui-settings-general\src\client\index.ts:221:    ctx.slots.register({ name: 'settings.trigger', locale: NS }, TriggerContent))
+packages\client\ui-settings-general\src\client\index.ts:223:    ctx.slots.register({ name: 'settings.header', locale: NS }, HeaderContent))
+packages\client\ui-settings-general\src\client\index.ts:225:    ctx.slots.inject('settings.action', () => ctx.slots.register({
+packages\client\ui-settings-general\src\client\index.ts:234:    ctx.slots.register({ name: 'settings.close', locale: NS }, CloseLabel))
+packages\client\ui-settings-general\src\client\index.ts:235:  ctx.slots.inject('settings.section', () => ctx.slots.register({
+packages\client\ui-settings-general\src\client\index.ts:249:  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+packages\client\ui-settings-models\src\client\index.ts:128:      ctx.on('connection/reset', refreshModels),
+packages\client\ui-settings-models\src\client\index.ts:136:  ctx.slots.inject('settings.section', () => ctx.slots.register({
+packages\client\ui-settings-models\src\client\index.ts:147:  if (!('dshDesktop' in globalThis)) ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
+packages\client\ui-settings-models\src\client\index.ts:153:  ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
+packages\sdk\server\src\server.ts:103:    this.disposers.push(ctx.on('session/event', (session, event) => {
+packages\sdk\server\src\server.ts:112:    this.disposers.push(ctx.on('agent/error', ({ agent, error }) => {
+packages\sdk\server\src\server.ts:117:    this.disposers.push(ctx.on('agent/status', ({ agent, status }) => {
+packages\sdk\server\src\server.ts:120:    this.disposers.push(ctx.on('session/created', (session) => {
+packages\sdk\server\src\server.ts:129:    this.disposers.push(ctx.on('subagent/end', function (this: Scoped<SubagentRuntime>, info: SubagentRunEndInfo) {
+packages\client\ui-sidebar-right\src\client\index.ts:205:      yield ctx.slots.register({
+packages\client\ui-sidebar-right\src\client\index.ts:213:      yield ctx.slots.register({
+packages\client\ui-sidebar-right\src\client\index.ts:238:    const disposeExpand = ctx.slots.inject('conversation.session.header.corner', () => ctx.slots.register({
+packages\client\ui-sidebar-right\src\client\index.ts:252:    const disposeGuide = ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+packages\client\ui-sidebar-right\src\client\index.ts:265:    const disposeGuideTitle = ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register(
+packages\client\ui-schedule\src\client\session-schedule-state.ts:39:    subscribeReset: listener => ctx.on('connection/reset', listener),
+packages\client\ui-settings-agent-loop\src\client\index.ts:47:  ctx.effect(() => ctx.configForms.whileServed([AGENT_LOOP_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+packages\client\ui-settings-shell\src\client\index.ts:50:  ctx.effect(() => ctx.configForms.whileServed([BASH_NS, PWSH_NS], served => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+packages\client\ui-schedule\src\client\index.ts:100:    subscribeReset: listener => ctx.on('connection/reset', listener),
+packages\client\ui-schedule\src\client\index.ts:112:  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+packages\client\ui-schedule\src\client\index.ts:156:  ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+packages\client\ui-schedule\src\client\index.ts:162:  ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register({
+packages\client\ui-schedule\src\client\index.ts:168:  ctx.slots.inject('main', () => ctx.slots.register({
+packages\client\ui-schedule\src\client\index.ts:178:  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+packages\client\ui-schedule\src\client\index.ts:189:  ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
+packages\client\ui-schedule\src\client\index.ts:210:    () => ctx.slots.register({
+packages\client\ui-schedule\src\client\index.ts:231:  ctx.slots.inject('sidebar.session.row.leading', () => ctx.slots.register({
+packages\client\ui-schedule\src\client\index.ts:238:  ctx.slots.inject('sidebar.session.row.hover', () => ctx.slots.register({
+packages\client\ui-settings-session-log\src\client\index.ts:37:    ctx.slots.register({ name: 'settings.general.item', id: namespace, order: 90, locale, inject: face }, UploadRow))))
+packages\client\ui-settings-session-log\src\client\index.ts:38:  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+packages\client\ui-sidebar\src\client\index.ts:76:  ctx.slots.inject('sidebar', () => ctx.slots.register({
+packages\client\ui-sidebar\src\client\index.ts:94:  ctx.slots.inject('shell.leading', () => ctx.slots.register({
+packages\schedule\tool-schedule\src\index.ts:13:import { defineTool } from '@deepseek-ai/dsh-tools'
+packages\schedule\tool-schedule\src\index.ts:453:  ctx.tools.register(defineTool({
+packages\schedule\tool-schedule\src\index.ts:491:  ctx.tools.register(defineTool({
+packages\schedule\tool-schedule\src\index.ts:512:  ctx.tools.register(defineTool({
+packages\schedule\tool-schedule\src\index.ts:538:  ctx.tools.register(defineTool({
+packages\client\ui-shortcuts\src\client\index.ts:42:  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+packages\client\ui-shortcuts\src\client\index.ts:66:    const disposeSlot = ctx.slots.register({
+packages\client\ui-sidebar-files\src\client\index.ts:86:  ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register(
+packages\client\ui-sidebar-files\src\client\index.ts:93:  ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register(
+packages\client\ui-sidebar-browser\src\client\index.ts:82:    scope.effect(() => scope.slots.inject('sidebar.right.pane.tab', () => scope.slots.register({
+packages\client\ui-sidebar-browser\src\client\index.ts:102:  ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register({
+packages\client\ui-sidebar-browser\src\client\browser\BrowserController.ts:114:    this.command(() => { this.page.frame.loadUrl(parsed.target) })
+packages\client\ui-sidebar-browser\src\client\browser\BrowserController.ts:118:  goBack(): void { this.command(() => { this.page.frame.goBack() }) }
+packages\client\ui-sidebar-browser\src\client\browser\BrowserController.ts:120:  goForward(): void { this.command(() => { this.page.frame.goForward() }) }
+packages\client\ui-sidebar-browser\src\client\browser\BrowserController.ts:124:    else this.command(() => { this.page.frame.reload() })
+packages\client\ui-sidebar-browser\src\client\browser\BrowserController.ts:133:    if (sandbox !== undefined) this.command(() => { sandbox.setEnabled(enabled) })
+packages\client\ui-sidebar-documentpreview\src\index.ts:14:  ctx.on('webserver/index-inject', (table) => {
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:31:  ctx.effect(() => ctx.slots.registerFactory({
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:36:  ctx.slots.inject('conversation.chat.reasoning.body', () => ctx.slots.register({
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:40:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:42:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:44:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:46:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:48:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:50:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:60:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:66:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:68:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:70:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:72:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:74:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:76:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:78:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+packages\client\ui-chat\src\client\chat\register-node-renderers.ts:88:  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
+packages\client\ui-chat\src\client\apply.ts:151:    scope.slots.inject('settings.general.item', () => scope.slots.register({
+packages\client\ui-chat\src\client\apply.ts:173:  ctx.slots.registerFactory({
+packages\client\ui-chat\src\client\apply.ts:178:  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+packages\client\ui-chat\src\client\apply.ts:189:  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+packages\client\ui-chat\src\client\apply.ts:215:  ctx.slots.inject('conversation.chat.flow', () => ctx.slots.register({
+packages\client\ui-chat\src\client\apply.ts:228:    const disposeView = ctx.slots.register({
+packages\client\ui-chat\src\client\apply.ts:305:  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+packages\client\ui-chat\src\client\apply.ts:324:    yield ctx.slots.register({
+packages\client\ui-chat\src\client\apply.ts:327:    yield ctx.slots.register({
+packages\client\ui-chat\src\client\apply.ts:333:    ctx.slots.register({ name: 'conversation.approval.detail' }, ApprovalCommand))
+packages\schedule\schedule\src\index.ts:166:    ctx.on('session/created', (session) => {
+packages\schedule\schedule\src\index.ts:189:      const activity = ctx.on('workspace/session-activity', async ({ sessionId }, next) => {
+packages\schedule\schedule\src\index.ts:199:      const stop = ctx.on('workspace/session-stop', async ({ sessionId }) => {
+packages\schedule\schedule\src\index.ts:270:  @Remote('list')
+packages\schedule\schedule\src\index.ts:284:  @Remote('catalog')
+packages\schedule\schedule\src\index.ts:302:  @Remote('history')
+packages\schedule\schedule\src\index.ts:325:  @Remote('delete')
+packages\schedule\schedule\src\index.ts:355:  @Remote('update')
+packages\client\ui-sidebar-documentpreview\src\client\code\index.ts:23:  ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register(
+packages\client\ui-sidebar-documentpreview\src\client\image\index.ts:48:  ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register({
+packages\client\ui-sidebar-documentpreview\src\client\html\index.ts:31:  ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register(
+packages\client\ui-sidebar-documentpreview\src\client\excel\index.ts:21:  ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register({
+packages\client\ui-sidebar-documentpreview\src\client\index.ts:103:  ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register(
+packages\client\ui-sidebar-documentpreview\src\client\index.ts:118:  ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register(
+packages\client\ui-sidebar-documentpreview\src\client\markdown\index.ts:28:  ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register(
+packages\client\ui-sidebar-documentpreview\src\client\text\index.ts:23:  ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register(
+packages\client\ui-sidebar-documentpreview\src\client\office\index.ts:47:  ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document.action', () => ctx.slots.register({
+packages\client\ui-sidebar-documentpreview\src\client\office\index.ts:56:  ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register({
+packages\client\ui-sidebar-documentpreview\src\client\office\index.ts:67:  ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document.office.pdf', () => ctx.slots.register({
+packages\client\ui-sidebar-documentpreview\src\client\pdf\index.ts:32:  ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register({
