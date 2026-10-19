@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Claude Desktop 2.42304.0 — 解剖浏览器</title>
+<style>
+:root{--bg:#0e1116;--panel:#161b22;--panel2:#1c232c;--line:#2a333f;--fg:#d7dde5;--dim:#8b96a4;
+--accent:#d97757;--ok:#3fb950;--warn:#d29922;--bad:#f85149;--info:#58a6ff;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.55 -apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Microsoft YaHei",sans-serif}
+header{padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:10}
+header h1{margin:0;font-size:15px;font-weight:600;letter-spacing:.2px}
+.badge{font:11px var(--mono);padding:2px 7px;border-radius:10px;background:var(--panel2);color:var(--dim);border:1px solid var(--line)}
+.badge.ok{color:var(--ok);border-color:#1f4429}.badge.warn{color:var(--warn);border-color:#3d2f10}
+.badge.bad{color:var(--bad);border-color:#4a1d1d}.badge.info{color:var(--info);border-color:#1b3550}
+#search{flex:1;min-width:220px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:6px 10px;border-radius:6px;font-size:13px}
+#search:focus{outline:none;border-color:var(--accent)}
+main{display:grid;grid-template-columns:280px 1fr;height:calc(100vh - 53px)}
+nav{border-right:1px solid var(--line);overflow:auto;background:var(--panel)}
+nav .sec{padding:8px 12px 4px;font:11px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.6px}
+nav a{display:flex;justify-content:space-between;gap:8px;padding:6px 12px;color:var(--fg);text-decoration:none;border-left:2px solid transparent;font-size:12.5px}
+nav a:hover{background:var(--panel2);border-left-color:var(--accent)}
+nav a.sel{background:var(--panel2);border-left-color:var(--accent)}
+nav a .n{color:var(--dim);font:11px var(--mono)}
+#content{overflow:auto;padding:18px 22px 60px}
+h2{margin:0 0 4px;font-size:19px;font-weight:600}
+h3{margin:22px 0 8px;font-size:14px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.sub{color:var(--dim);font:12px var(--mono);margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin:10px 0 16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:9px 11px}
+.card .k{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+.card .v{font:15px var(--mono);margin-top:2px}
+table{width:100%;border-collapse:collapse;margin:8px 0 18px;font-size:12.5px}
+th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--dim);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.4px;position:sticky;top:0;background:var(--bg)}
+td.mono,span.mono{font-family:var(--mono);font-size:11.5px;color:#a9b6c5}
+tr:hover td{background:#141920}
+.pill{display:inline-block;font:10.5px var(--mono);padding:1px 6px;border-radius:9px;border:1px solid var(--line);color:var(--dim)}
+.pill.s{color:var(--ok);border-color:#1f4429}.pill.r{color:var(--info);border-color:#1b3550}
+.pill.i{color:var(--warn);border-color:#3d2f10}.pill.u{color:var(--bad);border-color:#4a1d1d}
+.empty{color:var(--dim);padding:30px;text-align:center;border:1px dashed var(--line);border-radius:8px}
+.note{background:#1a1510;border-left:3px solid var(--warn);padding:9px 12px;border-radius:0 6px 6px 0;margin:12px 0;font-size:12.5px}
+.arch{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;font:12px/1.7 var(--mono);white-space:pre;overflow:auto;color:#a9b6c5}
+details{margin:6px 0;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+details>summary{padding:8px 12px;cursor:pointer;font-size:13px}
+details>summary:hover{background:var(--panel2)}
+details .body{padding:4px 12px 12px}
+a.lnk{color:var(--info);text-decoration:none}a.lnk:hover{text-decoration:underline}
+@media(max-width:820px){main{grid-template-columns:1fr}nav{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Claude Desktop 解剖</h1>
+  <span class="badge">2.42304.0</span>
+  <span class="badge info">x64 / MSIX enterprise</span>
+  <span class="badge" id="stat"></span>
+  <input id="search" placeholder="搜索服务 / 方法 / 文件 / 能力…  (Ctrl+K)">
+</header>
+<main>
+  <nav id="nav"></nav>
+  <div id="content"></div>
+</main>
+
+<script id="services-data" type="application/json">__SERVICES_JSON__</script>
+<script>
+const DATA = JSON.parse(document.getElementById('services-data').textContent);
+
+const OVERVIEW = {
+  title: '总览 — 这是什么',
+  render: () => `
+<div class="sub">Claude Desktop Windows x64 · 2.42304.0 · MSIX SHA256 2bf309665f0de4eaa76a7e64033594e6f73ceb6413c60080f72f3ce640fa24ee</div>
+<div class="grid">
+  <div class="card"><div class="k">MSIX 条目</div><div class="v">4,443</div></div>
+  <div class="card"><div class="k">ASAR 路径</div><div class="v">548</div></div>
+  <div class="card"><div class="k">ASAR 文件</div><div class="v">506</div></div>
+  <div class="card"><div class="k">JS/MJS/TS 解析</div><div class="v">437</div></div>
+  <div class="card"><div class="k">PE 二进制</div><div class="v">18</div></div>
+  <div class="card"><div class="k">RPC 服务</div><div class="v">${Object.keys(DATA).length}</div></div>
+  <div class="card"><div class="k">RPC 方法</div><div class="v">${Object.values(DATA).reduce((a,b)=>a+b.method_count,0)}</div></div>
+  <div class="card"><div class="k">RPC 事件</div><div class="v">${Object.values(DATA).reduce((a,b)=>a+b.event_count,0)}</div></div>
+</div>
+
+<h3>分层结构</h3>
+<div class="arch">AppxManifest.xml  (Identity 2.42304.0.0, 3 个 Application, CoworkVMService)
+└─ app\\Claude.exe            245,756,240 B  PE x64 GUI  Authenticode Valid
+   └─ resources\\app.asar      49,338,428 B  548 路径
+      ├─ package.json         main = .vite/build/index.pre.js
+      ├─ .vite/build\\         356 主进程 chunk + 13 preload + 9 worker
+      ├─ .vite/renderer\\      6 套窗口 (main / quick / buddy / about / find_in_page / local_exec_consent)
+      ├─ node_modules\\        45 (claude-native, node-pty, ws, agent-base)
+      ├─ compile-cache\\       3 个 V8 .jsc
+      └─ resources\\           artifact-libs(4) / bundled-skills(7) / office365-mcp(6)
+   └─ resources\\cowork-svc.exe 13,761,360 B  Go 1.25.14  → CoworkVMService (localSystem, auto)
+                                   \\\\.\\pipe\\cowork-vm-service</div>
+
+<h3>三条关键结论</h3>
+<div class="note"><b>1. 主 UI 是远程的。</b> <span class="mono">main_window/index.html</span> 首行原注释：只有标题栏与错误页在本地，其余从 claude.ai 加载。运行时日志证实主 webview 拉取 <span class="mono">claude.com/_next/static/*</span>。</div>
+<div class="note"><b>2. IPC 不是裸 ipcMain。</b> 只有 2 处 <span class="mono">ipcMain.handle</span>、6 处 <span class="mono">ipcMain.on</span>；真实 RPC 是自建 eipc 框架，97 个服务复用同一 channel，按 <span class="mono">Service_$_Method</span> 路由。</div>
+<div class="note"><b>3. Agent 执行所有权分三层。</b> Chat=云端；Code/LocalSessions=本地 spawn <span class="mono">claude</span> CLI 子进程；Cowork=本地 Hyper-V VM 或云端，受 policy 门控。</div>
+
+<h3>阅读顺序</h3>
+<table><thead><tr><th>层</th><th>入口</th><th>说明</th></tr></thead><tbody>
+<tr><td class="mono">P0</td><td class="mono">P0-PACKAGE-AUTHENTICITY.md</td><td>包/哈希/完整性/嵌套容器</td></tr>
+<tr><td class="mono">P1</td><td class="mono">P1-STATIC-CODE-INVENTORY.md</td><td>入口链、506 文件全归类、符号索引</td></tr>
+<tr><td class="mono">P3</td><td class="mono">P3-IPC-RPC-EVENTS.md</td><td>1,332 RPC 全配对</td></tr>
+<tr><td class="mono">P4</td><td class="mono">P4-AGENT-RUNTIME.md</td><td>Chat/Cowork/Agent/持久化/恢复</td></tr>
+<tr><td class="mono">P7</td><td class="mono">P7-RUNTIME-EVIDENCE.md</td><td>3 轮真实启动取证</td></tr>
+</tbody></table>`
+};
+
+const nav = document.getElementById('nav');
+const content = document.getElementById('content');
+let cur = null;
+
+function groupOf(name){
+  const g = [
+    [/^(LocalSessions|LocalAgentModeSessions|LocalSessionEnvironment|LocalSessionPresets|SessionPopouts|ClaudeCode|ClaudeVM|EngineSurface)$/,'会话与 Agent'],
+    [/^(Cowork|CCDScheduledTasks)/,'Cowork 与调度'],
+    [/^(ComputerUse|Cu|Framebuffer)/,'计算机操作'],
+    [/^(MCP|Skills|Extensions|CustomPlugins|LocalPlugins|PluginBridgeMcp|Custom3p)/,'扩展与技能'],
+    [/^(ChromeExtension|BrowserNavigation|SableOtter)/,'浏览器集成'],
+    [/^(Window|MainWindow|FindInPage|Quick|MenuEvents|Toast|DeepLink|Navigation)/,'窗口与界面'],
+    [/^(FileSystem|FilePickers|OsEntryPlaces|OsOpenHandlers|DocumentFunnel|DeviceStorage|DeviceRegistry|HistoryImport|ClaudeAiImport|CliSessionImport)/,'文件与数据'],
+    [/^(Auth|Account|AppConfig|AppFeatures|AppPreferences|ManagedConfig|PlanUsage|DesktopInfo|DesktopIntl)/,'账号与配置'],
+    [/^(GlobalShortcut|DesktopNotifications|AutoUpdater|Startup|SupportBundle|Resources|PrintCall|RendererMemory|ContentStamp)/,'系统集成'],
+  ];
+  for(const [re,label] of g) if(re.test(name)) return label;
+  return '其他';
+}
+
+function renderNav(filter=''){
+  const q = filter.trim().toLowerCase();
+  const byGroup = {};
+  for(const [name,v] of Object.entries(DATA)){
+    if(q && !(name.toLowerCase().includes(q) || v.methods.some(m=>m.name.toLowerCase().includes(q)))) continue;
+    const g = groupOf(name);
+    (byGroup[g] = byGroup[g]||[]).push(name);
+  }
+  let html = `<a href="#" data-k="__overview" class="${cur===null?'sel':''}">总览 <span class="n">→</span></a>`;
+  for(const g of Object.keys(byGroup).sort()){
+    html += `<div class="sec">${g}</div>`;
+    for(const n of byGroup[g].sort()){
+      const v = DATA[n];
+      html += `<a href="#" data-k="${n}" class="${cur===n?'sel':''}"><span>${n}</span><span class="n">${v.method_count}</span></a>`;
+    }
+  }
+  nav.innerHTML = html;
+  document.getElementById('stat').textContent = `${Object.keys(DATA).length} 服务`;
+}
+
+function esc(s){return String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+
+function renderService(name){
+  const v = DATA[name];
+  const opts = v.options.filter(o=>o!=='methods');
+  const rows = v.methods.map(m=>`<tr><td class="mono">${esc(m.name)}</td><td class="mono">${esc(m.params||'—')}</td></tr>`).join('');
+  const evs = v.events.map(e=>`<tr><td class="mono">${esc(e.name)}</td><td class="mono">${esc(e.params||'—')}</td></tr>`).join('');
+  return `
+<h2>${esc(name)}</h2>
+<div class="sub">namespace: ${esc(v.namespace)} · ${v.method_count} 方法 · ${v.event_count} 事件</div>
+<div class="grid">
+  <div class="card"><div class="k">方法</div><div class="v">${v.method_count}</div></div>
+  <div class="card"><div class="k">事件</div><div class="v">${v.event_count}</div></div>
+  <div class="card"><div class="k">能力面</div><div class="v" style="font-size:13px">${opts.join(', ')||'—'}</div></div>
+</div>
+<h3>方法（参数名为打包器保留的原始名）</h3>
+<table><thead><tr><th>方法</th><th>参数</th></tr></thead><tbody>${rows||'<tr><td colspan=2>无</td></tr>'}</tbody></table>
+${v.events.length?`<h3>事件</h3><table><thead><tr><th>事件</th><th>参数</th></tr></thead><tbody>${evs}</tbody></table>`:''}
+<div class="note">证据等级 <span class="pill s">S</span> 静态：来自 <span class="mono">eo(ns, "${esc(name)}", senderCheck, {methods:[[...]]})</span> 的服务定义表，含每方法参数 schema。</div>`;
+}
+
+function show(key){
+  cur = key;
+  renderNav(document.getElementById('search').value);
+  content.innerHTML = key ? renderService(key) : OVERVIEW.render();
+  content.scrollTop = 0;
+}
+
+nav.addEventListener('click', e=>{
+  const a = e.target.closest('a'); if(!a) return;
+  e.preventDefault();
+  show(a.dataset.k === '__overview' ? null : a.dataset.k);
+});
+document.getElementById('search').addEventListener('input', e=>renderNav(e.target.value));
+document.addEventListener('keydown', e=>{
+  if((e.ctrlKey||e.metaKey) && e.key==='k'){ e.preventDefault(); document.getElementById('search').focus(); }
+});
+renderNav(); show(null);
+</script>
+</body>
+</html>
