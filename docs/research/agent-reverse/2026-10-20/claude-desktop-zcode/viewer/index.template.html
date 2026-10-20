@@ -70,6 +70,8 @@ const SECTIONS = [
   ['flags','Feature Flags'],
   ['env','环境变量'],
   ['unknown','未解清单'],
+  ['gb','GrowthBook Flags'],
+  ['chunks','SPA Chunk 图'],
 ];
 
 function overview(){
@@ -208,6 +210,20 @@ function unknownView(){
 <table><thead><tr><th>ID</th><th>类别</th><th>对象</th><th>状态</th><th>原因</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+function gbView(){
+  const rows=D.gb_flags.map(r=>`<tr><td class="mono">${esc(r.key)}</td></tr>`).join('');
+  return `<h2>GrowthBook 实验开关（${D.gb_flags.length}）</h2>
+<div class="note">这是从 bundle 恢复的<b>完整允许名单</b>。遥测里出现的 <span class="mono">__gb__&lt;数字&gt;</span> 是 flag 名的 32 位哈希，不是随机 ID。</div>
+<table><thead><tr><th>键</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function chunksView(){
+  const rows=D.chunks.map(r=>`<tr><td class="mono">${esc(r.chunk)}</td><td class="mono">${r.bytes.toLocaleString()}</td><td class="mono">${esc(r.fan_in)}</td><td class="mono">${esc(r.fan_out)}</td><td><span class="pill ${r.mode==='LAZY'?'info':'ok'}">${esc(r.mode)}</span></td></tr>`).join('');
+  return `<h2>SPA Chunk 依赖图</h2>
+<div class="sub">${D.stats.chunks} 个 chunk · ${D.stats.lazy} 个懒加载 · 46,892 条边</div>
+<table><thead><tr><th>chunk</th><th>字节</th><th>fan-in</th><th>fan-out</th><th>加载</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
 function renderNav(){
   const q = document.getElementById('search').value.trim().toLowerCase();
   let h = '';
@@ -234,6 +250,8 @@ function show(key){
   else if (key==='flags') content.innerHTML = flagsView();
   else if (key==='env') content.innerHTML = envView();
   else if (key==='unknown') content.innerHTML = unknownView();
+  else if (key==='gb') content.innerHTML = gbView();
+  else if (key==='chunks') content.innerHTML = chunksView();
   content.scrollTop = 0;
 }
 

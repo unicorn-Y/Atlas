@@ -1,4 +1,4 @@
-chunk,bytes,fan_in,fan_out,load_mode
+chunk	bytes	fan_in	fan_out	load_mode
 vendor-frame-DfPJ1QmD.js	510284	1863	1	eager
 shared-25-DP8p7i1Z.js	374147	1235	11	LAZY
 vendor-intl-Db7hDWRO.js	48564	1165	1	eager
