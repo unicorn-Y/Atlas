@@ -1,7 +1,7 @@
 id	category	object	status	evidence_level	reason	how_to_resolve
 U-001	cloud	claude.ai 服务端 agent loop 实现	CLOUD-UNAVAILABLE	U	服务端代码不在安装包内，且按新规不连接 API	仅能通过官方文档（D 级）间接了解；客户端侧请求/响应形状已在 P4 记录
 U-002	cloud	1P 模式下的聊天 UI 组件树	CLOUD-UNAVAILABLE	U	1P 从 claude.ai 加载远程 SPA，本地无该代码	在 3P 模式下改用本地 ion-dist，可静态分析（部分已做：ION-MODULES/ROUTES）
-U-003	cloud	模型目录（catalog.json）实际内容	U	U	仅见下载 URL，包内无缓存	该文件由服务端下发；形状可从 schema.json URL 推断但未取得
+U-003	cloud	模型目录（catalog.json）实际内容	RESOLVED	S	**此前判断错误**：包内内嵌完整快照(version 2313, issued 2026-10-15, expires 2026-10-22)。含 5 个 surface(cc/ccd/ccr/chat/cowork)，cc 系 13 个模型含 opus-5-5/sonnet-5-5/fable-5-1/haiku-5-5 等，每模型带 1M 输入/128K 输出、effort 五档、image_limits、offered_on 七条推理路径。默认 claude-opus-5 + effort=high。详见 P6E	—
 U-004	code	Simulator 服务（54 方法）的业务目标	RESOLVED	S	已确定：把 iOS/Android 模拟器作为**原生面板嵌入主窗口的指定 pane**（nativeViewMount 带 targetWindowId+pane），支持折叠屏角度、无障碍树读取、手势/剪贴板/编辑注入、游标分页日志、录屏取证、DPI 坐标换算。不是截图流而是双向可控设备面板	—
 U-005	code	内部代号服务与实验的含义	PARTIAL	S	已解：GrandPrix=密码管理器配对；Gorse=记忆迁移；ForgeState/GitState=状态快照；WebBuild=commit上报；Simulator=iOS/Android模拟器；ViolinFret=**无人值守工具调用同意流程**(Unset/Accepted + confirmUnattendedConsent)；Baku=API路由命名空间(/v1/code/baku/sessions)；YukonSilver=VM出网与工具权限配置(yukon_silver_egress_templates/tool_perms/cuttlefish_ditto_prompt/octopus_prompt)。**未解**：57个cai_*实验代号、44个__gb__哈希键、Epitaxy产品定位	cai_*/__gb__ 需服务端配置；Epitaxy 需追踪路由挂载
 U-006	code	handleEvent 的完整事件名枚举	RESOLVED	S	7 个事件已从指令级 cmp/memequal 恢复：exit / error / ready / stderr / stdout / networkStatus / apiReachability；startupStep 已被证伪（实为 step 字段）	—
