@@ -100,3 +100,32 @@ src="/assets/v1/index-D3kGySMO.js"
 | 548 路由对象 / 103 唯一路径 | `ledgers/ION-ROUTE-TABLE.tsv` |
 | 组件名为 0 | `ledgers/ION-COMPONENTS.tsv`（空）与 `ION-HOOKS.tsv`（空） |
 | 3,588 文件全解析 | `ledgers/ION-MODULES.tsv` |
+
+---
+
+## 6. 全部 3,588 个 SPA 文件的逐文件归类（`ION-CLASSIFIED.tsv`）
+
+| 类别 | 文件数 | 字节 |
+|---|---:|---:|
+| route/page chunk | **3,482** | 98,355,852 |
+| shared chunk | 37 | 10,213,632 |
+| frame runtime asset | 32 | 4,520,926 |
+| artifact frame (shell) | 7 | 3,875,853 |
+| worker | 6 | 1,867,530 |
+| artifact frame | 3 | 221,471 |
+| wasm loader（tree-sitter / oniguruma） | 2 | 640,686（含 622 KB 内联 base64 WASM） |
+| app entry | 1 | 67,568 |
+| audio worklet | 1 | 67,634 |
+| bundler helper / runtime | 2 | 4,828 |
+| vendor（15 个分组） | 15 | 1,738,331 |
+| **合计** | **3,588** | **121,566,830** |
+
+**未分类 = 0。**
+
+### 说明
+
+- `route/page chunk` 占 96.8% 的体积 —— 这是 rolldown 的路由级代码分割，每个路由一个 chunk（3,482 个），与 P1C 第 4 节"103 条唯一路由"并不矛盾：**一条路由可以对应多个 chunk**（组件、loader、样式各自分包）。
+- `vendor:*` 15 组与第 2 节的依赖表完全对应（base-ui / datadog / frame / growthbook / icons / intl / markdown / motion / prosemirror / query / router / tiptap / utils / zod / all）。
+- `artifact frame` 系列共 10 个文件（shell 7 + runtime 3 + _frame-rt 下的 32 个资源），是 Artifact 沙箱外壳的完整实现。
+
+**这份表的价值**：此前只能说"3,588 个文件全部解析成功"，现在能说"每一个文件属于哪一类、占多少体积"。逐文件语义的边界仍然存在（组件名不可恢复），但**没有未归类的文件**。
