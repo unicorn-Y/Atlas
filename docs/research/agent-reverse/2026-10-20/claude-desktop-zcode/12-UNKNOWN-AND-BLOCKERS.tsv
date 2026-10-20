@@ -3,11 +3,11 @@ U-001	cloud	claude.ai 服务端 agent loop 实现	CLOUD-UNAVAILABLE	U	服务端�
 U-002	cloud	1P 模式下的聊天 UI 组件树	CLOUD-UNAVAILABLE	U	1P 从 claude.ai 加载远程 SPA，本地无该代码	在 3P 模式下改用本地 ion-dist，可静态分析（部分已做：ION-MODULES/ROUTES）
 U-003	cloud	模型目录（catalog.json）实际内容	U	U	仅见下载 URL，包内无缓存	该文件由服务端下发；形状可从 schema.json URL 推断但未取得
 U-004	code	Simulator 服务（54 方法）的业务目标	PARTIAL	S/U	方法名全部已知，业务目标仍未从代码定位到注释/常量	继续在 index.chunk 中追踪 attach/detach 调用点
-U-005	code	GrandPrix / ForgeState / Gorse / ViolinFret / WebBuild / Baku 代号含义	UNKNOWN	S/U	仅能从方法名推断领域，无内部注释	需结合调用方（远程 UI 不可得）或后续版本对比
+U-005	code	GrandPrix / ForgeState / Gorse / ViolinFret / WebBuild / Baku 代号含义	PARTIAL	S	已解：GrandPrix=密码管理器伙伴配对(desktop-grand-prix flag+HMAC白名单)；Gorse=记忆迁移向导；ForgeState=键值状态快照板；GitState=仓库状态快照；WebBuild=commit hash上报；Simulator=iOS/Android模拟器控制。**未解**：ViolinFret(仅setViolinFretChoice)、Baku、Epitaxy、YukonSilver	对 ViolinFret/Baku/Epitaxy 追踪调用方与路由挂载
 U-006	code	handleEvent 的完整事件名枚举	RESOLVED	S	7 个事件已从指令级 cmp/memequal 恢复：exit / error / ready / stderr / stdout / networkStatus / apiReachability；startupStep 已被证伪（实为 step 字段）	—
 U-007	code	cowork-svc 帧协议字节序与 10 MiB 上限	RESOLVED	S	大端已由 bigEndian itab 证明；管道上限 0xa00000=10MiB；guest vsock 上限 0x6400000=100MiB；越界报错文本已定位	—
 U-008	code	handlePassthrough 的转发目标	RESOLVED	S	转发到 guest agent；放行名单 10 项：spawn/kill/mountPath/readFile/getMemoryInfo/getSessionsDiskInfo/deleteSessionDirs/pruneSessionCaches/installSdk/addApprovedOauthToken	—
-U-009	code	edrgate 协议细节	PARTIAL	S/U	包与 handler 存在（handleRunEdrExtension 等）	追踪 edrpolicy 的数据结构
+U-009	code	edrgate 协议细节	PARTIAL	S	已解：策略源 SOFTWARE\Policies\Claude(REG_SZ)；门控顺序 CheapGates→systemDriveGate/shareGate→classifyShare→newGuestSubpath→NewRefusal；三态回答 answer/notAnswered/refused；结构体 GuestRequest/Attempt/Refusal/Wait/ServedShare/InstallArgs/HostPath/VendorID；防 CON/PRN 等保留名与 8.3 短名。**未解**：注册表值名字面量、Refusal.code 枚举全集	对 readEdrValue 的 LEA 目标做指令级读取
 U-010	code	ion-dist 3,588 个 SPA 文件的逐组件展开	DEFERRED	S	模块级(3,588)/路由级(103)/依赖级(15 vendor) 已完成；**组件名不可恢复**：rolldown 以 jsx() 运行时调用编译且标识符已压缩，AST 拿不到可读组件名。这是二进制形态限制，不是未做	可改为还原 chunk 级代码分割图（哪个路由加载哪些 chunk）；组件名需 sourcemap，本包无 map
 U-011	code	3 个 WASM 的用途	RESOLVED	S	已确定：clarkdown_editor（Rust 编辑器内核，1.36MB）、tree-sitter 解析器（205KB，wasi_snapshot_preview1）、c2pa 内容溯源签名（8.25MB，747 个 c2pa 相关符号）	—
 U-012	code	nodeHost 与 directMcpHost 的运行时差异	RESOLVED	S	nodeHost=本地 stdio shim（每服务器一个 utilityProcess，MessagePort 转发 stdin/stdout，self-exec 防护）；directMcpHost=远程 HTTP/SSE 客户端（所有远程服务器共用单例进程）	—
@@ -17,8 +17,8 @@ U-015	runtime	各状态迁移的真实触发时序	U	U	按新规不做动态观�
 U-016	packaging	consumer（Squirrel）线最新版本	U	U	claude.ai 下载端点返回 region_unavailable	需在允许地区网络下访问
 U-017	packaging	macOS 版差异	U	U	未取得 macOS 实物	不得以 Windows 推断 macOS
 U-018	packaging	2.42304.2 nupkg 与 2.42304.0 MSIX 的逐文件 diff	RESOLVED	S	已完成。31 个同路径文件差异中 30 个是构建噪声（含 package.json 仅版本号 1 字符、manifest 仅 agentSkillsRef）；唯一实质变化是 nodeHost.js +2,078 B：新增 18 个根证书 SPKI 屏蔽 + 同步耗时追踪。新增的 6 个资源项是 asar packed/unpacked 打包方式差异，非内容新增。详见 VERSION-DELTA.md	—
-U-019	code	ion-dist 中 audio/voice 的语音引擎	PARTIAL	S/U	3.1 MB 音频资源存在，未见 TTS/ASR 实现代码	追踪 web speech / 音频播放调用点
-U-020	code	hardwareBuddy 的 BLE 协议	PARTIAL	S/U	BuddyBleTransport 服务与 hardwareBuddyEnabled flag 存在	追踪 GATT 特征 UUID 常量
+U-019	code	ion-dist 中 audio/voice 的语音引擎	RESOLVED	S	**包内无 ASR/TTS 引擎**。audio/voice 是 27 个文件：1 个 audioSinkWorklet.js(AudioWorklet 播放端) + 26 个 mp3 试听音频(5 种音色 airy/buttery/glassy/mellow/round)。全包无 SpeechRecognition/speechSynthesis/whisper/vosk 符号。语音=本地采集+云端ASR/TTS+本地播放	—
+U-020	code	hardwareBuddy 的 BLE 协议	RESOLVED	S	无 GATT UUID 白名单：用 Electron select-bluetooth-device 事件，按广播名前缀 nibblet/claude 过滤。15s 扫描超时；配对仅 confirm 与 providePin；指数退避重连 2s→60s；HIPAA 限制下拒绝配对并强制断链；向设备安装内容包上限 1.8MB；传输为文本行协议(rx/tx 参数均为 line)	—
 U-021	code	LocalSessions 的 329 个方法逐条语义	PARTIAL	S	方法名与参数全部登记，但少数（如 dropsHostReplyStamp、paneHolds、seededSummon）语义未解	结合远程 UI 调用点（不可得）或命名推断
 U-022	code	custom-3p-gated-imports.json 的语义	RESOLVED	S	内容为 {"buildId":"spa-dev","imports":{}}，即 3P 构建无额外门控导入	—
 U-023	code	scc.json 的语义	RESOLVED	S	构建期模块图统计：chunks 3548、edges 44988、multiChunkSccs 0、sccs []（无循环依赖）	—
@@ -31,3 +31,4 @@ U-029	code	`shell-path-worker` 的用途与其 Windows 替代	RESOLVED	S	worker 
 U-030	code	内建 GitHub/Office365 MCP 的启用条件	RESOLVED	S	两者均已 packaged→registered→delegated；1P 池被 `zvn(e)=e.server==="microsoft365"` 过滤且受 GrowthBook "4074604942" 门控，3P 路径 `Evn(cOe(...))` 剥除 builtin —— 故在无托管配置的消费者安装中休眠	—
 U-031	code	Artifact 运行库是否真的从 CDN 加载	RESOLVED	S	否。https 协议覆写把恰好 3 个 jsDelivr URL 映射到本地 resources/artifact-libs；不在允许表的请求一律取消，CSP connect-src 'none'	—
 U-032	packaging	Electron/Chromium 运行时版本	RESOLVED	S	app/version = 44.7.2（Electron）；主进程运行期日志报 nodeVersion 24.21.0	—
+U-033	code	SPA chunk 级代码分割图	RESOLVED	S	3,548 chunk / 46,892 边(static 44,988 + dynamic 1,904)；1,517 个懒加载 chunk；路由枢纽 cf400e6a4(3.27MB, 854 个动态导入)；vendor-frame fan-in 1,863 最高	—
