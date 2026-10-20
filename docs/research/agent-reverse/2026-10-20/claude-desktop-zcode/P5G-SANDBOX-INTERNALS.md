@@ -190,3 +190,68 @@ failed to install SDK binary: %w
 ## 10. 产物
 
 本报告即证据，原文位于 `extract/_vhdx/sdk-daemon` 的只读数据段。
+
+---
+
+## 11. CLI 插件 manifest 的真实字段（解决 `U-040` 主体）
+
+对 `(*cliPluginServer).handle`（4,704 B）与 `spawn`（3,552 B）做指令级字符串引用解析，得到两条**安全拒绝串**：
+
+```
+manifest env name %q rejected (loader/interpreter hook or bad shape)
+manifest oauth.envVar %q rejected (loader/interpreter hook or bad shape)
+```
+
+**"loader/interpreter hook"** 指的是 `LD_PRELOAD`、`LD_LIBRARY_PATH`、`NODE_OPTIONS`、`PYTHONSTARTUP` 这类能劫持加载器的环境变量 —— 插件 manifest 里**不允许**声明它们。
+
+配合 sdk-daemon 内的 JSON 标签集合，可确定 manifest 的字段：
+
+| 字段 | 作用 |
+|---|---|
+| `name` | 插件名 |
+| `version` | 版本 |
+| `command` | 启动命令 |
+| `env` | 环境变量表（**受上面的名字校验**） |
+| `oauthToken` / `tokenEnvVar` | OAuth 令牌与它注入时使用的环境变量名（`oauth.envVar` 也受校验） |
+| `cliName` | CLI 显示名 |
+| `wrapperDir` | 包装目录（`unsafe plugin id from wrapperDir %q` 会校验） |
+
+### 11.1 插件运行的完整机制（S）
+
+`spawn` 里出现的字符串：
+
+```
+/usr/local/bin/sandbox-helper                     ← 实际执行者
+wrapper-stdin / wrapper-stdout / wrapper-stderr   ← 三路管道
+(intermediate) --make-private                     ← 中间挂载点私有化
+install %s: %w
+user@*.service / user@.service                    ← systemd 用户实例
+host-ca-%s.crt                                    ← 按主机签发的 CA 证书
+cli-%d                                            ← 进程命名
+manifest env name %q rejected …
+[coworkd] mounting subpath…
+[cli-plugin] cgroup create failed, continuing without
+[cli-plugin] cgroup OpenFD failed, falling back to direct kill
+```
+
+**插件进程的完整启动链**：
+
+```
+cliPluginServer.spawn
+  → 建 cgroup（失败则降级为直接 kill）
+  → 挂载 subpath 与 wrapper 目录
+  → /usr/local/bin/sandbox-helper <uid> <gid> <cmd>
+      → unshare + setuid + seccomp
+      → exec srt / 插件命令
+  → 三路管道 wrapper-stdin/stdout/stderr
+  → 可在 systemd user@.service 下运行
+```
+
+与 EDR 扩展的区别：**EDR 走 systemd transient unit（`Type=exec`），CLI 插件走 `sandbox-helper` 直接降权**。两套隔离路径并存。
+
+### 11.2 仍未解
+
+| 项 | 说明 |
+|---|---|
+| 插件包（目录 or tar）的具体分发格式 | 见到 staging 与 wrapperDir，但未见包解析代码 |
+| `ClassifyCliPlugin` 的 local/remote 判据 | 只有分类结果，未见规则 |
