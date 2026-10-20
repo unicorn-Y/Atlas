@@ -143,6 +143,38 @@ store：`grandPrixStatus`（初始状态由 `getInitialGrandPrixStatusState` 提
 
 配合 GrowthBook 键 `iosSimulatorH264`、`iosSimulatorAccessibilityReader`、`iosSimulatorDuo`、`simulatorScreenshotEditor`、`simulatorMiniView`、`androidEmulator`，可以确认这是**一等公民功能**，不是实验残留。
 
+
+### 7.2 Simulator 的参数级细节（解决"业务目标"的最后一层）
+
+从方法表恢复的完整签名：
+
+| 方法 | 参数 | 说明 |
+|---|---|---|
+| `nativeViewMount` | `udid`, `bounds`, `targetWindowId?`, `pane?` | **把模拟器画面作为原生视图挂到指定窗口的指定 pane** |
+| `nativeViewSetBounds` | `udid`, `bounds`, `pane?` | 改位置尺寸 |
+| `nativeViewSetVisible` | `udid`, `visible` | 显隐 |
+| `nativeViewSetOrientation` | `udid`, + | 旋转 |
+| `nativeViewSetBend` | `udid`, + | **折叠角度** |
+| `nativeViewFoldPlay/Go/Confirm/End` | `udid` | 折叠动画分步控制（play→go→confirm→end） |
+| `nativeViewStill` | `udid` | 冻结画面（截图用） |
+| `gesture` | `udid`, `msg`（结构 `sDa`） | 手势消息 |
+| `editAction` | `udid`, `request`（结构 `bDa`） | 编辑动作 |
+| `sendClipboard` | `udid`, `request`（`xDa`） | 写剪贴板 |
+| `getClipboard` | `udid`, `scope?` | 读剪贴板 |
+| `getLogEntries` | `udid`, `sinceSeq?`, `limit?`, `beforeSeq?` | **带游标分页**的日志 |
+| `startRecording` | `udid`, `trigger?` | 开始录屏 |
+| `displayPointsPerInch` | `windowId?` | 读取 DPI（用于坐标换算） |
+| `panelViewed` | `kind`, `opened?` | 面板曝光 |
+| `setEditShortcutsClaimed` | `udid`, `claimed`, `scope?` | 快捷键认领（避免与宿主冲突） |
+
+**三条关键结论**：
+
+1. **`nativeViewMount` 带 `targetWindowId` 与 `pane`** —— 模拟器不是独立窗口，而是**嵌入主窗口的某个 pane**，与 `WindowLayout` 的 pane 概念一致。这是"原生视图嵌入"，走的是 Electron 的 native view 通道，不是截图流。
+2. **`getLogEntries` 用 `sinceSeq`/`beforeSeq` 双向游标** —— 日志是**可增量、可回溯**的，能往前往后翻，符合"长日志浏览"需求。
+3. **`displayPointsPerInch` 是独立 RPC** —— 因为模拟器的逻辑坐标要按 DPI 换算成窗口物理像素，这是把点击坐标映射到模拟器的必要前置。
+
+**所以那 54 个方法的业务目标可以确定**：这是一套**把 iOS/Android 模拟器作为原生面板嵌入 Electron、并让模型能读无障碍树 + 看画面 + 发手势 + 录屏取证**的完整集成。它不是"看一眼截图"，而是双向可控的远程设备面板。
+
 ### 8.1 Launch 的完整能力（88 方法，节选按功能分组）
 
 | 组 | 方法 |
