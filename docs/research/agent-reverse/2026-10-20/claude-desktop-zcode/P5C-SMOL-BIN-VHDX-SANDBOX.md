@@ -235,3 +235,128 @@ extract/_vhdx/srt-settings.json        1,145 B  JSON
 | `cli-wrapper` 的具体包装逻辑 | 字符串未暴露 |
 | VHDX 由谁挂载（cowork-svc 还是 SDK daemon 自身） | 需追踪 `applyVmImageDelta`（napi 导出之一，见 NATIVE-ADDON） |
 | `srt` 缩写含义 | 未在二进制中找到展开 |
+
+---
+
+## 9. `sdk-daemon` 的符号级结构（20,046 函数，其中 385 个是 `coworkd`）
+
+用 P5 的 Go pclntab 解析器处理该 ELF：magic `0x98ca20`（go1.20+），`nfunc=20046`，`nfiles=1108`，`textStart=0x401000`，模块名 **`coworkd`**。
+
+### 9.1 第一方包分布（385 个函数）
+
+| 包 | 函数数 | 职责 |
+|---|---:|---|
+| `coworkd/internal/edrextension` (+`/verify`) | **148** | **EDR 扩展的安装与运行**（最大） |
+| `coworkd/internal/proxy` | **90** | **MITM 代理 + 证书管理 + PAC 评估** |
+| `coworkd/rpc` | 23 | 与宿主通信的 RPC 客户端 |
+| `coworkd/internal/logger` | 25 | 虚拟机控制台日志（`findVirtioConsolePath`） |
+| `coworkd/internal/vsockfilter` | 3 | vsock 过滤 |
+
+### 9.2 `coworkd/rpc` —— 沙箱与宿主的通道
+
+```
+(*Client).Connect / SendReady / Close
+(*Client).Request / handleResponse / handleRequest / handleNotification
+(*Client).AskClaude            ← 对应 claude-shim 的 socket
+(*Client).ClassifyCliPlugin
+(*Client).ReportCliExit
+(*Client).sendEvent / sendResponse
+(*Client).readLoop / unmarshalParams
+rpc.ReadMessage / rpc.WriteMessage
+```
+
+**`AskClaude` 只有 384 字节** —— 它是个薄封装，真正逻辑在同一套 request/response 框架里。
+
+### 9.3 `coworkd/internal/proxy` —— MITM 的真实实现（这是关键）
+
+```
+NewCertManager
+(*CertManager).generateCA              1536 B   ← 自己生成 CA
+(*CertManager).TLSCertificate          （按域名签发叶证书）
+(*CertManager).InstallToTrustStore     ← 把 CA 装进沙箱信任库
+hostname / inZones                     ← 域名归类判定
+SetHostProxy / guardDial               ← 出网拦截
+(*pacEvaluator).FindProxyForURL        928 B   ← PAC 脚本求值
+installPACBuiltins / pacRelay
+(*Proxy).Start
+```
+
+**结论（S）**：`srt-settings.json` 里那个 `mitmProxy.socketPath = /var/run/mitm-proxy.sock` 不是外部服务，**它的服务端就在 `sdk-daemon` 里**。链路是：
+
+```
+沙箱内进程 → HTTPS 请求
+   → 被 SetHostProxy/guardDial 拦住
+   → 转给内置 Proxy
+   → CertManager 用自签 CA 动态签发该域名的叶证书（MITM）
+   → 解密后按 allowedDomains 判定放行/拒绝
+   → 再向真实目标发起连接
+```
+
+`generateCA` 有 1,536 字节、`InstallToTrustStore` 独立成函数，说明**每次启动可重新生成并安装 CA**（不依赖预置证书）。
+
+**这解释了为什么 `srt-settings.json` 的 `deniedDomains` 是空数组**：不需要黑名单，因为**所有** HTTPS 都要经过内置 MITM，白名单之外直接拒。
+
+### 9.4 `coworkd/internal/edrextension` —— 沙箱内的 EDR 安装器（148 函数）
+
+```
+(*Installer).Handle / start / resolve / declined / abandonLocked
+(*Installer).saveLocked / restore / restoreAtStart / clearUp
+(*job).launch / run / watch / conclude / refuse / mayGoOn / neverStarted
+(*job).outputTail / scriptMayHaveStarted / unitAfterDoubt
+(*SystemdRunner).Start / Stop / Kill / Poll
+(*Refusal).Error / Kind
+(*InstallArgs).Format / Present
+verify.gpgvProcess.runOnFilteredThread
+```
+
+**职责（S）**：沙箱内安装/运行 **EDR 扩展**，通过 **systemd unit** 管理（`SystemdRunner`），带：
+- 状态机（`mayGoOn`、`neverStarted`、`scriptMayHaveStarted`、`unitAfterDoubt` —— 明显在**应对"不确定是否已启动"的中间态**）；
+- 持久化与恢复（`saveLocked`/`restore`/`restoreAtStart`）；
+- 拒绝类型化（`Refusal.Kind`）；
+- 输出截断保护（`outputTail`、`cappedReader`、`deadlineReader`）；
+- GPG 校验（`verify` 子包 + `gpgvProcess`）。
+
+这与宿主侧 `cowork-svc` 的 `edrgate`/`edrpolicy`（P5B）是**同一体系的两端**：宿主决定策略，沙箱内执行安装。
+
+### 9.5 `coworkd/internal/logger` —— 走 virtio 控制台
+
+```
+findVirtioConsolePath / openConsole / openDevice / startConsole
+(*console).reopenDevice / noteDrops / run
+```
+
+**结论**：日志写到**虚拟机的 virtio 串口控制台**（`/dev/hvc*` 类），而不是普通文件。这解释了 P5 里 `cowork-daemon-console` 管道的存在 —— 宿主通过它读取 guest 控制台输出。
+
+### 9.6 对沙箱架构图的补全
+
+```
+宿主 (Windows)
+  cowork-svc.exe ──pipe(cowork-vm-service)──┐
+       │                                    │
+       ├─ HVSocket ──────────────────────────┤
+       │                                    ▼
+       │                          ┌─────────────────────────┐
+       │                          │ smol-bin.x64.vhdx       │
+       │                          │ (FAT32, SDK_DAEMON)     │
+       │                          │                         │
+       │                          │ sdk-daemon (coworkd)    │
+       │                          │  ├ rpc.Client           │ ← AskClaude / events
+       │                          │  ├ internal/proxy       │ ← 自签 CA + MITM + PAC
+       │                          │  ├ internal/edrextension│ ← systemd 装 EDR
+       │                          │  └ internal/logger      │ ← virtio console
+       │                          │                         │
+       │                          │ claude-shim ──unix──→ rpc.Client.AskClaude
+       │                          │ sandbox-helper (seccomp)│
+       │                          │ cli-wrapper             │
+       │                          │ srt-settings.json       │
+       │                          └─────────────────────────┘
+       └─ cowork-daemon-console pipe ←── virtio console 日志
+```
+
+### 9.7 仍未解
+
+| 项 | 说明 |
+|---|---|
+| `edrextension` 的具体 EDR 厂商协议 | 有 `verify`/`Installer`/`systemd`，但厂商 ID 与扩展包格式未定 |
+| `vsockfilter` 的 3 个函数 | 未展开 |
+| PAC 内置函数集（`installPACBuiltins`） | 未列出具体函数名 |
