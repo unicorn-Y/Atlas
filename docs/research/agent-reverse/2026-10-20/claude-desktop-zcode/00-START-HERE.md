@@ -91,7 +91,19 @@ HCS (CreateComputeSystem / HVSocket)
 
 所以"客户端不知道有哪些模型"是错的 —— **它知道得非常具体，只是带有效期，过期要刷新**。
 
-### 6. 技能不由 Desktop 执行
+### 6. 包里还有一个完整的代码执行沙箱
+
+`app/resources/smol-bin.x64.vhdx`（37.7 MB，此前被哈希账误标为 TEXT 而未打开）是一个 **FAT32 虚拟盘**，卷标 `SDK_DAEMON`，creator `claude-vm`，内含：
+
+- `sdk-daemon`（16.7 MB，Go）—— Agent SDK 宿主，持 `AskClaude` 入口与 HTTP/HTTPS 代理栈
+- `sandbox-helper`（2.2 MB）—— `uid/gid` 降权 + **seccomp BPF** 过滤
+- `claude-shim`（2.35 MB）—— 伪装 `claude` 命令，转发到 `/run/coworkd/ask-claude.sock`，**只允许 `claude -p "<prompt>"`**
+- `cli-wrapper`（2.4 MB）—— CLI 启动包装
+- `srt-settings.json` —— 出网白名单（npm/PyPI/crates/GitHub/Ubuntu源/Anthropic）+ MITM 代理
+
+**所以"执行代码"的真实形态是**：在一个带 seccomp 约束、出网受白名单限制、且调用 Claude 被收窄为单轮提示的专用根文件系统里运行。
+
+### 7. 技能不由 Desktop 执行
 
 Desktop 打包了 6 个 `.skill`（docx/pptx/xlsx/pdf/pdf-reading/frontend-design），但通过环境变量把它们交给 CLI：
 
@@ -158,12 +170,14 @@ CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL
 | `P4C-SENDMESSAGE-SCHEMA.md` | `sendMessage` 17 参数的字段级语义 |
 | `P5-NATIVE-SERVICE-VM.md` | Go 服务 15,181 函数、管道 RPC、VM 依赖架构 |
 | `P5B-EDR-PROTOCOL.md` | 第三方 EDR 接入协议（策略源、门控顺序、三态回答） |
+| **`P5C-SMOL-BIN-VHDX-SANDBOX.md`** | **包内 37.7MB VHDX = 完整代码执行沙箱（SDK_DAEMON 根文件系统）** |
 | `P6-EXTENSIONS-TOOLS-SKILLS.md` | 6 技能、MCP、7 个可用 worker、1,062 环境变量 |
 | `P6B-VOICE-PIPELINE.md` | 语音链路（包内无 ASR/TTS，只有采集与播放胶水） |
 | `P6C-GROWTHBOOK-FLAGS.md` | **237 个 GrowthBook 开关的完整白名单** |
 | `P6D-TOOLS-AND-CATALOG.md` | 内置工具清单（含 Cron/Task/AskUserQuestion）与模型目录规则 |
 | **`P6E-EMBEDDED-MODEL-CATALOG.md`** | **包内内嵌的完整模型目录（13 模型 / 1M 上下文 / 7 条推理路径）** |
 | `P6F-EMBEDDED-RELEASE-MANIFESTS.md` | 内嵌的 Claude Code 2.1.299 与 SSH 发布清单（含签名方案） |
+| `P6G-CAI-CODEGEN-FLAGS.md` | 191 个 cai_* 实验代号的影响域反查 |
 | `P4D-LOCALSESSIONS-CAPABILITIES.md` | LocalSessions 329 方法的 13 域能力分类 |
 | `P7B-STATE-TRANSITIONS.md` | 状态迁移的静态可推导规则（后台节流五条件） |
 | `P7-STATIC-LIFECYCLE.md` | 启动/任务/退出/恢复的代码级时序 |

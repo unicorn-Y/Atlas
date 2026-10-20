@@ -1,0 +1,38 @@
+[
+ {
+  "file": "smol-bin.x64.vhdx",
+  "bytes": 37748736,
+  "sha256": "0f9f581618c0f7cb44debaf4c8798f583acfd0ca0bc55eb2a25d2f54dc969a79",
+  "type": "VHDX (FAT32, SDK_DAEMON)"
+ },
+ {
+  "file": "claude-shim",
+  "bytes": 2351288,
+  "sha256": "833b916d5fd04680e791ed4004ff3139f87ce7c104c884a396d0b8c16cd39e62",
+  "type": "ELF-x86-64"
+ },
+ {
+  "file": "cli-wrapper",
+  "bytes": 2400440,
+  "sha256": "190af431551fe66122c5e11e349d07530e85ef1cc4e186ca989c7a3c0c0c571f",
+  "type": "ELF-x86-64"
+ },
+ {
+  "file": "sandbox-helper",
+  "bytes": 2199736,
+  "sha256": "dc7f07d5edf118d158c47f8569ee28b3d9a14b07ff9a0e339d3e4230cf094504",
+  "type": "ELF-x86-64"
+ },
+ {
+  "file": "sdk-daemon",
+  "bytes": 16703672,
+  "sha256": "c04a63dfbe3170704c45ae006077cd31372952d397487f4ff9e8d0f2b9c2ed0b",
+  "type": "ELF-x86-64"
+ },
+ {
+  "file": "srt-settings.json",
+  "bytes": 1145,
+  "sha256": "9c57982fd45a86b39caa70afc392579d4a3914caa74bb6b79d75e895661c984d",
+  "type": "JSON"
+ }
+]

@@ -177,6 +177,29 @@ Windows SCM (CoworkVMService, localSystem, auto)
 
 ---
 
+## L9b — 代码执行沙箱（`smol-bin.x64.vhdx`）
+
+**是什么**：一个随包交付的 32 MiB FAT32 虚拟磁盘（卷标 `SDK_DAEMON`，creator `claude-vm`），
+承载 Agent SDK 的执行沙箱根文件系统。
+
+**在哪里**：`app/resources/smol-bin.x64.vhdx`（37,748,736 B，SHA256 `0f9f5816…`）
+
+**里面有什么**（5 个文件，全部解出）：
+
+| 文件 | 大小 | 作用 |
+|---|---:|---|
+| `sdk-daemon` | 16,703,672 | Go 1.25.14；`AskClaude` 入口 + HTTP/HTTPS 代理栈 + SocketPath |
+| `cli-wrapper` | 2,400,440 | Go 1.25.14；CLI 启动包装 |
+| `claude-shim` | 2,351,288 | Go 1.25.14；伪装 `claude`，转发到 `/run/coworkd/ask-claude.sock`，只许 `claude -p` |
+| `sandbox-helper` | 2,199,736 | Go 1.25.14；`usage: sandbox-helper <uid> <gid> <command>`，施加 **seccomp BPF** |
+| `srt-settings.json` | 1,145 | 出网白名单 + MITM 代理 + 文件系统策略 |
+
+**调谁**：沙箱内代码 → `claude-shim` → unix socket → `sdk-daemon` → 宿主/网络（受 `srt-settings.json` 约束）。
+
+**关键约束**：网络只允许 npm/yarn/PyPI/crates/GitHub/Ubuntu 源/Anthropic；文件系统 `allowWrite: ["/"]` 但禁读 `/run/systemd/resolve`、`/run/dbus`；`claude` 调用被收窄为单轮提示。
+
+---
+
 ## L11 — 云端边界（`CLOUD-UNAVAILABLE`）
 
 | 端点 | 用途 |
