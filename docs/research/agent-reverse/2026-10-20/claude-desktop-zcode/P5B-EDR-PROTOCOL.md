@@ -91,12 +91,32 @@ ResourcePath       ← 资源路径
 | `coworkEDRIntegration`（开关） | `pipe.readEdrPolicy` 是否启用 |
 | `coworkEDRIntegrationVendor`（厂商 ID） | `edrpolicy.VendorID` / `expectedVendor` 字段 |
 
-## 7. 仍未取到的点（诚实）
+## 7. 注册表值名已定位（指令级，S）
+
+对 `pipe.readEdrPolicy`（入口 `0x14050ee40`，608 B）做 LEA 目标解析，得到两条关键字符串：
+
+| LEA 目标 VA | 解出的字符串 |
+|---|---|
+| `0x14072d376` | **`SOFTWARE\Policies\Claude`** |
+| `0x1407278fe` | **`coworkEDRIntegration`** |
+| `0x14072fc1d` | **`coworkEDRIntegrationVendor`** |
+
+**结论**：注册表值名**就是 GrowthBook flag 名本身**。即：
+
+```
+HKLM\SOFTWARE\Policies\Claude
+   ├─ coworkEDRIntegration        (REG_SZ, 开关)
+   └─ coworkEDRIntegrationVendor  (REG_SZ, 厂商 ID)
+```
+
+这是一个非常干净的设计：**策略键名与产品 flag 名统一**，运维只需看一套命名。也印证了 `edrpolicy.ParseVendorID` / `ParseHostPath` 的存在（后者可能来自同一键下的其它值）。
+
+## 8. 仍未取到的点（诚实）
 
 | 项 | 原因 |
 |---|---|
-| 注册表**值名**的字面量 | 值名以打包字符串池形式存储，未在 `.rdata` 中作为独立可读串出现；需对 `readEdrValue` 的 LEA 目标做指令级读取 |
 | `Refusal.code` 的枚举全集 | 需要 `NewRefusal` 的调用点逐个读立即数 |
 | EDR 扩展二进制的加载格式 | `InstallArgs` 存在，但扩展本身的 PE/MSI 结构未定 |
+| `HostPath` 对应的注册表值名 | 本次 7 个 LEA 目标里未出现，可能在 `readEdrValue` 的另一分支 |
 
 这三条已记录在 `12-UNKNOWN-AND-BLOCKERS.tsv`（U-009 保留为 PARTIAL，附上述具体子项）。

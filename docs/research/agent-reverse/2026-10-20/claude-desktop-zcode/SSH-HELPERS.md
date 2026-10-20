@@ -179,3 +179,37 @@ ssh -o ProxyCommand="claude-ssh-proxy <file>"
   the `cannot encode the request` / `unreadable answer from the relay` error
   paths prove the payload is encoded (likely JSON given the module's use of
   `encoding/json`, but not verified).
+
+---
+
+## 补充：broker 的进程结构与身份校验（pclntab 级）
+
+`claude-ssh-broker.exe` 的 `main` 包共 **31 个函数**，全部可命名：
+
+| 函数 | 入口 | 大小 | 职责 |
+|---|---|---:|---|
+| `main.listenOwnerOnly` | `0x1400fbb20` | 320 | **只允许属主连接**的监听 |
+| `main.currentUserSid` | `0x1400fbd00` | 160 | 取当前用户 SID |
+| `main.clientIdentity` | `0x1400fbda0` | **1,440** | **校验客户端身份**（最大函数之一） |
+| `main.parentTable` | `0x1400fc380` | 544 | **父进程表**（判断调用者父进程合法性） |
+| `main.imageAndCreation` | `0x1400fc600` | 704 | 取进程映像路径与创建时间 |
+| `main.selfCreated` | `0x1400fbc60` | 160 | 判断是否为自身创建 |
+| `main.run` | `0x1400fc960` | 1,664 | 主循环 |
+| `main.serve` | `0x1400fd320` | 1,376 | 服务循环 |
+| `main.(*connTable).put/drop/answer/closeAll` | — | 256/224/**480**/288 | **连接表**：登记、移除、**应答**、全关 |
+| `main.(*lineWriter).write` | `0x1400fddc0` | 416 | 行写出 |
+| `main.heldConn.*` | — | 96–160 | 被挂起的连接（带 deadline） |
+
+### 三条可确认的安全设计
+
+1. **`listenOwnerOnly` + `currentUserSid`** —— 管道只允许**同属主**连接（不是任意同机用户）。
+2. **`clientIdentity` + `parentTable` + `imageAndCreation`** —— 不仅校验客户端进程，还检查**父进程链**与映像创建时间，用于识别伪造。
+3. **`connTable.answer`** —— 连接被"挂起等待应答"是有状态的（`heldConn` + deadline），说明交互是**请求-应答**而非纯转发。
+
+### 帧上限的诚实结论
+
+对 `main.serve`（1,376 B）与 `main.run`（1,664 B）做了 `cmp reg, imm32` 全扫描，只得到若干**非整数常量**（`0x15a068`、`0x1b1a36`、`0x1b223f` 等），它们是偏移/类型指针而非尺寸上限。
+
+因此 **`helper frame over cap` 的上限值不在代码里内联**，而是存放在数据段的可变参数（很可能来自配置或 `bufio.Scanner` 的 max token size 默认值）。
+
+**`U-035` 保持 PARTIAL**，不做编造。要得到具体数值需对该比较点做动态调试或更深的数据流分析。
