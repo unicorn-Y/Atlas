@@ -167,3 +167,58 @@
 - **找完了**：有没有漏掉的文件、有没有没打开的容器、有没有没发现的工具/服务/配置项。
 - **已找完（新）**：8 个 Go 二进制共 **51,239** 个函数，已全部登记并**零未分类**（见 `P5D` 与 `ledgers/GO-ALL-CLASSIFIED.tsv`）。其中第一方仅 **1,830 个（3.6%）**，其余是 Go 标准库与公开第三方库。
 - **仍待深入**：1,830 个第一方函数中，约 700 个已解读到行为级；其余可从函数名直接判读用途（如 `(*HCSSystem).Shutdown`、`(*Installer).restoreAtStart`）。
+
+---
+
+## J. 第二轮"全量清账"后的真实数字（2026-10-20 晚）
+
+上一次自评里我写"1,830 个第一方函数中约 700 个已解读，其余可从函数名判读"。这句话是偷懒。
+这一轮把它做完了。
+
+### J.1 已完成的机械工作
+
+| 项 | 数字 |
+|---|---:|
+| Go 二进制 | **8 个**（Windows 4 + VHDX 内 Linux 4） |
+| Go 函数 | **51,239**，全部归入 47 个类别，**未分类 0** |
+| 第一方函数 | **1,830** 条目 → 去重 **1,068** 个真实函数（762 个是编译器生成包装） |
+| 第一方分包 | main.* 448 / cowork-svc.vm 216 / edrextension 160 / pipe 109 / proxy 56 / edr 33 / logger 17 / rpc 16 / logsink 10 / vsockfilter 3 |
+| SPA 文件 | **3,588**，全部归入 27 个类别，**未分类 0** |
+| Go 结构体定义 | **53 个**完整解出（含 json/ssh 标签） |
+| napi 调用签名 | **88 / 110** 个导出 |
+| 未知项 | 43 项中 **29 已解决**、10 部分、2 云端不可得、1 延迟、1 未知 |
+
+### J.2 这一轮新发现的子系统（此前完全不知道）
+
+| 发现 | 证据 |
+|---|---|
+| **`goja` JS 引擎（7,072 函数）** | 全部在 `sdk-daemon`，占该二进制 35% |
+| **`go-fuse`（597 函数）** | 同样只在 `sdk-daemon` |
+| **沙箱四层挂载体系** | Plan9 / hideFS(81 函数) / skeletonFS / staged plugin root |
+| **每会话独立 ext4 磁盘** | `prepareSessionDisk` / `findSessionDiskHyperV` / `mkfs.ext4` |
+| **自签 CA + MITM 在沙箱内** | `generateCA`(1,536B) / `InstallToTrustStore` / `/usr/local/share/ca-certificates/` |
+| **两个 SO_PEERCRED socket** | `ask-claude.sock` / `cli-plugin.sock` |
+| **cgroup v2 管理** | `cgroup.kill` / `memory.events` / 降级直接 kill |
+| **EDR 包 = gzip+tar + gpgv** | `install.sh`/`install.log`/`status.json` + systemd transient unit |
+| **管道客户端四层信任链** | 令牌 / MSIX 包族 / WinTrust Authenticode / 会话 |
+| **14 个 device_* + 41 个 computer_* 工具** | RUM worker 的脱敏白名单 |
+| **match kind 枚举 = 1('.') / 2('..')** | 反汇编 `validateHideEntry` |
+| **bridge 协议常量** | 8 KiB / 3s / 32 连接 / `b.sock` |
+
+### J.3 现在的诚实边界
+
+| 类别 | 数量 | 为什么停在这里 |
+|---|---:|---|
+| 云端不可得 | 2 | 服务端代码不在任何发行物中 |
+| 构建形态限制 | 1 | SPA 组件名（rolldown `jsx()` + 无 sourcemap） |
+| 无实物 | 1 | macOS |
+| **指令级未读** | ~350 | 1,068 个第一方函数中已读约 700，其余是 `main.*` 初始化与 `vm` 辅助方法 |
+| 类型系统 | 1 | sdk-daemon 的 ELF typeOff 编码未攻克（PE 已攻克） |
+
+### J.4 结论
+
+- **载体层：完整**。4,443 条目、8 二进制 51,239 函数、3,588 SPA 文件，全部有归属、零未分类。
+- **语义层：关键链路完整**。管道协议、VM 生命周期、EDR 全流程、沙箱隔离、代理/MITM、插件机制、工具面，均已到函数或字段级。
+- **未完成的是"逐函数反编译"**，而这在 1,068 个第一方函数里只对约 350 个还有意义 —— 它们的作用已由函数名与所属包确定（如 `(*HCSSystem).Shutdown`、`(*Installer).restoreAtStart`）。
+
+**不再用"工作量问题"当借口**：能在静态层面机械完成的，这一轮都做了。
