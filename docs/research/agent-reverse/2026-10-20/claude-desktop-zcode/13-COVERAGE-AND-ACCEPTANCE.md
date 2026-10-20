@@ -56,6 +56,8 @@
 | GrowthBook 实验开关 | **237**（136 命名 + 57 cai_ 代号 + 44 __gb__ 数字） |
 | SPA chunk 依赖图 | **3,548 chunk / 46,892 边 / 1,517 懒加载** |
 | 内置工具 | **19**（Bash/Read/Write/Edit/Glob/Grep/Task/TodoWrite/WebFetch/WebSearch/AskUserQuestion/NotebookEdit/ExitPlanMode/Skill/Cron×3/ScheduleWakeup/Artifact） |
+| 内嵌模型目录 | **13 模型 / 5 surface / 7 推理路径**（version 2313，7 天有效期） |
+| 内嵌发布清单 | **2 份**（Claude Code 2.1.299 · SSH helper 683cc6a9） |
 | napi 原生导出 | **110** |
 | BLE / EDR / 语音 / SSH | 均已定性（见 P2B / P5B / P6B / SSH-HELPERS） |
 | `webContents` 原生事件 | 60（非 IPC，无需配对） |
@@ -100,11 +102,11 @@
 
 | 状态 | 数量 | 类别分布 |
 |---|---:|---|
-| RESOLVED（本轮内已解决） | **19** | 3 个 WASM 身份、gated-imports、scc.json、handleEvent 事件名、帧协议/10MiB/100MiB、handlePassthrough 目标、nodeHost vs directMcpHost |
-| PARTIAL（部分解释） | 8 | 代号服务、SPA 组件树、两版 diff、Claude Code CLI 参数等 |
+| RESOLVED（本轮内已解决） | **22** | 3 个 WASM 身份、gated-imports、scc.json、handleEvent 事件名、帧协议/10MiB/100MiB、handlePassthrough 目标、nodeHost vs directMcpHost |
+| PARTIAL（部分解释） | 9 | 代号服务、SPA 组件树、两版 diff、Claude Code CLI 参数等 |
 | CLOUD-UNAVAILABLE | 2 | 服务端 agent loop、1P 远程 UI |
 | DEFERRED（形态受限） | 1 | SPA 组件名不可恢复（无 sourcemap） |
-| UNKNOWN | 2 | SSH 中继管道路径、代号服务含义 |
+| UNKNOWN | 0 | — |
 | **合计** | **35** | — |
 
 ## 9. 独立审计（从原始包重新生成，不看本报告结论）

@@ -81,7 +81,17 @@ HCS (CreateComputeSystem / HVSocket)
   + edrgate / edrpolicy            ← 第三方 EDR 接入
 ```
 
-### 5. 技能不由 Desktop 执行
+### 5. 模型目录与 CLI 清单都在包里
+
+包内内嵌三份 JSON 快照：
+
+- **模型目录**（version 2313，2026-10-15 签发，7 天有效期）：5 个 surface、13 个模型（含 `claude-opus-5-5`、`claude-fable-5-1`）、每模型 1M 输入/128K 输出、effort 五档、`offered_on` 七条推理路径。
+- **Claude Code 2.1.299 发布清单**：commit `c416f56`、8 平台二进制大小与 sha256（win32-x64 为 95.7 MB）、签名算法 `RSASSA-PKCS1-v1_5-SHA512`。
+- **SSH helper 清单**：版本 `683cc6a9…`，六平台。
+
+所以"客户端不知道有哪些模型"是错的 —— **它知道得非常具体，只是带有效期，过期要刷新**。
+
+### 6. 技能不由 Desktop 执行
 
 Desktop 打包了 6 个 `.skill`（docx/pptx/xlsx/pdf/pdf-reading/frontend-design），但通过环境变量把它们交给 CLI：
 
@@ -152,6 +162,10 @@ CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL
 | `P6B-VOICE-PIPELINE.md` | 语音链路（包内无 ASR/TTS，只有采集与播放胶水） |
 | `P6C-GROWTHBOOK-FLAGS.md` | **237 个 GrowthBook 开关的完整白名单** |
 | `P6D-TOOLS-AND-CATALOG.md` | 内置工具清单（含 Cron/Task/AskUserQuestion）与模型目录规则 |
+| **`P6E-EMBEDDED-MODEL-CATALOG.md`** | **包内内嵌的完整模型目录（13 模型 / 1M 上下文 / 7 条推理路径）** |
+| `P6F-EMBEDDED-RELEASE-MANIFESTS.md` | 内嵌的 Claude Code 2.1.299 与 SSH 发布清单（含签名方案） |
+| `P4D-LOCALSESSIONS-CAPABILITIES.md` | LocalSessions 329 方法的 13 域能力分类 |
+| `P7B-STATE-TRANSITIONS.md` | 状态迁移的静态可推导规则（后台节流五条件） |
 | `P7-STATIC-LIFECYCLE.md` | 启动/任务/退出/恢复的代码级时序 |
 | `P7-STATIC-STATE-AND-EVENTS.md` | 状态机（127 个枚举）与事件通道 |
 

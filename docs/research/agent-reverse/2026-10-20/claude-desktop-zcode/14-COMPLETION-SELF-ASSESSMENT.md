@@ -72,6 +72,7 @@
 | SPA 组件名 | rolldown 以 `jsx()` 编译 + 标识符压缩，且无 sourcemap；信息已丢失 |
 | GrowthBook `__gb__` 数字对应的原名 | 单向哈希 |
 | 各 flag 的实际生效值 | 需登录后服务端响应 |
+| （已修正）模型目录内容 | ~~服务端独有~~ → **包内已内嵌**，见 `P6E` |
 | Consumer（Squirrel）线最新版 | `region_unavailable` 挡住下载 |
 | macOS 版 | 无实物 |
 | Claude Code CLI 参数全集 | CLI 本体由 downloads.claude.ai 分发，不在包内 |
