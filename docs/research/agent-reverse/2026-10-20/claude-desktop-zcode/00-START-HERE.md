@@ -132,7 +132,7 @@ CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL
 | ASAR 路径登记 | **548 / 548**（506 文件 + 42 目录） | ✅ |
 | ASAR JS 解析 | **435 ok / 437**（2 个 `.d.ts` 已解释） | ✅ 99.5%，剩余已解释 |
 | 内置 SPA JS 解析 | **3,588 / 3,588**，0 失败 | ✅ 100% |
-| Go 函数登记 | **23,018 / 23,018**（4 个二进制） | ✅ 100% |
+| Go 函数登记 | **51,239 / 51,239**（8 个二进制：含 VHDX 内 4 个 Linux 二进制） | ✅ 100%，**未分类 0** |
 | PE 二进制 | **18 / 18**（含签名与版本资源） | ✅ |
 | 技能内部文件 | **188 / 188**（6 个 ZIP） | ✅ |
 | RPC 条目配对 | **1,332 / 1,332** | ✅ 0 未配对 |
@@ -170,6 +170,7 @@ CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL
 | `P4B-CODENAME-SERVICES.md` | 代号服务释义 + Simulator/Launch 完整能力表 |
 | `P4C-SENDMESSAGE-SCHEMA.md` | `sendMessage` 17 参数的字段级语义 |
 | `P5-NATIVE-SERVICE-VM.md` | Go 服务 15,181 函数、管道 RPC、VM 依赖架构 |
+| **`P5D-ALL-GO-FUNCTIONS.md`** | **8 个 Go 二进制、51,239 个函数的零未分类账本** |
 | `P5B-EDR-PROTOCOL.md` | 第三方 EDR 接入协议（策略源、门控顺序、三态回答） |
 | **`P5C-SMOL-BIN-VHDX-SANDBOX.md`** | **包内 37.7MB VHDX = 完整代码执行沙箱（SDK_DAEMON 根文件系统）** |
 | `P6-EXTENSIONS-TOOLS-SKILLS.md` | 6 技能、MCP、7 个可用 worker、1,062 环境变量 |
