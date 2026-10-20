@@ -87,7 +87,7 @@ P1 原文写「主窗口 UI 是远程的」，依据是 `main_window/index.html`
 1. 对 `assets/v1/*.js` 建立模块/符号索引（与主进程 chunk 同等深度）；
 2. 识别路由表（SPA 内部 router）、页面组件、状态管理；
 3. 找出 SPA → `app://`/eipc 的桥接点（它如何调用 97 个 eipc 服务）；
-4. 3 个 `.wasm` 的用途（最大 8.25 MB）；
+4. 3 个独立 `.wasm` 的用途（最大 8.25 MB）——**另有第 4 个以 base64 内联在 `assets/wasm-*.js`（Oniguruma 正则引擎）**，见 `P6H`；
 5. `_frame-rt/_runtime/artifact.*.js` 与 `frame-shell.html` 的 Artifact 渲染沙箱实现。
 
 ## 6. 证据
