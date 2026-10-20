@@ -95,11 +95,12 @@
 
 | 状态 | 数量 | 类别分布 |
 |---|---:|---|
-| RESOLVED（本轮内已解决） | **10** | 3 个 WASM 身份、gated-imports、scc.json、handleEvent 事件名、帧协议/10MiB/100MiB、handlePassthrough 目标、nodeHost vs directMcpHost |
-| PARTIAL（部分解释） | 13 | 代号服务、SPA 组件树、两版 diff、Claude Code CLI 参数等 |
+| RESOLVED（本轮内已解决） | **14** | 3 个 WASM 身份、gated-imports、scc.json、handleEvent 事件名、帧协议/10MiB/100MiB、handlePassthrough 目标、nodeHost vs directMcpHost |
+| PARTIAL（部分解释） | 8 | 代号服务、SPA 组件树、两版 diff、Claude Code CLI 参数等 |
 | CLOUD-UNAVAILABLE | 2 | 服务端 agent loop、1P 远程 UI |
-| UNKNOWN | 5 | 若干构建标记与小文件语义 |
-| **合计** | **31** | — |
+| DEFERRED（形态受限） | 1 | SPA 组件名不可恢复（无 sourcemap） |
+| UNKNOWN | 2 | SSH 中继管道路径、代号服务含义 |
+| **合计** | **32** | — |
 
 ## 9. 独立审计（从原始包重新生成，不看本报告结论）
 
@@ -147,9 +148,9 @@
 
 | 项 | 工作量估计 | 价值 |
 |---|---|---|
-| `ion-dist` 3,588 文件的 React 组件树展开 | 大 | 高（这是完整的 Chat UI 代码） |
+| ~~`ion-dist` React 组件树展开~~ | — | **受限**：组件名在压缩+jsx() 编译下不可恢复；改为可做的 chunk 级代码分割图 |
 | `cowork-svc` 15,181 函数中的关键 handler 逐指令反汇编 | 中 | 高（协议字节序、10 MiB 上限） |
-| 2.42304.0 MSIX vs 2.42304.2 nupkg 逐文件 diff | 小 | 中（同代补丁差异） |
+| ~~2.42304.0 vs 2.42304.2 逐文件 diff~~ | — | **已完成**：见 `VERSION_DELTA.md`，唯一实质变化是 nodeHost CA 屏蔽 |
 | `nodeHost` vs `directMcpHost` 逐行 diff | 小 | 中 |
 | 5 个代号服务（GrandPrix/ForgeState/Gorse/ViolinFret/WebBuild）的调用方追踪 | 中 | 中 |
 | 3P 模式下的完整 UI → RPC 映射（因 SPA 已在包内，可静态做） | 大 | 高 |
