@@ -2,7 +2,7 @@ id	category	object	status	evidence_level	reason	how_to_resolve
 U-001	cloud	claude.ai 服务端 agent loop 实现	CLOUD-UNAVAILABLE	U	服务端代码不在安装包内，且按新规不连接 API	仅能通过官方文档（D 级）间接了解；客户端侧请求/响应形状已在 P4 记录
 U-002	cloud	1P 模式下的聊天 UI 组件树	CLOUD-UNAVAILABLE	U	1P 从 claude.ai 加载远程 SPA，本地无该代码	在 3P 模式下改用本地 ion-dist，可静态分析（部分已做：ION-MODULES/ROUTES）
 U-003	cloud	模型目录（catalog.json）实际内容	U	U	仅见下载 URL，包内无缓存	该文件由服务端下发；形状可从 schema.json URL 推断但未取得
-U-004	code	Simulator 服务（54 方法）的业务目标	PARTIAL	S/U	方法名全部已知，业务目标仍未从代码定位到注释/常量	继续在 index.chunk 中追踪 attach/detach 调用点
+U-004	code	Simulator 服务（54 方法）的业务目标	RESOLVED	S	已确定：把 iOS/Android 模拟器作为**原生面板嵌入主窗口的指定 pane**（nativeViewMount 带 targetWindowId+pane），支持折叠屏角度、无障碍树读取、手势/剪贴板/编辑注入、游标分页日志、录屏取证、DPI 坐标换算。不是截图流而是双向可控设备面板	—
 U-005	code	内部代号服务与实验的含义	PARTIAL	S	已解：GrandPrix=密码管理器配对；Gorse=记忆迁移；ForgeState/GitState=状态快照；WebBuild=commit上报；Simulator=iOS/Android模拟器；ViolinFret=**无人值守工具调用同意流程**(Unset/Accepted + confirmUnattendedConsent)；Baku=API路由命名空间(/v1/code/baku/sessions)；YukonSilver=VM出网与工具权限配置(yukon_silver_egress_templates/tool_perms/cuttlefish_ditto_prompt/octopus_prompt)。**未解**：57个cai_*实验代号、44个__gb__哈希键、Epitaxy产品定位	cai_*/__gb__ 需服务端配置；Epitaxy 需追踪路由挂载
 U-006	code	handleEvent 的完整事件名枚举	RESOLVED	S	7 个事件已从指令级 cmp/memequal 恢复：exit / error / ready / stderr / stdout / networkStatus / apiReachability；startupStep 已被证伪（实为 step 字段）	—
 U-007	code	cowork-svc 帧协议字节序与 10 MiB 上限	RESOLVED	S	大端已由 bigEndian itab 证明；管道上限 0xa00000=10MiB；guest vsock 上限 0x6400000=100MiB；越界报错文本已定位	—
@@ -14,7 +14,7 @@ U-012	code	nodeHost 与 directMcpHost 的运行时差异	RESOLVED	S	nodeHost=本
 U-013	code	Claude Code CLI 的完整参数集	U	U	参数在主进程运行期组装，CLI 本体不在包内（由 downloads.claude.ai 分发）	需取得对应版本 CLI 包（claude-code-releases）
 U-014	code	store 镜像（getState/update<X>Store）的主从方向	RESOLVED	S	单向：渲染层是主。宿主提供 getState/getStateSync（同步读）与 getInitial<X>State；渲染层调用 dispatch() 用 update<X>Store 经 send 推给宿主。每次 setImplementation 会先 removeHandler/removeAllListeners 再重注册，避免热切换重复	—
 U-015	runtime	各状态迁移的真实触发时序	U	U	按新规不做动态观测	已归类为 out-of-scope，不影响静态验收
-U-016	packaging	consumer（Squirrel）线最新版本	U	U	claude.ai 下载端点返回 region_unavailable	需在允许地区网络下访问
+U-016	packaging	consumer（Squirrel）线最新版本	PARTIAL	S	官方 RELEASES 端点实测可用（HTTP 200，78 行，40 个 full 包），**最新 = 0.14.10**（131,185,172 B，与本地 nupkg 字节数一致）。**仍缺**：MSIX/Store 线的最新版本，被 region_unavailable 挡住	需允许地区网络访问 claude.ai/download
 U-017	packaging	macOS 版差异	U	U	未取得 macOS 实物	不得以 Windows 推断 macOS
 U-018	packaging	2.42304.2 nupkg 与 2.42304.0 MSIX 的逐文件 diff	RESOLVED	S	已完成。31 个同路径文件差异中 30 个是构建噪声（含 package.json 仅版本号 1 字符、manifest 仅 agentSkillsRef）；唯一实质变化是 nodeHost.js +2,078 B：新增 18 个根证书 SPKI 屏蔽 + 同步耗时追踪。新增的 6 个资源项是 asar packed/unpacked 打包方式差异，非内容新增。详见 VERSION-DELTA.md	—
 U-019	code	ion-dist 中 audio/voice 的语音引擎	RESOLVED	S	**包内无 ASR/TTS 引擎**。audio/voice 是 27 个文件：1 个 audioSinkWorklet.js(AudioWorklet 播放端) + 26 个 mp3 试听音频(5 种音色 airy/buttery/glassy/mellow/round)。全包无 SpeechRecognition/speechSynthesis/whisper/vosk 符号。语音=本地采集+云端ASR/TTS+本地播放	—
