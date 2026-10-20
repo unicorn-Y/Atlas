@@ -6,7 +6,15 @@
 **固定样本**：Claude Desktop Windows x64 enterprise **2.42304.0**  
 **MSIX SHA256**：`2bf309665f0de4eaa76a7e64033594e6f73ceb6413c60080f72f3ce640fa24ee`  
 **执行模式**：纯静态离线逆向（任务书 commit `3e2b27b9` 纠偏后）  
-**总体状态**：**PARTIAL**
+**总体状态**：**PARTIAL（静态可拆部分已到边界）**
+
+| 未解项状态 | 数量 |
+|---|---:|
+| RESOLVED | 23 |
+| PARTIAL（已解释主体，剩细节） | 8 |
+| CLOUD-UNAVAILABLE（物理不可得） | 2 |
+| DEFERRED（构建形态限制） | 1 |
+| U（完全未知） | 1（macOS 版差异，无实物） |
 
 ---
 

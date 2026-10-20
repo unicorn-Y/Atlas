@@ -72,6 +72,7 @@ const SECTIONS = [
   ['unknown','未解清单'],
   ['gb','GrowthBook Flags'],
   ['chunks','SPA Chunk 图'],
+  ['models','模型目录'],
 ];
 
 function overview(){
@@ -224,6 +225,15 @@ function chunksView(){
 <table><thead><tr><th>chunk</th><th>字节</th><th>fan-in</th><th>fan-out</th><th>加载</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+function modelsView(){
+  const rows=D.models.map(m=>`<tr><td class="mono">${esc(m.id)}</td><td>${esc(m.name)}</td>
+<td class="mono">${(m.in||0).toLocaleString()}</td><td class="mono">${(m.out||0).toLocaleString()}</td>
+<td class="mono">${esc(m.eff||'—')}</td></tr>`).join('');
+  return `<h2>内嵌模型目录（${D.models.length}）</h2>
+<div class="sub">来自包内内嵌快照 version 2313 · issued 2026-10-15 · expires 2026-10-22</div>
+<table><thead><tr><th>模型 id</th><th>名称</th><th>最大输入</th><th>最大输出</th><th>默认 effort</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
 function renderNav(){
   const q = document.getElementById('search').value.trim().toLowerCase();
   let h = '';
@@ -250,6 +260,7 @@ function show(key){
   else if (key==='flags') content.innerHTML = flagsView();
   else if (key==='env') content.innerHTML = envView();
   else if (key==='unknown') content.innerHTML = unknownView();
+  else if (key==='models') content.innerHTML = modelsView();
   else if (key==='gb') content.innerHTML = gbView();
   else if (key==='chunks') content.innerHTML = chunksView();
   content.scrollTop = 0;
