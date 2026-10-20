@@ -360,3 +360,54 @@ findVirtioConsolePath / openConsole / openDevice / startConsole
 | `edrextension` 的具体 EDR 厂商协议 | 有 `verify`/`Installer`/`systemd`，但厂商 ID 与扩展包格式未定 |
 | `vsockfilter` 的 3 个函数 | 未展开 |
 | PAC 内置函数集（`installPACBuiltins`） | 未列出具体函数名 |
+
+### 9.8 `sandbox-helper` 的机制（9 个 main 函数 + 字符串，S）
+
+```
+main.ParseArgs                 解析 <uid> <gid> <command> [args...]
+main.validateMountPoint        校验挂载点
+main.postUnshareMountFixup     unshare 之后的挂载修补
+main.BuildSrtCommand           构造 srt 命令
+main.quoteForSrt               为 srt 转义参数
+main.fatal
+main.main / main.init.0
+```
+
+关键字符串（原文）：
+
+```
+/usr/local/lib/node_modules_global/bin/srt      ← 真实可执行的 srt
+exec srt for %s
+cli-plugin requires --settings (SRT supplies the pi…)
+cli-plugin srt settings missing
+/etc/srt-settings.base.json
+--no-srt
+--die-with-parent
+--unshare-pid
+failed to unshare mount/ipc namespaces
+post-unshare mount fixup
+to make mounts slave
+/mnt/.virtiofs-root/shared
+failed to unmount virtiofs host share at %s: %v (errno %d)
+no Plan9 drive shares mounted under %s
+size=64m,mode=0700,uid=%d,gid=%d
+network allowlist config missing
+failed to set uid / failed to set gid
+failed to apply seccomp / assemble seccomp BPF
+remount /dev/mqueue
+/dev/shm
+```
+
+**机制还原（S）**：
+
+1. `sandbox-helper <uid> <gid> <cmd>` 启动；
+2. `unshare` **mount + ipc + pid** 命名空间；
+3. **post-unshare mount fixup**：把 mounts 设为 slave、挂 tmpfs 到 `/dev/shm`、重挂 `/dev/mqueue`；
+4. 挂载 virtiofs 主机共享到 `/mnt/.virtiofs-root/shared`，并校验 Plan9 盘挂载；
+5. `setgid`/`setuid` 降权；
+6. 施加 **seccomp BPF**；
+7. **`exec srt`**（`/usr/local/lib/node_modules_global/bin/srt`），并传入 `/etc/srt-settings.base.json`。
+
+**注意 `srt` 不在 VHDX 里** —— 它在沙箱运行时的全局 node_modules 中（由镜像/挂载提供），所以这个 VHDX 只是**启动器 + 策略模板**，真正的 `srt` 运行时是另外注入的。这解释了为什么 `srt-settings.json` 只有 1,145 字节：它是**基础模板**（`/etc/srt-settings.base.json`），实际策略会与之合并。
+
+**srt 的缩写含义仍未确定**（`U-038`），但它的作用已明确：**沙箱的实际执行器（sandbox runtime）**。
