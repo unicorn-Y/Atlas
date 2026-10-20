@@ -160,6 +160,7 @@ CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL
 |---|---|
 | `P0-PACKAGE-AUTHENTICITY.md` | 包真实性、哈希、嵌套容器 |
 | `P1-STATIC-CODE-INVENTORY.md` | 入口链、506 文件全归类、符号索引 |
+| `P0B-RESOURCE-CLASS-AUDIT.md` | 资源类（pak/pri/i18n/字体/图标/音频）逐类核对：均无隐藏逻辑 |
 | **`P1B-ION-DIST-CORRECTION.md`** | **199.5 MB 内置前端的发现与架构修正（必读）** |
 | `P1C-ION-SPA-STACK.md` | 内置 SPA 的技术栈（Base UI/TipTap/GrowthBook/Datadog）与 103 条路由 |
 | `P2-UI-AND-WINDOWS.md` | 26 个界面、99 菜单项、57 快捷键、15 个窗口构造点 |
