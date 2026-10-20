@@ -116,6 +116,47 @@ store：`grandPrixStatus`（初始状态由 `getInitialGrandPrixStatusState` 提
 
 `isJitlessForced` 值得注意：说明预览窗口可能以 **JIT-less V8** 运行（更严格的沙箱），与 Electron 的 `--js-flags=--jitless` 对应。
 
+
+### 7.1 Simulator 的完整能力（54 方法 + 11 事件，全部读自方法表）
+
+| 能力组 | 方法 |
+|---|---|
+| 设备生命周期 | `attach` / `detach` / `shutdown` / `startDevice` / `restartDevice` / `renameDevice` / `awaitQuitRestart` / `simulatorProcessRunning` / `listDevices(kind)` |
+| 显示与外观 | `getAppearance` / `setAppearance` / `getSlowAnimations` / `setSlowAnimations` / `displayPointsPerInch(windowId)` |
+| **原生视图嵌入** | `nativeViewMount` / `nativeViewUnmount` / `nativeViewSetBounds` / `nativeViewSetVisible` / `nativeViewSetOrientation` / `nativeViewStill` |
+| **折叠屏仿真** | `nativeViewSetBend` / `nativeViewFoldPlay` / `nativeViewFoldGo` / `nativeViewFoldConfirm` / `nativeViewFoldEnd`（事件 `nativeViewFold`、`hingeAngle`） |
+| 输入与手势 | `gesture(udid)` / `sendClipboard` / `getClipboard` / `editAction` |
+| **无障碍** | `describeAccessibility(udid)` / `requestDeviceConsent` / `requestDeviceToolsRepin` |
+| 截图与录屏 | `captureScreenshot` / `saveScreenshot` / `readCapture` / `deleteCapture` / `startRecording` / `stopRecording`（事件 `recordingEnded`） |
+| 日志 | `getLogEntries(udid)`（事件 `logEntries`） |
+| 环境准备 | `checkSetup` / `checkAndroidSetup` / `openXcode` / `openAppStore` / `openAndroidStudio` |
+| 快捷键认领 | `setEditShortcutsClaimed` / `setCaptureShortcutsClaimed` / `setKeyboardShortcutClaimed` / `setQuitShortcutClaimed` / `setZoomShortcutsClaimed` |
+| 埋点 | `panelViewed(kind)` / `setupStepChanged(kind)` / `setupCtaClicked(kind)` / `captureThumbnailAction(kind)` / `miniViewChanged(kind)` |
+
+事件：`captureShortcut` / `keyboardShortcut` / `quitShortcut` / `zoomShortcut` / `displayPointsPerInchChanged` / `logEntries` / `nativeViewFold` / `hingeAngle` / `recordingEnded` / `modelActivity` / `consentAskShown`。
+
+**这解释了那 54 个方法在做什么**：这是一套**完整的移动端模拟器集成**，包括：
+- 把模拟器画面作为**原生视图**嵌进 Electron 窗口（不是截图流，是 `nativeViewMount` + bounds/orientation 控制）；
+- **折叠屏设备仿真**（`setBend` + `hingeAngle` 事件 → 真实铰链角度）；
+- **无障碍树读取**（`describeAccessibility`），让模型能"看见"UI 元素而非像素；
+- 录屏与截图编辑。
+
+配合 GrowthBook 键 `iosSimulatorH264`、`iosSimulatorAccessibilityReader`、`iosSimulatorDuo`、`simulatorScreenshotEditor`、`simulatorMiniView`、`androidEmulator`，可以确认这是**一等公民功能**，不是实验残留。
+
+### 8.1 Launch 的完整能力（88 方法，节选按功能分组）
+
+| 组 | 方法 |
+|---|---|
+| 服务器生命周期 | `isAvailable` / `isJitlessForced` / `stopServer(serverId)` / `getLogs(serverId)` |
+| 预览窗口 | `showPreview` / `hidePreview` / `destroyPreview` / `refreshPreview` / `focusPreview` / `setPreviewChromeFocus` / `setPreviewPaneMounted` |
+| 远程预览 | `teardownRemoteSessionPreview` / `setRemoteSessionViewed` / `startRemoteBrowserPreview` |
+| 文件与文档 | `pickHtmlFile` / `openGdriveDocument` |
+| **Chrome 导入** | `getChromeImportAvailability` / `getCoworkChromeImportAvailability` / `listChromeImportProfiles` / `listChromeImportSites` |
+| 浏览数据 | `clearCoworkBrowserData` / `clearPreviewBrowsingData` |
+| 会话预览 | `ensureChatBlankPreview(conversationUuid)` |
+
+`isJitlessForced()` 说明预览服务可能以 **JIT-less V8** 运行（更严的沙箱），这也与 `W-VIEW` 的 `--js-flags=--jitless` 相符。
+
 ## 9. 仍保留为 PARTIAL 的代号
 
 | 代号 | 已知 | 未知 |
