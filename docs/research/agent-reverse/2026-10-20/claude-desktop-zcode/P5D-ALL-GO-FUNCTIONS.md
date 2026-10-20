@@ -156,3 +156,54 @@ index/GO-ALL-FUNCTIONS.tsv     51,239 行（binary/platform/index/function/entry
 index/GO-ALL-CLASSIFIED.tsv    51,239 行（+ class 列，零未分类）
 index/GO-CLASSIFICATION.json   按二进制与按类别的聚合统计
 ```
+
+---
+
+## 9. 附加成果：Go 结构体定义解码（53 个）
+
+在解决 `U-025` 的过程中，把 Go 的 `moduledata` 链条走通了：
+
+```
+pclntab 头 VA
+  → 在全镜像搜该 VA 的 8 字节指针 → moduledata
+  → moduledata + 352 = typelinks (int32[])
+  → types 基址（PE 上等于 .rdata 起点）
+  → typelink 值 + types 基址 = rtype 地址
+  → rtype+23 = kind（0x19 = struct）
+  → rtype+40 = nameOff（相对 types 基址）
+  → name 记录 = {bits uint16, 名称字节, 标签字节}
+```
+
+**成功解出 53 个完整结构体定义**（含字段名、类型、标签）：
+
+| 二进制 | 结构体数 |
+|---|---:|
+| `cowork-svc.exe` | 34 |
+| `claude-ssh-broker.exe` | 7 |
+| `claude-ssh-askpass.exe` | 7 |
+| `claude-ssh-proxy.exe` | 5 |
+
+### 几个有代表性的定义（原文）
+
+```go
+struct { ID string `json:"id"`; ResultJson string `json:"resultJson"`; Error string `json:"error"` }
+
+struct { Session []uint8; Type uint8; User string; Service string;
+         Method string; Sign bool; Algo string; PubKey []uint8 }     // SSH 签名请求
+
+struct { ApplicationDigest []uint8 `ssh:"rest"`; Flags uint8;
+         Counter uint32; MessageDigest []uint8 `ssh:"rest"` }        // SSH 计数器模式
+
+struct { Version int; P *big.Int; Q *big.Int; G *big.Int;
+         Pub *big.Int; Priv *big.Int }                              // DSA 密钥
+```
+
+**价值**：这些是从二进制直接恢复的**类型定义**，不是推断。`json:"id"` 这类标签证实了管道 JSON 协议里的字段名来源。
+
+### 局限（诚实）
+
+- **只对 PE（Windows）有效**：`sdk-daemon`（ELF）的 typelink 编码与 PE 不同，尝试了段起点、moduledata 指针扫描、64 万点暴力搜索三种方法，最高命中率仅 6/80，判定为不可用。
+- 4,618（cowork-svc）/ 4,809（sdk-daemon）个 typelink 里只有 **struct 类型**被解出，且只有**带可读名称的**才被提取（匿名结构体很多）。
+- 其余类型（map/slice/interface/func）未解。
+
+产物：`ledgers/GO-STRUCTS-ALL.tsv`（53 行）、`ledgers/STRUCTS-cowork-svc.txt`。

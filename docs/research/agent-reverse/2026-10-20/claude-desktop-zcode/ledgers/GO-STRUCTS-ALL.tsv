@@ -1,0 +1,54 @@
+binary	struct_definition
+claude-ssh-broker.exe	*struct { f func() bool; once sync.Once; valid bool; p interface {}; result bool }
+claude-ssh-broker.exe	*struct { f func() go.shape.bool; once sync.Once; valid bool; p interface {}; result go.shape.bool }
+claude-ssh-broker.exe	*struct { f func() json.encoderFunc; once sync.Once; valid bool; p interface {}; result json.encoderFunc }
+claude-ssh-broker.exe	*struct { f func(); once sync.Once; valid bool; p interface {} }
+claude-ssh-broker.exe	*struct { len int; buf [128]*runtime.mspan }
+claude-ssh-broker.exe	*struct { ptr interface {}; len int }
+claude-ssh-broker.exe	*struct {}
+claude-ssh-proxy.exe	*struct { f func() bool; once sync.Once; valid bool; p interface {}; result bool }
+claude-ssh-proxy.exe	*struct { f func() go.shape.bool; once sync.Once; valid bool; p interface {}; result go.shape.bool }
+claude-ssh-proxy.exe	*struct { f func(); once sync.Once; valid bool; p interface {} }
+claude-ssh-proxy.exe	*struct { len int; buf [128]*runtime.mspan }
+claude-ssh-proxy.exe	*struct {}
+claude-ssh-askpass.exe	*struct { f func() bool; once sync.Once; valid bool; p interface {}; result bool }
+claude-ssh-askpass.exe	*struct { f func() go.shape.bool; once sync.Once; valid bool; p interface {}; result go.shape.bool }
+claude-ssh-askpass.exe	*struct { f func() json.encoderFunc; once sync.Once; valid bool; p interface {}; result json.encoderFunc }
+claude-ssh-askpass.exe	*struct { f func(); once sync.Once; valid bool; p interface {} }
+claude-ssh-askpass.exe	*struct { len int; buf [128]*runtime.mspan }
+claude-ssh-askpass.exe	*struct { ptr interface {}; len int }
+claude-ssh-askpass.exe	*struct {}
+cowork-svc.exe	*struct { ApplicationDigest []uint8 "ssh:\"rest\""; Flags uint8; Counter uint32; MessageDigest []uint8 "ssh:\"rest\"" }
+cowork-svc.exe	*struct { Curve string; KeyBytes []uint8; Application string; Rest []uint8 "ssh:\"rest\"" }
+cowork-svc.exe	*struct { Curve string; KeyBytes []uint8; Rest []uint8 "ssh:\"rest\"" }
+cowork-svc.exe	*struct { E *big.Int; N *big.Int; Rest []uint8 "ssh:\"rest\"" }
+cowork-svc.exe	*struct { ID string "json:\"id\""; ResultJson string "json:\"resultJson\""; Error string "json:\"error\"" }
+cowork-svc.exe	*struct { KeyBytes []uint8; Application string; Rest []uint8 "ssh:\"rest\"" }
+cowork-svc.exe	*struct { KeyBytes []uint8; Rest []uint8 "ssh:\"rest\"" }
+cowork-svc.exe	*struct { N string }
+cowork-svc.exe	*struct { Name string; E *big.Int; N *big.Int }
+cowork-svc.exe	*struct { Name string; ID string; Key []uint8 }
+cowork-svc.exe	*struct { Name string; ID string; Key []uint8; Application string }
+cowork-svc.exe	*struct { Name string; KeyBytes []uint8 }
+cowork-svc.exe	*struct { Name string; KeyBytes []uint8; Application string }
+cowork-svc.exe	*struct { Name string; Nonce []uint8; Key []uint8 "ssh:\"rest\"" }
+cowork-svc.exe	*struct { Name string; P *big.Int; Q *big.Int; G *big.Int; Y *big.Int }
+cowork-svc.exe	*struct { P *big.Int; Q *big.Int; G *big.Int; Y *big.Int; Rest []uint8 "ssh:\"rest\"" }
+cowork-svc.exe	*struct { R *big.Int; S *big.Int }
+cowork-svc.exe	*struct { Salt string; Rounds uint32 }
+cowork-svc.exe	*struct { Session []uint8; Type uint8; User string; Service string; Method string; Sign bool; Algo string; PubKey []uint8 }
+cowork-svc.exe	*struct { Signature []uint8 "ssh:\"rest\"" }
+cowork-svc.exe	*struct { Version int; P *big.Int; Q *big.Int; G *big.Int; Pub *big.Int; Priv *big.Int }
+cowork-svc.exe	*struct { curve ecdh.Curve; hash crypto.Hash; nSecret uint16 }
+cowork-svc.exe	*struct { f func() []ssh.dhKEXGroup; once sync.Once; valid bool; p interface {}; result []ssh.dhKEXGroup }
+cowork-svc.exe	*struct { f func() bool; once sync.Once; valid bool; p interface {}; result bool }
+cowork-svc.exe	*struct { f func() go.shape.*uint8; once sync.Once; valid bool; p interface {}; result go.shape.*uint8 }
+cowork-svc.exe	*struct { f func() go.shape.bool; once sync.Once; valid bool; p interface {}; result go.shape.bool }
+cowork-svc.exe	*struct { f func() json.encoderFunc; once sync.Once; valid bool; p interface {}; result json.encoderFunc }
+cowork-svc.exe	*struct { f func(); once sync.Once; valid bool; p interface {} }
+cowork-svc.exe	*struct { in string; out string }
+cowork-svc.exe	*struct { io.Reader; io.WriterTo }
+cowork-svc.exe	*struct { keySize int; nonceSize int; aead func([]uint8) (cipher.AEAD, error) }
+cowork-svc.exe	*struct { len int; buf [128]*runtime.mspan }
+cowork-svc.exe	*struct { ptr interface {}; len int }
+cowork-svc.exe	*struct {}
