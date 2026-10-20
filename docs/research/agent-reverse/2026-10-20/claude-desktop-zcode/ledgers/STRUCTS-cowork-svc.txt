@@ -1,0 +1,34 @@
+*struct { ApplicationDigest []uint8 "ssh:\"rest\""; Flags uint8; Counter uint32; MessageDigest []uint8 "ssh:\"rest\"" }
+*struct { Curve string; KeyBytes []uint8; Application string; Rest []uint8 "ssh:\"rest\"" }
+*struct { Curve string; KeyBytes []uint8; Rest []uint8 "ssh:\"rest\"" }
+*struct { E *big.Int; N *big.Int; Rest []uint8 "ssh:\"rest\"" }
+*struct { ID string "json:\"id\""; ResultJson string "json:\"resultJson\""; Error string "json:\"error\"" }
+*struct { KeyBytes []uint8; Application string; Rest []uint8 "ssh:\"rest\"" }
+*struct { KeyBytes []uint8; Rest []uint8 "ssh:\"rest\"" }
+*struct { N string }
+*struct { Name string; E *big.Int; N *big.Int }
+*struct { Name string; ID string; Key []uint8 }
+*struct { Name string; ID string; Key []uint8; Application string }
+*struct { Name string; KeyBytes []uint8 }
+*struct { Name string; KeyBytes []uint8; Application string }
+*struct { Name string; Nonce []uint8; Key []uint8 "ssh:\"rest\"" }
+*struct { Name string; P *big.Int; Q *big.Int; G *big.Int; Y *big.Int }
+*struct { P *big.Int; Q *big.Int; G *big.Int; Y *big.Int; Rest []uint8 "ssh:\"rest\"" }
+*struct { R *big.Int; S *big.Int }
+*struct { Salt string; Rounds uint32 }
+*struct { Session []uint8; Type uint8; User string; Service string; Method string; Sign bool; Algo string; PubKey []uint8 }
+*struct { Signature []uint8 "ssh:\"rest\"" }
+*struct { Version int; P *big.Int; Q *big.Int; G *big.Int; Pub *big.Int; Priv *big.Int }
+*struct { curve ecdh.Curve; hash crypto.Hash; nSecret uint16 }
+*struct { f func() []ssh.dhKEXGroup; once sync.Once; valid bool; p interface {}; result []ssh.dhKEXGroup }
+*struct { f func() bool; once sync.Once; valid bool; p interface {}; result bool }
+*struct { f func() go.shape.*uint8; once sync.Once; valid bool; p interface {}; result go.shape.*uint8 }
+*struct { f func() go.shape.bool; once sync.Once; valid bool; p interface {}; result go.shape.bool }
+*struct { f func() json.encoderFunc; once sync.Once; valid bool; p interface {}; result json.encoderFunc }
+*struct { f func(); once sync.Once; valid bool; p interface {} }
+*struct { in string; out string }
+*struct { io.Reader; io.WriterTo }
+*struct { keySize int; nonceSize int; aead func([]uint8) (cipher.AEAD, error) }
+*struct { len int; buf [128]*runtime.mspan }
+*struct { ptr interface {}; len int }
+*struct {}
