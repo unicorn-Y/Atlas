@@ -1,0 +1,18 @@
+handling_layer	entries	bytes	example_path
+P1C SPA assets (parsed)	4032	153036350	app/resources/ion-dist/assets/completionGzipWorker-Q_JtDKxH.js
+P0B SPA shell/static	143	7435569	app/resources/ion-dist/_frame-rt/_runtime/AnthropicMono-Roman-Web.49b8b95c950b0bee.woff2
+P0B media/font/icon	78	968819	assets/Square150x150Logo.scale-125.png
+P0B chromium pak	58	65068311	app/chrome_100_percent.pak
+P0B/P6 json config or i18n	44	3025377	app/vk_swiftshader_icd.json
+P6B voice clips	27	3124617	app/resources/ion-dist/audio/voice/audioSinkWorklet.js
+P0B i18n text	22	35965593	app/resources/ion-dist/i18n/de-DE.json
+P0/P5 PE binaries (analyzed)	12	309566616	app/vulkan-1.dll
+P0/P0B packaging metadata	7	1582300	assets/AppxManifest.xml.in
+P1/P5/P6 unpacked natives	6	28440304	app/resources/app.asar.unpacked/resources/office365-mcp/msalruntime.dll
+P0B windows pri	5	1127072	resources.pri
+P0B chromium runtime data	3	11986504	app/v8_context_snapshot.bin
+P0B misc ((none))	2	1102	app/version
+P0B license html	1	20477229	app/LICENSES.chromium.html
+P1 JS (parsed)	1	6770	app/resources/claude-browser-shim.js
+P5C VHDX sandbox (fully parsed)	1	37748736	app/resources/smol-bin.x64.vhdx
+P1 asar (fully unpacked)	1	49338428	app/resources/app.asar
