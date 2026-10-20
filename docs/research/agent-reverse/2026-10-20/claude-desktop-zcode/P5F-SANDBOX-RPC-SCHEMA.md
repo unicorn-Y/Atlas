@@ -149,6 +149,30 @@ identity  token  oauthToken  tokenEnvVar
 
 配合 `hideRules.classifyName`（2,176 B）内部**无任何字符串引用、仅有 `'0'` 与 `'$'` 两个字符立即数**，可判断 `classifyName` 处理的是**字符级判定**（如判断首字符是否为 `.`），而**具体模式由宿主经 RPC 下发**（`hide` 字段 + `match` + `rootKind`）。
 
+### 4.2 match kind 的具体取值（反汇编证实，S）
+
+对 `main.validateHideEntry` 偏移 `+0x0174`..`+0x0192` 的指令序列：
+
+```
++017a: 49 83 fa 01        cmp  r10, 1
++017e: 75 06              jne  +6
++0180: 41 80 3b 2e        cmp  byte [r11], 0x2e        ; '.'
++0184: 74 0e              je   +14
++0186: 49 83 fa 02        cmp  r10, 2
++018a: 75 cb              jne  back
++018c: 66 41 81 3b 2e 2e  cmp  word [r11], 0x2e2e      ; '..'
+```
+
+**含义**：代码在逐路径分量检查：
+
+| kind | 比较目标 | 语义 |
+|---:|---|---|
+| **1** | 单字节 `0x2e` = `.` | 该分量是 `.`（当前目录） |
+| **2** | 双字节 `0x2e2e` = `..` | 该分量是 `..`（父目录） |
+| 其它 | — | 报 `unknown match kind %q` |
+
+**这解释了 `'*' outside the last component` 的配套设计**：隐藏规则做路径校验时，逐分量判定是否为 `.` / `..`，遇到非法 kind 直接拒绝。**这是一道针对目录穿越的显式检查**，与 `openat2`、`nosymfollow` 共同构成三层防护。
+
 ### 4.1 与 RPC 字段的闭环
 
 | 字段 | 作用 |
@@ -187,7 +211,7 @@ vmw_vsock_virtio_transport
 | 项 | 说明 |
 |---|---|
 | 每字段的**具体类型与嵌套结构** | 只有标签名，未解出 Go structtype 的完整布局（Go 1.25 编码未攻克） |
-| match kind 的**枚举全集** | 已确认存在，但取值列表未在字符串中出现（可能是数字常量） |
+| ~~match kind 的枚举全集~~ | **已解出**：见 §4.2 |
 | `cliPluginServer` 的插件包格式 | 字段表里有 `wrapperDir`、`cliName`，但包结构未定 |
 
 ## 5. 产物
