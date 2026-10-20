@@ -63,7 +63,52 @@ var O = S("default_cas:set", () => {
 
 这直接针对 **TLS 中间人拦截**：被剔除的是会在本机注入的代理/杀软根证书类 CA。它只作用于 `nodeHost`（本地 stdio MCP 服务器所在进程），**不影响主进程**。
 
-18 个指纹已完整记录在源文件中（本报告不逐个列举，避免误读为"黑名单厂商"；它们是公钥指纹，不含名称信息）。
+18 个指纹已完整记录在 `ledgers/CA-BLOCKLIST.txt`（逐行一个 SHA-256）。**这些是公钥 SPKI 指纹，不含任何厂商名称信息**，因此无法从二进制直接判定归属；要归属需要与公开根证书库比对，本报告不做猜测。
+
+```
+8d417db2dd8bf5e3084d1e3f196d583849d81bdd4c00c70b9d39369e96b8c782
+eabc185c4e82d942b1a5978ba3c0181487d6b3b9974e5c49f72f6d0bd9637150
+376a1a7082a593dccc20d561d119e9ab8d30f11cc321d0a37fa41f0df284e01c
+b7408b4d2be0238ba37004dd34e276c6019bd2f24c9db7d4980f5f6c359a4bcc
+941ea0cbce0926d9f34ec667cee669b61fd39f4338fa0b91048d5749d8880d25
+1cbbd4cb5eec6a287e34636c07c78378fa3eb3c6d3fb0563286870f283d87034
+71f8adeec2b58adbdf6205c98dde928a4254b03695193d7f9a63a9a2588095d0
+3f83a68c4e80fc3f4f487e3105ad146498e56a09a3ea223b2a2982943f5995d7
+33836758bd871b8d464bd669b0b81832880b81e363fb8cbb21ba8e843a138858
+11567f2aaf4325c4044880c6ed2b37f1ca2586d87059cf254934d97c4fee89a5
+c619e4780ed8e0abeda24ad732567de4383a7ea941338f6d1a7d1b49ac792fe9
+b5ee1c904ac2aae39c92601ab466269c0c1cd0b96badbd251b0ed88e6c4ded68
+8dd3d055a7f47ffbca287285dcfd201dde92823ccc484d30f11cc40f079b3a3e
+e3212ac258d6d86f464c1150866a298c04a42783c1d17d7baa6a24ac0323f139
+cf36ee3b065cb7405569f6c189b54c2f3d43042a995e3f5fcfccefe09ad73177
+ece28e35289ce8621c72407949e5050052ad4607cc332eaf9b546029aacbfb7a
+0a6c2b2ca5b364207954171987ac9d2178561569d8205457e77ca90c32ede282
+5da77dc800f4c6fa93c6015aa6bd898fdb7c28d869e764571b25c00375a77755
+```
+
+判断依据：`D(e)` 用 `X509Certificate(e).publicKey.export({type:"spki",format:"der"})` 的 SHA-256 与集合比对 —— **认公钥不认证书**，所以同一 CA 换证书仍会被拦。
+
+### 3.1 归属分析（实测，非猜测）
+
+用本机可得的两个根证书集合做 SPKI 比对：
+
+| 对照库 | 条目数 | 命中 |
+|---|---:|---:|
+| Windows `ROOT` 存储（`ssl.enum_certificates`） | 61 | **0** |
+| `certifi` 公开根证书包（Mozilla 信任库） | 119 | **4** |
+
+命中的 4 个（完整主体名）：
+
+```
+CN=emSign Root CA - G1,     O=eMudhra Technologies Limited, OU=emSign PKI, C=IN
+CN=emSign ECC Root CA - G3, O=eMudhra Technologies Limited, OU=emSign PKI, C=IN
+CN=emSign Root CA - C1,     O=eMudhra Inc,                 OU=emSign PKI, C=US
+CN=emSign ECC Root CA - C3, O=eMudhra Inc,                 OU=emSign PKI, C=US
+```
+
+**结论**：18 个指纹中有 4 个属于 **eMudhra（印度 CA）的 emSign 根证书族**。其余 14 个不在 Mozilla 信任库也不在本机 ROOT 存储中 —— 说明它们**不是公开可信根**（更可能是企业/MITM 代理自己的根，或已从信任库移除的根）。
+
+这个结果符合"反 TLS 拦截"的设计意图：**把能签发本地拦截证书的 CA 从 MCP 宿主进程的可信集中剔除**，即使它被装进了系统信任库。
 
 ### 3.2 同步调用耗时追踪
 
