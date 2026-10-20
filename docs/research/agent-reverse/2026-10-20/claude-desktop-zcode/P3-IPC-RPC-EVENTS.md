@@ -171,3 +171,88 @@ index/CONTEXTBRIDGE-EXPOSURES.tsv   52  contextBridge 暴露
 index/WEBCONTENTS-EVENTS.tsv        60  非 IPC 的 webContents 事件
 index/NETWORK-ENDPOINTS.tsv        405  唯一 URL 及分类
 ```
+
+---
+
+## 11. Browser Bridge 与 Chrome Native Host 的完整参数（解决 U-028 的协议部分）
+
+在 `index.chunk-CxUAVDxD.js` 中找到了 bridge 的**全部常量**：
+
+```js
+var o = "CLAUDE_BROWSER_BRIDGE",        // 环境变量名
+    s = "claude-browser-shim.js",       // shim 文件名
+    c = "ccd-br-shim",                  // 前缀
+    l = "ccd-br-",                      // 前缀
+    u = /^ccd-br-[A-Za-z0-9]{6}$/,      // 会话 id 形状
+    d = "b.sock",                       // socket 文件名
+    f = 8192,                           // 请求行上限 = 8 KiB
+    p = 3e3,                            // 应答超时 = 3 秒
+    m = 2e3,                            // 次级超时 = 2 秒
+    h = 32,                             // maxConnections = 32
+    g = 15e3,                           // 陈旧目录阈值 = 15 秒
+    _ = 1e3,                            // 1 秒
+    v = /^[0-9a-f]{64}$/                // 64 hex = key 形状
+```
+
+这与 `claude-browser-shim.js` 里声明的常量**完全一致**：
+
+```js
+const REPLY_TIMEOUT_MS = 3000;      // ← p = 3e3
+const MAX_REQUEST_BYTES = 8 * 1024; // ← f = 8192
+const MAX_REPLY_BYTES = 1024;
+const OPENER_SETTLE_MS = 3000;
+```
+
+**两条独立证据互相印证**（主进程常量 与 shim 源码常量）。
+
+### 11.1 socket 路径与安全校验
+
+```js
+function xMr(){ return `claude-mcp-browser-bridge-${bMr() ?? Crt() ?? process.env.USER ?? process.env.USERNAME ?? "default"}` }
+function SMr(){ return `\.\pipe\${xMr()}` }
+```
+
+即 Windows 上是 `\.\pipe\claude-mcp-browser-bridge-<user>`；Linux/macOS 上是
+`<dir>/claude-mcp-browser-bridge-<user>/b.sock`。
+
+**目录安全校验**（`validateSocketSecurity`）：
+
+```js
+if (platform() === "win32" || this.context.connectVerified) return true;
+let dir = dirname(path);
+if (dirname(dir).startsWith("claude-mcp-browser-bridge-")) {
+  if ((await lstat(dir)).isSymbolicLink())
+    throw Error(`Socket directory is a symlink: ${dir}. Directory may have been tampered with.`);
+  ...
+}
+```
+
+**明确拒绝符号链接的 socket 目录** —— 防本地提权劫持。
+
+### 11.2 Chrome Native Host 的注册信息
+
+```js
+var V4n = "dihbgbndebgnbjfmelmegjepbnkhlgni",   // 扩展 ID（第三个）
+    H4n = "fcoeoabgfenejglbffodgkkbkcdhcgfn",   // 扩展 ID（主）
+    U4n = "dngcpimnedloihjnnfngkgjoidhnaolf",   // 扩展 ID（Nest）
+    W4n = "com.anthropic.claude_browser_extension",
+    G4n = "chrome-native-host.exe",
+    XI  = "com.anthropic.claude_browser_extension.json",
+    K4n = "ChromeNativeHost",
+    q4n = "SOFTWARE\Google\Chrome\Extensions";
+```
+
+三个扩展 ID 与 AppxManifest 里虚拟化排除的两个 ID 一致（`fcoeoabgfenejglbffodgkkbkcdhcgfn`、`dngcpimnedloihjnnfngkgjoidhnaolf`），
+第三个 `dihbgbndebgnbjfmelmegjepbnkhlgni` 是新发现的（可能是开发版或企业版扩展）。
+
+### 11.3 结论
+
+| 项 | 状态 |
+|---|---|
+| bridge 协议常量 | **全部确定**（8 KiB 请求 / 3 秒超时 / 32 连接 / b.sock） |
+| socket 命名规则 | 确定（`claude-mcp-browser-bridge-<user>`） |
+| 安全校验 | 确定（拒符号链接目录） |
+| Chrome 扩展 ID | 3 个，其中 2 个与 manifest 一致 |
+| `chrome-native-host.exe` 内部的帧前缀宽度 | **仍未定**（Rust 二进制内无源码） |
+
+**`U-028` 从"完全未知"推进到"协议参数全知、仅剩 Rust 内部实现细节"。**
