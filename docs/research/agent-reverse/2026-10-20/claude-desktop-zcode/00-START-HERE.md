@@ -171,6 +171,13 @@ CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL
 | `P4C-SENDMESSAGE-SCHEMA.md` | `sendMessage` 17 参数的字段级语义 |
 | `P5-NATIVE-SERVICE-VM.md` | Go 服务 15,181 函数、管道 RPC、VM 依赖架构 |
 | **`P5D-ALL-GO-FUNCTIONS.md`** | **8 个 Go 二进制、51,239 个函数的零未分类账本** |
+| `P5E-FIRSTPARTY-FUNCTIONS.md` | 1,830→1,068 个第一方函数的逐包归类 |
+| `P5F-SANDBOX-RPC-SCHEMA.md` | 沙箱 RPC 的 143 个 JSON 字段 + match kind 枚举 |
+| `P5G-SANDBOX-INTERNALS.md` | 两个 SO_PEERCRED socket、7 步派生、cgroup、六层文件系统、插件 manifest |
+| `P5H-EDR-INSTALLER-STATE-MACHINE.md` | EDR 包格式（gzip+tar）、gpgv 验签、systemd、40+ 拒绝码 |
+| `P5I-PIPE-CLIENT-AUTH.md` | 管道客户端四层信任链（令牌/MSIX/WinTrust/会话） |
+| `P5J-VM-LIFECYCLE-FUNCTIONS.md` | VM 生命周期 216 个函数完整拆解 |
+
 | `P5B-EDR-PROTOCOL.md` | 第三方 EDR 接入协议（策略源、门控顺序、三态回答） |
 | **`P5C-SMOL-BIN-VHDX-SANDBOX.md`** | **包内 37.7MB VHDX = 完整代码执行沙箱（SDK_DAEMON 根文件系统）** |
 | `P6-EXTENSIONS-TOOLS-SKILLS.md` | 6 技能、MCP、7 个可用 worker、1,062 环境变量 |
