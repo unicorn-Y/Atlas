@@ -1,0 +1,1148 @@
+[
+ {
+  "key": "cai_abundant_lightning",
+  "file": "v1\\c26bf6319-BFdeIDS3.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_abundant_meadow",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:code.channel_home_open,action:cowork.permission_prompt_removed_unanswered,action:cowork.permission_prompt_rendered,action:cowork.permission_prompt_responded"
+ },
+ {
+  "key": "cai_ancient_locket",
+  "file": "v1\\c0a41a7b3-D6CdJLqj.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_ancient_oasis_button",
+  "file": "v1\\shared-6-Cby4X-ms.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_breezy_summit",
+  "file": "v1\\shared-19-CkPOiIKm.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_bubbly_meadow",
+  "file": "v1\\shared-2-Cb74JByF.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_buzzing_reef",
+  "file": "v1\\c71860c77-B2SnQfnj.js",
+  "hint": "Couldn\\u2019t load this. Reload the page to continue.",
+  "events": ""
+ },
+ {
+  "key": "cai_buzzing_reef_channel_lookup",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_buzzing_reef_channel_search",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_buzzing_teapot",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:code.channel_home_open,action:page.interaction_slow,action:page.link_presses,action:page.new_chat_input_ready"
+ },
+ {
+  "key": "cai_calm_dusk",
+  "file": "v1\\shared-26-CgdP_nTj.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_calm_mist",
+  "file": "v1\\shared-26-CgdP_nTj.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_capability_tip_judge_fetch",
+  "file": "v1\\c0c371a67-DCETlr1s.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_cheeky_cosmos",
+  "file": "v1\\ca2ef848d-CWUk7Rll.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_cheeky_fountain",
+  "file": "v1\\c10f0af0c-E4ruBQ4W.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_cheeky_summit",
+  "file": "v1\\c83b009bb-BgVS2Ssa.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_cheeky_sunrise",
+  "file": "v1\\shared-2-Cb74JByF.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_cheerful_fern",
+  "file": "v1\\cc00a92fc-BJvQDSmJ.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_cheerful_prism",
+  "file": "v1\\shared-23-Bu_lvvVo.js",
+  "hint": "",
+  "events": "spa:cai_cheerful_prism"
+ },
+ {
+  "key": "cai_clever_tome",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.hub_creation_wait_expired,action:chat.hub_draft_dormant,action:chat.hub_draft_wake,action:chat.hub_send_ack"
+ },
+ {
+  "key": "cai_cozy_whistle",
+  "file": "v1\\shared-1-CAAiD7E3.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_crystalline_avalanche",
+  "file": "v1\\shared-52-DGviI8xb.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_cuddly_gizmo",
+  "file": "v1\\shared-7-B8UIMGDr.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_cuddly_pretzel",
+  "file": "v1\\shared-1-CAAiD7E3.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_cuddly_riddle",
+  "file": "v1\\shared-52-DGviI8xb.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_curious_brook",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.hub_action_response_timeout,action:chat.hub_send_attempt,action:chat.hub_send_awaiting_verdict,action:chat.hub_send_confirm"
+ },
+ {
+  "key": "cai_curious_bubble",
+  "file": "v1\\c1298b0ba-BAIZONJc.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_curious_tower",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:claudeai.chat.message_queue.returned_to_editor,action:claudeai.chat.message_queue.sent_now,action:code.channel_home_open,action:voice.read_aloud"
+ },
+ {
+  "key": "cai_curious_tower_drawn",
+  "file": "v1\\shared-4-CJsHhp5n.js",
+  "hint": "",
+  "events": "spa:cai_curious_tower"
+ },
+ {
+  "key": "cai_dapper_quill",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_dreamy_mountain",
+  "file": "v1\\c6d14f78e-DCs2SJ_O.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_dreamy_plum",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:claudeai.chat.message_queue.returned_to_editor,action:claudeai.chat.message_queue.sent_now,action:code.channel_home_open,action:code.channel_stream_open"
+ },
+ {
+  "key": "cai_drifting_sunset",
+  "file": "v1\\c10f0af0c-E4ruBQ4W.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_eager_grove",
+  "file": "v1\\ced1eadef-D6kzfQzx.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_effervescent_fern",
+  "file": "v1\\cce741025-B6Mo97b_.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_elegant_rainbow",
+  "file": "v1\\shared-104-Cqo2-vQh.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_embedded_forms",
+  "file": "v1\\c71860c77-Dm3AexrS.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_enchanted_garden",
+  "file": "v1\\cfe1b8ada-DKAiyxY7.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_enchanted_ripple",
+  "file": "v1\\c2771e1f6-Da07A5r-.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_epitaxy_worktree",
+  "file": "v1\\shared-11-BuQ3CK5I.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_ethereal_leaf",
+  "file": "v1\\c088df2d1-B0iZWONJ.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_ethereal_puzzle",
+  "file": "v1\\shared-19-CkPOiIKm.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_ethereal_tome",
+  "file": "v1\\c71dee58b-DSSF7GTt.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_example_flag",
+  "file": "v1\\c4e63a189-DgIMboYW.js",
+  "hint": "Add a flag",
+  "events": ""
+ },
+ {
+  "key": "cai_fancy_forest",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:app.crash_unseen,action:code.channel_home_open,action:code.channel_message_send,action:code.channel_stream_open"
+ },
+ {
+  "key": "cai_fancy_locket",
+  "file": "v1\\shared-4-CJsHhp5n.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_file_upload_config",
+  "file": "v1\\shared-52-DGviI8xb.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_fizzy_bonbon",
+  "file": "v1\\c81e9dd60-s1OKkFo9.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_fizzy_nest",
+  "file": "v1\\shared-21-IP-SVetq.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_flickering_stardust",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.hub_action_response_timeout,action:chat.hub_send_attempt,action:chat.hub_send_attempt_failed,action:chat.hub_send_confirm"
+ },
+ {
+  "key": "cai_floofy_garden",
+  "file": "v1\\c1298b0ba-BAIZONJc.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_floofy_ocean",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.hub_send_failed,action:chat.hub_send_pending_at_exit,action:chat.hub_send_rebuilt_row_landed,action:chat.hub_send_row_rebuilt"
+ },
+ {
+  "key": "cai_fluffy_crescent",
+  "file": "v1\\ce569194f-B6KeT8jg.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_fluffy_glade",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:code.transcript_open_settled,action:page.code_session_open_time,action:page.interaction_slow,action:page.lcp"
+ },
+ {
+  "key": "cai_fluttering_balloon",
+  "file": "v1\\c4e89c700-Cw9YGNt-.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_fluttering_mountain",
+  "file": "v1\\shared-21-IP-SVetq.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_fluttering_parasol",
+  "file": "v1\\c96d752d0-BOCqU7c2.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_gentle_thunder",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:code.channel_message_send,action:code.channel_pane_render,action:code.transcript_open_settled,action:page.code_session_open_time"
+ },
+ {
+  "key": "cai_giggly_dream",
+  "file": "v1\\c227f4d5e-Ba-r--Rl.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_giggly_snowglobe",
+  "file": "v1\\c6bba3086-CvDmqkrE.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_gleaming_tulip",
+  "file": "v1\\c96d752d0-BOCqU7c2.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_glistening_moon",
+  "file": "v1\\cd6016df4-6kreaPkX.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_glittery_glacier",
+  "file": "v1\\cf400e6a4-lYf3GCP4.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_glittery_sky",
+  "file": "v1\\c34ad4fd5-j7ClLtd3.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_glittery_snowglobe",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:code.channel_message_send,action:code.channel_pane_render,action:code.channel_send_milestone,action:code.channel_thread_open"
+ },
+ {
+  "key": "cai_glowing_blossom",
+  "file": "v1\\shared-21-IP-SVetq.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_glowing_cascade",
+  "file": "v1\\shared-1-CAAiD7E3.js",
+  "hint": "You\\u2019re offline. Check your connection and try again.",
+  "events": ""
+ },
+ {
+  "key": "cai_glowing_coral",
+  "file": "v1\\c6cbe7fcb-bBwscvz3.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_goofy_biscuit",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_goofy_meadow",
+  "file": "v1\\shared-4-CJsHhp5n.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_groovy_fog",
+  "file": "v1\\shared-4-CJsHhp5n.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_groovy_gizmo_row",
+  "file": "v1\\cf400e6a4-lYf3GCP4.js",
+  "hint": "Cancel",
+  "events": ""
+ },
+ {
+  "key": "cai_groovy_gizmo_row_dialog",
+  "file": "v1\\cf400e6a4-lYf3GCP4.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_groovy_sphere",
+  "file": "v1\\cf400e6a4-lYf3GCP4.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_hub_optout_reset_notice_cause",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_hub_optout_reset_notice_owed",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_hub_preview_optout",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_hub_preview_optout_at",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_hub_preview_optout_path",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_hub_reopened_conversations",
+  "file": "v1\\shared-78-D6VXYXaQ.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_humble_canyon",
+  "file": "v1\\cf16f7ab3-D8fk2V4U.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_humming_marshmallow",
+  "file": "v1\\ce569194f-B6KeT8jg.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_humming_sunset",
+  "file": "v1\\c2d1766e9-jfLsV1K_.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_iridescent_cupcake",
+  "file": "v1\\c77144b61-BAN2dbxX.js",
+  "hint": "This isn\\u2019t working right now. You can try again later.",
+  "events": ""
+ },
+ {
+  "key": "cai_iridescent_cupcake_action",
+  "file": "v1\\shared-0-ByI5P0CP.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_jazzy_starlight",
+  "file": "v1\\c26bf6319-BFdeIDS3.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_jolly_candle",
+  "file": "v1\\c7cbb2ba7-jUDcrVMJ.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_keen_cookie",
+  "file": "v1\\c96d752d0-BOCqU7c2.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_keen_dewdrop",
+  "file": "v1\\cf400e6a4-lYf3GCP4.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_keen_gizmo",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:app.quick_entry_asked,action:chat.scroll_stability,action:cowork.message_send,action:cowork.turn_complete"
+ },
+ {
+  "key": "cai_kind_rocket",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:app.quick_entry_asked,action:app.quick_entry_dropped,action:app.quick_entry_late_outcome,action:app.quick_entry_routed"
+ },
+ {
+  "key": "cai_lively_plum",
+  "file": "v1\\shared-21-IP-SVetq.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_lucky_fountain",
+  "file": "v1\\shared-11-BuQ3CK5I.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_lucky_lightning",
+  "file": "v1\\cf400e6a4-lYf3GCP4.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_luminous_shore",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.conversation_create,action:chat.hub_send_failed,action:chat.message_send,action:chat.turn_complete"
+ },
+ {
+  "key": "cai_luminous_tide",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_magical_bonbon",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_markdown_refusals",
+  "file": "v1\\shared-5-kdJVRUsT.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_melodic_goblet",
+  "file": "v1\\c6aa8f808-CXxIDA8a.js",
+  "hint": "this connector",
+  "events": ""
+ },
+ {
+  "key": "cai_melodic_pizza",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_merry_crayon",
+  "file": "v1\\shared-6-Cby4X-ms.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_misty_cascade",
+  "file": "v1\\cbc7fd025-CAGIpAIM.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_moonlit_dewdrop",
+  "file": "v1\\cc43287c9-DAfOi8yP.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_moonlit_flurry",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_mossy_aurora",
+  "file": "v1\\cc1aae219-DjR8LnUv.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_mossy_biscuit",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_mossy_eclipse",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_mossy_lemon",
+  "file": "v1\\c2f2784a6-CLCm_WKT.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_mossy_moon",
+  "file": "v1\\c96d752d0-BOCqU7c2.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_mossy_parasol",
+  "file": "v1\\shared-18-D4XxL6Tg.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_mossy_pond",
+  "file": "v1\\c40525e86-B62jhCA9.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_noble_thimble",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:auth.login,action:auth.login_ready,action:chat.create_round_trip,action:page.new_page_layout_corrected"
+ },
+ {
+  "key": "cai_opt_in_connector_suggestions",
+  "file": "v1\\c71860c77-D15EbUZs.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_peaceful_puddle",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:auth.login,action:auth.login_ready,action:code.channel_send_milestone,action:code.channel_thread_open"
+ },
+ {
+  "key": "cai_peppy_tulip",
+  "file": "v1\\c2a49a2be-YUiXkKQF.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_pewter_finch_report",
+  "file": "v1\\ca768caa9-DuezKp4l.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_polished_river",
+  "file": "v1\\c05b96c7f-DklIyA-P.js",
+  "hint": "Copy",
+  "events": ""
+ },
+ {
+  "key": "cai_polished_volcano",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_precious_crystal",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_quirky_candle",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_quirky_frost_setting",
+  "file": "v1\\cf400e6a4-lYf3GCP4.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_quizzical_quiche",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:billing.checkout_plan_toggle_price_painted,action:billing.checkout_plan_toggle_total_painted,action:chat.hub_send_attempt,action:chat.hub_send_failed"
+ },
+ {
+  "key": "cai_radiant_kettle",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.failed_send_retry,action:chat.hub_connection_card,action:chat.hub_send_attempt,action:chat.hub_send_confirm"
+ },
+ {
+  "key": "cai_radiant_pine",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_rippling_garden",
+  "file": "v1\\shared-21-IP-SVetq.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_rosy_feather_toggle",
+  "file": "v1\\c518a31cc-CSChENN1.js",
+  "hint": "Toggle activity sidebar",
+  "events": ""
+ },
+ {
+  "key": "cai_rosy_pumpkin",
+  "file": "v1\\c7b40a2f0-D5IRuZIT.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_serene_gadget",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:app.rum_exit,action:chat.message_send,action:page.chat_host_hold,action:page.interaction_slow"
+ },
+ {
+  "key": "cai_serene_globe",
+  "file": "v1\\c71dee58b-DSSF7GTt.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_serene_goblet",
+  "file": "v1\\cf400e6a4-lYf3GCP4.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_serene_pine",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.message_send,action:page.chat_host_hold,action:page.interaction_slow,action:page.sidebar_recents_painted"
+ },
+ {
+  "key": "cai_shimmying_marble",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_shimmying_mochi",
+  "file": "v1\\c3cc29110-B8KnTymM.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_shimmying_mochi_dismissals",
+  "file": "v1\\c4fc20348-DJdFVAwr.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_shiny_frost",
+  "file": "v1\\c6bba3086-CvDmqkrE.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_silly_pine",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.conversation_create,action:chat.create_round_trip,action:chat.message_send,action:page.chat_host_hold"
+ },
+ {
+  "key": "cai_sleepy_mountain",
+  "file": "v1\\c2d1766e9-jfLsV1K_.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_snazzy_candle",
+  "file": "v1\\c3cbaca16-PdxmNS7W.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_snug_coral",
+  "file": "v1\\shared-156-Bikz018e.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_snug_pillow",
+  "file": "v1\\shared-52-DGviI8xb.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_snug_puddle",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.conversation_create,action:chat.create_round_trip,action:chat.hub_answer_withdrawn,action:chat.message_send"
+ },
+ {
+  "key": "cai_snug_riddle",
+  "file": "v1\\shared-11-BuQ3CK5I.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_soft_fern",
+  "file": "v1\\shared-20-B7UqYfsi.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_soft_horizon",
+  "file": "v1\\c40525e86-B62jhCA9.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_sparkling_fern",
+  "file": "v1\\shared-7-B8UIMGDr.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_sparkling_muffin",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.hub_answer_withdrawn,action:chat.message_send,action:chat.send_ended_before_first_token,action:page.interaction_slow"
+ },
+ {
+  "key": "cai_spicy_crystal",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.hub_answer_withdrawn,action:chat.hub_send_attempt,action:chat.send_ended_before_first_token"
+ },
+ {
+  "key": "cai_splendid_nest",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.hub_answer_withdrawn,action:chat.hub_send_attempt,action:chat.hub_send_confirm,action:chat.hub_send_failed"
+ },
+ {
+  "key": "cai_splendid_nest_at_load",
+  "file": "v1\\shared-21-IP-SVetq.js",
+  "hint": "",
+  "events": "spa:cai_splendid_nest"
+ },
+ {
+  "key": "cai_squishy_acorn",
+  "file": "v1\\c6bba3086-CvDmqkrE.js",
+  "hint": "Reset memory",
+  "events": ""
+ },
+ {
+  "key": "cai_starry_harp",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.hub_answer_withdrawn,action:chat.hub_send_attempt,action:chat.hub_send_confirm,action:chat.hub_send_failed"
+ },
+ {
+  "key": "cai_starry_marble",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.hub_send_confirm,action:chat.hub_send_failed,action:chat.hub_stream_dial,action:chat.hub_stream_trouble"
+ },
+ {
+  "key": "cai_steady_meteor",
+  "file": "v1\\shared-52-DGviI8xb.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_steady_meteor_file",
+  "file": "v1\\shared-0-ByI5P0CP.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_steady_meteor_row_writer",
+  "file": "v1\\shared-0-ByI5P0CP.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_steady_oasis",
+  "file": "v1\\shared-26-CgdP_nTj.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_sunny_melody",
+  "file": "v1\\c40525e86-B62jhCA9.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_tender_ocean",
+  "file": "v1\\shared-19-CkPOiIKm.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_tender_tulip",
+  "file": "v1\\shared-1-CAAiD7E3.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_ticklish_lemon",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.hub_send_attempt,action:chat.hub_stream_dial,action:chat.hub_stream_trouble,action:chat.transcript_renderer_fallback"
+ },
+ {
+  "key": "cai_ticklish_trinket",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.hub_send_attempt,action:chat.hub_send_banner,action:chat.hub_send_confirm,action:chat.hub_send_snapshot_omitted"
+ },
+ {
+  "key": "cai_tidy_brook",
+  "file": "v1\\shared-8-B5lJ8U5C.js",
+  "hint": "You\\u2019re offline. Check your connection.",
+  "events": ""
+ },
+ {
+  "key": "cai_tidy_cascade",
+  "file": "v1\\c3cc77624-bvcmvM7i.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_tidy_locket",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.hub_send_attempt,action:chat.hub_send_banner,action:chat.hub_send_confirm,action:chat.hub_send_snapshot_omitted"
+ },
+ {
+  "key": "cai_tingly_zephyr",
+  "file": "v1\\c481da6c8-BJVFY_K6.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_toasty_snowglobe",
+  "file": "v1\\c5cd1b4dc-jDcYG_fG.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_twinkly_crayon",
+  "file": "v1\\ca768caa9-DuezKp4l.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_vast_pine",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.direct_filestore_upload,action:chat.file_upload,action:chat.scroll_smoothness,action:chat.scroll_stability"
+ },
+ {
+  "key": "cai_vast_rain",
+  "file": "v1\\c00b75dff-x1N0_d34.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_velvet_pretzel",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.direct_filestore_upload,action:chat.file_upload,action:chat.scroll_stability,action:code.renderer_memory"
+ },
+ {
+  "key": "cai_velvety_sprout",
+  "file": "v1\\shared-1-CAAiD7E3.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_velvety_wave",
+  "file": "v1\\cbbbe68ed-hPdPM0o7.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_vivid_summit",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.direct_filestore_upload,action:chat.file_upload,action:code.renderer_memory,action:mcp.local_servers_settled"
+ },
+ {
+  "key": "cai_vivid_tower",
+  "file": "v1\\shared-26-CgdP_nTj.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_warm_canyon",
+  "file": "v1\\shared-21-IP-SVetq.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_wiggly_cookie",
+  "file": "v1\\shared-6-Cby4X-ms.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_wild_dawn",
+  "file": "v1\\c3cc29110-B8KnTymM.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_wild_haven",
+  "file": "v1\\shared-18-D4XxL6Tg.js",
+  "hint": "Needs your approval \\u00B7 {tool}",
+  "events": ""
+ },
+ {
+  "key": "cai_wise_candle",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_wise_journal",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.direct_filestore_upload,action:chat.file_upload,action:chat.hub_send_cancelled,action:chat.hub_send_failed"
+ },
+ {
+  "key": "cai_wise_lake",
+  "file": "v1\\shared-26-CgdP_nTj.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_wise_origami",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.direct_filestore_upload,action:chat.file_upload,action:chat.hub_send_cancelled,action:chat.hub_send_failed"
+ },
+ {
+  "key": "cai_wise_sunrise",
+  "file": "v1\\c5cd1b4dc-jDcYG_fG.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_witty_canyon",
+  "file": "v1\\shared-130-DnUXVlYq.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_witty_cascade",
+  "file": "v1\\c2d1766e9-jfLsV1K_.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_wobbly_muffin",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.composer_typing_latency,action:chat.hub_send_cancelled,action:chat.hub_send_failed,action:claudeai.error_banner.viewed"
+ },
+ {
+  "key": "cai_zany_cupcake",
+  "file": "v1\\c227f4d5e-Ba-r--Rl.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_zany_flurry",
+  "file": "v1\\c83b009bb-BgVS2Ssa.js",
+  "hint": "",
+  "events": ""
+ },
+ {
+  "key": "cai_zany_scone",
+  "file": "v1\\shared-3-DnHYUZdJ.js",
+  "hint": "",
+  "events": "action:chat.composer_typing_latency,action:chat.hub_send_cancelled,action:chat.hub_send_failed,action:claudeai.error_banner.viewed"
+ },
+ {
+  "key": "cai_zazzy_flame",
+  "file": "v1\\c368fdb57-TPOrFKUt.js",
+  "hint": "Couldn\\u2019t load this project",
+  "events": ""
+ },
+ {
+  "key": "cai_zesty_pretzel",
+  "file": "v1\\cbc7fd025-CAGIpAIM.js",
+  "hint": "",
+  "events": ""
+ }
+]
