@@ -114,10 +114,13 @@ CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL
 | PE 二进制 | **18 / 18**（含签名与版本资源） | ✅ |
 | 技能内部文件 | **188 / 188**（6 个 ZIP） | ✅ |
 | RPC 条目配对 | **1,332 / 1,332** | ✅ 0 未配对 |
+| GrowthBook 开关 | **237**（完整白名单） | ✅ |
+| SPA chunk 图 | **3,548 chunk / 46,892 边 / 1,517 懒加载** | ✅ |
+| 内置工具 | 19 个（含 Cron×3 / ScheduleWakeup / Task / AskUserQuestion） | ✅ |
 | 界面对象 | **26**（12 window / 6 offscreen / 2 popup / 2 dialog / 2 tray / 2 menu） | ✅ 已登记 |
 | 菜单 / 快捷键 | 99 / 57 | ✅ |
 | 路由 | 64（远程 62 + 本地 2）＋ SPA 内 716 | ✅ |
-| Feature flags | 380 条 / 186 唯一键 | ✅ |
+| 企业策略 flag | 380 条 / 186 唯一键 | ✅ |
 | 环境变量 | 1,062 | ✅ |
 | Worker | 8 | ✅ |
 
@@ -129,31 +132,64 @@ CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL
 
 ## 报告导航
 
+### 主链（按阶段读）
+
 | 文件 | 内容 |
 |---|---|
-| `01-LAYER-ATLAS.md` | 分层架构地图（包 → OS → Electron → renderer → host → service → VM → tool → cloud） |
-| `02-CAPABILITY-CATALOG.md` | 97 个服务的逐项用途说明（中文） |
 | `P0-PACKAGE-AUTHENTICITY.md` | 包真实性、哈希、嵌套容器 |
 | `P1-STATIC-CODE-INVENTORY.md` | 入口链、506 文件全归类、符号索引 |
 | **`P1B-ION-DIST-CORRECTION.md`** | **199.5 MB 内置前端的发现与架构修正（必读）** |
-| `P2-UI-AND-WINDOWS.md` | 27 个界面、99 菜单项、58 快捷键、路由 |
+| `P1C-ION-SPA-STACK.md` | 内置 SPA 的技术栈（Base UI/TipTap/GrowthBook/Datadog）与 103 条路由 |
+| `P2-UI-AND-WINDOWS.md` | 26 个界面、99 菜单项、57 快捷键、15 个窗口构造点 |
+| `P2B-BUDDY-BLE.md` | 硬件 Buddy 的 BLE 链路（设备名过滤、配对、退避重连、1.8MB 上限） |
 | `P3-IPC-RPC-EVENTS.md` | 1,332 条 RPC 全配对、405 个网络端点 |
 | `P4-AGENT-RUNTIME.md` | Chat/Cowork/Agent 三层执行、持久化、恢复 |
+| `P4B-CODENAME-SERVICES.md` | 代号服务释义 + Simulator/Launch 完整能力表 |
+| `P4C-SENDMESSAGE-SCHEMA.md` | `sendMessage` 17 参数的字段级语义 |
 | `P5-NATIVE-SERVICE-VM.md` | Go 服务 15,181 函数、管道 RPC、VM 依赖架构 |
-| `P6-EXTENSIONS-TOOLS-SKILLS.md` | 6 技能、MCP、8 worker、1,062 环境变量、380 flags |
+| `P5B-EDR-PROTOCOL.md` | 第三方 EDR 接入协议（策略源、门控顺序、三态回答） |
+| `P6-EXTENSIONS-TOOLS-SKILLS.md` | 6 技能、MCP、7 个可用 worker、1,062 环境变量 |
+| `P6B-VOICE-PIPELINE.md` | 语音链路（包内无 ASR/TTS，只有采集与播放胶水） |
+| `P6C-GROWTHBOOK-FLAGS.md` | **237 个 GrowthBook 开关的完整白名单** |
+| `P6D-TOOLS-AND-CATALOG.md` | 内置工具清单（含 Cron/Task/AskUserQuestion）与模型目录规则 |
 | `P7-STATIC-LIFECYCLE.md` | 启动/任务/退出/恢复的代码级时序 |
 | `P7-STATIC-STATE-AND-EVENTS.md` | 状态机（127 个枚举）与事件通道 |
-| `13-COVERAGE-AND-ACCEPTANCE.md` | 覆盖率、差集、独立审计结果、验收判定 |
+
+### 总览与索引
+
+| 文件 | 内容 |
+|---|---|
+| `00-START-HERE.md` | 本文件：版本、五条结论、覆盖率 |
+| `01-LAYER-ATLAS.md` | L0–L11 分层架构地图 |
+| `02-CAPABILITY-CATALOG.md` | 97 个服务的逐项用途（中文） |
+| `VERSION-MATRIX.md` | 两条版本线（0.14.x / 2.4230x）对照 |
+| `VERSION-DELTA.md` | 2.42304.0 vs 2.42304.2 逐文件 diff（唯一实质变化 = CA 屏蔽） |
+| `13-COVERAGE-AND-ACCEPTANCE.md` | 覆盖率、差集、独立审计、验收判定 |
+| `12-UNKNOWN-AND-BLOCKERS.tsv` | 35 项未解清单（逐条含原因与补采办法） |
+| `PROGRESS.md` | 阶段进度与每轮新增 |
+
+### 专题深挖（由子任务产出）
+
+| 文件 | 内容 |
+|---|---|
 | `SERVICE-RPC.md` | cowork-svc 管道 RPC 的指令级证据（帧格式、分发表、事件名） |
 | `VM-LIFECYCLE.md` | HCS/HCN 动态解析与 VM 创建/启动/停止全过程 |
-| `SSH-HELPERS.md` | 三个 SSH 辅助程序 |
-| `NATIVE-ADDON.md` | `claude-native-binding.node` 的 109 个 napi 导出 |
-| `MCP-HOSTS.md` | nodeHost（本地 stdio shim）与 directMcpHost（远程 HTTP/SSE）的分工 |
-| `SKILL-SCHEMA.md` | `manifest.json` 的字段语义 |
+| `SSH-HELPERS.md` | 三个 SSH 辅助程序（stdin 配置、Job Object、身份校验） |
+| `NATIVE-ADDON.md` | `claude-native-binding.node` 的 110 个 napi 导出 |
+| `MCP-HOSTS.md` | nodeHost（本地 stdio shim）与 directMcpHost（远程 HTTP/SSE） |
+| `SKILL-SCHEMA.md` / `SKILL-DELIVERY.md` | 技能 manifest 语义与播种链路 |
+| `EXTENSIONS-LIFECYCLE.md` | DXT/MCPB 安装/校验/更新生命周期 |
+| `ARTIFACT-LIBS.md` | artifact 运行库本地化（不走 CDN） |
+| `GITHUB-MCP.md` / `OFFICE365-MCP.md` | 两个内建 MCP 的启用条件与工具面 |
 | `RENDERER-ENTRIES.md` | 6 套 renderer 的逐项解剖 |
-| `12-UNKNOWN-AND-BLOCKERS.tsv` | 未解清单（逐条含原因） |
-| `PROGRESS.md` | 阶段进度与每轮新增 |
-| `viewer/index.html` | 离线浏览器（97 服务可搜索） |
+
+### 工具与浏览器
+
+| 文件 | 内容 |
+|---|---|
+| `viewer/index.html` | **离线浏览器**：97 服务 / 1,170 方法 / 26 界面 / 237 flags / 3,548 chunk / 35 未解项 |
+| `ledgers/` | 50+ 份机器可读账本（TSV/JSON/TXT） |
+| `scripts/` | 全部可复跑的解析脚本（含 P5-PARSERS / P6-PARSERS） |
 | `out-of-scope/` | 按新规降级的运行取证归档（不计入完成率） |
 
 ---
