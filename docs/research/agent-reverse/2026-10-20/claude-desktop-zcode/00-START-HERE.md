@@ -165,6 +165,7 @@ CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL
 | `VERSION-MATRIX.md` | 两条版本线（0.14.x / 2.4230x）对照 |
 | `VERSION-DELTA.md` | 2.42304.0 vs 2.42304.2 逐文件 diff（唯一实质变化 = CA 屏蔽） |
 | `13-COVERAGE-AND-ACCEPTANCE.md` | 覆盖率、差集、独立审计、验收判定 |
+| **`14-COMPLETION-SELF-ASSESSMENT.md`** | **逐维度完成度自评：已拆完什么、什么不可完成、还能做什么** |
 | `12-UNKNOWN-AND-BLOCKERS.tsv` | 35 项未解清单（逐条含原因与补采办法） |
 | `PROGRESS.md` | 阶段进度与每轮新增 |
 

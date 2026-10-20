@@ -53,6 +53,11 @@
 | Electron channel 级配对闭合 | 3 / 1,232 —— **已解释**：单 channel 多路复用，正确单位是方法级 |
 | `contextBridge` 暴露 | 52 |
 | MCP 工具声明（从二进制恢复） | **200 行**（github 137 字面量≈135 去重 / office365 50 工具+10 资源处理器 / runtime 3） |
+| GrowthBook 实验开关 | **237**（136 命名 + 57 cai_ 代号 + 44 __gb__ 数字） |
+| SPA chunk 依赖图 | **3,548 chunk / 46,892 边 / 1,517 懒加载** |
+| 内置工具 | **19**（Bash/Read/Write/Edit/Glob/Grep/Task/TodoWrite/WebFetch/WebSearch/AskUserQuestion/NotebookEdit/ExitPlanMode/Skill/Cron×3/ScheduleWakeup/Artifact） |
+| napi 原生导出 | **110** |
+| BLE / EDR / 语音 / SSH | 均已定性（见 P2B / P5B / P6B / SSH-HELPERS） |
 | `webContents` 原生事件 | 60（非 IPC，无需配对） |
 
 ## 5. UI 覆盖
@@ -95,12 +100,12 @@
 
 | 状态 | 数量 | 类别分布 |
 |---|---:|---|
-| RESOLVED（本轮内已解决） | **14** | 3 个 WASM 身份、gated-imports、scc.json、handleEvent 事件名、帧协议/10MiB/100MiB、handlePassthrough 目标、nodeHost vs directMcpHost |
+| RESOLVED（本轮内已解决） | **19** | 3 个 WASM 身份、gated-imports、scc.json、handleEvent 事件名、帧协议/10MiB/100MiB、handlePassthrough 目标、nodeHost vs directMcpHost |
 | PARTIAL（部分解释） | 8 | 代号服务、SPA 组件树、两版 diff、Claude Code CLI 参数等 |
 | CLOUD-UNAVAILABLE | 2 | 服务端 agent loop、1P 远程 UI |
 | DEFERRED（形态受限） | 1 | SPA 组件名不可恢复（无 sourcemap） |
 | UNKNOWN | 2 | SSH 中继管道路径、代号服务含义 |
-| **合计** | **32** | — |
+| **合计** | **35** | — |
 
 ## 9. 独立审计（从原始包重新生成，不看本报告结论）
 
