@@ -14,13 +14,24 @@
 | `app/locales/` | 55 | Chromium 本地化包（每种语言一个） |
 | `app/` | 3 | `resources.pak`（12,436,139 B）、`chrome_100_percent.pak`（719,654 B）、`chrome_200_percent.pak`（1,269,017 B） |
 
-### 内容验证
+### 内容验证（PAK 格式头已解析，S）
 
-- 头部 magic：`05 00 00 00`（Chromium PAK 格式版本 5）。
-- `resources.pak` 内可读字符串仅 37 条，主要是音频编解码器标识（`reference libFLAC 1.3.3`、`ENCODER=Sound Grinder 4.2`）与二进制噪声。
-- `locales/*.pak` 是 Chromium 的 UI 字符串表（各语言），最大的三个是 `ml.pak`(1.77 MB)、`ta.pak`(1.76 MB)、`kn.pak`(1.72 MB) —— 印度语系字符集较大。
+PAK v5 头结构：`uint32 version, uint32 encoding, uint8 count_hi, uint16 count_lo, uint16 alias_count`。
 
-**判定**：**Chromium 运行时资源，无业务逻辑**。Claude 自己的界面文案不在这里（在 `ion-dist/i18n/*.json`，见 §3）。
+| 文件 | 版本 | **内部条目数** | 字节 |
+|---|---:|---:|---:|
+| `resources.pak` | 5 | **34,060** | 12,436,139 |
+| `chrome_100_percent.pak` | 5 | **44,289** | 719,654 |
+| `chrome_200_percent.pak` | 5 | **44,289** | 1,269,017 |
+| `locales/en-US.pak` | 5 | **74,800** | 586,582 |
+
+**这些数字说明**：`resources.pak` 不是"几个资源"，而是 **34,060 个条目**；语言包每个 **74,800 条**。
+它们是 Chromium 的 `grit` 资源系统，包含 HTML/CSS/JS 字符串、图片、音效等。
+
+可读字符串极少（仅 37 条，主要是 `reference libFLAC 1.3.3`、`ENCODER=Sound Grinder 4.2`），
+说明内容以二进制块存储（图片/音频/压缩文本），不是纯文本。
+
+**判定**：**Chromium 运行时资源，无 Claude 业务逻辑**。Claude 自己的文案在 `ion-dist/i18n`（35,441 键）与 `app/resources/*.json`（837 键）。
 
 ## 2. `.pri`（5 个，1,127,072 B）
 
