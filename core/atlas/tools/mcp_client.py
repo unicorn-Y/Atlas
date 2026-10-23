@@ -251,6 +251,7 @@ class MCPServerHandle:
     _owner_task: asyncio.Task[None] | None = None
     _owner_stop: asyncio.Event | None = None
     _oauth_context: Any = None
+    consecutive_terminal_errors: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +276,6 @@ class MCPServerConfig:
     tool_allow: list[str] | None = None
     tool_deny: list[str] = field(default_factory=list)
     blocking_reason: str | None = None
-    consecutive_terminal_errors: int = 0
 
 
 def _parse_server_configs() -> list[MCPServerConfig]:
