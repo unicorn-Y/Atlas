@@ -34,7 +34,8 @@ class ClassifiedError:
 def classify_api_error(error: Exception) -> ClassifiedError:
     status = getattr(error, "status_code", None) or getattr(error, "status", None)
     if status is None:
-        status = getattr(getattr(error, "response", None), "status_code", None)
+        response = getattr(error, "response", None)
+        status = getattr(response, "status_code", None) or getattr(response, "status", None)
     try:
         status = int(status) if status is not None else None
     except (TypeError, ValueError):
@@ -58,7 +59,7 @@ def classify_api_error(error: Exception) -> ClassifiedError:
         reason, retryable, fallback, compress = FailoverReason.auth, False, True, False
     elif status == 404:
         reason, retryable, fallback, compress = FailoverReason.model_not_found, False, True, False
-    elif any(word in text for word in ("timeout", "timed out")):
+    elif status in (408, 425, 499, 504) or any(word in text for word in ("timeout", "timed out")):
         reason, retryable, fallback, compress = FailoverReason.timeout, True, True, False
     elif any(word in text for word in ("connection", "network", "temporarily unavailable")):
         reason, retryable, fallback, compress = FailoverReason.network, True, True, False
