@@ -352,10 +352,13 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
     from atlas.models import ModelManager
 
     if isinstance(agent._model_mgr, ModelManager):
-        credential_error = agent._model_mgr.missing_model_credentials(runtime.model)
-        if credential_error:
-            yield {"type": "error", "category": "model", "detail": credential_error,
-                   "code": "MODEL_CREDENTIALS_MISSING"}
+        availability = agent._model_mgr.model_availability(runtime.model)
+        if not availability.get("available"):
+            reason = availability.get("reason")
+            yield {"type": "error", "category": "model",
+                   "detail": availability.get("message") or f"模型不可用：{runtime.model}",
+                   "code": "MODEL_CREDENTIALS_MISSING" if reason == "missing_credentials"
+                   else "MODEL_UNAVAILABLE"}
             state.abort = True
             return
     runtime.fallback_models = list(
@@ -949,7 +952,9 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
             atlas_agent=agent,
             atlas_context=runtime,
             reasoning_effort=request.reasoning_effort,
-            max_output_tokens=state.selected_config.get("max_output_tokens"),
+            max_output_tokens=agent._model_mgr.output_tokens_for_model(
+                runtime.model, None, state.selected_config.get("max_output_tokens"),
+            ),
             moa_enabled=runtime.moa_enabled,
             model_id=runtime.model,
             title_callback=on_session_title,
