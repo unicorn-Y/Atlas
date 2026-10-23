@@ -495,9 +495,8 @@ class ModelManager:
             raise ValueError(f"未知模型: {model_id}")
         if not target.get("custom"):
             raise ValueError("仅支持编辑自定义模型")
-        patch = patch if isinstance(patch, dict) else {}
-        if "api_key" in patch:
-            self.set_model_api_key(model_id, patch.get("api_key"))
+        if not isinstance(patch, dict):
+            raise ValueError("模型更新内容必须是对象")
         if "api_mode" in patch and patch["api_mode"] not in {
             None, "openai", "chat_completions", "anthropic_messages",
         }:
@@ -507,14 +506,42 @@ class ModelManager:
         hermes_pid = patch.get("hermes_provider")
         if hermes_pid and _catalog.resolve_catalog_id(str(hermes_pid)) is None:
             raise ValueError(f"未知服务商: {hermes_pid}")
+        candidate = dict(target)
         for field in _MODEL_PATCH_FIELDS:
             if field not in patch:
                 continue
             value = patch[field]
             if field in ("name", "base_url", "litellm_model", "native_model", "hermes_provider"):
-                target[field] = str(value).strip() if value is not None else None
+                candidate[field] = str(value).strip() if value is not None else None
             else:
-                target[field] = value
+                candidate[field] = value
+        for field in ("max_output_tokens",):
+            value = candidate.get(field)
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int) or value <= 0
+            ):
+                raise ValueError(f"{field} 必须是正整数")
+        capabilities = candidate.get("capabilities")
+        if capabilities is not None:
+            if not isinstance(capabilities, dict):
+                raise ValueError("capabilities 必须是对象")
+            for name, value in capabilities.items():
+                if name not in _CAPABILITY_FIELDS:
+                    raise ValueError(f"不支持的模型能力字段: {name}")
+                if name in {"context_window", "max_output_tokens"}:
+                    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                        raise ValueError(f"capabilities.{name} 必须是正整数")
+                elif not isinstance(value, bool):
+                    raise ValueError(f"capabilities.{name} 必须是布尔值")
+        price = candidate.get("price")
+        if price is not None and not isinstance(price, dict):
+            raise ValueError("price 必须是对象")
+        if "api_key" in patch:
+            # Validate the full public patch before changing the OS keyring so a
+            # rejected metadata update cannot leave a partially applied edit.
+            self.set_model_api_key(model_id, patch.get("api_key"))
+        target.clear()
+        target.update(candidate)
         self._persist_settings()
         log.info("model_manager.update_model", model_id=model_id)
         result = dict(target)
