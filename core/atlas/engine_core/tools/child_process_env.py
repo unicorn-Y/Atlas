@@ -52,6 +52,16 @@ def _string_env(values: Mapping[str, object] | None) -> dict[str, str]:
     return {str(key): str(value) for key, value in (values or {}).items()}
 
 
+def _apply_overrides(env: dict[str, str], explicit: Mapping[str, object] | None) -> None:
+    for key, value in (explicit or {}).items():
+        name = str(key)
+        existing = next((item for item in env if item.casefold() == name.casefold()), name)
+        if value is None:
+            env.pop(existing, None)
+        else:
+            env[existing] = str(value)
+
+
 def child_process_env(explicit: Mapping[str, object] | None = None) -> dict[str, str]:
     """Build a command-tool environment, optionally removing model credentials.
 
@@ -63,23 +73,12 @@ def child_process_env(explicit: Mapping[str, object] | None = None) -> dict[str,
     if _scrub_enabled():
         for name in _MODEL_CREDENTIALS:
             env.pop(name, None)
-    overrides = explicit or {}
-    for key, value in overrides.items():
-        name = str(key)
-        if value is None:
-            env.pop(name, None)
-        else:
-            env[name] = str(value)
+    _apply_overrides(env, explicit)
     return env
 
 
 def mcp_child_process_env(explicit: Mapping[str, object] | None = None) -> dict[str, str]:
     """Build an MCP environment with parent inheritance and explicit removals."""
     env = _string_env(os.environ)
-    for key, value in (explicit or {}).items():
-        name = str(key)
-        if value is None:
-            env.pop(name, None)
-        else:
-            env[name] = str(value)
+    _apply_overrides(env, explicit)
     return env
