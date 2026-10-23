@@ -68,6 +68,17 @@ _FILE_SEARCH_GUIDANCE = (
     "excerpt answers the question."
 )
 
+_PLAN_EXECUTION_GUIDANCE = (
+    "## Plans and multi-step work\n"
+    "For a multi-step task, maintain an ordered task list and keep its statuses current. "
+    "A useful plan states the goal, the concrete steps, important dependencies, and how "
+    "the result will be checked; keep it proportionate to the task. In Plan mode, inspect "
+    "and propose only. Once a plan is approved, carry it out in order and report progress "
+    "against it. If new evidence requires a material change, update the plan and explain "
+    "the change before continuing. Keep collaborators aligned by giving each a clear "
+    "scope, relevant context, and a concrete completion report."
+)
+
 
 def _breaker_prompt() -> str:
     """Workspace breaker prompt (engine/breaker.md) as the run's identity block.
@@ -651,6 +662,7 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
             "You are in read-only Plan mode. Inspect as needed, then return a concrete "
             "implementation plan. Do not modify files or execute commands."
         )))
+    initial_messages.append(SystemMessage(content=_PLAN_EXECUTION_GUIDANCE))
     for rule in request.workspace_rules or []:
         initial_messages.append(SystemMessage(content=(
             f"Workspace instructions from {rule['path']} ({rule['bytes']} bytes):\n"
