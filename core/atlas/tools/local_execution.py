@@ -119,9 +119,22 @@ def _find_git_bash() -> str | None:
 
 def _effective_shell(shell: str, git_bash: str | None, *, windows: bool) -> tuple[str, str | None]:
     if shell == "auto":
-        if git_bash:
-            return "bash", git_bash
-        return ("powershell", None) if windows else ("bash", None)
+        # Honor a user default only when that runtime is installed. An invalid
+        # preference falls through to the platform default.
+        from atlas.config import get_config
+
+        configured = str(get_config().get("local_execution.default_shell", "") or "").strip().lower()
+        preferred = configured or os.environ.get("ATLAS_DEFAULT_SHELL", "").strip().lower()
+        if preferred in {"bash", "powershell", "cmd"}:
+            if preferred == "bash" and (not windows or git_bash):
+                return "bash", git_bash
+            if preferred == "powershell" and (shutil.which("powershell.exe") or shutil.which("pwsh")):
+                return "powershell", None
+            if preferred == "cmd" and (os.environ.get("COMSPEC") or shutil.which("cmd.exe")):
+                return "cmd", None
+        if windows:
+            return ("bash", git_bash) if git_bash else ("powershell", None)
+        return "bash", None
     if shell == "bash":
         if windows and not git_bash:
             raise ValueError("Git Bash is not installed; choose PowerShell or cmd explicitly.")
@@ -167,7 +180,7 @@ LOCAL_TOOLS = [
             "(local_file read/list/glob/search, grep, glob, edit, write)."
         ),
         {
-            "shell": {"type": "string", "enum": ["powershell", "cmd", "bash"]},
+            "shell": {"type": "string", "enum": ["auto", "powershell", "cmd", "bash"], "default": "auto"},
             "command": {"type": "string"},
             "cwd": {"type": "string"},
             "env": {"type": "object", "additionalProperties": {"type": "string"}},
@@ -177,7 +190,7 @@ LOCAL_TOOLS = [
             "keep_stdin": {"type": "boolean"},
             "pty": {"type": "boolean"},
         },
-        ["shell", "command"],
+        ["command"],
     ),
     _tool(
         "local_exec",
@@ -218,7 +231,7 @@ LOCAL_TOOLS = [
             "execution_id": {"type": "string"},
             "executable": {"type": "string"},
             "args": {"type": "array", "items": {"type": "string"}},
-            "shell": {"type": "string", "enum": ["powershell", "cmd", "bash"]},
+            "shell": {"type": "string", "enum": ["auto", "powershell", "cmd", "bash"]},
             "command": {"type": "string"},
             "cwd": {"type": "string"},
             "env": {"type": "object", "additionalProperties": {"type": "string"}},
@@ -986,13 +999,15 @@ class LocalExecutionRuntime:
     async def _start_from_shell(
         self, args: dict[str, Any], run_id: str | None, callback: OutputCallback | None
     ) -> LocalProcess:
-        shell = args["shell"]
+        shell = str(args.get("shell") or "auto").strip().lower()
         command = str(args["command"])
         shell, resolved_bash = _effective_shell(
             shell, _find_git_bash(), windows=os.name == "nt",
         )
         if shell == "powershell":
-            executable = shutil.which("powershell.exe") or shutil.which("pwsh") or "powershell.exe"
+            executable = shutil.which("powershell.exe") or shutil.which("pwsh")
+            if not executable:
+                raise ValueError("PowerShell was not found; choose an installed shell explicitly.")
             utf8 = (
                 "$utf8 = [Text.UTF8Encoding]::new(); "
                 "[Console]::OutputEncoding = $utf8; $OutputEncoding = $utf8; "
@@ -1006,8 +1021,11 @@ class LocalExecutionRuntime:
                 utf8 + command,
             ]
         elif shell == "cmd":
+            executable = os.environ.get("COMSPEC") or shutil.which("cmd.exe")
+            if not executable:
+                raise ValueError("cmd.exe was not found on this Windows host.")
             argv = [
-                os.environ.get("COMSPEC", "cmd.exe"),
+                executable,
                 "/d",
                 "/s",
                 "/c",
