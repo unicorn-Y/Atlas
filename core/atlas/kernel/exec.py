@@ -88,14 +88,19 @@ class ExecHandle:
 
 
 class ExecManager:
+    PROGRESS_AFTER_SECONDS = 2.0
+    AUTO_BACKGROUND_AFTER_SECONDS = 15.0
+
     def __init__(self, dispatch: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]],
                  *, output_dir: str | Path, run_id: str | None = None,
-                 max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES, local_runtime: Any = None) -> None:
+                 max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES, local_runtime: Any = None,
+                 event_queue: asyncio.Queue[Any] | None = None) -> None:
         self.dispatch = dispatch
         self.output_dir = Path(output_dir)
         self.run_id = run_id
         self.max_output_bytes = max_output_bytes
         self.local_runtime = local_runtime
+        self.event_queue = event_queue
         self.handles: dict[str, ExecHandle] = {}
 
     async def start(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -183,12 +188,15 @@ class ExecManager:
         data = {"execution_id": handle.execution_id, "state": handle.outcome,
                 "outcome": handle.outcome, "exit_code": handle.exit_code,
                 "timed_out": handle.timed_out, "output": handle.buffer.text(),
+                "timeout_seconds": handle.timeout if handle.timed_out else None,
                 "backgrounded": handle.detached,
                 "output_ref": str(handle.output_path.resolve()),
                 "duration_seconds": round(time.monotonic() - handle.started, 3)}
+        status = (f"Process timed out after {handle.timeout:g}s" if handle.timed_out and handle.timeout is not None
+                  else f"Process {handle.execution_id} ({handle.outcome})")
         return {"data": data, "outcome": handle.outcome,
                 "output_ref": data["output_ref"], "is_error": handle.outcome in {"failed", "unknown"},
-                "content": [{"type": "text", "text": f"{data['output']}\nFull output: {data['output_ref']}\nProcess: {handle.execution_id} ({handle.outcome})"}]}
+                "content": [{"type": "text", "text": f"{data['output']}\nFull output: {data['output_ref']}\n{status}"}]}
 
     async def poll(self, execution_id: str) -> dict[str, Any]:
         handle = self.handles[execution_id]
@@ -303,7 +311,28 @@ class ExecManager:
             if args.get("background") or args.get("detached"):
                 return result
             try:
-                await asyncio.shield(self.handles[execution_id].watcher)
+                watcher = self.handles[execution_id].watcher
+                done, _ = await asyncio.wait({watcher}, timeout=self.PROGRESS_AFTER_SECONDS)
+                if not done and self.event_queue is not None:
+                    await self.event_queue.put({
+                        "type": "process.progress", "execution_id": execution_id,
+                        "elapsed_seconds": round(time.monotonic() - self.handles[execution_id].started, 1),
+                    })
+                if not done:
+                    done, _ = await asyncio.wait(
+                        {watcher}, timeout=max(0.0, self.AUTO_BACKGROUND_AFTER_SECONDS
+                                               - self.PROGRESS_AFTER_SECONDS),
+                    )
+                if not done:
+                    handle = self.handles[execution_id]
+                    handle.detached = True
+                    if self.event_queue is not None:
+                        await self.event_queue.put({
+                            "type": "process.backgrounded", "execution_id": execution_id,
+                            "threshold_seconds": self.AUTO_BACKGROUND_AFTER_SECONDS,
+                        })
+                    return await self.poll(execution_id)
+                await asyncio.shield(watcher)
             except asyncio.CancelledError:
                 handle = self.handles[execution_id]
                 if not handle.detached:
@@ -340,11 +369,11 @@ class ExecManager:
 
     async def shutdown(self) -> None:
         for handle in self.handles.values():
-            if handle.outcome == "running" and not handle.detached:
+            if handle.outcome == "running":
                 await self.kill(handle.execution_id)
-            if handle.watcher is not None and not handle.detached:
+            if handle.watcher is not None:
                 handle.watcher.cancel()
         await asyncio.gather(*(
             h.watcher for h in self.handles.values()
-            if h.watcher is not None and not h.detached
+            if h.watcher is not None
         ), return_exceptions=True)

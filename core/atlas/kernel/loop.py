@@ -596,6 +596,7 @@ class AtlasKernel:
                 dispatch_managed_process,
                 output_dir=output_dir, run_id=run_id,
                 local_runtime=getattr(agent, "_local_execution", None),
+                event_queue=event_queue,
                 max_output_bytes=int(engine_config.get("exec_head_tail_bytes", 10_000)),
             )
             proxy_runtime = copy.copy(runtime)
