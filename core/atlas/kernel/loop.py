@@ -832,6 +832,26 @@ class AtlasKernel:
 
             async def new_context_window_callback() -> dict[str, Any]:
                 result = await prepare_compaction(force=True)
+                if result.error == "context_over_budget: no safely compactable history":
+                    # A clean or very short conversation has nothing SessionDB can
+                    # safely replace yet. Still honor the handoff request with a
+                    # model summary so the following turn starts from a compact
+                    # continuation context.
+                    source = copy.deepcopy(messages)
+                    if source and isinstance(source[-1].get("tool_calls"), list) and source[-1]["tool_calls"]:
+                        source.pop()  # exclude this still-pending new_context_window tool call
+                    summary = await summarize(source, (
+                        "Create a concise Chinese handoff summary for the next model context. "
+                        "Preserve the user's goal, constraints, decisions, completed work, "
+                        "and next step. Do not claim unfinished work is complete. Output only "
+                        "the summary."
+                    ))
+                    if not summary.strip():
+                        raise RuntimeError("Could not create a handoff summary for the new context.")
+                    return {"method": "handoff", "summary": summary.strip(),
+                            "before_tokens": result.before_tokens,
+                            "after_tokens": estimate_tokens(source),
+                            "budget_tokens": result.budget_tokens}
                 if result.error or result.method == "none":
                     raise RuntimeError(result.error or "No safe conversation history could be compacted.")
                 return {"method": result.method, "before_tokens": result.before_tokens,
@@ -2540,7 +2560,7 @@ class AtlasKernel:
                                     "content": message.get("content", "")})
             result = history[-limit:]
             return {"content": json.dumps(result, ensure_ascii=False), "data": {"items": result}}
-        if name == "new_context":
+        if name in {"new_context", "new_context_window"}:
             callback = getattr(runtime, "new_context_window_callback", None)
             hermes_agent = getattr(runtime, "hermes_agent", None)
             if not callable(callback):
@@ -2549,14 +2569,16 @@ class AtlasKernel:
                 handoff = await callback()
             except (RuntimeError, ValueError) as exc:
                 return {"content": str(exc), "is_error": True, "outcome": "failed"}
-            if hermes_agent is not None and isinstance(handoff, str):
-                hermes_agent.set_context_handoff_summary(handoff)
+            summary = handoff if isinstance(handoff, str) else handoff.get("summary") if isinstance(handoff, dict) else None
+            if hermes_agent is not None and isinstance(summary, str) and summary.strip():
+                hermes_agent.set_context_handoff_summary(summary)
             await event_queue.put({
                 "type": "context.window.switched", "data": (
-                    {"summary": handoff} if isinstance(handoff, str) else dict(handoff)
+                    {"summary": summary, **({key: value for key, value in handoff.items() if key != "summary"}
+                                              if isinstance(handoff, dict) else {})}
                 ),
             })
-            return {"content": "Compacted the current session history and prepared a fresh context.",
+            return {"content": "Prepared a concise handoff summary and switched to a fresh context.",
                     "data": handoff, "outcome": "completed"}
         if name == "mark_chapter":
             title = str(arguments.get("title") or "").strip()[:80]

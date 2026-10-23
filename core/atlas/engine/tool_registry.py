@@ -447,14 +447,15 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                         return "无法生成上下文交接摘要。"
                     summary = asyncio.run_coroutine_threadsafe(callback(), bound_loop).result()
                     hermes_agent = getattr(bound_runtime, "hermes_agent", None)
-                    if hermes_agent is None:
+                    summary_text = summary if isinstance(summary, str) else summary.get("summary") if isinstance(summary, dict) else None
+                    if hermes_agent is None or not isinstance(summary_text, str) or not summary_text.strip():
                         return "无法切换上下文：当前会话没有可用的 Hermes Agent。"
-                    hermes_agent.set_context_handoff_summary(str(summary))
+                    hermes_agent.set_context_handoff_summary(summary_text)
                     event_queue = getattr(bound_runtime, "event_queue", None)
                     if event_queue is not None:
                         asyncio.run_coroutine_threadsafe(event_queue.put({
                             "type": "context.window.switched",
-                            "data": {"summary": str(summary)},
+                            "data": {"summary": summary_text},
                         }), bound_loop).result()
                     return "已整理交接摘要，正在切换到新上下文。"
                 if _name == "mark_chapter":
