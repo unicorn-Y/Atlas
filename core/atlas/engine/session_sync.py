@@ -42,6 +42,65 @@ from atlas.session_migration_gate import (
 _SESSION_SNAPSHOT_KEY = "_atlas_session_snapshot"
 _SESSION_SNAPSHOT_SCHEMA = 1
 _TRANSCRIPT_ROLES = frozenset({"system", "user", "assistant", "tool"})
+_SESSION_SNAPSHOT_FIELDS = frozenset({
+    "schema_version", "kind", "created_at", "method", "boundary_watermark",
+    "source_message_count", "source_first_message_id", "source_last_message_id",
+    "summary_sha256", "summary_chars", "state",
+})
+_SESSION_SNAPSHOT_STATE_FIELDS = frozenset({"plan", "todo", "open_tool_call_ids"})
+
+
+def _valid_session_snapshot_manifest(manifest: Any, summary: str) -> bool:
+    """Reject incomplete, mistyped, or extended snapshot state at the restore boundary."""
+    if not isinstance(manifest, dict) or set(manifest) != _SESSION_SNAPSHOT_FIELDS:
+        return False
+    if (type(manifest.get("schema_version")) is not int
+            or manifest["schema_version"] != _SESSION_SNAPSHOT_SCHEMA
+            or manifest.get("kind") != "context_compaction"
+            or manifest.get("method") != "summary"):
+        return False
+    if not isinstance(manifest.get("created_at"), str):
+        return False
+    try:
+        datetime.fromisoformat(manifest["created_at"].replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    for field in ("boundary_watermark", "source_message_count", "summary_chars"):
+        value = manifest.get(field)
+        if type(value) is not int or value < 0:
+            return False
+    first_id, last_id = (manifest.get("source_first_message_id"),
+                         manifest.get("source_last_message_id"))
+    if any(value is not None and (not isinstance(value, str) or not value)
+           for value in (first_id, last_id)):
+        return False
+    source_count = manifest["source_message_count"]
+    if (source_count == 0 and (first_id is not None or last_id is not None)) or (
+            source_count > 0 and (first_id is None or last_id is None)):
+        return False
+    digest = manifest.get("summary_sha256")
+    if (not isinstance(digest, str) or len(digest) != 64
+            or any(char not in "0123456789abcdef" for char in digest)):
+        return False
+    if manifest["summary_chars"] != len(summary):
+        return False
+    import hashlib
+
+    if digest != hashlib.sha256(summary.encode("utf-8")).hexdigest():
+        return False
+    state = manifest.get("state")
+    if not isinstance(state, dict) or not set(state).issubset(_SESSION_SNAPSHOT_STATE_FIELDS):
+        return False
+    for field in ("plan", "todo"):
+        if field in state and state[field] is not None and not isinstance(state[field], dict):
+            return False
+    open_calls = state.get("open_tool_call_ids")
+    if open_calls is not None and (
+            not isinstance(open_calls, list)
+            or any(not isinstance(item, str) or not item for item in open_calls)
+            or len(set(open_calls)) != len(open_calls)):
+        return False
+    return True
 
 
 async def wait_for_session_migration(home: str | Path) -> None:
@@ -129,7 +188,12 @@ def read_session_model_messages(home: str | Path, conversation_id: str) -> list[
                 message[key] = metadata[key]
     from atlas.kernel.repair import normalize_tool_results
 
-    return normalize_tool_results(model_history, require_complete=False)
+    # Corrupt orphan/duplicate receipts are excluded from the model projection;
+    # the kernel's recovery pass then pairs unresolved assistant calls with an
+    # explicit unknown-outcome receipt before the next request.
+    return normalize_tool_results(
+        model_history, require_complete=False, drop_orphan_results=True,
+    )
 
 
 def begin_session_compaction(
@@ -219,8 +283,6 @@ def restore_session_snapshot(home: str | Path, conversation_id: str) -> dict[str
     archived transcript generations. Legacy summaries without a manifest remain
     resumable and are surfaced with ``legacy=True``.
     """
-    import hashlib
-
     messages = read_session_model_messages(home, conversation_id)
     anchor = None
     manifest: dict[str, Any] | None = None
@@ -232,21 +294,7 @@ def restore_session_snapshot(home: str | Path, conversation_id: str) -> dict[str
             content = message.get("content")
             if not isinstance(content, str):
                 raise ValueError("Invalid session snapshot: summary content is not text")
-            digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
-            state = candidate.get("state")
-            open_calls = state.get("open_tool_call_ids") if isinstance(state, dict) else None
-            runtime_state_valid = isinstance(state, dict) and all(
-                state.get(key) is None or isinstance(state.get(key), dict)
-                for key in ("plan", "todo")
-            ) and (open_calls is None or (
-                isinstance(open_calls, list)
-                and all(isinstance(item, str) and item for item in open_calls)
-            ))
-            if (candidate.get("schema_version") != _SESSION_SNAPSHOT_SCHEMA
-                    or candidate.get("kind") != "context_compaction"
-                    or candidate.get("summary_sha256") != digest
-                    or candidate.get("summary_chars") != len(content)
-                    or not runtime_state_valid):
+            if not _valid_session_snapshot_manifest(candidate, content):
                 raise ValueError("Invalid session snapshot: manifest integrity check failed")
             anchor, manifest, legacy = index, dict(candidate), False
         elif message.get("_compressed_summary"):
