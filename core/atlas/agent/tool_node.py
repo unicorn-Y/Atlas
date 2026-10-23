@@ -1375,6 +1375,22 @@ async def execute_tools_node(
                 "is_error": True,
             }
 
+        # All executors converge on one result envelope before post-tool hooks,
+        # persistence and event shaping. A plug-in or stale adapter returning
+        # an unexpected value must not abort the whole turn or strand siblings.
+        if not isinstance(result, dict):
+            result = {
+                "data": {"value": result},
+                "content": [{"type": "text", "text": str(result)}],
+                "is_error": False,
+            }
+        content = result.get("content")
+        if not isinstance(content, list):
+            result["content"] = [{
+                "type": "text", "text": "" if content is None else str(content),
+            }]
+        result["is_error"] = bool(result.get("is_error", False))
+
         if (fn_name == "local_file" and fn_args.get("action") == "read"
                 and not fn_args.get("binary") and isinstance(result.get("data"), dict)
                 and getattr(ctx, "kernel_edit", None) is not None):
