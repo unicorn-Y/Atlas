@@ -216,6 +216,8 @@ def restore_session_snapshot(home: str | Path, conversation_id: str) -> dict[str
     archived transcript generations. Legacy summaries without a manifest remain
     resumable and are surfaced with ``legacy=True``.
     """
+    import hashlib
+
     messages = read_session_model_messages(home, conversation_id)
     anchor = None
     manifest: dict[str, Any] | None = None
@@ -224,6 +226,17 @@ def restore_session_snapshot(home: str | Path, conversation_id: str) -> dict[str
         metadata = message.get("display_metadata")
         candidate = metadata.get(_SESSION_SNAPSHOT_KEY) if isinstance(metadata, dict) else None
         if isinstance(candidate, dict):
+            content = message.get("content")
+            if not isinstance(content, str):
+                raise ValueError("Invalid session snapshot: summary content is not text")
+            digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+            state = candidate.get("state")
+            if (candidate.get("schema_version") != _SESSION_SNAPSHOT_SCHEMA
+                    or candidate.get("kind") != "context_compaction"
+                    or candidate.get("summary_sha256") != digest
+                    or candidate.get("summary_chars") != len(content)
+                    or not isinstance(state, dict)):
+                raise ValueError("Invalid session snapshot: manifest integrity check failed")
             anchor, manifest, legacy = index, dict(candidate), False
         elif message.get("_compressed_summary"):
             anchor, manifest, legacy = index, None, True
