@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import codecs
+import copy
 import glob as glob_module
 import json
 import math
@@ -165,6 +166,8 @@ LOCAL_TOOLS = [
         "local_shell",
         (
             "Run a shell command on this machine and return its output.\n"
+            "- Relative paths use the active session workspace; with no selected workspace they use Atlas's "
+            "configured/launch working directory shown in the environment. Provide cwd explicitly if needed.\n"
             "- shell: on Windows prefer \"bash\" (Git Bash, POSIX syntax: forward slashes, $VAR, &&). "
             "Use \"powershell\" only for PowerShell cmdlets, and then write PowerShell syntax only.\n"
             "- Never pass multi-line code inline (python -c, node -e, heredocs inside quotes): nested "
@@ -203,6 +206,8 @@ LOCAL_TOOLS = [
             "over local_shell when arguments contain spaces, quotes or JSON (e.g. executable=\"python\", "
             "args=[\"script.py\", \"--name\", \"a b\"]). Works for python, node, npm, npx, git and any "
             "other executable on PATH. Shell features (pipes, redirects, globs, &&) are not available.\n"
+            "- Relative paths use the active session workspace; with no selected workspace they use Atlas's "
+            "configured/launch working directory shown in the environment. Provide cwd explicitly if needed.\n"
             "- One-off multi-line code: executable=\"python\" (or \"node\"), args=[\"-\"], stdin=<the "
             "code>. It runs in this single call with no quoting and no file to write first."
         ),
@@ -261,6 +266,8 @@ LOCAL_TOOLS = [
         (
             "Read files and manage files or directories at any local path: read, list, glob, search, "
             "stat, mkdir, copy, move, delete, plus write/append.\n"
+            "- Relative paths use the active session workspace; with no selected workspace they use Atlas's "
+            "configured/launch working directory shown in the environment. Provide cwd explicitly if needed.\n"
             "- To change a text file, read it here first, then use edit (targeted replacement) or "
             "write (whole file). Use write/append here only when edit and write are not offered.\n"
             "- Need several files? Pass them all in paths (up to 20) in one read call instead of "
@@ -477,7 +484,43 @@ class LocalExecutionRuntime:
         self._read_paths: set[str] = set()
 
     def get_tools_for_llm(self) -> list[dict[str, Any]]:
-        return LOCAL_TOOLS
+        tools = copy.deepcopy(LOCAL_TOOLS)
+        try:
+            cwd = self._agent_cwd()
+            home = Path.home().resolve()
+        except (OSError, RuntimeError):
+            cwd = Path.cwd().resolve()
+            home = None
+        home_default = home is not None and cwd == home
+        for tool in tools:
+            function = tool.get("function") or {}
+            if function.get("name") not in {
+                "local_shell", "local_exec", "local_process", "local_file", "local_edit",
+            }:
+                continue
+            if home_default:
+                detail = (
+                    f"Current Atlas working directory: {cwd}. No project/workspace is selected; "
+                    "relative paths and commands without cwd are rejected here. Select a workspace "
+                    "or provide an explicit cwd (or an absolute file path).\n"
+                )
+            else:
+                detail = (
+                    f"Current Atlas working directory: {cwd}. Relative paths use the active session "
+                    "workspace when selected, otherwise this directory.\n"
+                )
+            function["description"] = detail + str(function.get("description") or "")
+        return tools
+
+    @staticmethod
+    def _agent_cwd() -> Path:
+        """Use the same configured/session cwd as Atlas's CLI and environment prompt."""
+        try:
+            from atlas.engine_core.agent.runtime_cwd import resolve_agent_cwd
+
+            return resolve_agent_cwd().expanduser().resolve()
+        except ImportError:
+            return Path.cwd().resolve()
 
     async def call_tool(
         self,
@@ -488,7 +531,7 @@ class LocalExecutionRuntime:
         output_callback: OutputCallback | None = None,
         event_callback: Any = None,
     ) -> dict[str, Any]:
-        args = arguments or {}
+        args = dict(arguments or {})
         output_callback = output_callback or self.output_callback
         if self.permission_mode != "full_access":
             return self._error(
@@ -497,6 +540,30 @@ class LocalExecutionRuntime:
         if self._closed:
             return self._error("Local execution runtime is shutting down.")
         try:
+            # Match CLI agents: use the session's declared workspace when one
+            # exists, otherwise use Atlas's configured/launch working directory.
+            # A desktop backend launched in the user's home is not a project
+            # selection; reject implicit relative paths there so they cannot
+            # silently read or execute against C:\Users\<user>.
+            uses_cwd = name in {"local_shell", "local_exec"}
+            uses_cwd = uses_cwd or (name == "local_process" and args.get("action") == "start")
+            if name in {"local_file", "local_edit", "local_edit_batch"}:
+                raw_paths = args.get("paths") if name == "local_file" else None
+                if name == "local_edit_batch":
+                    candidates = [item.get("path") for item in args.get("edits", [])
+                                  if isinstance(item, dict)]
+                else:
+                    candidates = raw_paths if isinstance(raw_paths, list) else [args.get("path")]
+                uses_cwd = any(
+                    bool(value) and not Path(os.path.expandvars(os.path.expanduser(str(value)))).is_absolute()
+                    for value in candidates
+                )
+            if uses_cwd and not str(args.get("cwd") or "").strip():
+                workspace = self._workspace_root(args)
+                if workspace is not None:
+                    args["cwd"] = str(workspace)
+                else:
+                    args["cwd"] = str(self._default_cwd())
             self._validate_execution_args(name, args)
             if name == "local_file" and args.get("action") == "read" and args.get("paths"):
                 data = await asyncio.to_thread(self._read_many, args)
@@ -698,12 +765,13 @@ class LocalExecutionRuntime:
         if not isinstance(edits, list) or not 1 <= len(edits) <= 32:
             raise ValueError("edits must contain between 1 and 32 changes")
         workspace = self._workspace_root(args)
+        cwd = workspace or Path(args.get("cwd") or Path.cwd())
         staged: list[tuple[Path, bytes, bytes, tuple[int, int, int]]] = []
         seen: set[Path] = set()
         for edit in edits:
             if not isinstance(edit, dict):
                 raise ValueError("Each edit must be an object")
-            path = self._path(edit.get("path"), str(workspace) if workspace else None)
+            path = self._path(edit.get("path"), str(cwd))
             self._ensure_workspace_path(path, workspace)
             if path in seen:
                 raise ValueError(f"Duplicate edit target: {path}")
@@ -769,6 +837,24 @@ class LocalExecutionRuntime:
         return Path(raw).expanduser().resolve()
 
     @staticmethod
+    def _default_cwd() -> Path:
+        """Return Atlas's configured cwd or launch cwd, refusing an implicit home cwd."""
+        cwd = LocalExecutionRuntime._agent_cwd()
+        try:
+            home = Path.home().resolve()
+        except OSError:
+            home = None
+        if home is not None and cwd == home:
+            raise ValueError(
+                f"No project or workspace is selected. Atlas's current working directory is {cwd}, "
+                "which is the user home directory; select a workspace or provide an explicit cwd "
+                "(or absolute file path) before using relative paths."
+            )
+        if not cwd.is_dir():
+            raise NotADirectoryError(f"Atlas current working directory does not exist: {cwd}")
+        return cwd
+
+    @staticmethod
     def _ensure_workspace_path(path: Path, workspace: Path | None) -> None:
         # Atlas runs unsandboxed like a CLI agent: approval is the permission
         # layer's job, so a missing or different workspace no longer blocks
@@ -811,6 +897,8 @@ class LocalExecutionRuntime:
         encoding = str(args.get("encoding", "utf-8"))
         workspace = self._workspace_root(args)
         if action == "read":
+            if not path.exists():
+                raise FileNotFoundError(f"File not found: {path}")
             total_size = path.stat().st_size if path.is_file() else 0
             if args.get("byte_offset") is not None or args.get("byte_limit") is not None:
                 if not path.is_file():

@@ -128,6 +128,32 @@ class ExecManager:
             args["command"] = args.pop("cmd")
         if "workdir" in args:
             args["cwd"] = args.pop("workdir")
+        if not str(args.get("cwd") or "").strip():
+            try:
+                from atlas.engine_core.agent.runtime_cwd import resolve_agent_cwd
+
+                cwd = resolve_agent_cwd().expanduser().resolve()
+                home = Path.home().resolve()
+                if cwd == home:
+                    return {
+                        "is_error": True,
+                        "error": (
+                            f"No project or workspace is selected. Atlas's current working directory is {cwd}, "
+                            "which is the user home directory; select a workspace or provide an explicit cwd "
+                            "before running a relative command."
+                        ),
+                    }
+                if not cwd.is_dir():
+                    return {"is_error": True, "error": f"Atlas current working directory does not exist: {cwd}"}
+                args["cwd"] = str(cwd)
+            except ImportError:
+                cwd = Path.cwd().resolve()
+                if cwd == Path.home().resolve():
+                    return {
+                        "is_error": True,
+                        "error": f"No project or workspace is selected; refusing implicit home cwd {cwd}.",
+                    }
+                args["cwd"] = str(cwd)
         if "command" in args:
             args.setdefault("shell", "auto")
         result = await self.dispatch("local_process", args)
