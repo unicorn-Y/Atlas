@@ -600,10 +600,15 @@ class ToolScheduler:
 
 def _cancelled_result(call: Any, *, started: bool) -> ToolExecutionResult:
     call_id, name = _call_identity(call)
-    phase = "during execution" if started else "before execution"
+    detail = (
+        "Tool call was cancelled during execution; it did not complete and may have "
+        "partial effects. Inspect the current state before retrying."
+        if started else
+        "Tool call was cancelled before execution; the requested operation was not executed."
+    )
     output = {
         "is_error": True,
-        "error": f"Tool call cancelled {phase}",
+        "error": detail,
         "outcome": "cancelled",
     }
     return ToolExecutionResult(
