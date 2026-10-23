@@ -801,7 +801,10 @@ async def complete_stream(
                 request_id, estimated, purpose="conversation",
                 model=route.model_id or candidate, wire_model=wire_model,
             ):
-                raise ModelCallError("Run input-token budget reached", category="budget")
+                raise ModelCallError(
+                    "本次任务的 Token 或费用预算已达上限；下一次模型请求未发送。调整运行上限后可以继续。",
+                    category="budget",
+                )
             stream = None
             attempt_text = ""
             attempt_reasoning = ""
@@ -1203,12 +1206,33 @@ def _usage_row(result: ModelCallResult, request_id: str, wire_model: str,
         output_tokens = max(0, int(output_tokens or 0))
     except (TypeError, ValueError):
         input_tokens = output_tokens = 0
+    details = usage.get("prompt_tokens_details") or usage.get("input_tokens_details") or {}
+    cached = next((usage.get(key) for key in (
+        "cached_input_tokens", "cache_read_input_tokens", "cached_tokens", "cache_read",
+    ) if usage.get(key) is not None), None)
+    if cached is None and isinstance(details, dict):
+        cached = next((details.get(key) for key in ("cached_tokens", "cache_read")
+                       if details.get(key) is not None), 0)
+    try:
+        cached = max(0, min(input_tokens, int(cached or 0)))
+    except (TypeError, ValueError):
+        cached = 0
+    cache_write = next((usage.get(key) for key in (
+        "cache_creation_input_tokens", "cache_write_input_tokens", "cache_write_tokens",
+    ) if usage.get(key) is not None), 0)
+    try:
+        cache_write = max(0, min(input_tokens - cached, int(cache_write or 0)))
+    except (TypeError, ValueError):
+        cache_write = 0
     return {
         "request_id": request_id, "purpose": "conversation", "model": result.model,
         "provider": result.provider, "wire_model": wire_model,
         "input_tokens": input_tokens or estimated_input_tokens,
         "output_tokens": output_tokens,
         "context_tokens": input_tokens or estimated_input_tokens,
+        "cached_input_tokens": cached,
+        "uncached_input_tokens": max(0, input_tokens - cached - cache_write),
+        "cache_write_tokens": cache_write,
         "duration_ms": result.duration_ms,
         **{key: value for key, value in usage.items()
            if key not in {"prompt_tokens", "completion_tokens", "input_tokens", "output_tokens"}

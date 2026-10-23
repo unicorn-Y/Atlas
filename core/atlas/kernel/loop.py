@@ -331,7 +331,7 @@ class AtlasKernel:
 
     async def run(self, request: KernelRequest) -> AsyncIterator[dict[str, Any]]:
         from atlas.kernel.exec import ExecManager
-        from atlas.usage import env_run_usage_budget
+        from atlas.usage import configured_run_usage_budget
 
         runtime = request.runtime
         agent = request.agent
@@ -801,7 +801,7 @@ class AtlasKernel:
             model_profile = profile_for(wire_model, selected_model)
             stuck = StuckDetector(**model_profile.stuck)
             output_token_limit = request.max_output_tokens or model_profile.max_output_tokens
-            usage_budget = request.usage_budget or env_run_usage_budget()
+            usage_budget = request.usage_budget or configured_run_usage_budget()
 
             async def record_workflow_usage(row: dict[str, Any]) -> None:
                 usage = dict(row)
@@ -843,13 +843,33 @@ class AtlasKernel:
                         "purpose": purpose, "model": event.get("model"),
                         "provider": event.get("provider"), "input_tokens": input_count,
                         "output_tokens": output_count, "context_tokens": input_count,
-                        "cached_tokens": cached_count,
+                        "cached_tokens": cached_count, "cached_input_tokens": cached_count,
+                        "uncached_input_tokens": max(0, input_count - cached_count),
                         "usage_available": bool(attempt_usage),
                         "duration_ms": event.get("duration_ms"),
                         "attempt": event.get("attempt"),
                     }
                     usage.update({key: value for key, value in attempt_usage.items()
                                   if key not in usage})
+                    try:
+                        model_entry = next((item for item in agent._model_mgr.list_models()
+                                            if event.get("model") in {
+                                                str(item.get("id") or ""),
+                                                str(item.get("litellm_model") or ""),
+                                            }), {})
+                        from atlas.usage_pricing import estimate_cost
+
+                        cost = estimate_cost(
+                            str(event.get("model") or selected_model),
+                            input_tokens=input_count, output_tokens=output_count,
+                            cached_input_tokens=cached_count,
+                            price=model_entry.get("price"),
+                        )
+                        if cost is not None:
+                            usage["cost_usd"] = float(cost)
+                            usage["est_cost"] = float(cost)
+                    except (AttributeError, TypeError, ValueError):
+                        pass
                     usage_rows.append(usage)
                     record("model_request", purpose=purpose, model=event.get("model"),
                            provider=event.get("provider"), duration_ms=event.get("duration_ms"),
