@@ -1230,6 +1230,16 @@ class AtlasKernel:
 
                 tool_allow = getattr(runtime, "tool_allow", None)
                 tool_deny = getattr(runtime, "tool_deny", ())
+                selected_model_config = next(
+                    (item for item in agent._model_mgr.list_models()
+                     if str(item.get("id")) == str(turn_model)), {},
+                )
+                capabilities = selected_model_config.get("capabilities")
+                supports_tools = capabilities.get("supports_tools") if isinstance(capabilities, dict) else None
+                if supports_tools is False:
+                    available_tools = []
+                    record("model_capability_gate", model=turn_model, capability="tools",
+                           supported=False)
                 # The model sees only the pool the current run may dispatch.
                 # This uses the same allow/deny predicate as ToolScheduler.
                 available_tools = filter_executable_tools(available_tools, tool_allow, tool_deny)
@@ -1246,11 +1256,12 @@ class AtlasKernel:
                 from atlas.engine.tool_permissions import tool_allowed
                 available_tools.extend(
                     schema for schema in kernel_tool_schemas(include_workflow=include_workflow)
-                    if str(schema["function"]["name"]) not in schema_names
+                    if supports_tools is not False
+                    and str(schema["function"]["name"]) not in schema_names
                     and tool_allowed(str(schema["function"]["name"]), tool_allow, tool_deny)
                     and not (read_only and schema["function"]["name"] == "workflow")
                 )
-                if edit_manager is not None:
+                if edit_manager is not None and supports_tools is not False:
                     # One way to edit text: the kernel editor (read-checked, fuzzy matching).
                     # The exact-match local_edit tools stay registered, just not offered.
                     available_tools = [

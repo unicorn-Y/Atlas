@@ -788,9 +788,15 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
         and initial_messages
         and isinstance(initial_messages[-1], HumanMessage)
     ):
-        initial_messages[-1] = HumanMessage(
-            content=agent._multimodal_content(state.message, request.image_attachments)
-        )
+        capabilities = state.selected_config.get("capabilities")
+        if isinstance(capabilities, dict) and capabilities.get("supports_vision") is False:
+            initial_messages[-1] = HumanMessage(content=(
+                state.message + "\n\n[Atlas: 当前选择的模型不支持图片输入，请切换视觉模型后重试。]"
+            ))
+        else:
+            initial_messages[-1] = HumanMessage(
+                content=agent._multimodal_content(state.message, request.image_attachments)
+            )
     return initial_messages
 
 
