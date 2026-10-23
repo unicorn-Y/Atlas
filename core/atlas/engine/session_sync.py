@@ -35,13 +35,18 @@ from atlas.session_migration_gate import (
     begin_session_migration,
     finish_session_migration,
     require_migration_settled as _require_migration_settled,
-    wait_for_session_migration as wait_for_session_migration,  # noqa: F401 - public compatibility export
+    wait_for_session_migration as _wait_for_session_migration,
 )
 
 
 _SESSION_SNAPSHOT_KEY = "_atlas_session_snapshot"
 _SESSION_SNAPSHOT_SCHEMA = 1
 _TRANSCRIPT_ROLES = frozenset({"system", "user", "assistant", "tool"})
+
+
+async def wait_for_session_migration(home: str | Path) -> None:
+    """Public compatibility wrapper for callers awaiting legacy migration state."""
+    await _wait_for_session_migration(home)
 
 
 def _open_db(home: str | Path):
