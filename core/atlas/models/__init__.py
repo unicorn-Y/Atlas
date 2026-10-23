@@ -7,6 +7,7 @@ import secrets
 import time
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 import structlog
 
@@ -320,6 +321,14 @@ class ModelManager:
         """设置/清除服务商的 base_url 覆盖（None = 回退 catalog 默认）。"""
         pid = self._require_provider(provider_id)
         url = str(base_url).strip().rstrip("/") if base_url and str(base_url).strip() else None
+        if url:
+            parsed = urlsplit(url)
+            if (parsed.scheme not in {"http", "https"} or not parsed.netloc
+                    or parsed.username is not None or parsed.password is not None
+                    or parsed.query or parsed.fragment):
+                raise ValueError(
+                    "服务商地址必须是无凭据、无查询参数的 HTTP(S) URL；密钥请单独保存。"
+                )
         entry = self._providers.setdefault(pid, {"base_url": None, "keys": []})
         if entry.get("base_url") != url:
             entry.pop("api_mode_probe", None)
