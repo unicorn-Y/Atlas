@@ -406,6 +406,11 @@ class ComputerUseRuntime:
             grant = None
         if not grant or grant.get("grant_id") != grant_id:
             return self._error("Computer Use requires an approved grant_id for this run.")
+        active_call = self._active_calls.get(run_key)
+        if active_call is not None and not active_call.done():
+            return self._error(
+                "A Computer Use action is already running for this run; wait for its result before sending another action."
+            )
         if grant.get("scope") == "window":
             try:
                 target_window = int(args.get("window_id") or 0)
