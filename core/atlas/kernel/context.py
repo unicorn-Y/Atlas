@@ -35,13 +35,53 @@ COMPACTABLE_TOOLS = frozenset({
     "session_search", "filesystem__read_text_file",
 })
 SUMMARY_PROMPT = (
-    "Summarize this conversation for another agent to continue the same task. "
-    "Preserve the user's explicit goals and constraints, the plan and completed or pending steps, "
-    "important files and evidence references, decisions, errors and fixes, current work, "
-    "unresolved problems, and pending tool calls with their IDs and completion state. "
-    "Do not invent progress, perform tools, or continue the task. Return only a concise "
-    "continuation summary."
+    "Create a precise continuation summary for the same agent to resume this task without asking "
+    "the user to repeat instructions. Summarize only the supplied history and never invent progress. "
+    "Cover these sections: (1) the user's latest explicit goal, constraints, and corrections; "
+    "(2) decisions, important technical concepts, and why they were chosen; (3) files read or changed, "
+    "key symbols and evidence; (4) completed work and how it was verified, including exact failures "
+    "and fixes; (5) current work and the precise stopping point; (6) pending tasks in priority order, "
+    "with the next concrete action; (7) unresolved risks and relevant tool calls still pending, with "
+    "their IDs and state. Preserve exact paths, identifiers, values, and user constraints. Recent "
+    "messages after the compaction boundary remain verbatim, so do not repeat their full contents. "
+    "Recent file-read results may also be restored verbatim after the summary; identify those paths "
+    "and explain how they relate to the current task. Do not perform tools or continue the task. "
+    "Return only the continuation summary."
 )
+
+_READ_TOOLS = frozenset({"read", "read_file", "local_file", "filesystem__read_text_file"})
+
+
+def _read_call_files(messages: Sequence[Mapping[str, Any]]) -> list[tuple[int, tuple[int, ...], str]]:
+    """Find completed read-tool call/result pairs in recency order."""
+    calls: dict[str, tuple[int, str, str]] = {}
+    results: dict[str, int] = {}
+    for index, message in enumerate(messages):
+        if message.get("role") == "assistant":
+            for call in _calls(message):
+                name = str(call.get("name") or (call.get("function") or {}).get("name") or "")
+                if name.lower() not in _READ_TOOLS:
+                    continue
+                function = call.get("function") or {}
+                arguments = call.get("arguments") or function.get("arguments") or {}
+                if isinstance(arguments, str):
+                    try:
+                        arguments = json.loads(arguments)
+                    except (TypeError, ValueError):
+                        arguments = {}
+                path = next((str(arguments.get(key)) for key in ("file_path", "path", "filename")
+                             if isinstance(arguments, Mapping) and arguments.get(key)), "")
+                calls[str(call.get("id", ""))] = (index, path, name)
+        elif message.get("role") == "tool":
+            results[_call_id(message)] = index
+    restored: dict[int, tuple[tuple[int, ...], str]] = {}
+    for call_id, (call_index, path, _name) in calls.items():
+        sibling_ids = [str(call.get("id", "")) for call in _calls(messages[call_index])]
+        if not sibling_ids or not all(sibling_id in results for sibling_id in sibling_ids):
+            continue
+        indices = (call_index, *(results[sibling_id] for sibling_id in sibling_ids))
+        restored[call_index] = (tuple(sorted(set(indices))), path)
+    return [(index, indices, path) for index, (indices, path) in restored.items()]
 
 
 def estimate_tokens(messages: Sequence[Mapping[str, Any]]) -> int:
@@ -334,6 +374,22 @@ class ContextManager:
             await before_compact(result)
         invariants = json.dumps(dict(preserved or {}), ensure_ascii=False, default=str)
         prompt = SUMMARY_PROMPT + "\nPreserved task state:\n" + invariants
+        read_restore: list[tuple[str, tuple[int, ...]]] = []
+        read_budget = max(0, int(self.config.get("post_compact_read_restore_tokens", 12_000)))
+        used_read_tokens = 0
+        occupied: set[int] = set()
+        for _call_index, indices, path in reversed(_read_call_files(messages[:cut])):
+            if not path or any(index >= cut or index in occupied for index in indices):
+                continue
+            pair_tokens = estimate_tokens([messages[index] for index in indices])
+            if used_read_tokens + pair_tokens > read_budget:
+                continue
+            read_restore.append((path, indices))
+            occupied.update(indices)
+            used_read_tokens += pair_tokens
+        if read_restore:
+            prompt += "\nRecent read files selected for verbatim restoration after the summary:\n- " + \
+                "\n- ".join(path for path, _indices in read_restore)
         if focus:
             prompt += "\nUser compaction focus: " + focus
         try:
@@ -352,13 +408,26 @@ class ContextManager:
                     retained_user.append(messages[index])
                     remaining_user_tokens -= message_tokens
                 retained_user.reverse()
-            replacement = [m for m in messages[:cut] if m.get("role") == "system"] + retained_user + [{
-                "role": "user", "content": "[Conversation continuation summary]\n" + summary.strip() +
-                "\n[Preserved task state]\n" + invariants,
-            }] + messages[cut:]
-            size = estimate_tokens(replacement) + prefix_tokens
-            if size >= after or size > budget:
-                raise ValueError("compaction summary did not fit the context budget")
+            system_prefix = [m for m in messages[:cut] if m.get("role") == "system"]
+            restored_messages = [messages[index] for _path, indices in reversed(read_restore)
+                                 for index in indices]
+            while True:
+                restored_paths = [path for path, _indices in read_restore]
+                restored_note = ("\n[Recent read-file results were restored verbatim: " +
+                                 ", ".join(restored_paths) + "]") if restored_paths else ""
+                replacement = system_prefix + retained_user + [{
+                    "role": "user", "content": "[Conversation continuation summary]\n" + summary.strip() +
+                    "\n[Preserved task state]\n" + invariants + restored_note,
+                }] + restored_messages + messages[cut:]
+                size = estimate_tokens(replacement) + prefix_tokens
+                if size < after and size <= budget:
+                    break
+                if not read_restore:
+                    raise ValueError("compaction summary did not fit the context budget")
+                # Drop the oldest restored file first, preserving the most recent evidence.
+                read_restore.pop()
+                restored_messages = [messages[index] for _path, indices in reversed(read_restore)
+                                     for index in indices]
         except asyncio.CancelledError:
             raise
         except Exception as exc:

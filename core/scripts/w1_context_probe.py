@@ -76,8 +76,38 @@ async def _probe_failed_summary_recovery() -> None:
         assert manager.consecutive_failures == 1
 
 
+async def _probe_summary_read_restore() -> None:
+    manager = ContextManager({"engine": {"context_keep_messages": 2,
+                                         "post_compact_read_restore_tokens": 4_000}})
+    history = [{"role": "user", "content": f"work note {index}: " + ("x" * 1_200)}
+               for index in range(18)]
+    history[3:3] = [
+        {"role": "assistant", "tool_calls": [{"id": "read-1", "name": "Read",
+                                                  "arguments": {"file_path": "C:/workspace/README.md"}}]},
+        {"role": "tool", "tool_call_id": "read-1", "name": "Read", "content": "file evidence"},
+    ]
+    captured_prompt = ""
+
+    async def summarize(_old: list[dict], prompt: str) -> str:
+        nonlocal captured_prompt
+        captured_prompt = prompt
+        return "Current task and pending work."
+
+    result = await manager.prepare(history, model_window=1_000_000, summarize=summarize, force=True)
+    assert result.method == "summary", result
+    assert "C:/workspace/README.md" in captured_prompt
+    assert "pending tasks in priority order" in captured_prompt
+    assert "without asking the user" in captured_prompt
+    assert any(item.get("role") == "tool" and item.get("content") == "file evidence"
+               for item in result.messages)
+    assert any("Recent read-file results were restored verbatim" in str(item.get("content", ""))
+               for item in result.messages)
+    assert manager.consecutive_failures == 0
+
+
 if __name__ == "__main__":
     probe_thresholds()
     probe_tool_output_clip()
     asyncio.run(_probe_failed_summary_recovery())
-    print("W1-2/W1-4 上下文、裁剪和失败恢复 probe PASS")
+    asyncio.run(_probe_summary_read_restore())
+    print("W1-2/W1-5 上下文预算、失败恢复和摘要续接 probe PASS")
