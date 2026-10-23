@@ -48,6 +48,16 @@ log = structlog.get_logger()
 _EVENT_STREAM_DONE = object()
 _CANCEL_REQUESTED = object()
 
+_TASK_COMPLETION_GUIDANCE = (
+    "## Task completion and verification\n"
+    "Before reporting a task complete, run the relevant checks or inspect the changed "
+    "result directly. For code changes, execute an appropriate test, build, or focused "
+    "runtime check when available; for other work, verify the requested outcome against "
+    "the source or artifact. If a check cannot be run, say exactly what remains "
+    "unverified and why. Never claim a check passed unless you observed it pass, and "
+    "report failures and partial results honestly."
+)
+
 
 def _breaker_prompt() -> str:
     """Workspace breaker prompt (engine/breaker.md) as the run's identity block.
@@ -599,6 +609,7 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
             content=(operator_text + "\n\n" + base_prompt) if operator_text else base_prompt
         )
     ]
+    initial_messages.append(SystemMessage(content=_TASK_COMPLETION_GUIDANCE))
     # Diagnostic only: ATLAS_DUMP_SYSTEM=<path> writes the assembled system messages
     # so the real prompt can be inspected. Unset by default and never affects a request.
     _dump_path = os.environ.get("ATLAS_DUMP_SYSTEM", "").strip()
