@@ -1093,8 +1093,9 @@ class LocalExecutionRuntime:
     ) -> LocalProcess:
         if not cwd.is_dir():
             raise NotADirectoryError(str(cwd))
-        process_env = os.environ.copy()
-        process_env.update({str(k): str(v) for k, v in (env or {}).items()})
+        from atlas.engine_core.tools.child_process_env import child_process_env
+
+        process_env = child_process_env(env)
         process_env.setdefault("PYTHONUTF8", "1")
         process_env.setdefault("PYTHONIOENCODING", "utf-8")
         kwargs: dict[str, Any] = {}
