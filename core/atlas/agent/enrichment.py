@@ -18,6 +18,7 @@ from typing import Any
 import structlog
 
 from atlas.engine.tool_permissions import intersect_tool_allow
+from atlas.agent.subagent_capacity import SubagentCapacity
 
 log = structlog.get_logger()
 
@@ -361,6 +362,7 @@ class DelegationService:
         self._subtasks: dict[str, dict[str, Any]] = {}
         self._background_tasks: dict[str, asyncio.Task[Any]] = {}
         self._steer_queues: dict[str, asyncio.Queue[dict[str, str]]] = {}
+        self.capacity = SubagentCapacity()
 
     def subtask_status(self, subtask_id: str) -> dict[str, Any] | None:
         """Return the live summary surface for one child, without its control objects."""
@@ -544,9 +546,15 @@ class DelegationService:
         # isn't a configured external Agent runs on Atlas itself.
         if name not in (getattr(self.host, "backends", None) or {}):
             name = "atlas"
+        if name == "atlas" and self.atlas_runner is None:
+            raise RuntimeError("Atlas 子任务执行器尚未就绪。")
+        record.update({"status": "queued", "progress": "等待子 Agent 容量槽位。"})
+        capacity_ticket = await self.capacity.acquire(
+            parent_id=str((atlas_options or {}).get("parent_subtask_id") or "root"),
+            depth=int((atlas_options or {}).get("depth", 1) or 1),
+        )
+        record.update({"status": "running", "progress": "子 Agent 已取得容量槽位。"})
         if name == "atlas":
-            if self.atlas_runner is None:
-                raise RuntimeError("Atlas 子任务执行器尚未就绪。")
             task_context = append_output_contract(context, schema) if schema else context
             record["backend"] = "atlas"
             await self.hooks.emit("subagent_start", goal=goal, backend="atlas")
@@ -611,6 +619,7 @@ class DelegationService:
                 summary = str(exc)[:1000] or summary
                 raise
             finally:
+                await self.capacity.release(capacity_ticket)
                 record.update({"status": status, "progress": summary, "result": summary})
                 self._steer_queues.pop(subtask_id, None)
                 if parent_cancel_task:
@@ -715,6 +724,7 @@ class DelegationService:
             completion_summary = str(exc)[:1000] or completion_summary
             raise
         finally:
+            await self.capacity.release(capacity_ticket)
             if cancel_event.is_set():
                 status = "cancelled"
             record.update({"status": status, "progress": completion_summary,
