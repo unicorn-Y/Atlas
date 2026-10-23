@@ -16,6 +16,7 @@ import base64
 import codecs
 import copy
 import glob as glob_module
+import functools
 import json
 import math
 import os
@@ -42,6 +43,8 @@ _MAX_READ_BYTES = 256 * 1024
 _MAX_READ_PAGE_BYTES = 1024 * 1024
 _MAX_READ_LINES = 2000
 _MAX_BATCH_READ = 20
+MAX_PROCESS_LOG_BYTES = 5 * 1024 * 1024 * 1024
+_LOG_TRUNCATION_MARKER = b"\n... process output truncated: disk limit reached ...\n"
 # An interpreter invoked with inline code: python -c, py -3 -c, node -e/-p, ruby -e ...
 _INLINE_CODE = re.compile(
     r"(?:^|[\s;&|(\"'])(?:python[0-9.]*|py|node|deno|ruby|perl|php)(?:\.exe)?"
@@ -155,6 +158,28 @@ def command_exit_is_error(command: str, exit_code: int | None) -> bool:
     return True
 
 
+def _decode_process_output(raw: bytes) -> str:
+    """Decode UTF-8 first, then detect a local command's legacy encoding."""
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    try:
+        from charset_normalizer import from_bytes
+
+        match = from_bytes(raw).best()
+        if match is not None and match.encoding:
+            encoding = match.encoding
+            if encoding.casefold().replace("-", "") in {"ibm866", "cp866"}:
+                punctuation = {0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x99}
+                if all(byte < 0x80 or byte in punctuation for byte in raw):
+                    encoding = "cp1252"
+            return raw.decode(encoding, errors="replace")
+    except (ImportError, LookupError, ValueError):
+        pass
+    return raw.decode("utf-8", errors="replace")
+
+
 def _read_text(item: dict[str, Any]) -> str:
     """One file read as the model should see it: a header line, then numbered lines.
 
@@ -204,6 +229,26 @@ def _trim_partial_char(raw: bytes, encoding: str) -> bytes:
     return raw
 
 
+@functools.lru_cache(maxsize=32)
+def _probe_shell(path: str) -> bool:
+    """Validate a shell executable without invoking an intermediate shell."""
+    candidate = Path(path)
+    if not candidate.is_file():
+        return False
+    if os.name != "nt" and os.access(path, os.X_OK):
+        return True
+    try:
+        subprocess.run(
+            [path, "--version"], stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            timeout=1.0, check=True,
+            creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0),
+        )
+        return True
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def _find_git_bash() -> str | None:
     """Find MSYS/Git Bash, preferring the installation paired with Git on PATH."""
     candidates: list[Path] = []
@@ -218,33 +263,76 @@ def _find_git_bash() -> str | None:
         normalized = str(candidate).lower().replace("/", "\\")
         if os.name == "nt" and ("\\windowsapps\\" in normalized or "\\system32\\" in normalized):
             continue
-        if candidate.is_file() or shutil.which(str(candidate)):
-            return str(candidate)
+        resolved = shutil.which(str(candidate)) or str(candidate)
+        if _probe_shell(resolved):
+            return resolved
+    return None
+
+
+def _find_posix_shell(name: str) -> str | None:
+    candidate = shutil.which(name)
+    if candidate and _probe_shell(candidate):
+        return candidate
+    for directory in ("/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"):
+        fallback = str(Path(directory) / name)
+        if _probe_shell(fallback):
+            return fallback
     return None
 
 
 def _effective_shell(shell: str, git_bash: str | None, *, windows: bool) -> tuple[str, str | None]:
     if shell == "auto":
-        # Honor a user default only when that runtime is installed. An invalid
-        # preference falls through to the platform default.
+        # Honor an installed Atlas preference first, then the user's supported
+        # SHELL preference on POSIX, then a stable platform candidate order.
         from atlas.config import get_config
 
         configured = str(get_config().get("local_execution.default_shell", "") or "").strip().lower()
         preferred = configured or os.environ.get("ATLAS_DEFAULT_SHELL", "").strip().lower()
-        if preferred in {"bash", "powershell", "cmd"}:
-            if preferred == "bash" and (not windows or git_bash):
+        user_shell_path = ""
+        if not windows and not preferred:
+            user_shell_path = os.environ.get("SHELL", "").strip()
+            user_shell = Path(user_shell_path).name.casefold()
+            preferred = user_shell if user_shell in {"bash", "zsh"} else ""
+        if preferred in {"bash", "powershell", "cmd", "zsh"}:
+            if (not configured and not windows and user_shell_path
+                    and Path(user_shell_path).name.casefold() == preferred
+                    and _probe_shell(user_shell_path)):
+                return preferred, user_shell_path
+            if preferred == "bash" and windows and git_bash:
                 return "bash", git_bash
+            if preferred == "bash" and not windows:
+                resolved = _find_posix_shell("bash")
+                if resolved:
+                    return "bash", resolved
+            if preferred == "zsh" and not windows and _find_posix_shell("zsh"):
+                return "zsh", None
             if preferred == "powershell" and (shutil.which("powershell.exe") or shutil.which("pwsh")):
                 return "powershell", None
             if preferred == "cmd" and (os.environ.get("COMSPEC") or shutil.which("cmd.exe")):
                 return "cmd", None
+        if preferred:
+            log.warning("local_execution.invalid_shell_preference", shell=preferred)
         if windows:
             return ("bash", git_bash) if git_bash else ("powershell", None)
-        return "bash", None
+        for candidate in ("zsh", "bash"):
+            resolved = _find_posix_shell(candidate)
+            if resolved:
+                return candidate, resolved
+        raise ValueError("No usable shell was found (looked for zsh, bash); install one or set local_execution.default_shell.")
     if shell == "bash":
         if windows and not git_bash:
             raise ValueError("Git Bash is not installed; choose PowerShell or cmd explicitly.")
-        return "bash", git_bash
+        resolved = git_bash if windows else _find_posix_shell("bash")
+        if not resolved:
+            raise ValueError("bash executable was not found or is not executable")
+        return "bash", resolved
+    if shell == "zsh":
+        if windows:
+            raise ValueError("zsh is supported only on POSIX hosts; choose an installed Windows shell.")
+        resolved = _find_posix_shell("zsh")
+        if not resolved:
+            raise ValueError("zsh executable was not found or is not executable")
+        return "zsh", resolved
     return shell, None
 
 
@@ -297,6 +385,8 @@ LOCAL_TOOLS = [
             }},
             "stdin": {"type": "string"},
             "timeout": {"type": "number"},
+            "max_output_bytes": {"type": "integer", "minimum": 1},
+            "yield_time_ms": {"type": "integer", "minimum": 250, "maximum": 30000},
             "detached": {"type": "boolean"},
             "keep_stdin": {"type": "boolean"},
             "pty": {"type": "boolean"},
@@ -326,6 +416,7 @@ LOCAL_TOOLS = [
             }},
             "stdin": {"type": "string"},
             "timeout": {"type": "number"},
+            "max_output_bytes": {"type": "integer", "minimum": 1},
             "detached": {"type": "boolean"},
         },
         ["executable"],
@@ -356,6 +447,8 @@ LOCAL_TOOLS = [
             }},
             "stdin": {"type": "string"},
             "timeout": {"type": "number"},
+            "max_output_bytes": {"type": "integer", "minimum": 1},
+            "yield_time_ms": {"type": "integer", "minimum": 250, "maximum": 30000},
             "detached": {"type": "boolean"},
             "keep_stdin": {"type": "boolean"},
             "pty": {"type": "boolean"},
@@ -551,6 +644,12 @@ class LocalProcess:
     stderr_path: Path = field(default_factory=Path)
     stdout_size: int = 0
     stderr_size: int = 0
+    output_bytes_total: int = 0
+    output_bytes_dropped: int = 0
+    output_truncated: bool = False
+    log_bytes_stored: int = 0
+    truncation_marker_written: bool = False
+    cancel_note: str = ""
     pump_tasks: list[asyncio.Task[None]] = field(default_factory=list)
     wait_task: asyncio.Task[None] | None = None
     cancelled: bool = False
@@ -576,6 +675,10 @@ class LocalProcess:
             "duration_seconds": round(time.monotonic() - self.started_monotonic, 3),
             "detached": self.detached,
             "handoff_note": self.handoff_note,
+            "output_bytes_total": self.output_bytes_total,
+            "output_bytes_dropped": self.output_bytes_dropped,
+            "output_truncated": self.output_truncated,
+            "cancel_note": self.cancel_note,
         }
 
 
@@ -600,6 +703,9 @@ class LocalExecutionRuntime:
         home_default = home is not None and cwd == home
         for tool in tools:
             function = tool.get("function") or {}
+            shell_schema = ((function.get("parameters") or {}).get("properties") or {}).get("shell")
+            if os.name != "nt" and isinstance(shell_schema, dict):
+                shell_schema["enum"] = [*shell_schema.get("enum", []), "zsh"]
             if function.get("name") not in {
                 "local_shell", "local_exec", "local_process", "local_file", "local_edit",
             }:
@@ -741,7 +847,7 @@ class LocalExecutionRuntime:
                 raise ValueError(f"{key} must be a finite non-negative number")
         if (
             name in {"local_shell", "local_process"}
-            and args.get("shell") not in {None, "auto", "powershell", "cmd", "bash"}
+            and args.get("shell") not in {None, "auto", "powershell", "cmd", "bash", "zsh"}
         ):
             raise ValueError(f"Unsupported shell: {args['shell']}")
         if name == "local_shell" and not str(args.get("command") or "").strip():
@@ -1251,10 +1357,10 @@ class LocalExecutionRuntime:
                 "/c",
                 f"chcp 65001>nul & {command}",
             ]
-        elif shell == "bash":
-            executable = resolved_bash or shutil.which("bash")
+        elif shell in {"bash", "zsh"}:
+            executable = resolved_bash or _find_posix_shell(shell) or shutil.which(shell)
             if not executable:
-                raise ValueError("bash executable was not found")
+                raise ValueError(f"{shell} executable was not found")
             argv = [executable, "-lc", command]
         else:
             raise ValueError(f"Unsupported shell: {shell}")
@@ -1430,12 +1536,32 @@ class LocalExecutionRuntime:
         path = record.stdout_path if name == "stdout" else record.stderr_path
         decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         while chunk := await reader.read(4096):
-            with path.open("ab") as stream:
-                stream.write(chunk)
-            if name == "stdout":
-                record.stdout_size += len(chunk)
-            else:
-                record.stderr_size += len(chunk)
+            record.output_bytes_total += len(chunk)
+            remaining = max(0, MAX_PROCESS_LOG_BYTES - record.log_bytes_stored)
+            stored = chunk[:remaining]
+            dropped = len(chunk) - len(stored)
+            if stored:
+                with path.open("ab") as stream:
+                    stream.write(stored)
+                record.log_bytes_stored += len(stored)
+                if name == "stdout":
+                    record.stdout_size += len(stored)
+                else:
+                    record.stderr_size += len(stored)
+            if dropped:
+                record.output_bytes_dropped += dropped
+                record.output_truncated = True
+                marker_room = MAX_PROCESS_LOG_BYTES - record.log_bytes_stored
+                if not record.truncation_marker_written and marker_room:
+                    marker = _LOG_TRUNCATION_MARKER[:marker_room]
+                    with path.open("ab") as stream:
+                        stream.write(marker)
+                    record.log_bytes_stored += len(marker)
+                    if name == "stdout":
+                        record.stdout_size += len(marker)
+                    else:
+                        record.stderr_size += len(marker)
+                    record.truncation_marker_written = True
             text = decoder.decode(chunk)
             if record.watch_patterns:
                 watched = record.watch_tail + text
@@ -1529,7 +1655,7 @@ class LocalExecutionRuntime:
             "stream": stream,
             "offset": offset,
             "next_offset": next_offset,
-            "text": content.decode("utf-8", errors="replace"),
+            "text": _decode_process_output(content),
             "total_bytes": path.stat().st_size,
             "complete": next_offset >= path.stat().st_size,
         }
@@ -1544,6 +1670,9 @@ class LocalExecutionRuntime:
                 "stderr": stderr["text"],
                 "stdout_truncated": record.stdout_size > 65536,
                 "stderr_truncated": record.stderr_size > 65536,
+                "output_bytes_total": record.output_bytes_total,
+                "output_bytes_dropped": record.output_bytes_dropped,
+                "output_truncated": record.output_truncated,
                 "outcome": (
                     "cancelled" if record.cancelled else
                     "failed" if command_exit_is_error(
@@ -1678,7 +1807,10 @@ class LocalExecutionRuntime:
     ) -> dict[str, Any]:
         writer = record.process.stdin
         if writer is None or writer.is_closing():
-            raise ValueError("Process stdin is closed; start the terminal with background=true.")
+            raise ValueError(
+                "Process stdin is closed. Start it with keep_stdin=true (or pty=true on Windows) "
+                "before sending input."
+            )
         if record.state != "running":
             raise ValueError("Process has already exited; stdin is unavailable.")
         if action == "close_stdin":
@@ -1701,6 +1833,10 @@ class LocalExecutionRuntime:
         if record.state != "running":
             return
         record.cancelled = True
+        record.cancel_note = (
+            "Command was interrupted and may have partially changed files or external state. "
+            "Check its output and workspace before retrying."
+        )
         try:
             if os.name == "nt":
                 record.process.send_signal(signal.CTRL_BREAK_EVENT)

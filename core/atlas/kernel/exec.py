@@ -22,6 +22,8 @@ from typing import Any
 DEFAULT_BASH_TIMEOUT_MS = 120_000
 DEFAULT_BASH_MAX_TIMEOUT_MS = 600_000
 DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024
+OUTPUT_METADATA_RESERVE_BYTES = 512
+MAX_CONCURRENT_TERMINALS = 64
 
 # Hook subprocess budgets are separate from interactive Bash budgets. Keep the
 # policy here so command-execution callers can share the same timeout rules.
@@ -105,7 +107,29 @@ class HeadTailBuffer:
 
     def text(self) -> str:
         marker = f"\n... {self.omitted_bytes} bytes omitted ...\n".encode() if self.omitted_bytes else b""
-        return (bytes(self.head) + marker + bytes(self.tail)).decode("utf-8", errors="replace")
+        return _decode_output(bytes(self.head)) + marker.decode() + _decode_output(bytes(self.tail))
+
+
+def _decode_output(raw: bytes) -> str:
+    """Prefer UTF-8, then a detected local CLI encoding, then lossy UTF-8."""
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    try:
+        from charset_normalizer import from_bytes
+
+        match = from_bytes(raw).best()
+        if match is not None and match.encoding:
+            encoding = match.encoding
+            if encoding.casefold().replace("-", "") in {"ibm866", "cp866"}:
+                punctuation = {0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x99}
+                if all(byte < 0x80 or byte in punctuation for byte in raw):
+                    encoding = "cp1252"
+            return raw.decode(encoding, errors="replace")
+    except (ImportError, LookupError, ValueError):
+        pass
+    return raw.decode("utf-8", errors="replace")
 
 
 def command_timeout(command: str, requested: Any = None) -> float:
@@ -139,6 +163,7 @@ class ExecHandle:
     output_path: Path
     buffer: HeadTailBuffer
     timeout: float | None
+    yield_time_ms: int = 2_000
     detached: bool = False
     started: float = field(default_factory=time.monotonic)
     offsets: dict[str, int] = field(default_factory=lambda: {"stdout": 0, "stderr": 0})
@@ -147,11 +172,16 @@ class ExecHandle:
     exit_code: int | None = None
     watcher: asyncio.Task[Any] | None = None
     interaction_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    output_file_bytes: int = 0
+    output_file_truncated: bool = False
+    output_file_marker_written: bool = False
 
 
 class ExecManager:
     PROGRESS_AFTER_SECONDS = 2.0
     AUTO_BACKGROUND_AFTER_SECONDS = 15.0
+    MAX_OUTPUT_FILE_BYTES = 5 * 1024 * 1024 * 1024
+    OUTPUT_FILE_MARKER = b"\n... full output file truncated: disk limit reached ...\n"
 
     def __init__(self, dispatch: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]],
                  *, output_dir: str | Path, run_id: str | None = None,
@@ -165,8 +195,44 @@ class ExecManager:
         self.event_queue = event_queue
         self.handles: dict[str, ExecHandle] = {}
 
+    def _output_budget(self, value: Any) -> int:
+        if value is None:
+            requested = self.max_output_bytes
+        elif isinstance(value, bool):
+            raise ValueError("max_output_bytes must be a positive integer")
+        else:
+            try:
+                requested = int(value)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ValueError("max_output_bytes must be a positive integer") from exc
+            if requested <= 0 or (isinstance(value, float) and not value.is_integer()):
+                raise ValueError("max_output_bytes must be a positive integer")
+        # Reserve space for state, exit status, and the truncation explanation.
+        return min(requested, self.max_output_bytes) - OUTPUT_METADATA_RESERVE_BYTES
+
+    @staticmethod
+    def _yield_window(value: Any) -> int:
+        if value is None:
+            return 15_000
+        if isinstance(value, bool):
+            return 15_000
+        try:
+            requested = int(value)
+        except (TypeError, ValueError, OverflowError):
+            return 15_000
+        return max(250, min(requested, 30_000))
+
     async def start(self, arguments: dict[str, Any]) -> dict[str, Any]:
         args = dict(arguments)
+        try:
+            output_budget = self._output_budget(args.pop("max_output_bytes", None))
+        except ValueError as exc:
+            return {"is_error": True, "error": str(exc)}
+        if output_budget < 1:
+            return {"is_error": True, "error": "max_output_bytes must exceed the output metadata reserve."}
+        yield_time_ms = self._yield_window(args.get("yield_time_ms"))
+        if sum(handle.outcome == "running" for handle in self.handles.values()) >= MAX_CONCURRENT_TERMINALS:
+            return {"is_error": True, "error": f"Atlas already has {MAX_CONCURRENT_TERMINALS} active terminal sessions."}
         direct_process_start = args.get("action") == "start"
         if args.get("background"):
             args["detached"] = True
@@ -229,7 +295,8 @@ class ExecManager:
         path = self.output_dir / f"{safe_id}.log"
         path.touch(exist_ok=False)
         handle = ExecHandle(
-            execution_id, path, HeadTailBuffer(self.max_output_bytes), timeout,
+            execution_id, path, HeadTailBuffer(output_budget), timeout,
+            yield_time_ms=yield_time_ms,
             detached=bool(args.get("detached")),
         )
         self.handles[execution_id] = handle
@@ -245,10 +312,10 @@ class ExecManager:
         if record is not None:
             for stream in ("stdout", "stderr"):
                 path = getattr(record, f"{stream}_path")
-                with path.open("rb") as source, handle.output_path.open("ab") as output:
+                with path.open("rb") as source:
                     source.seek(handle.offsets[stream])
                     while chunk := source.read(65536):
-                        output.write(chunk)
+                        self._append_output_file(handle, chunk)
                         handle.buffer.push_chunk(chunk)
                         handle.offsets[stream] += len(chunk)
             return
@@ -265,29 +332,56 @@ class ExecManager:
                 if next_offset <= handle.offsets[stream]:
                     break
                 chunk = str(data.get("text") or "").encode("utf-8")
-                with handle.output_path.open("ab") as output:
-                    output.write(chunk)
+                self._append_output_file(handle, chunk)
                 handle.buffer.push_chunk(chunk)
                 handle.offsets[stream] = next_offset
                 if data.get("complete"):
                     break
 
+    def _append_output_file(self, handle: ExecHandle, chunk: bytes) -> None:
+        remaining = max(0, self.MAX_OUTPUT_FILE_BYTES - handle.output_file_bytes)
+        stored = chunk[:remaining]
+        if stored:
+            with handle.output_path.open("ab") as output:
+                output.write(stored)
+            handle.output_file_bytes += len(stored)
+        if len(stored) < len(chunk):
+            handle.output_file_truncated = True
+            marker_room = self.MAX_OUTPUT_FILE_BYTES - handle.output_file_bytes
+            if marker_room and not handle.output_file_marker_written:
+                marker = self.OUTPUT_FILE_MARKER[:marker_room]
+                with handle.output_path.open("ab") as output:
+                    output.write(marker)
+                handle.output_file_bytes += len(marker)
+                handle.output_file_marker_written = True
+
     def _result(self, handle: ExecHandle) -> dict[str, Any]:
+        native = getattr(self.local_runtime, "_processes", {}).get(handle.execution_id)
+        disk_dropped = int(getattr(native, "output_bytes_dropped", 0)) if native else 0
+        native_truncated = bool(getattr(native, "output_truncated", False)) if native else False
+        cancel_note = str(getattr(native, "cancel_note", "")) if native else ""
         data = {"execution_id": handle.execution_id, "state": handle.outcome,
                 "outcome": handle.outcome, "exit_code": handle.exit_code,
                 "timed_out": handle.timed_out, "output": handle.buffer.text(),
                 "output_bytes": handle.buffer.total_bytes,
                 "output_omitted_bytes": handle.buffer.omitted_bytes,
-                "output_truncated": bool(handle.buffer.omitted_bytes),
+                "output_truncated": bool(handle.buffer.omitted_bytes) or native_truncated,
+                "output_bytes_dropped": disk_dropped,
+                "output_file_truncated": handle.output_file_truncated,
                 "timeout_seconds": handle.timeout if handle.timed_out else None,
                 "backgrounded": handle.detached,
                 "output_ref": str(handle.output_path.resolve()),
                 "duration_seconds": round(time.monotonic() - handle.started, 3)}
         status = (f"Process timed out after {handle.timeout:g}s" if handle.timed_out and handle.timeout is not None
                   else f"Process {handle.execution_id} ({handle.outcome})")
+        truncation = (
+            f"\nOutput storage capped; {disk_dropped} bytes could not be kept."
+            if disk_dropped else ""
+        )
+        cancellation = f"\n{cancel_note}" if cancel_note else ""
         return {"data": data, "outcome": handle.outcome,
                 "output_ref": data["output_ref"], "is_error": handle.outcome in {"failed", "unknown"},
-                "content": [{"type": "text", "text": f"{data['output']}\nFull output: {data['output_ref']}\n{status}"}]}
+                "content": [{"type": "text", "text": f"{data['output']}\nFull output: {data['output_ref']}\n{status}{truncation}{cancellation}"}]}
 
     async def poll(self, execution_id: str) -> dict[str, Any]:
         handle = self.handles[execution_id]
@@ -403,7 +497,9 @@ class ExecManager:
                 return result
             try:
                 watcher = self.handles[execution_id].watcher
-                done, _ = await asyncio.wait({watcher}, timeout=self.PROGRESS_AFTER_SECONDS)
+                handle = self.handles[execution_id]
+                progress_window = min(self.PROGRESS_AFTER_SECONDS, handle.yield_time_ms / 1000)
+                done, _ = await asyncio.wait({watcher}, timeout=progress_window)
                 if not done and self.event_queue is not None:
                     await self.event_queue.put({
                         "type": "process.progress", "execution_id": execution_id,
@@ -411,8 +507,10 @@ class ExecManager:
                     })
                 if not done:
                     done, _ = await asyncio.wait(
-                        {watcher}, timeout=max(0.0, self.AUTO_BACKGROUND_AFTER_SECONDS
-                                               - self.PROGRESS_AFTER_SECONDS),
+                        {watcher}, timeout=max(0.0, min(
+                            self.AUTO_BACKGROUND_AFTER_SECONDS - progress_window,
+                            handle.yield_time_ms / 1000 - progress_window,
+                        )),
                     )
                 if not done:
                     handle = self.handles[execution_id]
@@ -420,7 +518,7 @@ class ExecManager:
                     if self.event_queue is not None:
                         await self.event_queue.put({
                             "type": "process.backgrounded", "execution_id": execution_id,
-                            "threshold_seconds": self.AUTO_BACKGROUND_AFTER_SECONDS,
+                            "threshold_seconds": round(time.monotonic() - handle.started, 1),
                         })
                     return await self.poll(execution_id)
                 await asyncio.shield(watcher)

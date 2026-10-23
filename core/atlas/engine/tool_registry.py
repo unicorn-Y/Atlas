@@ -401,7 +401,9 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
             }
             if name == "terminal":
                 schema["parameters"].setdefault("properties", {})["shell"] = {
-                    "type": "string", "enum": ["auto", "bash", "powershell", "cmd"],
+                    "type": "string", "enum": (["auto", "bash", "powershell", "cmd", "zsh"]
+                                                    if os.name != "nt"
+                                                    else ["auto", "bash", "powershell", "cmd"]),
                     "description": (
                         "Shell to use. Defaults to Git Bash when available, "
                         "otherwise PowerShell."
