@@ -23,6 +23,7 @@ const desktopApi: AtlasDesktopApi = {
   openWorkspaceInEditor: (editor: PlatformEditorId, workspacePath: string) =>
     ipcRenderer.invoke('platform:open-workspace-in-editor', editor, workspacePath),
   showFloatingComposer: () => ipcRenderer.invoke('floating-composer:show'),
+  openConversationWindow: (conversationId: string) => ipcRenderer.invoke('conversation:open-window', conversationId),
   hideFloatingComposer: () => ipcRenderer.send('floating-composer:hide'),
   submitFloatingComposer: (text: string) => ipcRenderer.send('floating-composer:submit', text),
   onFloatingComposerSubmit: (callback: (text: string) => void) => {

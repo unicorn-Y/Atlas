@@ -80,6 +80,8 @@ export interface AtlasDesktopApi {
   openWorkspaceInEditor?(editor: PlatformEditorId, workspacePath: string): Promise<void>;
   /** Open the small native floating composer. The desktop shell forwards submitted text to the main UI. */
   showFloatingComposer?(): void;
+  /** Open the selected conversation in a separate synchronized desktop window. */
+  openConversationWindow?(conversationId: string): void;
   hideFloatingComposer?(): void;
   submitFloatingComposer?(text: string): void;
   onFloatingComposerSubmit?(callback: (text: string) => void): () => void;

@@ -31,6 +31,7 @@ function themeIcon(theme: string): Electron.NativeImage | undefined {
 }
 let windowRef: BrowserWindow | null = null;
 let floatingComposerWindow: BrowserWindow | null = null;
+const conversationWindows = new Map<string, BrowserWindow>();
 type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null; openAtLogin: boolean };
 let platformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null, openAtLogin: true };
 let globalShortcutState: GlobalShortcutState = { accelerator: null, registered: false };
@@ -348,12 +349,47 @@ function showFloatingComposer(): void {
   }
 }
 
+function openConversationWindow(conversationId: string): void {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(conversationId)) throw new Error('无效的会话 ID。');
+  const existing = conversationWindows.get(conversationId);
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore();
+    existing.show(); existing.focus();
+    return;
+  }
+  const devUrl = process.env.VITE_DEV_SERVER_URL;
+  const win = new BrowserWindow({
+    width: 1180, height: 820, minWidth: 760, minHeight: 560,
+    title: 'Atlas · 对话', backgroundColor: '#faf9f6', show: false,
+    webPreferences: {
+      preload: path.join(here, '../preload/index.cjs'),
+      contextIsolation: true, nodeIntegration: false, sandbox: true, webviewTag: true,
+    },
+  });
+  conversationWindows.set(conversationId, win);
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event, url) => {
+    const isApp = devUrl ? (() => { try { return new URL(url).origin === new URL(devUrl).origin; } catch { return false; } })()
+      : url.split('?')[0].split('#')[0] === pathToFileURL(path.resolve(here, '../../dist/index.html')).href;
+    if (!isApp) { event.preventDefault(); if (/^https?:/i.test(url)) void shell.openExternal(url); }
+  });
+  if (devUrl) {
+    const target = new URL(devUrl); target.searchParams.set('conversationId', conversationId);
+    void win.loadURL(target.href);
+  } else void win.loadFile(path.join(here, '../../dist/index.html'), { query: { conversationId } });
+  win.once('ready-to-show', () => { win.show(); win.focus(); });
+  win.on('closed', () => { if (conversationWindows.get(conversationId) === win) conversationWindows.delete(conversationId); });
+}
+
 function tryRegisterGlobalShortcut(accelerator: string | null): GlobalShortcutState {
   if (!accelerator) return { accelerator: null, registered: false };
   const invalid = validateGlobalAccelerator(accelerator);
   if (invalid) return { accelerator, registered: false, error: invalid };
   try {
-    const registered = globalShortcut.register(accelerator, focusAtlasWindow);
+    const registered = globalShortcut.register(accelerator, showFloatingComposer);
     return registered
       ? { accelerator, registered: true }
       : { accelerator, registered: false, error: '系统未能注册此快捷键，可能已被其他应用占用。' };
@@ -658,6 +694,11 @@ ipcMain.handle('deep-link:subscribe', (event) => {
 });
 ipcMain.on('deep-link:unsubscribe', (event) => {
   if (deepLinkSubscriber === event.sender) deepLinkSubscriber = null;
+});
+ipcMain.handle('conversation:open-window', (event, conversationId: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof conversationId !== 'string') throw new Error('无效的会话 ID。');
+  openConversationWindow(conversationId);
 });
 ipcMain.handle('platform:get-settings', (event) => {
   assertTrustedAppSender(event);

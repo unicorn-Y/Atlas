@@ -1,7 +1,7 @@
 // Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015c: packages/ui/src/TaskListItemContextMenu.tsx, packages/ui/src/TaskActionMenuContent.tsx, packages/ui/src/workspace-grouped-tasks/task-context-menu-content.tsx, packages/ui/src/workspace-grouped-tasks/WorkspaceGroupedTasksSection.tsx (Apache-2.0)
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import {
-  Archive, ArchiveRestore, ArrowUpDown, Blocks, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
+  Archive, ArchiveRestore, ArrowUpDown, AppWindow, Blocks, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
   Folder, FolderOpen, GitBranch, GripVertical, Home, Info, KanbanSquare, MessageSquare, MonitorSmartphone, Moon, MoreHorizontal, PanelLeft,
   Library, Pencil, Pin, PinOff, Plus, Repeat, Search, Settings, Sparkles, SquarePen, Sun, Trash2, Users, X, Wand2, type LucideIcon,
 } from 'lucide-react';
@@ -125,6 +125,7 @@ interface SidebarProps {
   onTogglePinned: (id: string) => void; onToggleArchived: (id: string) => void;
   onExport: (id: string, format: 'json' | 'md') => void; onDuplicate: (id: string) => void;
   onOpenBeside?: (id: string) => void;
+  onOpenInWindow?: (id: string) => void;
   onSetUnread?: (id: string, unread: boolean) => void;
   onSetWorkspace?: (id: string, workspace: string) => void;
   waiting?: string[];
@@ -660,6 +661,7 @@ export default function Sidebar(props: SidebarProps) {
               onSelect={() => setCustomMembers((current) => ({ ...current, [conversation.id]: group.id }))}><Users />{group.name}</MenuItem>)}
           </>}
           {props.onOpenBeside && !current && props.view === 'chat' && <MenuItem onSelect={() => props.onOpenBeside?.(conversation.id)}><Columns2 />在旁边打开</MenuItem>}
+          {props.onOpenInWindow && <MenuItem onSelect={() => props.onOpenInWindow?.(conversation.id)}><AppWindow />在新窗口打开</MenuItem>}
           <MenuItem onSelect={() => props.onDuplicate(conversation.id)}><CopyPlus />复制一份</MenuItem>
           <MenuItem onSelect={() => props.onExport(conversation.id, 'md')}><Download />导出为 Markdown</MenuItem>
           <MenuItem onSelect={() => props.onExport(conversation.id, 'json')}><Download />导出为 JSON</MenuItem>
