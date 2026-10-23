@@ -1272,6 +1272,13 @@ class LocalExecutionRuntime:
             await self._cancel_process(record)
             result = self._result(record)
             result["timed_out"] = True
+            result["outcome"] = "timed_out"
+            result["data"].update({"state": "timed_out", "timed_out": True, "exit_code": 124})
+            result["content"] = [{
+                "type": "text",
+                "text": f"Process timed out after {float(timeout):g}s.\n{result['content'][0]['text']}",
+            }]
+            result["is_error"] = True
             return result
         except asyncio.CancelledError:
             await self._cancel_process(record)
