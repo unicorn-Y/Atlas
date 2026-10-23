@@ -154,7 +154,7 @@ class ModelRouter:
         raw_provider = str(selected.get("hermes_provider") or selected.get("provider") or "")
         provider_id = catalog.resolve_catalog_id(raw_provider) or raw_provider
         provider_entry = catalog.get_provider(provider_id) or {}
-        configured_mode = str(provider_entry.get("api_mode") or "openai")
+        configured_mode = str(selected.get("api_mode") or provider_entry.get("api_mode") or "openai")
         native_supported = configured_mode == "anthropic_messages"
         litellm_model = _model_for_provider(selected, native=False)
         native_model = _model_for_provider(selected, native=True)
@@ -178,8 +178,12 @@ class ModelRouter:
 
         provider_cfg = self.model_manager.provider_config(provider_id)
         provider_key = self.model_manager.resolve_api_key(provider_id)
+        model_key = self.model_manager.resolve_model_api_key(str(selected.get("id") or "")) \
+            if selected.get("custom") and hasattr(self.model_manager, "resolve_model_api_key") else None
+        if model_key:
+            provider_key = model_key
         pool = self.model_manager.credential_pool(provider_id)
-        if pool is not None:
+        if pool is not None and not model_key:
             entry = pool.select(model=native_model)
             if entry is not None:
                 provider_key = entry.runtime_api_key
@@ -191,7 +195,10 @@ class ModelRouter:
 
         gateway_base = str(getattr(self.model_manager, "gateway_base_url", "") or "").strip()
         gateway_key = str(getattr(self.model_manager, "gateway_api_key", "") or "")
+        custom_endpoint = bool(selected.get("custom") and selected.get("base_url"))
         override = self.model_manager.get_api_mode_override(provider_id)
+        if not override and selected.get("custom"):
+            override = str(selected.get("api_mode") or "") or None
 
         if override == "anthropic_messages" and not native_supported:
             raise ValueError(f"Provider {provider_id} does not declare Anthropic Messages support")
@@ -200,12 +207,14 @@ class ModelRouter:
             if override == "anthropic_messages":
                 use_provider_credentials = bool(provider_key)
                 return self._route(
-                    selected, provider_id, native_model, provider_base if use_provider_credentials else gateway_base,
-                    provider_key if use_provider_credentials else gateway_key, pool if use_provider_credentials else None,
+                    selected, provider_id, native_model,
+                    provider_base if use_provider_credentials or custom_endpoint else gateway_base,
+                    provider_key if use_provider_credentials else (None if custom_endpoint else gateway_key),
+                    pool if use_provider_credentials and not model_key else None,
                     "anthropic_messages", purpose, wire_model=native_model,
                 )
-            base_url = provider_base if provider_key else gateway_base
-            key = provider_key or gateway_key or None
+            base_url = provider_base if provider_key or custom_endpoint else gateway_base
+            key = provider_key or (None if custom_endpoint else gateway_key) or None
             return self._route(
                 selected, provider_id, litellm_model, base_url or None, key, pool if provider_key else None,
                 self._canonical_mode(override), purpose, wire_model=native_model,
@@ -217,7 +226,16 @@ class ModelRouter:
                 "anthropic_messages", purpose, wire_model=native_model,
             )
 
-        if native_supported and gateway_base and gateway_key:
+        if custom_endpoint and not provider_key:
+            # A model with its own endpoint must never receive the unrelated
+            # gateway credential or silently fall back to the gateway route.
+            return self._route(
+                selected, provider_id, litellm_model, str(provider_base), None, None,
+                self._canonical_mode(override or configured_mode), purpose,
+                wire_model=native_model,
+            )
+
+        if native_supported and gateway_base and gateway_key and not custom_endpoint:
             supported, reason = await self._gateway_native_support(
                 provider_id, gateway_base, gateway_key, native_model,
             )

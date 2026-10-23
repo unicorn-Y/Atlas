@@ -20,7 +20,7 @@ log = structlog.get_logger()
 # 手填 capabilities 只允许这组规范字段（C5 契约 §1），其余键丢弃。
 _CAPABILITY_FIELDS = ("context_window", "max_output_tokens", "supports_vision", "supports_tools", "supports_reasoning")
 # 模型编辑（M6）允许修改的字段；id 与 custom 标记不可改，密钥不在这里改。
-_MODEL_PATCH_FIELDS = ("name", "base_url", "litellm_model", "native_model", "hermes_provider", "max_output_tokens", "price", "capabilities")
+_MODEL_PATCH_FIELDS = ("name", "base_url", "litellm_model", "native_model", "hermes_provider", "max_output_tokens", "price", "capabilities", "api_mode")
 
 # Default model configurations
 DEFAULT_MODELS: list[dict[str, Any]] = [
@@ -213,6 +213,8 @@ class ModelManager:
                 **m,
                 "favorite": m["id"] in self._favorites,
                 "selected": m["id"] == self._current,
+                "api_key_configured": bool(self.resolve_model_api_key(str(m["id"])))
+                if m.get("custom") else False,
                 # 附加字段（additive）：models.dev（allow_network=False）← 模型条目手填 capabilities 覆盖。
                 "capabilities": self._model_capabilities(m),
                 "reasoning_efforts": self._model_reasoning_efforts(m),
@@ -453,6 +455,32 @@ class ModelManager:
 
         return AtlasCredentialPool(pid)
 
+    @staticmethod
+    def _model_keyring_account(model_id: str) -> str:
+        return f"atlas:model:{model_id}"
+
+    def set_model_api_key(self, model_id: str, secret: str | None) -> None:
+        """Store a custom model key in the OS credential store, never settings."""
+        if not any(str(model.get("id")) == str(model_id) and model.get("custom") for model in self._models):
+            raise ValueError(f"未知自定义模型: {model_id}")
+        account = self._model_keyring_account(model_id)
+        try:
+            store = self._credential_store()
+            if secret and str(secret).strip():
+                store.set(account, str(secret).strip())
+            else:
+                store.delete(account)
+        except Exception as exc:
+            raise RuntimeError(f"自定义模型密钥写入系统凭据库失败: {exc}") from exc
+
+    def resolve_model_api_key(self, model_id: str) -> str | None:
+        """Return the OS-stored key for one custom model, if configured."""
+        try:
+            return self._credential_store().get(self._model_keyring_account(model_id))
+        except Exception as exc:
+            log.warning("model_manager.model_keyring_read_failed", model_id=model_id, error=str(exc))
+            return None
+
     # ------------------------------------------------------------------
     # 自定义模型编辑/删除（M6）
     # ------------------------------------------------------------------
@@ -468,6 +496,12 @@ class ModelManager:
         if not target.get("custom"):
             raise ValueError("仅支持编辑自定义模型")
         patch = patch if isinstance(patch, dict) else {}
+        if "api_key" in patch:
+            self.set_model_api_key(model_id, patch.get("api_key"))
+        if "api_mode" in patch and patch["api_mode"] not in {
+            None, "openai", "chat_completions", "anthropic_messages",
+        }:
+            raise ValueError("api_mode must be openai, chat_completions, or anthropic_messages")
         # hermes_provider 存的是 hermes id（qwen→alibaba、kimi→kimi-coding），
         # 校验必须走别名映射；存储/返回仍保持运行时路由期望的 hermes id。
         hermes_pid = patch.get("hermes_provider")
@@ -483,7 +517,9 @@ class ModelManager:
                 target[field] = value
         self._persist_settings()
         log.info("model_manager.update_model", model_id=model_id)
-        return dict(target)
+        result = dict(target)
+        result["api_key_configured"] = bool(self.resolve_model_api_key(model_id))
+        return result
 
     def delete_model(self, model_id: str) -> None:
         """删除模型。自定义模型直接移除；内置模型（DEFAULT_MODELS 硬编码、无法真正删除）
@@ -493,6 +529,11 @@ class ModelManager:
             raise ValueError(f"未知模型: {model_id}")
         builtin = not target.get("custom")
         self._models.remove(target)
+        if target.get("custom"):
+            try:
+                self._credential_store().delete(self._model_keyring_account(model_id))
+            except Exception as exc:
+                log.warning("model_manager.model_keyring_delete_failed", model_id=model_id, error=str(exc))
         if builtin:
             settings = load_user_settings()
             raw = settings.get("hidden_models")
