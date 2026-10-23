@@ -1322,7 +1322,10 @@ class LocalExecutionRuntime:
                 "content": [{"type": "text", "text": str(data)}],
                 "is_error": False,
             }
-        timeout = args.get("timeout") if args.get("timeout") is not None else 180.0
+        from atlas.kernel.exec import command_timeout
+
+        command = str(args.get("command") or args.get("executable") or "")
+        timeout = command_timeout(command, args.get("timeout"))
         return await self._wait_result(record, timeout)
 
     async def _process_operation(
