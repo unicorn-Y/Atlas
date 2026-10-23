@@ -56,13 +56,20 @@ def child_process_env(explicit: Mapping[str, object] | None = None) -> dict[str,
     """Build a command-tool environment, optionally removing model credentials.
 
     Caller-provided values are applied last and are preserved even when their
-    names are in the model credential list.
+    names are in the model credential list. A ``None`` value removes one
+    inherited variable without serializing the string ``"None"`` to the child.
     """
     env = _string_env(os.environ)
     if _scrub_enabled():
         for name in _MODEL_CREDENTIALS:
             env.pop(name, None)
-    env.update(_string_env(explicit))
+    overrides = explicit or {}
+    for key, value in overrides.items():
+        name = str(key)
+        if value is None:
+            env.pop(name, None)
+        else:
+            env[name] = str(value)
     return env
 
 
