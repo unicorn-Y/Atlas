@@ -871,14 +871,26 @@ class MCPClient:
             async with self._request_semaphore(server_name):
                 response = await handle.session.read_resource(uri)
             contents = []
+            from atlas.engine_core.tools.tool_output_limits import get_max_bytes
+
+            remaining = max(1, get_max_bytes())
             for item in response.contents:
                 value: dict[str, Any] = {
                     "uri": str(item.uri), "mimeType": getattr(item, "mimeType", None),
                 }
                 if hasattr(item, "text"):
-                    value["text"] = item.text
+                    normalized, remaining = _budget_mcp_content(
+                        {"type": "text", "text": str(item.text)}, remaining,
+                    )
+                    value["text"] = normalized["text"]
                 elif hasattr(item, "blob"):
-                    value["blob"] = item.blob
+                    normalized, remaining = _budget_mcp_content({
+                        "type": "resource", "uri": str(item.uri), "blob": item.blob,
+                    }, remaining)
+                    if "blob" in normalized:
+                        value["blob"] = normalized["blob"]
+                    else:
+                        value["text"] = (normalized.get("contents") or [{}])[0].get("text", "")
                 contents.append(value)
             return {"contents": contents, "is_error": False}
         except Exception as exc:
