@@ -440,6 +440,7 @@ class LocalProcess:
     notify_on_complete: bool = False
     watch_patterns: list[str] = field(default_factory=list)
     watch_tail: str = ""
+    stdin_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -1433,6 +1434,12 @@ class LocalExecutionRuntime:
         }
 
     async def _write_process_stdin(
+        self, record: LocalProcess, action: str, data: str,
+    ) -> dict[str, Any]:
+        async with record.stdin_lock:
+            return await self._write_process_stdin_locked(record, action, data)
+
+    async def _write_process_stdin_locked(
         self, record: LocalProcess, action: str, data: str,
     ) -> dict[str, Any]:
         writer = record.process.stdin
