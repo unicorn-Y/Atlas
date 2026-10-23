@@ -936,18 +936,37 @@ class LocalExecutionRuntime:
                 next_offset = offset + len(chunks)
                 complete = not truncated
             else:
-                if total_size > _MAX_READ_BYTES:
-                    raise ValueError(
-                        f"File is {total_size} bytes; default read is limited to {_MAX_READ_BYTES} bytes. "
-                        "Use offset/limit for lines or byte_offset/byte_limit for byte ranges."
-                    )
-                with path.open("rb") as stream:
-                    raw = stream.read(_MAX_READ_BYTES + 1)
-                if len(raw) > _MAX_READ_BYTES:
-                    raise ValueError(f"File grew beyond the {_MAX_READ_BYTES}-byte default read limit")
-                truncated = False
-                next_offset = None
-                complete = True
+                if args.get("binary"):
+                    if total_size > _MAX_READ_BYTES:
+                        raise ValueError(
+                            f"Binary file is {total_size} bytes; default read is limited to "
+                            f"{_MAX_READ_BYTES} bytes. Use byte_offset/byte_limit to page it."
+                        )
+                    with path.open("rb") as stream:
+                        raw = stream.read(_MAX_READ_BYTES + 1)
+                    if len(raw) > _MAX_READ_BYTES:
+                        raise ValueError(f"File grew beyond the {_MAX_READ_BYTES}-byte default read limit")
+                    truncated = False
+                    next_offset = None
+                    complete = True
+                else:
+                    # Bound default text reads by both lines and bytes, then give the
+                    # caller a precise continuation point for large source files.
+                    chunks = []
+                    byte_count = 0
+                    truncated = False
+                    with path.open("r", encoding=encoding, newline="") as stream:
+                        for line in stream:
+                            encoded_size = len(line.encode(encoding))
+                            if (len(chunks) >= _MAX_READ_LINES
+                                    or byte_count + encoded_size > _MAX_READ_PAGE_BYTES):
+                                truncated = True
+                                break
+                            chunks.append(line)
+                            byte_count += encoded_size
+                    raw = "".join(chunks).encode(encoding)
+                    next_offset = len(chunks) + 1 if truncated else None
+                    complete = not truncated
             if complete and int(args.get("offset", 1)) == 1 and int(args.get("byte_offset", 0)) == 0:
                 self._read_paths.add(str(path))
             result = {
@@ -965,6 +984,8 @@ class LocalExecutionRuntime:
                 result.update({"byte_offset": byte_offset, "next_byte_offset": next_offset})
             elif args.get("offset") is not None or args.get("limit") is not None:
                 result.update({"offset": offset, "next_offset": next_offset})
+            elif not args.get("binary") and truncated:
+                result.update({"offset": 1, "next_offset": next_offset})
             return result
         if action in ("write", "append"):
             self._ensure_workspace_path(path, workspace)

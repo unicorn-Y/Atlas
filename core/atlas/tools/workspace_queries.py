@@ -146,8 +146,26 @@ def _limit(value: Any, default: int = 200) -> int:
     return min(number, _MAX_LIMIT)
 
 
+def _grep_page(value: Any, offset: Any) -> tuple[int, int]:
+    """Normalize grep pagination while keeping even an unbounded request finite."""
+    try:
+        start = int(offset or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("offset must be a non-negative integer") from exc
+    if start < 0:
+        raise ValueError("offset must be a non-negative integer")
+    try:
+        page = int(value) if value is not None else 250
+    except (TypeError, ValueError) as exc:
+        raise ValueError("limit must be an integer") from exc
+    if page < 0:
+        raise ValueError("limit must be non-negative")
+    # `0` asks for all results, but a workspace scan must still be bounded.
+    return start, _MAX_LIMIT if page == 0 else min(page, _MAX_LIMIT)
+
+
 def glob_workspace(workspace: str, *, pattern: str, path: str | None = None,
-                   hidden: bool = False, limit: int = 200) -> dict[str, Any]:
+                   hidden: bool = False, limit: int = 100) -> dict[str, Any]:
     root, base = _rooted_path(workspace, path)
     if not isinstance(pattern, str) or not pattern.strip():
         raise ValueError("pattern must be a non-empty glob pattern")
@@ -155,7 +173,6 @@ def glob_workspace(workspace: str, *, pattern: str, path: str | None = None,
         raise ValueError("path must point to a directory")
     maximum = _limit(limit)
     matches: list[str] = []
-    skipped_path_truncated = False
     honour_result_skip = not _inside_skipped_tree(root, base)
     try:
         for relative in _iter_glob(root, base, pattern, hidden=hidden):
@@ -168,16 +185,20 @@ def glob_workspace(workspace: str, *, pattern: str, path: str | None = None,
         raise ValueError(f"Invalid or unreadable glob query: {exc}") from exc
     matches.sort(key=str.casefold)
     truncated = len(matches) > maximum
-    return {"path": str(base), "matches": matches[:maximum], "truncated": truncated}
+    result = {"path": str(base), "matches": matches[:maximum], "truncated": truncated}
+    if truncated:
+        result["hint"] = "Results were truncated; narrow the path or use a more specific pattern."
+    return result
 
 
 def grep_workspace(workspace: str, *, pattern: str, path: str | None = None,
                    include: str | None = None, literal: bool = False,
-                   case_sensitive: bool = True, limit: int = 200) -> dict[str, Any]:
+                   case_sensitive: bool = True, limit: int | None = None,
+                   offset: int = 0) -> dict[str, Any]:
     root, base = _rooted_path(workspace, path)
     if not isinstance(pattern, str) or not pattern:
         raise ValueError("pattern must be a non-empty search pattern")
-    maximum = _limit(limit)
+    start, maximum = _grep_page(limit, offset)
     flags = 0 if case_sensitive else re.IGNORECASE
     try:
         expression = re.compile(re.escape(pattern) if literal else pattern, flags)
@@ -217,6 +238,7 @@ def grep_workspace(workspace: str, *, pattern: str, path: str | None = None,
         files = files[:_MAX_FILES]
 
     matches: list[dict[str, Any]] = []
+    match_count = 0
     honour_result_skip = not _inside_skipped_tree(root, base)
     for item in files:
         try:
@@ -231,12 +253,27 @@ def grep_workspace(workspace: str, *, pattern: str, path: str | None = None,
             continue
         for number, line in enumerate(raw.splitlines(), 1):
             if expression.search(line):
-                matches.append({"path": relative.as_posix(), "line": number, "text": line})
+                match_count += 1
+                if match_count <= start:
+                    continue
+                text = line
+                clipped = len(text) > 500
+                if clipped:
+                    text = text[:500] + "… [line truncated]"
+                matches.append({"path": relative.as_posix(), "line": number, "text": text,
+                                **({"line_truncated": True} if clipped else {})})
                 if len(matches) > maximum:
-                    return {"path": str(base), "matches": matches[:maximum], "truncated": True,
-                            "scanned_files": len(files), "scan_truncated": truncated_files}
+                    # Inspect one additional matching line to report real truncation.
+                    result = {"path": str(base), "matches": matches, "truncated": True,
+                              "scanned_files": len(files), "offset": start,
+                              "next_offset": start + len(matches)}
+                    if truncated_files:
+                        result["scan_truncated"] = True
+                    result["matches"] = matches[:maximum]
+                    result["next_offset"] = start + maximum
+                    return result
     result: dict[str, Any] = {"path": str(base), "matches": matches, "truncated": False,
-                              "scanned_files": len(files)}
+                              "scanned_files": len(files), "offset": start}
     if truncated_files:
         # Say so explicitly. Returning an empty match list for a symbol that exists is what
         # sends an agent into a repeat-the-same-search loop; an honest "I did not look
@@ -256,7 +293,7 @@ def query_tool_schemas() -> list[dict[str, Any]]:
             "parameters": {"type": "object", "properties": {
                 "pattern": {"type": "string"}, "path": {"type": "string"},
                 "hidden": {"type": "boolean"},
-                "limit": {"type": "integer", "minimum": 1, "maximum": _MAX_LIMIT},
+                "limit": {"type": "integer", "minimum": 1, "maximum": _MAX_LIMIT, "default": 100},
             }, "required": ["pattern"], "additionalProperties": False},
         }},
         {"type": "function", "function": {
@@ -265,7 +302,9 @@ def query_tool_schemas() -> list[dict[str, Any]]:
                 "pattern": {"type": "string"}, "path": {"type": "string"},
                 "include": {"type": "string"}, "literal": {"type": "boolean"},
                 "caseSensitive": {"type": "boolean"},
-                "limit": {"type": "integer", "minimum": 1, "maximum": _MAX_LIMIT},
+                "limit": {"type": "integer", "minimum": 0, "maximum": _MAX_LIMIT,
+                          "default": 250, "description": "Number of matches to return; 0 returns up to the safe cap."},
+                "offset": {"type": "integer", "minimum": 0, "default": 0},
             }, "required": ["pattern"], "additionalProperties": False},
         }},
     ]
