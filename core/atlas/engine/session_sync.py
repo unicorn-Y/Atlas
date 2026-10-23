@@ -35,6 +35,7 @@ from atlas.session_migration_gate import (
     begin_session_migration,
     finish_session_migration,
     require_migration_settled as _require_migration_settled,
+    wait_for_session_migration as wait_for_session_migration,  # noqa: F401 - public compatibility export
 )
 
 
