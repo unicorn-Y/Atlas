@@ -694,6 +694,13 @@ class MCPClient:
             content: list of content blocks (text, image, etc.)
             is_error: bool
         """
+        if arguments is not None and not isinstance(arguments, dict):
+            return {"content": [{"type": "text", "text": "MCP tool arguments must be an object"}],
+                    "is_error": True}
+        try:
+            timeout = max(0.1, min(300.0, float(timeout)))
+        except (TypeError, ValueError):
+            timeout = 30.0
         tool = self._tool_index.get(qualified_name)
         if tool is None:
             return {"content": [{"type": "text",
