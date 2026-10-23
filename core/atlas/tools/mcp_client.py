@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import os
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass, field
@@ -65,6 +66,14 @@ def _mcp_tool_allowed(config: MCPServerConfig, tool_name: str) -> bool:
         return True
     return any(_mcp_rule_matches(rule, config.name, tool_name)
                for rule in config.tool_allow)
+
+
+def is_expired_remote_mcp_session(error: BaseException, transport: str) -> bool:
+    """Recognize only the structured expired-session code on HTTP transports."""
+    return (
+        transport in {"sse", "streamable_http", "streamable-http", "http"}
+        and getattr(error, "code", None) == -32001
+    )
 
 
 def _redact_mcp_arguments(value: Any, *, depth: int = 0) -> Any:
@@ -240,6 +249,7 @@ class MCPServerConfig:
     # None means unrestricted; [] means explicitly allow no tools.
     tool_allow: list[str] | None = None
     tool_deny: list[str] = field(default_factory=list)
+    blocking_reason: str | None = None
 
 
 def _parse_server_configs() -> list[MCPServerConfig]:
@@ -273,39 +283,61 @@ def _parse_server_configs() -> list[MCPServerConfig]:
 
     configs: list[MCPServerConfig] = []
     for name, data in servers_raw.items():
-        if not isinstance(data, dict):
-            continue
-        sc = MCPServerConfig(
-            name=name,
-            transport=data.get("transport", "stdio"),
-            command=data.get("command", ""),
-            args=[os.path.expanduser(os.path.expandvars(str(arg))) for arg in data.get("args", [])],
-            env=data.get("env", {}),
-            cwd=data.get("cwd"),
-            url=data.get("url", ""),
-            headers={
-                str(key): os.path.expandvars(str(value))
-                for key, value in (data.get("headers", {}) or {}).items()
-            },
-            oauth_scope=(str(data.get("oauth_scope") or "").strip() or None),
-            enabled=data.get("enabled", True),
-            tool_allow=(
-                [str(rule) for rule in data["tool_allow"]]
-                if "tool_allow" in data and isinstance(data["tool_allow"], list)
-                else ([] if "tool_allow" in data else None)
-            ),
-            tool_deny=(
-                [str(rule) for rule in data.get("tool_deny", [])]
-                if isinstance(data.get("tool_deny", []), list) else []
-            ),
-        )
-        # Only include servers that are both configured *and* in auto_start
-        # (unless auto_start is empty, meaning "start all configured")
-        if auto_start and name not in auto_start:
-            sc.enabled = False
-        if sc.enabled and (missing := missing_credentials(sc.env)):
-            log.warning("mcp.server_skipped_missing_credentials", server=name, missing=missing)
-            sc.enabled = False
+        try:
+            if not isinstance(data, dict):
+                raise ValueError("server entry must be a table")
+            args = data.get("args", [])
+            env = data.get("env", {}) or {}
+            headers = data.get("headers", {}) or {}
+            if not isinstance(args, list):
+                raise ValueError("args must be a list")
+            if not isinstance(env, dict):
+                raise ValueError("env must be a table")
+            if not isinstance(headers, dict):
+                raise ValueError("headers must be a table")
+            resolved_env, missing_env = resolve_mcp_env(env)
+            sc = MCPServerConfig(
+                name=str(name),
+                transport=str(data.get("transport", "stdio")),
+                command=str(data.get("command", "")),
+                args=[os.path.expanduser(os.path.expandvars(str(arg))) for arg in args],
+                env=resolved_env,
+                cwd=data.get("cwd"),
+                url=str(data.get("url", "")),
+                headers={
+                    str(key): os.path.expandvars(str(value))
+                    for key, value in headers.items()
+                },
+                oauth_scope=(str(data.get("oauth_scope") or "").strip() or None),
+                enabled=bool(data.get("enabled", True)),
+                tool_allow=(
+                    [str(rule) for rule in data["tool_allow"]]
+                    if "tool_allow" in data and isinstance(data["tool_allow"], list)
+                    else ([] if "tool_allow" in data else None)
+                ),
+                tool_deny=(
+                    [str(rule) for rule in data.get("tool_deny", [])]
+                    if isinstance(data.get("tool_deny", []), list) else []
+                ),
+            )
+            # Only include servers that are both configured *and* in auto_start
+            # (unless auto_start is empty, meaning "start all configured").
+            if auto_start and name not in auto_start:
+                sc.enabled = False
+                sc.blocking_reason = "server is not included in tools.auto_start"
+            if sc.enabled and missing_env:
+                sc.enabled = False
+                sc.blocking_reason = "Missing environment variables: " + ", ".join(missing_env)
+                log.warning("mcp.server_skipped_missing_credentials", server=name, missing=missing_env)
+        except Exception as exc:
+            sc = MCPServerConfig(
+                name=str(name), enabled=False,
+                blocking_reason=f"Invalid MCP server configuration ({type(exc).__name__})",
+            )
+            log.warning(
+                "mcp.server_config_invalid", server=str(name),
+                error_type=type(exc).__name__,
+            )
         configs.append(sc)
     return configs
 
@@ -325,6 +357,33 @@ def missing_credentials(env: dict[str, Any] | None) -> list[str]:
         if name.endswith(_CREDENTIAL_SUFFIXES) and not str(value or "").strip()                 and not os.environ.get(str(key), "").strip():
             missing.append(str(key))
     return missing
+
+
+_ENV_REFERENCE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)$")
+
+
+def resolve_mcp_env(env: dict[str, Any]) -> tuple[dict[str, str], list[str]]:
+    """Resolve whole-value ``$NAME`` / ``${NAME}`` references without leaking values."""
+    resolved: dict[str, str] = {}
+    missing: list[str] = []
+    referenced_keys: set[str] = set()
+    for raw_key, raw_value in env.items():
+        key, value = str(raw_key), str(raw_value or "")
+        reference = _ENV_REFERENCE.fullmatch(value)
+        if reference:
+            referenced_keys.add(key)
+            variable = reference.group(1) or reference.group(2)
+            value = os.environ.get(variable, "")
+            if not value:
+                missing.append(f"{key} (requires {variable})")
+        elif not value and key.upper().endswith(_CREDENTIAL_SUFFIXES):
+            # An empty override means "inherit this variable" for credential
+            # fields. Passing an empty string to the child would erase a valid
+            # parent-process secret after the missing-credential check.
+            value = os.environ.get(key, "")
+        resolved[key] = value
+    missing.extend(key for key in missing_credentials(resolved) if key not in referenced_keys)
+    return resolved, list(dict.fromkeys(missing))
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +410,7 @@ class MCPClient:
         self._server_status: dict[str, dict[str, Any]] = {}
         self._startup_tasks: set[asyncio.Task[Any]] = set()
         self._refresh_locks: dict[str, asyncio.Lock] = {}
+        self._session_recovery_locks: dict[str, asyncio.Lock] = {}
         self._reconnect_tasks: dict[str, asyncio.Task[Any]] = {}
         self._request_semaphores: dict[str, asyncio.Semaphore] = {}
         self._stopping = False
@@ -384,7 +444,10 @@ class MCPClient:
                 "state": "starting" if config.enabled else "disabled",
                 "tool_discovery": "pending" if config.enabled else "not_started",
                 "tool_count": 0,
-                "blocking_reason": None if config.enabled else "server is disabled",
+                "blocking_reason": (
+                    None if config.enabled
+                    else config.blocking_reason or "server is disabled"
+                ),
             }
         enabled = [c for c in configs if c.enabled]
         if not enabled:
@@ -663,7 +726,22 @@ class MCPClient:
                         await transport_cm.__aexit__(None, None, None)
 
         handle._owner_task = asyncio.create_task(own_connection(), name=f"mcp-owner:{handle.name}")
-        await ready
+        try:
+            await asyncio.wait_for(asyncio.shield(ready), timeout=_MCP_REQUEST_TIMEOUT_SECONDS)
+        except TimeoutError:
+            # A transport may hang before yielding streams. Cancel and join its
+            # owner before returning so a late handshake cannot leak a process
+            # or publish a connection after startup has already failed.
+            owner_task = handle._owner_task
+            if owner_task is not None and not owner_task.done():
+                owner_task.cancel()
+                await asyncio.gather(owner_task, return_exceptions=True)
+            handle._owner_task = None
+            handle._owner_stop = None
+            handle.session = None
+            raise TimeoutError(
+                f"MCP transport handshake timed out after {_MCP_REQUEST_TIMEOUT_SECONDS:g}s"
+            )
 
     async def _refresh_tools(self, server_name: str, handle: MCPServerHandle) -> None:
         """Atomically replace tools after a server's list_changed notification."""
@@ -785,11 +863,17 @@ class MCPClient:
                  args=_redact_mcp_arguments(arguments or {}))
 
         try:
-            async with self._request_semaphore(tool.server_name):
-                result = await asyncio.wait_for(
-                    handle.session.call_tool(tool.name, arguments),
-                    timeout=timeout,
-                )
+            async def invoke() -> Any:
+                async with self._request_semaphore(tool.server_name):
+                    return await handle.session.call_tool(tool.name, arguments or {})
+
+            # Include time queued behind this server's concurrency limit in the
+            # same deadline as the RPC. A saturated server must not let a call
+            # wait forever before its SDK-level timeout even begins.
+            result = await asyncio.wait_for(
+                invoke(),
+                timeout=timeout,
+            )
 
             from atlas.engine_core.tools.tool_output_limits import get_max_bytes
 
@@ -814,9 +898,39 @@ class MCPClient:
         except Exception as e:
             log.error("mcp.call_tool.error", tool=qualified_name,
                       error=str(e))
+            if is_expired_remote_mcp_session(e, handle.transport):
+                try:
+                    await self._recover_expired_session(tool.server_name, handle)
+                except Exception as recovery_error:
+                    log.warning(
+                        "mcp.expired_session_recovery_failed", server=tool.server_name,
+                        error_type=type(recovery_error).__name__,
+                    )
+                    return {"content": [{"type": "text", "text": (
+                        "MCP session expired; this call was not retried, and reconnect failed. "
+                        "Retry after the server is available."
+                    )}], "is_error": True}
+                return {"content": [{"type": "text", "text": (
+                    "MCP session expired; this call was not retried. The connection was refreshed; "
+                    "retry the tool call."
+                )}], "is_error": True}
             return {"content": [{"type": "text",
                                  "text": f"Tool call failed: {e}"}],
                     "is_error": True}
+
+    async def _recover_expired_session(
+        self, server_name: str, expected_handle: MCPServerHandle,
+    ) -> None:
+        """Replace one stale HTTP session once; do not replay possibly side-effecting tools."""
+        lock = self._session_recovery_locks.setdefault(server_name, asyncio.Lock())
+        async with lock:
+            if self._servers.get(server_name) is not expected_handle:
+                return  # another failing call already performed this recovery
+            config = self._server_configs.get(server_name)
+            if config is None:
+                raise RuntimeError("MCP server configuration is no longer available")
+            await self.disconnect_server(server_name)
+            await self._connect_server(config)
 
     # -- helpers -------------------------------------------------------------
 
