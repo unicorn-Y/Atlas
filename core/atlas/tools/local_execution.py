@@ -49,6 +49,30 @@ _INLINE_CODE = re.compile(
     re.IGNORECASE,
 )
 
+_NO_MATCH_COMMANDS = {"grep", "rg", "ripgrep", "find", "diff", "test", "["}
+_ROBOCOPY_COMMANDS = {"robocopy", "robocopy.exe"}
+_COMMAND_BOUNDARY = re.compile(r"(?:^|[|;&\r\n])\s*(?:\([^)]*\)\s*)?(?:command\s+)?(?:sudo\s+)?([\w./\\-]+)", re.I)
+
+
+def command_exit_is_error(command: str, exit_code: int | None) -> bool:
+    """Interpret shell exit codes using the documented command-specific contracts.
+
+    Most commands treat only 0 as success. Search/test utilities use 1 for the
+    expected "no match/false" result, while robocopy reserves 0–7 for successful
+    copy/compare outcomes. Unknown commands keep the conservative nonzero rule.
+    """
+    if exit_code is None or exit_code == 0:
+        return False
+    names = {
+        Path(match.group(1).replace("\\", "/")).name.lower()
+        for match in _COMMAND_BOUNDARY.finditer(str(command or ""))
+    }
+    if any(name in _ROBOCOPY_COMMANDS for name in names):
+        return not 0 <= exit_code <= 7
+    if exit_code == 1 and names & _NO_MATCH_COMMANDS:
+        return False
+    return True
+
 
 def _read_text(item: dict[str, Any]) -> str:
     """One file read as the model should see it: a header line, then numbered lines.
@@ -439,6 +463,7 @@ class LocalProcess:
     started_at: str
     owner_run_id: str | None
     detached: bool
+    exit_code_command: str = ""
     state: str = "running"
     exit_code: int | None = None
     stdout_path: Path = field(default_factory=Path)
@@ -604,7 +629,7 @@ class LocalExecutionRuntime:
             return {
                 "data": data,
                 "content": [{"type": "text", "text": str(data)}],
-                "is_error": False,
+                "is_error": bool(data.get("is_error")) if name == "local_git" else False,
             }
         except asyncio.CancelledError:
             raise
@@ -1105,6 +1130,9 @@ class LocalExecutionRuntime:
         result = waited["data"]
         result["action"] = action
         result["repo"] = str(self._path(args["repo"]))
+        result["is_error"] = command_exit_is_error(
+            "git " + " ".join(command), result.get("exit_code"),
+        )
         return result
 
     async def _start_from_shell(
@@ -1149,7 +1177,7 @@ class LocalExecutionRuntime:
             argv = [executable, "-lc", command]
         else:
             raise ValueError(f"Unsupported shell: {shell}")
-        return await self._spawn(
+        record = await self._spawn(
             argv,
             self._path(args.get("cwd")) if args.get("cwd") else Path.cwd(),
             args.get("env"),
@@ -1160,6 +1188,8 @@ class LocalExecutionRuntime:
             bool(args.get("keep_stdin")),
             bool(args.get("pty")),
         )
+        record.exit_code_command = command
+        return record
 
     async def _start_from_exec(
         self, args: dict[str, Any], run_id: str | None, callback: OutputCallback | None
@@ -1172,7 +1202,7 @@ class LocalExecutionRuntime:
             argv = self._windows_batch_argv(resolved, command_args)
         else:
             argv = [resolved, *command_args]
-        return await self._spawn(
+        record = await self._spawn(
             argv,
             self._path(args.get("cwd")) if args.get("cwd") else Path.cwd(),
             args.get("env"),
@@ -1183,6 +1213,8 @@ class LocalExecutionRuntime:
             bool(args.get("keep_stdin")),
             bool(args.get("pty")),
         )
+        record.exit_code_command = " ".join([executable, *command_args])
+        return record
 
     @staticmethod
     def _windows_batch_argv(executable: str, args: list[str]) -> list[str]:
@@ -1431,9 +1463,18 @@ class LocalExecutionRuntime:
                 "stderr": stderr["text"],
                 "stdout_truncated": record.stdout_size > 65536,
                 "stderr_truncated": record.stderr_size > 65536,
+                "outcome": (
+                    "cancelled" if record.cancelled else
+                    "failed" if command_exit_is_error(
+                        record.exit_code_command or record.command, record.exit_code,
+                    ) else "completed"
+                ),
             }
         )
-        return {"data": data, "content": [{"type": "text", "text": str(data)}], "is_error": False}
+        failed = record.cancelled or command_exit_is_error(
+            record.exit_code_command or record.command, record.exit_code,
+        )
+        return {"data": data, "content": [{"type": "text", "text": str(data)}], "is_error": failed}
 
     async def _execute_or_detach(
         self, record: LocalProcess, args: dict[str, Any]

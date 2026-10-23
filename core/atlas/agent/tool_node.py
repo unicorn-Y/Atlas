@@ -1520,7 +1520,13 @@ async def execute_tools_node(
             "is_error": bool(result.get("is_error", False)),
         })
         if result.get("is_error"):
-            events[-1]["error_category"] = "tool"
+            error_data = result.get("data") if isinstance(result.get("data"), dict) else {}
+            outcome = str(error_data.get("outcome") or "")
+            events[-1]["error_category"] = (
+                "cancelled" if outcome == "cancelled" else
+                "timeout" if outcome == "timed_out" or error_data.get("timed_out") else
+                "command" if isinstance(error_data.get("exit_code"), int) else "tool"
+            )
         if getattr(ctx, "event_queue", None) is not None:
             await ctx.event_queue.put(events[-1])
 
