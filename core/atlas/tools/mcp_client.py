@@ -401,12 +401,12 @@ class MCPClient:
         """Set up stdio transport."""
         command, args = _resolve_stdio_command(cfg.command, cfg.args)
         basename = Path(cfg.command).name.lower().removesuffix(".cmd").removesuffix(".exe")
-        from atlas.engine_core.tools.child_process_env import child_process_env
+        from atlas.engine_core.tools.child_process_env import mcp_child_process_env
 
-        env = child_process_env(cfg.env)
+        env = mcp_child_process_env(cfg.env)
         runtime = resolve_node_runtime()
         if basename in {"node", "npm", "npx"} and runtime.bundled and runtime.executable:
-            env = child_process_env(cfg.env)
+            env = mcp_child_process_env(cfg.env)
             node_directory = str(runtime.executable.parent)
             env["PATH"] = os.pathsep.join(
                 value for value in (node_directory, env.get("PATH", "")) if value

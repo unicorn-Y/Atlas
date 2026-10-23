@@ -172,6 +172,8 @@ approval_timeout_seconds = 600
 # Local CLI, filesystem, process, and Git tools are unrestricted by default.
 # Change this explicitly to deny to opt into a blocked mode.
 permission_mode = "full_access"
+# Remove Atlas and common model provider keys from command tool child processes.
+scrub_child_env = true
 
 [computer_use]
 # Real Windows desktop observation and input are unrestricted by default.
