@@ -23,7 +23,10 @@ from atlas.kernel.context import CompactionResult, ContextManager, estimate_toke
 from atlas.kernel.model_call import ModelCallError, ModelCallResult, complete_stream
 from atlas.kernel.plan import PlanMode
 from atlas.kernel.prompt import build_prompt
-from atlas.kernel.repair import ToolHistoryError, repair_unpaired_tool_calls, started_call_ids
+from atlas.kernel.repair import (
+    ToolHistoryError, normalize_tool_results, repair_unpaired_tool_calls,
+    started_call_ids,
+)
 from atlas.kernel.state import KernelEvent, RunPhase, RunState, RunTerminalStatus
 from atlas.kernel.stuck import StuckDetector
 from atlas.kernel.tools import (
@@ -1030,14 +1033,30 @@ class AtlasKernel:
                 model_capabilities = model_config.get("capabilities")
                 model_capabilities = model_capabilities if isinstance(model_capabilities, dict) else {}
                 context_window = model_config.get("context_window") or model_capabilities.get("context_window")
+                context_resolver = getattr(agent._model_mgr, "context_window_for_model", None)
+                beta_resolver = getattr(agent._model_mgr, "allowed_sdk_betas", None)
+                sdk_betas = (
+                    beta_resolver(model_config.get("sdk_betas"))
+                    if callable(beta_resolver) else model_config.get("sdk_betas")
+                )
+                if callable(context_resolver):
+                    context_window = context_resolver(
+                        turn_model, sdk_betas,
+                    ) or context_window
                 model_window = int(context_window or 200_000)
                 configured_output_limit = (
                     model_config.get("max_output_tokens")
                     or model_capabilities.get("max_output_tokens")
                 )
                 requested_output_limit = request.max_output_tokens or model_profile.max_output_tokens
-                output_token_limit = min(int(requested_output_limit), int(configured_output_limit)) \
-                    if configured_output_limit else int(requested_output_limit)
+                output_resolver = getattr(agent._model_mgr, "output_tokens_for_model", None)
+                if callable(output_resolver):
+                    output_token_limit = output_resolver(
+                        turn_model, int(requested_output_limit), configured_output_limit,
+                    ) or int(requested_output_limit)
+                else:
+                    output_token_limit = min(int(requested_output_limit), int(configured_output_limit)) \
+                        if configured_output_limit else int(requested_output_limit)
 
                 async def summarize(old: list[dict[str, Any]], summary_prompt: str) -> str:
                     from atlas.models.reasoning_stages import effort_for_phase, load_stage_config
@@ -1049,6 +1068,7 @@ class AtlasKernel:
                         [*old, {"role": "user", "content": summary_prompt}], [],
                         reasoning_effort=summary_effort or turn_effort,
                         max_output_tokens=min(int(engine_config.get("summary_max_tokens", 4096)), 8192),
+                        sdk_betas=sdk_betas,
                         cancel_event=request.cancel_event,
                         max_retries=model_retries,
                         fallback_models=list(getattr(runtime, "fallback_models", []) or []),
@@ -1134,6 +1154,12 @@ class AtlasKernel:
                             method=result.method,
                         )
                         try:
+                            # A summary may replace old dialogue, but a
+                            # protocol group that remains in the provider view
+                            # must still have exactly one result for each call.
+                            # Validate before commit so a malformed summary
+                            # cannot poison the next turn.
+                            normalize_tool_results(compacted_messages)
                             from atlas.engine.session_sync import compact_session_messages
 
                             await asyncio.to_thread(
@@ -1445,6 +1471,7 @@ class AtlasKernel:
                         agent, turn_model, messages, tools,
                         reasoning_effort=turn_effort,
                         max_output_tokens=output_token_limit,
+                        sdk_betas=sdk_betas,
                         cancel_event=model_cancel_event,
                         max_retries=model_retries,
                         fallback_models=list(getattr(runtime, "fallback_models", []) or []),

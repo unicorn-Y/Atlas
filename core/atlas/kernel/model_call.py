@@ -726,6 +726,7 @@ async def complete_stream(
     *,
     reasoning_effort: str | None = None,
     max_output_tokens: int | None = None,
+    sdk_betas: Any = None,
     cancel_event: asyncio.Event | None = None,
     max_retries: int | None = None,
     fallback_models: list[str] | None = None,
@@ -766,7 +767,6 @@ async def complete_stream(
     last_error: ModelCallError | None = None
     total_attempts = 0
     overall_started = time.monotonic()
-    last_route: Any = None
     last_usage: dict[str, Any] = {}
     retry_budget_attempts, retry_budget_wait_s = _task_retry_budget()
     task_retry_count = 0
@@ -782,9 +782,7 @@ async def complete_stream(
             if candidate_index + 1 < len(candidates):
                 continue
             raise last_error from exc
-        last_route = route
         wire_model = route.wire_model or route.model
-        route_started = time.monotonic()
         retry_index = 0
         connection_retry_count = 0
         connection_retry_delay = 5.0
@@ -842,6 +840,8 @@ async def complete_stream(
                     "tools": wire_tools or None, "stream": True,
                     "stream_options": {"include_usage": True},
                 }
+                if sdk_betas is not None:
+                    kwargs["sdk_betas"] = sdk_betas
                 if max_output_tokens:
                     kwargs["max_tokens"] = max_output_tokens
                 if reasoning_effort:
