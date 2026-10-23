@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import asyncio
 
 from atlas.kernel.context import ContextManager
 
@@ -45,7 +46,38 @@ def probe_tool_output_clip() -> None:
         assert clipped.original_bytes == len(source.encode("utf-8"))
 
 
+async def _probe_failed_summary_recovery() -> None:
+    with tempfile.TemporaryDirectory(prefix="atlas-w1-recovery-") as output_dir:
+        manager = ContextManager({"engine": {
+            "max_output_tokens": 100,
+            "context_buffer_tokens": 0,
+            "context_keep_messages": 2,
+            "microcompact": {"head_chars": 0, "tail_chars": 0, "keep_recent_tool_results": 5},
+        }}, output_dir=output_dir)
+        history = [
+            {"role": "user", "content": "start"},
+            {"role": "assistant", "tool_calls": [{"id": "a", "name": "Read"}]},
+            {"role": "tool", "tool_call_id": "a", "name": "Read", "content": "a" * 20_000},
+            {"role": "assistant", "tool_calls": [{"id": "b", "name": "Read"}]},
+            {"role": "tool", "tool_call_id": "b", "name": "Read", "content": "b" * 20_000},
+            {"role": "user", "content": "continue"},
+        ]
+
+        async def fail_summary(_old: list[dict], _prompt: str) -> str:
+            raise RuntimeError("simulated summary outage")
+
+        result = await manager.prepare(history, model_window=10_000, summarize=fail_summary,
+                                       force=True)
+        assert result.method == "aggressive_microcompact", result
+        assert result.error is None, result
+        assert result.recovery_note and "simulated summary outage" in result.recovery_note
+        assert any(message.get("output_ref") for message in result.messages)
+        assert result.after_tokens < result.before_tokens
+        assert manager.consecutive_failures == 1
+
+
 if __name__ == "__main__":
     probe_thresholds()
     probe_tool_output_clip()
-    print("W1-2/W1-3 上下文和工具裁剪 probe PASS")
+    asyncio.run(_probe_failed_summary_recovery())
+    print("W1-2/W1-4 上下文、裁剪和失败恢复 probe PASS")

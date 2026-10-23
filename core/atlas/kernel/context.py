@@ -66,6 +66,7 @@ class CompactionResult:
     after_tokens: int
     budget_tokens: int
     error: str | None = None
+    recovery_note: str | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -199,10 +200,13 @@ class ContextManager:
         return max(0, min(int(budget_tokens * 0.9), budget_tokens - 2000))
 
     def microcompact(self, history: Sequence[Mapping[str, Any]], *, budget_tokens: int,
-                     prefix_tokens: int = 0) -> list[dict[str, Any]]:
+                     prefix_tokens: int = 0, aggressive: bool = False) -> list[dict[str, Any]]:
         messages = copy.deepcopy(list(history))
-        cfg = self.config.get("microcompact", {})
-        if cfg.get("enabled") is False:
+        cfg = dict(self.config.get("microcompact", {}))
+        if aggressive:
+            cfg.update(enabled=True, keep_recent_tool_results=0, head_chars=500,
+                       tail_chars=500, min_token_savings=1)
+        if cfg.get("enabled") is False and not aggressive:
             return messages
         threshold = self._micro_threshold(budget_tokens)
         idle = (self.last_assistant_completed_at is not None and
@@ -237,10 +241,11 @@ class ContextManager:
                 group.append(index)
         if group:
             groups.append(group)
-        keep = max(1, int(cfg.get("keep_recent_tool_results", 5)))
+        keep = max(0 if aggressive else 1, int(cfg.get("keep_recent_tool_results", 5)))
         head = max(0, int(cfg.get("head_chars", 2000)))
         tail = max(0, int(cfg.get("tail_chars", 2000)))
-        for indices in groups[:-keep]:
+        eligible_groups = groups[:len(groups) - keep] if keep else groups
+        for indices in eligible_groups:
             for index in indices:
                 message = messages[index]
                 content = message["content"]
@@ -270,6 +275,19 @@ class ContextManager:
         after = estimate_tokens(messages) + prefix_tokens
         method = "microcompact" if messages != list(history) else "none"
         result = CompactionResult(messages, method, before, after, budget)
+
+        def recover_by_trimming(note: str) -> CompactionResult:
+            if not force:
+                result.error = note
+                return result
+            trimmed = self.microcompact(messages, budget_tokens=0, prefix_tokens=prefix_tokens,
+                                        aggressive=True)
+            trimmed_size = estimate_tokens(trimmed) + prefix_tokens
+            if trimmed != messages and trimmed_size < after:
+                return CompactionResult(trimmed, "aggressive_microcompact", before,
+                                        trimmed_size, budget, recovery_note=note)
+            result.error = note
+            return result
         announced = False
         auto_threshold = self.thresholds(model_window).auto_compact
         if before_compact is not None and (method != "none" or after >= auto_threshold or manual or force):
@@ -282,11 +300,9 @@ class ContextManager:
         if after < auto_threshold and not manual and not force:
             return result
         if summarize is None:
-            result.error = "context_over_budget: no summarizer available"
-            return result
+            return recover_by_trimming("context_over_budget: no summarizer available")
         if self.consecutive_failures >= MAX_CONSECUTIVE_FAILURES and not manual:
-            result.error = "compaction_circuit_breaker"
-            return result
+            return recover_by_trimming("compaction_circuit_breaker")
         # Keep recent turns and every unmatched call outside the summarized range.
         keep_messages = max(1, int(self.config.get("context_keep_messages", 6)))
         cut = max(0, len(messages) - keep_messages)
@@ -310,8 +326,7 @@ class ContextManager:
                 break
         old = [m for m in messages[:cut] if m.get("role") != "system"]
         if not old:
-            result.error = "context_over_budget: no safely compactable history"
-            return result
+            return recover_by_trimming("context_over_budget: no safely compactable history")
         # The hysteresis path can summarize while microcompact changed nothing and the
         # context is still under the hard budget; the caller must still get its
         # PreCompact/lease callback before a summary replaces history.
@@ -348,7 +363,6 @@ class ContextManager:
             raise
         except Exception as exc:
             self.consecutive_failures += 1
-            result.error = str(exc)
-            return result
+            return recover_by_trimming(f"summary failed: {exc}")
         self.consecutive_failures = 0
         return CompactionResult(replacement, "summary", before, size, budget)
