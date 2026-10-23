@@ -24,6 +24,7 @@ from atlas.config import get_config
 from atlas.tools.node_runtime import get_node_runtime_status, resolve_node_runtime
 
 log = structlog.get_logger()
+_MAX_PARALLEL_SERVER_REQUESTS = 8
 
 
 def normalize_mcp_content(block: Any) -> dict[str, Any]:
@@ -271,7 +272,16 @@ class MCPClient:
         self._startup_tasks: set[asyncio.Task[Any]] = set()
         self._refresh_locks: dict[str, asyncio.Lock] = {}
         self._reconnect_tasks: dict[str, asyncio.Task[Any]] = {}
+        self._request_semaphores: dict[str, asyncio.Semaphore] = {}
         self._stopping = False
+
+    def _request_semaphore(self, server_name: str) -> asyncio.Semaphore:
+        """Bound concurrent RPC work per MCP server without serializing other servers."""
+        semaphore = self._request_semaphores.get(server_name)
+        if semaphore is None:
+            semaphore = asyncio.Semaphore(_MAX_PARALLEL_SERVER_REQUESTS)
+            self._request_semaphores[server_name] = semaphore
+        return semaphore
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -666,10 +676,11 @@ class MCPClient:
                  args=arguments)
 
         try:
-            result = await asyncio.wait_for(
-                handle.session.call_tool(tool.name, arguments),
-                timeout=timeout,
-            )
+            async with self._request_semaphore(tool.server_name):
+                result = await asyncio.wait_for(
+                    handle.session.call_tool(tool.name, arguments),
+                    timeout=timeout,
+                )
 
             from atlas.engine_core.tools.tool_output_limits import get_max_bytes
 
@@ -769,7 +780,8 @@ class MCPClient:
             try:
                 from mcp import types
                 params = types.PaginatedRequestParams(cursor=cursor) if cursor else None
-                response = await handle.session.list_resources(params=params)
+                async with self._request_semaphore(name):
+                    response = await handle.session.list_resources(params=params)
                 result[name] = {
                     "instructions": handle.instructions,
                     "nextCursor": getattr(response, "nextCursor", None),
@@ -803,7 +815,8 @@ class MCPClient:
             try:
                 from mcp import types
                 params = types.PaginatedRequestParams(cursor=cursor) if cursor else None
-                response = await handle.session.list_resource_templates(params=params)
+                async with self._request_semaphore(name):
+                    response = await handle.session.list_resource_templates(params=params)
                 result[name] = {
                     "nextCursor": getattr(response, "nextCursor", None),
                     "resourceTemplates": [
@@ -828,7 +841,8 @@ class MCPClient:
         if handle is None or handle.session is None:
             return {"is_error": True, "error": f"MCP server is not connected: {server_name}"}
         try:
-            response = await handle.session.read_resource(uri)
+            async with self._request_semaphore(server_name):
+                response = await handle.session.read_resource(uri)
             contents = []
             for item in response.contents:
                 value: dict[str, Any] = {
