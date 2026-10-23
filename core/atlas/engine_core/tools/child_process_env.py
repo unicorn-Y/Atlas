@@ -74,7 +74,12 @@ def child_process_env(explicit: Mapping[str, object] | None = None) -> dict[str,
 
 
 def mcp_child_process_env(explicit: Mapping[str, object] | None = None) -> dict[str, str]:
-    """Build an MCP environment with complete parent inheritance and overrides."""
+    """Build an MCP environment with parent inheritance and explicit removals."""
     env = _string_env(os.environ)
-    env.update(_string_env(explicit))
+    for key, value in (explicit or {}).items():
+        name = str(key)
+        if value is None:
+            env.pop(name, None)
+        else:
+            env[name] = str(value)
     return env
