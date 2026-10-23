@@ -1476,29 +1476,6 @@ class LocalExecutionRuntime:
         if record.state != "running":
             return
         record.cancelled = True
-        if os.name == "nt":
-            try:
-                killer = await asyncio.create_subprocess_exec(
-                    "taskkill.exe",
-                    "/PID",
-                    str(record.process.pid),
-                    "/T",
-                    "/F",
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                )
-                await killer.wait()
-                if killer.returncode == 0:
-                    await record.wait_task
-                    record.state = "cancelled"
-                    return
-            except OSError as exc:
-                log.warning(
-                    "local_execution.tree_termination_failed",
-                    execution_id=record.execution_id,
-                    error=str(exc),
-                )
         try:
             if os.name == "nt":
                 record.process.send_signal(signal.CTRL_BREAK_EVENT)
@@ -1510,16 +1487,29 @@ class LocalExecutionRuntime:
             await asyncio.wait_for(asyncio.shield(record.wait_task), timeout=2.0)
         except TimeoutError:
             if os.name == "nt":
-                killer = await asyncio.create_subprocess_exec(
-                    "taskkill.exe",
-                    "/PID",
-                    str(record.process.pid),
-                    "/T",
-                    "/F",
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                await killer.wait()
+                try:
+                    killer = await asyncio.create_subprocess_exec(
+                        "taskkill.exe", "/PID", str(record.process.pid), "/T", "/F",
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    )
+                    return_code = await asyncio.wait_for(killer.wait(), timeout=5.0)
+                    if return_code != 0:
+                        log.warning("local_execution.tree_termination_failed",
+                                    execution_id=record.execution_id, return_code=return_code)
+                        process = getattr(record.process, "_process", record.process)
+                        process.kill()
+                except (OSError, TimeoutError) as exc:
+                    log.warning("local_execution.tree_termination_failed",
+                                execution_id=record.execution_id, error=type(exc).__name__)
+                    if "killer" in locals() and killer.returncode is None:
+                        killer.kill()
+                    process = getattr(record.process, "_process", record.process)
+                    try:
+                        process.kill()
+                    except (ProcessLookupError, OSError):
+                        pass
             else:
                 try:
                     os.killpg(record.process.pid, signal.SIGKILL)
