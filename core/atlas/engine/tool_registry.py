@@ -354,11 +354,23 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                     _registered.discard(stale_name)
             _atlas_mcp_registered[scope] = set(mcp_names)
         _bind_inline_atlas_tools()
-        indexed = {
-            str(item.get("function", {}).get("name", "")): item
-            for item in schemas
-            if str(item.get("function", {}).get("name", "")) != "read_office"
-        }
+        indexed: dict[str, dict[str, Any]] = {}
+        for item in schemas:
+            function = item.get("function", {})
+            name = str(function.get("name", ""))
+            if not name or name == "read_office":
+                continue
+            if name in indexed:
+                prior = indexed[name].get("function", {})
+                logger.warning(
+                    "tool_registry.schema_name_collision",
+                    tool=name,
+                    kept_description=str(prior.get("description", ""))[:120],
+                    skipped_description=str(function.get("description", ""))[:120],
+                    scope=scope,
+                )
+                continue
+            indexed[name] = item
         if plan_mode:
             indexed = {name: item for name, item in indexed.items() if name in plan_tools}
         for name in _ALIASES:
