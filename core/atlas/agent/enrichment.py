@@ -19,6 +19,7 @@ import structlog
 
 from atlas.engine.tool_permissions import intersect_tool_allow
 from atlas.agent.subagent_capacity import SubagentCapacity
+from atlas.agent.mailbox import AgentMailbox, MailMessage, normalize_address
 
 log = structlog.get_logger()
 
@@ -363,6 +364,45 @@ class DelegationService:
         self._background_tasks: dict[str, asyncio.Task[Any]] = {}
         self._steer_queues: dict[str, asyncio.Queue[dict[str, str]]] = {}
         self.capacity = SubagentCapacity()
+        self.mailbox = AgentMailbox()
+        self._mailbox_pumps: dict[str, asyncio.Task[Any]] = {}
+
+    async def send_agent_message(self, sender: str, recipient: str, content: str) -> MailMessage:
+        """Deliver a FIFO message to an agent address and wake a waiting child."""
+        return await self.mailbox.send(sender, recipient, content)
+
+    async def receive_agent_messages(
+        self, address: str, *, wait: bool = False, limit: int = 100,
+    ) -> list[MailMessage]:
+        """Read queued messages for an agent, optionally waiting for delivery."""
+        return await self.mailbox.receive(address, wait=wait, limit=limit)
+
+    def _start_mailbox_pump(self, subtask_id: str, address: str,
+                            steer_queue: asyncio.Queue[dict[str, str]]) -> None:
+        task = self._mailbox_pumps.get(subtask_id)
+        if task is not None and not task.done():
+            return
+
+        async def pump() -> None:
+            while True:
+                messages = await self.mailbox.receive(address, wait=True)
+                for message in messages:
+                    steer_queue.put_nowait({
+                        "content": message.content,
+                        "event_id": f"mail-{message.revision}",
+                        "sender": message.sender,
+                        "mail_revision": message.revision,
+                    })
+
+        self._mailbox_pumps[subtask_id] = asyncio.create_task(
+            pump(), name=f"atlas-mailbox-{subtask_id}",
+        )
+
+    async def _stop_mailbox_pump(self, subtask_id: str) -> None:
+        task = self._mailbox_pumps.pop(subtask_id, None)
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     def subtask_status(self, subtask_id: str) -> dict[str, Any] | None:
         """Return the live summary surface for one child, without its control objects."""
@@ -402,15 +442,18 @@ class DelegationService:
         return True
 
     def steer_subtask(self, subtask_id: str, text: str) -> bool:
-        """Queue a steering message for the child's next model turn."""
+        """Send an addressed mailbox message for the child's next model turn."""
         record = self._subtasks.get(subtask_id)
         if not text.strip() or record is None or record.get("status") != "running":
             return False
-        queue = self._steer_queues.get(subtask_id)
-        if queue is None:
+        address = record.get("agent_address")
+        if not address:
             return False
-        queue.put_nowait({"content": text.strip(), "event_id": secrets.token_hex(8)})
-        return True
+        try:
+            self.mailbox.send_nowait("parent@atlas", str(address), text)
+            return True
+        except ValueError:
+            return False
 
     async def _pick_backend(self) -> str:
         """First installed external Agent, Hermes preferred; a clear error when none is installed."""
@@ -461,12 +504,15 @@ class DelegationService:
             raise ValueError(schema_error)
         subtask_id = _subtask_id or secrets.token_hex(8)
         steer_queue = self._steer_queues.setdefault(subtask_id, asyncio.Queue())
+        team_id = str((atlas_options or {}).get("team_id") or "atlas")
+        agent_address = normalize_address(f"{subtask_id}@{team_id}")
+        self._start_mailbox_pump(subtask_id, agent_address, steer_queue)
         record = self._subtasks.setdefault(subtask_id, {
             "subtask_id": subtask_id, "goal": goal, "status": "running",
             "progress": "等待子 Agent 启动。", "result": None,
             "background": background, "steer_queue": steer_queue,
         })
-        record.update({"goal": goal, "status": "running"})
+        record.update({"goal": goal, "status": "running", "agent_address": agent_address})
         if _subtask_id is None:
             record["background"] = background
         if _subtask_id is None and background:
@@ -501,6 +547,7 @@ class DelegationService:
                             await child_callback(on_completed, child_id, status, summary,
                                                  duration_ms)
                     finally:
+                        await self._stop_mailbox_pump(subtask_id)
                         self._steer_queues.pop(subtask_id, None)
 
                 try:
@@ -525,6 +572,7 @@ class DelegationService:
                 finally:
                     if record.get("status") == "running":
                         record.update({"status": "failed", "result": "子任务未能完成。"})
+                    await self._stop_mailbox_pump(subtask_id)
                     self._steer_queues.pop(subtask_id, None)
 
             self._background_tasks[subtask_id] = asyncio.create_task(
@@ -620,6 +668,7 @@ class DelegationService:
                 raise
             finally:
                 await self.capacity.release(capacity_ticket)
+                await self._stop_mailbox_pump(subtask_id)
                 record.update({"status": status, "progress": summary, "result": summary})
                 self._steer_queues.pop(subtask_id, None)
                 if parent_cancel_task:
@@ -725,6 +774,7 @@ class DelegationService:
             raise
         finally:
             await self.capacity.release(capacity_ticket)
+            await self._stop_mailbox_pump(subtask_id)
             if cancel_event.is_set():
                 status = "cancelled"
             record.update({"status": status, "progress": completion_summary,
