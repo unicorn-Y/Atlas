@@ -1,3 +1,4 @@
+import './stdoutSafety.js';
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, session, shell, Tray } from 'electron';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
@@ -21,6 +22,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 if (process.env.ATLAS_DESKTOP_USER_DATA_DIR) {
   app.setPath('userData', path.resolve(process.env.ATLAS_DESKTOP_USER_DATA_DIR));
 }
+process.env.ATLAS_LOG_ROOT ??= app.isPackaged
+  ? app.getPath('userData')
+  : path.resolve(app.getAppPath(), '..');
 
 /** Window/taskbar icon per UI theme (assets/icon/icon-<theme>.png); the exe icon stays 夜航. */
 const THEME_ICONS = new Set(['light', 'aurora', 'dark']);
