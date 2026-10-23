@@ -199,6 +199,7 @@ async def _complete(agent: Any, model_id: str, messages: list[dict[str, Any]], l
             messages,
             TOOL_DEFINITION if label == "第 1 轮工具请求" else [],
             on_attempt=on_attempt,
+            reasoning_effort=os.environ.get("W0_SMOKE_EFFORT") or None,
             retry_source="foreground",
         )
     except BaseException as exc:
@@ -258,7 +259,9 @@ def _print_attempts(
 def _assistant_message(result: Any) -> dict[str, Any]:
     message: dict[str, Any] = {"role": "assistant", "content": result.text or ""}
     if result.tool_calls:
-        message["tool_calls"] = result.tool_calls
+        # 与真实主循环一致：Atlas 内部格式 {id,name,args} 转成历史/线上格式。
+        from atlas.kernel.loop import _tool_call_for_history
+        message["tool_calls"] = [_tool_call_for_history(call) for call in result.tool_calls]
     if result.reasoning_content:
         message["reasoning_content"] = result.reasoning_content
     if result.reasoning_details:
@@ -268,6 +271,8 @@ def _assistant_message(result: Any) -> dict[str, Any]:
 
 async def _run(args: argparse.Namespace) -> None:
     _configure_data_dir(args.data_dir)
+    if args.effort:
+        os.environ["W0_SMOKE_EFFORT"] = args.effort
 
     from atlas.models import ModelManager
 
@@ -290,9 +295,9 @@ async def _run(args: argparse.Namespace) -> None:
     conversation = list(first_messages)
     conversation.append(_assistant_message(tool_result))
     for call in tool_result.tool_calls:
-        function = call.get("function") or {}
-        if function.get("name") != "get_time":
-            raise RuntimeError(f"模型调用了意外工具：{function.get('name')!r}")
+        name = call.get("name") or (call.get("function") or {}).get("name")
+        if name != "get_time":
+            raise RuntimeError(f"模型调用了意外工具：{name!r}")
         conversation.append({
             "role": "tool",
             "tool_call_id": call.get("id") or "get_time-call",
@@ -321,6 +326,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="通过 Atlas W0 真实模型路径运行两轮冒烟对话。")
     parser.add_argument("--model", help="覆盖 Atlas 默认模型路由（模型 ID）")
     parser.add_argument("--data-dir", help="Atlas 数据目录；缺省沿用 Atlas 自身默认解析")
+    parser.add_argument("--effort", help="推理强度（如 high）；不传时沿用 Atlas 默认（通常是关闭思考）")
     args = parser.parse_args()
     try:
         asyncio.run(_run(args))
