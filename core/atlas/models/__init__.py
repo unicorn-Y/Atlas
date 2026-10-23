@@ -20,6 +20,12 @@ log = structlog.get_logger()
 
 # 手填 capabilities 只允许这组规范字段（C5 契约 §1），其余键丢弃。
 _CAPABILITY_FIELDS = ("context_window", "max_output_tokens", "supports_vision", "supports_tools", "supports_reasoning")
+# Anthropic SDK beta accepted for the million-token context window. Keep the
+# accepted set deliberately narrow; arbitrary beta strings must never leak to
+# provider requests from user settings.
+CONTEXT_1M_BETA = "context-1m-2025-08-07"
+_ALLOWED_SDK_BETAS = frozenset({CONTEXT_1M_BETA})
+_MIN_OUTPUT_LIMIT_OVERRIDE = 4096
 # 模型编辑（M6）允许修改的字段；id 与 custom 标记不可改，密钥不在这里改。
 _MODEL_PATCH_FIELDS = ("name", "base_url", "litellm_model", "native_model", "hermes_provider", "max_output_tokens", "price", "capabilities", "api_mode")
 
@@ -240,6 +246,82 @@ class ModelManager:
         if self._api_key or self.resolve_api_key(provider) or os.environ.get("ANTHROPIC_API_KEY"):
             return None
         return "所选 Claude 模型尚未配置可用密钥。请在设置 → 模型中配置服务商或网关密钥，再重新发送。"
+
+    def model_availability(self, model_id: str) -> dict[str, Any]:
+        """Return a local, deterministic availability check for a model.
+
+        This checks selection and required credentials only; it does not make a
+        network request or claim that a remote provider is healthy.
+        """
+        model = self._find_model(model_id)
+        if model is None:
+            return {"available": False, "reason": "unknown_model", "message": f"未知模型: {model_id}"}
+        credential_error = self.missing_model_credentials(model_id)
+        if credential_error:
+            return {"available": False, "reason": "missing_credentials", "message": credential_error}
+        return {"available": True, "reason": None, "message": None}
+
+    def allowed_sdk_betas(self, values: Any) -> list[str]:
+        """Filter caller supplied SDK beta flags through the 1M-only allowlist."""
+        if isinstance(values, str):
+            values = [values]
+        if not isinstance(values, (list, tuple, set, frozenset)):
+            return []
+        allowed = []
+        for value in values:
+            beta = str(value).strip()
+            if beta in _ALLOWED_SDK_BETAS and beta not in allowed:
+                allowed.append(beta)
+            elif beta:
+                log.warning("model_manager.sdk_beta_ignored", beta=beta)
+        return allowed
+
+    def supports_context_1m(self, model_id: str) -> bool:
+        """Require explicit model metadata before enabling the 1M beta."""
+        model = self._find_model(model_id)
+        if model is None:
+            return False
+        provider = _catalog.resolve_catalog_id(str(model.get("hermes_provider") or model.get("provider") or ""))
+        if provider != "anthropic":
+            return False
+        capabilities = self._model_capabilities(model) or {}
+        context_window = capabilities.get("context_window")
+        return isinstance(context_window, int) and not isinstance(context_window, bool) and context_window >= 1_000_000
+
+    def context_window_for_model(self, model_id: str, sdk_betas: Any = None) -> int | None:
+        """Resolve the runtime model's context window, including eligible 1M beta."""
+        model = self._find_model(model_id)
+        if model is None:
+            return None
+        capabilities = self._model_capabilities(model) or {}
+        window = capabilities.get("context_window")
+        if not isinstance(window, int) or isinstance(window, bool) or window <= 0:
+            return None
+        if CONTEXT_1M_BETA in self.allowed_sdk_betas(sdk_betas) and self.supports_context_1m(model_id):
+            return max(window, 1_000_000)
+        return window
+
+    def output_tokens_for_model(
+        self, model_id: str, requested: int | None, default: int | None = None,
+    ) -> int | None:
+        """Apply a trustworthy provider output limit without inventing one.
+
+        As in Claude's API capability handling, tiny/stale limits are ignored;
+        limits of at least 4096 cap both an explicit request and the default.
+        """
+        model = self._find_model(model_id)
+        if model is None:
+            return None
+        capabilities = self._model_capabilities(model) or {}
+        limit = capabilities.get("max_output_tokens")
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < _MIN_OUTPUT_LIMIT_OVERRIDE:
+            limit = None
+        desired = requested if requested is not None else default
+        if desired is None:
+            return limit
+        if isinstance(desired, bool) or not isinstance(desired, int) or desired <= 0:
+            raise ValueError("输出 token 预算必须是正整数")
+        return min(desired, limit) if limit is not None else desired
 
     def add_favorite(self, model_id: str) -> None:
         self._favorites.add(model_id)
