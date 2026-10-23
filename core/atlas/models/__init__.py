@@ -128,6 +128,10 @@ class ModelManager:
                 if self._current in hidden_ids:
                     self._current = self._models[0]["id"] if self._models else self._current
 
+        valid_ids = {str(model.get("id") or "") for model in self._models}
+        if valid_ids and self._current not in valid_ids:
+            self._current = str(self._models[0]["id"])
+
         log.info("model_manager.init", default=self._current, api_base=self._api_base,
                  source=self._gateway_source)
 
@@ -219,8 +223,9 @@ class ModelManager:
                 "capabilities": self._model_capabilities(m),
                 "reasoning_efforts": self._model_reasoning_efforts(m),
             })
-        # Favorites first, then alphabetical
-        result.sort(key=lambda x: (not x["favorite"], x["name"]))
+        # Keep the active route visible first; remaining favorites precede the
+        # alphabetical catalog so startup/default priority is explicit in UI.
+        result.sort(key=lambda x: (not x["selected"], not x["favorite"], x["name"]))
         return result
 
     def missing_model_credentials(self, model_id: str) -> str | None:
