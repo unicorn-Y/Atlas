@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { BookMarked, Check, ClipboardCopy, FileCheck2, FileWarning, SearchCheck, ChevronRight, CircleDashed, LoaderCircle, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Users, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
@@ -16,6 +16,7 @@ import { buildTimeline, cacheShare, describeTool, duration, tokenCount, type Ste
 import type { InspectorTab } from '../shell/Inspector';
 import { TokenUsageCard, TokenUsageToggle } from './TokenUsage';
 import { usageSummary } from './runInsights';
+import { api } from '../services/api';
 
 interface ConversationActivityProps {
   events: AgentEvent[];
@@ -407,6 +408,21 @@ function SessionProposal({ event, store }: { event: AgentEvent; store: Store }) 
   const parentId = run?.conversationId ?? store.activeConversationId;
   const childId = answer?.startsWith('started:') ? answer.slice('started:'.length) : '';
   const childRun = childId ? [...store.runs].reverse().find((item) => item.conversationId === childId) : undefined;
+  const [reportedStatus, setReportedStatus] = useState<string | null>(null);
+  useEffect(() => {
+    if (!childId) { setReportedStatus(null); return; }
+    let stopped = false;
+    const refresh = async () => {
+      try {
+        const activity = await api<{ items: Array<{ conversation_id: string; status: string }> }>(store.apiBaseUrl, '/api/conversation-activity?limit=100');
+        if (!stopped) setReportedStatus(activity.items.find((item) => item.conversation_id === childId)?.status ?? null);
+      } catch { /* The live run event remains the fallback when activity polling is unavailable. */ }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 2000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [childId, store.apiBaseUrl]);
+  const childStatus = reportedStatus ?? childRun?.status;
   const canDecide = answer === undefined && (!run || !['completed', 'failed', 'cancelled'].includes(run.status));
   const openChild = () => {
     if (!childId) return;
@@ -423,7 +439,7 @@ function SessionProposal({ event, store }: { event: AgentEvent; store: Store }) 
         <p className="m-0 text-[14px] font-semibold text-heading">建议另开会话：{title}</p>
         <p className="mt-1 mb-0 text-[13px] text-fg-2">{description}</p>
         {answer?.startsWith('started:') ? <div className="mt-3 flex items-center gap-2 text-[12.5px] text-fg-2">
-          <span>{childRun && !['completed', 'failed', 'cancelled'].includes(childRun.status) ? '后台会话正在运行' : childRun?.status === 'completed' ? '后台会话已完成' : '后台会话已启动'}</span>
+          <span>{childStatus && !['completed', 'failed', 'cancelled'].includes(childStatus) ? '后台会话正在运行' : childStatus === 'completed' ? '后台会话已完成' : childStatus === 'failed' ? '后台会话失败' : childStatus === 'cancelled' ? '后台会话已停止' : '后台会话已启动'}</span>
           <Button size="sm" variant="ghost" onClick={openChild}>打开会话</Button>
         </div> : answer !== undefined ? <p className="mt-3 mb-0 text-[12.5px] text-fg-3">已忽略这个建议。</p>
           : canDecide ? <div className="mt-3 flex gap-2">
