@@ -32,6 +32,41 @@ _SENSITIVE_ARGUMENT_KEYS = frozenset({
 })
 
 
+def _mcp_rule_matches(rule: str, server_name: str, tool_name: str) -> bool:
+    """Match only the three supported MCP permission forms.
+
+    Rules are server name (all tools on that server), ``server__*`` (all tools
+    on that server), or the exact ``server__tool`` name. Parenthesized and
+    other glob patterns are intentionally rejected instead of being treated
+    as a broader match.
+    """
+    rule = rule.strip()
+    if not rule or "(" in rule or ")" in rule:
+        return False
+    if rule == "*":
+        return True
+    if rule == server_name:
+        return True
+    if rule == f"{server_name}__*":
+        return True
+    return rule == f"{server_name}__{tool_name}"
+
+
+def _mcp_tool_allowed(config: MCPServerConfig, tool_name: str) -> bool:
+    """Apply MCP allow/deny rules with explicit deny precedence.
+
+    ``tool_allow = None`` means no allowlist was configured; an empty list is
+    a deliberate deny-all. Deny entries always win over matching allows.
+    """
+    if any(_mcp_rule_matches(rule, config.name, tool_name)
+           for rule in config.tool_deny):
+        return False
+    if config.tool_allow is None:
+        return True
+    return any(_mcp_rule_matches(rule, config.name, tool_name)
+               for rule in config.tool_allow)
+
+
 def _redact_mcp_arguments(value: Any, *, depth: int = 0) -> Any:
     """Keep MCP request diagnostics useful without logging credential values."""
     if depth > 8:
@@ -202,6 +237,9 @@ class MCPServerConfig:
     headers: dict[str, str] = field(default_factory=dict)
     oauth_scope: str | None = None
     enabled: bool = True
+    # None means unrestricted; [] means explicitly allow no tools.
+    tool_allow: list[str] | None = None
+    tool_deny: list[str] = field(default_factory=list)
 
 
 def _parse_server_configs() -> list[MCPServerConfig]:
@@ -223,6 +261,11 @@ def _parse_server_configs() -> list[MCPServerConfig]:
         [tools.servers.remote-example]
         transport = "sse"
         url = "http://localhost:3001/sse"
+
+        # Optional per-server tool permissions. Omitted tool_allow permits all;
+        # an explicit empty list denies all. Denials always override allows.
+        tool_allow = ["remote-example__search", "remote-example__*"]
+        tool_deny = ["remote-example__delete"]
     """
     cfg = get_config()
     servers_raw: dict[str, Any] = cfg.get("tools.servers", {}) or {}
@@ -246,6 +289,15 @@ def _parse_server_configs() -> list[MCPServerConfig]:
             },
             oauth_scope=(str(data.get("oauth_scope") or "").strip() or None),
             enabled=data.get("enabled", True),
+            tool_allow=(
+                [str(rule) for rule in data["tool_allow"]]
+                if "tool_allow" in data and isinstance(data["tool_allow"], list)
+                else ([] if "tool_allow" in data else None)
+            ),
+            tool_deny=(
+                [str(rule) for rule in data.get("tool_deny", [])]
+                if isinstance(data.get("tool_deny", []), list) else []
+            ),
         )
         # Only include servers that are both configured *and* in auto_start
         # (unless auto_start is empty, meaning "start all configured")
@@ -421,6 +473,8 @@ class MCPClient:
                 handle.session.list_tools(), timeout=_MCP_REQUEST_TIMEOUT_SECONDS,
             )
             for tool in tools_result.tools:
+                if not _mcp_tool_allowed(cfg, tool.name):
+                    continue
                 description = tool.description or ""
                 if handle.instructions.strip():
                     description = (
@@ -621,6 +675,9 @@ class MCPClient:
                 result = await handle.session.list_tools()
                 refreshed: list[ToolInfo] = []
                 for tool in result.tools:
+                    config = self._server_configs.get(server_name)
+                    if config is not None and not _mcp_tool_allowed(config, tool.name):
+                        continue
                     description = tool.description or ""
                     if handle.instructions.strip():
                         description = (
@@ -716,6 +773,12 @@ class MCPClient:
         if handle is None or handle.session is None:
             return {"content": [{"type": "text",
                                  "text": f"Server not connected: {tool.server_name}"}],
+                    "is_error": True}
+
+        config = self._server_configs.get(tool.server_name)
+        if config is not None and not _mcp_tool_allowed(config, tool.name):
+            return {"content": [{"type": "text",
+                                 "text": f"MCP tool denied by server policy: {qualified_name}"}],
                     "is_error": True}
 
         log.info("mcp.call_tool", tool=qualified_name,
