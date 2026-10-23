@@ -152,6 +152,7 @@ class MCPServerHandle:
     _stderr_log: Any = None
     _owner_task: asyncio.Task[None] | None = None
     _owner_stop: asyncio.Event | None = None
+    _oauth_context: Any = None
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +171,7 @@ class MCPServerConfig:
     cwd: str | None = None
     url: str = ""                   # for sse
     headers: dict[str, str] = field(default_factory=dict)
+    oauth_scope: str | None = None
     enabled: bool = True
 
 
@@ -213,6 +215,7 @@ def _parse_server_configs() -> list[MCPServerConfig]:
                 str(key): os.path.expandvars(str(value))
                 for key, value in (data.get("headers", {}) or {}).items()
             },
+            oauth_scope=(str(data.get("oauth_scope") or "").strip() or None),
             enabled=data.get("enabled", True),
         )
         # Only include servers that are both configured *and* in auto_start
@@ -426,7 +429,12 @@ class MCPClient:
     async def _connect_sse(self, cfg: MCPServerConfig,
                            handle: MCPServerHandle) -> None:
         """Set up SSE transport."""
-        transport_cm = sse_client(cfg.url)
+        from atlas.tools.mcp_oauth import oauth_provider
+
+        oauth = oauth_provider(cfg.name, cfg.url, scope=cfg.oauth_scope)
+        auth = await oauth.__aenter__()
+        handle._oauth_context = oauth
+        transport_cm = sse_client(cfg.url, headers=cfg.headers or None, auth=auth)
         await self._start_transport_owner(handle, transport_cm)
 
     async def _connect_streamable_http(self, cfg: MCPServerConfig,
@@ -438,7 +446,11 @@ class MCPClient:
             from mcp.client.streamable_http import streamablehttp_client
         except ImportError as exc:
             raise RuntimeError("Installed MCP SDK does not support Streamable HTTP") from exc
-        transport_cm = streamablehttp_client(cfg.url, headers=cfg.headers or None)
+        from atlas.tools.mcp_oauth import oauth_streamable_transport
+
+        transport_cm = oauth_streamable_transport(
+            cfg.name, cfg.url, cfg.headers or None, scope=cfg.oauth_scope,
+        )
         await self._start_transport_owner(handle, transport_cm)
 
     async def _start_transport_owner(self, handle: MCPServerHandle, transport_cm: Any) -> None:
@@ -507,6 +519,9 @@ class MCPClient:
                 if handle._stderr_log is not None:
                     handle._stderr_log.close()
                     handle._stderr_log = None
+            if handle._oauth_context is not None:
+                oauth, handle._oauth_context = handle._oauth_context, None
+                await oauth.__aexit__(None, None, None)
 
     # -- tool operations -----------------------------------------------------
 
