@@ -159,6 +159,22 @@ async def execute_tools_node(
         fn_name = tc["name"]
         fn_args = tc["args"]
         tc_id = tc["id"]
+        if ctx.cancel_event and ctx.cancel_event.is_set():
+            # Every provider tool call must receive one result, even when the
+            # user cancels between calls. Otherwise the next turn persists an
+            # assistant call with no matching ToolMessage and history repair
+            # has to guess what happened.
+            detail = "Tool call cancelled before execution."
+            cancelled_event = {
+                "type": "tool_result", "id": tc_id, "name": fn_name,
+                "content": [{"type": "text", "text": detail}],
+                "is_error": True, "error_category": "cancelled",
+            }
+            events.append(cancelled_event)
+            tool_messages.append(ToolMessage(content=detail, tool_call_id=tc_id))
+            if ctx.event_queue is not None:
+                await ctx.event_queue.put(cancelled_event)
+            continue
         if workspace and workspace.startswith("ssh://") and fn_name == "local_process":
             fn_args.setdefault("cwd", str(Path.cwd()))
         elif workspace and fn_name.startswith("local_"):
@@ -259,7 +275,17 @@ async def execute_tools_node(
 
         # Check cancellation between tool calls
         if ctx.cancel_event and ctx.cancel_event.is_set():
-            break
+            detail = "Tool call cancelled before execution."
+            cancelled_event = {
+                "type": "tool_result", "id": tc_id, "name": fn_name,
+                "content": [{"type": "text", "text": detail}],
+                "is_error": True, "error_category": "cancelled",
+            }
+            events.append(cancelled_event)
+            tool_messages.append(ToolMessage(content=detail, tool_call_id=tc_id))
+            if ctx.event_queue is not None:
+                await ctx.event_queue.put(cancelled_event)
+            continue
 
         # Wait if paused
         if ctx.pause_event:
