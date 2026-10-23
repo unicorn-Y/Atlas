@@ -1232,9 +1232,14 @@ class LocalExecutionRuntime:
         if callback is not None:
             remainder = decoder.decode(b"", final=True)
             if remainder:
-                result = callback(record.execution_id, name, remainder)
-                if asyncio.iscoroutine(result):
-                    await result
+                try:
+                    result = callback(record.execution_id, name, remainder)
+                    if asyncio.iscoroutine(result):
+                        await result
+                except Exception:
+                    log.debug(
+                        "local_execution.output_callback_failed", execution_id=record.execution_id
+                    )
 
     async def _watch(self, record: LocalProcess) -> None:
         try:
