@@ -124,9 +124,16 @@ def _iter_glob(root: Path, base: Path, pattern: str, *, hidden: bool):
                 yield relative
 
 
-def _rooted_path(workspace: str, raw: Any) -> tuple[Path, Path]:
-    root = Path(workspace).expanduser().resolve()
-    candidate = (root / str(raw or ".")).resolve()
+def _rooted_path(workspace: str | None, raw: Any) -> tuple[Path, Path]:
+    """Resolve within the workspace, or let an explicit absolute path stand alone."""
+    if not workspace:
+        if not raw or not Path(str(raw)).expanduser().is_absolute():
+            raise ValueError("Without an active workspace, provide an absolute path.")
+        candidate = Path(str(raw)).expanduser().resolve()
+        root = candidate if candidate.is_dir() else candidate.parent
+    else:
+        root = Path(workspace).expanduser().resolve()
+        candidate = (root / str(raw or ".")).resolve()
     try:
         candidate.relative_to(root)
     except ValueError as exc:
@@ -164,7 +171,7 @@ def _grep_page(value: Any, offset: Any) -> tuple[int, int]:
     return start, _MAX_LIMIT if page == 0 else min(page, _MAX_LIMIT)
 
 
-def glob_workspace(workspace: str, *, pattern: str, path: str | None = None,
+def glob_workspace(workspace: str | None, *, pattern: str, path: str | None = None,
                    hidden: bool = False, limit: int = 100) -> dict[str, Any]:
     root, base = _rooted_path(workspace, path)
     if not isinstance(pattern, str) or not pattern.strip():
@@ -191,7 +198,7 @@ def glob_workspace(workspace: str, *, pattern: str, path: str | None = None,
     return result
 
 
-def grep_workspace(workspace: str, *, pattern: str, path: str | None = None,
+def grep_workspace(workspace: str | None, *, pattern: str, path: str | None = None,
                    include: str | None = None, literal: bool = False,
                    case_sensitive: bool = True, limit: int | None = None,
                    offset: int = 0) -> dict[str, Any]:
@@ -289,7 +296,7 @@ def grep_workspace(workspace: str, *, pattern: str, path: str | None = None,
 def query_tool_schemas() -> list[dict[str, Any]]:
     return [
         {"type": "function", "function": {
-            "name": "glob", "description": "Find workspace files with a glob pattern.",
+            "name": "glob", "description": "Find files with a glob pattern. Without a selected workspace, pass an absolute directory path.",
             "parameters": {"type": "object", "properties": {
                 "pattern": {"type": "string"}, "path": {"type": "string"},
                 "hidden": {"type": "boolean"},
@@ -297,7 +304,7 @@ def query_tool_schemas() -> list[dict[str, Any]]:
             }, "required": ["pattern"], "additionalProperties": False},
         }},
         {"type": "function", "function": {
-            "name": "grep", "description": "Search workspace file contents with a literal or regular expression.",
+            "name": "grep", "description": "Search file contents with a literal or regular expression. Without a selected workspace, pass an absolute file or directory path.",
             "parameters": {"type": "object", "properties": {
                 "pattern": {"type": "string"}, "path": {"type": "string"},
                 "include": {"type": "string"}, "literal": {"type": "boolean"},
