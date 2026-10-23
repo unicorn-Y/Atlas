@@ -33,6 +33,7 @@ from atlas.models.network_transport import (
 _MEMORY_AUXILIARY_TIMEOUT_SECONDS = 120.0
 _MEMORY_AUXILIARY_PURPOSES = frozenset({"memory_library"})
 _MEMORY_LOW_REASONING_MODELS = frozenset({"gemini-3.8-flash"})
+_CONTEXT_1M_BETA = "context-1m-2025-08-07"
 _OLLAMA_LOCAL_BASE_URL = "http://127.0.0.1:11434/v1"
 _PROVIDER_SEMAPHORES: dict[str, threading.BoundedSemaphore] = {}
 _PROVIDER_SEMAPHORES_LOCK = threading.Lock()
@@ -711,6 +712,19 @@ def _request_details(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
             "x-api-key": route.key or "", "anthropic-version": "2023-06-01",
             "content-type": "application/json",
         }
+        requested_betas = kwargs.get("sdk_betas")
+        if isinstance(requested_betas, str):
+            requested_betas = [requested_betas]
+        context_window = route.capabilities.get("context_window")
+        eligible_1m = (
+            str(route.provider).lower() == "anthropic"
+            and type(context_window) is int and context_window >= 1_000_000
+        )
+        if eligible_1m and isinstance(requested_betas, (list, tuple, set, frozenset)):
+            # The only permitted direct Anthropic beta is the 1M context flag,
+            # and only for models whose catalog entry explicitly qualifies.
+            if _CONTEXT_1M_BETA in requested_betas:
+                headers["anthropic-beta"] = _CONTEXT_1M_BETA
         payload = _anthropic_payload(route, messages, kwargs)
     elif route.api_mode in {"openai", "chat_completions"}:
         url = _endpoint(route.base_url, "chat/completions")
@@ -722,7 +736,10 @@ def _request_details(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
         raise NotImplementedError(f"Atlas direct transport does not support API mode {route.api_mode!r}")
     extra_headers = kwargs.get("extra_headers")
     if isinstance(extra_headers, dict):
-        reserved = {"authorization", "x-api-key", "anthropic-version", "content-type"}
+        reserved = {
+            "authorization", "x-api-key", "anthropic-version", "anthropic-beta",
+            "content-type",
+        }
         for key, value in extra_headers.items():
             header = str(key).strip()
             if not header or header.lower() in reserved or value is None:
@@ -772,8 +789,22 @@ class _PooledClient:
     """Per-request view of a shared pool: carries the timeout, never closes the pool."""
 
     def __init__(self, route: RouteSpec, network: ModelNetworkSettings, timeout: Any) -> None:
+        self._route = route
+        self._network = network
         self._client, self._key = _shared_client(route, network)
         self._timeout = timeout
+
+    def _rebuild_after_stale_socket(self) -> None:
+        """Evict a failed keep-alive pool before the one permitted retry."""
+        with _POOLS_LOCK:
+            stale = _POOLS.get(self._key)
+            if stale is self._client:
+                _POOLS.pop(self._key, None)
+                try:
+                    stale.close()
+                except Exception:
+                    pass
+        self._client, self._key = _shared_client(self._route, self._network)
 
     def __enter__(self) -> "_PooledClient":
         return self
@@ -787,6 +818,7 @@ class _PooledClient:
         try:
             return self._client.post(url, **kwargs)
         except _STALE_SOCKET_ERRORS:
+            self._rebuild_after_stale_socket()
             return self._client.post(url, **kwargs)
 
     def open_stream(self, url: str, **kwargs: Any) -> httpx.Response:
@@ -794,6 +826,8 @@ class _PooledClient:
         try:
             response = self._client.send(request, stream=True)
         except _STALE_SOCKET_ERRORS:
+            self._rebuild_after_stale_socket()
+            request = self._client.build_request("POST", url, timeout=self._timeout, **kwargs)
             response = self._client.send(request, stream=True)
         if response.is_error:
             # Read the body so error classification (context length, quota...) sees it.
