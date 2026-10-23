@@ -23,7 +23,6 @@ import json
 import math
 import os
 import sqlite3
-import time
 import tempfile
 import shutil
 from contextlib import closing, suppress
@@ -33,11 +32,9 @@ from pathlib import Path
 from typing import Any
 
 from atlas.session_migration_gate import (
-    SessionMigrationError,
     begin_session_migration,
     finish_session_migration,
     require_migration_settled as _require_migration_settled,
-    wait_for_session_migration,
 )
 
 

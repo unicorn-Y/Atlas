@@ -660,14 +660,6 @@ class LocalExecutionRuntime:
             "is_error": True,
         }
 
-    @staticmethod
-    def _error(message: str) -> dict[str, Any]:
-        return {
-            "data": {"error": message},
-            "content": [{"type": "text", "text": message}],
-            "is_error": True,
-        }
-
     def _edit_operation(self, args: dict[str, Any]) -> dict[str, Any]:
         """Precise string-replacement edit: read-before-edit + uniqueness."""
         path = self._path(args.get("path"), args.get("cwd"))
