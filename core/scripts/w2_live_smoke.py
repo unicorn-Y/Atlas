@@ -193,9 +193,16 @@ async def _command_and_environment(root: Path) -> None:
         }, run_id="w2-live")
         if env_result.get("is_error"):
             raise RuntimeError("environment fixture command failed")
-        await asyncio.sleep(0.4)
         execution_id = str((env_result.get("data") or {}).get("execution_id") or "")
-        status = await runtime.call_tool("local_process", {"action": "status", "execution_id": execution_id}, run_id="w2-live")
+        deadline = time.monotonic() + 10
+        while True:
+            status = await runtime.call_tool("local_process", {"action": "status", "execution_id": execution_id}, run_id="w2-live")
+            status_data = status.get("data") or {}
+            if status_data.get("state") != "running":
+                break
+            if time.monotonic() >= deadline:
+                raise TimeoutError("environment fixture process did not finish within 10 seconds")
+            await asyncio.sleep(0.1)
         output = await runtime.call_tool("local_process", {"action": "read", "execution_id": execution_id,
                                       "stream": "stdout", "offset": 0, "limit": 1000}, run_id="w2-live")
         text = str((output.get("data") or {}).get("text") or "")
