@@ -483,6 +483,8 @@ def _anthropic_payload(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
                         blocks.append(block)
                     elif isinstance(part, dict) and part.get("type") in {"image", "image_url"}:
                         raise NotImplementedError("Anthropic image conversion is not supported by Atlas direct transport")
+                    elif isinstance(part, dict) and part.get("type") == "thinking":
+                        blocks.append({key: part[key] for key in ("type", "thinking", "signature") if key in part})
             if role == "assistant":
                 for detail in message.get("reasoning_details") or []:
                     if isinstance(detail, dict) and detail.get("type") == "thinking":
@@ -505,6 +507,25 @@ def _anthropic_payload(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
     }
     if system:
         payload["system"] = system
+    reasoning = kwargs.get("reasoning_config")
+    if isinstance(reasoning, dict):
+        effort = str(reasoning.get("effort") or "").strip().lower()
+        if reasoning.get("enabled") is False or effort in THINKING_OFF:
+            payload["thinking"] = {"type": "disabled"}
+        elif effort:
+            max_tokens = int(payload["max_tokens"])
+            numeric = None
+            try:
+                numeric = float(effort)
+            except ValueError:
+                pass
+            if numeric is not None:
+                effort = "low" if numeric <= 50 else "medium" if numeric <= 85 else "high"
+            budget = {
+                "minimal": 512, "low": 1024, "medium": 4096,
+                "high": 8192, "max": 8192,
+            }.get(effort, 4096)
+            payload["thinking"] = {"type": "enabled", "budget_tokens": min(budget, max(1, max_tokens - 1))}
     tools = kwargs.get("tools")
     if tools:
         payload["tools"] = []
@@ -535,15 +556,35 @@ def _reasoning_wire(route: RouteSpec, reasoning: Any) -> dict[str, Any]:
     produced reasoning on about half the requests). Each family has its own off switch.
     """
     if not isinstance(reasoning, dict):
-        return {}
+        reasoning = {}
+    from atlas.models.reasoning_effort import (
+        DEEPSEEK_V4_EFFORTS, KIMI_K3_OVERRIDES, clamp_effort,
+        kimi_supported_efforts, route_supported_efforts, thinking_toggle_extras,
+    )
+
     effort = str(reasoning.get("effort") or "").strip().lower()
     if reasoning.get("enabled") is False:
         effort = "off"
+    provider = (route.provider or "").lower()
+    model = (route.wire_model or route.model or "").lower()
     if not effort:
+        if "deepseek" in provider or "deepseek" in model:
+            return {"thinking": {"type": "enabled"}}
         return {}
     if effort not in THINKING_OFF:
-        return {"reasoning_effort": effort}
-    model = str(route.wire_model or route.model or "").lower()
+        if "deepseek" in provider or "deepseek" in model:
+            supported = DEEPSEEK_V4_EFFORTS if "v4" in model else ("low", "medium", "high")
+            toggle, values = thinking_toggle_extras(
+                {"effort": effort}, supported, always_emit_toggle=True,
+            )
+            return {**toggle, **values}
+        if "moonshot" in provider or "kimi" in provider or "kimi" in model:
+            return {"reasoning_effort": clamp_effort(
+                effort, kimi_supported_efforts(model), KIMI_K3_OVERRIDES,
+            )}
+        return {"reasoning_effort": clamp_effort(
+            effort, route_supported_efforts(provider, model),
+        )}
     if any(tag in model for tag in ("deepseek", "kimi", "moonshot", "glm", "zhipu")):
         return {"thinking": {"type": "disabled"}}
     if "qwen" in model or "qwq" in model:
@@ -563,6 +604,10 @@ def _openai_payload(route: RouteSpec, messages: list[dict[str, Any]], kwargs: di
         "messages": [
             {key: value for key, value in message.items() if key in {
                 "role", "content", "tool_calls", "tool_call_id", "name", "refusal",
+                *(('reasoning_content',) if (
+                    "deepseek" in (route.provider or "").lower()
+                    or "deepseek" in (route.wire_model or route.model or "").lower()
+                ) else ()),
             }}
             for message in messages
         ],
@@ -725,10 +770,19 @@ def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
                         block["text"] = str(block.get("text") or "") + str(delta.get("text") or "")
                     elif delta.get("type") == "thinking_delta":
                         block["thinking"] = str(block.get("thinking") or "") + str(delta.get("thinking") or "")
+                    elif delta.get("type") == "signature_delta":
+                        block["signature"] = str(block.get("signature") or "") + str(delta.get("signature") or "")
                     elif delta.get("type") == "input_json_delta":
                         block["partial_json"] = str(block.get("partial_json") or "") + str(delta.get("partial_json") or "")
                 elif kind == "content_block_start":
-                    blocks[int(event.get("index", 0))] = dict(event.get("content_block") or {})
+                    index = int(event.get("index", 0))
+                    block = dict(event.get("content_block") or {})
+                    blocks[index] = block
+                    if block.get("type") == "thinking":
+                        reasoning_blocks[index] = {
+                            "type": "thinking", "thinking": str(block.get("thinking") or ""),
+                            "signature": str(block.get("signature") or ""),
+                        }
                 elif kind == "message_start":
                     usage = ((event.get("message") or {}).get("usage") or {})
                     input_tokens = int(usage.get("input_tokens") or 0)
@@ -749,8 +803,7 @@ def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
                         function=SimpleNamespace(name=str(block.get("name") or ""), arguments=str(raw_args)),
                     ))
                 elif block.get("type") == "thinking":
-                    reasoning.append({"type": "thinking", "thinking": str(block.get("thinking") or ""),
-                                      "signature": str(block.get("signature") or "")})
+                    reasoning.append({key: block[key] for key in ("type", "thinking", "signature") if key in block})
             data = SimpleNamespace(
                 choices=[SimpleNamespace(message=SimpleNamespace(content=text, tool_calls=tool_calls or None,
                                                                   reasoning_details=reasoning or None),
@@ -827,6 +880,7 @@ def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
             if route.api_mode == "anthropic_messages":
                 tool_indexes: dict[int, int] = {}
                 next_tool_index = 0
+                anthropic_reasoning_blocks: dict[int, dict[str, Any]] = {}
                 input_tokens = 0
                 cache_read = cache_creation = 0
                 for raw in response.iter_lines():
@@ -847,6 +901,12 @@ def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
                         cache_creation = int(usage.get("cache_creation_input_tokens") or 0)
                     elif kind == "content_block_start":
                         block = item.get("content_block") or {}
+                        block_index = int(item.get("index", 0))
+                        if block.get("type") == "thinking":
+                            anthropic_reasoning_blocks[block_index] = {
+                                "type": "thinking", "thinking": str(block.get("thinking") or ""),
+                                "signature": str(block.get("signature") or ""),
+                            }
                         if block.get("type") == "tool_use":
                             idx = next_tool_index
                             next_tool_index += 1
@@ -856,11 +916,22 @@ def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
                         delta = item.get("delta") or {}
                         if delta.get("type") == "text_delta":
                             shaped = {"content": delta.get("text", "")}
+                        elif delta.get("type") == "thinking_delta":
+                            block = anthropic_reasoning_blocks.setdefault(
+                                int(item.get("index", 0)), {"type": "thinking", "thinking": "", "signature": ""},
+                            )
+                            piece = str(delta.get("thinking") or "")
+                            block["thinking"] += piece
+                            shaped = {"reasoning_content": piece}
+                        elif delta.get("type") == "signature_delta":
+                            block = anthropic_reasoning_blocks.setdefault(
+                                int(item.get("index", 0)), {"type": "thinking", "thinking": "", "signature": ""},
+                            )
+                            block["signature"] += str(delta.get("signature") or "")
+                            shaped = {}
                         elif delta.get("type") == "input_json_delta":
                             idx = tool_indexes.get(int(item.get("index", -1)))
                             shaped = {"tool_calls": [{"index": idx, "function": {"arguments": delta.get("partial_json", "")}}]} if idx is not None else {}
-                        elif delta.get("type") in {"thinking_delta", "signature_delta"}:
-                            raise NotImplementedError("Anthropic signed thinking streaming is not supported by Atlas direct transport")
                         else:
                             shaped = {}
                         if shaped:
@@ -873,7 +944,12 @@ def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
                             "cache_read_input_tokens": usage.get("cache_read_input_tokens", cache_read),
                             "cache_creation_input_tokens": usage.get("cache_creation_input_tokens", cache_creation),
                         }
-                        yield {"choices": [{"delta": {}, "finish_reason": item.get("delta", {}).get("stop_reason")}], "usage": shaped_usage}
+                        yield {
+                            "choices": [{"delta": {
+                                "reasoning_details": list(anthropic_reasoning_blocks.values()),
+                            }, "finish_reason": item.get("delta", {}).get("stop_reason")}],
+                            "usage": shaped_usage,
+                        }
             else:
                 for raw in response.iter_lines():
                     # SSE allows "data:" without the space; some relays send it that way.

@@ -49,6 +49,8 @@ class ModelCallResult:
     duration_ms: int
     model: str
     provider: str
+    reasoning_content: str = ""
+    reasoning_details: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -714,6 +716,7 @@ async def complete_stream(
             attempt_refusal = ""
             attempt_tools: dict[int, _ToolDelta] = {}
             attempt_usage: dict[str, Any] = {}
+            attempt_reasoning_details: list[dict[str, Any]] = []
             finish_reason: str | None = None
             attempt_started = time.monotonic()
             first_token_ms: int | None = None
@@ -794,6 +797,11 @@ async def complete_stream(
                         if terminal_reason is not None:
                             finish_reason = str(terminal_reason).lower()
                     text_delta, tool_deltas, usage = _choice_delta(chunk)
+                    choices = _get(chunk, "choices") or []
+                    delta_payload = (_get(choices[0], "delta") or _get(choices[0], "message") or {}) if choices else {}
+                    details = _get(delta_payload, "reasoning_details")
+                    if isinstance(details, list):
+                        attempt_reasoning_details = [item for item in details if isinstance(item, dict)]
                     reasoning_delta, refusal_delta = _choice_auxiliary_delta(chunk)
                     if first_token_ms is None and (text_delta or reasoning_delta or tool_deltas):
                         first_token_ms = int((time.monotonic() - attempt_started) * 1000)
@@ -881,7 +889,7 @@ async def complete_stream(
                     _tool_calls(attempt_tools, truncated=finish_reason in {"length", "max_tokens"},
                                 finish_reason=finish_reason, endpoint=_endpoint(route.base_url)),
                     last_usage, total_attempts, duration_ms, route.model_id or candidate,
-                    route.provider,
+                    route.provider, combined_reasoning, attempt_reasoning_details,
                 )
                 usage_details = last_usage.get("input_tokens_details") or last_usage.get("prompt_tokens_details") or {}
                 cached_tokens = next((last_usage.get(key) for key in (

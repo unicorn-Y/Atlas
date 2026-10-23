@@ -184,7 +184,7 @@ def _session_history(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else row.get("display_metadata", {})
         metadata = metadata if isinstance(metadata, dict) else {}
         for key in ("tool_calls", "tool_call_id", "tool_name", "output_ref", "repair_state",
-                    "turn_context"):
+                    "turn_context", "reasoning_content", "reasoning_details"):
             if key in metadata:
                 message[key] = metadata[key]
             elif key in row:
@@ -1454,9 +1454,15 @@ class AtlasKernel:
                     "role": "assistant", "content": assistant_content,
                     "tool_calls": [_tool_call_for_history(call) for call in calls],
                 }
+                if response.reasoning_content:
+                    assistant_message["reasoning_content"] = response.reasoning_content
+                if response.reasoning_details:
+                    assistant_message["reasoning_details"] = response.reasoning_details
                 messages.append(assistant_message)
                 await persist_async("assistant", assistant_content, {
                     "tool_calls": assistant_message["tool_calls"], "kernel_run_id": run_id, "reasoning": turn_reasoning or None,
+                    "reasoning_content": response.reasoning_content or None,
+                    "reasoning_details": response.reasoning_details or None,
                     "refusal_present": bool(state.streamed_refusal),
                 })
                 state.streamed_text = ""
