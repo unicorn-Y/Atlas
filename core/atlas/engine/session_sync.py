@@ -228,11 +228,19 @@ def restore_session_snapshot(home: str | Path, conversation_id: str) -> dict[str
                 raise ValueError("Invalid session snapshot: summary content is not text")
             digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
             state = candidate.get("state")
+            open_calls = state.get("open_tool_call_ids") if isinstance(state, dict) else None
+            runtime_state_valid = isinstance(state, dict) and all(
+                state.get(key) is None or isinstance(state.get(key), dict)
+                for key in ("plan", "todo")
+            ) and (open_calls is None or (
+                isinstance(open_calls, list)
+                and all(isinstance(item, str) and item for item in open_calls)
+            ))
             if (candidate.get("schema_version") != _SESSION_SNAPSHOT_SCHEMA
                     or candidate.get("kind") != "context_compaction"
                     or candidate.get("summary_sha256") != digest
                     or candidate.get("summary_chars") != len(content)
-                    or not isinstance(state, dict)):
+                    or not runtime_state_valid):
                 raise ValueError("Invalid session snapshot: manifest integrity check failed")
             anchor, manifest, legacy = index, dict(candidate), False
         elif message.get("_compressed_summary"):
