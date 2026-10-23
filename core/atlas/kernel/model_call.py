@@ -993,8 +993,9 @@ async def complete_stream(
                     finish_reason,
                 )
                 usage_details = last_usage.get("input_tokens_details") or last_usage.get("prompt_tokens_details") or {}
+                # DeepSeek 及其中转（如 d1api）用 prompt_cache_hit_tokens 报命中，优先读取。
                 cached_tokens = next((last_usage.get(key) for key in (
-                    "cache_read_input_tokens", "cached_tokens", "cache_read",
+                    "prompt_cache_hit_tokens", "cache_read_input_tokens", "cached_tokens", "cache_read",
                 ) if last_usage.get(key) is not None), None)
                 if cached_tokens is None and isinstance(usage_details, dict):
                     cached_tokens = next((usage_details.get(key) for key in (
@@ -1215,7 +1216,7 @@ def _usage_row(result: ModelCallResult, request_id: str, wire_model: str,
         input_tokens = output_tokens = 0
     details = usage.get("prompt_tokens_details") or usage.get("input_tokens_details") or {}
     cached = next((usage.get(key) for key in (
-        "cached_input_tokens", "cache_read_input_tokens", "cached_tokens", "cache_read",
+        "prompt_cache_hit_tokens", "cached_input_tokens", "cache_read_input_tokens", "cached_tokens", "cache_read",
     ) if usage.get(key) is not None), None)
     if cached is None and isinstance(details, dict):
         cached = next((details.get(key) for key in ("cached_tokens", "cache_read")
