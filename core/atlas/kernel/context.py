@@ -76,6 +76,14 @@ class ContextThresholds:
     blocking: int
 
 
+@dataclass(slots=True, frozen=True)
+class ToolOutputClip:
+    content: str
+    output_ref: str | None
+    original_bytes: int
+    clipped_bytes: int
+
+
 class ContextManager:
     def __init__(self, config: Mapping[str, Any] | None = None, *, output_dir: str | Path | None = None):
         settings = dict(config or {})
@@ -148,6 +156,43 @@ class ContextManager:
             except FileExistsError:
                 pass
         return str(path.resolve())
+
+    def clip_tool_result(self, content: str, *, tool_name: str = "") -> ToolOutputClip:
+        """Persist and preview oversized tool text before adding it to model history.
+
+        Claude Code caps a result at 50,000 characters and 100,000 estimated
+        tokens (400,000 UTF-8 bytes), then gives the model a file reference. We
+        retain a larger leading section and a useful tail; the complete result
+        remains available in the content-addressed output file.
+        """
+        raw = str(content)
+        original_bytes = len(raw.encode("utf-8"))
+        cfg = self.config.get("tool_result_limits", {})
+        max_chars = max(0, int(cfg.get("max_chars", 50_000)))
+        max_bytes = max(0, int(cfg.get("max_tokens", MAX_TOOL_RESULT_TOKENS))) * BYTES_PER_TOKEN
+        if len(raw) <= max_chars and original_bytes <= max_bytes:
+            return ToolOutputClip(raw, None, original_bytes, original_bytes)
+        message: dict[str, Any] = {}
+        ref = self._output_ref(message, raw)
+        if ref is None:
+            # Preserve evidence when no durable destination was provided.
+            return ToolOutputClip(raw, None, original_bytes, original_bytes)
+        preview_budget = min(max_chars, max_bytes)
+        if preview_budget <= 256:
+            preview_budget = 256
+        notice = f"\n[Tool output truncated; source is {original_bytes} UTF-8 bytes; full output saved at {ref}]\n"
+        available = max(0, preview_budget - len(notice))
+        head = min(available * 3 // 4, len(raw))
+        tail = min(available - head, len(raw) - head)
+        while head + tail > 0 and len((raw[:head] + notice + (raw[-tail:] if tail else "")).encode("utf-8")) > max_bytes:
+            if head * 3 >= tail:
+                head -= 1
+            else:
+                tail -= 1
+        preview = raw[:head] + notice + (raw[-tail:] if tail else "")
+        if tool_name:
+            preview = f"[Tool: {tool_name}]\n" + preview
+        return ToolOutputClip(preview, ref, original_bytes, len(preview.encode("utf-8")))
 
     @staticmethod
     def _micro_threshold(budget_tokens: int) -> int:

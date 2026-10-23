@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 
 from atlas.kernel.context import ContextManager
 
@@ -29,6 +30,22 @@ def probe_thresholds() -> None:
             os.environ["ATLAS_AUTO_COMPACT_PCT"] = old
 
 
+def probe_tool_output_clip() -> None:
+    with tempfile.TemporaryDirectory(prefix="atlas-w1-clip-") as output_dir:
+        manager = ContextManager({"engine": {"tool_result_limits": {"max_chars": 1_000}}},
+                                 output_dir=output_dir)
+        source = "HEAD\n" + ("x" * 2_000) + "\nTAIL"
+        clipped = manager.clip_tool_result(source, tool_name="probe")
+        assert clipped.output_ref and os.path.isfile(clipped.output_ref)
+        assert clipped.content.startswith("[Tool: probe]\nHEAD")
+        assert "Tool output truncated" in clipped.content
+        assert "TAIL" in clipped.content
+        with open(clipped.output_ref, encoding="utf-8") as stream:
+            assert stream.read() == source
+        assert clipped.original_bytes == len(source.encode("utf-8"))
+
+
 if __name__ == "__main__":
     probe_thresholds()
-    print("W1-2 自动压缩阈值 probe PASS")
+    probe_tool_output_clip()
+    print("W1-2/W1-3 上下文和工具裁剪 probe PASS")
