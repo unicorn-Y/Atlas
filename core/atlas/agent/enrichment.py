@@ -625,14 +625,42 @@ class DelegationService:
                     )
                 child_context = task_context
                 for attempt in range(2 if schema else 1):
-                    result = await self.atlas_runner(
-                        goal=goal, context=child_context, cwd=cwd, subtask_id=subtask_id,
-                        atlas_options={**(atlas_options or {}), "cancel_event": cancel_event},
-                        on_progress=lambda text: _call_callback(
+                    progress_seen = False
+
+                    async def report_child_progress(text: str) -> Any:
+                        nonlocal progress_seen
+                        progress_seen = True
+                        return await _call_callback(
                             on_progress, subtask_id, _human_subtask_text(text),
                             *((event_metadata,) if event_metadata is not None else ()),
-                        ),
-                    )
+                        )
+
+                    # A child that fails before publishing any progress has not
+                    # exposed a tool call or result to the parent. Give that
+                    # startup failure one bounded restart. Once progress starts,
+                    # the outcome may include side effects, so fail closed.
+                    crash_attempt = 0
+                    while True:
+                        try:
+                            result = await self.atlas_runner(
+                                goal=goal, context=child_context, cwd=cwd,
+                                subtask_id=subtask_id,
+                                atlas_options={**(atlas_options or {}),
+                                               "cancel_event": cancel_event},
+                                on_progress=report_child_progress,
+                            )
+                            break
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception:
+                            if crash_attempt or progress_seen or cancel_event.is_set():
+                                raise
+                            crash_attempt += 1
+                            await _call_callback(
+                                on_progress, subtask_id,
+                                "子 Agent 启动失败，按一次性崩溃预算重新启动。",
+                                *((event_metadata,) if event_metadata is not None else ()),
+                            )
                     if schema is None:
                         break
                     valid, errors = validate_output(str(result.get("result", "")), schema)
