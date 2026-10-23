@@ -800,7 +800,6 @@ class AtlasKernel:
 
             model_profile = profile_for(wire_model, selected_model)
             stuck = StuckDetector(**model_profile.stuck)
-            output_token_limit = request.max_output_tokens or model_profile.max_output_tokens
             usage_budget = request.usage_budget or configured_run_usage_budget()
 
             async def record_workflow_usage(row: dict[str, Any]) -> None:
@@ -1027,7 +1026,17 @@ class AtlasKernel:
                         model_switch_pending = False
                 model_config = next((item for item in agent._model_mgr.list_models()
                                      if item.get("id") == turn_model), {})
-                model_window = int(model_config.get("context_window") or 200_000)
+                model_capabilities = model_config.get("capabilities")
+                model_capabilities = model_capabilities if isinstance(model_capabilities, dict) else {}
+                context_window = model_config.get("context_window") or model_capabilities.get("context_window")
+                model_window = int(context_window or 200_000)
+                configured_output_limit = (
+                    model_config.get("max_output_tokens")
+                    or model_capabilities.get("max_output_tokens")
+                )
+                requested_output_limit = request.max_output_tokens or model_profile.max_output_tokens
+                output_token_limit = min(int(requested_output_limit), int(configured_output_limit)) \
+                    if configured_output_limit else int(requested_output_limit)
 
                 async def summarize(old: list[dict[str, Any]], summary_prompt: str) -> str:
                     from atlas.models.reasoning_stages import effort_for_phase, load_stage_config
