@@ -306,7 +306,14 @@ class MCPClient:
         """Bound concurrent RPC work per MCP server without serializing other servers."""
         semaphore = self._request_semaphores.get(server_name)
         if semaphore is None:
-            semaphore = asyncio.Semaphore(_MAX_PARALLEL_SERVER_REQUESTS)
+            try:
+                configured = get_config().get(
+                    "mcp.max_parallel_requests", _MAX_PARALLEL_SERVER_REQUESTS,
+                )
+                limit = max(1, min(64, int(configured)))
+            except (TypeError, ValueError):
+                limit = _MAX_PARALLEL_SERVER_REQUESTS
+            semaphore = asyncio.Semaphore(limit)
             self._request_semaphores[server_name] = semaphore
         return semaphore
 
