@@ -674,7 +674,42 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
         )))
     initial_messages.append(SystemMessage(content=_PLAN_EXECUTION_GUIDANCE))
     initial_messages.append(SystemMessage(content=_TOOL_RESULT_BOUNDARY_GUIDANCE))
-    for rule in request.workspace_rules or []:
+    workspace_rules = list(request.workspace_rules or [])
+    discovered_rules: list[dict[str, Any]] = []
+    if request.workspace:
+        try:
+            from atlas.agent.project_instructions import load_project_instructions
+
+            discovered_rules = load_project_instructions(request.workspace, trusted=True)
+        except Exception:  # noqa: BLE001 — optional project guidance must not break a run
+            log.debug("agent.project_instructions_unavailable", exc_info=True)
+    seen_rule_paths: set[str] = set()
+
+    def rule_path_key(rule: dict[str, Any]) -> str:
+        raw_path = str(rule.get("path") or "").strip()
+        if not raw_path:
+            return ""
+        try:
+            return str(Path(raw_path).expanduser().resolve()).casefold()
+        except (OSError, RuntimeError, ValueError):
+            return raw_path.replace("\\", "/").casefold()
+
+    for rule in workspace_rules:
+        if isinstance(rule, dict) and (key := rule_path_key(rule)):
+            seen_rule_paths.add(key)
+    injected_discovered: list[dict[str, Any]] = []
+    for rule in discovered_rules:
+        key = rule_path_key(rule)
+        if key and key in seen_rule_paths:
+            continue
+        if key:
+            seen_rule_paths.add(key)
+        workspace_rules.append(rule)
+        injected_discovered.append(rule)
+    if injected_discovered and isinstance(state.context, dict):
+        state.context["discovered_project_instructions"] = injected_discovered
+
+    for rule in workspace_rules:
         initial_messages.append(SystemMessage(content=(
             f"Workspace instructions from {rule['path']} ({rule['bytes']} bytes):\n"
             f"{rule['content']}"
@@ -850,6 +885,12 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
             str(item.get("path")) for item in request.workspace_rules or []
             if isinstance(item, dict) and item.get("path")
         ]
+        if isinstance(state.context, dict):
+            loaded_paths.extend(
+                str(item.get("path")) for item in state.context.get(
+                    "discovered_project_instructions", []
+                ) if isinstance(item, dict) and item.get("path")
+            )
         loaded_paths.extend(
             str(item.get("path")) for item in request.active_skill_instructions or []
             if isinstance(item, dict) and item.get("path")
