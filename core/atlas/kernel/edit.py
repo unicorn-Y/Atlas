@@ -526,6 +526,8 @@ class EditManager:
         with self._lock:
             changes: list[dict[str, Any]] = []
             mutation_started = False
+            transaction_before: list[tuple[Path, ReadSnapshot | None]] = []
+            committed = False
             try:
                 operations: list[tuple[Path, str | None, ReadSnapshot | None, str]] = []
                 if name in {"edit", "write"}:
@@ -598,6 +600,7 @@ class EditManager:
                                  str(path) if text is not None else "/dev/null")
                     prepared.append((path, text, raw, previous, strategy, diff, codec))
                 for path, text, raw, previous, strategy, diff, codec in prepared:
+                    transaction_before.append((path, previous))
                     self._check(path, previous)
                     mutation_started = True
                     if raw is None:
@@ -610,13 +613,45 @@ class EditManager:
                                     "before_hash": _digest(previous.raw) if previous else None,
                                     "after_hash": _digest(raw) if raw is not None else None,
                                     "encoding": codec})
+                committed = True
                 data = {"changes": changes, "changed_paths": [c["path"] for c in changes],
                         "diff": "\n".join(c["diff"] for c in changes), "outcome": "completed"}
                 return {"data": data, "content": [{"type": "text", "text": data["diff"] or "No text changes."}],
                         "is_error": False, "outcome": "completed"}
             except Exception as exc:
+                rollback_errors: list[str] = []
+                if mutation_started and not committed:
+                    for path, previous in reversed(transaction_before):
+                        try:
+                            if previous is None:
+                                path.unlink(missing_ok=True)
+                                self.reads.pop(self._key(path), None)
+                            else:
+                                path.parent.mkdir(parents=True, exist_ok=True)
+                                descriptor, temporary = tempfile.mkstemp(
+                                    prefix=f".{path.name}.rollback.", suffix=".tmp", dir=path.parent,
+                                )
+                                try:
+                                    with os.fdopen(descriptor, "wb") as stream:
+                                        stream.write(previous.raw)
+                                        stream.flush()
+                                        os.fsync(stream.fileno())
+                                    os.chmod(temporary, previous.mode)
+                                    os.replace(temporary, path)
+                                finally:
+                                    if os.path.exists(temporary):
+                                        os.unlink(temporary)
+                                self.reads[self._key(path)] = self._snapshot(path, previous.encoding)
+                        except Exception as rollback_exc:
+                            rollback_errors.append(f"{path}: {rollback_exc}")
                 outcome = "unknown" if mutation_started else "not_started"
-                data = {"error": f"{type(exc).__name__}: {exc}", "changes": changes,
+                message = f"{type(exc).__name__}: {exc}"
+                if mutation_started and not rollback_errors:
+                    outcome = "not_started"
+                    message += " (all files rolled back)"
+                elif rollback_errors:
+                    message += "; rollback incomplete: " + "; ".join(rollback_errors)
+                data = {"error": message, "changes": changes,
                         "changed_paths": [c["path"] for c in changes], "outcome": outcome}
                 return {"data": data, "content": [{"type": "text", "text": data["error"]}],
                         "is_error": True, "outcome": outcome}
