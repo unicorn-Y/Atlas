@@ -412,7 +412,39 @@ class ToolScheduler:
             for index, call in calls
         ]
         try:
-            return list(await asyncio.gather(*tasks)), False
+            # Read-only calls may fan out, but once one reports a concrete tool
+            # error there is no value in keeping its siblings running. Collect
+            # completed calls, cancel the rest, then restore original call order.
+            pending = set(tasks)
+            items: dict[asyncio.Task[Any], ToolExecutionResult] = {}
+            cancellation_requested = False
+            while pending:
+                done, pending = await asyncio.wait(
+                    pending, return_when=asyncio.FIRST_COMPLETED,
+                )
+                for task in done:
+                    item = task.result()
+                    items[task] = item
+                    if item.receipt.state not in {"completed", "cancelled"}:
+                        cancellation_requested = True
+                if cancellation_requested:
+                    for task in pending:
+                        task.cancel()
+                    break
+            if pending:
+                settled = await asyncio.gather(*pending, return_exceptions=True)
+                for task, item in zip(pending, settled):
+                    if isinstance(item, ToolExecutionResult):
+                        items[task] = item
+            ordered = [items.get(task) for task in tasks]
+            # A task canceled before its coroutine got its first timeslice has
+            # no chance to create its own terminal receipt.
+            for offset, item in enumerate(ordered):
+                if item is None:
+                    index, call = calls[offset]
+                    cancelled_indices.add(index)
+                    ordered[offset] = _cancelled_result(call, started=False)
+            return [item for item in ordered if item is not None], cancellation_requested
         except asyncio.CancelledError:
             # Keep one terminal result per started call when the batch is stopped.
             # _execute turns handler cancellation into a result; tasks cancelled
