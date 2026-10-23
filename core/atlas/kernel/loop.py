@@ -1243,6 +1243,7 @@ class AtlasKernel:
                     for item in available_tools
                 }
                 read_only = bool(getattr(runtime, "read_only", False))
+                from atlas.engine.tool_permissions import tool_allowed
                 available_tools.extend(
                     schema for schema in kernel_tool_schemas(include_workflow=include_workflow)
                     if str(schema["function"]["name"]) not in schema_names

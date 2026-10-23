@@ -1888,6 +1888,7 @@ async def _handle_run_start(
             workspace_rules=run.workspace_rules,
             mode=run.mode,
             manager=manager,
+            resume_from=resume_from if isinstance(resume_from, str) else None,
         )
     execution = _server()._execute_after_rule_trust(run, execute) if run.trust_future else execute
     if agent_profile is not None:
@@ -2348,6 +2349,7 @@ async def _execute_run(
     mode: str = "act",
     continuation: bool = False,
     manager: RuntimeManager | None = None,
+    resume_from: str | None = None,
 ) -> None:
     """Execute agent run, emitting Runtime Event envelopes."""
     manager = manager or _server().runtime_mgr

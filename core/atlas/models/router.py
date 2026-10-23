@@ -843,6 +843,7 @@ def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
             from types import SimpleNamespace
 
             blocks: dict[int, dict[str, Any]] = {}
+            reasoning_blocks: dict[int, dict[str, Any]] = {}
             input_tokens = output_tokens = cache_read = cache_creation = 0
             for line in response.iter_lines():
                 if not line.startswith("data: ") or line[6:] == "[DONE]":
