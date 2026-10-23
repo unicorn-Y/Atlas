@@ -457,6 +457,17 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                             "data": {"summary": str(summary)},
                         }), bound_loop).result()
                     return "已整理交接摘要，正在切换到新上下文。"
+                if _name == "mark_chapter":
+                    title = str(args.get("title") or "").strip()[:80]
+                    if not title:
+                        return "章节标题不能为空。"
+                    event_queue = getattr(bound_runtime, "event_queue", None)
+                    if event_queue is None:
+                        return "当前运行无法通知界面添加章节。"
+                    asyncio.run_coroutine_threadsafe(event_queue.put({
+                        "type": "chapter.marked", "data": {"title": title},
+                    }), bound_loop).result()
+                    return f"已在当前对话添加章节：{title}"
                 if _name == repo_map_name:
                     workspace = str(getattr(bound_runtime, "workspace", "") or "")
                     call_id = f"atlas:{uuid.uuid4().hex}"

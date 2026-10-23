@@ -48,6 +48,9 @@ function readScreenReaderMode(): boolean {
 function readEnterToSend(): boolean {
   try { return localStorage.getItem(ENTER_TO_SEND_KEY) !== 'false'; } catch { return true; }
 }
+function readShortcutHints(): boolean {
+  try { return localStorage.getItem('atlas.shortcut-hints') !== 'false'; } catch { return true; }
+}
 
 export interface ComposerMode { id: string; label: string; icon: LucideIcon }
 
@@ -160,6 +163,7 @@ export default function Composer(props: ComposerProps) {
   const hero = props.variant === 'hero';
   const [expert] = useExpertMode(backend.apiBaseUrl);
   const [enterToSend, setEnterToSend] = useState(readEnterToSend);
+  const [showShortcutHints, setShowShortcutHints] = useState(() => { try { return localStorage.getItem('atlas.shortcut-hints') !== 'false'; } catch { return true; } });
   const textRef = useRef<HTMLTextAreaElement>(null);
   const valueRef = useRef(props.value);
   valueRef.current = props.value;
@@ -177,6 +181,11 @@ export default function Composer(props: ComposerProps) {
   const historyDraftRef = useRef('');
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   useEffect(() => { historyRef.current = readHistory(); }, []);
+  useEffect(() => {
+    const refresh = () => setShowShortcutHints(readShortcutHints());
+    window.addEventListener('atlas:shortcut-hints', refresh);
+    return () => window.removeEventListener('atlas:shortcut-hints', refresh);
+  }, []);
   const recallHistory = (step: -1 | 1) => {
     const history = historyRef.current;
     if (!history.length) return;
@@ -472,6 +481,7 @@ export default function Composer(props: ComposerProps) {
       className={cn('block w-full resize-none border-0 bg-transparent p-0 text-fg outline-none placeholder:text-fg-3',
         hero ? 'min-h-[60px] text-[16px] leading-[1.65]' : 'min-h-[26px] text-[15px] leading-[1.6]')} />
     <span id={`${textareaId}-help`} className="sr-only">按 Enter 发送，Shift 加 Enter 换行；建议列表可用上下方向键选择、Tab 补全，Escape 关闭。选中文字后按 Alt 加 Shift 加 A，可将选中文字放入消息草稿。</span>
+    {showShortcutHints && <div className="mt-1 text-[10.5px] text-fg-3" aria-label="快捷键提示">Enter 发送 · Shift+Enter 换行 · Ctrl+P 切换模型 · ? 或 /keymap 查看快捷键</div>}
     <span id={`${textareaId}-screen-reader-help`} className={screenReaderMode ? 'sr-only' : 'hidden'}>屏幕阅读增强已开启。建议列表打开时焦点保留在消息输入框；使用上下方向键浏览，当前项和运行提示会自动播报，Enter 选择，Escape 关闭。</span>
     <span id={`${textareaId}-status`} role={screenReaderMode ? undefined : 'status'} aria-live={screenReaderMode ? undefined : 'polite'}
       aria-atomic={screenReaderMode ? undefined : 'true'} aria-hidden={screenReaderMode || undefined}

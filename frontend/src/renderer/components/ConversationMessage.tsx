@@ -350,7 +350,7 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
     <button type="button" onClick={() => {
       window.dispatchEvent(new CustomEvent('atlas:add-selection-to-draft', { detail: { text: selectionTooltip.text } }));
       setSelectionTooltip(null);
-    }} className="rounded-md px-2 py-1 text-[12px] text-fg hover:bg-hover">加入任务</button>
+    }} className="rounded-md px-2 py-1 text-[12px] text-fg hover:bg-hover">引用这段继续问</button>
     <button type="button" onClick={() => {
       window.dispatchEvent(new CustomEvent('atlas:side-chat-selection', { detail: { text: selectionTooltip.text } }));
       setSelectionTooltip(null);

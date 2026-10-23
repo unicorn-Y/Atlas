@@ -1,5 +1,5 @@
 import './stdoutSafety.js';
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, session, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, session, shell, Tray } from 'electron';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
@@ -36,7 +36,8 @@ function themeIcon(theme: string): Electron.NativeImage | undefined {
 let windowRef: BrowserWindow | null = null;
 let floatingComposerWindow: BrowserWindow | null = null;
 const conversationWindows = new Map<string, BrowserWindow>();
-type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null; openAtLogin: boolean };
+type WindowBounds = { x: number; y: number; width: number; height: number };
+type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null; openAtLogin: boolean; windowBounds?: WindowBounds };
 let platformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null, openAtLogin: true };
 let globalShortcutState: GlobalShortcutState = { accelerator: null, registered: false };
 let pendingDeepLinks: AtlasDeepLink[] = [];
@@ -94,10 +95,27 @@ function loadPlatformPreferences(): PlatformPreferences {
       alwaysOnTop: data.alwaysOnTop === true,
       globalShortcut: typeof data.globalShortcut === 'string' ? data.globalShortcut : null,
       openAtLogin: data.openAtLogin !== false,
+      ...(isWindowBounds(data.windowBounds) ? { windowBounds: data.windowBounds } : {}),
     };
   } catch {
     return { alwaysOnTop: false, globalShortcut: null, openAtLogin: true };
   }
+}
+
+function isWindowBounds(value: unknown): value is WindowBounds {
+  if (!value || typeof value !== 'object') return false;
+  const bounds = value as Record<string, unknown>;
+  return ['x', 'y', 'width', 'height'].every((key) => typeof bounds[key] === 'number' && Number.isFinite(bounds[key]))
+    && Number(bounds.width) >= 1050 && Number(bounds.height) >= 680;
+}
+
+function restoredWindowBounds(): WindowBounds {
+  const saved = platformPreferences.windowBounds;
+  if (!saved) return { x: 0, y: 0, width: 1440, height: 920 };
+  const overlapsDisplay = screen.getAllDisplays().some(({ workArea }) =>
+    saved.x < workArea.x + workArea.width && saved.x + saved.width > workArea.x
+      && saved.y < workArea.y + workArea.height && saved.y + saved.height > workArea.y);
+  return overlapsDisplay ? saved : { x: 0, y: 0, width: 1440, height: 920 };
 }
 
 function savePlatformPreferences(next: PlatformPreferences): void {
@@ -574,9 +592,9 @@ function createWindow() {
     windowRef.focus();
     return;
   }
+  const bounds = restoredWindowBounds();
   windowRef = new BrowserWindow({
-    width: 1440,
-    height: 920,
+    ...bounds,
     minWidth: 1050,
     minHeight: 680,
     backgroundColor: '#faf9f6',
@@ -596,6 +614,18 @@ function createWindow() {
   });
   windowRef.once('ready-to-show', () => { if (!explicitQuit && !process.argv.includes('--background')) windowRef?.show(); });
   windowRef.setAlwaysOnTop(platformPreferences.alwaysOnTop);
+  let boundsSaveTimer: NodeJS.Timeout | undefined;
+  const persistBounds = () => {
+    if (!windowRef || windowRef.isDestroyed() || windowRef.isMaximized() || windowRef.isMinimized()) return;
+    clearTimeout(boundsSaveTimer);
+    boundsSaveTimer = setTimeout(() => {
+      if (!windowRef || windowRef.isDestroyed() || windowRef.isMaximized() || windowRef.isMinimized()) return;
+      const current = windowRef.getBounds();
+      savePlatformPreferences({ ...platformPreferences, windowBounds: { x: current.x, y: current.y, width: current.width, height: current.height } });
+    }, 250);
+  };
+  windowRef.on('move', persistBounds);
+  windowRef.on('resize', persistBounds);
 
   windowRef.on('maximize', () => windowRef?.webContents.send('window:maximize-change', true));
   windowRef.on('unmaximize', () => windowRef?.webContents.send('window:maximize-change', false));

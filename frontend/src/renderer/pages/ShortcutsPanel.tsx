@@ -17,17 +17,20 @@ import {
 } from '../services/shortcuts';
 import { Kbd } from '../ui/Kbd';
 import { cn } from '../ui/cn';
+import type { ModelInfo } from '@atlas/backend-adapter';
 
 type RecordingTarget = { action: ShortcutAction; bindingIndex: number | null };
 
 /** Manage app shortcuts: search, record one or more bindings, clear, or restore defaults. */
-export default function ShortcutsPanel() {
+export default function ShortcutsPanel({ models = [] }: { models?: ModelInfo[] }) {
   const [bindings, setBindings] = useState<ShortcutBindings>(loadBindings);
   const [recording, setRecording] = useState<RecordingTarget | null>(null);
   const [query, setQuery] = useState('');
   const [keyFilter, setKeyFilter] = useState('');
   const [searchRecording, setSearchRecording] = useState(false);
   const [note, setNote] = useState('');
+  const [showHints, setShowHints] = useState(() => { try { return localStorage.getItem('atlas.shortcut-hints') !== 'false'; } catch { return true; } });
+  const [cycleModels, setCycleModels] = useState<string[]>(() => { try { const value: unknown = JSON.parse(localStorage.getItem('atlas.model-cycle') ?? '[]'); return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
 
   const update = (next: ShortcutBindings) => { setBindings(next); saveBindings(next); };
   const defaults = defaultBindings();
@@ -123,6 +126,10 @@ export default function ShortcutsPanel() {
   });
 
   return <div className="grid gap-1" data-shortcut-recorder>
+    <div className="mb-3 grid gap-3 rounded-xl bg-sunken p-3">
+      <label className="flex items-center gap-2 text-[12.5px] text-fg-2"><input type="checkbox" checked={showHints} onChange={(event) => { const enabled = event.target.checked; setShowHints(enabled); try { localStorage.setItem('atlas.shortcut-hints', String(enabled)); } catch { /* storage unavailable */ } window.dispatchEvent(new Event('atlas:shortcut-hints')); }} />在输入框下方显示按键提示</label>
+      <div className="grid gap-1.5"><span className="text-[12.5px] font-medium text-fg-2">Ctrl+P 模型循环</span><p className="m-0 text-[11.5px] text-fg-3">勾选常用模型；未选时会循环所有已配置模型。</p>{models.map((model) => <label key={model.id} className="flex items-center gap-2 text-[12px] text-fg-2"><input type="checkbox" checked={cycleModels.includes(model.id)} onChange={(event) => { const next = event.target.checked ? [...cycleModels, model.id] : cycleModels.filter((id) => id !== model.id); setCycleModels(next); try { localStorage.setItem('atlas.model-cycle', JSON.stringify(next)); } catch { /* storage unavailable */ } }} />{model.name ?? model.id}</label>)}</div>
+    </div>
     <div className="mb-2 grid gap-2 px-2">
       <input
         type="search"

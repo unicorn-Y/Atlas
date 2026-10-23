@@ -3021,6 +3021,9 @@ async def _execute_run(
             elif etype == "context.window.switched":
                 await emit("context.window.switched", event.get("data", {}))
 
+            elif etype == "chapter.marked":
+                await emit("chapter.marked", event.get("data", {}))
+
             elif etype == "approval_required":
                 # Already emitted by the approval_callback above;
                 # no need to re-emit here.

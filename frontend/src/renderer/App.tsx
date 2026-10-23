@@ -9,6 +9,7 @@ import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/back
 import type { BackendStartupProgress } from '../shared/ipc';
 import { latestTodos, usageSummary } from './components/runInsights';
 import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
+import KeymapDialog from './components/KeymapDialog';
 import { resolveMessageSkillReferences } from './components/skillMentions';
 const MessageThread = lazy(() => import('./components/MessageThread'));
 const TodoPanel = lazy(() => import('./components/TodoPanel'));
@@ -20,6 +21,7 @@ const RemoteFolderDialog = lazy(() => import('./components/RemoteFolderDialog'))
 const InitDialog = lazy(() => import('./components/InitDialog'));
 const LspStatusSection = lazy(() => import('./components/LspStatusSection'));
 const TimelineNav = lazy(() => import('./components/TimelineNav'));
+const ChaptersNav = lazy(() => import('./components/ChaptersNav'));
 const ForkTree = lazy(() => import('./components/ForkTree'));
 const RunSetupMenu = lazy(() => import('./components/RunSetupMenu'));
 const TabStrip = lazy(() => import('./components/TabStrip'));
@@ -204,6 +206,7 @@ export default function App() {
   const [sheet, setSheet] = useState<SheetPane | null>(null);
   const [settingsQuery, setSettingsQuery] = useState('');
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [keymapOpen, setKeymapOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [input, setInput] = useState('');
   const [homeMode, setHomeMode] = useState('chat');
@@ -292,6 +295,11 @@ export default function App() {
     historyWithBranchNotes.splice(forkIndex >= 0 ? forkIndex + 1 : historyWithBranchNotes.length, 0, note);
   }
   const modelName = store.models.find((model) => model.id === store.model)?.name ?? store.model ?? '默认模型';
+  useEffect(() => {
+    const sessionName = activeConversation?.title?.trim() || '新任务';
+    const status = store.busy ? ' · 运行中…' : '';
+    document.title = `${sessionName}${status} — Atlas`;
+  }, [activeConversation?.title, store.busy]);
   const loadingMessages = store.loadingMessagesConversationId === store.activeConversationId && Boolean(store.activeConversationId);
   const working = store.busy && !store.paused;
   const reply = useMemo(() => {
@@ -814,6 +822,15 @@ export default function App() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (voiceOpen || (event.target as HTMLElement | null)?.closest?.('[data-shortcut-recorder]')) return;
+      const target = event.target as HTMLElement | null;
+      if (event.key === '?' && !event.ctrlKey && !event.metaKey && !event.altKey && !target?.closest('input,textarea,[contenteditable="true"]')) {
+        event.preventDefault(); setKeymapOpen((value) => !value); return;
+      }
+      if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'p') {
+        const configured = (() => { try { const parsed: unknown = JSON.parse(localStorage.getItem('atlas.model-cycle') ?? '[]'); return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string' && store.models.some((model) => model.id === id)) : []; } catch { return []; } })();
+        const choices = configured.length ? configured : store.models.map((model) => model.id);
+        if (choices.length > 1) { event.preventDefault(); const index = choices.indexOf(store.model); void store.selectModel(choices[(index + 1 + choices.length) % choices.length]); return; }
+      }
       if (event.altKey && event.shiftKey && event.key.toLowerCase() === 'a') {
         event.preventDefault();
         askSelectedText();
@@ -891,13 +908,44 @@ export default function App() {
     : source.startsWith('claude') ? 'Claude 命令' : source.startsWith('codex') ? 'Codex 命令'
       : source.startsWith('plugin') ? '插件命令' : source === 'atlas' ? 'Atlas 命令' : source;
   const slashCommands: SlashCommand[] = [
-    { id: 'new', label: '/new', hint: '新任务', run: newTask },
+    { id: 'new', label: '/new', hint: '总结当前上下文并在新对话继续', run: () => {
+      if (!activeConversation) { newTask(); return; }
+      const recent = messages.filter((item) => (item.role === 'user' || item.role === 'assistant') && item.content.trim()).slice(-8);
+      const handoff = [`原对话：${activeConversation.title || '未命名任务'}`,
+        '最近的上下文（按时间顺序，原话截断以控制长度）：',
+        ...recent.map((item) => `${item.role === 'user' ? '用户' : 'Atlas'}：${item.content.replace(/\s+/g, ' ').slice(0, item.role === 'user' ? 360 : 520)}`),
+        '请先据此承接原任务，再处理我接下来提出的新问题。'].join('\n');
+      newTask(); setInput(`交接摘要：\n${handoff}\n\n我的新问题：`);
+    } },
     { id: 'clear', label: '/clear', hint: '开始一段新对话', run: newTask },
     ...(activeConversation ? [
       { id: 'export', label: '/export', hint: '导出当前对话为 JSON', run: () => void store.exportConversation(activeConversation.id) },
       { id: 'rename', label: '/rename', hint: '把后面的文字设为对话名称', takesArgument: true, run: (title: string) => { if (title.trim()) void store.renameConversation(activeConversation.id, title); else setToast('在 /rename 后面写上新名称'); } },
       { id: 'resume', label: '/resume', hint: '继续打开最近对话，或按名称搜索', takesArgument: true, run: (query: string) => { const target = query.trim() ? store.conversations.find((item) => item.id === query.trim() || item.title.toLowerCase().includes(query.trim().toLowerCase())) : store.conversations[0]; if (target) openConversation(target); else setToast('没有找到可恢复的对话'); } },
-      { id: 'fork', label: '/fork', hint: '从最近一条用户消息分叉', run: () => { const last = [...messages].reverse().find((item) => item.role === 'user'); if (last) void store.forkFrom(last.id); else setToast('当前对话还没有用户消息'); } },
+      { id: 'fork', label: '/fork', hint: '从最近消息或指定检查点分叉', takesArgument: true, run: (target: string) => {
+        const requested = target.trim();
+        if (!requested) { const last = [...messages].reverse().find((item) => item.role === 'user'); if (last) void store.forkFrom(last.id); else setToast('当前对话还没有用户消息'); return; }
+        const workspace = typeof activeConversation.workspace === 'string' ? activeConversation.workspace : '';
+        void api<Array<{ id: string; created_at: string }>>(store.apiBaseUrl, `/api/checkpoints${workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''}`).then((checkpoints) => {
+          const checkpoint = requested.toLowerCase() === 'latest' ? checkpoints[0] : checkpoints.find((item) => item.id === requested);
+          if (!checkpoint) { setToast('没有找到这个工作区检查点'); return; }
+          const pointTime = Date.parse(checkpoint.created_at);
+          const message = [...messages].reverse().find((item) => item.role === 'user' && (!Number.isFinite(pointTime) || Date.parse(item.created_at ?? '') <= pointTime));
+          if (message) void store.forkFrom(message.id, true); else setToast('检查点之前没有可分叉的用户消息');
+        }).catch((error) => setToast(`检查点读取失败：${error instanceof Error ? error.message : String(error)}`));
+      } },
+      { id: 'rewind', label: '/rewind', hint: '查看或恢复当前工作区检查点', takesArgument: true, run: (target: string) => {
+        showInspectorTab('changes');
+        const requested = target.trim(); if (!requested) return;
+        const workspace = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : '';
+        void api<Array<{ id: string; files?: unknown[] }>>(store.apiBaseUrl, `/api/checkpoints${workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''}`).then(async (checkpoints) => {
+          const checkpoint = requested.toLowerCase() === 'latest' ? checkpoints[0] : checkpoints.find((item) => item.id === requested);
+          if (!checkpoint) { setToast('没有找到这个工作区检查点'); return; }
+          if (!window.confirm(`将工作区恢复到检查点 ${checkpoint.id}，继续吗？`)) return;
+          const result = await api<{ result: { restored?: unknown[] } }>(store.apiBaseUrl, '/api/agent/capabilities/workspace.checkpoint.restore/invoke', { method: 'POST', json: { checkpoint_id: checkpoint.id } });
+          setToast(`已恢复 ${result.result?.restored?.length ?? checkpoint.files?.length ?? 0} 个文件`);
+        }).catch((error) => setToast(`检查点恢复失败：${error instanceof Error ? error.message : String(error)}`));
+      } },
       { id: 'undo', label: '/undo', hint: '撤回最近一条用户消息及其之后内容', run: () => { const last = [...messages].reverse().find((item) => item.role === 'user'); if (last) void rewind(last.id, false); else setToast('当前对话没有可撤回的用户消息'); } },
       { id: 'redo', label: '/redo', hint: '恢复刚刚撤回的内容', run: () => { if (rewound) void store.redoRewind(rewound.conversationId, rewound.rewindId).then((ok) => { if (ok) { setRewound(null); setToast('已重做'); } }); else setToast('当前没有可重做的撤回'); } },
       { id: 'approve', label: '/approve', hint: '打开当前对话的审批与活动', run: () => showInspectorTab('activity') },
@@ -954,11 +1002,17 @@ export default function App() {
     { id: 'auto', label: '/auto', hint: '打开自动化', run: () => go('auto') },
     { id: 'memory', label: '/memory', hint: '打开记忆', run: () => go('memory') },
     { id: 'context', label: '/context', hint: '查看上下文用量明细', run: () => showInspectorTab('context') },
+    { id: 'keymap', label: '/keymap', hint: '显示分组快捷键一览', run: () => setKeymapOpen(true) },
+    { id: 'chapter', label: '/chapter', hint: '在当前对话末尾添加章节目录项', takesArgument: true, run: (title: string) => {
+      const value = title.trim(); if (!value) { setToast('用法：/chapter 章节名称'); return; }
+      window.dispatchEvent(new CustomEvent('atlas:add-chapter', { detail: { title: value } })); setToast(`已添加章节：${value}`);
+    } },
+    { id: 'version', label: '/version', hint: '显示 Atlas 版本', run: () => setToast(`Atlas ${__APP_VERSION__}`) },
     { id: 'diff', label: '/diff', hint: '查看本次运行的文件改动', run: () => showInspectorTab('changes') },
     { id: 'model', label: '/model', hint: '选择或切换模型', takesArgument: true, run: (query: string) => { const found = store.models.find((item) => item.id.toLowerCase() === query.trim().toLowerCase() || (item.name ?? '').toLowerCase() === query.trim().toLowerCase()); if (found) void store.selectModel(found.id); else setSheet('models'); } },
     { id: 'reasoning', label: '/reasoning', hint: '打开模型选择，查看当前可用的推理强度', run: () => setSheet('models') },
     { id: 'usage', label: '/usage', hint: '查看用量和费用', run: () => setSheet('usage') },
-    { id: 'status', label: '/status', hint: '显示当前模型、推理强度和权限', run: () => setToast(`${modelName} · 推理 ${store.reasoningEffort || '默认'} · ${PERMISSION[permission].label}`) },
+    { id: 'status', label: '/status', hint: '显示版本、模型、API 连通性和工具状态', run: () => setToast(`Atlas ${__APP_VERSION__} · ${modelName} · ${store.connected ? 'API 已连接' : 'API 未连接'} · 工具 ${store.tools.length} 个可用 · 推理 ${store.reasoningEffort || '默认'} · ${PERMISSION[permission].label}`) },
     { id: 'permissions', label: '/permissions', hint: '切换当前对话权限模式', run: () => { if (!activeConversation) { setToast('先打开一个对话再切换权限'); return; } setToast(`权限模式：${PERMISSION[cyclePermission()].label}`); } },
     { id: 'agents', label: '/agents', hint: '打开 Agents 页：常驻 Agent 花名册与详情', run: () => go('agents') },
     { id: 'ps', label: '/ps', hint: '查看后台进程和最近输出', run: () => showInspectorTab('processes') },
@@ -1162,8 +1216,10 @@ export default function App() {
   </div>;
 
   const latestUsage = [...activeEvents].reverse().find((event) => event.type === 'run.usage')?.data;
-  const contextUse = typeof latestUsage?.context_tokens === 'number' && typeof latestUsage?.context_limit === 'number' && latestUsage.context_limit > 0
-    ? Math.round(latestUsage.context_tokens / latestUsage.context_limit * 100) : null;
+  const rawContextLimit = typeof latestUsage?.context_limit === 'number' && latestUsage.context_limit > 0 ? latestUsage.context_limit : null;
+  const effectiveContextLimit = rawContextLimit === null ? null : Math.min(rawContextLimit, 200_000);
+  const contextUse = typeof latestUsage?.context_tokens === 'number' && effectiveContextLimit
+    ? Math.min(100, Math.round(latestUsage.context_tokens / effectiveContextLimit * 100)) : null;
   const rewind = async (messageId: string, files: boolean) => {
     const conversationId = storeRef.current.activeConversationId;
     const result = await storeRef.current.rewindTo(messageId, files);
@@ -1401,6 +1457,7 @@ export default function App() {
               hasEarlier={Boolean(store.messagesHasEarlier[store.activeConversationId])}
               truncatedCount={activeRun?.eventsTruncated ? (activeRun.droppedEventCount ?? 0) : 0}
               loading={loadingMessages} />
+            {store.activeConversationId && <ChaptersNav conversationId={store.activeConversationId} threadRef={threadRef} history={historyWithBranchNotes} events={activeEvents} />}
             <MessageThread history={historyWithBranchNotes} username={username} historyActions={historyActions} threadRef={threadRef} setTab={showInspectorTab}
               onOpenBrowser={(url) => { setBrowserUrl(url); showInspectorTab('browser'); }}
               emptyState={!messages.length && !activeEvents.length && !loadingMessages ? <div className="pt-[16vh] text-center">
@@ -1528,7 +1585,7 @@ export default function App() {
         {sheet === 'mainConfig' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">主体配置</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">直接查看和修改 Atlas 主体的配置文件。</p><MainConfigPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'expert' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">专家模式</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">开着时在普通配置之上额外加载你自己仓库里装上的提示词、技能、插件、工具和 MCP。</p><ExpertModePanel apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'network' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">模型网络</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">为支持的模型连接配置本机代理与自定义 CA 证书。</p><NetworkSettingsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
-        {sheet === 'shortcuts' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">快捷键</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">改成你顺手的组合键，只在这台电脑上生效。</p><ShortcutsPanel /></section>}
+        {sheet === 'shortcuts' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">快捷键</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">改成你顺手的组合键，只在这台电脑上生效。</p><ShortcutsPanel models={store.models} /></section>}
         {sheet === 'hooks' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Hooks</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">在任务开始、用工具前后、完成或失败时运行你自己的命令。</p><HooksPanel /></section>}
         {sheet === 'notifications' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">通知</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">任务完成、需要确认时怎么提醒你。</p><div className="grid gap-6"><AppearanceNotificationsPanel theme={theme} onThemeChange={chooseTheme} username={username} onSaveUsername={saveUsername} onToast={notify} section="notifications" /><NotificationsPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
         {sheet === 'mcp' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">MCP 服务</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理 Atlas 已支持的 MCP 服务，并浏览服务显式提供的资源。</p><div className="grid gap-8"><McpServersPanel apiBaseUrl={store.apiBaseUrl} /><McpResourcesPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
@@ -1548,6 +1605,7 @@ export default function App() {
 
     <PersonalTodos apiBaseUrl={store.apiBaseUrl} connected={store.connected} />
     {paletteOpen && <Suspense fallback={null}><Palette items={paletteItems} open onClose={() => setPaletteOpen(false)} search={searchMessages} /></Suspense>}
+    {keymapOpen && <KeymapDialog onClose={() => setKeymapOpen(false)} />}
 
     {voiceOpen && <Suspense fallback={null}><VoiceOverlay
       onClose={(toChat) => { setVoiceOpen(false); if (toChat) go('chat'); }}

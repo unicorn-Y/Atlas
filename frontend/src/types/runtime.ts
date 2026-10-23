@@ -14,7 +14,7 @@ export type AgentEventType =
   | 'rules.trust_required' | 'hook.ran'
   | 'run.model_switched' | 'run.verify_nudge'
   | 'session.title'
-  | 'process.completed' | 'process.notification' | 'run.compaction.progress' | 'run.recovery.notice' | 'context.window.switched'
+  | 'process.completed' | 'process.notification' | 'run.compaction.progress' | 'run.recovery.notice' | 'context.window.switched' | 'chapter.marked'
   | 'run.completed' | 'run.failed' | 'run.cancelled'
   | 'lsp.diagnostics' | 'review.findings'
   | 'computer.foreground_required' | 'computer.foreground_resumed' | 'computer.foreground_denied' | 'computer.step'

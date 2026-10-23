@@ -2558,6 +2558,13 @@ class AtlasKernel:
             })
             return {"content": "Compacted the current session history and prepared a fresh context.",
                     "data": handoff, "outcome": "completed"}
+        if name == "mark_chapter":
+            title = str(arguments.get("title") or "").strip()[:80]
+            if not title:
+                return {"content": "章节标题不能为空。", "is_error": True, "outcome": "failed"}
+            await event_queue.put({"type": "chapter.marked", "data": {"title": title}})
+            return {"content": f"已在当前对话添加章节：{title}",
+                    "data": {"title": title}, "outcome": "completed"}
         if name == "request_permissions":
             approval = getattr(runtime, "approval_callback", None)
             if not callable(approval):

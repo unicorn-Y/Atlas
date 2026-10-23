@@ -247,6 +247,15 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
     })
     tools.append({
         "type": "function", "function": {
+            "name": "mark_chapter",
+            "description": "Add a named chapter marker at the latest message in the current conversation so the user can jump back to this topic.",
+            "parameters": {"type": "object", "properties": {
+                "title": {"type": "string", "minLength": 1, "maxLength": 80},
+            }, "required": ["title"], "additionalProperties": False},
+        },
+    })
+    tools.append({
+        "type": "function", "function": {
             "name": "run_checks",
             "description": "Run project lint, typecheck, tests, or all available checks and return structured diagnostics.",
             "parameters": {"type": "object", "properties": {

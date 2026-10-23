@@ -39,6 +39,8 @@ export function UsageBreakdown({ usage, title = '本次用量' }: { usage: Usage
   const share = (value: number) => total ? `${value / total * 100}%` : '0%';
   const hit = usage.input ? Math.round(usage.cached / usage.input * 100) : 0;
   const context = usage.context;
+  const effectiveLimit = context ? Math.min(context.limit, 200_000) : 0;
+  const effectivePercent = context && effectiveLimit ? Math.min(100, Math.round(context.used / effectiveLimit * 100)) : 0;
   const categoryTotal = context?.categories.reduce((sum, item) => sum + item.tokens, 0) ?? 0;
   return <div className="grid gap-3.5">
     <div className="flex items-baseline gap-2">
@@ -77,19 +79,21 @@ export function UsageBreakdown({ usage, title = '本次用量' }: { usage: Usage
         <span className="font-medium text-fg-2">上下文窗口</span>
         {context.estimated && <span className="text-[11px] text-fg-3">估算</span>}
         <span className="flex-1" />
-        <span className="tabular-nums text-fg-3">{formatTokens(context.used)} / {formatTokens(context.limit)}</span>
-        <b className={cn('tabular-nums font-semibold', context.percent >= 80 ? 'text-danger' : 'text-fg')}>{context.percent}%</b>
+        <span className="tabular-nums text-fg-3">{formatTokens(context.used)} / {formatTokens(effectiveLimit)}</span>
+        <b className={cn('tabular-nums font-semibold', effectivePercent >= 80 ? 'text-danger' : 'text-fg')}>{effectivePercent}%</b>
       </div>
-      <div className="flex h-2 overflow-hidden rounded-full bg-sunken">
+      <div className="relative flex h-2 overflow-hidden rounded-full bg-sunken" aria-label={`自动压缩有效窗口 ${formatTokens(effectiveLimit)}，当前使用 ${effectivePercent}%`}>
         {categoryTotal > 0
-          ? context.categories.map((item) => <i key={item.id} className="block h-full" title={`${item.label} ${formatTokens(item.tokens)}`}
-            style={{ width: `${item.tokens / context.limit * 100}%`, background: CATEGORY_COLOR[item.id] ?? 'var(--fg-3)' }} />)
-          : <i className={cn('block h-full', context.percent >= 80 ? 'bg-danger' : 'bg-brand')} style={{ width: `${context.percent}%` }} />}
+            ? context.categories.map((item) => <i key={item.id} className="block h-full" title={`${item.label} ${formatTokens(item.tokens)}`}
+            style={{ width: `${Math.min(100, item.tokens / effectiveLimit * 100)}%`, background: CATEGORY_COLOR[item.id] ?? 'var(--fg-3)' }} />)
+          : <i className={cn('block h-full', effectivePercent >= 80 ? 'bg-danger' : 'bg-brand')} style={{ width: `${effectivePercent}%` }} />}
+        <i className="absolute inset-y-0 right-0 z-[1] w-[2px] bg-fg" title={`自动压缩线 ${formatTokens(effectiveLimit)}`} />
       </div>
+      <p className="m-0 text-[11px] text-fg-3">按自动压缩窗口 {formatTokens(effectiveLimit)} 计算；竖线为压缩线。</p>
       {categoryTotal > 0 && <div className="grid grid-cols-2 gap-x-4 gap-y-1">
         {context.categories.map((item) => <Row key={item.id} color={CATEGORY_COLOR[item.id] ?? 'var(--fg-3)'} label={item.label} value={formatTokens(item.tokens)} />)}
       </div>}
-      {context.percent >= 80 && <p className="m-0 text-[11.5px] text-danger">快满了，可以用 /compact 压缩上下文</p>}
+      {effectivePercent >= 80 && <p className="m-0 text-[11.5px] text-danger">快满了，可以用 /compact 压缩上下文</p>}
     </div>}
 
     {usage.byModel.length > 0 && <div className="grid gap-1.5 border-t border-line pt-3">

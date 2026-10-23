@@ -37,8 +37,8 @@ function samePath(left: string, right: string): boolean {
 }
 
 /** What this run changed on disk, and the snapshots that can put it back. */
-export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, onToast, onAsk }: {
-  runId?: string; runStatus?: string; apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; onAsk?: (text: string) => void | Promise<void>;
+export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, onToast, onAsk, workspace }: {
+  runId?: string; runStatus?: string; apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; onAsk?: (text: string) => void | Promise<void>; workspace?: string | null;
 }) {
   const [comments, setComments] = useState<LineComment[]>([]);
   const [sendingComments, setSendingComments] = useState(false);
@@ -190,6 +190,14 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
           hunk_id: hunk.id, action, expected_diff_hash: file.diff_hash },
       });
       setChangesReload((value) => value + 1);
+      if (onAsk) {
+        const decision = action === 'accept' ? '接受' : '拒绝并还原';
+        try {
+          await onAsk(`我已${decision}文件「${file.path}」中的差异块（旧行 ${hunk.old_start}，新行 ${hunk.new_start}）。请基于当前工作区状态继续后续工作，并不要重新应用这块决定。`);
+        } catch (feedbackError) {
+          onToast(`差异块已${decision}，但未能把结果发送给 agent：${feedbackError instanceof Error ? feedbackError.message : String(feedbackError)}`);
+        }
+      }
     } catch (exc) {
       setHunkError(exc instanceof Error ? exc.message : String(exc));
     } finally {
@@ -284,7 +292,7 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
         <button disabled={sendingComments} onClick={() => void send()} className="primary-fill inline-flex h-7 items-center gap-1 rounded-lg px-2.5 disabled:opacity-50"><Send size={12} />{sendingComments ? '正在提交…' : '提交全部评注'}</button>
       </div>}
     </section>
-    <Checkpoints apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} runId={runId} refreshKey={`${runId}:${runStatus}`} />
+    <Checkpoints apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} runId={runId} workspace={workspace} refreshKey={`${runId}:${runStatus}`} />
   </div>;
 }
 
@@ -489,7 +497,7 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
 }
 
 /** Shadow snapshots Atlas takes before changing files; restoring one puts those files back. */
-function Checkpoints({ apiBaseUrl, connected, onToast, runId, refreshKey }: { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; runId?: string; refreshKey: string }) {
+function Checkpoints({ apiBaseUrl, connected, onToast, runId, workspace, refreshKey }: { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; runId?: string; workspace?: string | null; refreshKey: string }) {
   const [items, setItems] = useState<Checkpoint[] | null>(null);
   const [confirm, setConfirm] = useState('');
   const [restoring, setRestoring] = useState('');
@@ -499,7 +507,7 @@ function Checkpoints({ apiBaseUrl, connected, onToast, runId, refreshKey }: { ap
   useEffect(() => {
     if (!connected) return;
     let stale = false;
-    api<Checkpoint[]>(apiBaseUrl, '/api/checkpoints')
+    api<Checkpoint[]>(apiBaseUrl, `/api/checkpoints${workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''}`)
       .then((result) => {
         if (stale) return;
         // This run's snapshots first, then the newest of the rest.
@@ -509,7 +517,7 @@ function Checkpoints({ apiBaseUrl, connected, onToast, runId, refreshKey }: { ap
       })
       .catch((exc) => { if (!stale) { setItems([]); setError(exc instanceof Error ? exc.message : String(exc)); } });
     return () => { stale = true; };
-  }, [apiBaseUrl, connected, refreshKey, runId]);
+  }, [apiBaseUrl, connected, refreshKey, runId, workspace]);
 
   const restore = async (checkpoint: Checkpoint) => {
     if (confirm !== checkpoint.id) { setConfirm(checkpoint.id); return; }
