@@ -11,6 +11,7 @@ import copy
 import hashlib
 import json
 import math
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,11 @@ from typing import Any, Awaitable, Callable, Mapping, Sequence
 DEFAULT_CONTEXT_WINDOW = 200_000
 OUTPUT_RESERVE_TOKENS = 21_000
 BUFFER_TOKENS = 13_000
+WARNING_BUFFER_TOKENS = 20_000
+BLOCKING_BUFFER_TOKENS = 3_000
+AUTO_COMPACT_BUFFER_TOKENS = 13_000
+MAX_TOOL_RESULT_TOKENS = 100_000
+BYTES_PER_TOKEN = 4
 MAX_CONSECUTIVE_FAILURES = 3
 COMPACT_USER_MESSAGE_MAX_TOKENS = 20_000
 COMPACTABLE_TOOLS = frozenset({
@@ -62,6 +68,14 @@ class CompactionResult:
     error: str | None = None
 
 
+@dataclass(slots=True, frozen=True)
+class ContextThresholds:
+    effective_window: int
+    auto_compact: int
+    warning: int
+    blocking: int
+
+
 class ContextManager:
     def __init__(self, config: Mapping[str, Any] | None = None, *, output_dir: str | Path | None = None):
         settings = dict(config or {})
@@ -83,6 +97,41 @@ class ContextManager:
                       OUTPUT_RESERVE_TOKENS)
         buffer = max(0, int(self.config.get("context_buffer_tokens", BUFFER_TOKENS)))
         return max(0, min(int(window * ratio), cap, window - reserve - buffer))
+
+    def thresholds(self, model_window: int = DEFAULT_CONTEXT_WINDOW) -> ContextThresholds:
+        """Return model-relative auto-compact, warning, and blocking watermarks.
+
+        ``ATLAS_AUTO_COMPACT_PCT`` is a temporary operator override intended for
+        smoke runs. Like Claude Code's percentage override, it can only move the
+        automatic trigger earlier; the 13k reserve is never exceeded.
+        """
+        window = max(1, int(model_window))
+        reserve = min(window, max(0, int(self.config.get("max_output_tokens", OUTPUT_RESERVE_TOKENS))),
+                      OUTPUT_RESERVE_TOKENS)
+        effective = max(0, window - reserve)
+        auto = max(0, effective - int(self.config.get("auto_compact_buffer_tokens", AUTO_COMPACT_BUFFER_TOKENS)))
+        env_percent = os.environ.get("ATLAS_AUTO_COMPACT_PCT")
+        if env_percent:
+            try:
+                percentage = float(env_percent)
+            except ValueError:
+                percentage = 0
+            if math.isfinite(percentage) and 0 < percentage <= 100:
+                auto = min(auto, math.floor(effective * percentage / 100))
+        warning = max(0, auto - int(self.config.get("context_warning_buffer_tokens", WARNING_BUFFER_TOKENS)))
+        blocking = max(0, effective - int(self.config.get("context_blocking_buffer_tokens", BLOCKING_BUFFER_TOKENS)))
+        return ContextThresholds(effective, auto, warning, blocking)
+
+    def warning_state(self, token_count: int, model_window: int = DEFAULT_CONTEXT_WINDOW) -> dict[str, Any]:
+        """Expose the three request watermarks to the loop/UI without model constants."""
+        thresholds = self.thresholds(model_window)
+        count = max(0, int(token_count))
+        return {
+            "thresholds": thresholds,
+            "is_above_warning": count >= thresholds.warning,
+            "is_above_auto_compact": count >= thresholds.auto_compact,
+            "is_at_blocking_limit": count >= thresholds.blocking,
+        }
 
     def _output_ref(self, message: dict[str, Any], content: str) -> str | None:
         ref = message.get("output_ref")
@@ -177,14 +226,15 @@ class ContextManager:
         method = "microcompact" if messages != list(history) else "none"
         result = CompactionResult(messages, method, before, after, budget)
         announced = False
-        if before_compact is not None and (method != "none" or after > budget or manual or force):
+        auto_threshold = self.thresholds(model_window).auto_compact
+        if before_compact is not None and (method != "none" or after >= auto_threshold or manual or force):
             await before_compact(result)
             announced = True
         # Hysteresis: if trimming old tool outputs could not bring the context back
         # under the microcompact threshold, summarize now. Otherwise every later
         # request nibbles one more tool result (each nibble busts the prompt cache)
         # until the hard budget is finally hit.
-        if after <= self._micro_threshold(budget) and not manual and not force:
+        if after < auto_threshold and not manual and not force:
             return result
         if summarize is None:
             result.error = "context_over_budget: no summarizer available"
