@@ -31,8 +31,10 @@ class HeadTailBuffer:
         self.head = bytearray()
         self.tail = bytearray()
         self.omitted_bytes = 0
+        self.total_bytes = 0
 
     def push_chunk(self, chunk: bytes) -> None:
+        self.total_bytes += len(chunk)
         take = min(len(chunk), self.max_bytes // 2 - len(self.head))
         self.head.extend(chunk[:take])
         self.tail.extend(chunk[take:])
@@ -188,6 +190,9 @@ class ExecManager:
         data = {"execution_id": handle.execution_id, "state": handle.outcome,
                 "outcome": handle.outcome, "exit_code": handle.exit_code,
                 "timed_out": handle.timed_out, "output": handle.buffer.text(),
+                "output_bytes": handle.buffer.total_bytes,
+                "output_omitted_bytes": handle.buffer.omitted_bytes,
+                "output_truncated": bool(handle.buffer.omitted_bytes),
                 "timeout_seconds": handle.timeout if handle.timed_out else None,
                 "backgrounded": handle.detached,
                 "output_ref": str(handle.output_path.resolve()),
