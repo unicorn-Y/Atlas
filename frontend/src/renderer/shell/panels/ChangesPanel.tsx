@@ -326,6 +326,9 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
   const [activeSearchHit, setActiveSearchHit] = useState(0);
   const searchInputId = useId();
   const searchHitRefs = useRef<Array<HTMLElement | null>>([]);
+  const hunkRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const [activeHunk, setActiveHunk] = useState(0);
+  const hunkLineIndexes = useMemo(() => lines.flatMap((line, index) => line.kind === 'hunk' && line.text.startsWith('@@') ? [index] : []), [lines]);
   const commentButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const commentable = Boolean(comments);
   const searchHits = useMemo<DiffSearchHit[]>(() => {
@@ -354,6 +357,14 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
   const moveSearchHit = (direction: -1 | 1) => {
     if (!searchHits.length) return;
     setActiveSearchHit((current) => (current + direction + searchHits.length) % searchHits.length);
+  };
+  const moveHunk = (direction: -1 | 1) => {
+    if (!hunkLineIndexes.length) return;
+    setActiveHunk((current) => {
+      const next = (current + direction + hunkLineIndexes.length) % hunkLineIndexes.length;
+      requestAnimationFrame(() => hunkRefs.current[next]?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+      return next;
+    });
   };
   useEffect(() => {
     if (searchText && searchHits.length) searchHitRefs.current[activeSearchHit]?.scrollIntoView({ block: 'center', inline: 'nearest' });
@@ -398,6 +409,11 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
         onClick={() => moveSearchHit(-1)} className="grid h-7 w-7 place-items-center rounded-md text-fg-2 hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"><ChevronUp size={14} /></button>
       <button type="button" aria-label="下一个 diff 搜索命中" title="下一个命中（Enter）" disabled={!searchHits.length}
         onClick={() => moveSearchHit(1)} className="grid h-7 w-7 place-items-center rounded-md text-fg-2 hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"><ChevronDown size={14} /></button>
+      {hunkLineIndexes.length > 1 && <>
+        <span className="ml-1 text-[10.5px] text-fg-3">差异块 {Math.min(activeHunk + 1, hunkLineIndexes.length)}/{hunkLineIndexes.length}</span>
+        <button type="button" aria-label="上一个差异块" title="上一个差异块" onClick={() => moveHunk(-1)} className="grid h-7 w-7 place-items-center rounded-md text-fg-2 hover:bg-hover"><ChevronUp size={14} /></button>
+        <button type="button" aria-label="下一个差异块" title="下一个差异块" onClick={() => moveHunk(1)} className="grid h-7 w-7 place-items-center rounded-md text-fg-2 hover:bg-hover"><ChevronDown size={14} /></button>
+      </>}
     </div>
     {lines.map((line, index) => {
       const number = line.newNo ?? line.oldNo;
@@ -417,7 +433,7 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
         cursor = hit.end;
       }
       if (lineHitIndexes.length) highlighted.push(lineContent.slice(cursor));
-      return <div key={index}>
+      return <div key={index} ref={line.kind === 'hunk' && line.text.startsWith('@@') ? (node) => { hunkRefs.current[line.hunkIndex] = node; } : undefined}>
         <div className={cn('group flex', line.kind === 'add' ? 'bg-ok-soft text-fg' : line.kind === 'del' ? 'bg-danger-soft text-fg' : line.kind === 'hunk' ? 'text-fg-3' : 'text-fg-2')}>
           <span className="w-9 shrink-0 pr-1.5 text-right text-fg-3 select-none tabular-nums">{line.kind === 'hunk' ? '' : number}</span>
           {commentable && line.kind !== 'hunk'
