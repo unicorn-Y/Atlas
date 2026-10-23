@@ -331,6 +331,31 @@ async def _run_command(
         else:
             argv = ["sh", "-lc", command]
     proc = None
+
+    async def stop_process_tree() -> None:
+        if proc is None or proc.returncode is not None:
+            return
+        if os.name == "nt":
+            killer = None
+            try:
+                killer = await asyncio.create_subprocess_exec(
+                    "taskkill.exe", "/PID", str(proc.pid), "/T", "/F",
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+                await asyncio.wait_for(killer.wait(), timeout=3)
+            except (OSError, TimeoutError):
+                if killer is not None and killer.returncode is None:
+                    killer.kill()
+            if proc.returncode is None:
+                proc.kill()
+                await asyncio.wait_for(proc.wait(), timeout=3)
+            return
+        proc.kill()
+        await asyncio.wait_for(proc.wait(), timeout=3)
+
     try:
         proc = await asyncio.create_subprocess_exec(
             *argv, cwd=cwd or None, env=env, stdin=asyncio.subprocess.PIPE,
@@ -342,9 +367,10 @@ async def _run_command(
         )
         return proc.returncode or 0, stdout[:4096].decode("utf-8", errors="replace"), stderr[:4096].decode("utf-8", errors="replace")
     except Exception as exc:
-        if proc is not None and proc.returncode is None:
-            proc.kill()
-            await proc.wait()
+        try:
+            await stop_process_tree()
+        except (OSError, TimeoutError):
+            pass
         return 1, "", str(exc)[:4096]
 
 
