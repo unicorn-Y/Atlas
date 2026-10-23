@@ -125,6 +125,19 @@ class ModelManager:
             if custom.get("id") and not any(model["id"] == custom["id"] for model in self._models):
                 self.add_model(custom, persist=False)
 
+        # A user may keep a provider-specific display name for an ID that also exists in
+        # the built-in catalog (for example the same DeepSeek route through d1api). Keep
+        # the catalog's routing metadata, but honor the user's label in the UI.
+        display_names: dict[str, str] = {}
+        for custom in [*cfg.custom_models, *custom_models]:
+            if isinstance(custom, dict) and custom.get("id") and isinstance(custom.get("name"), str) and custom["name"].strip():
+                display_names[str(custom["id"])] = custom["name"].strip()
+        if display_names:
+            self._models = [
+                {**model, "name": display_names.get(str(model.get("id")), model.get("name"))}
+                for model in self._models
+            ]
+
         # settings["hidden_models"]: 用户隐藏的内置模型（内置条目硬编码在 DEFAULT_MODELS，
         # 无法删除，只能从列表里过滤；用于「这张密钥只给某一个模型用」的部署）。
         hidden = settings.get("hidden_models")
@@ -295,6 +308,25 @@ class ModelManager:
             return None
         capabilities = self._model_capabilities(model) or {}
         window = capabilities.get("context_window")
+        if not isinstance(window, int) or isinstance(window, bool) or window <= 0:
+            # A routed model can be selected through a generic OpenAI-compatible
+            # entry while another configured entry carries its provider metadata.
+            # Reuse capability data only for an identical wire model.
+            wire_model = str(model.get("litellm_model") or "")
+            native_model = self._native_model_id(model)
+            if wire_model or native_model:
+                for candidate in self._models:
+                    if candidate is model:
+                        continue
+                    same_wire = wire_model and str(candidate.get("litellm_model") or "") == wire_model
+                    same_native = native_model and self._native_model_id(candidate) == native_model
+                    if not (same_wire or same_native):
+                        continue
+                    candidate_caps = self._model_capabilities(candidate) or {}
+                    candidate_window = candidate_caps.get("context_window")
+                    if isinstance(candidate_window, int) and not isinstance(candidate_window, bool) and candidate_window > 0:
+                        window = candidate_window
+                        break
         if not isinstance(window, int) or isinstance(window, bool) or window <= 0:
             return None
         if CONTEXT_1M_BETA in self.allowed_sdk_betas(sdk_betas) and self.supports_context_1m(model_id):

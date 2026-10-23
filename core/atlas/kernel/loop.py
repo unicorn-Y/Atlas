@@ -279,6 +279,44 @@ def _usage_row(result: ModelCallResult, call_id: str) -> dict[str, Any]:
     return row
 
 
+def _context_breakdown(messages: list[dict[str, Any]], tools: list[dict[str, Any]],
+                       used_tokens: int, context_limit: int) -> dict[str, Any]:
+    """Attribute the provider's actual input total across estimated prompt parts."""
+    parts: dict[str, Any] = {"system_prompt": [], "conversation": [], "tool_results": [], "files": []}
+    file_tools = {"read_file", "local_file", "grep", "glob", "search_files", "read"}
+    for message in messages:
+        role = str(message.get("role") or "")
+        if role == "system":
+            parts["system_prompt"].append(message)
+        elif role == "tool":
+            name = str(message.get("tool_name") or "").casefold()
+            parts["files" if name in file_tools or "file" in name else "tool_results"].append(message)
+        else:
+            parts["conversation"].append(message)
+    estimates = {key: estimate_tokens(value) for key, value in parts.items()}
+    estimates["tool_definitions"] = estimate_tokens(tools)
+    estimate_total = sum(estimates.values())
+    if used_tokens <= 0 or estimate_total <= 0 or context_limit <= 0:
+        return {}
+    ids_labels = {
+        "system_prompt": "系统提示", "tool_definitions": "工具定义",
+        "conversation": "对话内容", "tool_results": "工具结果", "files": "文件内容",
+    }
+    remaining = used_tokens
+    categories = []
+    nonzero = [(key, value) for key, value in estimates.items() if value > 0]
+    for index, (key, value) in enumerate(nonzero):
+        tokens = remaining if index == len(nonzero) - 1 else min(remaining, round(used_tokens * value / estimate_total))
+        remaining -= tokens
+        if tokens:
+            categories.append({"id": key, "label": ids_labels[key], "tokens": tokens})
+    return {
+        "categories": categories, "context_used": used_tokens,
+        "context_max": context_limit, "context_source": "provider_usage_plus_estimate",
+        "context_estimated": True,
+    }
+
+
 async def _wait_until_resumed(
     pause_event: asyncio.Event | None,
     cancel_event: asyncio.Event | None,
@@ -1617,6 +1655,17 @@ class AtlasKernel:
                 pending_nudges.clear()
                 pending_stop_responses.clear()
                 usage = _usage_row(response, uuid.uuid4().hex)
+                if model_window:
+                    usage["context_limit"] = model_window
+                    usage["context_breakdown"] = _context_breakdown(
+                        messages, tools, int(usage.get("context_tokens") or 0), model_window,
+                    )
+                    for recorded in reversed(usage_rows):
+                        if (recorded.get("purpose") == "conversation"
+                                and recorded.get("model") == response.model):
+                            recorded["context_limit"] = model_window
+                            recorded["context_breakdown"] = usage["context_breakdown"]
+                            break
                 await flush_reasoning()
                 turn_reasoning = state.streamed_reasoning
                 assistant_content = response.text or state.streamed_refusal
@@ -2224,8 +2273,6 @@ class AtlasKernel:
             from atlas.tools.workspace_queries import glob_workspace, grep_workspace
 
             workspace = str(getattr(runtime, "workspace", "") or "")
-            if not workspace:
-                return {"content": "Workspace queries require an active workspace.", "is_error": True}
             try:
                 if name == "glob":
                     data = await asyncio.to_thread(
@@ -2533,6 +2580,26 @@ class AtlasKernel:
                 "content": "Permission approved for this request only." if allowed else "Permission was not approved.",
                 "is_error": not allowed, "outcome": "completed" if allowed else "denied",
             }
+        if name == "propose_background_session":
+            input_callback = getattr(runtime, "input_callback", None)
+            title = str(arguments.get("title") or "").strip()
+            description = str(arguments.get("description") or "").strip()
+            task = str(arguments.get("task") or "").strip()
+            if not title or not description or not task:
+                return {"content": "title, description, and task are required.", "is_error": True}
+            if not callable(input_callback):
+                return {"content": "This run has no interactive user-input channel.", "is_error": True}
+            decision = input_callback(
+                f"{call_id or 'session'}:proposal", description, None,
+                {"proposal": True, "title": title, "description": description, "task": task},
+            )
+            if hasattr(decision, "__await__"):
+                decision = await decision
+            if str(decision).startswith("started:"):
+                return {"content": f"User started the background conversation {str(decision).split(':', 1)[1]}.",
+                        "data": {"started": True}, "outcome": "completed"}
+            return {"content": "User ignored the proposed background conversation.",
+                    "data": {"started": False}, "outcome": "completed"}
         if name in {"request_user_input", "request_user_input_async", "AskUserQuestion"}:
             input_callback = getattr(runtime, "input_callback", None)
             questions = arguments.get("questions")
@@ -2540,6 +2607,34 @@ class AtlasKernel:
                 return {"content": "This run has no interactive user-input channel.", "is_error": True}
             if not isinstance(questions, list) or not questions:
                 return {"content": "questions must contain at least one question.", "is_error": True}
+            if len(questions) > 3:
+                return {"content": "questions must contain no more than three questions.", "is_error": True}
+            if len(questions) > 1:
+                normalized: list[dict[str, Any]] = []
+                for index, question_data in enumerate(questions, start=1):
+                    if not isinstance(question_data, dict) or not str(question_data.get("question") or "").strip():
+                        return {"content": f"Question {index} must include question text.", "is_error": True}
+                    normalized.append({
+                        "id": str(question_data.get("id") or f"question-{index}"),
+                        "header": str(question_data.get("header") or "").strip(),
+                        "question": str(question_data["question"]).strip(),
+                        "multi_select": bool(question_data.get("multi_select", question_data.get("multiSelect", False))),
+                        "options": question_data.get("options", []),
+                    })
+                raw_answers = input_callback(
+                    f"{call_id or 'input'}:batch", normalized[0]["question"], None,
+                    {"questions": normalized},
+                )
+                if hasattr(raw_answers, "__await__"):
+                    raw_answers = await raw_answers
+                try:
+                    answers = json.loads(raw_answers)
+                except (TypeError, json.JSONDecodeError):
+                    return {"content": "The user's answers could not be parsed.", "is_error": True}
+                if not isinstance(answers, dict):
+                    return {"content": "The user's answers must be an object.", "is_error": True}
+                return {"content": json.dumps(answers, ensure_ascii=False),
+                        "data": {"answers": answers}, "outcome": "completed"}
             answers: dict[str, Any] = {}
             for index, question_data in enumerate(questions, start=1):
                 if not isinstance(question_data, dict):

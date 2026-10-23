@@ -4,6 +4,8 @@ import type { ModelInfo } from '@atlas/backend-adapter';
 import { fuzzyScore } from '../services/fuzzy';
 import { matchSlashCommands, registerSlashCommands, type SlashCommand } from '../services/slashCommands';
 import { cn } from '../ui/cn';
+import { ContextUsageControl } from './TokenUsage';
+import type { UsageSummary } from './runInsights';
 import { Dialog } from '../ui/Dialog';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '../ui/Menu';
 import { Tip } from '../ui/Tooltip';
@@ -150,6 +152,8 @@ interface ComposerProps {
   onEnhancePrompt?: (text: string) => Promise<string>;
   onAttachDrawing?: (dataUrl: string) => boolean;
   contextKey?: string;
+  contextUsage?: UsageSummary['context'];
+  contextFiles?: string[];
 }
 
 export default function Composer(props: ComposerProps) {
@@ -533,6 +537,8 @@ export default function Composer(props: ComposerProps) {
           toolsFade.left && toolsFade.right ? '[mask-image:linear-gradient(90deg,transparent,#000_20px,#000_calc(100%-20px),transparent)]'
             : toolsFade.right ? '[mask-image:linear-gradient(90deg,#000_calc(100%-24px),transparent)]'
             : toolsFade.left ? '[mask-image:linear-gradient(90deg,transparent,#000_24px)]' : '')}>{props.tools}</div>}
+
+      {props.contextUsage && <ContextUsageControl context={props.contextUsage} files={props.contextFiles} />}
 
       {props.modes && <div role="radiogroup" aria-label="任务类型" className="flex shrink-0 gap-0.5 rounded-[10px] bg-sunken p-[3px] shadow-[inset_0_0_0_1px_var(--line)]">
         {props.modes.options.map(({ id, label, icon: Icon }) => {

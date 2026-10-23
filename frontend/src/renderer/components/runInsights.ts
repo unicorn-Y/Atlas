@@ -77,6 +77,7 @@ const num = (value: unknown) => typeof value === 'number' && Number.isFinite(val
 const CONTEXT_LABEL: Record<string, string> = {
   system_prompt: '系统提示', tool_definitions: '工具定义', rules: '规则文件', skills: '技能',
   mcp: 'MCP 工具', subagent_definitions: '子 Agent', memory: '记忆', conversation: '对话内容',
+  tool_results: '工具结果', files: '文件内容',
 };
 
 /** Sums every run.usage row of a run. Rows re-emitted with the same request_id replace the earlier one. */

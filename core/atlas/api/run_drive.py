@@ -2410,6 +2410,14 @@ async def _execute_run(
             # request counts and null the aggregated totals).
             return
         row = dict(raw_usage)
+        # Provider usage reports the actual prompt token count. Pair it with
+        # Atlas's capability metadata so the UI can show truthful window use.
+        # Do not invent a limit when the model catalog has no capability data.
+        if not row.get("context_limit") and model_mgr is not None:
+            usage_model = str(row.get("model") or model_id or run.model or "")
+            context_limit = model_mgr.context_window_for_model(usage_model)
+            if context_limit:
+                row["context_limit"] = context_limit
         request_id = str(row.get("request_id") or "")
         duplicate = bool(request_id and request_id in usage_positions)
         if duplicate:

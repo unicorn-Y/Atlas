@@ -7,7 +7,7 @@ import {
 import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/backend-adapter';
 import type { BackendStartupProgress } from '../shared/ipc';
-import { latestTodos } from './components/runInsights';
+import { latestTodos, usageSummary } from './components/runInsights';
 import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
 import { resolveMessageSkillReferences } from './components/skillMentions';
 const MessageThread = lazy(() => import('./components/MessageThread'));
@@ -258,6 +258,11 @@ export default function App() {
   const threadRef = useRef<HTMLDivElement>(null);
 
   const activeConversation = store.conversations.find((item) => item.id === store.activeConversationId);
+  useEffect(() => {
+    if (defaultWorkspace || store.conversationsLoading) return;
+    const recentWorkspace = store.conversations.find((item) => typeof item.workspace === 'string' && item.workspace.trim())?.workspace;
+    if (recentWorkspace) { setPref('default-workspace', recentWorkspace); setDefaultWorkspace(recentWorkspace); }
+  }, [defaultWorkspace, store.conversations, store.conversationsLoading]);
   const activeRun = store.runs.find((run) => run.id === store.activeRunId);
   const activeArtifacts = store.artifacts.filter((artifact) => artifact.runId === store.activeRunId);
   const activeEvents = activeRun?.events ?? [];
@@ -673,6 +678,8 @@ export default function App() {
     const conversationId = useAtlasStore.getState().activeConversationId;
     if (conversationId) store.setWorkspace(conversationId, picked);
     else store.setDraftWorkspace(picked);
+    setPref('default-workspace', picked);
+    setDefaultWorkspace(picked);
     setToast(`工作目录：${picked}`);
   };
   const toggleSpeechInput = async () => {
@@ -735,8 +742,7 @@ export default function App() {
   }, []);
   useEffect(() => window.atlasDesktop?.onFloatingComposerSubmit?.((text) => {
     go('chat');
-    setInput(text);
-    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="消息内容"]')?.focus());
+    void useAtlasStore.getState().sendMessage(text);
   }), [go]);
   // C6R: /review「打开文件」请求 → 切到文件面板;FilesPanel 自己消费请求并定位行。
   useEffect(() => { if (storeData.fileOpenRequest) showInspectorTab('files'); }, [storeData.fileOpenRequest]);
@@ -751,6 +757,16 @@ export default function App() {
     go('chat');
     void store.openConversation(conversation);
   };
+  const conversationWindowId = useMemo(() => new URLSearchParams(window.location.search).get('conversationId'), []);
+  const conversationWindowOpened = useRef(false);
+  useEffect(() => {
+    if (!conversationWindowId || conversationWindowOpened.current || !store.connected || store.conversationsLoading) return;
+    const target = store.conversations.find((item) => item.id === conversationWindowId);
+    if (!target) { conversationWindowOpened.current = true; setToast('找不到要打开的对话'); return; }
+    conversationWindowOpened.current = true;
+    go('chat');
+    void store.openConversation(target);
+  }, [conversationWindowId, store.connected, store.conversations, store.conversationsLoading]);
   const draft = (text: string) => {
     go('chat');
     if (store.activeConversationId) skipDraftRestoreRef.current = true;
@@ -892,6 +908,23 @@ export default function App() {
     ...(activeRun && runDone && store.runPrompts[activeRun.id] ? [{ id: 'retry', label: '/retry', hint: '把上一条要求重新执行一遍', run: () => store.retryRun(activeRun.id) }] : []),
     { id: 'plan', label: '/plan', hint: store.nextRunMode === 'plan' ? '取消：下一条直接执行' : '下一条先出计划，你批准后再动手', run: () => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan') },
     { id: 'folder', label: '/folder', hint: '选择这个对话的工作目录', run: () => void chooseWorkspace() },
+    { id: 'pwd', label: '/pwd', hint: '显示当前对话的工作目录', run: () => {
+      const path = activeConversation
+        ? (typeof activeConversation.workspace === 'string' ? activeConversation.workspace : '')
+        : store.draftWorkspace !== null ? store.draftWorkspace : defaultWorkspace;
+      setToast(path || '当前没有设置工作目录');
+    } },
+    { id: 'cd', label: '/cd', hint: '切换工作目录；可写完整路径，--none 清除工作目录', takesArgument: true, run: (value: string) => {
+      const path = value.trim();
+      if (!path) { void chooseWorkspace(); return; }
+      const id = useAtlasStore.getState().activeConversationId;
+      if (path === '--none') {
+        if (id) store.setWorkspace(id, null); else store.setDraftWorkspace('');
+        setToast('已清除当前对话的工作目录；绝对路径搜索仍可用'); return;
+      }
+      if (id) store.setWorkspace(id, path); else store.setDraftWorkspace(path);
+      setPref('default-workspace', path); setDefaultWorkspace(path); setToast(`工作目录：${path}`);
+    } },
     { id: 'init', label: '/init', hint: '扫描工作区，生成或更新 AGENTS.md', run: () => { if (typeof activeConversation?.workspace !== 'string' || !activeConversation.workspace) { setToast('请先选择工作目录'); return; } void store.runInit(); } },
       { id: 'ide', label: '/ide', hint: '用系统默认程序打开当前工作目录；实际 IDE 关联由系统决定', run: () => {
         if (typeof activeConversation?.workspace !== 'string' || !activeConversation.workspace) { setToast('请先选择本机工作目录'); return; }
@@ -967,7 +1000,9 @@ export default function App() {
       return [{ id: `m-${hit.id}`, group: '消息内容', label: excerpt || conversation.title, hint: conversation.title, run: () => openConversation(conversation) }];
     });
   }, [store.apiBaseUrl, store.connected]);
-  const workspacePath = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : store.draftWorkspace ?? '';
+  const workspacePath = activeConversation
+    ? (typeof activeConversation.workspace === 'string' ? activeConversation.workspace : '')
+    : store.draftWorkspace !== null ? store.draftWorkspace : defaultWorkspace ?? '';
   const remoteHost = /^ssh:\/\/([^/]+)\//.exec(workspacePath)?.[1] ?? '';
   const workspaceName = workspacePath
     ? `${remoteHost ? `${remoteHost}:` : ''}${workspacePath.split(/[\\/]/).filter(Boolean).pop() ?? workspacePath}` : '';
@@ -1098,6 +1133,20 @@ export default function App() {
     onLongPaste: (text: string) => { addDocuments([new File([text], `粘贴的文本-${new Date().toLocaleTimeString().replace(/:/g, '')}.txt`, { type: 'text/plain' })]); setToast(`粘贴内容有 ${text.length} 个字，已转成附件`); },
     models: store.models, model: store.model, onSelectModel: (id: string) => void store.selectModel(id), onManageModels: () => setSheet('models'),
     status: composerStatus, autoFocus: true, commands: slashCommands,
+    contextUsage: usageSummary(activeEvents)?.context,
+    contextFiles: [...new Set([
+      ...(activeRun ? store.runPrompts[activeRun.id]?.refs?.files ?? [] : []),
+      ...(activeRun ? store.runPrompts[activeRun.id]?.files.map((file) => file.name) ?? [] : []),
+      ...activeEvents.flatMap((event) => {
+        if (event.type !== 'tool.started' && event.type !== 'tool.completed') return [];
+        const data = event.data as Record<string, unknown>;
+        const name = String(data.name ?? '').toLowerCase();
+        if (!/(read|file|grep|glob|search)/.test(name)) return [];
+        const args = (data.arguments ?? data.input) as Record<string, unknown> | undefined;
+        const path = args?.path ?? args?.file_path ?? args?.file ?? args?.directory;
+        return typeof path === 'string' && path.trim() ? [path] : [];
+      }),
+    ])],
     onCyclePermission: activeConversation ? cyclePermission : undefined,
   };
   const errorNote = store.error && <div role="alert" className="anim-fade mt-3 flex items-start justify-between gap-3 rounded-xl bg-danger-soft px-4 py-2.5 text-[13px] text-danger">
@@ -1284,7 +1333,7 @@ export default function App() {
         waiting={waitingConversations} onSetUnread={store.setConversationUnread}
         onSetWorkspace={(id, workspace) => store.setWorkspace(id, workspace)}
         onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}
-        onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} onOpenBeside={setBesideId} />
+        onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} onOpenBeside={setBesideId} onOpenInWindow={(id) => window.atlasDesktop?.openConversationWindow?.(id)} />
 
       <main className="sheet relative my-1.5 mr-1.5 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px]">
         <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
