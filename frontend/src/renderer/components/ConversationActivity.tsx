@@ -57,7 +57,9 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
       <Button size="sm" variant="ghost" onClick={() => setTab('artifacts')}>查看</Button>
     </div>;
     case 'approval': return <Approval key={item.id} event={item.event} store={store} />;
-    case 'question': return <Question key={item.id} event={item.event} store={store} />;
+    case 'question': return item.event.data.proposal === true
+      ? <SessionProposal key={item.id} event={item.event} store={store} />
+      : <Question key={item.id} event={item.event} store={store} />;
     case 'plan': return <Plan key={item.id} event={item.event} store={store} />;
     case 'trust': return <Trust key={item.id} event={item.event} store={store} />;
     case 'foreground': {
@@ -394,44 +396,122 @@ function Approval({ event, store }: { event: AgentEvent; store: ReturnType<typeo
 
 type Store = ReturnType<typeof useAtlasStore.getState>;
 
-/** The Agent stopped to ask something; the run waits until this is answered or stopped. */
-function Question({ event, store }: { event: AgentEvent; store: Store }) {
-  const [text, setText] = useState('');
-  const [selected, setSelected] = useState<string[]>([]);
+function SessionProposal({ event, store }: { event: AgentEvent; store: Store }) {
   const eventId = String(event.data.event_id ?? '');
-  const question = String(event.data.question ?? '');
-  const header = String(event.data.header ?? '');
-  const multiple = event.data.multi_select === true || event.data.multiSelect === true;
-  const options = Array.isArray(event.data.options) ? event.data.options.map((option) =>
-    typeof option === 'string' ? { label: option, description: '' }
-      : { label: String((option as { label?: unknown })?.label ?? ''),
-          description: String((option as { description?: unknown })?.description ?? '') },
-  ).filter((option) => option.label) : [];
-  const answer = store.answers[eventId];
   const run = store.getRun(event.runId);
-  const open = answer === undefined && (!run || !['completed', 'failed', 'cancelled'].includes(run.status));
-  const send = (value: string) => { if (value.trim()) store.answerInput(event.runId, eventId, value.trim()); };
+  const answer = store.answers[eventId];
+  const [starting, setStarting] = useState(false);
+  const title = String(event.data.title ?? '后台会话');
+  const description = String(event.data.description ?? event.data.question ?? '');
+  const task = String(event.data.task ?? '');
+  const parentId = run?.conversationId ?? store.activeConversationId;
+  const childId = answer?.startsWith('started:') ? answer.slice('started:'.length) : '';
+  const childRun = childId ? [...store.runs].reverse().find((item) => item.conversationId === childId) : undefined;
+  const canDecide = answer === undefined && (!run || !['completed', 'failed', 'cancelled'].includes(run.status));
+  const openChild = () => {
+    if (!childId) return;
+    if (window.atlasDesktop?.openConversationWindow) window.atlasDesktop.openConversationWindow(childId);
+    else {
+      const conversation = store.conversations.find((item) => item.id === childId);
+      if (conversation) void store.openConversation(conversation);
+    }
+  };
   return <div className="my-4 overflow-hidden rounded-xl card-surface">
     <div className="flex gap-3.5 border-l-[3px] border-brand px-4 py-3.5">
       <MessageCircleQuestion size={18} className="mt-0.5 shrink-0 text-brand" />
       <div className="min-w-0 flex-1">
-        {header && <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-brand">{header}</p>}
-        <p className="m-0 text-[14px] font-semibold whitespace-pre-wrap text-heading">{question}</p>
+        <p className="m-0 text-[14px] font-semibold text-heading">建议另开会话：{title}</p>
+        <p className="mt-1 mb-0 text-[13px] text-fg-2">{description}</p>
+        {answer?.startsWith('started:') ? <div className="mt-3 flex items-center gap-2 text-[12.5px] text-fg-2">
+          <span>{childRun && !['completed', 'failed', 'cancelled'].includes(childRun.status) ? '后台会话正在运行' : childRun?.status === 'completed' ? '后台会话已完成' : '后台会话已启动'}</span>
+          <Button size="sm" variant="ghost" onClick={openChild}>打开会话</Button>
+        </div> : answer !== undefined ? <p className="mt-3 mb-0 text-[12.5px] text-fg-3">已忽略这个建议。</p>
+          : canDecide ? <div className="mt-3 flex gap-2">
+            <Button variant="primary" disabled={starting} onClick={() => { void (async () => {
+              setStarting(true);
+              const id = await store.startProposedConversation(title, task, parentId);
+              if (id) store.answerInput(event.runId, eventId, `started:${id}`);
+              setStarting(false);
+            })(); }}>{starting ? '正在启动…' : '开始'}</Button>
+            <Button variant="ghost" onClick={() => store.answerInput(event.runId, eventId, 'ignored')}>忽略</Button>
+          </div> : <p className="mt-3 mb-0 text-[12.5px] text-fg-3">任务已经结束，这个建议没有执行。</p>}
+      </div>
+    </div>
+  </div>;
+}
+
+/** The Agent stopped to ask something; the run waits until this is answered or stopped. */
+function Question({ event, store }: { event: AgentEvent; store: Store }) {
+  const [texts, setTexts] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<Record<string, string[]>>({});
+  const eventId = String(event.data.event_id ?? '');
+  const questions = (Array.isArray(event.data.questions) ? event.data.questions : [event.data]).flatMap((raw, index) => {
+    if (!raw || typeof raw !== 'object') return [];
+    const item = raw as Record<string, unknown>;
+    const question = String(item.question ?? '').trim();
+    if (!question) return [];
+    const options = Array.isArray(item.options) ? item.options.map((option) =>
+      typeof option === 'string' ? { label: option, description: '' }
+        : { label: String((option as { label?: unknown })?.label ?? ''), description: String((option as { description?: unknown })?.description ?? '') },
+    ).filter((option) => option.label) : [];
+    return [{ id: String(item.id ?? `question-${index + 1}`), header: String(item.header ?? ''), question,
+      multiple: item.multi_select === true || item.multiSelect === true, options }];
+  });
+  const answer = store.answers[eventId];
+  const run = store.getRun(event.runId);
+  const open = answer === undefined && (!run || !['completed', 'failed', 'cancelled'].includes(run.status));
+  const send = (value: string) => { if (value.trim()) store.answerInput(event.runId, eventId, value.trim()); };
+  const submitAll = () => {
+    const values = Object.fromEntries(questions.map((item) => {
+      const text = (texts[item.id] ?? '').trim();
+      const chosen = selected[item.id] ?? [];
+      return [item.id, text || (item.multiple ? chosen : chosen[0] ?? '')];
+    }));
+    if (questions.length > 1) send(JSON.stringify(values));
+    else {
+      const item = questions[0];
+      if (item) send(JSON.stringify(values[item.id]));
+    }
+  };
+  const allAnswered = questions.length > 0 && questions.every((item) => (texts[item.id] ?? '').trim() || (selected[item.id]?.length ?? 0) > 0);
+  const displayAnswer = (() => {
+    try {
+      const parsed = JSON.parse(answer ?? '');
+      if (Array.isArray(parsed)) return parsed.join('、');
+      if (parsed && typeof parsed === 'object') return Object.entries(parsed).map(([id, value]) => {
+        const item = questions.find((candidate) => candidate.id === id);
+        return `${item?.header || item?.question || id}：${Array.isArray(value) ? value.join('、') : String(value)}`;
+      }).join('；');
+    } catch { /* legacy single-text answer */ }
+    return answer;
+  })();
+  return <div className="my-4 overflow-hidden rounded-xl card-surface">
+    <div className="flex gap-3.5 border-l-[3px] border-brand px-4 py-3.5">
+      <MessageCircleQuestion size={18} className="mt-0.5 shrink-0 text-brand" />
+      <div className="min-w-0 flex-1">
         {answer !== undefined
-          ? <p className="mt-2 mb-0 flex items-center gap-1.5 text-[13px] text-fg-2"><Check size={14} className="text-ok" />你的回答：{(() => { try { const parsed = JSON.parse(answer); return Array.isArray(parsed) ? parsed.join('、') : answer; } catch { return answer; } })()}</p>
+          ? <p className="mt-2 mb-0 flex items-center gap-1.5 text-[13px] text-fg-2"><Check size={14} className="text-ok" />你的回答：{displayAnswer}</p>
           : open ? <>
-            {options.length > 0 && <div className="mt-3 grid gap-2">{options.map((option) => multiple
-              ? <label key={option.label} className="flex cursor-pointer items-start gap-2 rounded-lg bg-sunken p-2.5 text-[13px] text-fg-2">
-                <input type="checkbox" checked={selected.includes(option.label)} onChange={(changeEvent) => setSelected((current) => changeEvent.target.checked ? [...current, option.label] : current.filter((item) => item !== option.label))} />
-                <span><span className="block font-medium text-heading">{option.label}</span>{option.description && <span className="mt-0.5 block text-fg-3">{option.description}</span>}</span>
-              </label>
-              : <Button key={option.label} onClick={() => send(option.label)}><span className="text-left"><span className="block">{option.label}</span>{option.description && <span className="block text-[11px] text-fg-3">{option.description}</span>}</span></Button>)}</div>}
-            <form className="mt-3 flex gap-2" onSubmit={(formEvent) => { formEvent.preventDefault(); send(text); }}>
-              <input value={text} onChange={(changeEvent) => setText(changeEvent.target.value)} placeholder={options.length ? '或者直接写你的回答' : '写下你的回答'} aria-label="回答 Atlas 的问题"
-                className="min-w-0 flex-1 rounded-[9px] bg-sunken px-3 text-[13.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />
-              <Button type="submit" variant="primary" disabled={!text.trim()}>回答</Button>
-            </form>
-            {multiple && <Button className="mt-2" variant="primary" disabled={!selected.length} onClick={() => send(JSON.stringify(selected))}>提交所选项</Button>}
+            {questions.map((item) => <section key={item.id} className="mt-3 rounded-lg bg-sunken p-3">
+              {item.header && <p className="m-0 mb-1 text-[11px] font-semibold uppercase tracking-wide text-brand">{item.header}</p>}
+              <p className="m-0 text-[14px] font-semibold whitespace-pre-wrap text-heading">{item.question}</p>
+              {item.options.length > 0 && <div className="mt-2 grid gap-1.5">{item.options.map((option) => item.multiple
+                ? <label key={option.label} className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 text-[13px] text-fg-2 hover:bg-hover">
+                  <input type="checkbox" checked={(selected[item.id] ?? []).includes(option.label)} onChange={(changeEvent) => setSelected((current) => ({ ...current, [item.id]: changeEvent.target.checked ? [...(current[item.id] ?? []), option.label] : (current[item.id] ?? []).filter((entry) => entry !== option.label) }))} />
+                  <span><span className="block font-medium text-heading">{option.label}</span>{option.description && <span className="mt-0.5 block text-fg-3">{option.description}</span>}</span>
+                </label>
+                : <button type="button" key={option.label} aria-pressed={(selected[item.id] ?? [])[0] === option.label} onClick={() => setSelected((current) => ({ ...current, [item.id]: [option.label] }))}
+                  className={cn('rounded-lg px-2.5 py-2 text-left text-[13px]', (selected[item.id] ?? [])[0] === option.label ? 'bg-brand-soft text-fg' : 'hover:bg-hover text-fg-2')}>
+                  <span className="block font-medium">{option.label}</span>{option.description && <span className="mt-0.5 block text-[11px] text-fg-3">{option.description}</span>}
+                </button>)}</div>}
+              <input value={texts[item.id] ?? ''} onChange={(changeEvent) => setTexts((current) => ({ ...current, [item.id]: changeEvent.target.value }))} placeholder={item.options.length ? '其他（自填）' : '写下你的回答'} aria-label={`回答：${item.question}`}
+                className="mt-2 h-8 w-full rounded-[9px] bg-background px-3 text-[13px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />
+            </section>)}
+            <Button className="mt-3" variant="primary" disabled={!allAnswered} onClick={questions.length > 1 ? submitAll : () => {
+              const item = questions[0]; if (!item) return;
+              const text = (texts[item.id] ?? '').trim(); const chosen = selected[item.id] ?? [];
+              send(text || (item.multiple ? JSON.stringify(chosen) : chosen[0] ?? ''));
+            }}>提交回答</Button>
           </> : <p className="mt-2 mb-0 text-[13px] text-fg-3">任务已经结束，这个问题不再需要回答。</p>}
       </div>
     </div>

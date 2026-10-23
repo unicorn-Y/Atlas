@@ -194,6 +194,11 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
             "permission": {"type": "string"}, "reason": {"type": "string"},
             "scope": {"type": "string"}, "resource": {"type": "string"},
         }, ["permission", "reason"]),
+        _function_schema("propose_background_session", "Suggest starting a separate background conversation for a task. Wait for the user to start or ignore it.", {
+            "title": {"type": "string", "description": "Short title for the proposed conversation."},
+            "description": {"type": "string", "description": "One sentence explaining what it will do."},
+            "task": {"type": "string", "description": "Detailed task prompt for the new conversation."},
+        }, ["title", "description", "task"]),
         _function_schema("request_user_input", "Ask the user one or more structured questions and wait for their answers.", {
             "questions": {"type": "array", "items": {"type": "object",
                 "properties": {
