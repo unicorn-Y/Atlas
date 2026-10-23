@@ -44,6 +44,22 @@ _SKIP_SUBTYPES = {
     "group_join", "group_leave", "thread_broadcast", "reminder_add",
 }
 _MENTION_RE = re.compile(r"<@([A-Z0-9]+)(\|[^>]+)?>")
+_RETRYABLE_SLACK_ERRORS = {
+    "ratelimited", "rate_limited", "internal_error", "service_unavailable",
+    "request_timeout", "temporarily_unavailable",
+}
+
+
+def slack_send_error_retryable(error: str, status_code: int | None = None) -> bool:
+    """Classify a Slack send failure for the channel delivery retry queue.
+
+    Network/server/rate-limit failures are transient; authentication, invalid
+    arguments, missing scopes, and other permanent API errors should be surfaced
+    without replaying the same message.
+    """
+    if status_code == 429 or (status_code is not None and status_code >= 500):
+        return True
+    return str(error or "").strip().lower() in _RETRYABLE_SLACK_ERRORS
 
 
 def _channel_kind(channel_id: str) -> tuple[bool, str]:
@@ -90,7 +106,7 @@ class SlackAdapter(ChannelAdapter):
             import slack_sdk  # noqa: F401
         except ImportError:
             return False
-        return True
+        return slack_sdk is not None
 
     async def start(self) -> None:
         if not self.is_available():
@@ -220,7 +236,7 @@ class SlackAdapter(ChannelAdapter):
         metadata: dict[str, Any] | None = None,
     ) -> SendResult:
         if self._web is None:
-            return SendResult(ok=False, error="not connected")
+            return SendResult(ok=False, error="not connected", retryable=True)
         text, blocks = content, None
         if content.startswith(_BLOCKS_PREFIX):
             text, blocks = self._parse_blocks(content[len(_BLOCKS_PREFIX):])
@@ -244,9 +260,18 @@ class SlackAdapter(ChannelAdapter):
             return SendResult(ok=False, error=str(exc), retryable=True)
         data = getattr(response, "data", None)
         if not isinstance(data, dict):
-            data = {"ok": True}
-        if not data.get("ok", True):
-            return SendResult(ok=False, error=str(data.get("error") or "slack api error"))
+            return SendResult(ok=False, error="Slack returned an invalid send response")
+        if not data.get("ok", False):
+            error = str(data.get("error") or "slack api error")
+            status_code = getattr(response, "status_code", None)
+            try:
+                status_code = int(status_code) if status_code is not None else None
+            except (TypeError, ValueError):
+                status_code = None
+            return SendResult(
+                ok=False, error=error,
+                retryable=slack_send_error_retryable(error, status_code),
+            )
         return SendResult(ok=True, message_id=str(data.get("ts") or ""))
 
     def _parse_blocks(self, raw: str) -> tuple[str, list[dict[str, Any]] | None]:
