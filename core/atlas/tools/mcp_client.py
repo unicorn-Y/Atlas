@@ -25,6 +25,7 @@ from atlas.tools.node_runtime import get_node_runtime_status, resolve_node_runti
 
 log = structlog.get_logger()
 _MAX_PARALLEL_SERVER_REQUESTS = 8
+_MCP_RESOURCE_TIMEOUT_SECONDS = 30.0
 _SENSITIVE_ARGUMENT_KEYS = frozenset({
     "api_key", "apikey", "access_token", "refresh_token", "authorization",
     "password", "secret", "client_secret", "private_key", "token",
@@ -822,7 +823,10 @@ class MCPClient:
                 from mcp import types
                 params = types.PaginatedRequestParams(cursor=cursor) if cursor else None
                 async with self._request_semaphore(name):
-                    response = await handle.session.list_resources(params=params)
+                    response = await asyncio.wait_for(
+                        handle.session.list_resources(params=params),
+                        timeout=_MCP_RESOURCE_TIMEOUT_SECONDS,
+                    )
                 result[name] = {
                     "instructions": handle.instructions,
                     "nextCursor": getattr(response, "nextCursor", None),
@@ -857,7 +861,10 @@ class MCPClient:
                 from mcp import types
                 params = types.PaginatedRequestParams(cursor=cursor) if cursor else None
                 async with self._request_semaphore(name):
-                    response = await handle.session.list_resource_templates(params=params)
+                    response = await asyncio.wait_for(
+                        handle.session.list_resource_templates(params=params),
+                        timeout=_MCP_RESOURCE_TIMEOUT_SECONDS,
+                    )
                 result[name] = {
                     "nextCursor": getattr(response, "nextCursor", None),
                     "resourceTemplates": [
@@ -883,7 +890,10 @@ class MCPClient:
             return {"is_error": True, "error": f"MCP server is not connected: {server_name}"}
         try:
             async with self._request_semaphore(server_name):
-                response = await handle.session.read_resource(uri)
+                response = await asyncio.wait_for(
+                    handle.session.read_resource(uri),
+                    timeout=_MCP_RESOURCE_TIMEOUT_SECONDS,
+                )
             contents = []
             from atlas.engine_core.tools.tool_output_limits import get_max_bytes
 
