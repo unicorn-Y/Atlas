@@ -74,6 +74,7 @@ def started_call_ids(messages: Iterable[dict[str, Any]], log_root: str | Path) -
 
 def normalize_tool_results(
     messages: Iterable[dict[str, Any]], *, require_complete: bool = True,
+    drop_orphan_results: bool = False,
 ) -> list[dict[str, Any]]:
     """Build a provider view, keeping results next to their owning call group.
 
@@ -100,9 +101,13 @@ def normalize_tool_results(
             call_id = _message_call_id(message)
             owner = owners.get(call_id)
             if owner is None:
+                if drop_orphan_results:
+                    continue
                 raise ToolHistoryError("Invalid tool history: orphan tool result")
             identity = (owner, call_id)
             if identity in results:
+                if drop_orphan_results:
+                    continue
                 raise ToolHistoryError("Invalid tool history: duplicate tool result")
             message["role"] = "tool"
             message["tool_call_id"] = call_id
@@ -141,7 +146,39 @@ def repair_unpaired_tool_calls(
     Absence of a dispatch record is not proof a tool never ran: a crash can lose
     the receipt. Unknown outcomes must be inspected before any decision to retry.
     """
-    repaired = normalize_tool_results(messages, require_complete=False)
+    # A corrupt result row is not allowed to poison the entire conversation.
+    # Remove only results that cannot be safely attached to a call (or that
+    # repeat an already accepted result), while preserving every valid call
+    # and result.  These rows are excluded from the provider projection; the
+    # durable transcript remains available for diagnosis.
+    source = copy.deepcopy(list(messages))
+    pending_calls: set[str] = set()
+    repaired_source: list[dict[str, Any]] = []
+    receipts: list[dict[str, str]] = []
+    for message in source:
+        if not isinstance(message, dict):
+            continue
+        if message.get("role") == "assistant":
+            calls = _calls(message)
+            ids = [_call_id(call) for call in calls]
+            if calls and (not all(ids) or len(set(ids)) != len(ids)):
+                raise ToolHistoryError("Invalid tool history: missing or duplicate tool call ID")
+            pending_calls.update(ids)
+            repaired_source.append(message)
+            continue
+        if message.get("role") in {"tool", "tool_result"}:
+            call_id = _message_call_id(message)
+            if not call_id or call_id not in pending_calls:
+                receipts.append({
+                    "tool_call_id": call_id,
+                    "name": str(message.get("tool_name") or message.get("name") or "unknown"),
+                    "state": "orphan_result_dropped",
+                    "content": "Dropped an orphan or duplicate tool result from the model history.",
+                })
+                continue
+            pending_calls.remove(call_id)
+        repaired_source.append(message)
+    repaired = normalize_tool_results(repaired_source, require_complete=False)
     started = started_ids or set()
     pending: dict[str, tuple[str, int]] = {}
     for index, message in enumerate(repaired):
@@ -153,7 +190,6 @@ def repair_unpaired_tool_calls(
             call_id = _call_id(call)
             if call_id:
                 pending[call_id] = (_call_name(call), index)
-    receipts: list[dict[str, str]] = []
     for call_id, (name, _index) in pending.items():
         outcome = "unknown"
         detail = (
