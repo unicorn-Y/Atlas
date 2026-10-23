@@ -163,8 +163,8 @@ async def _command_and_environment(root: Path) -> None:
     async def dispatch(_name: str, args: dict[str, Any]) -> dict[str, Any]:
         return await runtime.call_tool("local_process", args, run_id="w2-live")
 
-    old_key = os.environ.get("W2_LIVE_API_KEY")
-    os.environ["W2_LIVE_API_KEY"] = "sentinel-never-print"
+    old_key = os.environ.get("OPENAI_API_KEY"); old_brave = os.environ.get("BRAVE_API_KEY")
+    os.environ["OPENAI_API_KEY"] = "sentinel-never-print"; os.environ["BRAVE_API_KEY"] = "brave-sentinel"
     try:
         with tempfile.TemporaryDirectory(prefix="atlas-w2-live-", dir=root) as directory:
             manager = ExecManager(dispatch, output_dir=directory, run_id="w2-live",
@@ -188,7 +188,7 @@ async def _command_and_environment(root: Path) -> None:
             await manager.shutdown()
 
         env_result = await runtime.call_tool("local_process", {
-            "action": "start", "command": "python -c \"import os; print('present=' + str('W2_LIVE_API_KEY' in os.environ).lower())\"",
+            "action": "start", "command": "python -c \"import os; print('present=' + str('OPENAI_API_KEY' in os.environ).lower() + ' brave=' + str('BRAVE_API_KEY' in os.environ).lower())\"",
             "cwd": str(root), "shell": "auto", "detached": False,
         }, run_id="w2-live")
         if env_result.get("is_error"):
@@ -201,13 +201,19 @@ async def _command_and_environment(root: Path) -> None:
         text = str((output.get("data") or {}).get("text") or "")
         if "present=false" not in text:
             raise RuntimeError("subprocess inherited the model API key")
+        if "brave=true" not in text:
+            raise RuntimeError("subprocess lost a non-model API key (BRAVE_API_KEY) it should inherit")
         await runtime.shutdown()
-        print("child environment: inherited API key absent", flush=True)
+        print("child environment: model API key absent, BRAVE_API_KEY kept", flush=True)
     finally:
         if old_key is None:
-            os.environ.pop("W2_LIVE_API_KEY", None)
+            os.environ.pop("OPENAI_API_KEY", None)
         else:
-            os.environ["W2_LIVE_API_KEY"] = old_key
+            os.environ["OPENAI_API_KEY"] = old_key
+        if old_brave is None:
+            os.environ.pop("BRAVE_API_KEY", None)
+        else:
+            os.environ["BRAVE_API_KEY"] = old_brave
 
 
 async def _file_edits(root: Path) -> None:
