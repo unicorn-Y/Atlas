@@ -58,6 +58,16 @@ _TASK_COMPLETION_GUIDANCE = (
     "report failures and partial results honestly."
 )
 
+_FILE_SEARCH_GUIDANCE = (
+    "## File search and reading\n"
+    "Prefer Atlas's dedicated file search, glob, and file reading tools over shell "
+    "commands for locating or inspecting source. Search narrowly by path, symbol, or "
+    "distinctive text, and use a bounded result set (default to at most 100 matches). "
+    "For large files, read only the relevant line range or page and continue in "
+    "additional ranges as needed; do not load a whole large file when a focused "
+    "excerpt answers the question."
+)
+
 
 def _breaker_prompt() -> str:
     """Workspace breaker prompt (engine/breaker.md) as the run's identity block.
@@ -610,6 +620,7 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
         )
     ]
     initial_messages.append(SystemMessage(content=_TASK_COMPLETION_GUIDANCE))
+    initial_messages.append(SystemMessage(content=_FILE_SEARCH_GUIDANCE))
     # Diagnostic only: ATLAS_DUMP_SYSTEM=<path> writes the assembled system messages
     # so the real prompt can be inspected. Unset by default and never affects a request.
     _dump_path = os.environ.get("ATLAS_DUMP_SYSTEM", "").strip()
