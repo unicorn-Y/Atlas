@@ -94,7 +94,7 @@ export type TimelineItem =
   | { kind: 'review'; id: string; scope: string; scopeLabel: string; workspace: string; findings: ReviewFinding[] }
   | { kind: 'artifact'; id: string; name: string; summary: string }
   | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
-  | { kind: 'failed'; id: string; detail: string };
+  | { kind: 'failed'; id: string; detail: string; service?: string; reason?: string; retryAfterSeconds?: number; status?: number };
 
 const TARGET_KEYS = ['path', 'file_path', 'filepath', 'file', 'command', 'cmd', 'query', 'pattern', 'url', 'q', 'target', 'name'];
 
@@ -719,7 +719,14 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         break;
       case 'run.failed':
         dropPreparing();
-        items.push({ kind: 'failed', id: event.id, detail: text(data.detail ?? data.code) || '未知错误' });
+        items.push({
+          kind: 'failed', id: event.id,
+          detail: text(data.detail ?? data.code) || '未知错误',
+          service: typeof data.service === 'string' ? data.service : undefined,
+          reason: typeof data.reason === 'string' ? data.reason : undefined,
+          retryAfterSeconds: typeof data.retry_after_seconds === 'number' ? data.retry_after_seconds : undefined,
+          status: typeof data.status === 'number' ? data.status : undefined,
+        });
         break;
       default:
         break;

@@ -91,7 +91,14 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     </div>;
     case 'done': return <DoneLine key={item.id} item={item} events={events} store={store} setTab={setTab} />;
     case 'failed': return <div key={item.id} role="alert" className="my-4 rounded-xl bg-danger-soft px-4 py-3 text-[13px] text-danger">
-      没能完成：{item.detail}
+      {item.reason && <p className="m-0 mb-1 font-medium">{item.service ? `服务 ${item.service}：` : ''}{item.reason}{item.status ? `（HTTP ${item.status}）` : ''}</p>}
+      <p className="m-0">没能完成：{item.detail}</p>
+      {item.reason && <p className="m-0 mt-2 text-[12px] text-fg-2">
+        {item.retryAfterSeconds != null
+          ? `约 ${Math.max(0, Math.ceil(item.retryAfterSeconds))} 秒后可以重试。`
+          : '服务没有提供可用的重试时间，请稍后重试。'}
+        {' '}发送补充说明可以续接这项任务。
+      </p>}
     </div>;
     default: return null;
   }

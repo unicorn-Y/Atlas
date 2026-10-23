@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Awaitable, Callable
+from urllib.parse import urlsplit
 
 from atlas.kernel.repair import normalize_tool_results
 
@@ -63,11 +64,14 @@ class _ToolDelta:
 
 class ModelCallError(RuntimeError):
     def __init__(self, detail: str, *, category: str, status: int | None = None,
-                 retryable: bool = False) -> None:
+                 retryable: bool = False, service: str = "",
+                 retry_after_seconds: float | None = None) -> None:
         super().__init__(detail)
         self.category = category
         self.status = status
         self.retryable = retryable
+        self.service = service
+        self.retry_after_seconds = retry_after_seconds
 
 
 _RATE_LIMIT_RETRY_RE = re.compile(
@@ -1038,6 +1042,9 @@ async def complete_stream(
                     category=category, status=status, retryable=retryable,
                 )
                 last_error = error
+                host = urlsplit(str(route.base_url or "")).hostname or ""
+                error.service = host or route.provider
+                error.retry_after_seconds = _retry_after(exc)
                 if error.retryable:
                     record_failure(route.model_id or candidate, seconds=60.0)
                 retry_after = _retry_after(exc)

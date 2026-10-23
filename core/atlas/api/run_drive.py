@@ -3078,10 +3078,14 @@ async def _execute_run(
             elif etype == "error":
                 run.status = "failed"
                 category = event.get("category", "runtime")
-                await emit("run.failed", {
+                failure_event = {
                     "category": category,
                     "detail": event.get("detail", "Unknown error"),
-                })
+                }
+                for key in ("service", "reason", "retry_after_seconds", "status"):
+                    if event.get(key) is not None:
+                        failure_event[key] = event[key]
+                await emit("run.failed", failure_event)
                 return
 
         # Run completed successfully
