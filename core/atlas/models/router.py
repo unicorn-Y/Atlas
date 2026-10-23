@@ -51,6 +51,7 @@ class RouteSpec:
     # transport consumer sends ``wire_model`` (the bare/native id) instead.
     wire_model: str = ""
     model_id: str = ""
+    capabilities: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
     # Atlas-only transport configuration; proxy credentials never appear in repr/logs.
     network_proxy_url: str | None = field(default=None, repr=False, compare=False)
     network_ca_bundle_path: str | None = field(default=None, repr=False, compare=False)
@@ -292,6 +293,8 @@ class ModelRouter:
             provider=provider, api_mode=api_mode, model=model, base_url=base_url,
             key=key, credential_pool=pool, purpose=purpose, fallback_reason=fallback_reason,
             wire_model=wire_model or model, model_id=str(model_data.get("id") or ""),
+            capabilities=dict(model_data.get("capabilities") or {})
+            if isinstance(model_data.get("capabilities"), dict) else {},
             network_proxy_url=network.proxy_url,
             network_ca_bundle_path=network.ca_bundle_path,
         )
@@ -527,6 +530,8 @@ def _anthropic_payload(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
             }.get(effort, 4096)
             payload["thinking"] = {"type": "enabled", "budget_tokens": min(budget, max(1, max_tokens - 1))}
     tools = kwargs.get("tools")
+    if route.capabilities.get("supports_tools") is False:
+        tools = None
     if tools:
         payload["tools"] = []
         for tool in tools:
@@ -616,6 +621,9 @@ def _openai_payload(route: RouteSpec, messages: list[dict[str, Any]], kwargs: di
     for key in ("max_tokens", "max_completion_tokens", "temperature", "top_p", "stop", "stream_options", "tools", "tool_choice", "parallel_tool_calls"):
         if kwargs.get(key) is not None:
             payload[key] = kwargs[key]
+    if route.capabilities.get("supports_tools") is False:
+        for key in ("tools", "tool_choice", "parallel_tool_calls"):
+            payload.pop(key, None)
     payload.update(_reasoning_wire(route, kwargs.get("reasoning_config")))
     extra = kwargs.get("extra_body")
     if isinstance(extra, dict):

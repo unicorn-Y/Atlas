@@ -25,7 +25,9 @@ from atlas.kernel.prompt import build_prompt
 from atlas.kernel.repair import ToolHistoryError, repair_unpaired_tool_calls, started_call_ids
 from atlas.kernel.state import KernelEvent, RunPhase, RunState, RunTerminalStatus
 from atlas.kernel.stuck import StuckDetector
-from atlas.kernel.tools import READ_ONLY_TOOLS, ToolExecutionResult, ToolScheduler
+from atlas.kernel.tools import (
+    READ_ONLY_TOOLS, ToolExecutionResult, ToolScheduler, validate_tool_arguments,
+)
 
 log = logging.getLogger(__name__)
 
@@ -620,6 +622,7 @@ class AtlasKernel:
             pretool_blocked: set[str] = set()
             tool_hook_context: dict[str, list[str]] = {}
             bad_tool_args: dict[str, str] = {}
+            offered_schemas: dict[str, dict[str, Any]] = {}
             # The tool node already reports each call's real output on event_queue;
             # those ids get no second, output-less tool_result from the batch end.
             tool_started_at: dict[str, float] = {}
@@ -631,6 +634,11 @@ class AtlasKernel:
                     return {"content": bad_tool_args.pop(call_id), "is_error": True,
                             "outcome": "failed"}
                 tool_args = copy.deepcopy(args)
+                offered_schema = offered_schemas.get(name)
+                if offered_schema is not None:
+                    schema_error = validate_tool_arguments(name, tool_args, offered_schema)
+                    if schema_error:
+                        return {"content": schema_error, "is_error": True, "outcome": "failed"}
                 if (getattr(proxy_runtime, "dynamic_plan_mode", False)
                         and name not in {
                             "update_plan", "EnterPlanMode", "ExitPlanMode",
@@ -1256,6 +1264,13 @@ class AtlasKernel:
                     messages = [*messages[:insert_at], {"role": "system", "content": deferred_note},
                                 *messages[insert_at:]]
                 tools = plan.filter_tools(available_tools, read_only_names=("build_repo_map",))
+                offered_schemas.clear()
+                offered_schemas.update({
+                    str((item.get("function") or item).get("name")): dict(
+                        (item.get("function") or item).get("parameters") or {}
+                    ) for item in tools
+                    if str((item.get("function") or item).get("name") or "")
+                })
                 tool_json = json.dumps(messages, ensure_ascii=False, default=str)
                 record("model_request", model=turn_model, input_chars=len(tool_json),
                        input_tokens=estimate_tokens(messages), attempt=turn_index + 1)

@@ -38,6 +38,80 @@ READ_ONLY_TOOLS = frozenset({
 EDIT_TOOL_NAMES = frozenset({"apply_patch", "edit", "write", "notebook_edit"})
 
 
+def validate_tool_arguments(name: str, arguments: dict[str, Any], schema: dict[str, Any]) -> str | None:
+    """Validate model arguments against the advertised JSON Schema subset."""
+    if not isinstance(arguments, dict):
+        return f"Tool {name} expects an object of arguments. Please retry with a JSON object."
+    properties = schema.get("properties") if isinstance(schema, dict) else None
+    if not isinstance(properties, dict):
+        return None
+    required = schema.get("required", [])
+    missing = [key for key in required if key not in arguments]
+    if missing:
+        return f"Tool {name} is missing required argument(s): {', '.join(map(str, missing))}. Please retry."
+    extra = [key for key in arguments if key not in properties]
+    if extra and schema.get("additionalProperties") is False:
+        return f"Tool {name} does not accept argument(s): {', '.join(extra)}. Please retry without them."
+
+    def check(value: Any, spec: Any, path: str) -> str | None:
+        if not isinstance(spec, dict):
+            return None
+        kind = spec.get("type")
+        kinds = kind if isinstance(kind, list) else [kind]
+        checks = {
+            "object": lambda v: isinstance(v, dict),
+            "array": lambda v: isinstance(v, list),
+            "string": lambda v: isinstance(v, str),
+            "boolean": lambda v: isinstance(v, bool),
+            "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+            "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
+            "null": lambda v: v is None,
+        }
+        if kind and not any(k is None or k not in checks or checks[k](value) for k in kinds):
+            return f"{path} must be {' or '.join(map(str, kinds))}."
+        if "enum" in spec and value not in spec["enum"]:
+            return f"{path} must be one of {', '.join(map(str, spec['enum']))}."
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if isinstance(spec.get("minimum"), (int, float)) and value < spec["minimum"]:
+                return f"{path} must be at least {spec['minimum']}."
+            if isinstance(spec.get("maximum"), (int, float)) and value > spec["maximum"]:
+                return f"{path} must be at most {spec['maximum']}."
+        if isinstance(value, (str, list)):
+            size_key = "minLength" if isinstance(value, str) else "minItems"
+            max_key = "maxLength" if isinstance(value, str) else "maxItems"
+            if isinstance(spec.get(size_key), int) and len(value) < spec[size_key]:
+                return f"{path} must contain at least {spec[size_key]} {'characters' if isinstance(value, str) else 'items'}."
+            if isinstance(spec.get(max_key), int) and len(value) > spec[max_key]:
+                return f"{path} must contain at most {spec[max_key]} {'characters' if isinstance(value, str) else 'items'}."
+            if isinstance(value, str) and isinstance(spec.get("pattern"), str):
+                if re.search(spec["pattern"], value) is None:
+                    return f"{path} must match the required pattern."
+        if isinstance(value, dict) and isinstance(spec.get("properties"), dict):
+            req = [key for key in spec.get("required", []) if key not in value]
+            if req:
+                return f"{path} is missing required field(s): {', '.join(req)}."
+            for key, child in value.items():
+                if key in spec["properties"]:
+                    error = check(child, spec["properties"][key], f"{path}.{key}")
+                    if error:
+                        return error
+                elif spec.get("additionalProperties") is False:
+                    return f"{path} does not accept field {key}."
+        if isinstance(value, list) and isinstance(spec.get("items"), dict):
+            for index, child in enumerate(value):
+                error = check(child, spec["items"], f"{path}[{index}]")
+                if error:
+                    return error
+        return None
+
+    for key, value in arguments.items():
+        if key in properties:
+            error = check(value, properties[key], f"{name}.{key}")
+            if error:
+                return f"Invalid arguments for {name}: {error} Please correct the arguments and retry."
+    return None
+
+
 def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
     """Return the extra function schemas owned by AtlasKernel itself."""
     import copy
