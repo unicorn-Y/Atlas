@@ -699,8 +699,6 @@ def _openai_payload(route: RouteSpec, messages: list[dict[str, Any]], kwargs: di
     extra = kwargs.get("extra_body")
     if isinstance(extra, dict):
         payload.update(extra)
-    if isinstance(kwargs.get("extra_headers"), dict):
-        payload["_atlas_headers"] = kwargs["extra_headers"]
     return payload
 
 
@@ -718,9 +716,16 @@ def _request_details(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
         if route.key:
             headers["authorization"] = f"Bearer {route.key}"
         payload = _openai_payload(route, messages, kwargs)
-        headers.update(payload.pop("_atlas_headers", {}))
     else:
         raise NotImplementedError(f"Atlas direct transport does not support API mode {route.api_mode!r}")
+    extra_headers = kwargs.get("extra_headers")
+    if isinstance(extra_headers, dict):
+        reserved = {"authorization", "x-api-key", "anthropic-version", "content-type"}
+        for key, value in extra_headers.items():
+            header = str(key).strip()
+            if not header or header.lower() in reserved or value is None:
+                continue
+            headers[header] = str(value)
     return url, headers, payload
 
 
