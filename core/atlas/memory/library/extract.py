@@ -13,9 +13,12 @@ user's message, and secrets are never written. Added here: values the user asked
 from __future__ import annotations
 
 import json
+import hashlib
 import re
+import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 
 from .store import (
     SRC_EDITED, SRC_SAID, Entry, MemoryStore, Page, new_id, page_for_key, safe_name, tombstone_hashes,
@@ -312,11 +315,29 @@ def _locate(store: MemoryStore, key: str) -> tuple[Page, int] | None:
 
 
 def apply(store: MemoryStore, proposals: list[Proposal], *, user_text: str, session: str,
-          mode: str, now: datetime, ref: str = "") -> ApplyResult:
+          mode: str, now: datetime, ref: str = "", workspace: str = "") -> ApplyResult:
     """Apply proposals to the Markdown pages. Caller holds ``store.lock`` and commits."""
     result = ApplyResult()
     stamp = now.isoformat(timespec="seconds")
     today = now.date().isoformat()
+    project_root = ""
+    if workspace and not workspace.startswith("ssh://"):
+        try:
+            project_root = subprocess.run(
+                ["git", "-C", workspace, "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True, timeout=3, check=True,
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            try:
+                project_root = str(Path(workspace).resolve())
+            except OSError:
+                pass
+    project_scope = hashlib.sha256(project_root.casefold().encode("utf-8")).hexdigest()[:16] if project_root else ""
+
+    def target_for(key: str, temporary: bool) -> str:
+        if project_scope and key.startswith(("project.", "user.project.")):
+            return f"项目/{project_scope}.md"
+        return page_for_key(key, temporary=temporary)
     for p in proposals:
         if p.op in {"set", "alias"} and p.stance != "said":
             result.rejected += 1
@@ -361,6 +382,8 @@ def apply(store: MemoryStore, proposals: list[Proposal], *, user_text: str, sess
             text=text, id=new_id(), key=p.key, value=p.value, src=SRC_SAID, at=stamp,
             until=p.forget_after, quote=p.quote[:300], session=session, mode=mode, ref=ref,
             importance=p.importance, trigger=p.triggers,
+            scope=(f"project:{project_scope}" if project_scope and
+                   p.key.startswith(("project.", "user.project.")) else "global"),
         )
         if found is not None:
             page, i = found
@@ -370,7 +393,7 @@ def apply(store: MemoryStore, proposals: list[Proposal], *, user_text: str, sess
             old.ended, old.why = today, f"改成：{text}"
             page.current.pop(i)
             page.history.insert(0, old)
-            target = page_for_key(p.key, temporary=bool(p.forget_after))
+            target = target_for(p.key, temporary=bool(p.forget_after))
             if target == page.path:
                 page.current.append(entry)
                 store.write(page)
@@ -381,7 +404,7 @@ def apply(store: MemoryStore, proposals: list[Proposal], *, user_text: str, sess
                 store.write(dest)
             result.changed.append(text)
         else:
-            target = page_for_key(p.key, temporary=bool(p.forget_after))
+            target = target_for(p.key, temporary=bool(p.forget_after))
             page = store.read(target)
             if page.kind in ("person", "thing") and not page.current and not page.history:
                 page.title = safe_name(p.key.split(".")[1])

@@ -62,6 +62,7 @@ class Entry:
     quote: str = ""
     session: str = ""
     mode: str = ""
+    scope: str = "global"
     ended: str = ""
     why: str = ""
     importance: int = 5
@@ -283,10 +284,11 @@ class MemoryStore:
 
     def pages(self) -> list[str]:
         found = [name for name in RESIDENT_PAGES if (self.root / name).exists()]
-        for sub in (PEOPLE, THINGS, EPISODES):
+        for sub in (PEOPLE, THINGS, EPISODES, "项目"):
             folder = self.root / sub
             if folder.exists():
-                found.extend(f"{sub}/{p.name}" for p in sorted(folder.glob("*.md")))
+                found.extend(p.relative_to(self.root).as_posix()
+                             for p in sorted(folder.rglob("*.md")))
         return found
 
     def diary_pages(self) -> list[str]:

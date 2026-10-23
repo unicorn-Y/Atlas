@@ -339,14 +339,37 @@ class MemoryLibrary:
         except (TypeError, ValueError):
             steps = []
         if len(user_text) >= 2:
-            if model_mgr is None:
+            explicit = self._explicit_memory_proposal(user_text)
+            if explicit is not None:
+                proposals = [explicit]
+            elif model_mgr is None:
                 raise ModelUnavailable("no memory writer model available")
-            proposals, episode = await self._extract_full(user_text, assistant_text, model_mgr, now,
-                                                          steps, bool(row.get("verified", 0)))
+            else:
+                proposals, episode = await self._extract_full(user_text, assistant_text, model_mgr, now,
+                                                              steps, bool(row.get("verified", 0)))
         ref = f"{row['session']}@{row.get('turn_started') or now.isoformat(timespec='seconds')}"
         return await asyncio.to_thread(self._apply, proposals, user_text,
                                        row["session"], row["mode"], now, episode=episode,
-                                       steps=steps, verified=bool(row.get("verified", 0)), ref=ref)
+                                       steps=steps, verified=bool(row.get("verified", 0)), ref=ref,
+                                       workspace=str(row.get("workspace") or ""))
+
+    @staticmethod
+    def _explicit_memory_proposal(user_text: str) -> extract.Proposal | None:
+        """Only direct user-authored remember requests enter the deterministic path."""
+        match = re.match(r"^\s*(?:请)?(?:记住|记下来|记下|以后记得)\s*[：:，,]?\s*(.{2,500})\s*$",
+                         user_text, re.S)
+        if not match:
+            return None
+        fact = " ".join(match.group(1).split()).strip("\"'“”‘’ ")
+        if len(fact) < 2 or extract.contains_secret(fact):
+            return None
+        category = ("preference" if re.search(r"喜欢|偏好|习惯|不喜欢|prefer|like", fact, re.I)
+                    else "project" if re.search(r"项目|仓库|代码库|project|repository", fact, re.I)
+                    else "note")
+        import hashlib
+        digest = hashlib.sha1(fact.encode("utf-8")).hexdigest()[:10]
+        return extract.Proposal(op="set", key=f"user.{category}.{digest}", value=fact,
+                                text=fact, quote=match.group(1).strip(), stance="said")
 
     def _write_diary(self, now: datetime, user_text: str, assistant_text: str,
                      session: str, mode: str, ref: str = "") -> None:
@@ -411,11 +434,12 @@ class MemoryLibrary:
     def _apply(self, proposals: list[extract.Proposal], user_text: str, session: str,
                mode: str, now: datetime, *, episode: extract.Episode | None = None,
                steps: list[dict] | None = None, verified: bool = False,
-               ref: str = "") -> extract.ApplyResult:
+               ref: str = "", workspace: str = "") -> extract.ApplyResult:
         with self.store.lock:
             ended = extract.expire(self.store, now)
             result = extract.apply(self.store, proposals, user_text=user_text,
-                                   session=session, mode=mode, now=now, ref=ref)
+                                   session=session, mode=mode, now=now, ref=ref,
+                                   workspace=workspace)
             episode_changed = extract.apply_episode(self.store, episode, steps or [], verified,
                                                     session, now, mode, ref)
             result.ended.extend(ended)
