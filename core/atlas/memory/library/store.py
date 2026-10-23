@@ -284,7 +284,7 @@ class MemoryStore:
 
     def pages(self) -> list[str]:
         found = [name for name in RESIDENT_PAGES if (self.root / name).exists()]
-        for sub in (PEOPLE, THINGS, EPISODES, "项目"):
+        for sub in (PEOPLE, THINGS, EPISODES, "项目", "代理"):
             folder = self.root / sub
             if folder.exists():
                 found.extend(p.relative_to(self.root).as_posix()

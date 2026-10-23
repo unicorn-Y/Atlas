@@ -207,6 +207,7 @@ class RunRequest:
     reasoning_effort: str | None = None
     worker: bool = False
     stable_system_prefix: str | None = None
+    memory_scope_id: str = ""
 
 
 @dataclass
@@ -313,6 +314,7 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
         workspace=request.workspace, workspace_trusted=request.workspace_trusted,
         agent_role=request.agent_role, agent_depth=request.agent_depth,
         agent_type=request.agent_type, mode=request.mode,
+        memory_scope_id=request.memory_scope_id,
         moa_enabled=moa_enabled,
         tool_allow=request.tool_allow, tool_deny=request.tool_deny or [],
         read_only=request.read_only,

@@ -536,9 +536,43 @@ class MemoryLibrary:
         if rel in RESIDENT_PAGES:
             return rel
         folder, _, name = rel.partition("/")
-        if folder in (PEOPLE, THINGS) and name.endswith(".md") and "/" not in name:
+        if folder in (PEOPLE, THINGS, "代理") and name.endswith(".md") and "/" not in name:
             return f"{folder}/{safe_name(name[:-3])}.md"
         raise ValueError("unknown memory page")
+
+    def agent_memory_read(self, agent_id: str, query: str = "", limit: int = 8) -> dict[str, Any]:
+        """Read global resident memory and the caller's own visible scope."""
+        self.ready()
+        digest = __import__("hashlib").sha256(str(agent_id or "main").encode()).hexdigest()[:16]
+        own = self.store.read(f"代理/{digest}.md")
+        own_rows = [entry.text for entry in own.current]
+        child_scopes = {}
+        if not agent_id:
+            for path in sorted((self.store.root / "代理").glob("*.md")):
+                child_scopes[path.stem] = [entry.text for entry in self.store.read(
+                    path.relative_to(self.store.root).as_posix()).current]
+        hits = self.search(query, limit=max(1, min(20, limit))) if query.strip() else []
+        return {
+            "global": self._resident_block(), "agent_scope": own_rows,
+            "child_scopes": child_scopes, "matches": hits, "agent_scope_path": own.path,
+        }
+
+    def agent_memory_write(self, agent_id: str, text: str) -> dict[str, Any]:
+        """Write a user-visible, source-labelled fact into the agent's Markdown page."""
+        text = " ".join(str(text or "").split())[:1000]
+        if not text or extract.contains_secret(text):
+            raise ValueError("内容为空或含有密码、密钥")
+        digest = __import__("hashlib").sha256(str(agent_id or "main").encode()).hexdigest()[:16]
+        rel = f"代理/{digest}.md"
+        with self.store.lock:
+            page = self.store.read(rel)
+            entry = Entry(text=text, id=new_id(), src="子代理观察", scope=f"agent:{digest}",
+                          at=_now(self.config).isoformat(timespec="seconds"))
+            page.current.append(entry)
+            self.store.write(page)
+            self.store.commit(f"子代理记忆：{text}"[:400])
+        self.index.sync()
+        return {"id": entry.id, "path": rel, "scope": f"agent:{digest}"}
 
     # ---------- views for the memory page ----------
     def page_view(self, rel: str) -> dict[str, Any]:
