@@ -35,13 +35,22 @@ class ClassifiedError:
 
 
 def classify_api_error(error: Exception) -> ClassifiedError:
-    status = getattr(error, "status_code", None)
+    status = getattr(error, "status_code", None) or getattr(error, "status", None)
+    if status is None:
+        status = getattr(getattr(error, "response", None), "status_code", None)
+    try:
+        status = int(status) if status is not None else None
+    except (TypeError, ValueError):
+        status = None
     body = getattr(error, "body", None)
     text = " ".join((str(error), str(getattr(error, "message", "")), str(body or ""))).lower()
-    if any(value in text for value in ("context length", "context window", "maximum context", "too many tokens")):
-        reason, retryable, fallback, compress = FailoverReason.context_overflow, False, False, True
-    elif status == 402 or any(value in text for value in ("insufficient credits", "billing limit", "quota exhausted")):
+    if status == 402 or any(value in text for value in (
+        "insufficient credits", "insufficient_quota", "billing limit", "billing_not_active",
+        "quota exhausted", "payment required",
+    )):
         reason, retryable, fallback, compress = FailoverReason.billing, False, True, False
+    elif any(value in text for value in ("context length", "context window", "maximum context", "too many tokens")):
+        reason, retryable, fallback, compress = FailoverReason.context_overflow, False, False, True
     elif status == 429:
         reason, retryable, fallback, compress = FailoverReason.rate_limit, True, True, False
     elif status in (502, 503, 504, 529):
