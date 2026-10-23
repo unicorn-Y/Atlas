@@ -43,6 +43,7 @@ from atlas.session_migration_gate import (
 
 _SESSION_SNAPSHOT_KEY = "_atlas_session_snapshot"
 _SESSION_SNAPSHOT_SCHEMA = 1
+_TRANSCRIPT_ROLES = frozenset({"system", "user", "assistant", "tool"})
 
 
 def _open_db(home: str | Path):
@@ -296,6 +297,13 @@ def append_session_message(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     """Append an auxiliary visible message (for example a hook denial) to SessionDB."""
+    role = str(role or "").strip()
+    if role not in _TRANSCRIPT_ROLES:
+        raise ValueError(f"Unsupported transcript role: {role or '(empty)'}")
+    if not str(conversation_id or "").strip():
+        raise ValueError("conversation_id must not be empty")
+    if metadata is not None and not isinstance(metadata, dict):
+        raise ValueError("message metadata must be an object")
     with _open_db(home) as db:
         if db.get_session(conversation_id) is None:
             db.ensure_session(conversation_id, "api_server")
@@ -341,15 +349,23 @@ def append_session_messages(
     """
     if not messages:
         return []
+    if not str(conversation_id or "").strip():
+        raise ValueError("conversation_id must not be empty")
+    for index, source in enumerate(messages):
+        if not isinstance(source, dict):
+            raise ValueError(f"session transcript event {index} must be an object")
+        role = str(source.get("role") or "").strip()
+        if role not in _TRANSCRIPT_ROLES:
+            raise ValueError(f"Unsupported transcript role at event {index}: {role or '(empty)'}")
+        if "content" not in source:
+            raise ValueError(f"session transcript event {index} requires content")
     with _open_db(home) as db:
         if db.get_session(conversation_id) is None:
             db.ensure_session(conversation_id, "api_server")
         rows: list[dict[str, Any]] = []
         for source in messages:
             item = dict(source)
-            role = str(item.pop("role", "unknown"))
-            if "content" not in item:
-                raise ValueError("session transcript event requires content")
+            role = str(item.pop("role", "")).strip()
             item["role"] = role
             item["display_metadata"] = dict(item.pop("display_metadata", {}) or {})
             item["display_metadata"].update(dict(item.pop("metadata", {}) or {}))
