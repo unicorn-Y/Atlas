@@ -457,11 +457,11 @@ function Plan({ event, store }: { event: AgentEvent; store: Store }) {
       {decided !== undefined
         ? <p className="mt-3 mb-0 flex items-center gap-1.5 text-[13px] text-fg-2"><Check size={14} className="text-ok" />{decided === 'approved' ? '已批准，按计划执行' : `已批准，并补充：${decided}`}</p>
         : open ? <>
-          {adding && <textarea autoFocus value={edits} onChange={(changeEvent) => setEdits(changeEvent.target.value)} rows={2} placeholder="执行时还要注意什么" aria-label="补充说明"
+          {adding && <textarea autoFocus value={edits} onChange={(changeEvent) => setEdits(changeEvent.target.value)} rows={3} placeholder="描述要调整、删除或新增的步骤" aria-label="修改计划"
             className="mt-3 block w-full resize-none rounded-[9px] bg-sunken p-2.5 text-[13.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />}
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="primary" onClick={() => store.approvePlan(event.runId, eventId, adding ? edits : '')}>{adding && edits.trim() ? '补充后执行' : '按计划执行'}</Button>
-            {!adding && <Button onClick={() => setAdding(true)}>补充说明</Button>}
+            <Button variant="primary" onClick={() => store.approvePlan(event.runId, eventId, adding ? edits : '')}>{adding && edits.trim() ? '按修改后的计划执行' : '按计划执行'}</Button>
+            {!adding && <Button onClick={() => setAdding(true)}>修改计划</Button>}
             <Button variant="ghost" onClick={() => store.stopTask()}>不执行</Button>
           </div>
         </> : <p className="mt-3 mb-0 text-[13px] text-fg-3">这个计划没有执行。</p>}

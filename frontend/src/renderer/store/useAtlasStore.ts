@@ -1111,6 +1111,9 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   const mode = get().nextRunMode;
   const overrides = get().pendingRunOverrides;
   const run = get().createRun(conversationId, conversation?.title ?? content.slice(0, 80));
+  const interrupted = [...get().runs].reverse().find((candidate) =>
+    candidate.conversationId === conversationId && candidate.status === 'failed',
+  );
   set((current) => ({ runPrompts: { ...current.runPrompts, [run.id]: { content, attachments, files, refs: item.refs, ...(item.agentId ? { agentId: item.agentId } : {}) } }, nextRunMode: 'act', pendingRunOverrides: null }));
   // 流式 delta 按 ~12.5Hz 合并进 store；其余事件先冲出攒着的 delta 再立即透传，顺序不变。
   const buffer = createEventBuffer((events) => { for (const event of events) get().appendEvent(event); });
@@ -1133,6 +1136,7 @@ async function startRun(conversationId: string, item: QueuedMessage) {
     ...(files.length ? { files } : {}), ...(mode === 'plan' ? { mode } : {}), ...(workspace ? { workspace } : {}),
     ...((item.profileId ?? state.profileId) !== 'default' ? { profile_id: item.profileId ?? state.profileId } : {}),
     ...(item.agentId ? { agent_id: item.agentId } : {}),
+    ...(interrupted ? { resume_from: interrupted.id } : {}),
     ...(state.reasoningEffort && supportsEffort ? { reasoning_effort: state.reasoningEffort } : {}),
     ...(worktree && !conversation?.worktree_path ? { worktree } : {}),
     ...(overrides?.tool_allow ? { tool_allow: overrides.tool_allow } : {}),

@@ -1422,10 +1422,12 @@ async def _handle_run_start(
     recovered_plan = None
     prior_run = manager.runs.get(resume_from) if isinstance(resume_from, str) else None
     if resume_from is not None:
-        if not prior_run or prior_run.status != "failed" or not prior_run.plan_state:
-            raise ValueError("resume_from must reference an interrupted run with a saved plan")
+        if not prior_run or prior_run.status != "failed":
+            raise ValueError("resume_from must reference a failed or interrupted run")
+        if data.get("conversation_id") and prior_run.conversation_id != str(data["conversation_id"]):
+            raise ValueError("resume_from must belong to the same conversation")
         recovered_plan = prior_run.plan_state
-        if not content:
+        if not content and recovered_plan:
             content = str(recovered_plan.get("goal", ""))
     conv_id = data.get("conversation_id") or (
         prior_run.conversation_id if prior_run else str(uuid.uuid4())
@@ -2873,7 +2875,7 @@ async def _execute_run(
             approval_callback=approval_callback,
             plan_state=plan_state,
             plan_update_callback=persist_plan,
-            source_run_id=run.run_id,
+            source_run_id=str(resume_from or run.run_id),
             image_attachments=image_attachments,
             active_skill_instructions=active_skill_instructions,
             run_id=run.run_id,
