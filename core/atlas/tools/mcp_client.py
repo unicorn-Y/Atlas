@@ -27,6 +27,7 @@ from atlas.tools.node_runtime import get_node_runtime_status, resolve_node_runti
 log = structlog.get_logger()
 _MAX_PARALLEL_SERVER_REQUESTS = 8
 _MCP_REQUEST_TIMEOUT_SECONDS = 30.0
+_MCP_MAX_CONSECUTIVE_TERMINAL_ERRORS = 3
 _SENSITIVE_ARGUMENT_KEYS = frozenset({
     "api_key", "apikey", "access_token", "refresh_token", "authorization",
     "password", "secret", "client_secret", "private_key", "token",
@@ -74,6 +75,30 @@ def is_expired_remote_mcp_session(error: BaseException, transport: str) -> bool:
         transport in {"sse", "streamable_http", "streamable-http", "http"}
         and getattr(error, "code", None) == -32001
     )
+
+
+def is_terminal_mcp_connection_error(error: BaseException) -> bool:
+    """Recognize transport failures that should count toward reconnect."""
+    terminal_types = {
+        "BrokenResourceError", "ClosedResourceError", "ConnectionClosedError",
+        "ConnectionResetError", "EndOfStream", "IncompleteReadError", "StreamClosedError",
+    }
+    return (
+        isinstance(error, (ConnectionError, OSError, EOFError, asyncio.IncompleteReadError))
+        or type(error).__name__ in terminal_types
+    )
+
+
+def _mcp_handshake_timeout_seconds() -> float:
+    """Read a configurable transport handshake limit (default: 30 seconds)."""
+    raw = get_config().get("tools.mcp.handshake_timeout_seconds", _MCP_REQUEST_TIMEOUT_SECONDS)
+    try:
+        timeout = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("tools.mcp.handshake_timeout_seconds must be a positive number") from exc
+    if not 0 < timeout < float("inf"):
+        raise ValueError("tools.mcp.handshake_timeout_seconds must be a positive finite number")
+    return timeout
 
 
 def _redact_mcp_arguments(value: Any, *, depth: int = 0) -> Any:
@@ -250,6 +275,7 @@ class MCPServerConfig:
     tool_allow: list[str] | None = None
     tool_deny: list[str] = field(default_factory=list)
     blocking_reason: str | None = None
+    consecutive_terminal_errors: int = 0
 
 
 def _parse_server_configs() -> list[MCPServerConfig]:
@@ -682,6 +708,7 @@ class MCPClient:
 
     async def _start_transport_owner(self, handle: MCPServerHandle, transport_cm: Any) -> None:
         """Enter, hold, and exit MCP contexts in one dedicated owner task."""
+        handshake_timeout = _mcp_handshake_timeout_seconds()
         loop = asyncio.get_running_loop()
         ready: asyncio.Future[None] = loop.create_future()
         stop_event = asyncio.Event()
@@ -727,7 +754,7 @@ class MCPClient:
 
         handle._owner_task = asyncio.create_task(own_connection(), name=f"mcp-owner:{handle.name}")
         try:
-            await asyncio.wait_for(asyncio.shield(ready), timeout=_MCP_REQUEST_TIMEOUT_SECONDS)
+            await asyncio.wait_for(asyncio.shield(ready), timeout=handshake_timeout)
         except TimeoutError:
             # A transport may hang before yielding streams. Cancel and join its
             # owner before returning so a late handshake cannot leak a process
@@ -740,7 +767,7 @@ class MCPClient:
             handle._owner_stop = None
             handle.session = None
             raise TimeoutError(
-                f"MCP transport handshake timed out after {_MCP_REQUEST_TIMEOUT_SECONDS:g}s"
+                f"MCP transport handshake timed out after {handshake_timeout:g}s"
             )
 
     async def _refresh_tools(self, server_name: str, handle: MCPServerHandle) -> None:
@@ -874,6 +901,7 @@ class MCPClient:
                 invoke(),
                 timeout=timeout,
             )
+            handle.consecutive_terminal_errors = 0
 
             from atlas.engine_core.tools.tool_output_limits import get_max_bytes
 
@@ -898,6 +926,20 @@ class MCPClient:
         except Exception as e:
             log.error("mcp.call_tool.error", tool=qualified_name,
                       error=str(e))
+            if is_terminal_mcp_connection_error(e):
+                handle.consecutive_terminal_errors += 1
+                if (handle.consecutive_terminal_errors >= _MCP_MAX_CONSECUTIVE_TERMINAL_ERRORS
+                        and handle.transport in {"sse", "streamable_http", "streamable-http", "http"}):
+                    try:
+                        await self._recover_expired_session(tool.server_name, handle)
+                    except Exception as recovery_error:
+                        log.warning(
+                            "mcp.terminal_error_recovery_failed", server=tool.server_name,
+                            error_type=type(recovery_error).__name__,
+                        )
+                    handle.consecutive_terminal_errors = 0
+            else:
+                handle.consecutive_terminal_errors = 0
             if is_expired_remote_mcp_session(e, handle.transport):
                 try:
                     await self._recover_expired_session(tool.server_name, handle)
