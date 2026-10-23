@@ -7,6 +7,7 @@ each providing a set of tools the agent can call.
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 import shutil
 import tempfile
@@ -23,6 +24,78 @@ from atlas.config import get_config
 from atlas.tools.node_runtime import get_node_runtime_status, resolve_node_runtime
 
 log = structlog.get_logger()
+
+
+def normalize_mcp_content(block: Any) -> dict[str, Any]:
+    """Map SDK text/image/resource blocks to Atlas' canonical tool content shape."""
+    if isinstance(block, dict):
+        kind = str(block.get("type") or "")
+        get = block.get
+    else:
+        kind = type(block).__name__.lower()
+        get = lambda key, default=None: getattr(block, key, default)
+    if kind in {"text", "textcontent"} or get("text") is not None:
+        return {"type": "text", "text": str(get("text", ""))}
+    if kind in {"image", "imagecontent"} or get("data") is not None and get("mimeType"):
+        data = get("data", "")
+        if isinstance(data, bytes):
+            data = base64.b64encode(data).decode("ascii")
+        mime = str(get("mimeType", "image/png"))
+        data_url = str(data) if str(data).startswith("data:") else f"data:{mime};base64,{data}"
+        return {"type": "image_url", "image_url": {"url": data_url}}
+    if kind in {"resourcelink", "resource_link"} or get("uri") is not None and get("name") is not None:
+        return {"type": "resource_link", "uri": str(get("uri", "")),
+                "name": str(get("name", "")), "title": str(get("title", "") or "")}
+    if kind in {"resource", "embeddedresource", "embedded_resource"} or get("contents") is not None:
+        contents = get("contents", None)
+        if contents is None:
+            contents = []
+            if get("text") is not None:
+                contents.append({"type": "text", "text": get("text")})
+            if get("blob") is not None:
+                contents.append({"type": "resource", "blob": get("blob"),
+                                 "mimeType": get("mimeType", "")})
+        return {"type": "resource", "uri": str(get("uri", "") or ""),
+                "contents": [normalize_mcp_content(item) for item in contents]}
+    uri = get("uri")
+    if uri is not None:
+        value = {"type": "resource", "uri": str(uri),
+                 "mimeType": str(get("mimeType", "") or "")}
+        if get("text") is not None:
+            value["text"] = str(get("text"))
+        elif get("blob") is not None:
+            value["blob"] = get("blob")
+        return value
+    return {"type": "text", "text": str(block)}
+
+
+def _budget_mcp_content(block: dict[str, Any], remaining: int) -> tuple[dict[str, Any], int]:
+    """Apply one shared character budget recursively to MCP text and binary blocks."""
+    if block.get("type") == "text":
+        text = str(block.get("text") or "")
+        from atlas.tools.output_truncate import truncate_head_tail
+
+        clipped = truncate_head_tail(text, max(1, remaining), label="MCP OUTPUT")
+        return {"type": "text", "text": clipped}, max(0, remaining - len(text))
+    if block.get("type") == "image_url":
+        url = str((block.get("image_url") or {}).get("url") or "")
+        if len(url) > remaining:
+            return {"type": "text", "text": "[MCP image omitted: output budget exceeded]"}, 0
+        return block, max(0, remaining - len(url))
+    if block.get("type") == "resource":
+        if "blob" in block:
+            blob = block.get("blob")
+            size = len(blob) if isinstance(blob, (str, bytes)) else 1
+            if size > remaining:
+                return {"type": "resource", "uri": block.get("uri", ""),
+                        "contents": [{"type": "text", "text": "[MCP resource omitted: output budget exceeded]"}]}, 0
+            return block, max(0, remaining - size)
+        contents = []
+        for child in block.get("contents") or []:
+            normalized, remaining = _budget_mcp_content(child, remaining)
+            contents.append(normalized)
+        return {**block, "contents": contents}, remaining
+    return block, max(0, remaining - len(str(block)))
 
 
 # ---------------------------------------------------------------------------
@@ -483,20 +556,14 @@ class MCPClient:
                 timeout=timeout,
             )
 
-            # Normalize content to dicts
+            from atlas.engine_core.tools.tool_output_limits import get_max_bytes
+
             content_blocks = []
+            remaining = max(1, get_max_bytes())
             for block in result.content:
-                if hasattr(block, "text"):
-                    content_blocks.append({"type": "text", "text": block.text})
-                elif hasattr(block, "data"):
-                    content_blocks.append({
-                        "type": "image",
-                        "data": block.data,
-                        "mimeType": getattr(block, "mimeType", "image/png"),
-                    })
-                else:
-                    content_blocks.append({"type": "text",
-                                           "text": str(block)})
+                normalized = normalize_mcp_content(block)
+                normalized, remaining = _budget_mcp_content(normalized, remaining)
+                content_blocks.append(normalized)
 
             return {
                 "content": content_blocks,

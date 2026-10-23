@@ -1741,16 +1741,17 @@ class AtlasKernel:
                                state=receipt["state"], is_error=is_error,
                                output_ref=receipt.get("output_ref"), output=content)
                         tool_content: Any = content
-                        image_url = (
-                            result.output.get("data", {}).get("_image_data_url")
-                            if isinstance(result.output, dict)
-                            and isinstance(result.output.get("data"), dict) else None
-                        )
-                        if isinstance(image_url, str):
-                            tool_content = [
-                                {"type": "text", "text": content},
-                                {"type": "image_url", "image_url": {"url": image_url}},
-                            ]
+                        images = []
+                        if isinstance(result.output, dict):
+                            image_url = (result.output.get("data", {}).get("_image_data_url")
+                                         if isinstance(result.output.get("data"), dict) else None)
+                            if isinstance(image_url, str):
+                                images.append({"type": "image_url", "image_url": {"url": image_url}})
+                            for block in result.output.get("content") or []:
+                                if isinstance(block, dict) and block.get("type") == "image_url":
+                                    images.append(block)
+                        if images:
+                            tool_content = [{"type": "text", "text": content}, *images]
                         messages.append({"role": "tool", "tool_call_id": result.call_id,
                                          "name": result.name, "content": tool_content})
                         active_call_ids.discard(result.call_id)
@@ -2746,10 +2747,25 @@ def _tool_output_text(output: Any) -> str:
     if isinstance(output, dict):
         content = output.get("content")
         if isinstance(content, list):
-            return "\n".join(
-                str(block.get("text", block)) if isinstance(block, dict) else str(block)
-                for block in content
-            )
+            rendered = []
+            for block in content:
+                if not isinstance(block, dict):
+                    rendered.append(str(block))
+                elif block.get("type") == "text":
+                    rendered.append(str(block.get("text") or ""))
+                elif block.get("type") == "image_url":
+                    rendered.append("[MCP image result]")
+                elif block.get("type") == "resource_link":
+                    rendered.append(f"Resource: {block.get('name') or ''} {block.get('uri') or ''}".strip())
+                elif block.get("type") == "resource":
+                    nested = block.get("contents") or []
+                    nested_text = _tool_output_text({"content": nested}) if nested else ""
+                    rendered.append("\n".join(filter(None, [
+                        f"[MCP resource {block.get('uri') or ''}]".strip(), nested_text,
+                    ])))
+                else:
+                    rendered.append(str(block.get("text") or block))
+            return "\n".join(rendered)
         if isinstance(content, str):
             return content
         if "error" in output:
