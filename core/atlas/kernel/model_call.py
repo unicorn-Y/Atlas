@@ -51,6 +51,7 @@ class ModelCallResult:
     provider: str
     reasoning_content: str = ""
     reasoning_details: list[dict[str, Any]] = field(default_factory=list)
+    finish_reason: str | None = None
 
 
 @dataclass(slots=True)
@@ -256,6 +257,11 @@ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
     generic = classify_api_error(exc)
     status = _status(exc)
     text = _error_text(exc)
+    if any(marker in text for marker in (
+        "max_output_tokens", "max output tokens", "output token limit",
+        "maximum output tokens", "output_tokens_exceeded",
+    )):
+        return "max_output_tokens", False, _status(exc)
     name = type(exc).__name__.lower()
     if status == 413 or any(marker in text for marker in (
         "context_length_exceeded", "context_window_exceeded", "context_length_error",
@@ -461,6 +467,22 @@ def _backoff(retry_index: int) -> float:
     """Codex's shared 200 ms exponential backoff with up to 10% jitter."""
     base = 0.2 * (2 ** max(0, retry_index))
     return base * random.uniform(0.9, 1.1)
+
+
+def _task_retry_budget() -> tuple[int, float]:
+    """Bound retries across every fallback candidate in one model task."""
+    def read(name: str, default: float, minimum: float, maximum: float) -> float:
+        try:
+            value = float(os.environ.get(name, default))
+            if math.isfinite(value):
+                return min(maximum, max(minimum, value))
+        except (TypeError, ValueError, OverflowError):
+            pass
+        return default
+
+    attempts = int(read("ATLAS_MODEL_RETRY_BUDGET_ATTEMPTS", 20, 0, 100))
+    wait_seconds = read("ATLAS_MODEL_RETRY_BUDGET_SECONDS", 300, 0, 3600)
+    return attempts, wait_seconds
 
 
 def _overloaded_backoff(retry_index: int, base_delay_s: float) -> float:
@@ -714,7 +736,7 @@ async def complete_stream(
     usage_budget: Any = None,
 ) -> ModelCallResult:
     """Stream one model response through Atlas ModelRouter and HTTPX transport."""
-    from atlas.agent.fallback_cooldown import cool, is_cooling
+    from atlas.agent.fallback_cooldown import is_cooling, record_failure, record_success
     from atlas.models.tokens import estimate_tokens
 
     router = agent._model_router
@@ -742,6 +764,9 @@ async def complete_stream(
     overall_started = time.monotonic()
     last_route: Any = None
     last_usage: dict[str, Any] = {}
+    retry_budget_attempts, retry_budget_wait_s = _task_retry_budget()
+    task_retry_count = 0
+    task_retry_wait_s = 0.0
 
     for candidate_index, candidate in enumerate(candidates):
         if candidate_index and is_cooling(candidate):
@@ -949,6 +974,7 @@ async def complete_stream(
                         "Model stream ended before a completion marker",
                         category="connection", retryable=True,
                     )
+                record_success(route.model_id or candidate)
                 last_usage = attempt_usage or last_usage
                 duration_ms = int((time.monotonic() - overall_started) * 1000)
                 result = ModelCallResult(
@@ -957,6 +983,7 @@ async def complete_stream(
                                 finish_reason=finish_reason, endpoint=_endpoint(route.base_url)),
                     last_usage, total_attempts, duration_ms, route.model_id or candidate,
                     route.provider, combined_reasoning, attempt_reasoning_details,
+                    finish_reason,
                 )
                 usage_details = last_usage.get("input_tokens_details") or last_usage.get("prompt_tokens_details") or {}
                 cached_tokens = next((last_usage.get(key) for key in (
@@ -1008,8 +1035,8 @@ async def complete_stream(
                     category=category, status=status, retryable=retryable,
                 )
                 last_error = error
-                if status in {429, 529}:
-                    cool(route.model_id or candidate, 60.0)
+                if error.retryable:
+                    record_failure(route.model_id or candidate, seconds=60.0)
                 retry_after = _retry_after(exc)
                 retry_directive = (_header(exc, "x-should-retry") or "").lower()
                 server_retry_override = retry_directive in {"true", "1", "yes"}
@@ -1058,6 +1085,8 @@ async def complete_stream(
                     will_retry = True
                 if server_no_retry:
                     will_retry = False
+                if task_retry_count >= retry_budget_attempts:
+                    will_retry = False
                 if watchdog_capacity_retry and retry_watchdog_max_wait_s is not None:
                     remaining_wait = retry_watchdog_max_wait_s - watchdog_capacity_wait_s
                     if remaining_wait <= 0:
@@ -1076,6 +1105,12 @@ async def complete_stream(
                 if watchdog_capacity_retry and will_retry and retry_watchdog_max_wait_s is not None:
                     remaining_wait = max(0.0, retry_watchdog_max_wait_s - watchdog_capacity_wait_s)
                     delay = min(delay or 0.0, remaining_wait)
+                if will_retry:
+                    remaining_task_wait = retry_budget_wait_s - task_retry_wait_s
+                    if remaining_task_wait <= 0:
+                        will_retry = False
+                    else:
+                        delay = min(delay if delay is not None else 0.0, remaining_task_wait)
                 retry_kind = (
                     "auth_rotation" if auth_rotation else
                     "persistent" if persistent_retry and not retry_529 and not connection_retry else
@@ -1117,6 +1152,8 @@ async def complete_stream(
                     })
                     content_filter_guidance_added = True
                 assert delay is not None
+                task_retry_count += 1
+                task_retry_wait_s += delay
                 if cancel_event is not None:
                     try:
                         await asyncio.wait_for(cancel_event.wait(), timeout=delay)

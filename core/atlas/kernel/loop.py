@@ -1266,6 +1266,45 @@ class AtlasKernel:
                     await record_model_attempt(event, purpose="conversation")
 
                 overflow_retry_used = False
+                output_recovery_count = 0
+
+                async def recover_output_limit(partial: str, reason: str) -> bool:
+                    nonlocal output_recovery_count
+                    if output_recovery_count >= 3:
+                        return False
+                    if partial:
+                        assistant_partial = {"role": "assistant", "content": partial}
+                        messages.append(assistant_partial)
+                        await persist_async("assistant", partial, {
+                            "kernel_run_id": run_id, "finish_reason": "max_output_tokens",
+                            "partial": True,
+                        })
+                    recovery_message = (
+                        "Output token limit hit. Resume directly from the cutoff, with no apology "
+                        "or recap. Continue the unfinished response and break remaining work into "
+                        "smaller pieces."
+                    )
+                    messages.append({"role": "user", "content": recovery_message})
+                    await persist_async("user", recovery_message, {
+                        "kernel_run_id": run_id, "meta": True,
+                        "recovery": "max_output_tokens", "attempt": output_recovery_count + 1,
+                    })
+                    output_recovery_count += 1
+                    record("output_limit_recovery", reason=reason,
+                           attempt=output_recovery_count, partial_chars=len(partial))
+                    yield_notice = emit("run.recovery.notice", data={
+                        "message": "Output limit reached; continuing from the cutoff.",
+                        "attempt": output_recovery_count,
+                    })
+                    await event_queue.put(yield_notice)
+                    partial_response_text.clear()
+                    state.streamed_text = ""
+                    state.streamed_reasoning = ""
+                    state.streamed_refusal = ""
+                    state.streamed_tool_calls.clear()
+                    transition(RunPhase.AWAITING_MODEL_RESPONSE)
+                    return True
+
                 model_interrupted_by_steer = False
                 response: ModelCallResult | None = None
                 while True:
@@ -1387,6 +1426,11 @@ class AtlasKernel:
                         overflow_retry_used = False
                         continue
                     if stream_error is not None:
+                        if stream_error.category == "max_output_tokens":
+                            partial = "".join(partial_response_text)
+                            if await recover_output_limit(partial, "provider_error"):
+                                continue
+                            raise stream_error
                         if (stream_error.category != "context_window_exceeded"
                                 or overflow_retry_used):
                             raise stream_error
@@ -1413,6 +1457,11 @@ class AtlasKernel:
                         continue
                     if response is None:
                         raise ModelCallError("Model stream ended without a response", category="stream")
+                    if (response.finish_reason in {"length", "max_tokens"}
+                            and not response.tool_calls):
+                        if await recover_output_limit(response.text, "finish_reason"):
+                            continue
+                        record("output_limit_recovery_exhausted", chars=len(response.text))
                     if model_switch_pending:
                         await self._run_hook(request, "PostModelSwitch", {
                             "model": turn_model, "previous_model": previous_turn_model,
