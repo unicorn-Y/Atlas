@@ -81,7 +81,7 @@ export default function ToolExecutionCard({ step, live, children }: {
       {step.subtaskId && children && <div className="mt-2 pl-[23px]">{children}</div>}
       {hasDetails && <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}
         className="mt-2 ml-[21px] inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] text-fg-3 hover:bg-hover hover:text-fg">
-        <ChevronRight size={12} className={cn('transition-transform', open && 'rotate-90')} />{open ? '收起原始详情' : '查看原始详情'}
+        <ChevronRight size={12} className={cn('transition-transform', open && 'rotate-90')} />{open ? '收起原始详情' : step.output && step.output.length > 500 ? '展开长输出与参数' : '查看原始详情'}
       </button>}
       {open && hasDetails && <div className="anim-fade mt-2 ml-[23px] grid gap-2">
         {step.input && <Detail label="输入参数" value={step.input} />}
