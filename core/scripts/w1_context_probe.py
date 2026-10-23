@@ -12,17 +12,42 @@ from atlas.kernel.context import ContextManager
 def probe_thresholds() -> None:
     manager = ContextManager({"engine": {"max_output_tokens": 20_000}})
     normal = manager.thresholds(1_048_576)
-    assert normal.effective_window == 1_028_576, normal
-    assert normal.auto_compact == 1_015_576, normal
-    assert normal.warning == 995_576, normal
+    assert normal.effective_window == 180_000, normal
+    assert normal.auto_compact == 167_000, normal
+    assert normal.warning == 150_300, normal
     assert normal.blocking == 1_025_576, normal
-    assert manager.thresholds(200_000).auto_compact != normal.auto_compact
+    small_window = manager.thresholds(128_000)
+    assert small_window.effective_window == 108_000, small_window
+    assert small_window.auto_compact == 95_000, small_window
+    assert small_window.warning == 85_500, small_window
+    assert small_window.blocking == 105_000, small_window
+    assert manager.thresholds(200_000).auto_compact == normal.auto_compact
+
+    configured_cap = ContextManager({"engine": {"max_output_tokens": 20_000,
+                                                  "auto_compact_window_tokens": 300_000}})
+    configured = configured_cap.thresholds(1_048_576)
+    assert configured.effective_window == 280_000, configured
+    assert configured.auto_compact == 267_000, configured
+    assert configured.blocking == normal.blocking, configured
+
+    old_cap = os.environ.get("ATLAS_AUTO_COMPACT_WINDOW")
+    try:
+        os.environ["ATLAS_AUTO_COMPACT_WINDOW"] = "100000"
+        overridden_cap = configured_cap.thresholds(1_048_576)
+        assert overridden_cap.effective_window == 80_000, overridden_cap
+        assert overridden_cap.auto_compact == 67_000, overridden_cap
+        assert overridden_cap.blocking == normal.blocking, overridden_cap
+    finally:
+        if old_cap is None:
+            os.environ.pop("ATLAS_AUTO_COMPACT_WINDOW", None)
+        else:
+            os.environ["ATLAS_AUTO_COMPACT_WINDOW"] = old_cap
 
     old = os.environ.get("ATLAS_AUTO_COMPACT_PCT")
     try:
         os.environ["ATLAS_AUTO_COMPACT_PCT"] = "1"
         overridden = manager.thresholds(1_048_576)
-        assert overridden.auto_compact == 10_285, overridden
+        assert overridden.auto_compact == 1_800, overridden
         assert 0 < overridden.warning < overridden.auto_compact, overridden
         assert overridden.auto_compact < normal.auto_compact
     finally:

@@ -23,6 +23,7 @@ BUFFER_TOKENS = 13_000
 WARNING_BUFFER_TOKENS = 20_000
 BLOCKING_BUFFER_TOKENS = 3_000
 AUTO_COMPACT_BUFFER_TOKENS = 13_000
+AUTO_COMPACT_WINDOW_TOKENS = 200_000
 MAX_TOOL_RESULT_TOKENS = 100_000
 BYTES_PER_TOKEN = 4
 MAX_CONSECUTIVE_FAILURES = 3
@@ -148,17 +149,26 @@ class ContextManager:
         return max(0, min(int(window * ratio), cap, window - reserve - buffer))
 
     def thresholds(self, model_window: int = DEFAULT_CONTEXT_WINDOW) -> ContextThresholds:
-        """Return model-relative auto-compact, warning, and blocking watermarks.
+        """Return auto-compact/warning watermarks and the model-relative blocker.
 
         ``ATLAS_AUTO_COMPACT_PCT`` is a temporary operator override intended for
         smoke runs. Like Claude Code's percentage override, it can only move the
-        automatic trigger earlier; the 13k reserve is never exceeded.
+        automatic trigger earlier; the 13k reserve is never exceeded. The auto
+        compact window cap affects only auto-compact and warning, never blocking.
         """
         window = max(1, int(model_window))
         reserve = min(window, max(0, int(self.config.get("max_output_tokens", OUTPUT_RESERVE_TOKENS))),
                       OUTPUT_RESERVE_TOKENS)
-        effective = max(0, window - reserve)
-        auto = max(0, effective - int(self.config.get("auto_compact_buffer_tokens", AUTO_COMPACT_BUFFER_TOKENS)))
+        configured_cap = self.config.get("auto_compact_window_tokens", AUTO_COMPACT_WINDOW_TOKENS)
+        env_cap = os.environ.get("ATLAS_AUTO_COMPACT_WINDOW")
+        try:
+            cap = int(env_cap) if env_cap is not None else int(configured_cap)
+        except (TypeError, ValueError):
+            cap = AUTO_COMPACT_WINDOW_TOKENS
+        if cap <= 0:
+            cap = AUTO_COMPACT_WINDOW_TOKENS
+        compact_effective = max(0, min(window, cap) - reserve)
+        auto = max(0, compact_effective - int(self.config.get("auto_compact_buffer_tokens", AUTO_COMPACT_BUFFER_TOKENS)))
         env_percent = os.environ.get("ATLAS_AUTO_COMPACT_PCT")
         if env_percent:
             try:
@@ -166,14 +176,14 @@ class ContextManager:
             except ValueError:
                 percentage = 0
             if math.isfinite(percentage) and 0 < percentage <= 100:
-                auto = min(auto, math.floor(effective * percentage / 100))
+                auto = min(auto, math.floor(compact_effective * percentage / 100))
         warning_gap = min(
             int(self.config.get("context_warning_buffer_tokens", WARNING_BUFFER_TOKENS)),
             max(1, math.floor(auto * 0.1)),
         )
         warning = max(0, auto - warning_gap)
-        blocking = max(0, effective - int(self.config.get("context_blocking_buffer_tokens", BLOCKING_BUFFER_TOKENS)))
-        return ContextThresholds(effective, auto, warning, blocking)
+        blocking = max(0, window - reserve - int(self.config.get("context_blocking_buffer_tokens", BLOCKING_BUFFER_TOKENS)))
+        return ContextThresholds(compact_effective, auto, warning, blocking)
 
     def warning_state(self, token_count: int, model_window: int = DEFAULT_CONTEXT_WINDOW) -> dict[str, Any]:
         """Expose the three request watermarks to the loop/UI without model constants."""
