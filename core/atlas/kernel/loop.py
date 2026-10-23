@@ -1412,36 +1412,17 @@ class AtlasKernel:
                         usage_budget=usage_budget,
                     ))
                     queue_get = asyncio.create_task(event_queue.get())
-                    steer_get = (
-                        asyncio.create_task(request.steer_queue.get())
-                        if request.steer_queue is not None else None
-                    )
                     stream_error: ModelCallError | None = None
                     try:
                         while (not model_task.done() or not event_queue.empty()
-                               or (steer_get is not None and steer_get.done())):
+                               ):
                             waiters: set[asyncio.Task[Any]] = {model_task, queue_get}
-                            if steer_get is not None:
-                                waiters.add(steer_get)
                             if cancel_waiter is not None:
                                 waiters.add(cancel_waiter)
                             done, _ = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
                             if cancel_waiter is not None and cancel_waiter in done:
                                 model_cancel_event.set()
                                 cancel_waiter = None
-                            if steer_get is not None and steer_get in done:
-                                steer_payload = steer_get.result()
-                                steer = await accept_steer(steer_payload)
-                                if steer is not None:
-                                    await event_queue.put(steer["event"])
-                                    if steer["immediate"] and not steer["send_now"]:
-                                        model_interrupted_by_steer = True
-                                        if not model_task.done():
-                                            model_cancel_event.set()
-                                steer_get = (
-                                    asyncio.create_task(request.steer_queue.get())
-                                    if request.steer_queue is not None else None
-                                )
                             if queue_get in done:
                                 queued_event = queue_get.result()
                                 if (isinstance(queued_event, dict)
@@ -1462,7 +1443,7 @@ class AtlasKernel:
                             await asyncio.gather(model_task, return_exceptions=True)
                             raise
                     finally:
-                        pending_tasks = [queue_get, steer_get, cancel_waiter]
+                        pending_tasks = [queue_get, cancel_waiter]
                         for task in pending_tasks:
                             if task is not None and not task.done():
                                 task.cancel()
@@ -1538,6 +1519,21 @@ class AtlasKernel:
                         if await recover_output_limit(response.text, "finish_reason"):
                             continue
                         record("output_limit_recovery_exhausted", chars=len(response.text))
+                    if not response.tool_calls and request.steer_queue and not request.steer_queue.empty():
+                        # Let the current model response finish; then persist it and
+                        # inject queued user input before starting the next request.
+                        await persist_async("assistant", response.text, {
+                            "kernel_run_id": run_id, "steered_response": True,
+                            "reasoning_content": response.reasoning_content or None,
+                        })
+                        messages.append({"role": "assistant", "content": response.text})
+                        state.streamed_text = ""
+                        state.streamed_reasoning = ""
+                        state.streamed_refusal = ""
+                        for steer in await apply_pending_steers():
+                            yield steer["event"]
+                        transition(RunPhase.AWAITING_MODEL_RESPONSE)
+                        continue
                     if model_switch_pending:
                         await self._run_hook(request, "PostModelSwitch", {
                             "model": turn_model, "previous_model": previous_turn_model,
@@ -1828,6 +1824,11 @@ class AtlasKernel:
                 transition(RunPhase.AGGREGATING_RESULTS)
                 for result_event in await consume_tool_results(results):
                     yield result_event
+                # Inputs received during a tool batch stay queued until all tool
+                # results are recorded. Inject them at this boundary so they are
+                # present in the next model request without interrupting tools.
+                for steer in await apply_pending_steers():
+                    yield steer["event"]
                 tool_batch_records = [{
                         "tool_use_id": result.call_id,
                         "tool_name": result.name,
