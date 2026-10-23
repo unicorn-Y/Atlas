@@ -12,7 +12,10 @@ from pathlib import Path
 from atlas.engine.session_sync import (
     append_session_messages,
     append_user_message_before_model,
+    begin_session_compaction,
+    compact_session_messages,
     read_session_model_messages,
+    restore_session_snapshot,
 )
 
 
@@ -45,6 +48,33 @@ def main() -> None:
         assert restored[2]["tool_call_id"] == "call-probe-1"
         assert restored[2]["content"] == "tool result persisted"
         print("W1-6 ordered transcript: PASS (user, tool call, result, assistant restored)")
+
+        compact_session_id = "w1-snapshot-probe"
+        append_session_messages(home, compact_session_id, [
+            {"role": "user", "content": "Earlier task: calculate the release checksum."},
+            {"role": "assistant", "content": "I will preserve the task and its result."},
+            {"role": "user", "content": "Continue with the release note."},
+            {"role": "assistant", "content": "The release checksum is 7f3a."},
+        ])
+        held = read_session_model_messages(home, compact_session_id)
+        holder = "w1-probe-compaction"
+        watermark = begin_session_compaction(home, compact_session_id, holder)
+        summary = {
+            "role": "user",
+            "content": "[Conversation continuation summary]\nPreserve checksum 7f3a and write the release note.",
+            "_compressed_summary": True,
+        }
+        compact_session_messages(
+            home, compact_session_id, holder, watermark, held, [summary],
+            snapshot_state={"plan": {"step": "release note"}, "pending_tool_call_ids": []},
+        )
+        recovered = restore_session_snapshot(home, compact_session_id)
+        assert recovered is not None and not recovered["legacy"]
+        assert recovered["snapshot"]["boundary_watermark"] == watermark
+        assert recovered["snapshot"]["state"]["plan"]["step"] == "release note"
+        assert len(recovered["messages"]) == 1
+        assert "7f3a" in recovered["messages"][0]["content"]
+        print("W1-7 summary snapshot: PASS (boundary, state, and resumable summary restored)")
 
 
 if __name__ == "__main__":

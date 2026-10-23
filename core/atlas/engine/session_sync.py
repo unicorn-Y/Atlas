@@ -41,6 +41,10 @@ from atlas.session_migration_gate import (
 )
 
 
+_SESSION_SNAPSHOT_KEY = "_atlas_session_snapshot"
+_SESSION_SNAPSHOT_SCHEMA = 1
+
+
 def _open_db(home: str | Path):
     _require_migration_settled(home)
     root = Path(home).expanduser().resolve()
@@ -142,10 +146,45 @@ def compact_session_messages(
     home: str | Path, conversation_id: str, holder: str, watermark: int,
     held_messages: list[dict[str, Any]], compacted_messages: list[dict[str, Any]], *,
     tail_count: int = 0, carried_messages: list[dict[str, Any]] | None = None,
+    snapshot_state: dict[str, Any] | None = None,
 ) -> int:
-    """Publish model compaction atomically through the existing SessionDB authority."""
+    """Publish model compaction and its recoverable snapshot atomically.
+
+    ``snapshot_state`` carries runtime boundary fields that are not part of the
+    user-facing transcript (for example plan/todo state and pending tool-call IDs).
+    The generated snapshot manifest is stored in display metadata on the summary
+    message, in the same SessionDB transaction that archives the old transcript.
+    """
     from atlas.engine_core.agent.conversation_compression_archive import coverage_for_commit
     from atlas.engine_core.agent.context_compressor import stamp_db_persisted_markers
+
+    import hashlib
+
+    summary = next((item for item in compacted_messages
+                    if item.get("_compressed_summary") or (
+                        item.get("role") == "user" and isinstance(item.get("content"), str)
+                        and item["content"].startswith("[Conversation continuation summary]"))), None)
+    if summary is not None:
+        summary_text = str(summary.get("content") or "")
+        source_ids = [str(item.get("message_uid") or item.get("id") or item.get("_row_id"))
+                      for item in held_messages
+                      if item.get("message_uid") or item.get("id") or item.get("_row_id") is not None]
+        manifest = {
+            "schema_version": _SESSION_SNAPSHOT_SCHEMA,
+            "kind": "context_compaction",
+            "created_at": datetime.now(UTC).isoformat(),
+            "method": "summary",
+            "boundary_watermark": int(watermark),
+            "source_message_count": len(source_ids),
+            "source_first_message_id": source_ids[0] if source_ids else None,
+            "source_last_message_id": source_ids[-1] if source_ids else None,
+            "summary_sha256": hashlib.sha256(summary_text.encode("utf-8")).hexdigest(),
+            "summary_chars": len(summary_text),
+            "state": dict(snapshot_state or {}),
+        }
+        display_metadata = dict(summary.get("display_metadata") or {})
+        display_metadata[_SESSION_SNAPSHOT_KEY] = manifest
+        summary["display_metadata"] = display_metadata
 
     with _open_db(home) as db:
         try:
@@ -164,6 +203,36 @@ def compact_session_messages(
             return int(count)
         finally:
             db.release_compression_lock(conversation_id, holder)
+
+
+def restore_session_snapshot(home: str | Path, conversation_id: str) -> dict[str, Any] | None:
+    """Restore from the newest durable summary snapshot plus following active rows.
+
+    SessionDB compaction leaves one active continuation-summary row and the
+    post-boundary tail. This projection starts at that row rather than replaying
+    archived transcript generations. Legacy summaries without a manifest remain
+    resumable and are surfaced with ``legacy=True``.
+    """
+    messages = read_session_model_messages(home, conversation_id)
+    anchor = None
+    manifest: dict[str, Any] | None = None
+    legacy = False
+    for index, message in enumerate(messages):
+        metadata = message.get("display_metadata")
+        candidate = metadata.get(_SESSION_SNAPSHOT_KEY) if isinstance(metadata, dict) else None
+        if isinstance(candidate, dict):
+            anchor, manifest, legacy = index, dict(candidate), False
+        elif message.get("_compressed_summary"):
+            anchor, manifest, legacy = index, None, True
+    if anchor is None:
+        return None
+    return {
+        "snapshot": manifest,
+        "snapshot_message": dict(messages[anchor]),
+        "messages": [dict(item) for item in messages[anchor:]],
+        "post_snapshot_count": max(0, len(messages) - anchor - 1),
+        "legacy": legacy,
+    }
 
 
 def latest_session_message_id(
