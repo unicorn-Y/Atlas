@@ -114,6 +114,7 @@ interface AtlasState extends PersistentSlice {
   /** 向上翻页：把当前已载入最早一条之前的一页历史拼到前面（滚动到顶部时调用）。 */
   loadEarlier: (conversationId: string) => Promise<void>;
   createConversation: (title?: string) => Promise<void>;
+  startProposedConversation: (title: string, prompt: string, parentConversationId: string) => Promise<string | null>;
   beginConversationDraft: (workspace?: string | null) => void;
   setDraftWorkspace: (workspace: string | null) => void;
   selectModel: (model: string) => Promise<void>;
@@ -472,6 +473,26 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         fail(error, '无法创建新对话');
       } finally {
         set({ creatingConversation: false });
+      }
+    },
+    startProposedConversation: async (title, prompt, parentConversationId) => {
+      const parent = get().conversations.find((item) => item.id === parentConversationId);
+      const workspace = parent?.workspace || get().draftWorkspace || undefined;
+      try {
+        let conversation = await backend.createConversation(title.trim() || '后台任务');
+        if (workspace) {
+          await backend.updateConversation(conversation.id, { workspace });
+          conversation = { ...conversation, workspace };
+        }
+        set((state) => ({
+          conversations: [conversation, ...state.conversations.filter((item) => item.id !== conversation.id)],
+          conversationMessages: { ...state.conversationMessages, [conversation.id]: [] },
+        }));
+        startRun(conversation.id, { id: crypto.randomUUID(), content: prompt.trim(), attachments: [], files: [] });
+        return conversation.id;
+      } catch (error) {
+        set(errorPatch(error, '无法启动后台会话'));
+        return null;
       }
     },
 
