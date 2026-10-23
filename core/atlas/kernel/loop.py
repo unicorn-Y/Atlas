@@ -1417,6 +1417,8 @@ class AtlasKernel:
                         if request.cancel_event is not None else None
                     )
                     steer_count_at_model_start = len(steer_messages)
+                    if prewarm_task is not None and not prewarm_task.done():
+                        await asyncio.shield(prewarm_task)
                     model_task = asyncio.create_task(complete_stream(
                         agent, turn_model, messages, tools,
                         reasoning_effort=turn_effort,

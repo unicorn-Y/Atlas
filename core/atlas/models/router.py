@@ -18,6 +18,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -33,6 +34,42 @@ _MEMORY_AUXILIARY_TIMEOUT_SECONDS = 120.0
 _MEMORY_AUXILIARY_PURPOSES = frozenset({"memory_library"})
 _MEMORY_LOW_REASONING_MODELS = frozenset({"gemini-3.8-flash"})
 _OLLAMA_LOCAL_BASE_URL = "http://127.0.0.1:11434/v1"
+_PROVIDER_SEMAPHORES: dict[str, threading.BoundedSemaphore] = {}
+_PROVIDER_SEMAPHORES_LOCK = threading.Lock()
+
+
+def _provider_semaphore(route: Any) -> threading.BoundedSemaphore:
+    """Queue provider requests at the configured upstream concurrency limit."""
+    from atlas.config import get_config
+
+    host = (urlsplit(str(getattr(route, "base_url", "") or "")).hostname or "").lower()
+    provider = "d1api" if "d1api" in host else str(getattr(route, "provider", "default") or "default").lower()
+    configured = get_config().get("models.provider_concurrency", {}) or {}
+    try:
+        limit = max(1, min(128, int(configured.get(provider, 8)))) if isinstance(configured, dict) else 8
+    except (TypeError, ValueError):
+        limit = 8
+    key = f"{provider}:{limit}"
+    with _PROVIDER_SEMAPHORES_LOCK:
+        return _PROVIDER_SEMAPHORES.setdefault(key, threading.BoundedSemaphore(limit))
+
+
+def _provider_timeout(route: Any, *, streaming: bool) -> httpx.Timeout:
+    from atlas.config import get_config
+
+    provider = str(getattr(route, "provider", "default") or "default").lower()
+    configured = get_config().get("models.provider_timeouts", {}) or {}
+    row = configured.get(provider, {}) if isinstance(configured, dict) else {}
+    row = row if isinstance(row, dict) else {}
+    defaults = {"connect": 15.0, "read": 300.0 if streaming else 120.0,
+                "write": 30.0, "pool": 10.0}
+    values = {}
+    for key, default in defaults.items():
+        try:
+            values[key] = max(1.0, min(900.0, float(row.get(key, default))))
+        except (TypeError, ValueError):
+            values[key] = default
+    return httpx.Timeout(**values)
 
 
 @dataclass(frozen=True)
@@ -327,6 +364,8 @@ class ModelRouter:
 
         if route.purpose in _MEMORY_AUXILIARY_PURPOSES and kwargs.get("timeout") is None:
             kwargs["timeout"] = _MEMORY_AUXILIARY_TIMEOUT_SECONDS
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = _provider_timeout(route, streaming=False)
         if (
             route.purpose in _MEMORY_AUXILIARY_PURPOSES
             and (route.wire_model or route.model) in _MEMORY_LOW_REASONING_MODELS
@@ -355,7 +394,10 @@ class ModelRouter:
             )
             raise RuntimeError(f"{reason}; the auxiliary model request was not sent.")
         try:
-            response = await asyncio.to_thread(_post_completion, route, messages, kwargs, network)
+            response = await asyncio.to_thread(
+                _post_completion_queued, route, messages, kwargs, network,
+                _provider_semaphore(route),
+            )
         except BaseException:
             if budget is not None:
                 budget.release(request_id)
@@ -391,7 +433,18 @@ class ModelRouter:
             proxy_url=route.network_proxy_url, ca_bundle_path=route.network_ca_bundle_path,
         )
         assert_transport_supported(network, provider=route.provider, api_mode=route.api_mode)
-        return _stream_completion(route, messages, kwargs, network)
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = _provider_timeout(route, streaming=True)
+        semaphore = _provider_semaphore(route)
+
+        def queued_stream():
+            semaphore.acquire()
+            try:
+                yield from _stream_completion(route, messages, kwargs, network)
+            finally:
+                semaphore.release()
+
+        return queued_stream()
 
     async def complete_for(
         self, model_id: str, purpose: str, messages: list[dict[str, Any]],
@@ -768,6 +821,16 @@ def prewarm(route: RouteSpec) -> None:
         _POOL_LAST_USE[key] = time.monotonic()
     except Exception:
         pass
+
+
+def _post_completion_queued(route: RouteSpec, messages: list[dict[str, Any]],
+                            kwargs: dict[str, Any], network: ModelNetworkSettings,
+                            semaphore: threading.BoundedSemaphore) -> dict[str, Any]:
+    semaphore.acquire()
+    try:
+        return _post_completion(route, messages, kwargs, network)
+    finally:
+        semaphore.release()
 
 
 def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: dict[str, Any], network: ModelNetworkSettings) -> dict[str, Any]:
