@@ -25,6 +25,33 @@ from atlas.tools.node_runtime import get_node_runtime_status, resolve_node_runti
 
 log = structlog.get_logger()
 _MAX_PARALLEL_SERVER_REQUESTS = 8
+_SENSITIVE_ARGUMENT_KEYS = frozenset({
+    "api_key", "apikey", "access_token", "refresh_token", "authorization",
+    "password", "secret", "client_secret", "private_key", "token",
+})
+
+
+def _redact_mcp_arguments(value: Any, *, depth: int = 0) -> Any:
+    """Keep MCP request diagnostics useful without logging credential values."""
+    if depth > 8:
+        return "[depth-limited]"
+    if isinstance(value, dict):
+        result: dict[str, Any] = {}
+        for key, item in value.items():
+            normalized_key = str(key).lower().replace("-", "_")
+            sensitive = (normalized_key in _SENSITIVE_ARGUMENT_KEYS
+                         or any(part in normalized_key for part in (
+                             "api_key", "access_token", "refresh_token", "client_secret",
+                         )))
+            result[str(key)] = "[REDACTED]" if sensitive else _redact_mcp_arguments(
+                item, depth=depth + 1,
+            )
+        return result
+    if isinstance(value, list):
+        return [_redact_mcp_arguments(item, depth=depth + 1) for item in value[:100]]
+    if isinstance(value, str):
+        return value[:1000]
+    return value
 
 
 def normalize_mcp_content(block: Any) -> dict[str, Any]:
@@ -673,7 +700,7 @@ class MCPClient:
                     "is_error": True}
 
         log.info("mcp.call_tool", tool=qualified_name,
-                 args=arguments)
+                 args=_redact_mcp_arguments(arguments or {}))
 
         try:
             async with self._request_semaphore(tool.server_name):
