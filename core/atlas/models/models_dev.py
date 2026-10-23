@@ -703,7 +703,7 @@ _UNKNOWN_MODEL_BASE: Dict[str, Any] = {"limit": {"context": 200000}, "tool_call"
 # their capabilities available for an explicitly selected/discovered model
 # without adding them to any picker catalog.
 _DEEPSEEK_FLASH_VISION: Dict[str, Any] = {
-    "limit": {"context": 1_000_000, "output": 384_000},
+    "limit": {"context": 1_048_576, "output": 384_000},
     "modalities": {"input": ["text", "image"], "output": ["text"]},
     "tool_call": True,
     "reasoning": True,

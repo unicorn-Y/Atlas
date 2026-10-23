@@ -167,7 +167,11 @@ class ContextManager:
                 percentage = 0
             if math.isfinite(percentage) and 0 < percentage <= 100:
                 auto = min(auto, math.floor(effective * percentage / 100))
-        warning = max(0, auto - int(self.config.get("context_warning_buffer_tokens", WARNING_BUFFER_TOKENS)))
+        warning_gap = min(
+            int(self.config.get("context_warning_buffer_tokens", WARNING_BUFFER_TOKENS)),
+            max(1, math.floor(auto * 0.1)),
+        )
+        warning = max(0, auto - warning_gap)
         blocking = max(0, effective - int(self.config.get("context_blocking_buffer_tokens", BLOCKING_BUFFER_TOKENS)))
         return ContextThresholds(effective, auto, warning, blocking)
 

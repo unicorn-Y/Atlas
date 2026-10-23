@@ -29,6 +29,13 @@ class RunPhase(StrEnum):
     INTERRUPTED = "interrupted"
 
 
+class RunTerminalStatus(StrEnum):
+    COMPLETED = "completed"
+    USER_INTERRUPTED = "user_interrupted"
+    ERROR = "error"
+    BUDGET_EXCEEDED = "budget_exceeded"
+
+
 _TRANSITIONS: dict[RunPhase, frozenset[RunPhase]] = {
     RunPhase.PREPARING: frozenset({
         RunPhase.AWAITING_MODEL_RESPONSE, RunPhase.STREAMING, RunPhase.TOOLS, RunPhase.WAITING_APPROVAL,
@@ -83,6 +90,7 @@ class RunState:
     usage_rows: list[dict[str, Any]] = field(default_factory=list)
     usage: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
+    terminal_status: RunTerminalStatus | None = None
 
     def transition(self, phase: RunPhase) -> None:
         if phase not in _TRANSITIONS[self.phase]:

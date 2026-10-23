@@ -23,6 +23,7 @@ def probe_thresholds() -> None:
         os.environ["ATLAS_AUTO_COMPACT_PCT"] = "1"
         overridden = manager.thresholds(1_048_576)
         assert overridden.auto_compact == 10_285, overridden
+        assert 0 < overridden.warning < overridden.auto_compact, overridden
         assert overridden.auto_compact < normal.auto_compact
     finally:
         if old is None:

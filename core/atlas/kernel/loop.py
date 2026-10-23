@@ -23,7 +23,7 @@ from atlas.kernel.model_call import ModelCallError, ModelCallResult, complete_st
 from atlas.kernel.plan import PlanMode
 from atlas.kernel.prompt import build_prompt
 from atlas.kernel.repair import ToolHistoryError, repair_unpaired_tool_calls, started_call_ids
-from atlas.kernel.state import KernelEvent, RunPhase, RunState
+from atlas.kernel.state import KernelEvent, RunPhase, RunState, RunTerminalStatus
 from atlas.kernel.stuck import StuckDetector
 from atlas.kernel.tools import READ_ONLY_TOOLS, ToolExecutionResult, ToolScheduler
 
@@ -396,9 +396,6 @@ class AtlasKernel:
         try:
             record("run_start", model=selected_model, session_id=session_id,
                    workspace=request.workspace or "", kernel="atlas")
-            prewarm_task = asyncio.create_task(_prewarm_route(agent, selected_model))
-            _PREWARM_TASKS.add(prewarm_task)
-            prewarm_task.add_done_callback(_PREWARM_TASKS.discard)
             turn_context = _turn_context_block(request.volatile_context)
             # Where the time before the first model request goes (logged on tool_offer).
             prep_started = time.monotonic()
@@ -420,10 +417,24 @@ class AtlasKernel:
                            references=request.moa_references, latency_ms=request.moa_latency_ms)
 
             from atlas.engine.session_sync import read_session_model_messages
+            restored_snapshot_state: dict[str, Any] = {}
             try:
                 canonical_rows = await asyncio.to_thread(
                     read_session_model_messages, self.data_dir / "engine", session_id,
                 )
+                from atlas.engine.session_sync import restore_session_snapshot
+
+                snapshot = await asyncio.to_thread(
+                    restore_session_snapshot, self.data_dir / "engine", session_id,
+                )
+                if snapshot:
+                    canonical_rows = snapshot["messages"]
+                    manifest = snapshot.get("snapshot") or {}
+                    restored_snapshot_state = dict(manifest.get("state") or {})
+                    open_call_ids.update(
+                        str(item) for item in restored_snapshot_state.get("open_tool_call_ids", [])
+                        if item
+                    )
             except ToolHistoryError as exc:
                 raise ModelCallError(str(exc), category="invalid_history") from exc
             except Exception:
@@ -431,13 +442,23 @@ class AtlasKernel:
                 canonical_rows = []
             history = _session_history(canonical_rows) if canonical_rows else copy.deepcopy(request.history)
             if not any(m.get("role") == "user" and _message_text(m) == request.message for m in history[-3:]):
-                await persist_async("user", request.message, {
-                    "kernel_run_id": run_id, **({"turn_context": turn_context} if turn_context else {}),
-                })
+                from atlas.engine.session_sync import append_user_message_before_model
+
+                await asyncio.to_thread(
+                    append_user_message_before_model, self.data_dir / "engine", session_id,
+                    request.user_content if request.user_content is not None else request.message,
+                    {"kernel_run_id": run_id,
+                     **({"turn_context": turn_context} if turn_context else {})},
+                )
                 history.append({"role": "user", "content": request.user_content or request.message,
                                 **({"turn_context": turn_context} if turn_context else {})})
             elif request.user_content is not None and history and history[-1].get("role") == "user":
                 history[-1]["content"] = request.user_content
+            # The first outbound request (including route prewarm) must not race
+            # the durable user turn write above.
+            prewarm_task = asyncio.create_task(_prewarm_route(agent, selected_model))
+            _PREWARM_TASKS.add(prewarm_task)
+            prewarm_task.add_done_callback(_PREWARM_TASKS.discard)
             durable_history = copy.deepcopy(history)
             prep_mark("session")
 
@@ -517,7 +538,11 @@ class AtlasKernel:
                     messages = prompt.messages
 
             prep_mark("prompt")
-            plan = PlanMode(runtime, engine_config, plan_state=request.plan_state,
+            recovered_plan_state = request.plan_state
+            if not recovered_plan_state:
+                recovered_plan_state = (restored_snapshot_state.get("plan")
+                                        or restored_snapshot_state.get("todo"))
+            plan = PlanMode(runtime, engine_config, plan_state=recovered_plan_state,
                             plan_update_callback=request.plan_update_callback,
                             todo_store=getattr(runtime, "todo_store", None))
             edit_manager = None
@@ -1076,6 +1101,11 @@ class AtlasKernel:
                                 compact_session_messages, self.data_dir / "engine", session_id,
                                 holder, int(compaction_lease["watermark"]), held_messages,
                                 compacted_messages, tail_count=tail_count, carried_messages=carried,
+                                snapshot_state={
+                                    "plan": plan.plan.to_dict() if plan.plan else None,
+                                    "todo": copy.deepcopy(request.plan_state),
+                                    "open_tool_call_ids": sorted(open_call_ids),
+                                },
                             )
                         except Exception as exc:
                             compaction_lease["holder"] = None
@@ -1137,6 +1167,33 @@ class AtlasKernel:
                         "phase": compaction.method, "before_tokens": compaction.before_tokens,
                         "after_tokens": compaction.after_tokens,
                     })
+                context_state = context_manager.warning_state(
+                    estimate_tokens(messages), model_window,
+                )
+                thresholds = context_state["thresholds"]
+                if context_state["is_above_warning"]:
+                    yield emit("run.context.warning", data={
+                        "estimated_tokens": estimate_tokens(messages),
+                        "warning_tokens": thresholds.warning,
+                        "auto_compact_tokens": thresholds.auto_compact,
+                        "blocking_tokens": thresholds.blocking,
+                    })
+                if context_state["is_at_blocking_limit"]:
+                    forced = await prepare_compaction(force=True)
+                    if forced.method != "none":
+                        yield emit("run.compaction.progress", data={
+                            "phase": forced.method, "before_tokens": forced.before_tokens,
+                            "after_tokens": forced.after_tokens,
+                            "trigger": "blocking_threshold",
+                        })
+                    context_state = context_manager.warning_state(
+                        estimate_tokens(messages), model_window,
+                    )
+                    if context_state["is_at_blocking_limit"]:
+                        raise ModelCallError(
+                            "Context remains above the model blocking watermark after compaction",
+                            category="context_budget",
+                        )
 
                 available_tools = agent._model_facing_tools()
                 from atlas.kernel.tools import kernel_tool_schemas
@@ -1649,6 +1706,14 @@ class AtlasKernel:
                         content = _tool_output_text(result.output)
                         if tool_hook_context.get(result.call_id):
                             content += "\n\n" + "\n".join(tool_hook_context.pop(result.call_id))
+                        clipped = context_manager.clip_tool_result(content, tool_name=result.name)
+                        if clipped.clipped_bytes < clipped.original_bytes:
+                            content = clipped.content
+                            receipt["output_ref"] = clipped.output_ref or receipt.get("output_ref")
+                            record("tool_output_clipped", tool_call_id=result.call_id,
+                                   name=result.name, original_bytes=clipped.original_bytes,
+                                   clipped_bytes=clipped.clipped_bytes,
+                                   output_ref=receipt["output_ref"])
                         is_error = (
                             bool(isinstance(result.output, dict) and (
                                 result.output.get("is_error")
@@ -1689,7 +1754,7 @@ class AtlasKernel:
                             continue
                         result_events.append(emit(
                             "tool_result", id=result.call_id, name=result.name,
-                            content=[{"type": "text", "text": _tool_result_event_text(result)}],
+                            content=[{"type": "text", "text": content}],
                             data={"state": receipt["state"],
                                   "duration_ms": receipt["duration_ms"]},
                             is_error=is_error,
@@ -1792,22 +1857,48 @@ class AtlasKernel:
                 for steer in await apply_pending_steers():
                     yield steer["event"]
             else:
-                raise RuntimeError(f"Kernel reached its {max_turns}-turn limit")
+                raise ModelCallError(
+                    f"Kernel reached its {max_turns}-turn budget", category="budget",
+                )
 
             transition(RunPhase.DONE)
+            state.terminal_status = RunTerminalStatus.COMPLETED
             elapsed = int((time.monotonic() - started_at) * 1000)
-            record("run_end", status="completed",
+            record("run_end", status="completed", terminal_status=state.terminal_status.value,
                    duration_ms=elapsed, total_input_tokens=sum(int(row.get("input_tokens") or 0) for row in usage_rows),
                    total_output_tokens=sum(int(row.get("output_tokens") or 0) for row in usage_rows))
             yield emit("hermes.result", result={"final_response": final_response,
-                                                "usage": usage_rows})
+                                                "usage": usage_rows,
+                                                "terminal_status": state.terminal_status.value})
         except asyncio.CancelledError:
             if state.phase not in {RunPhase.DONE, RunPhase.FAILED, RunPhase.INTERRUPTED}:
                 transition(RunPhase.INTERRUPTED)
+            state.terminal_status = RunTerminalStatus.USER_INTERRUPTED
             try:
                 await preserve_partial_output("interrupted")
+                # A stream can be cancelled after tool-call deltas arrived but
+                # before the assistant call was committed to the transcript.
+                # Materialize those partial calls and pair them with explicit
+                # unknown-outcome results so the next turn has valid history.
+                streamed_calls = []
+                for (_attempt, _index), fragments in sorted(state.streamed_tool_calls.items()):
+                    call_id = str(fragments.get("id") or f"interrupted-{uuid.uuid4().hex}")
+                    streamed_calls.append({
+                        "id": call_id, "type": "function", "function": {
+                            "name": str(fragments.get("name") or "interrupted_tool"),
+                            "arguments": str(fragments.get("arguments") or "{}"),
+                        },
+                    })
+                if streamed_calls:
+                    await persist_async("assistant", "", {
+                        "tool_calls": streamed_calls, "kernel_run_id": run_id,
+                        "finish_reason": "interrupted_tool_call_stream",
+                    })
+                    messages.append({"role": "assistant", "content": "",
+                                     "tool_calls": streamed_calls})
+                    open_call_ids.update(str(call["id"]) for call in streamed_calls)
                 if open_call_ids:
-                    _, repairs = repair_unpaired_tool_calls(
+                    messages, repairs = repair_unpaired_tool_calls(
                         messages, started_ids=active_call_ids, run_id=run_id,
                     )
                     for repair in repairs:
@@ -1817,9 +1908,12 @@ class AtlasKernel:
                             "tool_name": repair["name"], "repair_state": repair["state"],
                             "kernel_run_id": run_id,
                         })
+                    open_call_ids.clear()
                 else:
                     record("repair", state="run_interrupted")
-                record("run_end", status="interrupted", duration_ms=int((time.monotonic() - started_at) * 1000),
+                record("run_end", status="interrupted",
+                       terminal_status=state.terminal_status.value,
+                       duration_ms=int((time.monotonic() - started_at) * 1000),
                        total_input_tokens=sum(int(row.get("input_tokens") or 0) for row in usage_rows),
                        total_output_tokens=sum(int(row.get("output_tokens") or 0) for row in usage_rows),
                        reason="cancelled")
@@ -1829,13 +1923,18 @@ class AtlasKernel:
             raise
         except Exception as exc:
             failure = f"{type(exc).__name__}: {exc}"
+            if isinstance(exc, ModelCallError) and exc.category in {"budget", "context_budget"}:
+                state.terminal_status = RunTerminalStatus.BUDGET_EXCEEDED
+            else:
+                state.terminal_status = RunTerminalStatus.ERROR
             if state.phase not in {RunPhase.DONE, RunPhase.FAILED, RunPhase.INTERRUPTED}:
                 state.error = failure
                 transition(RunPhase.FAILED)
             with contextlib.suppress(Exception):
                 await preserve_partial_output("error")
             log.exception("kernel.run_failed", extra={"run_id": run_id, "session_id": session_id})
-            record("run_end", status="failed", duration_ms=int((time.monotonic() - started_at) * 1000),
+            record("run_end", status="failed", terminal_status=state.terminal_status.value,
+                   duration_ms=int((time.monotonic() - started_at) * 1000),
                    total_input_tokens=sum(int(row.get("input_tokens") or 0) for row in usage_rows),
                    total_output_tokens=sum(int(row.get("output_tokens") or 0) for row in usage_rows),
                    reason=failure)
