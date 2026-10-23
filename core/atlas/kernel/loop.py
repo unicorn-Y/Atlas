@@ -1197,6 +1197,13 @@ class AtlasKernel:
 
                 available_tools = agent._model_facing_tools()
                 from atlas.kernel.tools import kernel_tool_schemas
+                from atlas.agent.tool_catalog import filter_executable_tools
+
+                tool_allow = getattr(runtime, "tool_allow", None)
+                tool_deny = getattr(runtime, "tool_deny", ())
+                # The model sees only the pool the current run may dispatch.
+                # This uses the same allow/deny predicate as ToolScheduler.
+                available_tools = filter_executable_tools(available_tools, tool_allow, tool_deny)
 
                 include_workflow = (
                     getattr(runtime, "agent_role", "general") != "leaf"
@@ -1206,10 +1213,6 @@ class AtlasKernel:
                     str((item.get("function") or item).get("name", ""))
                     for item in available_tools
                 }
-                from atlas.engine.tool_permissions import tool_allowed
-
-                tool_allow = getattr(runtime, "tool_allow", None)
-                tool_deny = getattr(runtime, "tool_deny", ())
                 read_only = bool(getattr(runtime, "read_only", False))
                 available_tools.extend(
                     schema for schema in kernel_tool_schemas(include_workflow=include_workflow)

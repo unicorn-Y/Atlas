@@ -454,4 +454,23 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
             }, "required": ["question"], "additionalProperties": False},
         },
     })
-    return tools
+    # Registry and server order can change when MCP servers reconnect. Emit one
+    # canonical schema per executable name so retries keep the same prompt prefix.
+    # Keep the first schema: Atlas registration uses the same first-wins rule.
+    by_name: dict[str, dict[str, Any]] = {}
+    for schema in tools:
+        function = schema.get("function") or schema
+        name = str(function.get("name") or "")
+        if name:
+            by_name.setdefault(name, schema)
+    return [by_name[name] for name in sorted(by_name)]
+
+
+def filter_executable_tools(tools: list[dict[str, Any]], allow: Any = None,
+                            deny: Any = ()) -> list[dict[str, Any]]:
+    """Filter a model-facing tool pool with the dispatch allow/deny predicate."""
+    from atlas.engine.tool_permissions import tool_allowed
+
+    return [item for item in tools if tool_allowed(
+        str((item.get("function") or item).get("name") or ""), allow, deny,
+    )]
