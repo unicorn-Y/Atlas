@@ -163,6 +163,7 @@ class ExecHandle:
     output_path: Path
     buffer: HeadTailBuffer
     timeout: float | None
+    shell: str = "Shell: none (direct argv)"
     yield_time_ms: int = 2_000
     detached: bool = False
     started: float = field(default_factory=time.monotonic)
@@ -294,8 +295,17 @@ class ExecManager:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         path = self.output_dir / f"{safe_id}.log"
         path.touch(exist_ok=False)
+        shell_label = str(data.get("shell") or "")
+        if "command" in args and not shell_label:
+            from atlas.tools.local_execution import _shell_identity
+
+            shell_name, shell_path = _shell_identity(str(args.get("shell") or "auto"))
+            shell_label = f"Shell: {shell_name} ({shell_path})"
+        elif not shell_label:
+            shell_label = "Shell: none (direct argv)"
         handle = ExecHandle(
             execution_id, path, HeadTailBuffer(output_budget), timeout,
+            shell=shell_label,
             yield_time_ms=yield_time_ms,
             detached=bool(args.get("detached")),
         )
@@ -361,6 +371,7 @@ class ExecManager:
         native_truncated = bool(getattr(native, "output_truncated", False)) if native else False
         cancel_note = str(getattr(native, "cancel_note", "")) if native else ""
         data = {"execution_id": handle.execution_id, "state": handle.outcome,
+                "shell": handle.shell,
                 "outcome": handle.outcome, "exit_code": handle.exit_code,
                 "timed_out": handle.timed_out, "output": handle.buffer.text(),
                 "output_bytes": handle.buffer.total_bytes,
@@ -381,7 +392,7 @@ class ExecManager:
         cancellation = f"\n{cancel_note}" if cancel_note else ""
         return {"data": data, "outcome": handle.outcome,
                 "output_ref": data["output_ref"], "is_error": handle.outcome in {"failed", "unknown"},
-                "content": [{"type": "text", "text": f"{data['output']}\nFull output: {data['output_ref']}\n{status}{truncation}{cancellation}"}]}
+                "content": [{"type": "text", "text": f"{handle.shell}\n{data['output']}\nFull output: {data['output_ref']}\n{status}{truncation}{cancellation}"}]}
 
     async def poll(self, execution_id: str) -> dict[str, Any]:
         handle = self.handles[execution_id]

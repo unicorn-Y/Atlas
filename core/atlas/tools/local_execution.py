@@ -56,10 +56,54 @@ _NO_MATCH_COMMANDS = {"grep", "rg", "ripgrep", "find", "diff", "test", "["}
 _ROBOCOPY_COMMANDS = {"robocopy", "robocopy.exe"}
 _COMMAND_BOUNDARY = re.compile(r"(?:^|[|;&\r\n])\s*(?:\([^)]*\)\s*)?(?:command\s+)?(?:sudo\s+)?([\w./\\-]+)", re.I)
 _MAX_SEARCH_RESULTS = 2000
+_GIT_LOCAL_ENV_NAMES = frozenset({
+    "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_COMMON_DIR", "GIT_NAMESPACE",
+    "GIT_PREFIX", "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+    "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM",
+})
 
 
 class SearchCancelledError(Exception):
     """Raised when a running Atlas search is cancelled by its owning run."""
+
+
+def _git_child_environment() -> dict[str, str]:
+    """Keep repo-selection variables from the parent from redirecting a local_git call."""
+    from atlas.engine_core.tools.child_process_env import child_process_env
+
+    environment = child_process_env()
+    for name in tuple(environment):
+        upper = name.upper()
+        if (upper in _GIT_LOCAL_ENV_NAMES
+                or upper.startswith("GIT_CONFIG_KEY_")
+                or upper.startswith("GIT_CONFIG_VALUE_")):
+            environment.pop(name, None)
+    environment.update({
+        "GIT_OPTIONAL_LOCKS": "0",
+        "GIT_PAGER": "cat",
+        "GIT_TERMINAL_PROMPT": "0",
+        "PAGER": "cat",
+        "TERM": "dumb",
+        "LC_ALL": "C",
+        "LANG": "C",
+    })
+    return environment
+
+
+def _git_child_env_overrides() -> dict[str, object]:
+    """Explicit overrides for _spawn; None removes inherited repo selection state."""
+    return {
+        **{name: None for name in _GIT_LOCAL_ENV_NAMES},
+        "GIT_OPTIONAL_LOCKS": "0",
+        "GIT_PAGER": "cat",
+        "GIT_TERMINAL_PROMPT": "0",
+        "PAGER": "cat",
+        "TERM": "dumb",
+        "LC_ALL": "C",
+        "LANG": "C",
+    }
 
 
 def _file_search_timeout_seconds() -> float:
@@ -156,6 +200,21 @@ def command_exit_is_error(command: str, exit_code: int | None) -> bool:
     if exit_code == 1 and names & _NO_MATCH_COMMANDS:
         return False
     return True
+
+
+def git_command_timeout(action: str, requested: Any = None) -> float:
+    """Bound git provider operations with short read deadlines and a push hook budget."""
+    if requested is None:
+        return {"diff": 20.0, "push": 600.0}.get(action, 15.0)
+    if isinstance(requested, bool):
+        raise ValueError("Git timeout must be a finite positive number of seconds")
+    try:
+        timeout = float(requested)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Git timeout must be a finite positive number of seconds") from exc
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("Git timeout must be a finite positive number of seconds")
+    return timeout
 
 
 def _decode_process_output(raw: bytes) -> str:
@@ -334,6 +393,22 @@ def _effective_shell(shell: str, git_bash: str | None, *, windows: bool) -> tupl
             raise ValueError("zsh executable was not found or is not executable")
         return "zsh", resolved
     return shell, None
+
+
+def _shell_identity(shell: str = "auto") -> tuple[str, str]:
+    """Resolve a user-facing shell label and executable path without starting it."""
+    selected, resolved = _effective_shell(shell, _find_git_bash(), windows=os.name == "nt")
+    if selected == "bash" and resolved:
+        path = resolved
+    elif selected in {"bash", "zsh"}:
+        path = resolved or shutil.which(selected) or selected
+    elif selected == "powershell":
+        path = shutil.which("powershell.exe") or shutil.which("pwsh") or "powershell.exe"
+    elif selected == "cmd":
+        path = os.environ.get("COMSPEC") or shutil.which("cmd.exe") or "cmd.exe"
+    else:
+        path = selected
+    return selected, str(Path(path).resolve()) if Path(path).exists() else path
 
 
 def _tool(
@@ -638,6 +713,8 @@ class LocalProcess:
     owner_run_id: str | None
     detached: bool
     exit_code_command: str = ""
+    shell_name: str = "none (direct argv)"
+    shell_path: str = ""
     state: str = "running"
     exit_code: int | None = None
     stdout_path: Path = field(default_factory=Path)
@@ -669,6 +746,10 @@ class LocalProcess:
             "pid": self.process.pid,
             "command": self.command,
             "cwd": self.cwd,
+            "shell": (
+                f"Shell: {self.shell_name} ({self.shell_path})" if self.shell_path
+                else f"Shell: {self.shell_name}"
+            ),
             "state": self.state,
             "exit_code": self.exit_code,
             "started_at": self.started_at,
@@ -694,6 +775,10 @@ class LocalExecutionRuntime:
 
     def get_tools_for_llm(self) -> list[dict[str, Any]]:
         tools = copy.deepcopy(LOCAL_TOOLS)
+        try:
+            shell_name, shell_path = _shell_identity()
+        except (OSError, RuntimeError, ValueError):
+            shell_name, shell_path = ("unknown", "unavailable")
         try:
             cwd = self._agent_cwd()
             home = Path.home().resolve()
@@ -722,6 +807,12 @@ class LocalExecutionRuntime:
                     "workspace when selected, otherwise this directory.\n"
                 )
             function["description"] = detail + str(function.get("description") or "")
+            if function.get("name") in {"local_shell", "local_process"}:
+                function["description"] = (
+                    f"Shell: {shell_name} ({shell_path}). This is the actual default shell for this run; "
+                    "use syntax for this shell unless an explicit shell argument selects another one.\n"
+                    + function["description"]
+                )
         return tools
 
     @staticmethod
@@ -1304,19 +1395,38 @@ class LocalExecutionRuntime:
         if action == "add":
             command.extend([str(item) for item in args.get("paths", ["."])])
         command.extend([str(item) for item in args.get("args", [])])
+        repo = self._path(args["repo"])
+        timeout = git_command_timeout(action, args.get("timeout"))
+        if action == "push":
+            branch = await asyncio.create_subprocess_exec(
+                "git", "symbolic-ref", "--quiet", "--short", "HEAD",
+                cwd=str(repo), stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+                env=_git_child_environment(),
+            )
+            try:
+                branch_bytes, _ = await asyncio.wait_for(branch.communicate(), timeout=3.0)
+            except TimeoutError:
+                branch.kill()
+                await branch.wait()
+                raise TimeoutError("Timed out checking the current Git branch before push.")
+            branch_name = branch_bytes.decode("utf-8", errors="replace").strip()
+            if branch.returncode != 0 or not branch_name:
+                raise ValueError("Git push requires a non-empty local branch; detached HEAD was not pushed.")
         process = await self._spawn(
             ["git", *command],
-            cwd=self._path(args["repo"]),
-            env=None,
+            cwd=repo,
+            env=_git_child_env_overrides(),
             stdin=None,
             detached=False,
             run_id=run_id,
             callback=callback,
+            clear_env_prefixes=("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"),
         )
-        waited = await self._wait_result(process, args.get("timeout"))
+        waited = await self._wait_result(process, timeout)
         result = waited["data"]
         result["action"] = action
-        result["repo"] = str(self._path(args["repo"]))
+        result["repo"] = str(repo)
         result["is_error"] = command_exit_is_error(
             "git " + " ".join(command), result.get("exit_code"),
         )
@@ -1330,6 +1440,12 @@ class LocalExecutionRuntime:
         shell, resolved_bash = _effective_shell(
             shell, _find_git_bash(), windows=os.name == "nt",
         )
+        if shell == "powershell":
+            shell_path = shutil.which("powershell.exe") or shutil.which("pwsh") or "powershell.exe"
+        elif shell == "cmd":
+            shell_path = os.environ.get("COMSPEC") or shutil.which("cmd.exe") or "cmd.exe"
+        else:
+            shell_path = resolved_bash or shutil.which(shell) or shell
         if shell == "powershell":
             executable = shutil.which("powershell.exe") or shutil.which("pwsh")
             if not executable:
@@ -1367,7 +1483,8 @@ class LocalExecutionRuntime:
         record = await self._spawn(
             argv,
             self._path(args.get("cwd")) if args.get("cwd") else Path.cwd(),
-            args.get("env"),
+            ({**(args.get("env") or {}), "SHELL": shell_path}
+             if shell in {"bash", "zsh"} else args.get("env")),
             args.get("stdin"),
             bool(args.get("detached")),
             run_id,
@@ -1376,6 +1493,8 @@ class LocalExecutionRuntime:
             bool(args.get("pty")),
         )
         record.exit_code_command = command
+        record.shell_name = shell
+        record.shell_path = str(Path(shell_path).resolve()) if Path(shell_path).exists() else shell_path
         return record
 
     async def _start_from_exec(
@@ -1438,6 +1557,7 @@ class LocalExecutionRuntime:
         callback: OutputCallback | None,
         keep_stdin: bool = False,
         pty: bool = False,
+        clear_env_prefixes: tuple[str, ...] = (),
     ) -> LocalProcess:
         # Resolve the effective directory once, immediately before process
         # creation. This makes relative paths, environment variables, and `~`
@@ -1448,6 +1568,10 @@ class LocalExecutionRuntime:
         from atlas.engine_core.tools.child_process_env import child_process_env
 
         process_env = child_process_env(env)
+        prefixes = tuple(item.casefold() for item in clear_env_prefixes)
+        for key in tuple(process_env):
+            if key.casefold().startswith(prefixes):
+                process_env.pop(key, None)
         process_env.setdefault("PYTHONUTF8", "1")
         process_env.setdefault("PYTHONIOENCODING", "utf-8")
         kwargs: dict[str, Any] = {}
@@ -1855,7 +1979,7 @@ class LocalExecutionRuntime:
                         stderr=asyncio.subprocess.DEVNULL,
                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                     )
-                    return_code = await asyncio.wait_for(killer.wait(), timeout=5.0)
+                    return_code = await asyncio.wait_for(killer.wait(), timeout=2.0)
                     if return_code != 0:
                         log.warning("local_execution.tree_termination_failed",
                                     execution_id=record.execution_id, return_code=return_code)

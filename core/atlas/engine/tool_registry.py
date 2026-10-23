@@ -400,6 +400,16 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                 "parameters": function.get("parameters", {"type": "object", "properties": {}}),
             }
             if name == "terminal":
+                try:
+                    from atlas.tools.local_execution import _shell_identity
+
+                    shell_name, shell_path = _shell_identity()
+                    schema["description"] = (
+                        f"Shell: {shell_name} ({shell_path}). This is the actual default shell for this run.\n"
+                        + schema["description"]
+                    )
+                except (OSError, RuntimeError, ValueError):
+                    schema["description"] = "Shell: unknown (unavailable).\n" + schema["description"]
                 schema["parameters"].setdefault("properties", {})["shell"] = {
                     "type": "string", "enum": (["auto", "bash", "powershell", "cmd", "zsh"]
                                                     if os.name != "nt"
