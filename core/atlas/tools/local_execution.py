@@ -52,6 +52,73 @@ _INLINE_CODE = re.compile(
 _NO_MATCH_COMMANDS = {"grep", "rg", "ripgrep", "find", "diff", "test", "["}
 _ROBOCOPY_COMMANDS = {"robocopy", "robocopy.exe"}
 _COMMAND_BOUNDARY = re.compile(r"(?:^|[|;&\r\n])\s*(?:\([^)]*\)\s*)?(?:command\s+)?(?:sudo\s+)?([\w./\\-]+)", re.I)
+_MAX_SEARCH_RESULTS = 2000
+
+
+def _file_search_timeout_seconds() -> float:
+    """Use the larger search budget needed by the WSL filesystem boundary."""
+    return 60.0 if os.environ.get("WSL_DISTRO_NAME") else 20.0
+
+
+def search_files(
+    path: str | Path,
+    query: str,
+    *,
+    timeout_seconds: float = 20.0,
+    max_results: int = _MAX_SEARCH_RESULTS,
+    encoding: str = "utf-8",
+) -> dict[str, Any]:
+    """Search text files with bounded time/results and explicit partial results.
+
+    A timeout with no matches is an error, so callers cannot mistake an
+    incomplete search for a clean negative. If complete matches were collected,
+    they are returned with ``partial`` and a reason flag for model-facing context.
+    """
+    root = Path(path)
+    if timeout_seconds < 0 or max_results < 1:
+        raise ValueError("timeout_seconds must be non-negative and max_results must be positive")
+    deadline = time.monotonic() + timeout_seconds
+    matches: list[dict[str, Any]] = []
+    timed_out = False
+    overflow = False
+
+    def files():
+        if root.is_file():
+            yield root
+            return
+        def onerror(exc: OSError) -> None:
+            log.debug("local_execution.search_directory_skipped", path=str(exc.filename or root))
+        for directory, _, names in os.walk(root, onerror=onerror):
+            for name in names:
+                yield Path(directory) / name
+
+    for item in files():
+        if time.monotonic() >= deadline:
+            timed_out = True
+            break
+        try:
+            with item.open("r", encoding=encoding) as stream:
+                for number, line in enumerate(stream, 1):
+                    if time.monotonic() >= deadline:
+                        timed_out = True
+                        break
+                    if query in line:
+                        matches.append({
+                            "path": str(item), "line": number, "text": line.rstrip("\r\n"),
+                        })
+                        if len(matches) >= max_results:
+                            overflow = True
+                            break
+        except (OSError, UnicodeError):
+            continue
+        if timed_out or overflow:
+            break
+    if timed_out and not matches:
+        raise TimeoutError(f"Search timed out after {timeout_seconds:g}s before finding matches.")
+    return {
+        "path": str(root), "matches": matches,
+        "partial": timed_out or overflow, "timed_out": timed_out, "overflow": overflow,
+    }
 
 
 def command_exit_is_error(command: str, exit_code: int | None) -> bool:
@@ -1066,19 +1133,10 @@ class LocalExecutionRuntime:
             return {"path": str(path), "matches": matches}
         if action == "search":
             query = str(args.get("query", ""))
-            matches: list[dict[str, Any]] = []
-            for item in path.rglob("*") if path.is_dir() else [path]:
-                if not item.is_file():
-                    continue
-                try:
-                    for number, line in enumerate(
-                        item.read_text(encoding=encoding).splitlines(), 1
-                    ):
-                        if query in line:
-                            matches.append({"path": str(item), "line": number, "text": line})
-                except (OSError, UnicodeError):
-                    continue
-            return {"path": str(path), "matches": matches}
+            return search_files(
+                path, query, timeout_seconds=_file_search_timeout_seconds(),
+                max_results=_MAX_SEARCH_RESULTS, encoding=encoding,
+            )
         if action == "stat":
             if not path.exists():
                 return {"path": str(path), "exists": False}
@@ -1551,6 +1609,8 @@ class LocalExecutionRuntime:
             elif action == "wait":
                 return await self._wait_result(record, args.get("timeout"))
             elif action == "cancel":
+                if record.state != "running":
+                    raise ValueError("Only a running process can be cancelled.")
                 await self._cancel_process(record)
                 data = record.summary()
             elif action in {"write_stdin", "submit_stdin", "close_stdin"}:
