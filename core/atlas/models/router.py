@@ -692,13 +692,15 @@ def _openai_payload(route: RouteSpec, messages: list[dict[str, Any]], kwargs: di
     for key in ("max_tokens", "max_completion_tokens", "temperature", "top_p", "stop", "stream_options", "tools", "tool_choice", "parallel_tool_calls"):
         if kwargs.get(key) is not None:
             payload[key] = kwargs[key]
-    if route.capabilities.get("supports_tools") is False:
-        for key in ("tools", "tool_choice", "parallel_tool_calls"):
-            payload.pop(key, None)
     payload.update(_reasoning_wire(route, kwargs.get("reasoning_config")))
     extra = kwargs.get("extra_body")
     if isinstance(extra, dict):
         payload.update(extra)
+    # Model capability gates apply to the final wire payload as well as the
+    # standard arguments; provider-specific extra_body must not re-enable tools.
+    if route.capabilities.get("supports_tools") is False:
+        for key in ("tools", "tool_choice", "parallel_tool_calls"):
+            payload.pop(key, None)
     return payload
 
 
