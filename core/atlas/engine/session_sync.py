@@ -247,6 +247,48 @@ def append_session_message(
         return str(latest.get("message_uid") or message_id)
 
 
+def append_user_message_before_model(
+    home: str | Path, conversation_id: str, content: Any,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """Synchronously commit a user turn before its first model request.
+
+    ``append_session_message`` returns only after the SessionDB write transaction
+    commits. Keep this deliberately synchronous: callers must await/finish it before
+    starting a model request, so a killed process remains resumable from the prompt.
+    """
+    return append_session_message(home, conversation_id, "user", content, metadata)
+
+
+def append_session_messages(
+    home: str | Path, conversation_id: str, messages: list[dict[str, Any]],
+) -> list[str]:
+    """Append an ordered assistant/tool event batch in one durable transaction.
+
+    This is intended for the assistant tool-call message and its tool results when
+    they are already available together. For streaming events use
+    :func:`append_session_message` in event order; each call commits before returning.
+    The returned IDs follow input order and are the DB row IDs assigned by SessionDB.
+    """
+    if not messages:
+        return []
+    with _open_db(home) as db:
+        if db.get_session(conversation_id) is None:
+            db.ensure_session(conversation_id, "api_server")
+        rows: list[dict[str, Any]] = []
+        for source in messages:
+            item = dict(source)
+            role = str(item.pop("role", "unknown"))
+            if "content" not in item:
+                raise ValueError("session transcript event requires content")
+            item["role"] = role
+            item["display_metadata"] = dict(item.pop("display_metadata", {}) or {})
+            item["display_metadata"].update(dict(item.pop("metadata", {}) or {}))
+            rows.append(item)
+        db.append_messages_batch(conversation_id, rows)
+        return [str(item.get("message_uid") or item.get("_row_id") or "") for item in rows]
+
+
 def list_session_previews(home: str | Path, *, limit: int = 1000) -> dict[str, str]:
     with _open_db(home) as db:
         sessions = db.list_sessions_rich(
