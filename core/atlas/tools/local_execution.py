@@ -1109,8 +1109,12 @@ class LocalExecutionRuntime:
         keep_stdin: bool = False,
         pty: bool = False,
     ) -> LocalProcess:
+        # Resolve the effective directory once, immediately before process
+        # creation. This makes relative paths, environment variables, and `~`
+        # behave the same for shell and argv execution.
+        cwd = Path(os.path.expandvars(os.path.expanduser(str(cwd)))).resolve()
         if not cwd.is_dir():
-            raise NotADirectoryError(str(cwd))
+            raise NotADirectoryError(f"Process working directory does not exist: {cwd}")
         from atlas.engine_core.tools.child_process_env import child_process_env
 
         process_env = child_process_env(env)
