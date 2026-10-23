@@ -206,6 +206,7 @@ class RunRequest:
     task_id: str | None = None
     reasoning_effort: str | None = None
     worker: bool = False
+    stable_system_prefix: str | None = None
 
 
 @dataclass
@@ -323,6 +324,7 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
         sandbox_tool_callback=callbacks.sandbox_tool_callback,
         sandbox_enabled=request.sandbox_enabled,
         reasoning_effort=request.reasoning_effort,
+        stable_system_prefix=request.stable_system_prefix,
         subtask_started=callbacks.subtask_started,
         subtask_progress=callbacks.subtask_progress,
         subtask_completed=callbacks.subtask_completed,
@@ -635,13 +637,20 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
 
     operator_text = operator_head()
     base_prompt = _breaker_prompt() + _user_output_style_prompt()
-    initial_messages: list[BaseMessage] = [
-        SystemMessage(
-            content=(operator_text + "\n\n" + base_prompt) if operator_text else base_prompt
-        )
-    ]
-    initial_messages.append(SystemMessage(content=_TASK_COMPLETION_GUIDANCE))
-    initial_messages.append(SystemMessage(content=_FILE_SEARCH_GUIDANCE))
+    stable_system_prefix = request.stable_system_prefix
+    if isinstance(stable_system_prefix, str) and stable_system_prefix:
+        # The parent already rendered this cache-stable scaffold. Keep its exact
+        # bytes as the child's first system section; only child-turn runtime data
+        # and its task request are appended below.
+        initial_messages: list[BaseMessage] = [SystemMessage(content=stable_system_prefix)]
+    else:
+        initial_messages = [
+            SystemMessage(
+                content=(operator_text + "\n\n" + base_prompt) if operator_text else base_prompt
+            ),
+            SystemMessage(content=_TASK_COMPLETION_GUIDANCE),
+            SystemMessage(content=_FILE_SEARCH_GUIDANCE),
+        ]
     # Diagnostic only: ATLAS_DUMP_SYSTEM=<path> writes the assembled system messages
     # so the real prompt can be inspected. Unset by default and never affects a request.
     _dump_path = os.environ.get("ATLAS_DUMP_SYSTEM", "").strip()
@@ -667,13 +676,14 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
         initial_messages.append(SystemMessage(content=state.context["system_prompt_prefix"]))
     if isinstance(state.context, dict) and state.context.get("turn_recall"):
         initial_messages.append(SystemMessage(content=state.context["turn_recall"]))
-    if request.mode == "plan":
+    if request.mode == "plan" and not stable_system_prefix:
         initial_messages.append(SystemMessage(content=(
             "You are in read-only Plan mode. Inspect as needed, then return a concrete "
             "implementation plan. Do not modify files or execute commands."
         )))
-    initial_messages.append(SystemMessage(content=_PLAN_EXECUTION_GUIDANCE))
-    initial_messages.append(SystemMessage(content=_TOOL_RESULT_BOUNDARY_GUIDANCE))
+    if not stable_system_prefix:
+        initial_messages.append(SystemMessage(content=_PLAN_EXECUTION_GUIDANCE))
+        initial_messages.append(SystemMessage(content=_TOOL_RESULT_BOUNDARY_GUIDANCE))
     workspace_rules = list(request.workspace_rules or [])
     discovered_rules: list[dict[str, Any]] = []
     if request.workspace:
@@ -825,6 +835,9 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
             section for section in prompt_sections
             if not section.startswith(volatile_prefixes)
         )
+        # Forked children reuse the already rendered, provider-visible static
+        # scaffold byte-for-byte so the prompt cache recognizes the same prefix.
+        runtime.stable_system_prefix = system_message
         hermes_history = [
             {"role": item["role"], "content": item["content"]}
             for item in state.history

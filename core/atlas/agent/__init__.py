@@ -252,6 +252,7 @@ class AgentRunContext:
     run_id: str | None = None
     goal: str | None = None
     conversation_id: str | None = None
+    stable_system_prefix: str | None = None
     project_id: str | None = None
     reminders: SystemReminders = field(default_factory=SystemReminders)
     maintenance_snapshot: dict[str, Any] | None = None
@@ -591,6 +592,7 @@ class AgentOrchestrator:
                         workspace_trusted=bool(options.get("workspace_trusted", False)),
                         agent_role=child_role, agent_depth=child_depth,
                         agent_type=str(options.get("agent_type", "general")),
+                        stable_system_prefix=options.get("stable_system_prefix"),
                         user_hook_callback=options.get("user_hook_callback"),
                         ssh_tool_callback=options.get("ssh_tool_callback"),
                         ssh_checkpoint_callback=options.get("ssh_checkpoint_callback"),
@@ -810,6 +812,7 @@ class AgentOrchestrator:
         subtask_completed: Callable[..., Any] | None = None,
         subtask_group_completed: Callable[..., Any] | None = None,
         worker: bool = False,
+        stable_system_prefix: str | None = None,
         parent_process_event_callback: Callable[..., Any] | None = None,
         source: str = "foreground",
     ) -> AsyncIterator[dict[str, Any]]:
@@ -848,6 +851,7 @@ class AgentOrchestrator:
             permission_mode=permission_mode, allowed_paths=allowed_paths,
             sandbox_enabled=sandbox_enabled, project_id=project_id,
             task_id=task_id, reasoning_effort=reasoning_effort, worker=worker,
+            stable_system_prefix=stable_system_prefix,
         )
         callbacks = RunCallbacks(
             cancel_event=cancel_event, pause_event=pause_event,
