@@ -131,7 +131,7 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
     <section className="grid gap-3 rounded-xl border border-line p-4">
       <div>
         <h4 className="m-0 flex items-center gap-2 text-[13.5px] font-medium text-heading"><Keyboard size={16} />全局快捷键</h4>
-        <p className="mt-1 mb-0 text-[12px] text-fg-3">注册一个系统级快捷键，用于显示并聚焦 Atlas。示例：CommandOrControl+Shift+Space。</p>
+        <p className="mt-1 mb-0 text-[12px] text-fg-3">注册系统级快捷键呼出浮动输入条；提交后发送到当前对话，没有当前对话时会新建一条。示例：CommandOrControl+Shift+Space。</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <input aria-label="全局快捷键" value={accelerator} maxLength={80} disabled={!available || busy} onChange={(event) => setAccelerator(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void saveShortcut(accelerator); }} placeholder="CommandOrControl+Shift+Space" className="h-9 min-w-[250px] flex-1 rounded-lg border border-line bg-surface px-2.5 font-mono text-[12px] text-fg" />
