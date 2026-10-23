@@ -1266,6 +1266,7 @@ async def execute_tools_node(
                     result = await agent._local_execution.call_tool(
                         fn_name, fn_args, run_id=ctx.run_id,
                         output_callback=report_process_output,
+                        cancel_event=ctx.cancel_event,
                         event_callback=(ctx.parent_process_event_callback or process_event)
                         if fn_name == "local_process" and fn_args.get("action") == "handoff" else process_event,
                     )

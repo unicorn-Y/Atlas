@@ -55,6 +55,10 @@ _COMMAND_BOUNDARY = re.compile(r"(?:^|[|;&\r\n])\s*(?:\([^)]*\)\s*)?(?:command\s
 _MAX_SEARCH_RESULTS = 2000
 
 
+class SearchCancelledError(Exception):
+    """Raised when a running Atlas search is cancelled by its owning run."""
+
+
 def _file_search_timeout_seconds() -> float:
     """Use the larger search budget needed by the WSL filesystem boundary."""
     return 60.0 if os.environ.get("WSL_DISTRO_NAME") else 20.0
@@ -67,6 +71,7 @@ def search_files(
     timeout_seconds: float = 20.0,
     max_results: int = _MAX_SEARCH_RESULTS,
     encoding: str = "utf-8",
+    cancel_check: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     """Search text files with bounded time/results and explicit partial results.
 
@@ -81,6 +86,11 @@ def search_files(
     matches: list[dict[str, Any]] = []
     timed_out = False
     overflow = False
+    visited_lines = 0
+
+    def check_cancelled() -> None:
+        if cancel_check is not None and cancel_check():
+            raise SearchCancelledError("File search cancelled.")
 
     def files():
         if root.is_file():
@@ -93,12 +103,16 @@ def search_files(
                 yield Path(directory) / name
 
     for item in files():
+        check_cancelled()
         if time.monotonic() >= deadline:
             timed_out = True
             break
         try:
             with item.open("r", encoding=encoding) as stream:
                 for number, line in enumerate(stream, 1):
+                    visited_lines += 1
+                    if visited_lines % 1024 == 0:
+                        check_cancelled()
                     if time.monotonic() >= deadline:
                         timed_out = True
                         break
@@ -622,6 +636,7 @@ class LocalExecutionRuntime:
         run_id: str | None = None,
         output_callback: OutputCallback | None = None,
         event_callback: Any = None,
+        cancel_event: Any = None,
     ) -> dict[str, Any]:
         args = dict(arguments or {})
         output_callback = output_callback or self.output_callback
@@ -665,7 +680,10 @@ class LocalExecutionRuntime:
                     "is_error": all("error" in item for item in data["files"]),
                 }
             if name == "local_file":
-                data = await asyncio.to_thread(self._file_operation, args)
+                data = await asyncio.to_thread(
+                    self._file_operation, args,
+                    cancel_check=(cancel_event.is_set if cancel_event is not None else None),
+                )
                 return {
                     "data": data,
                     "content": [{"type": "text", "text": _file_result_text(args, data)}],
@@ -700,6 +718,8 @@ class LocalExecutionRuntime:
             }
         except asyncio.CancelledError:
             raise
+        except SearchCancelledError:
+            raise asyncio.CancelledError
         except Exception as exc:
             log.warning("local_execution.tool_failed", tool=name, error=str(exc))
             return self._error(f"{type(exc).__name__}: {exc}")
@@ -981,7 +1001,9 @@ class LocalExecutionRuntime:
                 files.append({"path": raw, "error": f"{type(exc).__name__}: {exc}"})
         return {"files": files}
 
-    def _file_operation(self, args: dict[str, Any]) -> dict[str, Any]:
+    def _file_operation(
+        self, args: dict[str, Any], *, cancel_check: Callable[[], bool] | None = None,
+    ) -> dict[str, Any]:
         action = args["action"]
         if not str(args.get("path") or "").strip():
             raise ValueError("local_file requires path (or paths for a multi-file read)")
@@ -1136,6 +1158,7 @@ class LocalExecutionRuntime:
             return search_files(
                 path, query, timeout_seconds=_file_search_timeout_seconds(),
                 max_results=_MAX_SEARCH_RESULTS, encoding=encoding,
+                cancel_check=cancel_check,
             )
         if action == "stat":
             if not path.exists():
