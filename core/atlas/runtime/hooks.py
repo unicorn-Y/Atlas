@@ -11,13 +11,21 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
 import threading
 import time
 import tomllib
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
+
+from atlas.kernel.hook_runtime import (
+    hook_command_argv,
+    hook_environment,
+    prepare_hook_command,
+    resolve_hook_shell,
+    timeout_for,
+    await_hook_with_timeout,
+)
 
 
 # Claude-compatible events with a real Atlas lifecycle trigger.
@@ -56,6 +64,21 @@ _MATCH_FIELDS = {
     "StopFailure": "error_type", "InstructionsLoaded": "load_reason",
 }
 _EXACT_MATCHER = re.compile(r"^[A-Za-z0-9_\- ,|]*$")
+_ASYNC_HOOK_TASKS: set[asyncio.Task[Any]] = set()
+
+
+def _track_async_hook(task: asyncio.Task[Any]) -> None:
+    _ASYNC_HOOK_TASKS.add(task)
+
+    def finished(completed: asyncio.Task[Any]) -> None:
+        _ASYNC_HOOK_TASKS.discard(completed)
+        try:
+            completed.result()
+        except (asyncio.CancelledError, Exception):
+            # Fire-and-forget hook failures are isolated from their caller.
+            pass
+
+    task.add_done_callback(finished)
 
 
 def parse_claude_hooks(
@@ -308,28 +331,19 @@ async def _run_command(
     }
     command = _substitute(command, replacements)
     args = spec.get("args")
-    env = os.environ.copy()
-    if cwd:
-        env["CLAUDE_PROJECT_DIR"] = cwd
-    if plugin_root:
-        env["CLAUDE_PLUGIN_ROOT"] = plugin_root
-    timeout = max(1, min(300, int(spec.get("timeout", 30))))
+    selected_shell = resolve_hook_shell(spec.get("shell"))
+    command, env = prepare_hook_command(
+        command, shell=selected_shell, cwd=cwd, plugin_root=plugin_root,
+    )
+    env = hook_environment(spec, env, shell=selected_shell)
+    timeout_ms = timeout_for(spec, event=str(spec.get("event") or ""))
     if isinstance(args, list):
         argv = [command, *[_substitute(str(arg), replacements) for arg in args]]
     else:
-        shell = str(spec.get("shell") or "")
-        if os.name == "nt":
-            if shell.lower() in {"powershell", "pwsh"}:
-                argv = [shutil.which("pwsh") or "powershell.exe", "-NoProfile", "-Command", command]
-            else:
-                bash = shutil.which("bash")
-                wsl_bash = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "bash.exe"
-                if bash and Path(bash).resolve() != wsl_bash.resolve():
-                    argv = [bash, "-lc", command]
-                else:
-                    argv = ["powershell.exe", "-NoProfile", "-Command", command]
-        else:
-            argv = ["sh", "-lc", command]
+        argv = hook_command_argv(command, selected_shell)
+    safe_cwd = cwd
+    if safe_cwd and not Path(safe_cwd).is_dir():
+        safe_cwd = str(Path.cwd())
     proc = None
 
     async def stop_process_tree() -> None:
@@ -358,14 +372,21 @@ async def _run_command(
 
     try:
         proc = await asyncio.create_subprocess_exec(
-            *argv, cwd=cwd or None, env=env, stdin=asyncio.subprocess.PIPE,
+            *argv, cwd=safe_cwd or None, env=env, stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
         )
         stdout, stderr = await asyncio.wait_for(
-            proc.communicate(json.dumps(input_data, ensure_ascii=False, default=str).encode("utf-8")),
-            timeout=timeout,
+            proc.communicate((json.dumps(input_data, ensure_ascii=False, default=str) + "\n").encode("utf-8")),
+            timeout=timeout_ms / 1000,
         )
-        return proc.returncode or 0, stdout[:4096].decode("utf-8", errors="replace"), stderr[:4096].decode("utf-8", errors="replace")
+        return int(proc.returncode or 0), stdout[:4096].decode("utf-8", errors="replace"), stderr[:4096].decode("utf-8", errors="replace")
+    except asyncio.CancelledError:
+        try:
+            await stop_process_tree()
+        except (OSError, TimeoutError):
+            pass
+        raise
     except Exception as exc:
         try:
             await stop_process_tree()
@@ -401,9 +422,30 @@ async def execute_claude_hooks(
             if not _matches_if(spec.get("if"), event, event_payload):
                 continue
             started = time.monotonic()
-            code, output, stderr = await _run_command(
-                spec, event_payload, cwd=cwd, plugin_root=group.get("plugin_root"),
-            )
+            run_spec = {**spec, "event": event}
+            force_sync = spec.get("force_sync_execution", spec.get("forceSyncExecution", False))
+            if (spec.get("async") or spec.get("async_rewake") or spec.get("asyncRewake")) and not force_sync:
+                requested_async_ms = spec.get("async_timeout", spec.get("asyncTimeout"))
+                async_timeout = dict(run_spec)
+                if requested_async_ms is None or isinstance(requested_async_ms, bool):
+                    async_timeout["timeout"] = None
+                else:
+                    try:
+                        value_ms = float(requested_async_ms)
+                        async_timeout["timeout"] = value_ms / 1000 if value_ms > 0 else None
+                    except (TypeError, ValueError):
+                        async_timeout["timeout"] = None
+                timeout_ms = timeout_for(async_timeout, event=event, kind="async")
+                task = asyncio.create_task(await_hook_with_timeout(
+                    _run_command(run_spec, event_payload, cwd=cwd, plugin_root=group.get("plugin_root")),
+                    timeout_ms,
+                ))
+                _track_async_hook(task)
+                code, output, stderr = 0, "", ""
+            else:
+                code, output, stderr = await _run_command(
+                    run_spec, event_payload, cwd=cwd, plugin_root=group.get("plugin_root"),
+                )
             try:
                 structured = json.loads(output) if output.strip() else None
             except json.JSONDecodeError:
@@ -845,7 +887,7 @@ class HookStore:
         for hook in atlas_hooks:
             started = time.monotonic()
             code, output, stderr = await _run_command(
-                {"command": hook["command"], "timeout": hook.get("timeout_s", 30)},
+                {"command": hook["command"], "timeout": hook.get("timeout_s", 30), "event": event},
                 {"event": event, **payload}, cwd=cwd, plugin_root=None,
             )
             log = {"hook_id": hook["id"], "event": event, "exit_code": code,
@@ -890,7 +932,7 @@ class HookStore:
                 return self._deny_untrusted_sync(atlas_hook, hook["event"], "atlas")
             started = time.monotonic()
             code, output, stderr = await _run_command(
-                {"command": hook["command"], "timeout": hook.get("timeout_s", 30)},
+                {"command": hook["command"], "timeout": hook.get("timeout_s", 30), "event": hook["event"]},
                 {"event": hook["event"], "run_id": "example-run",
                  "conversation_id": "example-conversation", "tool_name": "example",
                  "parameters": {}, "result": None}, cwd=None, plugin_root=None,

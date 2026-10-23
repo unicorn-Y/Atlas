@@ -23,6 +23,66 @@ DEFAULT_BASH_TIMEOUT_MS = 120_000
 DEFAULT_BASH_MAX_TIMEOUT_MS = 600_000
 DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024
 
+# Hook subprocess budgets are separate from interactive Bash budgets. Keep the
+# policy here so command-execution callers can share the same timeout rules.
+DEFAULT_HOOK_TIMEOUT_MS = 600_000
+DEFAULT_SESSION_END_HOOK_TIMEOUT_MS = 1_500
+DEFAULT_ASYNC_HOOK_TIMEOUT_MS = 15_000
+DEFAULT_AGENT_HOOK_TIMEOUT_MS = 60_000
+DEFAULT_HTTP_HOOK_TIMEOUT_MS = 600_000
+DEFAULT_PROMPT_HOOK_TIMEOUT_MS = 30_000
+
+
+def hook_timeout_ms(
+    requested: Any = None, *, event: str = "", kind: str = "command",
+    environ: Any = None,
+) -> int:
+    """Return a bounded, positive timeout for one hook execution.
+
+    Hook config timeouts are expressed in seconds. SessionEnd has its own
+    environment-overridable shutdown budget; the other runtime categories
+    match the reference defaults for command, async, agent, HTTP and prompt
+    hooks. ``environ`` is injectable to keep policy checks deterministic.
+    """
+    environment = os.environ if environ is None else environ
+    if event == "SessionEnd":
+        try:
+            value = int(environment.get(
+                "CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS",
+                DEFAULT_SESSION_END_HOOK_TIMEOUT_MS,
+            ))
+        except (TypeError, ValueError):
+            value = DEFAULT_SESSION_END_HOOK_TIMEOUT_MS
+        cap = value if value > 0 else DEFAULT_SESSION_END_HOOK_TIMEOUT_MS
+        if requested is None or requested == 0 or isinstance(requested, bool):
+            return cap
+        try:
+            seconds = float(requested)
+        except (TypeError, ValueError):
+            return cap
+        if not math.isfinite(seconds) or seconds <= 0:
+            return cap
+        return min(cap, max(1, int(seconds * 1000)))
+    defaults = {
+        "command": DEFAULT_HOOK_TIMEOUT_MS,
+        "async": DEFAULT_ASYNC_HOOK_TIMEOUT_MS,
+        "agent": DEFAULT_AGENT_HOOK_TIMEOUT_MS,
+        "http": DEFAULT_HTTP_HOOK_TIMEOUT_MS,
+        "prompt": DEFAULT_PROMPT_HOOK_TIMEOUT_MS,
+    }
+    default = defaults.get(kind, DEFAULT_HOOK_TIMEOUT_MS)
+    if requested is None or requested == 0:
+        return default
+    if isinstance(requested, bool):
+        return default
+    try:
+        seconds = float(requested)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(seconds) or seconds <= 0:
+        return default
+    return max(1, int(seconds * 1000))
+
 
 class HeadTailBuffer:
     """Codex stable 50% prefix and rolling 50% suffix, measured in bytes."""
