@@ -8,7 +8,9 @@ import random
 import time
 
 
-def jittered_backoff(attempt: int, *, base_delay: float = 1.0,
-                     max_delay: float = 8.0, jitter_ratio: float = 0.2) -> float:
+def jittered_backoff(attempt: int, *, base_delay: float = 0.5,
+                     max_delay: float = 32.0, jitter_ratio: float = 0.25) -> float:
+    """Claude Code request backoff: 500ms exponential, 32s ceiling, positive 25% jitter."""
     delay = min(max_delay, base_delay * 2 ** max(0, attempt - 1))
-    return delay + random.Random(time.time_ns()).uniform(0, jitter_ratio * delay)
+    jittered = delay + random.Random(time.time_ns()).uniform(0, jitter_ratio * delay)
+    return min(max_delay, jittered)

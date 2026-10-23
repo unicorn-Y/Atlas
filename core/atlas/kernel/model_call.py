@@ -249,6 +249,11 @@ def _provider_error_detail(exc: BaseException, *, secret: str = "") -> str:
 
 
 def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
+    # Keep the previously orphaned provider-neutral classifier in the live path;
+    # the transport classifier below adds response/header-aware distinctions.
+    from atlas.agent.error_classifier import classify_api_error
+
+    generic = classify_api_error(exc)
     status = _status(exc)
     text = _error_text(exc)
     name = type(exc).__name__.lower()
@@ -288,6 +293,8 @@ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
         return "overloaded", True, status
     if status in {408, 425, 504} or "timeout" in name or "timed out" in text:
         return "timeout", True, status
+    if status is not None and status >= 500 and _is_non_json_server_error(exc):
+        return "connection", True, status
     if status is not None and (status >= 500 or status == 409):
         return "provider", True, status
     if any(marker in name or marker in text for marker in (
@@ -301,7 +308,59 @@ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
         return "connection", True, status
     if status in {400, 422}:
         return "invalid_request", False, status
+    if generic.retryable:
+        return generic.reason.value, True, status
     return "model", False, status
+
+
+def _is_non_json_server_error(exc: BaseException) -> bool:
+    """Treat HTML/plain proxy 5xx pages as a broken network hop, not provider JSON."""
+    current: Any = exc
+    for _ in range(4):
+        response = _get(current, "response")
+        if response is not None:
+            headers = _get(response, "headers") or {}
+            try:
+                content_type = str(headers.get("content-type", "")).lower()
+            except Exception:
+                content_type = ""
+            if content_type and "json" not in content_type:
+                return True
+            body = _get(response, "text")
+            if body is None:
+                body = _get(response, "content")
+            if isinstance(body, bytes):
+                body = body[:2048].decode("utf-8", errors="replace")
+            if isinstance(body, str) and body.strip():
+                try:
+                    json.loads(body)
+                except (TypeError, ValueError):
+                    return True
+            return False
+        current = _get(current, "__cause__") or _get(current, "__context__")
+        if current is None:
+            break
+    return False
+
+
+def _header(exc: BaseException, name: str) -> str | None:
+    current: Any = exc
+    for _ in range(4):
+        response = _get(current, "response")
+        headers = _get(response, "headers")
+        if headers is not None:
+            try:
+                value = headers.get(name)
+                if value is None and callable(getattr(headers, "items", None)):
+                    value = next((v for k, v in headers.items() if str(k).lower() == name.lower()), None)
+                if value is not None:
+                    return str(value).strip()
+            except Exception:
+                pass
+        current = _get(current, "__cause__") or _get(current, "__context__")
+        if current is None:
+            break
+    return None
 
 
 def _retry_after_value(value: Any) -> float | None:
@@ -405,8 +464,10 @@ def _backoff(retry_index: int) -> float:
 
 
 def _overloaded_backoff(retry_index: int, base_delay_s: float) -> float:
-    """Claude Code's documented 500 ms exponential start for 529 responses."""
-    return min(300.0, base_delay_s * (2 ** min(max(0, retry_index), 16)))
+    """Claude Code's 500 ms exponential 529 backoff with 32 s cap and positive jitter."""
+    from atlas.agent.retry_utils import jittered_backoff
+
+    return jittered_backoff(retry_index + 1, base_delay=base_delay_s, max_delay=32.0)
 
 
 async def _publish(
@@ -649,6 +710,7 @@ async def complete_stream(
     retry_watchdog: bool | None = None,
     retry_watchdog_max_wait_s: float | None = None,
     overloaded_retry_base_delay_s: float | None = None,
+    retry_source: str | None = None,
     usage_budget: Any = None,
 ) -> ModelCallResult:
     """Stream one model response through Atlas ModelRouter and HTTPX transport."""
@@ -656,6 +718,9 @@ async def complete_stream(
     from atlas.models.tokens import estimate_tokens
 
     router = agent._model_router
+    retry_source = str(retry_source or getattr(agent, "source", "foreground")).lower()
+    foreground_retry_sources = {"foreground", "cli", "desktop", "web", "telegram", "discord", "slack"}
+    unattended_retry = retry_source not in foreground_retry_sources
     candidates = [model_id, *(fallback_models or [])]
     candidates = list(dict.fromkeys(str(item) for item in candidates if item))
     max_retries, retry_watchdog, retry_watchdog_max_wait_s, overloaded_retry_base_delay_s = (
@@ -695,6 +760,8 @@ async def complete_stream(
         connection_retry_count = 0
         connection_retry_delay = 5.0
         overloaded_retry_count = 0
+        auth_rotation_count = 0
+        persistent_retry_delay = 0.5
         watchdog_capacity_wait_s = 0.0
 
         while True:
@@ -944,6 +1011,31 @@ async def complete_stream(
                 if status in {429, 529}:
                     cool(route.model_id or candidate, 60.0)
                 retry_after = _retry_after(exc)
+                retry_directive = (_header(exc, "x-should-retry") or "").lower()
+                server_retry_override = retry_directive in {"true", "1", "yes"}
+                server_no_retry = retry_directive in {"false", "0", "no"}
+                auth_rotation = False
+                if status in {401, 403} and route.credential_pool is not None and auth_rotation_count < 5:
+                    refresh = getattr(route.credential_pool, "try_refresh_matching", None)
+                    refreshed = refresh(api_key_hint=route.key) if callable(refresh) else None
+                    if refreshed is not None:
+                        route = await router.resolve(candidate, "conversation")
+                        wire_model = route.wire_model or route.model
+                        auth_rotation = True
+                        auth_rotation_count += 1
+                    rotate = getattr(route.credential_pool, "mark_exhausted_and_rotate", None)
+                    if not auth_rotation and callable(rotate):
+                        next_entry = rotate(
+                            status_code=status,
+                            error_context={"message": str(error)},
+                            api_key_hint=route.key,
+                            model=route.model_id or candidate,
+                        )
+                        auth_rotation = next_entry is not None
+                        auth_rotation_count += int(auth_rotation)
+                        if auth_rotation:
+                            route = await router.resolve(candidate, "conversation")
+                            wire_model = route.wire_model or route.model
                 connection_retry = bool(
                     error.retryable and error.category == "connection"
                     and unbounded_connection_retries
@@ -952,10 +1044,20 @@ async def complete_stream(
                 watchdog_capacity_retry = bool(
                     error.retryable and retry_watchdog and status in {429, 529}
                     and error.category in {"rate_limit", "overloaded"}
+                    and (status != 529 or (
+                        retry_source in foreground_retry_sources and overloaded_retry_count < 3
+                    ))
                 )
-                will_retry = connection_retry or watchdog_capacity_retry or bool(
-                    error.retryable and retry_index < max_retries
+                is_529 = status == 529 or error.category == "overloaded"
+                retry_529 = is_529 and retry_source in foreground_retry_sources and overloaded_retry_count < 3
+                persistent_retry = unattended_retry and error.retryable and not is_529
+                will_retry = auth_rotation or connection_retry or watchdog_capacity_retry or retry_529 or persistent_retry or bool(
+                    error.retryable and retry_index < max_retries and not is_529
                 )
+                if server_retry_override and not server_no_retry and not is_529:
+                    will_retry = True
+                if server_no_retry:
+                    will_retry = False
                 if watchdog_capacity_retry and retry_watchdog_max_wait_s is not None:
                     remaining_wait = retry_watchdog_max_wait_s - watchdog_capacity_wait_s
                     if remaining_wait <= 0:
@@ -963,7 +1065,9 @@ async def complete_stream(
 
                 delay = connection_retry_delay if connection_retry else retry_after
                 if will_retry and delay is None:
-                    if status == 529 or error.category == "overloaded":
+                    if persistent_retry and not retry_529 and not connection_retry:
+                        delay = min(300.0, persistent_retry_delay)
+                    elif status == 529 or error.category == "overloaded":
                         delay = _overloaded_backoff(
                             overloaded_retry_count, overloaded_retry_base_delay_s,
                         )
@@ -973,12 +1077,15 @@ async def complete_stream(
                     remaining_wait = max(0.0, retry_watchdog_max_wait_s - watchdog_capacity_wait_s)
                     delay = min(delay or 0.0, remaining_wait)
                 retry_kind = (
+                    "auth_rotation" if auth_rotation else
+                    "persistent" if persistent_retry and not retry_529 and not connection_retry else
                     "connection" if connection_retry else
                     "watchdog_capacity" if watchdog_capacity_retry and will_retry else
                     "overloaded" if status == 529 or error.category == "overloaded" else
                     "standard" if will_retry else None
                 )
                 retry_number = (
+                    auth_rotation_count if auth_rotation else
                     connection_retry_count + 1 if connection_retry else
                     overloaded_retry_count + 1 if status == 529 or error.category == "overloaded" else
                     retry_index + 1
@@ -1018,6 +1125,8 @@ async def complete_stream(
                         pass
                 else:
                     await asyncio.sleep(delay)
+                if auth_rotation:
+                    continue
                 if connection_retry:
                     connection_retry_count += 1
                     connection_retry_delay = min(60.0, connection_retry_delay * 2)
@@ -1025,6 +1134,8 @@ async def complete_stream(
                     watchdog_capacity_wait_s += delay
                     if status == 529 or error.category == "overloaded":
                         overloaded_retry_count += 1
+                elif persistent_retry and not retry_529:
+                    persistent_retry_delay = min(300.0, persistent_retry_delay * 2)
                 else:
                     retry_index += 1
                     if status == 529 or error.category == "overloaded":

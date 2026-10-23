@@ -21,8 +21,7 @@ agent/credential_pool.py@e287231，hermes 侧调用点逐一核实如下：
   revert 判定读 entry.priority（本实现恒 0，该分支不触发）。
 
 与 hermes 的有意差异（静态 API key 池，无 OAuth/DEAD/lease/策略）：
-- try_refresh_matching() 恒 None（无刷新能力，hermes 401 路径随即轮换）；
-  try_refresh_current() 返回 current()（凭据不变，供 auxiliary client 探活）。
+- try_refresh_matching() 恒 None（静态 API key 无刷新令牌；模型请求调用后进入池轮换）。
 - 身份对不上任何条目时不标记、仅在确有第二个可用 key 时轮换（hermes _rotate_unmatched
   的 streak 计数省略：Atlas 的 hint 均来自本池条目）。
 - 模型级 429（C5 契约 §3 B2）：mark_exhausted_and_rotate 带 model 且状态为 429（非 billing
@@ -491,10 +490,6 @@ class AtlasCredentialPool:
     ) -> AtlasCredentialEntry | None:
         """恒 None：hermes 401/403 路径收到 None 即转入 mark_exhausted_and_rotate 轮换。"""
         return None
-
-    def try_refresh_current(self) -> AtlasCredentialEntry | None:
-        """无刷新动作，返回当前条目（auxiliary client 探活路径）。"""
-        return self.current()
 
     # --- 轮换 ------------------------------------------------------------
 

@@ -832,6 +832,7 @@ class HermesRuntime:
         message: str,
         user_content: Any | None = None,
         conversation_id: str,
+        source: str = "foreground",
         workspace: str | None,
         history: list[dict[str, Any]],
         system_message: str | None = None,
@@ -971,7 +972,7 @@ class HermesRuntime:
             kernel = AtlasKernel(data_dir=self.home.parent, config=atlas_config.raw)
             request = KernelRequest(
                 agent=atlas_agent, runtime=atlas_context, message=message,
-                conversation_id=conversation_id, workspace=workspace, history=history,
+                conversation_id=conversation_id, source=source, workspace=workspace, history=history,
                 system_message=request_system_message,
                 volatile_context=list(volatile_context or []), user_content=user_content,
                 model_id=model_id, reasoning_effort=reasoning_effort,

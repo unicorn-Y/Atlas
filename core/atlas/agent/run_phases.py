@@ -138,6 +138,7 @@ class RunRequest:
 
     message: str
     conversation_id: str
+    source: str = "foreground"
     model: str | None = None
     plan_state: dict[str, Any] | None = None
     force_plan: bool = False
@@ -830,6 +831,7 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
             message=state.message,
             user_content=model_input,
             conversation_id=request.conversation_id,
+            source=request.source,
             workspace=request.workspace,
             history=hermes_history,
             system_message=system_message,

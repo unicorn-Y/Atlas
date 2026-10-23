@@ -786,6 +786,7 @@ class AgentOrchestrator:
         subtask_group_completed: Callable[..., Any] | None = None,
         worker: bool = False,
         parent_process_event_callback: Callable[..., Any] | None = None,
+        source: str = "foreground",
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
 
@@ -811,6 +812,7 @@ class AgentOrchestrator:
         """
         request = RunRequest(
             message=message, conversation_id=conversation_id, model=model,
+            source=source,
             plan_state=plan_state, force_plan=force_plan, evaluate_goal=evaluate_goal,
             source_run_id=source_run_id, image_attachments=image_attachments,
             active_skill_instructions=active_skill_instructions, run_id=run_id,

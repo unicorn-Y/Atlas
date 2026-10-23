@@ -95,6 +95,7 @@ class KernelRequest:
     runtime: Any
     message: str
     conversation_id: str
+    source: str = "foreground"
     workspace: str | None = None
     history: list[dict[str, Any]] = field(default_factory=list)
     system_message: str = ""
@@ -990,6 +991,7 @@ class AtlasKernel:
                         retry_watchdog=retry_watchdog,
                         retry_watchdog_max_wait_s=watchdog_max_wait,
                         overloaded_retry_base_delay_s=overloaded_retry_base_delay,
+                        retry_source=request.source,
                         on_attempt=on_summary_attempt,
                         usage_budget=usage_budget,
                     )
@@ -1290,6 +1292,7 @@ class AtlasKernel:
                         retry_watchdog=retry_watchdog,
                         retry_watchdog_max_wait_s=watchdog_max_wait,
                         overloaded_retry_base_delay_s=overloaded_retry_base_delay,
+                        retry_source=request.source,
                         on_text=on_text, on_attempt=on_attempt, on_event=on_event,
                         usage_budget=usage_budget,
                     ))
