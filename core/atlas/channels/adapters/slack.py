@@ -48,6 +48,7 @@ _RETRYABLE_SLACK_ERRORS = {
     "ratelimited", "rate_limited", "internal_error", "service_unavailable",
     "request_timeout", "temporarily_unavailable",
 }
+_INVALID_THREAD_ANCHOR_ERRORS = {"thread_not_found", "invalid_thread_ts"}
 
 
 def slack_send_error_retryable(error: str, status_code: int | None = None) -> bool:
@@ -60,6 +61,11 @@ def slack_send_error_retryable(error: str, status_code: int | None = None) -> bo
     if status_code == 429 or (status_code is not None and status_code >= 500):
         return True
     return str(error or "").strip().lower() in _RETRYABLE_SLACK_ERRORS
+
+
+def slack_thread_anchor_invalid(error: str) -> bool:
+    """Return true only for structured Slack errors that reject a reply anchor."""
+    return str(error or "").strip().lower() in _INVALID_THREAD_ANCHOR_ERRORS
 
 
 def _channel_kind(channel_id: str) -> tuple[bool, str]:
@@ -261,6 +267,21 @@ class SlackAdapter(ChannelAdapter):
         data = getattr(response, "data", None)
         if not isinstance(data, dict):
             return SendResult(ok=False, error="Slack returned an invalid send response")
+        if not data.get("ok", False) and reply_to and slack_thread_anchor_invalid(
+            str(data.get("error") or ""),
+        ):
+            # The thread may have been deleted between inbound dispatch and the
+            # final answer. Slack confirmed this attempt was rejected, so one
+            # unthreaded retry safely delivers the content to the channel.
+            payload.pop("thread_ts", None)
+            try:
+                response = await self._web.chat_postMessage(**payload)
+            except Exception as exc:
+                logger.exception("Slack unthreaded fallback send failed")
+                return SendResult(ok=False, error=str(exc), retryable=True)
+            data = getattr(response, "data", None)
+            if not isinstance(data, dict):
+                return SendResult(ok=False, error="Slack returned an invalid fallback response")
         if not data.get("ok", False):
             error = str(data.get("error") or "slack api error")
             status_code = getattr(response, "status_code", None)
