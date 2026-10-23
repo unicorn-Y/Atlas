@@ -629,7 +629,15 @@ class ChannelManager:
                     self.delivery.fail(record.id, f"渠道 {record.channel} 未运行", retryable=True)
                     await self._report_delivery_failure(record, "渠道未运行，消息已排队重试。")
                     continue
-                attachments = [Attachment(**item) for item in (record.attachments or [])]
+                try:
+                    attachments = [Attachment(**item) for item in (record.attachments or [])]
+                except (TypeError, ValueError) as exc:
+                    logger.warning(
+                        "渠道待发送消息附件格式无效 %s: %s", record.channel, exc,
+                    )
+                    self.delivery.fail(record.id, f"Invalid attachment metadata: {exc}", retryable=False)
+                    await self._report_delivery_failure(record, "消息附件信息无效，未发送。")
+                    continue
                 try:
                     result = await adapter.send(
                         record.chat_id, record.content,
