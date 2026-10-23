@@ -303,6 +303,34 @@ _EVENT_STREAM_DONE = object()
 _MAX_SUBAGENT_STOP_CONTINUATIONS = 5
 
 
+def _subagent_task_prompt(
+    *, goal: str, context: str | None, cwd: str | None,
+    tool_allow: list[str] | None, tool_deny: list[str] | None,
+) -> str:
+    """Render the explicit task packet inherited by an Atlas child run."""
+    if tool_allow:
+        available_tools = "Allowed tool names: " + ", ".join(sorted(set(tool_allow))) + "."
+    else:
+        available_tools = "Use the tools exposed to this child run, respecting its denied-tool list."
+    denied = sorted({str(name) for name in (tool_deny or []) if str(name)})
+    if denied:
+        available_tools += " Unavailable tools: " + ", ".join(denied) + "."
+    return (
+        "You are an Atlas child worker running in the background. Complete only the "
+        "assigned task; do not delegate further, ask the user questions, or wait for "
+        "confirmation. The parent run supplies only the context excerpt below, not its "
+        "entire conversation. Use the stated working directory and the tools exposed "
+        "to this child run. Make reasonable assumptions where needed and report them.\n\n"
+        f"Task:\n{goal}\n\n"
+        f"Relevant parent context excerpt:\n{context.strip() if context and context.strip() else 'None supplied.'}\n\n"
+        f"Working directory:\n{cwd or 'Not specified.'}\n\n"
+        f"Tool availability:\n{available_tools}\n\n"
+        "On completion, return a concise handoff to the parent: outcome, important "
+        "evidence and checks run, files or state changed, and any assumptions or "
+        "unfinished work. If the task fails, state the failure and what did not complete."
+    )
+
+
 class _RuntimeFailureError(Exception):
     """An agent failure with a user-facing runtime category."""
 
@@ -511,12 +539,9 @@ class AgentOrchestrator:
         cancel_event = options.get("cancel_event") or asyncio.Event()
         usage: list[dict[str, Any]] = []
         outputs: list[str] = []
-        worker_prompt = (
-            "你是 Atlas 的子任务 Worker，在后台运行，没有人能回答你的问题。"
-            "只完成给定目标，不能再委派任务，也不要向用户提问或等待确认；"
-            "信息不够时按最合理的假设直接做完，并在结论里写明做了哪些假设。"
-            "完成后给出简短结论和证据。\n\n"
-            f"目标：{goal}\n补充信息：{context or '无'}"
+        worker_prompt = _subagent_task_prompt(
+            goal=goal, context=context, cwd=cwd,
+            tool_allow=options.get("tool_allow"), tool_deny=options.get("tool_deny"),
         )
         status = "completed"
         prompt = worker_prompt
