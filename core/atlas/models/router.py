@@ -447,18 +447,29 @@ def _endpoint(base_url: str | None, suffix: str) -> str:
 
 
 def _anthropic_payload(route: RouteSpec, messages: list[dict[str, Any]], kwargs: dict[str, Any]) -> dict[str, Any]:
-    system: list[str] = []
+    system: list[dict[str, Any]] = []
     converted: list[dict[str, Any]] = []
     for message in messages:
         role = str(message.get("role") or "user")
         content = message.get("content") or ""
         if role in {"system", "developer"}:
-            system.append(str(content))
+            if isinstance(content, str):
+                system.append({"type": "text", "text": content})
+            elif isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and part.get("type", "text") == "text":
+                        block = {"type": "text", "text": str(part.get("text") or "")}
+                        if isinstance(part.get("cache_control"), dict):
+                            block["cache_control"] = part["cache_control"]
+                        system.append(block)
         elif role == "tool":
-            converted.append({"role": "user", "content": [{
+            result_block = {
                 "type": "tool_result", "tool_use_id": str(message.get("tool_call_id") or ""),
                 "content": str(content),
-            }]})
+            }
+            if isinstance(message.get("cache_control"), dict):
+                result_block["cache_control"] = message["cache_control"]
+            converted.append({"role": "user", "content": [result_block]})
         else:
             blocks: list[dict[str, Any]] = []
             if isinstance(content, str) and content:
@@ -493,15 +504,20 @@ def _anthropic_payload(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
         "max_tokens": max(1, int(max_tokens)),
     }
     if system:
-        payload["system"] = "\n\n".join(system)
+        payload["system"] = system
     tools = kwargs.get("tools")
     if tools:
-        payload["tools"] = [
-            {"name": (tool.get("function") or {}).get("name", ""),
-             "description": (tool.get("function") or {}).get("description", ""),
-             "input_schema": (tool.get("function") or {}).get("parameters") or {"type": "object", "properties": {}}}
-            for tool in tools
-        ]
+        payload["tools"] = []
+        for tool in tools:
+            function = tool.get("function") or {}
+            converted_tool = {
+                "name": function.get("name", ""),
+                "description": function.get("description", ""),
+                "input_schema": function.get("parameters") or {"type": "object", "properties": {}},
+            }
+            if isinstance(tool.get("cache_control"), dict):
+                converted_tool["cache_control"] = tool["cache_control"]
+            payload["tools"].append(converted_tool)
     if kwargs.get("temperature") is not None:
         payload["temperature"] = kwargs["temperature"]
     payload["stream"] = bool(kwargs.get("stream", False))
@@ -693,7 +709,7 @@ def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
             from types import SimpleNamespace
 
             blocks: dict[int, dict[str, Any]] = {}
-            input_tokens = output_tokens = 0
+            input_tokens = output_tokens = cache_read = cache_creation = 0
             for line in response.iter_lines():
                 if not line.startswith("data: ") or line[6:] == "[DONE]":
                     continue
@@ -714,7 +730,10 @@ def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
                 elif kind == "content_block_start":
                     blocks[int(event.get("index", 0))] = dict(event.get("content_block") or {})
                 elif kind == "message_start":
-                    input_tokens = int(((event.get("message") or {}).get("usage") or {}).get("input_tokens") or 0)
+                    usage = ((event.get("message") or {}).get("usage") or {})
+                    input_tokens = int(usage.get("input_tokens") or 0)
+                    cache_read = int(usage.get("cache_read_input_tokens") or 0)
+                    cache_creation = int(usage.get("cache_creation_input_tokens") or 0)
                 elif kind == "message_delta":
                     output_tokens = int((event.get("usage") or {}).get("output_tokens") or 0)
             text = "".join(str(block.get("text") or "") for block in blocks.values()
@@ -737,7 +756,9 @@ def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
                                                                   reasoning_details=reasoning or None),
                                          finish_reason=None)],
                 usage=SimpleNamespace(prompt_tokens=input_tokens, completion_tokens=output_tokens,
-                                      total_tokens=input_tokens + output_tokens),
+                                      total_tokens=input_tokens + output_tokens,
+                                      cache_read_input_tokens=cache_read,
+                                      cache_creation_input_tokens=cache_creation),
             )
         else:
             data = response.json()
@@ -762,6 +783,8 @@ def _post_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs: d
         usage_obj = SimpleNamespace(
             prompt_tokens=usage.get("input_tokens"), completion_tokens=usage.get("output_tokens"),
             total_tokens=(int(usage.get("input_tokens") or 0) + int(usage.get("output_tokens") or 0)),
+            cache_read_input_tokens=usage.get("cache_read_input_tokens"),
+            cache_creation_input_tokens=usage.get("cache_creation_input_tokens"),
         )
         data = SimpleNamespace(
             choices=[SimpleNamespace(message=message, finish_reason=data.get("stop_reason"))],
@@ -805,6 +828,7 @@ def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
                 tool_indexes: dict[int, int] = {}
                 next_tool_index = 0
                 input_tokens = 0
+                cache_read = cache_creation = 0
                 for raw in response.iter_lines():
                     if not raw.startswith("data: "):
                         continue
@@ -817,7 +841,10 @@ def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
                         continue
                     kind = item.get("type")
                     if kind == "message_start":
-                        input_tokens = int((item.get("message") or {}).get("usage", {}).get("input_tokens") or 0)
+                        usage = (item.get("message") or {}).get("usage", {})
+                        input_tokens = int(usage.get("input_tokens") or 0)
+                        cache_read = int(usage.get("cache_read_input_tokens") or 0)
+                        cache_creation = int(usage.get("cache_creation_input_tokens") or 0)
                     elif kind == "content_block_start":
                         block = item.get("content_block") or {}
                         if block.get("type") == "tool_use":
@@ -843,6 +870,8 @@ def _stream_completion(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
                         shaped_usage = {
                             "input_tokens": usage.get("input_tokens", input_tokens),
                             "output_tokens": usage.get("output_tokens"),
+                            "cache_read_input_tokens": usage.get("cache_read_input_tokens", cache_read),
+                            "cache_creation_input_tokens": usage.get("cache_creation_input_tokens", cache_creation),
                         }
                         yield {"choices": [{"delta": {}, "finish_reason": item.get("delta", {}).get("stop_reason")}], "usage": shaped_usage}
             else:

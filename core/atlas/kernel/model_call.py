@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import math
 import os
 import random
@@ -19,6 +20,24 @@ from email.utils import parsedate_to_datetime
 from typing import Any, Awaitable, Callable
 
 from atlas.kernel.repair import normalize_tool_results
+
+
+def _stable_wire_value(value: Any) -> Any:
+    """Canonicalize JSON objects so equivalent tool schemas serialize identically."""
+    if isinstance(value, dict):
+        return {key: _stable_wire_value(value[key]) for key in sorted(value)}
+    if isinstance(value, list):
+        return [_stable_wire_value(item) for item in value]
+    return value
+
+
+def _stable_tool_definitions(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Keep the provider-visible tool prefix stable across turns and retries."""
+    normalized = [_stable_wire_value(tool) for tool in (tools or [])]
+    return sorted(normalized, key=lambda tool: (
+        str(((tool.get("function") or {}).get("name") or "")),
+        json.dumps(tool, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+    ))
 
 
 @dataclass(slots=True)
@@ -701,8 +720,24 @@ async def complete_stream(
             got_chunk = False
             first_chunk_limit, idle_limit = _stream_limits()
             try:
+                wire_messages = _wire_messages(request_messages)
+                wire_tools = _stable_tool_definitions(tools)
+                if route.api_mode == "anthropic_messages":
+                    from atlas.agent.prompt_cache_boundary import find_stable_prefix
+                    from atlas.agent.prompt_caching import build_prompt_cache_plan
+
+                    system_content = next((
+                        item.get("content") for item in wire_messages
+                        if item.get("role") == "system" and isinstance(item.get("content"), str)
+                    ), None)
+                    cache_plan = build_prompt_cache_plan(
+                        wire_messages, wire_tools, native_anthropic=True,
+                        static_system_prefix=find_stable_prefix(system_content) if system_content else None,
+                        direct_native_tool_cache=True,
+                    )
+                    wire_messages, wire_tools = cache_plan.messages, cache_plan.tools
                 kwargs: dict[str, Any] = {
-                    "tools": tools or None, "stream": True,
+                    "tools": wire_tools or None, "stream": True,
                     "stream_options": {"include_usage": True},
                 }
                 if max_output_tokens:
@@ -710,7 +745,7 @@ async def complete_stream(
                 if reasoning_effort:
                     kwargs["reasoning_config"] = {"effort": reasoning_effort}
                 stream = await asyncio.to_thread(
-                    router.stream, route, _wire_messages(request_messages), **kwargs,
+                    router.stream, route, wire_messages, **kwargs,
                 )
                 if hasattr(stream, "choices"):
                     chunks = iter((stream,))
@@ -847,6 +882,19 @@ async def complete_stream(
                                 finish_reason=finish_reason, endpoint=_endpoint(route.base_url)),
                     last_usage, total_attempts, duration_ms, route.model_id or candidate,
                     route.provider,
+                )
+                usage_details = last_usage.get("input_tokens_details") or last_usage.get("prompt_tokens_details") or {}
+                cached_tokens = next((last_usage.get(key) for key in (
+                    "cache_read_input_tokens", "cached_tokens", "cache_read",
+                ) if last_usage.get(key) is not None), None)
+                if cached_tokens is None and isinstance(usage_details, dict):
+                    cached_tokens = next((usage_details.get(key) for key in (
+                        "cached_tokens", "cache_read", "cache_read_input_tokens",
+                    ) if usage_details.get(key) is not None), None)
+                logging.getLogger(__name__).info(
+                    "model.cache_usage provider=%s model=%s cached_tokens=%s cache_read=%s usage=%s",
+                    route.provider, route.model_id or candidate, cached_tokens,
+                    last_usage.get("cache_read"), last_usage,
                 )
                 if usage_budget is not None:
                     usage_row = _usage_row(result, request_id, wire_model, estimated)
