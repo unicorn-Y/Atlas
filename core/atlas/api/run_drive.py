@@ -1706,6 +1706,17 @@ async def _handle_run_start(
                         workspace_path, conv_id, worktree_request.get("base_branch"),
                         worktree_request.get("name"),
                     )
+                    worktree_hook = await _server()._hook_store().execute("WorktreeCreate", {
+                        "conversation_id": conv_id, "worktree_path": worktree_data["worktree_path"],
+                        "worktree_branch": worktree_data["worktree_branch"],
+                        "base_branch": worktree_data["base_branch"], "cwd": str(workspace_path),
+                    }, cwd=str(workspace_path))
+                    if worktree_hook.get("blocked"):
+                        _server()._worktrees().remove(
+                            workspace_path, Path(worktree_data["worktree_path"]),
+                            worktree_data["worktree_branch"], force=True,
+                        )
+                        raise ValueError(str(worktree_hook.get("reason") or "WorktreeCreate hook blocked creation"))
                     if memory is not None:
                         await memory.update_conversation(
                             conv_id, workspace=str(workspace_path), **worktree_data,
@@ -2788,10 +2799,36 @@ async def _execute_run(
         async def user_hook(event_name: str, payload: dict[str, Any]) -> dict[str, Any]:
             hook_payload = dict(payload)
             bridge_event_alias = bool(hook_payload.pop("__atlas_bridge_event_alias__", True))
-            return await _server()._hook_store().execute(event_name, {
+            hook_store = _server()._hook_store()
+            event_result = await hook_store.execute(event_name, {
                 "run_id": run.run_id, "conversation_id": run.conversation_id,
                 **hook_payload,
             }, cwd=workspace, emit=emit, bridge_event_alias=bridge_event_alias)
+            session_key = run.conversation_id or run.run_id
+            if event_name == "SessionStart":
+                old_cwd = hook_store._watch_cwds.get(str(session_key))
+                if old_cwd and old_cwd != str(Path(workspace or os.getcwd()).resolve()):
+                    cwd_result = await hook_store.execute("CwdChanged", {
+                        "conversation_id": run.conversation_id, "session_id": run.conversation_id,
+                        "run_id": run.run_id, "old_cwd": old_cwd,
+                        "new_cwd": workspace or os.getcwd(), "cwd": workspace or os.getcwd(),
+                    }, cwd=workspace, emit=emit)
+                    event_result["watch_paths"] = list(dict.fromkeys([
+                        *(event_result.get("watch_paths") or []),
+                        *(cwd_result.get("watch_paths") or []),
+                    ]))
+                hook_store.start_file_watcher(
+                    str(session_key), event_result.get("watch_paths") or [],
+                    cwd=workspace, callback=user_hook,
+                )
+            elif event_name == "CwdChanged":
+                hook_store.start_file_watcher(
+                    str(session_key), event_result.get("watch_paths") or [],
+                    cwd=workspace, callback=user_hook,
+                )
+            elif event_name == "SessionEnd":
+                hook_store.stop_file_watcher(str(session_key))
+            return event_result
 
         async def publish_runtime_event(event: dict[str, Any]) -> None:
             if event.get("type") == "session.title":

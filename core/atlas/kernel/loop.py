@@ -635,10 +635,20 @@ class AtlasKernel:
                     reason = str(pre_tool.get("reason") or (
                         f"Tool use blocked by PreToolUse hook ({permission_decision or 'blocked'})."
                     ))
-                    pretool_blocked.add(call_id)
-                    record("tool_blocked", tool_call_id=call_id, name=name,
-                           decision=permission_decision or "blocked", reason=reason)
-                    return {"content": reason, "is_error": True, "outcome": "denied"}
+                    denied_hook = await self._run_hook(request, "PermissionDenied", {
+                        "tool_name": name, "tool_use_id": call_id,
+                        "tool_input": copy.deepcopy(tool_args), "reason": reason,
+                        "conversation_id": session_id, "run_id": run_id,
+                        "cwd": request.workspace or "",
+                    })
+                    if denied_hook.get("retry") is True:
+                        record("permission_denied_retry", tool_call_id=call_id, name=name,
+                               reason=reason)
+                    else:
+                        pretool_blocked.add(call_id)
+                        record("tool_blocked", tool_call_id=call_id, name=name,
+                               decision=permission_decision or "blocked", reason=reason)
+                        return {"content": reason, "is_error": True, "outcome": "denied"}
                 if permission_decision == "ask":
                     permission_hook = await self._run_hook(request, "PermissionRequest", {
                         "tool_name": name, "tool_use_id": call_id,
@@ -654,10 +664,21 @@ class AtlasKernel:
                     if permission_hook.get("blocked"):
                         reason = str(permission_hook.get("reason") or
                                      "PermissionRequest hook denied the tool call.")
-                        pretool_blocked.add(call_id)
-                        record("tool_blocked", tool_call_id=call_id, name=name,
-                               decision="permission_request_denied", reason=reason)
-                        return {"content": reason, "is_error": True, "outcome": "denied"}
+                        denied_hook = await self._run_hook(request, "PermissionDenied", {
+                            "tool_name": name, "tool_use_id": call_id,
+                            "tool_input": copy.deepcopy(tool_args), "reason": reason,
+                            "conversation_id": session_id, "run_id": run_id,
+                            "cwd": request.workspace or "",
+                        })
+                        if denied_hook.get("retry") is True:
+                            permission_hook["allowed"] = True
+                            record("permission_denied_retry", tool_call_id=call_id, name=name,
+                                   reason=reason)
+                        else:
+                            pretool_blocked.add(call_id)
+                            record("tool_blocked", tool_call_id=call_id, name=name,
+                                   decision="permission_request_denied", reason=reason)
+                            return {"content": reason, "is_error": True, "outcome": "denied"}
                     if permission_hook.get("allowed"):
                         proxy_runtime._preapproved_tool_call_ids.add(call_id)
                     else:
@@ -693,9 +714,18 @@ class AtlasKernel:
                         if choice != "allow":
                             reason = str(pre_tool.get("reason") or
                                          "Tool use was not approved after the PreToolUse hook requested permission.")
-                            record("tool_blocked", tool_call_id=call_id, name=name,
-                                   decision="ask_denied", reason=reason)
-                            return {"content": reason, "is_error": True, "outcome": "denied"}
+                            denied_hook = await self._run_hook(request, "PermissionDenied", {
+                                "tool_name": name, "tool_use_id": call_id,
+                                "tool_input": copy.deepcopy(tool_args), "reason": reason,
+                                "conversation_id": session_id, "run_id": run_id,
+                                "cwd": request.workspace or "",
+                            })
+                            if denied_hook.get("retry") is not True:
+                                record("tool_blocked", tool_call_id=call_id, name=name,
+                                       decision="ask_denied", reason=reason)
+                                return {"content": reason, "is_error": True, "outcome": "denied"}
+                            record("permission_denied_retry", tool_call_id=call_id, name=name,
+                                   reason=reason)
                         proxy_runtime._preapproved_tool_call_ids.add(call_id)
                         pretool_blocked.discard(call_id)
                 active_call_ids.add(call_id)
@@ -892,6 +922,7 @@ class AtlasKernel:
                         accepted.append(steer)
                 return accepted
 
+            previous_turn_model = selected_model
             for turn_index in range(max_turns):
                 await _wait_until_resumed(pause_event, request.cancel_event)
                 if request.cancel_event is not None and request.cancel_event.is_set():
@@ -927,6 +958,18 @@ class AtlasKernel:
                 turn_model, turn_effort = plan.model_settings(selected_model, selected_effort)
                 if str(request.reasoning_effort or "").lower() in _THINKING_OFF:
                     turn_effort = "off"
+                model_switch_pending = turn_model != previous_turn_model
+                if model_switch_pending:
+                    pre_switch = await self._run_hook(request, "PreModelSwitch", {
+                        "model": turn_model, "previous_model": previous_turn_model,
+                        "conversation_id": session_id, "run_id": run_id,
+                        "cwd": request.workspace or "",
+                    })
+                    if pre_switch.get("blocked"):
+                        record("model_switch_blocked", model=turn_model,
+                               reason=str(pre_switch.get("reason") or "PreModelSwitch hook blocked the switch"))
+                        turn_model = previous_turn_model
+                        model_switch_pending = False
                 model_config = next((item for item in agent._model_mgr.list_models()
                                      if item.get("id") == turn_model), {})
                 model_window = int(model_config.get("context_window") or 200_000)
@@ -1367,6 +1410,13 @@ class AtlasKernel:
                         continue
                     if response is None:
                         raise ModelCallError("Model stream ended without a response", category="stream")
+                    if model_switch_pending:
+                        await self._run_hook(request, "PostModelSwitch", {
+                            "model": turn_model, "previous_model": previous_turn_model,
+                            "conversation_id": session_id, "run_id": run_id,
+                            "cwd": request.workspace or "",
+                        })
+                    previous_turn_model = turn_model
                     break
 
                 pending_nudges.clear()
@@ -1375,6 +1425,13 @@ class AtlasKernel:
                 await flush_reasoning()
                 turn_reasoning = state.streamed_reasoning
                 assistant_content = response.text or state.streamed_refusal
+                display_hook = await self._run_hook(request, "MessageDisplay", {
+                    "message": assistant_content, "content": assistant_content,
+                    "conversation_id": session_id, "run_id": run_id,
+                    "cwd": request.workspace or "",
+                })
+                if isinstance(display_hook.get("display_content"), str):
+                    assistant_content = display_hook["display_content"]
                 state.response_text = assistant_content
                 state.usage = usage
                 stuck.observe_message(assistant_content)

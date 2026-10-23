@@ -800,6 +800,22 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
         async def lifecycle_hook(event_name: str, payload: dict[str, Any]) -> dict[str, Any]:
             return await run_user_hook(callbacks.user_hook_callback, event_name, payload)
 
+        loaded_paths = [
+            str(item.get("path")) for item in request.workspace_rules or []
+            if isinstance(item, dict) and item.get("path")
+        ]
+        loaded_paths.extend(
+            str(item.get("path")) for item in request.active_skill_instructions or []
+            if isinstance(item, dict) and item.get("path")
+        )
+        instructions_hook = await lifecycle_hook("InstructionsLoaded", {
+            "load_reason": "run_start", "file_paths": loaded_paths,
+            "cwd": request.workspace or "", "conversation_id": request.conversation_id,
+        })
+        instructions_context = str(instructions_hook.get("additional_context") or "").strip()
+        if instructions_context:
+            volatile_context.append("InstructionsLoaded hook context:\n" + instructions_context)
+
         async def update_kernel_plan(value: dict[str, Any]) -> None:
             plan = TaskPlan.from_dict(value)
             persist = callbacks.plan_update_callback

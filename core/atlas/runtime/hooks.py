@@ -20,17 +20,15 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 
-# Kept in sync with the current Claude Code hooks reference. Event declarations may
-# be read even when Atlas does not yet have a real lifecycle point for that event.
+# Claude-compatible events with a real Atlas lifecycle trigger.
 CLAUDE_HOOK_EVENTS = frozenset({
-    "SessionStart", "Setup", "InstructionsLoaded", "UserPromptSubmit",
-    "UserPromptExpansion", "MessageDisplay", "PreToolUse", "PermissionRequest",
+    "SessionStart", "InstructionsLoaded", "UserPromptSubmit",
+    "MessageDisplay", "PreToolUse", "PermissionRequest",
     "PostToolUse", "PostToolUseFailure", "PostToolBatch", "PermissionDenied",
     "Notification", "SubagentStart", "SubagentStop", "TaskCreated", "TaskCompleted",
-    "Stop", "StopFailure", "TeammateIdle", "ConfigChange", "CwdChanged",
-    "DirectoryAdded", "FileChanged", "WorktreeCreate", "WorktreeRemove",
-    "PreCompact", "PostCompact", "PreModelSwitch", "PostModelSwitch",
-    "SessionEnd", "Elicitation", "ElicitationResult",
+    "Stop", "StopFailure", "ConfigChange", "CwdChanged", "DirectoryAdded",
+    "FileChanged", "WorktreeCreate", "WorktreeRemove", "PreCompact", "PostCompact",
+    "PreModelSwitch", "PostModelSwitch", "SessionEnd",
 })
 
 _ATLAS_TO_CLAUDE = {
@@ -41,23 +39,21 @@ _ATLAS_TO_CLAUDE = {
     "run.failed": "StopFailure",
 }
 _BLOCKING_EXIT_EVENTS = {
-    "PreToolUse", "UserPromptSubmit", "UserPromptExpansion", "Stop",
-    "SubagentStop", "TeammateIdle", "TaskCreated", "TaskCompleted",
-    "PostToolBatch", "PreCompact", "PreModelSwitch", "ConfigChange",
-    "Elicitation", "ElicitationResult", "WorktreeCreate", "WorktreeRemove",
+    "PreToolUse", "UserPromptSubmit", "Stop",
+    "SubagentStop", "TaskCreated", "TaskCompleted",
+    "PostToolBatch", "PreCompact", "ConfigChange", "PreModelSwitch",
+    "WorktreeCreate", "WorktreeRemove",
 }
 _MATCH_FIELDS = {
     "PreToolUse": "tool_name", "PostToolUse": "tool_name",
     "PostToolUseFailure": "tool_name", "PermissionRequest": "tool_name",
-    "PermissionDenied": "tool_name", "SessionStart": "source", "Setup": "trigger",
+    "PermissionDenied": "tool_name", "SessionStart": "source",
     "SessionEnd": "reason", "Notification": "notification_type",
     "SubagentStart": "agent_type", "SubagentStop": "agent_type",
     "PreCompact": "trigger", "PostCompact": "trigger",
     "PreModelSwitch": "model", "PostModelSwitch": "model",
     "ConfigChange": "source", "DirectoryAdded": "source", "FileChanged": "file_path",
     "StopFailure": "error_type", "InstructionsLoaded": "load_reason",
-    "UserPromptExpansion": "command_name", "Elicitation": "mcp_server_name",
-    "ElicitationResult": "mcp_server_name",
 }
 _EXACT_MATCHER = re.compile(r"^[A-Za-z0-9_\- ,|]*$")
 
@@ -237,11 +233,11 @@ def _json_decision(event: str, value: Any) -> dict[str, Any]:
         context = specific.get("additionalContext") or value.get("additionalContext")
         if isinstance(context, str) and context:
             outcome["additional_context"] = context
-    elif event in {"SessionStart", "SubagentStart", "PostModelSwitch"}:
+    elif event in {"SessionStart", "SubagentStart", "CwdChanged", "PostModelSwitch"}:
         context = specific.get("additionalContext") or value.get("additionalContext")
         if isinstance(context, str) and context:
             outcome["additional_context"] = context
-        if event == "SessionStart":
+        if event in {"SessionStart", "CwdChanged"}:
             for source, target in (
                 ("initialUserMessage", "initial_user_message"),
                 ("sessionTitle", "session_title"),
@@ -253,15 +249,6 @@ def _json_decision(event: str, value: Any) -> dict[str, Any]:
     elif event == "MessageDisplay":
         if isinstance(specific.get("displayContent"), str):
             outcome["display_content"] = specific["displayContent"]
-    elif event in {"Elicitation", "ElicitationResult"}:
-        action = specific.get("action")
-        if isinstance(action, str) and action in {"accept", "decline", "cancel"}:
-            outcome["action"] = action
-        if "content" in specific:
-            outcome["content"] = specific["content"]
-        if value.get("decision") == "block":
-            outcome.update(action="decline", blocked=True,
-                           reason=str(value.get("reason") or "Declined by hook"))
     elif event == "WorktreeCreate":
         worktree_path = specific.get("worktreePath")
         if isinstance(worktree_path, str) and worktree_path:
@@ -273,24 +260,14 @@ def _json_decision(event: str, value: Any) -> dict[str, Any]:
         if isinstance(context, str) and context:
             outcome["additional_context"] = context
     elif event in {
-        "UserPromptSubmit", "UserPromptExpansion", "PostToolUseFailure",
-        "PostToolBatch", "SubagentStop", "ConfigChange", "PreCompact",
-        "TaskCreated", "TaskCompleted", "TeammateIdle", "PreModelSwitch",
+        "UserPromptSubmit", "InstructionsLoaded", "PostToolUseFailure", "PostToolBatch",
+        "SubagentStop", "ConfigChange", "PreCompact", "TaskCreated", "TaskCompleted",
+        "PreModelSwitch",
     }:
         if value.get("decision") == "block" and event == "PostToolUseFailure":
             outcome["feedback"] = str(value.get("reason") or "")
         elif value.get("decision") == "block":
             outcome.update(blocked=True, reason=str(value.get("reason") or "Blocked by hook"))
-        if event == "PreModelSwitch":
-            decision = specific.get("permissionDecision")
-            if isinstance(decision, str) and decision in {"allow", "deny", "ask"}:
-                outcome["permission_decision"] = decision
-                if decision == "deny":
-                    outcome.update(blocked=True, reason=str(
-                        specific.get("permissionDecisionReason") or value.get("reason") or "Model switch blocked by hook"
-                    ))
-                elif decision == "ask":
-                    outcome["ask_user"] = True
         context = specific.get("additionalContext") or value.get("additionalContext")
         if isinstance(context, str) and context:
             outcome["additional_context"] = context
@@ -298,10 +275,18 @@ def _json_decision(event: str, value: Any) -> dict[str, Any]:
             outcome.update(blocked=True, reason=str(
                 value.get("reason") or value.get("stopReason") or "Stopped by PostToolBatch hook"
             ))
-        if event in {"TaskCompleted", "TeammateIdle"} and value.get("continue") is False:
+        if event == "TaskCompleted" and value.get("continue") is False:
             outcome.update(blocked=True, reason=str(
                 value.get("stopReason") or value.get("reason") or "Stopped by hook"
             ))
+        if event == "PreModelSwitch":
+            decision = specific.get("permissionDecision") or value.get("decision")
+            if decision in {"deny", "block"}:
+                outcome.update(blocked=True, reason=str(
+                    specific.get("permissionDecisionReason") or value.get("reason") or "Model switch blocked by hook"
+                ))
+            elif decision == "ask":
+                outcome["ask_user"] = True
     if isinstance(value.get("systemMessage"), str) and value["systemMessage"]:
         outcome["system_message"] = value["systemMessage"]
     if value.get("continue") is False:
@@ -402,9 +387,6 @@ async def execute_claude_hooks(
                 decision = {"blocked": False, "reason": ""}
             if event == "ConfigChange" and event_payload.get("source") == "policy_settings":
                 decision.update(blocked=False, reason="")
-            if event in {"Elicitation", "ElicitationResult"} and code == 2:
-                decision = {"blocked": True, "reason": stderr.strip() or output.strip() or "Declined by hook",
-                            "action": "decline"}
             if event == "WorktreeCreate" and code != 0:
                 decision.update(blocked=True, reason=stderr.strip() or output.strip() or "Worktree creation failed")
             elif event == "WorktreeRemove" and code != 0:
@@ -414,9 +396,6 @@ async def execute_claude_hooks(
             elif code == 2 and event in _BLOCKING_EXIT_EVENTS:
                 if event == "ConfigChange" and event_payload.get("source") == "policy_settings":
                     pass
-                elif event in {"Elicitation", "ElicitationResult"}:
-                    decision.update(blocked=True, action="decline",
-                                    reason=stderr.strip() or output.strip() or "Declined by hook")
                 else:
                     decision.update(blocked=True, reason=stderr.strip() or output.strip() or "Blocked by hook")
             elif code == 2 and event in {"PostToolUse", "PostToolUseFailure"}:
@@ -424,9 +403,9 @@ async def execute_claude_hooks(
                     decision["feedback"] = "\n".join(
                         item for item in (str(decision.get("feedback") or ""), stderr.strip()) if item
                     )
-            elif not output.strip() and event in {"SessionStart", "UserPromptSubmit", "UserPromptExpansion", "PostModelSwitch"} and code == 0:
+            elif not output.strip() and event in {"SessionStart", "UserPromptSubmit", "PostModelSwitch"} and code == 0:
                 decision["additional_context"] = ""
-            elif structured is None and code == 0 and event in {"SessionStart", "UserPromptSubmit", "UserPromptExpansion", "PostModelSwitch"}:
+            elif structured is None and code == 0 and event in {"SessionStart", "UserPromptSubmit", "PostModelSwitch"}:
                 decision["additional_context"] = output.strip()
             if event == "WorktreeCreate" and code == 0 and not decision.get("worktree_path"):
                 worktree_path = output.strip()
@@ -502,6 +481,107 @@ class HookStore:
         self._recent_logs: list[dict[str, Any]] = []
         self._trust_path = path.with_name("hooks.trust.json")
         self._trust_lock = threading.RLock()
+        self._watch_tasks: dict[str, asyncio.Task[Any]] = {}
+        self._watch_paths: dict[str, set[str]] = {}
+        self._watch_cwds: dict[str, str] = {}
+
+    def start_file_watcher(
+        self, session_id: str, paths: Iterable[str], *, cwd: str | None,
+        callback: Callable[[str, dict[str, Any]], Any],
+    ) -> None:
+        """Watch SessionStart/CwdChanged paths and dispatch stable file changes."""
+        identifier = str(session_id or "")
+        if not identifier:
+            return
+        resolved_cwd = str(Path(cwd or os.getcwd()).resolve())
+        resolved_paths = {
+            str(Path(item).expanduser().resolve())
+            for item in paths if isinstance(item, str) and item.strip()
+        }
+        resolved_paths.add(str(self.path.resolve()))
+        if cwd:
+            project = Path(cwd).expanduser().resolve() / ".claude"
+            resolved_paths.update(str(path) for path in (
+                project / "settings.json", project / "settings.local.json",
+            ))
+        prior_cwd = self._watch_cwds.get(identifier)
+        prior_paths = self._watch_paths.get(identifier)
+        if prior_cwd == resolved_cwd and prior_paths == resolved_paths:
+            return
+        self.stop_file_watcher(identifier)
+        self._watch_cwds[identifier] = resolved_cwd
+        self._watch_paths[identifier] = resolved_paths
+        task = asyncio.create_task(
+            self._watch_file_changes(identifier, resolved_paths, resolved_cwd, callback),
+            name=f"atlas-hook-file-watch:{identifier[:12]}",
+        )
+        self._watch_tasks[identifier] = task
+
+    def stop_file_watcher(self, session_id: str) -> None:
+        identifier = str(session_id or "")
+        task = self._watch_tasks.pop(identifier, None)
+        if task is not None:
+            task.cancel()
+        self._watch_paths.pop(identifier, None)
+        self._watch_cwds.pop(identifier, None)
+
+    @staticmethod
+    def _file_snapshot(paths: set[str]) -> dict[str, tuple[bool, int, int, bool]]:
+        snapshot: dict[str, tuple[bool, int, int, bool]] = {}
+        for raw_path in paths:
+            path = Path(raw_path)
+            targets = [path]
+            if path.is_dir():
+                targets.extend(item for item in path.rglob("*") if item.is_file() or item.is_dir())
+            for item in targets:
+                try:
+                    info = item.stat()
+                except OSError:
+                    snapshot[str(item)] = (False, 0, 0, False)
+                else:
+                    snapshot[str(item)] = (True, info.st_mtime_ns, info.st_size, item.is_dir())
+        return snapshot
+
+    async def _watch_file_changes(
+        self, session_id: str, paths: set[str], cwd: str,
+        callback: Callable[[str, dict[str, Any]], Any],
+    ) -> None:
+        before = await asyncio.to_thread(self._file_snapshot, paths)
+        try:
+            while True:
+                await asyncio.sleep(0.35)
+                after = await asyncio.to_thread(self._file_snapshot, paths)
+                for file_path in sorted(set(before) | set(after)):
+                    old, new = before.get(file_path), after.get(file_path)
+                    if old == new:
+                        continue
+                    await asyncio.sleep(0.25)
+                    stable = await asyncio.to_thread(self._file_snapshot, {file_path})
+                    current = stable.get(file_path, (False, 0, 0, False))
+                    if current != after.get(file_path):
+                        continue
+                    change_type = "added" if not (old or (False,))[0] and current[0] else (
+                        "deleted" if not current[0] else "changed"
+                    )
+                    payload = {
+                        "file_path": file_path, "path": file_path,
+                        "change_type": change_type, "cwd": cwd,
+                        "session_id": session_id,
+                    }
+                    result = callback("FileChanged", payload)
+                    if asyncio.iscoroutine(result):
+                        await result
+                    if change_type == "added" and current[3]:
+                        result = callback("DirectoryAdded", {**payload, "source": "watcher"})
+                        if asyncio.iscoroutine(result):
+                            await result
+                    if Path(file_path).name in {"settings.json", "settings.local.json", "config.toml"}:
+                        result = callback("ConfigChange", {**payload, "source": "file_watcher"})
+                        if asyncio.iscoroutine(result):
+                            await result
+                before = after
+        except asyncio.CancelledError:
+            return
 
     @staticmethod
     def _fingerprint(hook: Mapping[str, Any]) -> str:

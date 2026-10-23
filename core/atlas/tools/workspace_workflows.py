@@ -651,6 +651,15 @@ async def _worktree_manage(args: dict[str, Any], agent: Any, runtime: Any) -> di
                          / conversation_id.replace("-", "")[:8]).resolve(strict=False)
         if path != expected_root:
             raise PermissionError("Registered worktree path is outside Atlas's conversation worktree directory.")
+        from atlas.runtime.hooks import run_user_hook
+
+        remove_hook = await run_user_hook(_get(runtime, "user_hook_callback"), "WorktreeRemove", {
+            "conversation_id": conversation_id, "worktree_path": str(path),
+            "worktree_branch": branch, "base_branch": conversation.get("base_branch", ""),
+            "cwd": str(base_workspace),
+        })
+        if remove_hook.get("blocked"):
+            return _result({}, error=str(remove_hook.get("reason") or "WorktreeRemove hook blocked removal"))
         await _approve(runtime, "workspace_worktree_manage", {
             "action": action, "path": str(path), "branch": branch,
         }, "Remove the current conversation worktree only if it is clean; preserve its branch.")

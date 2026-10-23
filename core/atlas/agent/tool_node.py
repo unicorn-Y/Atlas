@@ -627,17 +627,42 @@ async def execute_tools_node(
                 elif fn_name == "kanban_create_task":
                     board_id = str(fn_args["board_id"])
                     data = await asyncio.to_thread(store.create_task, board_id, fn_args)
+                    created_hook = await run_user_hook(user_hook_callback, "TaskCreated", {
+                        "task": data, "task_id": data.get("id"), "board_id": board_id,
+                        "tool_name": fn_name, "cwd": workspace or "",
+                    })
+                    if created_hook.get("blocked"):
+                        await asyncio.to_thread(store.delete_task, board_id, str(data["id"]))
+                        reason = str(created_hook.get("reason") or "Task creation blocked by hook")
+                        result = {"content": [{"type": "text", "text": reason}], "is_error": True}
+                    else:
+                        result = {"data": data, "content": [{
+                            "type": "text", "text": json.dumps(data, ensure_ascii=False),
+                        }], "is_error": False}
                 else:
                     board_id = str(fn_args["board_id"])
                     task_id = str(fn_args.pop("task_id"))
-                    data = await asyncio.to_thread(
-                        store.update_task, board_id, task_id, {
-                            key: value for key, value in fn_args.items() if key != "board_id"
-                        },
-                    )
-                result = {"data": data, "content": [{
-                    "type": "text", "text": json.dumps(data, ensure_ascii=False),
-                }], "is_error": False}
+                    changes = {key: value for key, value in fn_args.items() if key != "board_id"}
+                    current = next((task for task in await asyncio.to_thread(store.tasks, board_id)
+                                    if task.get("id") == task_id), None)
+                    if current and current.get("status") != "done" and changes.get("status") == "done":
+                        completed_hook = await run_user_hook(user_hook_callback, "TaskCompleted", {
+                            "task": {**current, **changes}, "task_id": task_id,
+                            "board_id": board_id, "tool_name": fn_name, "cwd": workspace or "",
+                        })
+                        if completed_hook.get("blocked"):
+                            reason = str(completed_hook.get("reason") or "Task completion blocked by hook")
+                            result = {"content": [{"type": "text", "text": reason}], "is_error": True}
+                        else:
+                            data = await asyncio.to_thread(store.update_task, board_id, task_id, changes)
+                            result = {"data": data, "content": [{
+                                "type": "text", "text": json.dumps(data, ensure_ascii=False),
+                            }], "is_error": False}
+                    else:
+                        data = await asyncio.to_thread(store.update_task, board_id, task_id, changes)
+                        result = {"data": data, "content": [{
+                            "type": "text", "text": json.dumps(data, ensure_ascii=False),
+                        }], "is_error": False}
             elif fn_name == "automation_manage":
                 # E8：自然语言提醒接既有 AutomationEngine（不另造 scheduler）。
                 from atlas.automation import get_automation_engine

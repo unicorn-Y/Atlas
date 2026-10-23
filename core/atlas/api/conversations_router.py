@@ -1146,7 +1146,9 @@ async def delete_conversation(
     if not ok:
         raise HTTPException(status_code=404, detail="Conversation not found")
     # Real session destruction point: fire SessionEnd after the delete succeeded.
-    await _server()._hook_store().execute("SessionEnd", {
+    hook_store = _server()._hook_store()
+    await hook_store.execute("SessionEnd", {
         "conversation_id": conversation_id, "reason": "delete",
     }, cwd=conv.get("workspace") if conv else None)
+    hook_store.stop_file_watcher(conversation_id)
     return {"status": "ok", "conversation_id": conversation_id}

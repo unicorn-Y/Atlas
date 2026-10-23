@@ -131,6 +131,11 @@ class KanbanStore:
                         merged["status"], merged["output"], merged["run_id"], task_id, board_id))
         return next(task for task in self.tasks(board_id) if task["id"] == task_id)
 
+    def delete_task(self, board_id: str, task_id: str) -> None:
+        """Remove a newly-created task when its TaskCreated hook blocks creation."""
+        with self._connect() as db:
+            db.execute("DELETE FROM kanban_tasks WHERE board_id=? AND id=?", (board_id, task_id))
+
 
 def atlas_kanban_store() -> KanbanStore:
     """Use a dedicated SQLite file so live run/session writes cannot block board updates."""
