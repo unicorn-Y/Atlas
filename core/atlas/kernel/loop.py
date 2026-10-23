@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import copy
+import hashlib
 import json
 import logging
 import os
@@ -1683,11 +1684,19 @@ class AtlasKernel:
                 if response.reasoning_details:
                     assistant_message["reasoning_details"] = response.reasoning_details
                 messages.append(assistant_message)
+                offered_schema_json = json.dumps(
+                    offered_schemas, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+                    default=str,
+                )
                 await persist_async("assistant", assistant_content, {
                     "tool_calls": assistant_message["tool_calls"], "kernel_run_id": run_id, "reasoning": turn_reasoning or None,
                     "reasoning_content": response.reasoning_content or None,
                     "reasoning_details": response.reasoning_details or None,
                     "refusal_present": bool(state.streamed_refusal),
+                    "tool_snapshot": {
+                        "names": sorted(offered_schemas),
+                        "sha256": hashlib.sha256(offered_schema_json.encode("utf-8")).hexdigest(),
+                    },
                 })
                 state.streamed_text = ""
                 state.streamed_reasoning = ""

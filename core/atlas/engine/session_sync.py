@@ -60,7 +60,8 @@ def _message_for_atlas(message: dict[str, Any]) -> dict[str, Any]:
     metadata = dict(message.get("display_metadata") or {})
     for key in ("tool_name", "tool_call_id", "tool_calls", "reasoning", "reasoning_content",
                 "reasoning_details", "codex_reasoning_items", "codex_message_items",
-                "_compressed_summary", "finish_reason", "token_count", "display_kind"):
+                "_compressed_summary", "finish_reason", "token_count", "display_kind",
+                "tool_snapshot"):
         if key in message:
             metadata[key] = message[key]
     timestamp = message.get("timestamp") or message.get("created_at") or ""
@@ -119,7 +120,8 @@ def read_session_model_messages(home: str | Path, conversation_id: str) -> list[
             continue
         for key in ("tool_calls", "tool_call_id", "tool_name", "finish_reason",
                     "reasoning", "reasoning_content", "reasoning_details",
-                    "codex_reasoning_items", "codex_message_items", "_compressed_summary"):
+                    "codex_reasoning_items", "codex_message_items", "_compressed_summary",
+                    "tool_snapshot"):
             if key in metadata and key not in message:
                 message[key] = metadata[key]
     from atlas.kernel.repair import normalize_tool_results
