@@ -1284,7 +1284,21 @@ async def execute_tools_node(
                             "type": "checkpoint_error", "tool": fn_name,
                             "detail": str(exc),
                         })
-                result = await ctx.kernel_edit.execute(fn_name, fn_args)
+                acp_fs = getattr(ctx, "acp_filesystem", None)
+                if (acp_fs is not None and fn_name == "write" and acp_fs.write_enabled):
+                    path = str(fn_args["path"])
+                    from atlas.tools.acp_fs import local_file
+                    result = await local_file(acp_fs, action="write", path=path,
+                                              content=str(fn_args.get("content", "")))
+                elif (acp_fs is not None and fn_name == "edit"
+                      and acp_fs.read_enabled and acp_fs.write_enabled):
+                    from atlas.tools.acp_fs import edit_file
+                    result = await edit_file(acp_fs, path=str(fn_args["path"]),
+                        old_text=str(fn_args.get("old_string", "")),
+                        new_text=str(fn_args.get("new_string", "")),
+                        replace_all=bool(fn_args.get("replace_all")))
+                else:
+                    result = await ctx.kernel_edit.execute(fn_name, fn_args)
             elif fn_name.startswith("local_") and agent._local_execution:
                 if ctx.session_env and fn_name in {"local_process", "local_exec", "local_shell"}:
                     explicit_env = fn_args.get("env") if isinstance(fn_args.get("env"), dict) else {}
@@ -1361,6 +1375,16 @@ async def execute_tools_node(
                     "local_shell", "local_exec", "local_process",
                 }:
                     result = await ctx.exec_manager.execute(fn_name, fn_args)
+                elif (getattr(ctx, "acp_filesystem", None) is not None
+                      and fn_name == "local_file" and not fn_args.get("binary")
+                      and ((fn_args.get("action") == "read" and ctx.acp_filesystem.read_enabled)
+                           or (fn_args.get("action") == "write" and ctx.acp_filesystem.write_enabled)
+                           or (fn_args.get("action") == "append" and ctx.acp_filesystem.read_enabled
+                               and ctx.acp_filesystem.write_enabled))):
+                    from atlas.tools.acp_fs import local_file
+                    result = await local_file(ctx.acp_filesystem,
+                        action=str(fn_args["action"]), path=str(fn_args["path"]),
+                        content=str(fn_args.get("content", "")))
                 else:
                     if fn_name in {"local_file", "local_edit", "local_edit_batch"}:
                         fn_args.setdefault("_atlas_workspace", workspace)

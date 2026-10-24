@@ -76,6 +76,8 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
         pending_approvals: dict[str, asyncio.Future[str]] = {}
         pending_inputs: dict[str, asyncio.Future[str]] = {}
         pending_client_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        session_fs: dict[str, dict[str, bool]] = {}
+        from atlas.tools.acp_fs import AcpFilesystem, reset_current, set_current
         outgoing: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
         async def write_output() -> None:
@@ -148,7 +150,25 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
                     pending_inputs.pop(call_id, None)
 
             failure_detail = ""
+            fs_token = None
             try:
+                fs_caps = session_fs.get(session_id, {}) if acp else {}
+                if acp and (fs_caps.get("read") or fs_caps.get("write")):
+                    async def client_fs(method: str, params: dict[str, Any]) -> dict[str, Any]:
+                        client_request_id = f"acp-fs-{uuid.uuid4().hex}"
+                        future = asyncio.get_running_loop().create_future()
+                        pending_client_requests[client_request_id] = future
+                        await outgoing.put({"jsonrpc": "2.0", "id": client_request_id,
+                                            "method": method, "params": params})
+                        try:
+                            return await asyncio.wait_for(future, timeout=120)
+                        finally:
+                            pending_client_requests.pop(client_request_id, None)
+                    fs_token = set_current(AcpFilesystem(
+                        session_id, session["workspace"], client_fs,
+                        read_enabled=fs_caps.get("read", False),
+                        write_enabled=fs_caps.get("write", False),
+                    ))
                 async for event in orchestrator.run(
                     prompt, session["conversation_id"], workspace=session["workspace"],
                     workspace_trusted=True, permission_mode="ask_writes",
@@ -220,6 +240,8 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
             except Exception as exc:  # keep the JSON-RPC process alive across run failures
                 await response(request_id, error={"code": -32010, "message": f"{type(exc).__name__}: {exc}"})
             finally:
+                if fs_token is not None:
+                    reset_current(fs_token)
                 active.pop(session_id, None)
                 active_tasks.pop(session_id, None)
 
@@ -248,6 +270,12 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
                             "code": -32002, "message": "Atlas supports ACP protocol version 1 only.",
                         })
                         continue
+                    capabilities = params.get("clientCapabilities")
+                    fs_capabilities = capabilities.get("fs") if isinstance(capabilities, dict) else None
+                    session_fs["__initialize__"] = {
+                        "read": bool(isinstance(fs_capabilities, dict) and fs_capabilities.get("readTextFile")),
+                        "write": bool(isinstance(fs_capabilities, dict) and fs_capabilities.get("writeTextFile")),
+                    }
                     await response(request_id, result={
                         "protocolVersion": 1,
                         "agentInfo": {"name": "Atlas", "version": "0.1.0"},
@@ -290,6 +318,7 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
                     conversation_id = str(params.get("conversation_id") or uuid.uuid4())
                     await memory.save_conversation_metadata(conversation_id, title_hint="Atlas app-server")
                     sessions[session_id] = {"workspace": cwd, "conversation_id": conversation_id}
+                    session_fs[session_id] = dict(session_fs.get("__initialize__", {})) if acp else {}
                     if acp:
                         await response(request_id, result={"sessionId": session_id})
                     else:

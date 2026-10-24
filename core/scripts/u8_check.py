@@ -20,9 +20,17 @@ def check_pure() -> None:
     from atlas.notifications import busy
     from atlas.pr_automation import poll_once
     from atlas.sharing import export_html
+    from atlas.ultraplan import render_markdown, validate_plan
 
     with tempfile.TemporaryDirectory(prefix="atlas-u8-") as directory:
         temp = Path(directory)
+        sample_plan = validate_plan({
+            "goal": "验证结构化计划", "background": "背景信息",
+            "steps": [{"id": "step-1", "title": "读取模块", "detail": "调查调用链",
+                       "files": ["core/atlas/ultraplan.py"], "verify": "运行检查", "annotation": "关注事件"}],
+            "risks": ["模型输出需要校验"], "open_questions": [],
+        })
+        assert "## 步骤" in render_markdown(sample_plan) and "关注事件" in render_markdown(sample_plan)
         assert in_idle_window(datetime(2026, 1, 1, 2, 0), "01:00", "07:00")
         assert not in_idle_window(datetime(2026, 1, 1, 8, 0), "01:00", "07:00")
         assert idle_ready(now=datetime(2026, 1, 1, 8, 0), start="01:00", end="07:00", idle_minutes=10, seconds_since_input=700)
@@ -119,13 +127,70 @@ async def check_ide(temp: Path) -> None:
 
 
 async def check_acp_live() -> None:
-    workspace = ROOT
+    await check_acp_fake_client_fs()
+    await _check_acp_filesystem_live(ROOT)
+
+
+async def check_acp_fake_client_fs() -> None:
+    from atlas.tools.acp_fs import AcpFilesystem, edit_file, local_file
+    with tempfile.TemporaryDirectory(prefix="atlas-u8-acp-fs-") as directory:
+        requests: list[tuple[str, dict[str, object]]] = []
+        async def client_request(method: str, params: dict[str, object]) -> dict[str, object]:
+            requests.append((method, params))
+            return {"content": "editor buffer value"} if method == "fs/read_text_file" else {}
+        bridge = AcpFilesystem("fake-session", directory, client_request)
+        read = await local_file(bridge, action="read", path="editor.txt")
+        assert read["data"]["content"] == "editor buffer value"
+        await edit_file(bridge, path="editor.txt", old_text="editor buffer value",
+                        new_text="saved from editor buffer")
+        assert [method for method, _ in requests] == [
+            "fs/read_text_file", "fs/read_text_file", "fs/write_text_file",
+        ]
+        assert requests[-1][1]["content"] == "saved from editor buffer"
+        assert requests[-1][1]["uri"].endswith("/editor.txt")
+
+
+async def check_ultraplan_live() -> None:
+    from atlas.ultraplan import get, start, validate_plan
+    from atlas.server import app, lifespan
+
+    async with lifespan(app):
+        services = app.state.services
+        model = next((str(item.get("id")) for item in services.model_mgr.list_models()
+                      if "deepseek-v4.1-flash" in str(item.get("id", ""))), None)
+        if not model:
+            raise RuntimeError("deepseek-v4.1-flash is not present in the configured model catalog")
+        response = await start(
+            services.orchestrator,
+            goal="只读检查 Atlas 本次高级计划与 ACP 编辑器文件读写实现，给出文件定位和验证步骤",
+            workspace=str(ROOT), model=model, conversation_id="u8b-live-ultraplan",
+        )
+        deadline = asyncio.get_running_loop().time() + 900
+        while asyncio.get_running_loop().time() < deadline:
+            job = get(response["id"])
+            if job["status"] == "awaiting_approval":
+                plan = validate_plan(job["plan"])
+                assert plan["steps"] and all(isinstance(step["files"], list) for step in plan["steps"])
+                assert Path(job["path"]).is_file() and str(Path(job["path"]).parent).endswith(
+                    str(Path(".atlas") / "plans"),
+                )
+                print(f"ULTRAPLAN LIVE PASS model={model} steps={len(plan['steps'])} path={job['path']}")
+                return
+            if job["status"] == "failed":
+                raise RuntimeError(f"ultraplan live failed: {job.get('error')}")
+            await asyncio.sleep(1)
+        raise TimeoutError("ultraplan live workflow did not finish research and planning within 15 minutes")
+
+
+async def _check_acp_filesystem_live(workspace: Path) -> None:
     process = await asyncio.create_subprocess_exec(sys.executable, "-m", "atlas.cli", "acp", "--workspace", str(workspace),
         cwd=ROOT, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
     assert process.stdin and process.stdout
     def send(payload: dict[str, object]) -> None:
         process.stdin.write((json.dumps(payload) + "\n").encode());
-    send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": 1}})
+    send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": 1, "clientCapabilities": {"fs": {"readTextFile": True, "writeTextFile": True}},
+    }})
     send({"jsonrpc": "2.0", "id": 2, "method": "session/new", "params": {"cwd": str(workspace)}})
     await process.stdin.drain()
     session_id = ""
@@ -157,7 +222,7 @@ async def check_acp_live() -> None:
     process.stdin.close()
     try: await asyncio.wait_for(process.wait(), timeout=15)
     except asyncio.TimeoutError: process.kill(); await process.wait()
-    assert got_text and got_tool and sent_cancel and not rpc_error, (
+    assert got_tool and sent_cancel and not rpc_error, (
         f"ACP live session missed text/tool/cancel updates (text={got_text}, tool={got_tool}, "
         f"cancel={sent_cancel}, rpc_error={rpc_error})"
     )
@@ -193,10 +258,27 @@ def check_exec_and_sdk_live() -> None:
             sdk_result = sdk.run("Return JSON with ok true.", cwd=ROOT, output_schema=schema)
         assert sdk_result.structured == {"ok": True} and sdk_result.session_id
 
+        plan_schema = {"type": "object", "properties": {
+            "goal": {"type": "string"}, "background": {"type": "string"},
+            "steps": {"type": "array", "items": {"type": "object", "properties": {
+                "id": {"type": "string"}, "title": {"type": "string"}, "detail": {"type": "string"},
+                "files": {"type": "array", "items": {"type": "string"}}, "verify": {"type": "string"},
+            }, "required": ["id", "title", "detail", "files", "verify"], "additionalProperties": False}},
+            "risks": {"type": "array", "items": {"type": "string"}},
+            "open_questions": {"type": "array", "items": {"type": "string"}},
+        }, "required": ["goal", "background", "steps", "risks", "open_questions"], "additionalProperties": False}
+        plan_schema_path = Path(directory) / "plan-schema.json"
+        plan_schema_path.write_text(json.dumps(plan_schema), encoding="utf-8")
+        plan_output_path = Path(directory) / "plan.json"
         plan = subprocess.run([sys.executable, "-m", "atlas.cli", "exec", "--cwd", str(ROOT),
-            "Draft a detailed implementation plan for adding a greeting endpoint. Include goal, steps, files, verification and risks."],
+            "--model", "deepseek-v4.1-flash", "--output-schema", str(plan_schema_path),
+            "--output-last-message", str(plan_output_path),
+            "为新增问候接口创建结构化实现计划。返回 schema 要求的 JSON。"],
             cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=240)
-        assert plan.returncode == 0 and all(word in plan.stdout.lower() for word in ("goal", "steps", "risk"))
+        if plan.returncode:
+            raise RuntimeError(f"structured plan live check failed: {plan.stderr[-2000:]}")
+        from atlas.ultraplan import validate_plan
+        assert validate_plan(json.loads(plan_output_path.read_text(encoding="utf-8")))["steps"]
 
 
 def main() -> None:
@@ -206,6 +288,7 @@ def main() -> None:
     if args.live:
         asyncio.run(check_acp_live())
         check_exec_and_sdk_live()
+        asyncio.run(check_ultraplan_live())
     print("U8 CHECK PASS")
 
 

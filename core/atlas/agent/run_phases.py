@@ -335,6 +335,8 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
         subtask_group_completed=callbacks.subtask_group_completed,
         parent_process_event_callback=callbacks.parent_process_event_callback,
     )
+    from atlas.tools.acp_fs import current as current_acp_filesystem
+    runtime.acp_filesystem = current_acp_filesystem()
     state.runtime = runtime
 
     # Resolve model
