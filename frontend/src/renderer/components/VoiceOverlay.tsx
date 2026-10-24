@@ -20,7 +20,7 @@ interface VoiceOverlayProps {
 }
 
 const SENTENCE = /[。！？.!?；;\n]/;
-function voiceFailure(cause: unknown): { category: string; detail: string; next: string } {
+export function classifyVoiceFailure(cause: unknown): { category: string; detail: string; next: string } {
   const error = cause as { name?: string; message?: string };
   const name = error?.name ?? '';
   const detail = error?.message || (typeof cause === 'string' ? cause : '语音服务发生未知错误');
@@ -86,14 +86,14 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
               setSaid(''); setPhase('thinking'); onSendRef.current(message.text.trim());
             }
             if (message.type === 'error') {
-              const failure = voiceFailure(message.detail); setProblem(`${failure.category}：${failure.detail}。${failure.next}`); setPhase('unavailable');
+              const failure = classifyVoiceFailure(message.detail); setProblem(`${failure.category}：${failure.detail}。${failure.next}`); setPhase('unavailable');
               if (recognitionRef.current === session) recognitionRef.current = null;
               try { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'end' })); socket.close(); } catch { /* already closing */ }
               processor.disconnect(); silent.disconnect(); stream.getTracks().forEach((track) => track.stop()); void context.close();
             }
           } catch { /* malformed local ASR response */ }
         };
-        socket.onerror = () => { const failure = voiceFailure('WebSocket 连接失败'); setProblem(`${failure.category}：${failure.detail}。${failure.next}`); };
+        socket.onerror = () => { const failure = classifyVoiceFailure('WebSocket 连接失败'); setProblem(`${failure.category}：${failure.detail}。${failure.next}`); };
         socket.onclose = (event) => {
           const isCurrent = recognitionRef.current?.socket === socket;
           if (isCurrent) {
@@ -106,7 +106,7 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
             setPhase('thinking');
             window.setTimeout(() => { if (!mutedRef.current && !recognitionRef.current) listen(); }, 350 * failureRef.current);
           } else if (isCurrent && !mutedRef.current && event.code !== 1000) {
-            const failure = voiceFailure('WebSocket 语音连接中断'); setProblem(`${failure.category}：${failure.detail}。已重连 2 次仍未恢复。${failure.next}`); setPhase('unavailable');
+            const failure = classifyVoiceFailure('WebSocket 语音连接中断'); setProblem(`${failure.category}：${failure.detail}。已重连 2 次仍未恢复。${failure.next}`); setPhase('unavailable');
           }
         };
         await new Promise<void>((resolve, reject) => { socket.addEventListener('open', () => resolve(), { once: true }); socket.addEventListener('error', () => reject(new Error('本地语音识别连接失败')), { once: true }); });
@@ -137,7 +137,7 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
       } catch (cause) {
         const session = recognitionRef.current; recognitionRef.current = null;
         session?.processor.disconnect(); session?.silent.disconnect(); session?.stream.getTracks().forEach((track) => track.stop()); void session?.context.close();
-        const failure = voiceFailure(cause);
+        const failure = classifyVoiceFailure(cause);
         if (/websocket|连接/i.test(failure.detail) && failureRef.current < 2 && !mutedRef.current) {
           failureRef.current += 1; setProblem(`${failure.category}：${failure.detail}。正在尝试重连（${failureRef.current}/2）…`); setPhase('thinking');
           window.setTimeout(() => { if (!mutedRef.current && !recognitionRef.current) listen(); }, 350 * failureRef.current);
@@ -281,7 +281,7 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
       {captions && heard && <p className="you">“{heard}”</p>}
       {captions && said && phase !== 'listening' && <p className="atlas">{said}</p>}
       {state && <p className="state">{state}</p>}
-      {phase === 'unavailable' && <div role="alert" className="state"><b>{voiceFailure(problem).category}</b><p>{problem}</p><div className="flex justify-center gap-2"><button onClick={() => { failureRef.current = 0; setPhase('listening'); listen(); }}><RotateCcw size={13} className="mr-1 inline" />重试</button><button onClick={() => onClose(true)}><MessageSquareText size={13} className="mr-1 inline" />转为文字</button></div></div>}
+      {phase === 'unavailable' && <div role="alert" className="state"><b>{classifyVoiceFailure(problem).category}</b><p>{problem}</p><div className="flex justify-center gap-2"><button onClick={() => { failureRef.current = 0; setPhase('listening'); listen(); }}><RotateCcw size={13} className="mr-1 inline" />重试</button><button onClick={() => onClose(true)}><MessageSquareText size={13} className="mr-1 inline" />转为文字</button></div></div>}
     </div>
     <div className="vctl">
       <div className="vlabel"><button aria-pressed={muted} aria-label="静音" onClick={toggleMute}><MicOff size={20} /></button>静音</div>
