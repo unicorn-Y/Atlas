@@ -100,6 +100,7 @@ async def test_atlas_subtask_inherits_read_only_and_cannot_redelegate(monkeypatc
     assert "delegate_task" in calls[0]["tool_deny"]
     assert "delegate_parallel" in calls[0]["tool_deny"]
     assert calls[0]["permission_mode"] == "read_only"
+    assert calls[0]["read_only"] is True
     assert calls[0]["model"] == "parent-run-model"
     assert calls[0]["allowed_paths"] == ["C:/repo"]
     # Worker mode: no user memory/skills/planning, and the prompt forbids asking the user.
