@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Plus, RotateCcw, X } from 'lucide-react';
 import {
   comboFromEvent,
@@ -17,13 +17,15 @@ import {
 } from '../services/shortcuts';
 import { Kbd } from '../ui/Kbd';
 import { cn } from '../ui/cn';
+import { api } from '../services/api';
 import type { ModelInfo } from '@atlas/backend-adapter';
 
 type RecordingTarget = { action: ShortcutAction; bindingIndex: number | null };
 
 /** Manage app shortcuts: search, record one or more bindings, clear, or restore defaults. */
-export default function ShortcutsPanel({ models = [] }: { models?: ModelInfo[] }) {
+export default function ShortcutsPanel({ models = [], apiBaseUrl }: { models?: ModelInfo[]; apiBaseUrl: string }) {
   const [bindings, setBindings] = useState<ShortcutBindings>(loadBindings);
+  useEffect(() => { const updateFromFile = () => setBindings(loadBindings()); window.addEventListener('atlas:shortcuts', updateFromFile); return () => window.removeEventListener('atlas:shortcuts', updateFromFile); }, []);
   const [recording, setRecording] = useState<RecordingTarget | null>(null);
   const [query, setQuery] = useState('');
   const [keyFilter, setKeyFilter] = useState('');
@@ -32,7 +34,10 @@ export default function ShortcutsPanel({ models = [] }: { models?: ModelInfo[] }
   const [showHints, setShowHints] = useState(() => { try { return localStorage.getItem('atlas.shortcut-hints') !== 'false'; } catch { return true; } });
   const [cycleModels, setCycleModels] = useState<string[]>(() => { try { const value: unknown = JSON.parse(localStorage.getItem('atlas.model-cycle') ?? '[]'); return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
 
-  const update = (next: ShortcutBindings) => { setBindings(next); saveBindings(next); };
+  const update = (next: ShortcutBindings) => {
+    setBindings(next); saveBindings(next);
+    void api(apiBaseUrl, '/api/u6/keybindings', { method: 'PUT', json: { bindings: next } }).then(() => setNote('快捷键已保存到 keybindings.json')).catch((error) => setNote(`已在本机保存；文件同步失败：${error instanceof Error ? error.message : String(error)}`));
+  };
   const defaults = defaultBindings();
   const changed = SHORTCUTS.some(({ action }) => !sameBindings(bindings[action], defaults[action]));
 

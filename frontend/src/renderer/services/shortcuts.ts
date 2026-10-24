@@ -73,6 +73,16 @@ export function saveBindings(bindings: ShortcutBindings) {
   window.dispatchEvent(new Event('atlas:shortcuts'));
 }
 
+export function applyFileBindings(bindings: Record<string, string[]>) {
+  const valid: Partial<Record<ShortcutAction, string[]>> = {};
+  for (const item of SHORTCUTS) {
+    const value = bindings[item.action];
+    if (Array.isArray(value) && value.every((combo) => typeof combo === 'string')) valid[item.action] = [...new Set(value)];
+  }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(valid)); } catch { /* storage unavailable */ }
+  window.dispatchEvent(new Event('atlas:shortcuts'));
+}
+
 export function sameBindings(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((combo, index) => shortcutSignature(combo) === shortcutSignature(right[index]));
 }

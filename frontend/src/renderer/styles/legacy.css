@@ -142,12 +142,12 @@ mark { background: var(--brand-soft); color: inherit; border-radius: 3px; paddin
 .composer textarea::placeholder { color: var(--fg-3); }
 
 /* voice call overlay keeps its own night stage */
-.voice { position: fixed; inset: 0; z-index: 50; display: grid; grid-template-rows: 64px 1fr auto auto; justify-items: center; color: #E8ECF4; background: radial-gradient(70% 50% at 50% 110%, #3A2E4A 0%, transparent 70%), radial-gradient(60% 50% at 85% 0%, #1B2745 0%, transparent 70%), #080B12; animation: fade-in .4s; }
-.vtop { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; font-size: 13px; color: #98A2B8; }
+.voice { position: fixed; right: 20px; bottom: 20px; z-index: 80; width: min(380px, calc(100vw - 32px)); height: min(500px, calc(100vh - 32px)); display: grid; grid-template-rows: 52px 1fr auto auto; justify-items: center; overflow: hidden; border: 1px solid rgba(255,255,255,.16); border-radius: 18px; color: #E8ECF4; background: radial-gradient(70% 50% at 50% 110%, #3A2E4A 0%, transparent 70%), radial-gradient(60% 50% at 85% 0%, #1B2745 0%, transparent 70%), #080B12; box-shadow: 0 18px 60px rgba(0,0,0,.45); animation: fade-in .2s; }
+.vtop { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; font-size: 11px; color: #98A2B8; }
 .vtop b { color: #E8ECF4; font-weight: 500; font-variant-numeric: tabular-nums; }
 .vtop .live { display: inline-flex; align-items: center; gap: 8px; }
 .vtop .live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #6FC2A8; box-shadow: 0 0 0 4px rgba(111,194,168,.2); }
-.orb { width: min(360px, 58vmin); aspect-ratio: 1; align-self: center; position: relative; }
+.orb { width: min(210px, 52vw); aspect-ratio: 1; align-self: center; position: relative; }
 .orb svg { width: 100%; height: 100%; overflow: visible; }
 .orb .ring { transform-origin: 200px 200px; transform-box: view-box; }
 .orb .r1 { animation: arm-turn 26s linear infinite; }
@@ -155,17 +155,17 @@ mark { background: var(--brand-soft); color: inherit; border-radius: 3px; paddin
 .orb .r3 { animation: arm-turn 54s linear infinite; }
 .orb .core { transform-origin: 200px 200px; transform-box: view-box; transform: scale(calc(.9 + var(--lvl, 0) * .18)); transition: transform .12s; }
 .orb .halo { transform-origin: 200px 200px; transform-box: view-box; opacity: calc(.35 + var(--lvl, 0) * .6); transform: scale(calc(1 + var(--lvl, 0) * .12)); transition: transform .15s, opacity .15s; }
-.captions { width: min(640px, 88vw); text-align: center; min-height: 120px; }
+.captions { width: min(340px, 88vw); padding: 0 12px; text-align: center; min-height: 74px; overflow: auto; }
 .captions .you { color: #8C96AE; font-size: 14px; margin: 0 0 10px; }
-.captions .atlas { font: 500 21px/1.7 var(--font-serif); color: #F1F3F8; margin: 0; max-height: 30vh; overflow: auto; }
+.captions .atlas { font: 500 14px/1.5 var(--font-serif); color: #F1F3F8; margin: 0; max-height: 110px; overflow: auto; }
 .captions .state { font-size: 13px; color: #8C96AE; margin: 0; }
-.vctl { display: flex; gap: 14px; padding: 18px 0 40px; }
-.vctl button { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; color: #E8ECF4; background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); border: 0; transition: background .15s; }
+.vctl { display: flex; gap: 8px; padding: 10px 0 14px; }
+.vctl button { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; color: #E8ECF4; background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); border: 0; transition: background .15s; }
 .vctl button:hover { background: rgba(255,255,255,.16); }
 .vctl button[aria-pressed=true] { background: #E8ECF4; color: #131A2C; }
-.vctl .end { background: #D2453E; width: 72px; border-radius: 28px; box-shadow: none; }
+.vctl .end { background: #D2453E; width: 52px; border-radius: 22px; box-shadow: none; }
 .vctl .end:hover { background: #E0544C; }
-.vlabel { display: grid; justify-items: center; gap: 6px; font-size: 12px; color: #8C96AE; }
+.vlabel { display: grid; justify-items: center; gap: 4px; font-size: 10px; color: #8C96AE; }
 
 @media (max-width: 980px) { .split { grid-template-columns: 1fr; } .detail { position: static; } }
 @media (max-width: 820px) { .page { padding: 8px 16px 40px; } .page-head { flex-wrap: wrap; } .form .two { grid-template-columns: 1fr; } }

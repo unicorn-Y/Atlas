@@ -2,7 +2,7 @@ import { lazy, startTransition, Suspense, useCallback, useEffect, useMemo, useRe
 import { useShallow } from 'zustand/react/shallow';
 import {
   AudioLines, Bell, BookMarked, Brain, Copy, Cpu, Keyboard, Monitor, Radio, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Settings,
-  SlidersHorizontal, Square, Sun, Zap, FileCog, Volume2, X, Gauge, Search, Pin, File as FileIcon,
+  SlidersHorizontal, Square, Sun, Zap, FileCog, Volume2, X, Gauge, Search, Pin, HardDrive, File as FileIcon,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/backend-adapter';
@@ -29,7 +29,7 @@ const OnboardingDialog = lazy(() => import('./components/OnboardingDialog'));
 const SidePane = lazy(() => import('./components/SidePane'));
 const ResumePickerDialog = lazy(() => import('./components/ResumePickerDialog'));
 const FallbackModelsDialog = lazy(() => import('./components/FallbackModelsDialog'));
-import { loadBindings, matchShortcut } from './services/shortcuts';
+import { applyFileBindings, loadBindings, matchShortcut } from './services/shortcuts';
 import type { CustomCommandInfo, PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
 import Mark, { MarkDefs } from './components/Mark';
@@ -75,6 +75,7 @@ const ExtensionPackagesPanel = lazy(() => import('./components/settings/Extensio
 const ExtensionCatalogPanel = lazy(() => import('./components/settings/ExtensionCatalogPanel'));
 const AppearanceNotificationsPanel = lazy(() => import('./components/settings/AppearanceNotificationsPanel'));
 const AudioDevicesPanel = lazy(() => import('./components/settings/AudioDevicesPanel'));
+const StorageRetentionPanel = lazy(() => import('./components/settings/StorageRetentionPanel'));
 const WorkspaceSecurityPanel = lazy(() => import('./components/settings/WorkspaceSecurityPanel'));
 const U4SettingsPanel = lazy(() => import('./components/settings/U4SettingsPanel'));
 const SettingsProposalCards = lazy(() => import('./components/SettingsProposalCards'));
@@ -106,7 +107,7 @@ import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 import { cleanSearchSnippet, rankSearchHits, searchHitRoleLabel } from './services/searchHits';
 
-type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig';
+type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage';
 
 const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['models', '模型与服务', SlidersHorizontal, 'provider 模型 model API key 密钥 reasoning 推理 连接'],
@@ -136,6 +137,7 @@ const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['extensions', '扩展目录与来源', Puzzle, 'extension package registry catalog 扩展 包 目录 来源'],
   ['transfer', '配置导入导出', Download, 'settings config export import backup 配置 导入 导出 备份'],
   ['diagnostics', '诊断', ShieldCheck, 'diagnostics health config errors 诊断 健康 配置 错误'],
+  ['storage', '存储与保留', HardDrive, 'storage disk cache retention data clear 存储 占用 保留期限 清理'],
   ['platform', '平台集成', Laptop, 'desktop platform global shortcut hotkey always on top VS Code JetBrains deep link'],
   ['integrations', '任务与集成', GitBranchPlus, 'github pull request Slack Linear cloud tasks automation'],
 ];
@@ -238,6 +240,7 @@ export default function App() {
   const [wakeTranscript, setWakeTranscript] = useState('');
   const wakeSessionRef = useRef<{ socket: WebSocket; stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode } | null>(null);
   const [turnSuggestions, setTurnSuggestions] = useState<string[]>([]);
+  const [whatsNewLoaded, setWhatsNewLoaded] = useState(false);
   const generatedSuggestionsRun = useRef('');
   const [homeGitStatus, setHomeGitStatus] = useState<{ isGit: boolean; changed: number; languages: string[] }>({ isGit: false, changed: 0, languages: [] });
   const [homeMode, setHomeMode] = useState('chat');
@@ -252,6 +255,16 @@ export default function App() {
   const editingDraftRef = useRef<{ text: string; attachments: string[]; files: Array<RunFile & { size: number }>; mentions: MentionItem[] } | null>(null);
   const [rawText, setRawText] = useState<string | null>(null);
   const [rawTextTitle, setRawTextTitle] = useState('最近回复的原始文本');
+  useEffect(() => {
+    if (!store.connected || whatsNewLoaded) return;
+    void api<{ highlights: Array<string | { date?: string; title?: string }> }>(store.apiBaseUrl, '/api/u6/whatsnew').then((result) => {
+      const current = __APP_VERSION__; let previous = '';
+      try { previous = localStorage.getItem('atlas.last-seen-version') || ''; localStorage.setItem('atlas.last-seen-version', current); } catch { /* optional preference */ }
+      const details = result.highlights.map((item) => typeof item === 'string' ? item : `${item.date || ''} ${item.title || ''}`.trim()).filter(Boolean).join('\n');
+      if (previous && previous !== current) { setRawTextTitle('有什么新功能'); setRawText(details || `Atlas ${current} 已更新。`); }
+      setWhatsNewLoaded(true);
+    }).catch(() => setWhatsNewLoaded(true));
+  }, [store.connected, store.apiBaseUrl, whatsNewLoaded]);
   const [browserUrl, setBrowserUrl] = useState('');
   const [terminalCommand, setTerminalCommand] = useState<{ id: string; text: string } | null>(null);
   const [mentions, setMentions] = useState<MentionItem[]>([]);
@@ -271,11 +284,23 @@ export default function App() {
   const [tabs, setTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
   const [closedTabs, setClosedTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('closed-tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
   const [bindings, setBindings] = useState(loadBindings);
+  const keybindingsMtimeRef = useRef(-1);
   useEffect(() => {
     const update = () => setBindings(loadBindings());
     window.addEventListener('atlas:shortcuts', update);
     return () => window.removeEventListener('atlas:shortcuts', update);
   }, []);
+  useEffect(() => {
+    if (!store.connected) return;
+    let active = true; let warned = false;
+    const refresh = () => void api<{ bindings: Record<string, string[]>; updated_at: number }>(store.apiBaseUrl, '/api/u6/keybindings').then((file) => {
+      if (!active || file.updated_at < 0 || file.updated_at === keybindingsMtimeRef.current) return;
+      keybindingsMtimeRef.current = file.updated_at; applyFileBindings(file.bindings);
+    }).catch((error) => { if (active && !warned) { warned = true; setToast(`keybindings.json 无法读取：${error instanceof Error ? error.message : String(error)}`); } });
+    refresh(); const timer = window.setInterval(refresh, 3000);
+    void api(store.apiBaseUrl, '/api/u6/retention/run').catch(() => undefined);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [store.connected, store.apiBaseUrl]);
   const [listening, setListening] = useState(false);
   const [voiceOutput, setVoiceOutput] = useState(() => pref('voice-output') === 'true');
   const [speechRate, setSpeechRate] = useState(() => Number(pref('speech-rate') || 1));
@@ -1378,7 +1403,8 @@ export default function App() {
     { id: 'help', label: '/help', hint: '列出全部斜杠命令及用法', run: showHelp },
     { id: 'doctor', label: '/doctor', hint: '检查安装与配置并查看修复建议', run: () => setSheet('diagnostics') },
     { id: 'config', label: '/config', hint: '打开配置面板', run: () => setSheet('mainConfig') },
-    { id: 'release-notes', label: '/release-notes', hint: '查看本版本更新说明', run: () => { setRawTextTitle('更新说明'); setRawText(`Atlas ${__APP_VERSION__} 更新说明\n\n本版本包括会话整理、任务交接、会话导入导出、用量统计、语音、通知与托盘、定时任务和诊断帮助界面。`); } },
+    { id: 'whatsnew', label: '/whatsnew', hint: '查看仓库提交中的新功能亮点', run: () => { void api<{ source: string; highlights: Array<string | { date?: string; title?: string }> }>(store.apiBaseUrl, '/api/u6/whatsnew').then((result) => { setRawTextTitle('有什么新功能'); setRawText(result.highlights.map((item) => typeof item === 'string' ? item : `${item.date || ''} ${item.title || ''}`.trim()).filter(Boolean).join('\n') || '仓库里还没有可显示的更新亮点。'); }).catch((error) => setToast(`读取更新说明失败：${error instanceof Error ? error.message : String(error)}`)); } },
+    { id: 'release-notes', label: '/release-notes', hint: '查看更新说明（/whatsnew）', run: () => { void api<{ highlights: Array<string | { date?: string; title?: string }> }>(store.apiBaseUrl, '/api/u6/whatsnew').then((result) => { setRawTextTitle('有什么新功能'); setRawText(result.highlights.map((item) => typeof item === 'string' ? item : `${item.date || ''} ${item.title || ''}`.trim()).filter(Boolean).join('\n')); }); } },
     { id: 'status', label: '/status', hint: '显示版本、模型、API 连通性和工具状态', run: () => setToast(`Atlas ${__APP_VERSION__} · ${modelName} · ${store.connected ? 'API 已连接' : 'API 未连接'} · 工具 ${store.tools.length} 个可用 · 推理 ${store.reasoningEffort || '默认'} · ${PERMISSION[permission].label}`) },
     { id: 'permissions', label: '/permissions', hint: '切换当前对话权限模式', run: () => { if (!activeConversation) { setToast('先打开一个对话再切换权限'); return; } setToast(`权限模式：${PERMISSION[cyclePermission()].label}`); } },
     { id: 'agents', label: '/agents', hint: '打开 Agents 页：常驻 Agent 花名册与详情', run: () => go('agents') },
@@ -2096,7 +2122,7 @@ export default function App() {
         {sheet === 'mainConfig' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">主体配置</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">直接查看和修改 Atlas 主体的配置文件。</p><MainConfigPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'expert' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">专家模式</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">开着时在普通配置之上额外加载你自己仓库里装上的提示词、技能、插件、工具和 MCP。</p><ExpertModePanel apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'network' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">模型网络</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">为支持的模型连接配置本机代理与自定义 CA 证书。</p><NetworkSettingsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
-        {sheet === 'shortcuts' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">快捷键</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">改成你顺手的组合键，只在这台电脑上生效。</p><ShortcutsPanel models={store.models} /></section>}
+        {sheet === 'shortcuts' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">快捷键</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">改成你顺手的组合键，也同步到数据目录的 keybindings.json。</p><ShortcutsPanel apiBaseUrl={store.apiBaseUrl} models={store.models} /></section>}
         {sheet === 'hooks' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Hooks</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">在任务开始、用工具前后、完成或失败时运行你自己的命令。</p><HooksPanel /></section>}
         {sheet === 'notifications' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">通知</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">任务完成、需要确认时怎么提醒你。</p><div className="grid gap-6"><AppearanceNotificationsPanel theme={theme} onThemeChange={chooseTheme} username={username} onSaveUsername={saveUsername} onToast={notify} section="notifications" /><NotificationsPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
         {sheet === 'mcp' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">MCP 服务</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理 Atlas 已支持的 MCP 服务，并浏览服务显式提供的资源。</p><div className="grid gap-8"><McpServersPanel apiBaseUrl={store.apiBaseUrl} /><McpResourcesPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
@@ -2108,6 +2134,7 @@ export default function App() {
         {sheet === 'security' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">工作区安全</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理当前对话后续运行的权限与 Docker 隔离。工作区规则仍在首次读取时由你确认。</p>{activeConversation ? <WorkspaceSecurityPanel apiBaseUrl={store.apiBaseUrl} conversation={activeConversation} onChange={(patch) => store.setConversationSettings(activeConversation.id, patch)} /> : <div className="rounded-xl bg-sunken p-4 text-[13px] text-fg-3">先打开一个对话，再配置该对话的工作区权限和沙箱。</div>}</section>}
         {sheet === 'commands' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">自定义斜杠命令</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">查看所有已发现命令；这里只能新建和编辑 Atlas 用户级命令，项目、Claude 与插件命令保持只读。</p><CustomCommandsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'limits' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">运行限制</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">控制新运行的主循环轮数上限，并查看当前可用的 token/费用预算边界。</p><RunLimitsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
+        {sheet === 'storage' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">存储与保留</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">查看 Atlas 数据占用，并配置旧会话的保留规则。</p><StorageRetentionPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'platform' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">平台集成</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">配置桌面窗口、系统级快捷键，并在本机 VS Code 或 JetBrains IDE 打开工作区。</p><PlatformSettingsPanel workspacePath={activeConversation?.workspace} /></section>}
         {sheet === 'integrations' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">任务与集成入口</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">使用已接通的 GitHub PR、Linear、Slack 和本机自动化功能；云端任务服务未提供。</p><div className="grid gap-8"><SettingsIntegrationsPanel onOpenCode={() => { setSheet(null); go('code'); }} onOpenChannels={() => setSheet('channels')} onOpenAutomation={() => { setSheet(null); go('auto'); }} /><LinearIntegrationPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
       </div>
