@@ -122,8 +122,17 @@ class ModelManager:
             if custom.get("id"):
                 self._models.append({**custom, "custom": False})
         for custom in custom_models:
-            if custom.get("id") and not any(model["id"] == custom["id"] for model in self._models):
+            if not custom.get("id"):
+                continue
+            # 用户设置里的模型优先：同 id 的内置/atlas.toml 条目被覆盖（并标为 custom，
+            # 保存设置时才会写回）。以前这里直接跳过同 id 条目，导致用户配置的模型名不生效，
+            # 且下一次保存设置时被从 user-settings.json 里悄悄删掉。
+            existing = next((index for index, model in enumerate(self._models)
+                             if model["id"] == custom["id"]), None)
+            if existing is None:
                 self.add_model(custom, persist=False)
+            else:
+                self._models[existing] = {**self._models[existing], **custom, "custom": True}
 
         # A user may keep a provider-specific display name for an ID that also exists in
         # the built-in catalog (for example the same DeepSeek route through d1api). Keep
