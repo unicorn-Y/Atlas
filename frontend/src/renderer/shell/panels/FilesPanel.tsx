@@ -34,6 +34,25 @@ const absoluteWorkspacePath = (root: string, relative: string): string | null =>
 };
 
 interface WorkbookSheet { name: string; html: string }
+interface PresentationShape { id: string; name: string; text: string }
+interface PresentationSlide { number: number; title: string; shapes: PresentationShape[] }
+
+function presentationSlides(html: string): PresentationSlide[] {
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  return Array.from(parsed.querySelectorAll('section.slide')).map((section, index) => {
+    const title = section.querySelector('h2')?.textContent?.trim() || `幻灯片 ${index + 1}`;
+    const shapes: PresentationShape[] = [];
+    const heading = section.querySelector('h2');
+    if (heading?.dataset.shapeId) shapes.push({ id: heading.dataset.shapeId, name: '标题', text: title });
+    section.querySelectorAll(':scope > div[data-shape-id]').forEach((element) => {
+      const id = element.getAttribute('data-shape-id') ?? '';
+      const name = element.getAttribute('data-shape-name') ?? `元素 ${id}`;
+      const text = Array.from(element.querySelectorAll('p')).map((paragraph) => paragraph.textContent?.trim() ?? '').filter(Boolean).join('\n');
+      shapes.push({ id, name, text: text || (element.querySelector('img') ? '图片' : name) });
+    });
+    return { number: index + 1, title, shapes };
+  });
+}
 
 /** Keep the generated workbook preview's known table structure and discard every attribute/tag. */
 function workbookSheets(html: string): WorkbookSheet[] {
@@ -101,6 +120,9 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
   const [sheetIndex, setSheetIndex] = useState(0);
   const [workbookError, setWorkbookError] = useState('');
   const [workbookLoading, setWorkbookLoading] = useState(false);
+  const [slides, setSlides] = useState<PresentationSlide[]>([]);
+  const [presentationError, setPresentationError] = useState('');
+  const [presentationLoading, setPresentationLoading] = useState(false);
   // C6R: 订阅内部「打开文件」请求；定位行列并滚动到对应代码位置。
   const openRequest = useAtlasStore((state) => state.fileOpenRequest);
   const [highlightLine, setHighlightLine] = useState<number | null>(null);
@@ -304,6 +326,24 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
   }, [workspace, selected, mode, version, refreshKey, reloads]);
 
   useEffect(() => {
+    if (!workspace || !selected || !/\.pptx$/i.test(selected) || mode !== 'preview' || version) {
+      setSlides([]); setPresentationError(''); setPresentationLoading(false); return;
+    }
+    let stale = false;
+    const controller = new AbortController();
+    setSlides([]); setPresentationError(''); setPresentationLoading(true);
+    fetch(backend.officePreviewUrl(workspace, selected), { signal: controller.signal }).then(async (response) => {
+      if (!response.ok) throw new Error(response.status === 413 ? '这个演示文稿超过 10 MB 的预览上限。' : `PPT 预览失败（HTTP ${response.status}）。`);
+      const parsed = presentationSlides(await response.text());
+      if (!parsed.length) throw new Error('演示文稿里没有可读取的幻灯片。');
+      if (!stale) setSlides(parsed);
+    }).catch((exc) => {
+      if (!stale && !(exc instanceof DOMException && exc.name === 'AbortError')) setPresentationError(exc instanceof Error ? exc.message : String(exc));
+    }).finally(() => { if (!stale) setPresentationLoading(false); });
+    return () => { stale = true; controller.abort(); };
+  }, [workspace, selected, mode, version, refreshKey, reloads]);
+
+  useEffect(() => {
     const query = fileQuery.trim();
     if (!workspace || !query) { setSearchResults([]); setSearchError(''); setSearching(false); return; }
     let stale = false;
@@ -501,8 +541,20 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
                       srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body{font:14px system-ui,sans-serif;margin:1rem;color:#20242a}table{border-collapse:collapse;margin:1rem 0;width:100%}td{border:1px solid #bbb;padding:.4rem;white-space:pre-wrap}</style></head><body>${sheets[sheetIndex].html}</body></html>`}
                       className="min-h-0 w-full flex-1 border-0 bg-white" />}
               </div>
-              // Rendered server-side to static HTML; scripts are disabled in the frame.
-              : <iframe title={`预览 ${file.path}`} src={backend.officePreviewUrl(workspace, file.path)} onError={() => setError('办公文档预览加载失败；可以用外部程序打开。')} sandbox="" className="min-h-0 w-full flex-1 border-0 bg-white" />
+              : /\.pptx$/i.test(file.path)
+                ? <div className="min-h-0 flex-1 overflow-auto p-3" aria-label="PPT 幻灯片与元素">
+                  {presentationLoading ? <p role="status" className="m-0 p-4 text-[12.5px] text-fg-3">正在读取演示文稿…</p>
+                    : presentationError ? <div role="alert" className="p-4 text-[12.5px] text-danger">{presentationError}</div>
+                      : <div className="grid gap-3">{slides.map((slide) => <section key={slide.number} className="rounded-xl border border-line bg-white p-4 text-[#20242a] shadow-sm">
+                        <h3 className="m-0 border-b border-[#ddd] pb-2 text-[15px]">第 {slide.number} 页 · {slide.title}</h3>
+                        {slide.shapes.map((shape) => <div key={shape.id} className="mt-2 flex items-start gap-2 rounded-lg border border-transparent p-2 hover:border-[#8b7cf6] hover:bg-[#f6f4ff]">
+                          <div className="min-w-0 flex-1 whitespace-pre-wrap text-[13px]">{shape.text}</div>
+                          <button type="button" className="shrink-0 rounded-md bg-[#eeeaff] px-2 py-1 text-[11px] text-[#4937ac] hover:bg-[#e2dcff]" title={`引用第 ${slide.number} 页的 ${shape.name}`} onClick={() => window.dispatchEvent(new CustomEvent('atlas:add-context-file', { detail: { path: file.path, element: `slide:${slide.number}/shape:${shape.id}`, label: `${basename(file.path)} · 第 ${slide.number} 页 · ${shape.name}` } }))}>引用元素</button>
+                        </div>)}
+                      </section>)}</div>}
+                </div>
+                // Non-interactive office formats are rendered in a sandboxed document.
+                : <iframe title={`预览 ${file.path}`} src={backend.officePreviewUrl(workspace, file.path)} onError={() => setError('办公文档预览加载失败；可以用外部程序打开。')} sandbox="" className="min-h-0 w-full flex-1 border-0 bg-white" />
           : PDF.test(file.path) && !version
             ? <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="flex shrink-0 items-center gap-1.5 border-b border-line px-2 py-1" role="group" aria-label="PDF 页面与缩放">

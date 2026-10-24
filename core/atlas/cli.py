@@ -1,7 +1,9 @@
 """Atlas CLI — command-line entry point."""
 
 import asyncio
+import base64
 import json
+import mimetypes
 import os
 import sys
 import time
@@ -814,6 +816,7 @@ async def _drive_turn(
     base_url: str,
     *,
     prompt: str,
+    attachments: list[dict[str, str]] | None = None,
     workspace: str,
     model: str | None,
     permission_mode: str | None,
@@ -851,6 +854,8 @@ async def _drive_turn(
         "type": "run.start", "run_id": run_id, "content": prompt,
         "conversation_id": conversation_id, "workspace": workspace,
     }
+    if attachments:
+        start_message["files"] = attachments
     if model:
         start_message["model"] = model
     if permission_mode:
@@ -1000,6 +1005,7 @@ async def _drive_turn(
 async def _run_headless(
     *,
     prompt: str,
+    attachments: list[dict[str, str]],
     workspace: str,
     model: str | None,
     permission_mode: str | None,
@@ -1037,6 +1043,7 @@ async def _run_headless(
             exit_code, _summary = await _drive_turn(
                 base_url,
                 prompt=prompt, workspace=workspace, model=model,
+                attachments=attachments,
                 permission_mode=permission_mode, conversation_id=conv_id,
                 max_turns=max_turns, output_format=output_format, timeout=timeout,
                 out=out,
@@ -1065,6 +1072,8 @@ def _validate_run_arguments(workspace: Path, max_turns: int | None, timeout: flo
 @main.command()
 @click.option("--print", "-p", "prompt_text", default=None,
               help="本轮任务描述；缺省时从 stdin 读取")
+@click.option("--attach", "attachments", multiple=True, type=click.Path(path_type=Path, exists=True, dir_okay=False),
+              help="附加文件到首条消息（可重复指定；每个文件最多 10 MB）")
 @click.option("--workspace", default=None, help="工作目录（默认当前目录，须为绝对路径）")
 @click.option("--model", "-m", default=None, help="模型 ID（默认用配置的默认模型）")
 @click.option("--permission-mode", "permission_mode", default=None,
@@ -1077,7 +1086,7 @@ def _validate_run_arguments(workspace: Path, max_turns: int | None, timeout: flo
 @click.option("--server", "server_url", default=None,
               help="连接已运行的后端 URL（默认进程内直接启动运行时）")
 @click.option("--timeout", default=1800.0, show_default=True, help="单轮整体超时秒数")
-def run(prompt_text: str | None, workspace: str | None, model: str | None,
+def run(prompt_text: str | None, attachments: tuple[Path, ...], workspace: str | None, model: str | None,
         permission_mode: str | None, output_format: str, max_turns: int | None,
         resume_id: str | None, server_url: str | None, timeout: float) -> None:
     """Headless one-shot run: start the Atlas runtime and serve one task.
@@ -1097,6 +1106,22 @@ def run(prompt_text: str | None, workspace: str | None, model: str | None,
         _error_line("arguments", problem)
         sys.exit(EXIT_USAGE)
 
+    attached_files: list[dict[str, str]] = []
+    try:
+        for path in attachments:
+            resolved = path.expanduser().resolve(strict=True)
+            raw = resolved.read_bytes()
+            if len(raw) > 10 * 1024 * 1024:
+                raise ValueError(f"附件超过 10 MB：{resolved.name}")
+            attached_files.append({
+                "name": resolved.name,
+                "mime": mimetypes.guess_type(resolved.name)[0] or "application/octet-stream",
+                "data_base64": base64.b64encode(raw).decode("ascii"),
+            })
+    except (OSError, ValueError) as exc:
+        _error_line("arguments", f"无法读取 --attach 文件：{exc}")
+        sys.exit(EXIT_USAGE)
+
     # In-process mode: the engine prints via sys.stdout, so reserve the real
     # stdout for CLI data (--server mode has no engine in this process).
     if server_url:
@@ -1107,6 +1132,7 @@ def run(prompt_text: str | None, workspace: str | None, model: str | None,
     try:
         exit_code = asyncio.run(_run_headless(
             prompt=prompt,
+            attachments=attached_files,
             workspace=str(workspace_path),
             model=model,
             permission_mode=permission_mode,

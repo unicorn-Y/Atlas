@@ -226,11 +226,14 @@ def render_office(raw: bytes, suffix: str) -> str:
 
         presentation = Presentation(io.BytesIO(raw))
         for index, slide in enumerate(presentation.slides, 1):
-            title = slide.shapes.title.text if slide.shapes.title else f"Slide {index}"
-            sections.append(f"<section class=\"slide\"><h2>{html.escape(title)}</h2>")
+            title_shape = slide.shapes.title
+            title = title_shape.text if title_shape else f"Slide {index}"
+            title_id = title_shape.shape_id if title_shape else 0
+            sections.append(f"<section class=\"slide\" data-slide=\"{index}\"><h2 data-shape-id=\"{title_id}\">{html.escape(title)}</h2>")
             for shape in slide.shapes:
-                if shape == slide.shapes.title:
+                if shape == title_shape:
                     continue
+                sections.append(f"<div data-shape-id=\"{shape.shape_id}\" data-shape-name=\"{html.escape(shape.name, quote=True)}\">")
                 if getattr(shape, "has_text_frame", False):
                     for paragraph in shape.text_frame.paragraphs:
                         if paragraph.text:
@@ -239,6 +242,7 @@ def render_office(raw: bytes, suffix: str) -> str:
                     image = shape.image
                     mime = mimetypes.guess_type("image." + image.ext)[0] or "image/png"
                     sections.append(f'<img alt="" src="{_data_url(image.blob, mime)}">')
+                sections.append("</div>")
             sections.append("</section>")
     else:
         raise ValueError("Only .docx, .xlsx, and .pptx files can be previewed")
