@@ -234,6 +234,51 @@ def _ensure_gitignore_entry(repo_root: str) -> None:
         log.warning("Could not add .worktrees/ to %s: %s", path, exc)
 
 
+_ORPHAN_MIN_AGE_SECONDS = 3600
+
+
+def prune_orphan_worktrees(repo_root: str, *, min_age_seconds: float = _ORPHAN_MIN_AGE_SECONDS) -> list[str]:
+    """Remove leftover child worktrees whose finalizer never ran (Atlas killed or crashed mid-run).
+
+    Only trees older than ``min_age_seconds`` that are clean and whose branch tip is already
+    contained in a non-subagent branch (so no unique commits) are removed; anything else stays
+    for review, same rule as :func:`finalize_subagent_worktree`.
+    """
+    import time
+
+    removed: list[str] = []
+    container = Path(repo_root) / ".worktrees"
+    if not container.is_dir():
+        return removed
+    for tree in sorted(container.glob("subagent-*")):
+        try:
+            if not tree.is_dir() or time.time() - tree.stat().st_mtime < min_age_seconds:
+                continue
+            env = noninteractive_repo_git_env(str(tree))
+            if env is None:
+                continue
+            status = _run_git(["status", "--porcelain"], cwd=str(tree), env=env)
+            if status.returncode or status.stdout.strip():
+                continue
+            branch = f"atlas-subagent/{tree.name.removeprefix('subagent-')}"
+            containing = _run_git(["branch", "--format=%(refname:short)", "--contains", "HEAD"], cwd=str(tree), env=env)
+            if containing.returncode:
+                continue
+            others = [line.strip() for line in containing.stdout.splitlines()
+                      if line.strip() and not line.strip().startswith("atlas-subagent/")]
+            if not others:
+                continue  # has commits no regular branch contains: keep for review
+            result = _run_git(["worktree", "remove", "--force", str(tree)], cwd=repo_root)
+            if result.returncode == 0:
+                _run_git(["branch", "-D", branch], cwd=repo_root)
+                removed.append(str(tree))
+        except (OSError, subprocess.SubprocessError) as exc:
+            log.warning("Subagent orphan worktree sweep skipped %s: %s", tree, exc)
+    if removed:
+        _run_git(["worktree", "prune"], cwd=repo_root)
+    return removed
+
+
 def create_subagent_worktree(
     parent_cwd: str | None, subagent_id: str | None = None,
 ) -> dict[str, str] | None:
@@ -241,6 +286,10 @@ def create_subagent_worktree(
     repo_root = resolve_repo_root(parent_cwd)
     if not repo_root:
         return None
+    try:
+        prune_orphan_worktrees(repo_root)
+    except Exception as exc:  # the sweep must never block creating the child's tree
+        log.warning("Subagent orphan worktree sweep failed: %s", exc)
     suffix = re.sub(r"[^A-Za-z0-9._-]", "-", subagent_id or uuid.uuid4().hex[:8])
     name = f"subagent-{suffix}"
     branch = f"atlas-subagent/{suffix}"

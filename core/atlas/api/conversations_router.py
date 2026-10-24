@@ -59,10 +59,27 @@ class ConversationUiMetadataRequest(BaseModel):
     metadata: dict[str, Any]
 
 
+def _ui_metadata_path() -> Path:
+    """Sidebar labels/groups/order live with Atlas' other data under DATA_ROOT/data.
+
+    Older builds wrote DATA_ROOT/conversation-ui-metadata.json, which on a source checkout is the
+    repository root; move that file over the first time it is seen.
+    """
+    from atlas.config import DATA_ROOT
+    path = DATA_ROOT / "data" / "conversation-ui-metadata.json"
+    legacy = DATA_ROOT / "conversation-ui-metadata.json"
+    if not path.exists() and legacy.exists():
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            legacy.replace(path)
+        except OSError:
+            return legacy
+    return path
+
+
 @router.get("/api/ui/conversation-metadata")
 async def get_conversation_ui_metadata() -> dict[str, Any]:
-    from atlas.config import DATA_ROOT
-    path = DATA_ROOT / "conversation-ui-metadata.json"
+    path = _ui_metadata_path()
     try:
         value = await asyncio.to_thread(path.read_text, encoding="utf-8")
         parsed = json.loads(value)
@@ -75,8 +92,7 @@ async def get_conversation_ui_metadata() -> dict[str, Any]:
 
 @router.put("/api/ui/conversation-metadata")
 async def put_conversation_ui_metadata(request: ConversationUiMetadataRequest) -> dict[str, bool]:
-    from atlas.config import DATA_ROOT
-    path = DATA_ROOT / "conversation-ui-metadata.json"
+    path = _ui_metadata_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".json.tmp")
     payload = json.dumps({"metadata": request.metadata}, ensure_ascii=False, indent=2)

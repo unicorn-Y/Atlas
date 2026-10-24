@@ -325,7 +325,7 @@ def apply(store: MemoryStore, proposals: list[Proposal], *, user_text: str, sess
         try:
             project_root = subprocess.run(
                 ["git", "-C", workspace, "rev-parse", "--show-toplevel"],
-                capture_output=True, text=True, timeout=3, check=True,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3, check=True,
             ).stdout.strip()
         except (OSError, subprocess.SubprocessError):
             try:

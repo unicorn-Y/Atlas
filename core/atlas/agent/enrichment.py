@@ -907,7 +907,7 @@ class DelegationService:
             probe = await asyncio.to_thread(
                 subprocess.run,
                 ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
-                capture_output=True, text=True, check=False,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
             )
             if probe.returncode == 0:
                 git_root = Path(probe.stdout.strip()).resolve()
@@ -1046,12 +1046,12 @@ class DelegationService:
                         await asyncio.to_thread(
                             subprocess.run,
                             ["git", "-C", str(worktree), "add", "-N", "--all"],
-                            capture_output=True, text=True, check=False,
+                            capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
                         )
                         status_result = await asyncio.to_thread(
                             subprocess.run,
                             ["git", "-C", str(worktree), "status", "--porcelain"],
-                            capture_output=True, text=True, check=False,
+                            capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
                         )
                         changed_files = [
                             line[3:].strip().replace("\\", "/")
@@ -1061,7 +1061,7 @@ class DelegationService:
                             subprocess.run,
                             ["git", "-C", str(worktree), "diff", "--name-only",
                              worktree_info["base_commit"]],
-                            capture_output=True, text=True, check=False,
+                            capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
                         )
                         changed_files = sorted(set(changed_files) | {
                             line.strip().replace("\\", "/")
@@ -1071,7 +1071,7 @@ class DelegationService:
                             subprocess.run,
                             ["git", "-C", str(worktree), "diff", "--binary",
                              worktree_info["base_commit"]],
-                            capture_output=True, text=True, check=False,
+                            capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
                         )
                         patch_text = diff.stdout
                     finally:

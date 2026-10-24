@@ -339,7 +339,7 @@ def _secure_dir(path: str | os.PathLike[str]) -> Path:
         subprocess.run(
             ["icacls", str(directory), "/inheritance:r", "/grant:r",
              f"{getpass.getuser()}:(OI)(CI)F"],
-            check=True, capture_output=True, text=True,
+            check=True, capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
     return directory
 

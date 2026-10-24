@@ -49,6 +49,28 @@ for key in pref_writes:
     if f"preference.{key}" not in pref_reads and key in {k.split(".")[-1] for k in pref_reads if not k.startswith("preference.")}:
         problems.append(f"preference '{key}' is written as atlas.preference.{key} but read under a different key")
 
+# Backend: subprocess calls decoding text without an explicit encoding use the Windows ANSI code page;
+# Chinese paths/output then make the reader thread fail and stdout becomes None (workspace search 500,
+# git status, worker diffs all broke this way).
+import ast  # noqa: E402
+
+for path in sorted((ROOT / "core" / "atlas").rglob("*.py")):
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except SyntaxError:
+        continue
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+        if name not in {"run", "check_output", "Popen", "call", "check_call"}:
+            continue
+        keywords = {kw.arg: kw for kw in node.keywords if kw.arg}
+        text_kw = keywords.get("text") or keywords.get("universal_newlines")
+        if (text_kw is not None and isinstance(text_kw.value, ast.Constant) and text_kw.value.value is True
+                and "encoding" not in keywords):
+            problems.append(f"{path.relative_to(ROOT)}:{node.lineno} subprocess {name}(text=True) without encoding=\"utf-8\"")
+
 if problems:
     print("\n".join(problems))
     sys.exit(1)

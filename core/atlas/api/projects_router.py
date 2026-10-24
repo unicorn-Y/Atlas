@@ -171,7 +171,7 @@ async def import_project(
         try:
             result = subprocess.run(
                 ["git", "-C", str(path), "remote", "get-url", "origin"],
-                capture_output=True, text=True, timeout=3, check=False,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3, check=False,
             )
             return result.stdout.strip() if result.returncode == 0 else ""
         except (OSError, subprocess.TimeoutExpired):
