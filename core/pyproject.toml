@@ -35,6 +35,8 @@ dependencies = [
     # P18X upstream integrations (versions pinned for reproducible packaging).
     "cua-driver==0.34.1",
     "pywinauto==0.6.9",
+    "pynput>=1.7.7",
+    "Pillow>=10.0.0",
     "browser-use==0.13.11",
     "dbos==3.2.0",
     "claude-agent-sdk==0.2.165",

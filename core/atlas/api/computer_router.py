@@ -12,6 +12,7 @@ resolution channel shared with ``POST /api/browser/handoff``.
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -21,16 +22,61 @@ from atlas.origin_guard import TOKEN_HEADER, is_trusted
 
 router = APIRouter(prefix="/api/computer", tags=["computer"])
 
-
 def _require_trusted_origin(request: Request) -> None:
     """Mirror of the app-level OriginGuard rule for standalone mounts."""
-    trusted = is_trusted(
-        request.headers.get("origin"),
-        request.headers.get(TOKEN_HEADER),
-        fetch_site=request.headers.get("sec-fetch-site"),
-    )
+    trusted = is_trusted(request.headers.get("origin"), request.headers.get(TOKEN_HEADER), fetch_site=request.headers.get("sec-fetch-site"))
     if not trusted:
         raise HTTPException(status_code=403, detail="Requests from this origin are not allowed")
+
+@router.get("/teach")
+async def teach_status() -> dict[str, Any]:
+    from atlas.computer_teach import snapshot
+    return snapshot()
+
+@router.post("/teach/start", dependencies=[Depends(_require_trusted_origin)])
+async def teach_start() -> dict[str, Any]:
+    from atlas.computer_teach import start
+    try: return await asyncio.to_thread(start)
+    except (ValueError, RuntimeError) as exc: raise HTTPException(409, str(exc)) from exc
+
+@router.post("/teach/stop", dependencies=[Depends(_require_trusted_origin)])
+async def teach_stop() -> dict[str, Any]:
+    from atlas.computer_teach import stop
+    try: return await asyncio.to_thread(stop)
+    except ValueError as exc: raise HTTPException(409, str(exc)) from exc
+
+@router.put("/teach/steps", dependencies=[Depends(_require_trusted_origin)])
+async def teach_correct(req: dict[str, Any]) -> dict[str, Any]:
+    from atlas.computer_teach import correct
+    try: return correct(req.get("steps", []))
+    except ValueError as exc: raise HTTPException(409, str(exc)) from exc
+
+@router.post("/teach/replay", dependencies=[Depends(_require_trusted_origin)])
+async def teach_replay() -> dict[str, Any]:
+    from atlas.computer_teach import replay
+    try: return await asyncio.to_thread(replay)
+    except Exception as exc: raise HTTPException(400, str(exc)) from exc
+
+@router.post("/teach/export", dependencies=[Depends(_require_trusted_origin)])
+async def teach_export(req: dict[str, Any], request: Request) -> dict[str, Any]:
+    from atlas.computer_teach import export_skill
+    try:
+        from atlas import server
+        app_services = getattr(request.app.state, "services", None)
+        model_mgr = getattr(app_services, "model_mgr", None) or getattr(server, "model_mgr", None)
+        if model_mgr is None: raise HTTPException(503, "技能整理模型暂不可用。")
+        from atlas.computer_teach import snapshot
+        state = snapshot()
+        prompt = [{"role":"system","content":"你把桌面演示步骤整理成可复用 Atlas 技能。只返回完整 SKILL.md（含 YAML frontmatter、用途、参数、逐步操作及每步定位策略）。优先窗口/控件定位，其次锚点截图匹配，最后坐标。保留目标窗口信息；敏感输入只要求用户运行时提供，不得推断或生成任何凭据。"},
+                  {"role":"user","content":json.dumps({"name":req.get("name"),"purpose":req.get("purpose"),"parameters":req.get("parameters",[]),"steps":[{key:value for key,value in step.items() if key!="anchor"} for step in state.get("steps",[])]},ensure_ascii=False)}]
+        result = await model_mgr.model_router.complete_for(model_mgr.current_model,"conversation",prompt,max_tokens=2400,temperature=.2)
+        draft = str(getattr(result,"text","") or "")
+        exported = await asyncio.to_thread(export_skill,str(req.get("name","")),str(req.get("purpose","")),req.get("parameters",[]),draft)
+        skill_mgr = getattr(app_services, "skill_mgr", None)
+        if skill_mgr is not None:
+            await asyncio.to_thread(skill_mgr.scan_skills_sync)
+        return exported
+    except ValueError as exc: raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/status")
