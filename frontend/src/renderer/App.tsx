@@ -1602,10 +1602,16 @@ export default function App() {
           const target = store.conversations.find((item) => item.id === conversationId);
           if (!target) return;
           await openConversation(target);
-          window.setTimeout(() => {
-            const row = Array.from(document.querySelectorAll<HTMLElement>('[data-message-id]')).find((item) => item.dataset.messageId === messageId);
-            row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }, 250);
+          for (let page = 0; page < 100; page += 1) {
+            const state = useAtlasStore.getState();
+            const messages = state.conversationMessages[conversationId] ?? [];
+            if (messages.some((message) => String(message.id) === messageId) || !state.messagesHasEarlier[conversationId]) break;
+            const oldest = messages[0]?.id;
+            await state.loadEarlier(conversationId);
+            const updated = useAtlasStore.getState().conversationMessages[conversationId] ?? [];
+            if (updated[0]?.id === oldest) break;
+          }
+          window.dispatchEvent(new CustomEvent('atlas:jump-message', { detail: { conversationId, messageId } }));
         }}
         username={username} subtitle={store.connected ? modelName : store.backendStarting ? '后端启动中…' : '后端没有连接'}
         theme={theme} onToggleTheme={toggleTheme} onSettings={() => setSheet('models')}

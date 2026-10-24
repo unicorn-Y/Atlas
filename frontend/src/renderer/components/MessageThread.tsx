@@ -178,6 +178,7 @@ export default function MessageThread({ history, username, historyActions, empty
   const [activeSearchKey, setActiveSearchKey] = useState<string | null>(null);
   const [searchHistoryLoading, setSearchHistoryLoading] = useState(false);
   const [searchHistoryIncomplete, setSearchHistoryIncomplete] = useState(false);
+  const [externalJump, setExternalJump] = useState<{ conversationId: string; messageId: string } | null>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -189,6 +190,15 @@ export default function MessageThread({ history, username, historyActions, empty
   const [screenReaderAnnouncement, setScreenReaderAnnouncement] = useState('');
   scrollStateKeyRef.current = scrollStateKey;
   const previousHistory = useRef({ conversationId: '', length: 0 });
+
+  useEffect(() => {
+    const onJump = (event: Event) => {
+      const detail = (event as CustomEvent<{ conversationId?: string; messageId?: string }>).detail;
+      if (detail?.conversationId && detail.messageId) setExternalJump({ conversationId: detail.conversationId, messageId: detail.messageId });
+    };
+    window.addEventListener('atlas:jump-message', onJump);
+    return () => window.removeEventListener('atlas:jump-message', onJump);
+  }, []);
 
   const timelineItems = useMemo(() => buildTimeline(events), [events]);
   // The placeholder only covers the gap before anything streams; once thinking text arrives the
@@ -275,6 +285,16 @@ export default function MessageThread({ history, username, historyActions, empty
   const displayRows = useMemo(() => searchOpen
     ? rows.map((row) => ({ kind: 'row' as const, id: row.id, row }))
     : presentRows(rows, presentation, answers), [answers, presentation, rows, searchOpen]);
+  useEffect(() => {
+    if (!externalJump || externalJump.conversationId !== conversationId) return;
+    const matchesMessage = (row: ThreadRow) => row.kind === 'history' && String(row.message.id) === externalJump.messageId;
+    const index = displayRows.findIndex((entry) => entry.kind === 'row'
+      ? matchesMessage(entry.row)
+      : entry.rows.some(matchesMessage));
+    if (index < 0) return;
+    virtuosoRef.current?.scrollToIndex({ index, align: 'center', behavior: 'smooth' });
+    setExternalJump(null);
+  }, [conversationId, displayRows, externalJump]);
   const latestCompletedEvent = useMemo(() => [...events].reverse().find((event) => event.type === 'message.completed'), [events]);
 
   useEffect(() => {
