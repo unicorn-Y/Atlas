@@ -39,7 +39,7 @@ from typing import Any, Awaitable, Callable
 
 from atlas.config import get_config
 from atlas.tools.computer_use import COMPUTER_TOOLS
-from atlas.tools.x2.context import EVENT_COMPUTER_STEP, X2Context, current_context
+from atlas.tools.x2.context import EVENT_COMPUTER_FRAME, EVENT_COMPUTER_STEP, X2Context, current_context
 from atlas.tools.x2.hermes_config_sync import sync_x2_config
 
 log = logging.getLogger(__name__)
@@ -65,6 +65,9 @@ _SUMMARY_LIMIT = 400
 _THUMBNAIL_MAX_SIDE = 256
 _THUMBNAIL_JPEG_QUALITY = 50
 _THUMBNAIL_FALLBACK_BYTES = 8192
+_LIVE_FRAME_INTERVAL = 0.2
+_LIVE_FRAME_LAST: dict[str, float] = {}
+_LIVE_FRAME_LOCK = threading.Lock()
 
 # Sentinel: distinguishes "no backend injected" (lazy Hermes acquisition) from
 # an explicit ``backend=None`` ("Hermes unavailable" — straight to legacy).
@@ -482,6 +485,21 @@ class X2ComputerRuntime:
         }
         _record_step(ctx.run_id or ctx.session_id or "", step)
         await ctx.emit_event(EVENT_COMPUTER_STEP, step)
+        if thumbnail and ctx.run_id:
+            now = asyncio.get_running_loop().time()
+            with _LIVE_FRAME_LOCK:
+                last = _LIVE_FRAME_LAST.get(ctx.run_id, 0.0)
+                emit_frame = now - last >= _LIVE_FRAME_INTERVAL
+                if emit_frame:
+                    _LIVE_FRAME_LAST[ctx.run_id] = now
+                    if len(_LIVE_FRAME_LAST) > 256:
+                        oldest = min(_LIVE_FRAME_LAST, key=_LIVE_FRAME_LAST.__getitem__)
+                        _LIVE_FRAME_LAST.pop(oldest, None)
+            if emit_frame:
+                await ctx.emit_event(EVENT_COMPUTER_FRAME, {
+                    "run_id": ctx.run_id, "session_id": ctx.session_id,
+                    "thumbnail": thumbnail, "captured_at": now,
+                })
 
     async def shutdown(self) -> None:
         """Release the Hermes session backend and stop the legacy runtime, best-effort."""

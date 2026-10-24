@@ -8,7 +8,6 @@ duration of each tool call.
 """
 from __future__ import annotations
 
-import asyncio
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
@@ -24,6 +23,7 @@ EVENT_HANDOFF_REQUIRED = "browser.handoff_required"
 EVENT_HANDOFF_RESOLVED = "browser.handoff_resolved"
 EVENT_PANEL_SYNC = "browser.panel.sync"
 EVENT_COMPUTER_STEP = "computer.step"
+EVENT_COMPUTER_FRAME = "computer.frame"
 EVENT_BROWSER_STEP = "browser.step"
 
 # input.response option values used by the handoff / foreground cards

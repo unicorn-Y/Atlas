@@ -116,6 +116,7 @@ import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 import { cleanSearchSnippet, rankSearchHits, searchHitRoleLabel } from './services/searchHits';
+import ComputerLivePreview from './components/x2/ComputerLivePreview';
 
 type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage' | 'memories' | 'teach' | 'secrets';
 
@@ -243,6 +244,8 @@ export default function App() {
   const [keymapOpen, setKeymapOpen] = useState(false);
   const [fallbackOpen, setFallbackOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [computerReady, setComputerReady] = useState(false);
+  const [computerUseEnabled, setComputerUseEnabled] = useState(() => pref('computer-use-enabled') !== 'false');
   const [input, setInput] = useState('');
   const [pendingProjectId, setPendingProjectId] = useState('');
   const [summaryEnabled, setSummaryEnabled] = useState(() => pref('pinned-summary') !== 'false');
@@ -339,6 +342,15 @@ export default function App() {
   const [speechRate, setSpeechRate] = useState(() => Number(pref('speech-rate') || 1));
   const [speechVoice, setSpeechVoice] = useState(() => pref('speech-voice') || '');
   const [speechVoices, setSpeechVoices] = useState<SpeechSynthesisVoice[]>([]);
+  useEffect(() => {
+    if (!store.connected) { setComputerReady(false); return; }
+    let current = true;
+    const refresh = () => void api<{ ready?: boolean; permission_mode?: string }>(store.apiBaseUrl, '/api/computer/status')
+      .then((status) => { if (current) setComputerReady(status.ready === true && status.permission_mode === 'full_access'); })
+      .catch(() => { if (current) setComputerReady(false); });
+    refresh(); const timer = window.setInterval(refresh, 8000);
+    return () => { current = false; window.clearInterval(timer); };
+  }, [store.connected, store.apiBaseUrl]);
   const [username, setUsername] = useState(() => pref('username')?.trim() || 'User');
   const [statusBar, setStatusBar] = useState(readStatusBarPreferences);
   const [maximized, setMaximized] = useState(false);
@@ -788,6 +800,8 @@ export default function App() {
     const refs = { files: mentions.filter((item) => item.kind === 'file').map((item) => item.id), conversations: [] };
     setMentions([]);
     const messageSkills = resolveMessageSkillReferences(text, store.skills.map((skill) => skill.name));
+    const existingOverrides = useAtlasStore.getState().pendingRunOverrides;
+    store.setPendingRunOverrides({ ...existingOverrides, tool_deny: computerUseEnabled ? existingOverrides?.tool_deny : [...new Set([...(existingOverrides?.tool_deny ?? []), 'computer_*'])] });
     const sent = immediate && activeRun && !runDone
       ? store.sendNow(text, images, documents, refs)
       : store.sendMessage(text, images, documents, refs, undefined, undefined, messageSkills);
@@ -1807,6 +1821,12 @@ export default function App() {
       }),
     ])],
     onCyclePermission: activeConversation ? cyclePermission : undefined,
+    tools: <Tip label={!computerReady ? 'Computer Use 尚未就绪或当前权限模式不支持' : computerUseEnabled ? '本轮允许 Atlas 使用电脑操控' : '本轮关闭电脑操控'}>
+      <button type="button" disabled={!computerReady || permission !== 'full_access'} aria-pressed={computerUseEnabled} onClick={() => setComputerUseEnabled((value) => { const next = !value; setPref('computer-use-enabled', String(next)); return next; })}
+        className={cn('inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[11.5px]', computerUseEnabled && computerReady && permission === 'full_access' ? 'bg-brand-soft text-brand' : 'text-fg-3 hover:bg-hover disabled:opacity-40')}>
+        <Monitor size={14} />电脑操控{computerUseEnabled ? '开' : '关'}
+      </button>
+    </Tip>,
   };
   const errorNote = store.error && <div role="alert" className="anim-fade mt-3 flex items-start justify-between gap-3 rounded-xl bg-danger-soft px-4 py-2.5 text-[13px] text-danger">
     <div className="min-w-0">
@@ -2129,7 +2149,7 @@ export default function App() {
             {activeRun && activeRun.conversationId === store.activeConversationId && <div className="pointer-events-none absolute top-2 left-1/2 z-20 flex -translate-x-1/2 justify-center [&>*]:pointer-events-auto">
               <ProgressCapsule run={activeRun} events={activeEvents} onShowAll={() => showInspectorTab('activity')} />
             </div>}
-            {computerRunId && <ComputerEdgeBar apiBaseUrl={store.apiBaseUrl} runId={computerRunId} canPause={Boolean(foregroundEvent)} className="shrink-0" />}
+            {computerRunId && <><ComputerEdgeBar apiBaseUrl={store.apiBaseUrl} runId={computerRunId} canPause={Boolean(foregroundEvent)} className="shrink-0" /><ComputerLivePreview runId={computerRunId} events={activeEvents} /></>}
             {!!peerInbox.length && <section className="mx-6 mt-2 rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5" aria-label="跨会话收件箱">
               <div className="flex items-center justify-between gap-3"><b className="text-[12.5px] text-fg">跨会话收件箱 · {peerInbox.length} 条未读</b>
                 <button className="text-[11.5px] text-fg-3 hover:text-fg" onClick={() => void api<{ marked_read: number }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(store.activeConversationId)}/peer-inbox/read`, { method: 'POST', json: { message_ids: peerInbox.map((item) => item.id) } }).then(() => setPeerInbox([])).catch((error) => setToast(error instanceof Error ? error.message : '标记已读失败'))}>标记已读</button></div>
