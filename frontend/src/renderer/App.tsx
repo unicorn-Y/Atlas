@@ -1475,7 +1475,8 @@ export default function App() {
     { id: 'memories', label: '/memories', hint: '设置当前对话是否读取和生成记忆', run: () => setSheet('memories') },
     { id: 'config', label: '/config', hint: '打开配置面板', run: () => setSheet('mainConfig') },
     { id: 'whatsnew', label: '/whatsnew', hint: '查看仓库提交中的新功能亮点', run: () => { void api<{ source: string; highlights: Array<string | { date?: string; title?: string }> }>(store.apiBaseUrl, '/api/u6/whatsnew').then((result) => { setRawTextTitle('有什么新功能'); setRawText(result.highlights.map((item) => typeof item === 'string' ? item : `${item.date || ''} ${item.title || ''}`.trim()).filter(Boolean).join('\n') || '仓库里还没有可显示的更新亮点。'); }).catch((error) => setToast(`读取更新说明失败：${error instanceof Error ? error.message : String(error)}`)); } },
-    { id: 'release-notes', label: '/release-notes', hint: '查看更新说明（/whatsnew）', run: () => { void api<{ highlights: Array<string | { date?: string; title?: string }> }>(store.apiBaseUrl, '/api/u6/whatsnew').then((result) => { setRawTextTitle('有什么新功能'); setRawText(result.highlights.map((item) => typeof item === 'string' ? item : `${item.date || ''} ${item.title || ''}`.trim()).filter(Boolean).join('\n')); }); } },
+    { id: 'release-notes', label: '/release-notes', hint: '查看完整更新说明（按版本索引）', run: () => { void api<{ changelog?: string; highlights: Array<string | { date?: string; title?: string }> }>(store.apiBaseUrl, '/api/u6/whatsnew').then((result) => { setRawTextTitle('更新说明'); setRawText(result.changelog || result.highlights.map((item) => typeof item === 'string' ? item : `${item.date || ''} ${item.title || ''}`.trim()).filter(Boolean).join('\n')); }); } },
+    { id: 'about', label: '/about', hint: '查看 Atlas 版本与更新说明', run: () => { void api<{ source?: string; changelog?: string; highlights: Array<string | { date?: string; title?: string }> }>(store.apiBaseUrl, '/api/u6/whatsnew').then((result) => { setRawTextTitle('关于 Atlas'); setRawText(`Atlas ${__APP_VERSION__}\n更新来源：${result.source || '未知'}\n\n${result.changelog || result.highlights.map((item) => typeof item === 'string' ? item : `${item.date || ''} ${item.title || ''}`.trim()).filter(Boolean).join('\n')}`); }); } },
     { id: 'status', label: '/status', hint: '显示版本、模型、API 连通性和工具状态', run: () => setToast(`Atlas ${__APP_VERSION__} · ${modelName} · ${store.connected ? 'API 已连接' : 'API 未连接'} · 工具 ${store.tools.length} 个可用 · 推理 ${store.reasoningEffort || '默认'} · ${PERMISSION[permission].label}`) },
     { id: 'permissions', label: '/permissions', hint: '切换当前对话权限模式', run: () => { if (!activeConversation) { setToast('先打开一个对话再切换权限'); return; } setToast(`权限模式：${PERMISSION[cyclePermission()].label}`); } },
     { id: 'agents', label: '/agents', hint: '打开 Agents 页：常驻 Agent 花名册与详情', run: () => go('agents') },
@@ -1514,7 +1515,7 @@ export default function App() {
       : ['new', 'clear', 'resume', 'fork', 'undo', 'redo', 'rename', 'export', 'handoff', 'preset', 'import-chatgpt'].includes(command.id) ? '会话'
         : ['folder', 'pwd', 'cd', 'init', 'ide', 'worktree', 'open'].includes(command.id) ? '工作区'
           : ['model', 'reasoning', 'usage', 'cost', 'advisor'].includes(command.id) ? '模型'
-            : ['doctor', 'config', 'release-notes', 'help', 'version', 'insights'].includes(command.id) ? '诊断'
+            : ['doctor', 'config', 'release-notes', 'about', 'help', 'version', 'insights'].includes(command.id) ? '诊断'
               : command.id.startsWith('skill-') ? '技能' : '工具';
   });
   const conversationsRef = useRef(store.conversations);

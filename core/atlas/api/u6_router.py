@@ -124,7 +124,10 @@ async def put_keybindings(request: dict[str, Any]) -> dict[str, Any]:
 async def whatsnew() -> dict[str, Any]:
     from atlas.config import PROJECT_ROOT
     changelog = PROJECT_ROOT / "CHANGELOG.md"
-    if changelog.is_file(): return {"source": "CHANGELOG.md", "highlights": changelog.read_text(encoding="utf-8", errors="replace")[:12000].splitlines()[:100]}
+    if changelog.is_file():
+        content = changelog.read_text(encoding="utf-8", errors="replace")[:50000]
+        return {"source": "CHANGELOG.md", "changelog": content,
+                "highlights": content.splitlines()[:500]}
     import asyncio
     try:
         head = await asyncio.to_thread(subprocess.run, ["git", "-C", str(PROJECT_ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
