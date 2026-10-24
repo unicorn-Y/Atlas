@@ -62,7 +62,7 @@ async def main() -> None:
         assert "computer_click" in bundle["skill_md"] and bundle["steps"]
 
     print("U9 backend scenarios passed (PR state, vault rotation, project-only policy, shared sources, conversation memory options, recorder export).")
-    print("Note: this focused check does not claim the desktop teaching UI or release updater/signature workflow is complete.")
+    print("Note: desktop teaching UI remains outside this check; release hash verification is covered by u9c_check.py.")
 
 
 if __name__ == "__main__":
