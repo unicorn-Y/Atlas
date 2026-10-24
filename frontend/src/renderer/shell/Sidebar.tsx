@@ -50,7 +50,7 @@ const LABELS = [
 type Arrange = 'time' | 'project' | 'workspace' | 'custom' | 'label' | 'name';
 type StatusFilter = 'all' | 'running' | 'waiting' | 'completed' | 'failed' | 'unread' | 'archived' | 'worktree';
 type CustomGroup = { id: string; name: string };
-type Project = { project_id: string; name: string; color?: string; icon?: string; workspace_path?: string; status?: string; conversation_ids?: string[] };
+type Project = { project_id: string; name: string; color?: string; icon?: string; workspace_path?: string; status?: string; pinned?: boolean; default_model?: string; default_preset_id?: string; conversation_ids?: string[] };
 type Section = { id: string; label: string; items: ConversationSummary[]; custom?: boolean };
 type Dragged = { kind: 'conversation' | 'section'; id: string; groupId?: string };
 type ConversationActivity = { conversation_id: string; status: string; updated_at?: string; waiting_for?: string };
@@ -318,7 +318,7 @@ export default function Sidebar(props: SidebarProps) {
   const pinnedItems = sortedItems(allMatched.filter((item) => props.pinned.includes(item.id) && !props.archived.includes(item.id)));
   const archivedItems = sortedItems(allMatched.filter((item) => props.archived.includes(item.id)));
   const activeItems = sortedItems(allMatched.filter((item) => !props.pinned.includes(item.id) && !props.archived.includes(item.id)));
-  const activeProjects = projects.filter((project) => project.status !== 'archived');
+  const activeProjects = projects.filter((project) => project.status !== 'archived').sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
   const projectIds = new Set(activeProjects.flatMap((project) => project.conversation_ids ?? []));
   let groups: Section[] = [];
   if (mode === 'time') groups = groupByDay(activeItems);
@@ -756,6 +756,31 @@ export default function Sidebar(props: SidebarProps) {
       {project && <Menu>
         <MenuTrigger asChild><button aria-label={project.name + ' 项目操作'} className="grid size-6 place-items-center rounded text-fg-3 hover:bg-hover hover:text-fg"><MoreHorizontal size={14} /></button></MenuTrigger>
         <MenuContent align="end">
+          <MenuItem onSelect={() => window.dispatchEvent(new CustomEvent('atlas:new-project-conversation', { detail: { project } }))}><Plus />在此项目中新建会话</MenuItem>
+          <MenuItem onSelect={() => void api(backend.apiBaseUrl, `/api/projects/${encodeURIComponent(project.project_id)}`, { method: 'PUT', json: { pinned: !project.pinned } }).then(() => {
+            setProjects((items) => items.map((item) => item.project_id === project.project_id ? { ...item, pinned: !project.pinned } : item));
+          }).catch((error) => setFeedback('项目置顶设置失败：' + String(error)))}><Pin />{project.pinned ? '取消置顶' : '置顶项目'}</MenuItem>
+          <MenuItem onSelect={() => {
+            const name = window.prompt('项目名称', project.name); if (!name?.trim()) return;
+            const color = window.prompt('项目颜色（十六进制，例如 #5274d9）', project.color || '#5274d9');
+            if (color === null) return;
+            void api(backend.apiBaseUrl, `/api/projects/${encodeURIComponent(project.project_id)}`, { method: 'PUT', json: { name: name.trim(), color } }).then(() => {
+              setProjects((items) => items.map((item) => item.project_id === project.project_id ? { ...item, name: name.trim(), color } : item));
+            }).catch((error) => setFeedback('项目设置保存失败：' + String(error)));
+          }}><Pencil />改名或改色</MenuItem>
+          <MenuItem onSelect={() => {
+            const workspace_path = window.prompt('新会话默认工作目录', project.workspace_path || ''); if (workspace_path === null) return;
+            const default_model = window.prompt('默认模型 ID（留空使用全局模型）', project.default_model || ''); if (default_model === null) return;
+            void api(backend.apiBaseUrl, `/api/projects/${encodeURIComponent(project.project_id)}`, { method: 'PUT', json: { workspace_path, default_model } }).then(() => {
+              setProjects((items) => items.map((item) => item.project_id === project.project_id ? { ...item, workspace_path, default_model } : item));
+            }).catch((error) => setFeedback('项目默认值保存失败：' + String(error)));
+          }}><Folder />设置新会话默认值</MenuItem>
+          <MenuItem onSelect={() => {
+            if (!window.confirm(`删除项目“${project.name}”？现有会话会保留。`)) return;
+            void api(backend.apiBaseUrl, `/api/projects/${encodeURIComponent(project.project_id)}`, { method: 'DELETE' }).then(() => setProjects((items) => items.filter((item) => item.project_id !== project.project_id)))
+              .catch((error) => setFeedback('项目删除失败：' + String(error)));
+          }}><Trash2 />删除项目</MenuItem>
+          <MenuSeparator />
           <MenuItem disabled={!archiveableProjectConversations.length} onSelect={(event) => {
             if (confirmProjectArchive !== section.id) { event.preventDefault(); setConfirmProjectArchive(section.id); return; }
             archiveableProjectConversations.forEach((item) => props.onToggleArchived(item.id));

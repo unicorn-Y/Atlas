@@ -75,6 +75,9 @@ async def create_project(
             workspace_path=str(req.get("workspace_path", "") or ""),
             repo_url=str(req.get("repo_url", "") or ""),
             current_goal=str(req.get("current_goal", "") or ""),
+            color=str(req.get("color", "") or ""),
+            default_model=str(req.get("default_model", "") or ""),
+            default_preset_id=str(req.get("default_preset_id", "") or ""),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

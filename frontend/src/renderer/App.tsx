@@ -230,6 +230,7 @@ export default function App() {
   const [fallbackOpen, setFallbackOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [input, setInput] = useState('');
+  const [pendingProjectId, setPendingProjectId] = useState('');
   const [homeMode, setHomeMode] = useState('chat');
   const [createPrompt, setCreatePrompt] = useState('');
   const [toast, setToast] = useState('');
@@ -579,6 +580,19 @@ export default function App() {
     setEditing(null);
     editingDraftRef.current = null;
   }, [go, store, defaultWorkspace]);
+  useEffect(() => {
+    const startProjectConversation = (event: Event) => {
+      const project = (event as CustomEvent<{ project?: { project_id: string; workspace_path?: string } }>).detail?.project;
+      if (!project?.project_id || store.creatingConversation) return;
+      go('chat');
+      if (store.activeConversationId) skipDraftRestoreRef.current = true;
+      store.beginConversationDraft(project.workspace_path || defaultWorkspace || null);
+      setPendingProjectId(project.project_id);
+      setInput(''); setAttachments([]); setFiles([]); setMentions([]); setEditing(null);
+    };
+    window.addEventListener('atlas:new-project-conversation', startProjectConversation);
+    return () => window.removeEventListener('atlas:new-project-conversation', startProjectConversation);
+  }, [defaultWorkspace, go, store]);
   // First run: once the backend answers and no model key is saved, walk through setup (only once).
   useEffect(() => {
     if (store.connected && store.configLoaded && !store.apiKeyConfigured && pref('onboarded') !== 'true') setOnboardingOpen(true);
@@ -671,8 +685,19 @@ export default function App() {
     const refs = { files: mentions.filter((item) => item.kind === 'file').map((item) => item.id), conversations: [] };
     setMentions([]);
     const messageSkills = resolveMessageSkillReferences(text, store.skills.map((skill) => skill.name));
-    if (immediate && activeRun && !runDone) void store.sendNow(text, images, documents, refs);
-    else void store.sendMessage(text, images, documents, refs, undefined, undefined, messageSkills);
+    const sent = immediate && activeRun && !runDone
+      ? store.sendNow(text, images, documents, refs)
+      : store.sendMessage(text, images, documents, refs, undefined, undefined, messageSkills);
+    void sent.then(async () => {
+      const projectId = pendingProjectId;
+      const conversationId = useAtlasStore.getState().activeConversationId;
+      if (!projectId || !conversationId) return;
+      try {
+        await api(store.apiBaseUrl, `/api/projects/${encodeURIComponent(projectId)}/conversations`, { method: 'POST', json: { conversation_id: conversationId } });
+        window.dispatchEvent(new Event('atlas:projects-updated'));
+      } catch (error) { setToast(`会话已创建，但未能归入项目：${error instanceof Error ? error.message : String(error)}`); }
+      setPendingProjectId('');
+    });
   };
   /** Images go to the model as pictures; every other file rides along as a document. */
   const addFiles = (picked: FileList | null) => {

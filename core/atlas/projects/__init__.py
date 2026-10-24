@@ -39,6 +39,9 @@ class Project:
     active_task_ids: list[str] = field(default_factory=list)
     memory_refs: list[str] = field(default_factory=list)
     skill_refs: list[str] = field(default_factory=list)
+    default_model: str = ""
+    default_preset_id: str = ""
+    pinned: bool = False
     created_at: str = ""
     updated_at: str = ""
 
@@ -48,6 +51,7 @@ class Project:
 
 def _row_to_project(row: aiosqlite.Row) -> Project:
     record = dict(row)
+    record["pinned"] = bool(record.get("pinned", False))
     for key in ("active_task_ids", "memory_refs", "skill_refs"):
         try:
             record[key] = json.loads(record.get(key) or "[]")
@@ -119,6 +123,12 @@ class ProjectStore:
             await self._db.execute("ALTER TABLE projects ADD COLUMN color TEXT NOT NULL DEFAULT ''")
         if "icon" not in columns:
             await self._db.execute("ALTER TABLE projects ADD COLUMN icon TEXT NOT NULL DEFAULT 'folder'")
+        if "default_model" not in columns:
+            await self._db.execute("ALTER TABLE projects ADD COLUMN default_model TEXT NOT NULL DEFAULT ''")
+        if "default_preset_id" not in columns:
+            await self._db.execute("ALTER TABLE projects ADD COLUMN default_preset_id TEXT NOT NULL DEFAULT ''")
+        if "pinned" not in columns:
+            await self._db.execute("ALTER TABLE projects ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
         await self._db.commit()
 
     async def close(self) -> None:
@@ -139,6 +149,9 @@ class ProjectStore:
         workspace_path: str = "",
         repo_url: str = "",
         current_goal: str = "",
+        color: str = "",
+        default_model: str = "",
+        default_preset_id: str = "",
     ) -> Project:
         db = self._require_db()
         if not str(name).strip():
@@ -152,13 +165,16 @@ class ProjectStore:
             workspace_path=str(workspace_path or ""),
             repo_url=str(repo_url or ""),
             current_goal=str(current_goal or ""),
+            color=str(color or ""), default_model=str(default_model or ""),
+            default_preset_id=str(default_preset_id or ""),
         )
         await db.execute(
-            "INSERT INTO projects (project_id, name, workspace_path, repo_url, current_goal)"
-            " VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO projects (project_id, name, workspace_path, repo_url, current_goal, color, default_model, default_preset_id)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 project.project_id, project.name, project.workspace_path,
-                project.repo_url, project.current_goal,
+                project.repo_url, project.current_goal, project.color,
+                project.default_model, project.default_preset_id,
             ),
         )
         await db.commit()
@@ -184,12 +200,12 @@ class ProjectStore:
         db = self._require_db()
         if status:
             cursor = await db.execute(
-                "SELECT * FROM projects WHERE status = ? ORDER BY updated_at DESC",
+                "SELECT * FROM projects WHERE status = ? ORDER BY pinned DESC, updated_at DESC",
                 (status,),
             )
         else:
             cursor = await db.execute(
-                "SELECT * FROM projects ORDER BY updated_at DESC",
+                "SELECT * FROM projects ORDER BY pinned DESC, updated_at DESC",
             )
         return [_row_to_project(row) for row in await cursor.fetchall()]
 
@@ -198,6 +214,7 @@ class ProjectStore:
         allowed = {
             "name", "workspace_path", "repo_url", "status", "current_goal",
             "current_state", "active_task_ids", "memory_refs", "skill_refs", "color", "icon",
+            "default_model", "default_preset_id", "pinned",
         }
         updates = {key: value for key, value in fields.items() if key in allowed}
         if "name" in updates:
@@ -218,6 +235,8 @@ class ProjectStore:
         if "icon" in updates:
             if not isinstance(updates["icon"], str) or updates["icon"] not in PROJECT_ICONS:
                 raise ValueError("invalid project icon")
+        if "pinned" in updates:
+            updates["pinned"] = int(bool(updates["pinned"]))
         for key in ("active_task_ids", "memory_refs", "skill_refs"):
             if key in updates:
                 updates[key] = json.dumps(list(updates[key] or []))
