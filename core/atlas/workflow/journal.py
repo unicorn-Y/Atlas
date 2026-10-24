@@ -168,6 +168,20 @@ class WorkflowJournal:
             ).fetchall()
         return [json.loads(row[0]) for row in rows]
 
+    def list_runs(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        """Return recent durable workflow snapshots with their complete event streams."""
+        bounded = max(1, min(int(limit), 500))
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT workflow_id, graph_json, status, created_at, updated_at, sequence "
+                "FROM workflow_runs ORDER BY updated_at DESC LIMIT ?", (bounded,),
+            ).fetchall()
+        return [{
+            "workflow_id": row[0], "graph": json.loads(row[1]), "status": row[2],
+            "created_at": row[3], "updated_at": row[4], "sequence": row[5],
+            "events": self.events(row[0]),
+        } for row in rows]
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(str(self.path), timeout=15)
         connection.execute("PRAGMA foreign_keys = ON")

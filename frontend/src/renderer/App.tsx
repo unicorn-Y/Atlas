@@ -17,6 +17,7 @@ const TodoPanel = lazy(() => import('./components/TodoPanel'));
 const ProgressCapsule = lazy(() => import('./components/ProgressCapsule'));
 const ConversationQueuePanel = lazy(() => import('./components/ConversationQueuePanel'));
 const RecipesDialog = lazy(() => import('./components/RecipesDialog'));
+const WorkflowManagerDialog = lazy(() => import('./components/WorkflowManagerDialog'));
 const SideChat = lazy(() => import('./components/SideChat'));
 const UltraplanPanel = lazy(() => import('./components/UltraplanPanel'));
 const RemoteFolderDialog = lazy(() => import('./components/RemoteFolderDialog'));
@@ -281,6 +282,7 @@ export default function App() {
   const composerSnapshotRef = useRef({ text: input, attachments, files, mentions });
   composerSnapshotRef.current = { text: input, attachments, files, mentions };
   const [recipesOpen, setRecipesOpen] = useState(false);
+  const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
   const [side, setSide] = useState<{ open: boolean; question?: string }>({ open: false });
   // 发起时就固定目标/会话/工作区：面板不随当前会话切换而重发调研或被卸载。
   const [ultraplan, setUltraplan] = useState<{ goal: string; conversationId: string; workspace: string; title: string } | null>(null);
@@ -1258,6 +1260,17 @@ export default function App() {
   const commandGroup = (source: string) => source === 'recipe' ? '配方命令'
     : source.startsWith('claude') ? 'Claude 命令' : source.startsWith('codex') ? 'Codex 命令'
       : source.startsWith('plugin') ? '插件命令' : source === 'atlas' ? 'Atlas 命令' : source;
+  const startDynamicWorkflow = async (goal: string) => {
+    const target = goal.trim();
+    if (!target) { setToast('用法：/workflow <要完成的目标>'); return; }
+    go('chat');
+    if (!useAtlasStore.getState().activeConversationId) {
+      const workspace = store.draftWorkspace ?? defaultWorkspace ?? '';
+      if (!store.draftWorkspace && workspace) store.setDraftWorkspace(workspace);
+      await store.createConversation(`工作流：${target.slice(0, 36)}`);
+    }
+    await store.sendMessage(`请使用 Atlas 的 workflow 工具执行以下目标。先由主 Agent 规划为有依赖关系的子任务 DAG，再并行运行可并行的子 Agent，并等待完成后汇总结果、错误和产物。\n\n目标：${target}`);
+  };
   const slashCommands: SlashCommand[] = [
     { id: 'new', label: '/new', hint: '总结当前上下文并在新对话继续', run: () => {
       if (!activeConversation) { newTask(); return; }
@@ -1427,6 +1440,8 @@ export default function App() {
       { id: 'ask-selection', label: '/ask-selection', hint: '把当前选中的文字放进消息草稿', run: askSelectedText },
     { id: 'review', label: '/review', hint: '代码审查：branch <名> / commit <sha>，默认审查未提交改动', takesArgument: true, run: (arg: string) => { const focus = arg.trim(); void store.sendMessage(focus ? `/review ${focus}` : '/review'); } },
     { id: 'recipe', label: '/recipe', hint: '打开配方，带参数复跑保存过的任务', run: () => setRecipesOpen(true) },
+    { id: 'workflow', label: '/workflow', hint: '规划并启动动态子 Agent DAG：/workflow <目标>', takesArgument: true, run: (goal: string) => { void startDynamicWorkflow(goal).catch((error) => setToast(`工作流启动失败：${error instanceof Error ? error.message : String(error)}`)); } },
+    { id: 'dwf', label: '/dwf', hint: '查看工作流运行、节点输出、错误、产物并管理已保存定义', run: () => setWorkflowManagerOpen(true) },
     ...(activeConversation ? [{ id: 'btw', label: '/btw', hint: '旁问：不打断正在做的事，也不存进对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) }] : []),
     { id: 'open', label: '/open', hint: '在浏览器面板打开网址，如 /open localhost:5173', takesArgument: true, run: (target: string) => { if (target.trim()) setBrowserUrl(/^\w+:/.test(target.trim()) ? target.trim() : `http://${target.trim()}`); showInspectorTab('browser'); } },
     ...(activeConversation ? [{ id: 'compact', label: '/compact', hint: '压缩上下文，可附说明让摘要优先保留相关事项', takesArgument: true, run: (note: string) => void store.compactConversation(activeConversation.id, note).then((text) => { if (text) setToast(text); }) }] : []),
@@ -2279,6 +2294,8 @@ export default function App() {
       }} /></Suspense>}
     {recipesOpen && <Suspense fallback={null}><RecipesDialog open onClose={() => setRecipesOpen(false)} recipes={store.recipes}
       onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} /></Suspense>}
+    {workflowManagerOpen && <Suspense fallback={null}><WorkflowManagerDialog apiBaseUrl={store.apiBaseUrl} open onClose={() => setWorkflowManagerOpen(false)}
+      onRun={(goal) => { void startDynamicWorkflow(goal).catch((error) => setToast(`工作流启动失败：${error instanceof Error ? error.message : String(error)}`)); }} onToast={notify} /></Suspense>}
     <Dialog open={rawText !== null} onOpenChange={(open) => { if (!open) setRawText(null); }} label={rawTextTitle} className="flex max-h-[82vh] w-[min(900px,92vw)] flex-col bg-panel p-4 shadow-xl">
       <div className="mb-3 flex items-center gap-2">
         <h2 className="m-0 text-[15px] font-semibold text-heading">{rawTextTitle}</h2>

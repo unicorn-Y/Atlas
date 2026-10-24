@@ -13,6 +13,7 @@ from atlas.api.agent_skills_router import router as agent_skills_router
 from atlas.api.app_services import AppServices
 from atlas.api.startup_components import StartupComponents
 from atlas.api.automation_router import automation_router
+from atlas.api.workflow_router import router as workflow_router
 from atlas.api.browser_router import router as browser_router
 from atlas.api.channel_router import router as channel_router
 from atlas.api.conversations_router import router as conversations_router
@@ -105,6 +106,7 @@ def create_app(
         upstream_router,
         channel_router,
         automation_router,
+        workflow_router,
         device_router,
         local_models_router,
         agent_skills_router,
