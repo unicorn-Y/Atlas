@@ -12,6 +12,7 @@ export interface PaletteItem {
   hint?: string;
   icon?: ReactNode;
   run: () => void;
+  runAlt?: () => void;
 }
 
 export default function Palette({ items, open, onClose, search }: {
@@ -47,7 +48,7 @@ export default function Palette({ items, open, onClose, search }: {
     listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [cursor]);
 
-  const choose = (item?: PaletteItem) => { if (!item) return; onClose(); item.run(); };
+  const choose = (item?: PaletteItem, alt = false) => { if (!item) return; onClose(); (alt && item.runAlt ? item.runAlt : item.run)(); };
   let lastGroup = '';
 
   return <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }} label="搜索与命令" align="top" className="w-[min(620px,calc(100vw-32px))]">
@@ -59,7 +60,7 @@ export default function Palette({ items, open, onClose, search }: {
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown') { event.preventDefault(); setCursor((value) => Math.min(results.length - 1, value + 1)); }
           else if (event.key === 'ArrowUp') { event.preventDefault(); setCursor((value) => Math.max(0, value - 1)); }
-          else if (event.key === 'Enter') { event.preventDefault(); choose(results[cursor]); }
+          else if (event.key === 'Enter') { event.preventDefault(); choose(results[cursor], event.altKey); }
         }} />
     </label>
     <div className="max-h-[52vh] overflow-auto p-1.5" role="listbox" ref={listRef}>
@@ -67,7 +68,7 @@ export default function Palette({ items, open, onClose, search }: {
         const header = item.group !== lastGroup ? <div className="px-3 pt-2.5 pb-1 text-[12px] text-fg-3">{item.group}</div> : null;
         lastGroup = item.group;
         return <div key={item.id}>{header}
-          <button role="option" aria-selected={index === cursor} onMouseMove={() => setCursor(index)} onClick={() => choose(item)}
+          <button role="option" aria-selected={index === cursor} onMouseMove={() => setCursor(index)} onClick={(event) => choose(item, event.altKey)}
             className={cn('flex w-full items-center gap-3 rounded-[10px] px-3 py-2 text-left text-[13.5px] text-fg [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-3',
               index === cursor && 'bg-selected')}>
             {item.icon ?? <MessageSquare />}<span className="min-w-0 truncate">{item.label}</span>{item.hint && <span className="ml-auto shrink-0 text-[12px] text-fg-3">{item.hint}</span>}
