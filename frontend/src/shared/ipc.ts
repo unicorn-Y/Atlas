@@ -48,6 +48,7 @@ export interface PlatformSettingsState {
   openAtLogin: boolean;
   globalShortcut: GlobalShortcutState;
   screenshotShortcut: GlobalShortcutState;
+  voiceShortcut: GlobalShortcutState;
 }
 
 export interface AtlasDesktopApi {
@@ -79,6 +80,8 @@ export interface AtlasDesktopApi {
   /** Register a single OS-wide show/focus shortcut, or clear it with null. */
   setGlobalShortcut?(accelerator: string | null): Promise<GlobalShortcutState>;
   setScreenshotShortcut?(accelerator: string | null): Promise<GlobalShortcutState>;
+  setVoiceShortcut?(accelerator: string | null): Promise<GlobalShortcutState>;
+  onVoiceHotkey?(callback: () => void): () => void;
   setScreenshotContext?(conversationId: string, lastInteractionAt: number): void;
   onSessionScreenshot?(callback: (imageDataUrl: string, conversationId: string) => void): () => void;
   setKeepAwake?(enabled: boolean): Promise<void>;

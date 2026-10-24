@@ -1,26 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Captions, MessageSquareText, MicOff, PhoneOff, Hand } from 'lucide-react';
-
-export type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  continuous?: boolean;
-  onresult: ((event: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal?: boolean }> }) => void) | null;
-  onerror: ((event?: { error?: string }) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-  abort?: () => void;
-};
-
-export function getSpeechRecognition(): (new () => SpeechRecognitionLike) | undefined {
-  const speechWindow = window as typeof window & { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike };
-  return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
-}
+import { api } from '../services/api';
 
 type Phase = 'listening' | 'thinking' | 'speaking' | 'paused' | 'unavailable';
 
 interface VoiceOverlayProps {
+  apiBaseUrl: string;
   onClose: (toChat: boolean) => void;
   onSend: (text: string) => void;
   /** id of the run currently shown in the conversation */
@@ -32,14 +17,7 @@ interface VoiceOverlayProps {
 }
 
 const SENTENCE = /[。！？.!?；;\n]/;
-const ERROR_TEXT: Record<string, string> = {
-  'not-allowed': '没有麦克风权限。请在系统设置里允许 Atlas 使用麦克风。',
-  'service-not-allowed': '没有麦克风权限。请在系统设置里允许 Atlas 使用麦克风。',
-  network: '语音识别服务连不上。当前设备的语音识别需要联网。',
-  'audio-capture': '没有检测到麦克风。',
-};
-
-export default function VoiceOverlay({ onClose, onSend, runId, reply, runDone, modelName }: VoiceOverlayProps) {
+export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply, runDone, modelName }: VoiceOverlayProps) {
   const [phase, setPhase] = useState<Phase>('listening');
   const [heard, setHeard] = useState('');
   const [said, setSaid] = useState('');
@@ -48,7 +26,7 @@ export default function VoiceOverlay({ onClose, onSend, runId, reply, runDone, m
   const [problem, setProblem] = useState('');
   const [seconds, setSeconds] = useState(0);
   const orbRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const recognitionRef = useRef<{ socket: WebSocket; stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode } | null>(null);
   const levelRef = useRef(0);
   const phaseRef = useRef<Phase>('listening');
   const mutedRef = useRef(false);
@@ -62,44 +40,57 @@ export default function VoiceOverlay({ onClose, onSend, runId, reply, runDone, m
 
   const listen = useCallback(() => {
     if (mutedRef.current) { setPhase('paused'); return; }
-    const Constructor = getSpeechRecognition();
-    if (!Constructor) { setProblem('此设备不支持语音识别。可以转成文字对话继续。'); setPhase('unavailable'); return; }
-    recognitionRef.current?.abort?.();
-    const recognition = new Constructor();
-    recognition.lang = 'zh-CN';
-    recognition.interimResults = true;
-    recognition.continuous = false;
-    let finalText = '';
-    recognition.onresult = (event) => {
-      const text = Array.from(event.results).map((result) => result[0].transcript).join('');
-      setHeard(text);
-      finalText = text;
-    };
-    recognition.onerror = (event) => {
-      const code = event?.error ?? '';
-      if (code === 'no-speech' || code === 'aborted') return;
-      setProblem(ERROR_TEXT[code] ?? `语音识别出错（${code || '未知原因'}）。`);
-      setPhase('unavailable');
-    };
-    recognition.onend = () => {
-      if (recognitionRef.current !== recognition) return;
-      recognitionRef.current = null;
-      if (phaseRef.current !== 'listening') return;
-      const text = finalText.trim();
-      if (text) {
-        staleRunRef.current = trackedRunRef.current ?? runIdRef.current;
-        setSaid('');
-        setPhase('thinking');
-        onSendRef.current(text);
-      } else if (!mutedRef.current) {
-        window.setTimeout(() => { if (phaseRef.current === 'listening' && !recognitionRef.current) listen(); }, 250);
+    void (async () => {
+      try {
+        const status = await api<{ ready: boolean; message?: string }>(apiBaseUrl, '/api/asr/status');
+        if (!status.ready) { setProblem(status.message || '请先准备本地语音识别模型。'); setPhase('unavailable'); return; }
+        const inputDevice = localStorage.getItem('atlas.audio.input-device') || '';
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { ...(inputDevice ? { deviceId: { exact: inputDevice } } : {}), channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+        const context = new AudioContext();
+        const source = context.createMediaStreamSource(stream);
+        const processor = context.createScriptProcessor(4096, 1, 1);
+        const socketUrl = new URL('/ws/asr', apiBaseUrl); socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(socketUrl);
+        const session = { socket, stream, context, processor };
+        recognitionRef.current = session;
+        let submitted = false;
+        socket.onmessage = (event) => {
+          try {
+            const message = JSON.parse(String(event.data)) as { type?: string; text?: string; detail?: string };
+            if (message.type === 'partial') setHeard(message.text || '');
+            if (message.type === 'final' && message.text?.trim() && !submitted) {
+              submitted = true; setHeard(message.text.trim()); recognitionRef.current = null;
+              try { socket.send(JSON.stringify({ type: 'end' })); } catch { /* closed */ }
+              processor.disconnect(); stream.getTracks().forEach((track) => track.stop()); void context.close();
+              staleRunRef.current = trackedRunRef.current ?? runIdRef.current; setSaid(''); setPhase('thinking'); onSendRef.current(message.text.trim());
+            }
+            if (message.type === 'error') { setProblem(message.detail || '本地语音识别失败。'); setPhase('unavailable'); }
+          } catch { /* malformed local ASR response */ }
+        };
+        socket.onerror = () => { setProblem('本地语音识别连接失败。'); setPhase('unavailable'); };
+        await new Promise<void>((resolve, reject) => { socket.addEventListener('open', () => resolve(), { once: true }); socket.addEventListener('error', () => reject(new Error('本地语音识别连接失败')), { once: true }); });
+        const downsample = (samples: Float32Array, from: number) => {
+          if (from <= 16000) return samples;
+          const ratio = from / 16000; const output = new Float32Array(Math.floor(samples.length / ratio));
+          for (let i = 0; i < output.length; i++) output[i] = samples[Math.floor(i * ratio)];
+          return output;
+        };
+        processor.onaudioprocess = (event) => {
+          if (socket.readyState !== WebSocket.OPEN) return;
+          const samples = downsample(event.inputBuffer.getChannelData(0), context.sampleRate);
+          const pcm = new Int16Array(samples.length);
+          for (let i = 0; i < samples.length; i++) pcm[i] = Math.max(-1, Math.min(1, samples[i])) * 0x7fff;
+          socket.send(pcm.buffer);
+        };
+        source.connect(processor); processor.connect(context.destination);
+        setProblem(''); setPhase('listening');
+      } catch (cause) {
+        const session = recognitionRef.current; recognitionRef.current = null;
+        session?.stream.getTracks().forEach((track) => track.stop()); void session?.context.close();
+        setProblem(cause instanceof Error ? cause.message : '本地语音识别启动失败。'); setPhase('unavailable');
       }
-    };
-    recognitionRef.current = recognition;
-    setProblem('');
-    setPhase('listening');
-    try { recognition.start(); } catch { /* already started */ }
-  }, []);
+    })();
+  }, [apiBaseUrl]);
 
   const runIdRef = useRef(runId);
   runIdRef.current = runId;
@@ -182,7 +173,7 @@ export default function VoiceOverlay({ onClose, onSend, runId, reply, runDone, m
       window.removeEventListener('keydown', onKey);
       const recognition = recognitionRef.current;
       recognitionRef.current = null;
-      recognition?.abort?.();
+      if (recognition) { try { recognition.socket.send(JSON.stringify({ type: 'end' })); } catch { /* socket closed */ } recognition.processor.disconnect(); recognition.stream.getTracks().forEach((track) => track.stop()); void recognition.context.close(); }
       window.speechSynthesis?.cancel();
       stream?.getTracks().forEach((track) => track.stop());
       void (context as AudioContext | null)?.close();
@@ -196,7 +187,7 @@ export default function VoiceOverlay({ onClose, onSend, runId, reply, runDone, m
     if (next) {
       const recognition = recognitionRef.current;
       recognitionRef.current = null;
-      recognition?.abort?.();
+      if (recognition) { try { recognition.socket.send(JSON.stringify({ type: 'end' })); } catch { /* socket closed */ } recognition.processor.disconnect(); recognition.stream.getTracks().forEach((track) => track.stop()); void recognition.context.close(); }
       if (phaseRef.current === 'listening') setPhase('paused');
     } else if (phaseRef.current === 'paused') listen();
   };

@@ -37,10 +37,11 @@ let windowRef: BrowserWindow | null = null;
 let floatingComposerWindow: BrowserWindow | null = null;
 const conversationWindows = new Map<string, BrowserWindow>();
 type WindowBounds = { x: number; y: number; width: number; height: number };
-type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null; screenshotShortcut: string | null; openAtLogin: boolean; windowBounds?: WindowBounds };
-let platformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null, screenshotShortcut: 'Control+Shift+X', openAtLogin: true };
+type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null; screenshotShortcut: string | null; voiceShortcut: string | null; openAtLogin: boolean; windowBounds?: WindowBounds };
+let platformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null, screenshotShortcut: 'Control+Shift+X', voiceShortcut: 'Control+Shift+V', openAtLogin: true };
 let globalShortcutState: GlobalShortcutState = { accelerator: null, registered: false };
 let screenshotShortcutState: GlobalShortcutState = { accelerator: 'Control+Shift+X', registered: false };
+let voiceShortcutState: GlobalShortcutState = { accelerator: 'Control+Shift+V', registered: false };
 let screenshotContext: { conversationId: string; lastInteractionAt: number } = { conversationId: '', lastInteractionAt: 0 };
 let keepAwakeEnabled = false;
 let keepAwakeBlockerId: number | null = null;
@@ -100,11 +101,12 @@ function loadPlatformPreferences(): PlatformPreferences {
       alwaysOnTop: data.alwaysOnTop === true,
       globalShortcut: typeof data.globalShortcut === 'string' ? data.globalShortcut : null,
       screenshotShortcut: typeof data.screenshotShortcut === 'string' ? data.screenshotShortcut : 'Control+Shift+X',
+      voiceShortcut: typeof data.voiceShortcut === 'string' ? data.voiceShortcut : 'Control+Shift+V',
       openAtLogin: data.openAtLogin !== false,
       ...(isWindowBounds(data.windowBounds) ? { windowBounds: data.windowBounds } : {}),
     };
   } catch {
-    return { alwaysOnTop: false, globalShortcut: null, screenshotShortcut: 'Control+Shift+X', openAtLogin: true };
+    return { alwaysOnTop: false, globalShortcut: null, screenshotShortcut: 'Control+Shift+X', voiceShortcut: 'Control+Shift+V', openAtLogin: true };
   }
 }
 
@@ -132,7 +134,7 @@ function savePlatformPreferences(next: PlatformPreferences): void {
 }
 
 function platformSettingsSnapshot(): PlatformSettingsState {
-  return { alwaysOnTop: platformPreferences.alwaysOnTop, openAtLogin: platformPreferences.openAtLogin, globalShortcut: { ...globalShortcutState }, screenshotShortcut: { ...screenshotShortcutState } };
+  return { alwaysOnTop: platformPreferences.alwaysOnTop, openAtLogin: platformPreferences.openAtLogin, globalShortcut: { ...globalShortcutState }, screenshotShortcut: { ...screenshotShortcutState }, voiceShortcut: { ...voiceShortcutState } };
 }
 
 function runtimeDir(): string {
@@ -449,6 +451,21 @@ function tryRegisterGlobalShortcut(accelerator: string | null): GlobalShortcutSt
 function registerPreferredGlobalShortcut(): void {
   globalShortcutState = tryRegisterGlobalShortcut(platformPreferences.globalShortcut);
   screenshotShortcutState = tryRegisterScreenshotShortcut(platformPreferences.screenshotShortcut);
+  voiceShortcutState = tryRegisterVoiceShortcut(platformPreferences.voiceShortcut);
+}
+
+function tryRegisterVoiceShortcut(accelerator: string | null): GlobalShortcutState {
+  if (!accelerator) return { accelerator: null, registered: false };
+  const invalid = validateGlobalAccelerator(accelerator);
+  if (invalid) return { accelerator, registered: false, error: invalid };
+  try {
+    const registered = globalShortcut.register(accelerator, () => {
+      if (!windowRef || windowRef.isDestroyed()) return;
+      if (windowRef.isMinimized()) windowRef.restore();
+      windowRef.show(); windowRef.focus(); windowRef.webContents.send('app:voice-hotkey');
+    });
+    return registered ? { accelerator, registered: true } : { accelerator, registered: false, error: '系统未能注册语音快捷键，可能已被其他应用占用。' };
+  } catch { return { accelerator, registered: false, error: '系统未能注册语音快捷键。' }; }
 }
 
 function tryRegisterScreenshotShortcut(accelerator: string | null): GlobalShortcutState {
@@ -491,6 +508,15 @@ function setScreenshotShortcut(accelerator: string | null): GlobalShortcutState 
   if (previous && screenshotShortcutState.registered) globalShortcut.unregister(previous);
   screenshotShortcutState = tryRegisterScreenshotShortcut(accelerator);
   return { ...screenshotShortcutState };
+}
+
+function setVoiceShortcut(accelerator: string | null): GlobalShortcutState {
+  if (accelerator !== null) { const invalid = validateGlobalAccelerator(accelerator); if (invalid) return { accelerator, registered: false, error: invalid }; }
+  const previous = platformPreferences.voiceShortcut;
+  savePlatformPreferences({ ...platformPreferences, voiceShortcut: accelerator });
+  if (previous && voiceShortcutState.registered) globalShortcut.unregister(previous);
+  voiceShortcutState = tryRegisterVoiceShortcut(accelerator);
+  return { ...voiceShortcutState };
 }
 
 function assertTrustedAppSender(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
@@ -860,6 +886,11 @@ ipcMain.handle('platform:set-screenshot-shortcut', (event, accelerator: unknown)
   assertTrustedAppSender(event);
   if (accelerator !== null && typeof accelerator !== 'string') throw new Error('截图快捷键格式无效。');
   return setScreenshotShortcut(accelerator as string | null);
+});
+ipcMain.handle('platform:set-voice-shortcut', (event, accelerator: unknown) => {
+  assertTrustedAppSender(event);
+  if (accelerator !== null && typeof accelerator !== 'string') throw new Error('语音快捷键格式无效。');
+  return setVoiceShortcut(accelerator as string | null);
 });
 ipcMain.on('platform:set-screenshot-context', (event, conversationId: unknown, lastInteractionAt: unknown) => {
   assertTrustedAppSender(event);

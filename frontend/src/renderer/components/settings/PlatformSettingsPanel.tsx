@@ -24,6 +24,7 @@ const initialState: PlatformSettingsState = {
   openAtLogin: true,
   globalShortcut: { accelerator: null, registered: false },
   screenshotShortcut: { accelerator: 'Control+Shift+X', registered: false },
+  voiceShortcut: { accelerator: 'Control+Shift+V', registered: false },
 };
 
 export default function PlatformSettingsPanel({ workspacePath }: PlatformSettingsPanelProps) {
@@ -31,6 +32,7 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
   const [settings, setSettings] = useState(initialState);
   const [accelerator, setAccelerator] = useState('');
   const [screenshotAccelerator, setScreenshotAccelerator] = useState('Control+Shift+X');
+  const [voiceAccelerator, setVoiceAccelerator] = useState('Control+Shift+V');
   const [editor, setEditor] = useState<PlatformEditorId>('vscode');
   const [folder, setFolder] = useState(workspacePath ?? '');
   const [busy, setBusy] = useState(false);
@@ -49,6 +51,7 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
       setSettings(next);
       setAccelerator(next.globalShortcut.accelerator ?? '');
       setScreenshotAccelerator(next.screenshotShortcut.accelerator ?? '');
+      setVoiceAccelerator(next.voiceShortcut.accelerator ?? '');
     }).catch((reason: unknown) => {
       if (active) setError(reason instanceof Error ? reason.message : String(reason));
     });
@@ -116,6 +119,14 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
     finally { setBusy(false); }
   };
 
+  const saveVoiceShortcut = async (value: string | null) => {
+    if (!desktop?.setVoiceShortcut) return;
+    setBusy(true); setError(null); setMessage(null);
+    try { const result = await desktop.setVoiceShortcut(value); setSettings((current) => ({ ...current, voiceShortcut: result })); setVoiceAccelerator(result.accelerator ?? ''); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setBusy(false); }
+  };
+
   const selectWorkspace = async () => {
     try {
       const selected = await desktop?.selectDirectory(folder || undefined);
@@ -142,6 +153,14 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
     </div>
 
     {!available && <p role="status" className="m-0 rounded-xl border border-line p-3 text-[12px] text-fg-3">这些平台功能需要在 Atlas 桌面应用中使用。</p>}
+
+    <section className="grid gap-3 rounded-xl border border-line p-4">
+      <div><h4 className="m-0 flex items-center gap-2 text-[13.5px] font-medium text-heading"><Keyboard size={16} />全局语音快捷键</h4><p className="mt-1 mb-0 text-[12px] text-fg-3">呼出语音识别浮层；默认 Ctrl+Shift+V。</p></div>
+      <div className="flex flex-wrap gap-2"><input aria-label="全局语音快捷键" value={voiceAccelerator} maxLength={80} disabled={!available || busy} onChange={(event) => setVoiceAccelerator(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void saveVoiceShortcut(voiceAccelerator); }} placeholder="Control+Shift+V" className="h-9 min-w-[250px] flex-1 rounded-lg border border-line bg-surface px-2.5 font-mono text-[12px] text-fg" />
+        <button disabled={!available || busy || !voiceAccelerator.trim()} onClick={() => void saveVoiceShortcut(voiceAccelerator)} className="h-9 rounded-lg bg-brand px-3 text-[12px] font-medium text-on-primary disabled:opacity-50">注册</button>
+        <button disabled={!available || busy || !settings.voiceShortcut.accelerator} onClick={() => void saveVoiceShortcut(null)} className="h-9 rounded-lg border border-line px-3 text-[12px] text-fg-2 hover:bg-hover disabled:opacity-50">清除</button></div>
+      <p role={settings.voiceShortcut.error ? 'alert' : 'status'} className={`m-0 text-[12px] ${settings.voiceShortcut.error ? 'text-danger' : 'text-fg-3'}`}>{settings.voiceShortcut.error ?? (settings.voiceShortcut.registered ? `已注册：${settings.voiceShortcut.accelerator}` : settings.voiceShortcut.accelerator ? `未注册：${settings.voiceShortcut.accelerator}` : '尚未注册')}</p>
+    </section>
 
     <section className="grid gap-3 rounded-xl border border-line p-4">
       <h4 className="m-0 text-[13.5px] font-medium text-heading">任务运行时防休眠</h4>

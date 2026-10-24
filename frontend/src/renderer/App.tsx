@@ -35,7 +35,6 @@ import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } fr
 import Mark, { MarkDefs } from './components/Mark';
 import type { PaletteItem } from './components/Palette';
 import PersonalTodos from './components/PersonalTodos';
-import type { SpeechRecognitionLike } from './components/VoiceOverlay';
 import type { StatusBarPreferences } from './pages/SettingsPage';
 import type { RecipeLaunchRequest } from './components/settings/RecipeManagerPanel';
 // Each navigation destination is its own renderer chunk. The initial conversation
@@ -75,6 +74,7 @@ const RecipeManagerPanel = lazy(() => import('./components/settings/RecipeManage
 const ExtensionPackagesPanel = lazy(() => import('./components/settings/ExtensionPackagesPanel'));
 const ExtensionCatalogPanel = lazy(() => import('./components/settings/ExtensionCatalogPanel'));
 const AppearanceNotificationsPanel = lazy(() => import('./components/settings/AppearanceNotificationsPanel'));
+const AudioDevicesPanel = lazy(() => import('./components/settings/AudioDevicesPanel'));
 const WorkspaceSecurityPanel = lazy(() => import('./components/settings/WorkspaceSecurityPanel'));
 const U4SettingsPanel = lazy(() => import('./components/settings/U4SettingsPanel'));
 const SettingsProposalCards = lazy(() => import('./components/SettingsProposalCards'));
@@ -233,6 +233,10 @@ export default function App() {
   const [pendingProjectId, setPendingProjectId] = useState('');
   const [summaryEnabled, setSummaryEnabled] = useState(() => pref('pinned-summary') !== 'false');
   const [proactiveEnabled, setProactiveEnabled] = useState(() => pref('suggestions') !== 'false');
+  const [wakeEnabled, setWakeEnabled] = useState(() => pref('wake-enabled') === 'true');
+  const [wakeWord, setWakeWord] = useState(() => pref('wake-word') || '你好 Atlas');
+  const [wakeTranscript, setWakeTranscript] = useState('');
+  const wakeSessionRef = useRef<{ socket: WebSocket; stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode } | null>(null);
   const [turnSuggestions, setTurnSuggestions] = useState<string[]>([]);
   const generatedSuggestionsRun = useRef('');
   const [homeGitStatus, setHomeGitStatus] = useState<{ isGit: boolean; changed: number; languages: string[] }>({ isGit: false, changed: 0, languages: [] });
@@ -286,7 +290,6 @@ export default function App() {
     setPref('statusbar', JSON.stringify(next));
     return next;
   });
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const dictationRef = useRef<{ socket: WebSocket; stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode; prefix: string; finalText: string } | null>(null);
   const spokenSequenceRef = useRef(0);
   const spokenRunRef = useRef('');
@@ -634,9 +637,7 @@ export default function App() {
   const closeOnboarding = () => { setOnboardingOpen(false); setPref('onboarded', 'true'); };
 
   const startVoice = async () => {
-    const { getSpeechRecognition } = await import('./components/VoiceOverlay');
-    if (!getSpeechRecognition()) { setToast('这台设备不支持语音识别，暂时无法通话'); return; }
-    recognitionRef.current?.stop();
+    if (!navigator.mediaDevices?.getUserMedia) { setToast('当前设备没有麦克风访问能力'); return; }
     window.speechSynthesis?.cancel();
     setVoiceOpen(true);
   };
@@ -679,7 +680,6 @@ export default function App() {
       void store.editMessage(editing.id, text);
       return;
     }
-    recognitionRef.current?.stop();
     if (fromHome && homeMode === 'image') {
       setCreatePrompt(text.trim());
       setInput('');
@@ -831,7 +831,8 @@ export default function App() {
     try {
       const status = await api<{ ready: boolean; message?: string }>(store.apiBaseUrl, '/api/asr/status');
       if (!status.ready) { setToast(status.message || '请先在语音设置中准备本地识别模型'); return; }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+      const inputDevice = localStorage.getItem('atlas.audio.input-device') || '';
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { ...(inputDevice ? { deviceId: { exact: inputDevice } } : {}), channelCount: 1, echoCancellation: true, noiseSuppression: true } });
       const context = new AudioContext();
       const source = context.createMediaStreamSource(stream);
       const processor = context.createScriptProcessor(4096, 1, 1);
@@ -874,6 +875,59 @@ export default function App() {
       setToast(`语音听写启动失败：${error instanceof Error ? error.message : String(error)}`);
     }
   };
+  useEffect(() => {
+    setPref('wake-enabled', String(wakeEnabled));
+  }, [wakeEnabled]);
+  useEffect(() => window.atlasDesktop?.onVoiceHotkey?.(() => setVoiceOpen(true)), []);
+  useEffect(() => {
+    setPref('wake-word', wakeWord);
+  }, [wakeWord]);
+  useEffect(() => {
+    if (!wakeEnabled || voiceOpen || !store.connected || !navigator.mediaDevices?.getUserMedia) return;
+    let active = true;
+    let starting = false;
+    const stop = () => {
+      const session = wakeSessionRef.current;
+      wakeSessionRef.current = null;
+      if (!session) return;
+      session.processor.disconnect(); session.stream.getTracks().forEach((track) => track.stop()); void session.context.close();
+      try { session.socket.send(JSON.stringify({ type: 'end' })); session.socket.close(); } catch { /* socket already closed */ }
+    };
+    const begin = async () => {
+      if (starting || !active || voiceOpen) return;
+      starting = true;
+      try {
+        const status = await api<{ ready: boolean }>(store.apiBaseUrl, '/api/asr/status');
+        if (!status.ready || !active) return;
+        const device = localStorage.getItem('atlas.audio.input-device') || '';
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { ...(device ? { deviceId: { exact: device } } : {}), channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+        const context = new AudioContext(); const source = context.createMediaStreamSource(stream); const processor = context.createScriptProcessor(4096, 1, 1);
+        const url = new URL('/ws/asr', store.apiBaseUrl); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(url); const session = { socket, stream, context, processor }; wakeSessionRef.current = session;
+        socket.onmessage = (event) => {
+          try {
+            const message = JSON.parse(String(event.data)) as { type?: string; text?: string };
+            if (message.type !== 'final' || !message.text) return;
+            setWakeTranscript(message.text);
+            const normalize = (value: string) => value.toLocaleLowerCase().replace(/[\s，。！？,.!?]/g, '');
+            if (normalize(message.text).includes(normalize(wakeWord)) && active) { stop(); setWakeTranscript(''); setVoiceOpen(true); }
+          } catch { /* ignore malformed local ASR response */ }
+        };
+        socket.onclose = () => { if (wakeSessionRef.current === session) wakeSessionRef.current = null; };
+        await new Promise<void>((resolve, reject) => { socket.addEventListener('open', () => resolve(), { once: true }); socket.addEventListener('error', () => reject(new Error('本地唤醒监听连接失败')), { once: true }); });
+        processor.onaudioprocess = (event) => {
+          if (socket.readyState !== WebSocket.OPEN) return;
+          const data = event.inputBuffer.getChannelData(0); const ratio = context.sampleRate / 16000; const samples = ratio <= 1 ? data : Float32Array.from({ length: Math.floor(data.length / ratio) }, (_, index) => data[Math.floor(index * ratio)]);
+          const pcm = new Int16Array(samples.length); for (let i = 0; i < samples.length; i++) pcm[i] = Math.max(-1, Math.min(1, samples[i])) * 0x7fff;
+          socket.send(pcm.buffer);
+        };
+        source.connect(processor); processor.connect(context.destination);
+      } catch { stop(); }
+      finally { starting = false; }
+    };
+    void begin();
+    return () => { active = false; stop(); };
+  }, [wakeEnabled, wakeWord, voiceOpen, store.connected, store.apiBaseUrl]);
   const readLastReply = () => {
     const lastReply = [...messages].reverse().find((message) => message.role === 'assistant')?.content || (runDone ? reply : '');
     if (!lastReply || !('speechSynthesis' in window)) { setToast('还没有可以朗读的回复'); return; }
@@ -1101,7 +1155,7 @@ export default function App() {
       }
     } catch { /* corrupt screenshot cache is ignored */ }
   }, [store.activeConversationId]);
-  useEffect(() => () => { recognitionRef.current?.stop(); dictationRef.current?.stream.getTracks().forEach((track) => track.stop()); void dictationRef.current?.context.close(); window.speechSynthesis?.cancel(); }, []);
+  useEffect(() => () => { dictationRef.current?.stream.getTracks().forEach((track) => track.stop()); void dictationRef.current?.context.close(); window.speechSynthesis?.cancel(); }, []);
 
   const paletteItems: PaletteItem[] = [
     { id: 'new', group: '操作', label: '新任务', hint: 'Ctrl N', icon: <Plus />, run: newTask },
@@ -1314,6 +1368,12 @@ export default function App() {
     { id: 'cost', label: '/cost', hint: '查看本会话 Token、缓存、费用与耗时', run: () => {
       if (!activeConversation) { setToast('先打开一个会话再查看 /cost'); return; }
       setSheet('usage');
+    } },
+    { id: 'wake', label: '/wake', hint: '开启或关闭本机唤醒词监听', takesArgument: true, run: (argument: string) => {
+      const value = argument.trim().toLowerCase();
+      if (value === 'on') { setWakeEnabled(true); setToast(`已开启本地唤醒词「${wakeWord}」`); }
+      else if (value === 'off') { setWakeEnabled(false); setWakeTranscript(''); setToast('已关闭唤醒词监听'); }
+      else setToast('用法：/wake on 或 /wake off');
     } },
     { id: 'help', label: '/help', hint: '列出全部斜杠命令及用法', run: showHelp },
     { id: 'doctor', label: '/doctor', hint: '检查安装与配置并查看修复建议', run: () => setSheet('diagnostics') },
@@ -2003,7 +2063,11 @@ export default function App() {
             <div className="set-row"><div>置顶任务摘要<small>在长对话顶部显示首条目标和最近进度</small></div><button className="switch" role="switch" aria-label="置顶任务摘要" aria-checked={summaryEnabled} onClick={() => { const next = !summaryEnabled; setSummaryEnabled(next); setPref('pinned-summary', String(next)); }} /></div>
             <div className="set-row"><div>收起侧边栏<small>只显示图标，给内容更多空间</small></div><button className="switch" role="switch" aria-label="收起侧边栏" aria-checked={sideMini} onClick={toggleMini} /></div>
             <div className="set-row"><div>自动朗读新回复<small>用本机语音逐句读出 Atlas 的回答</small></div><button className="switch" role="switch" aria-label="自动朗读新回复" aria-checked={voiceOutput} onClick={toggleVoiceOutput} /></div>
+            <div className="set-row"><div>本地唤醒词<small>后台监听只发送音频到 Atlas 本机识别服务</small></div><button className="switch" role="switch" aria-label="本地唤醒词" aria-checked={wakeEnabled} onClick={() => setWakeEnabled((value) => !value)} /></div>
           </div>
+          <label className="mt-3 grid max-w-[760px] gap-1 text-[12px] text-fg-2">唤醒词<input value={wakeWord} onChange={(event) => setWakeWord(event.target.value)} placeholder="你好 Atlas" className="h-9 rounded-lg border border-line bg-surface px-2.5 text-[12px]" /></label>
+          {wakeEnabled && <p className="mt-2 text-[11.5px] text-fg-3">{wakeTranscript ? `本地识别：${wakeTranscript}` : '已开启本地监听；需先在语音识别配置中下载本地模型。'}</p>}
+          <div className="mt-5"><AudioDevicesPanel onToast={notify} /></div>
         </section>}
         {sheet === 'u4' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">会话与顾问</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">顾问模型、会话预设、历史导入、手机推送、字体与语言。</p><U4SettingsPanel apiBaseUrl={store.apiBaseUrl} models={store.models} currentModel={store.model} theme={theme} onThemeChange={chooseTheme} onToast={notify} onImported={() => void store.refreshConversations()} onApplyPreset={(preset) => {
           store.beginConversationDraft(preset.workspace || null);
@@ -2058,6 +2122,7 @@ export default function App() {
     {fallbackOpen && <Suspense fallback={null}><FallbackModelsDialog apiBaseUrl={store.apiBaseUrl} currentModel={store.model} onClose={() => setFallbackOpen(false)} onToast={notify} /></Suspense>}
 
     {voiceOpen && <Suspense fallback={null}><VoiceOverlay
+      apiBaseUrl={store.apiBaseUrl}
       onClose={(toChat) => { setVoiceOpen(false); if (toChat) go('chat'); }}
       onSend={(text) => { if (view !== 'chat') go('chat'); void store.sendMessage(text); }}
       runId={store.activeRunId ?? null}

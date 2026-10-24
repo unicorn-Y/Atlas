@@ -22,6 +22,8 @@ const desktopApi: AtlasDesktopApi = {
   setOpenAtLogin: (enabled) => ipcRenderer.invoke('platform:set-open-at-login', enabled),
   setGlobalShortcut: (accelerator) => ipcRenderer.invoke('platform:set-global-shortcut', accelerator),
   setScreenshotShortcut: (accelerator) => ipcRenderer.invoke('platform:set-screenshot-shortcut', accelerator),
+  setVoiceShortcut: (accelerator) => ipcRenderer.invoke('platform:set-voice-shortcut', accelerator),
+  onVoiceHotkey: (callback) => { const listener = () => callback(); ipcRenderer.on('app:voice-hotkey', listener); return () => ipcRenderer.removeListener('app:voice-hotkey', listener); },
   setScreenshotContext: (conversationId, lastInteractionAt) => ipcRenderer.send('platform:set-screenshot-context', conversationId, lastInteractionAt),
   onSessionScreenshot: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, dataUrl: string, conversationId: string) => callback(dataUrl, conversationId);
