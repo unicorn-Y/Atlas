@@ -459,11 +459,24 @@ class ProjectStore:
                 raise ValueError("资料路径不存在或类型不匹配。")
             candidates = [target] if target.is_file() else sorted(p for p in target.rglob("*") if p.is_file())
             for item in candidates:
-                size = item.stat().st_size
+                try:
+                    size = item.stat().st_size
+                except OSError as exc:
+                    from atlas.diagnostic_alerts import record_alert
+                    record_alert("project-index", "项目知识索引失败", f"{item}: {exc}", target="project-sources", dedupe_key=f"project-index:{project_id}:{item}")
+                    continue
                 if (size > 2 * 1024 * 1024
                         or current_bytes + byte_count + size > 50 * 1024 * 1024):
+                    from atlas.diagnostic_alerts import record_alert
+                    reason = "文件超过 2 MiB 索引上限" if size > 2 * 1024 * 1024 else "项目资料总量超过 50 MiB 上限"
+                    record_alert("project-index", "项目知识索引失败", f"{item}: {reason}", target="project-sources", dedupe_key=f"project-index:{project_id}:{item}")
                     continue
-                extracted = await asyncio.to_thread(_extract_file_text, item)
+                try:
+                    extracted = await asyncio.to_thread(_extract_file_text, item)
+                except (OSError, UnicodeError, ValueError) as exc:
+                    from atlas.diagnostic_alerts import record_alert
+                    record_alert("project-index", "项目知识索引失败", f"{item}: {exc}", target="project-sources", dedupe_key=f"project-index:{project_id}:{item}")
+                    continue
                 if not extracted:
                     continue
                 byte_count += size
@@ -572,7 +585,7 @@ def _chunks(text: str, size: int = 1000, overlap: int = 120) -> list[str]:
 def _extract_file_text(path: Path) -> str:
     suffix = path.suffix.casefold()
     if suffix in _TEXT_SUFFIXES:
-        return path.read_text(encoding="utf-8", errors="replace")
+        return path.read_text(encoding="utf-8", errors="strict")
     try:
         if suffix == ".docx":
             from docx import Document

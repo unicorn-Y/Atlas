@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+import re
 from pathlib import Path
 
 import httpx
@@ -17,8 +18,74 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
+from atlas.config import load_user_settings, save_user_settings
+from atlas.diagnostic_alerts import record_alert
+from atlas.diagnostic_alerts import _read as read_alerts
 
 router = APIRouter()
+
+
+@router.get("/api/settings/project-context-budget")
+async def get_project_context_budget() -> dict[str, int]:
+    value = load_user_settings().get("project_context_token_budget", 1600)
+    try: budget = min(12000, max(256, int(value)))
+    except (TypeError, ValueError): budget = 1600
+    return {"tokens": budget}
+
+
+@router.put("/api/settings/project-context-budget")
+async def put_project_context_budget(req: dict[str, Any]) -> dict[str, int]:
+    try: budget = int(req.get("tokens"))
+    except (TypeError, ValueError) as exc: raise HTTPException(status_code=422, detail="tokens must be an integer") from exc
+    if not 256 <= budget <= 12000:
+        raise HTTPException(status_code=422, detail="预算范围为 256 到 12000 tokens")
+    settings = load_user_settings(); settings["project_context_token_budget"] = budget; save_user_settings(settings)
+    return {"tokens": budget}
+
+
+@router.get("/api/projects/{project_id}/context-status")
+async def get_project_context_status(
+    services: Annotated[AppServices, Depends(get_app_services)], project_id: str, root: str = "",
+) -> dict[str, Any]:
+    projects = services.projects or _server().projects
+    data = await projects.get_sources(project_id)
+    if data is None: raise HTTPException(status_code=404, detail="找不到这个项目。")
+    documents: list[tuple[str, str]] = []
+    if data.get("instructions"): documents.append(("项目指令", str(data["instructions"])))
+    db = projects._require_db()
+    cursor = await db.execute("SELECT s.title,f.path,f.text FROM project_source_fts f JOIN project_sources s ON s.id=f.source_id WHERE f.project_id=?", (project_id,))
+    documents.extend((str(row["path"] or row["title"]), str(row["text"] or "")) for row in await cursor.fetchall())
+    errors: list[dict[str, str]] = []
+    if root and not root.startswith("ssh://"):
+        try:
+            workspace, _ = _server()._workspace_path(root)
+            for rel in (".atlas/NOTES.md", "AGENTS.md", "CLAUDE.md"):
+                path = workspace / rel
+                if not path.exists(): continue
+                try:
+                    if path.stat().st_size > 256 * 1024: raise ValueError("文件超过 256 KiB")
+                    documents.append((str(path), path.read_text(encoding="utf-8")))
+                except (OSError, UnicodeError, ValueError) as exc:
+                    errors.append({"file": str(path), "reason": str(exc)})
+        except (OSError, ValueError): pass
+    claims: dict[str, list[dict[str, str]]] = {}
+    for source, content in documents:
+        for line in content.splitlines():
+            match = re.match(r"^\s*([^:：]{1,48})[:：]\s*(.{1,180})$", line)
+            if match:
+                key = re.sub(r"\s+", " ", match.group(1)).strip().lower()
+                claims.setdefault(key, []).append({"source": source, "value": match.group(2).strip()})
+    conflicts = [{"key": key, "claims": values} for key, values in claims.items() if len({item["value"] for item in values}) > 1]
+    total = sum(len(source) + len(content) for source, content in documents)
+    raw_budget = load_user_settings().get("project_context_token_budget", 1600)
+    try: budget = min(12000, max(256, int(raw_budget)))
+    except (TypeError, ValueError): budget = 1600
+    prior_errors = [{"file": row.get("detail", ""), "reason": row.get("detail", "索引失败")}
+                    for row in read_alerts() if row.get("category") == "project-index" and
+                    str(row.get("dedupe_key", "")).startswith((f"project-index:{project_id}:", f"project-add:{project_id}:", f"project-refresh:{project_id}:"))]
+    errors.extend(prior_errors)
+    return {"conflicts": conflicts, "errors": errors, "budget": budget, "total_tokens": (total + 3) // 4,
+            "sources": len(documents), "priority": ["项目指令", ".atlas/NOTES.md", "AGENTS.md / CLAUDE.md", "索引资料"]}
 
 
 def _server() -> Any:
@@ -79,6 +146,7 @@ async def create_project(
             default_preset_id=str(req.get("default_preset_id", "") or ""),
         )
     except ValueError as exc:
+        record_alert("project-index", "项目资料索引失败", str(exc), target="project-sources", dedupe_key=f"project-add:{project_id}:{req.get('path') or req.get('title')}")
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return project.to_dict()
 
@@ -117,6 +185,7 @@ async def import_project(
             repo_url=await asyncio.to_thread(origin_url),
         )
     except ValueError as exc:
+        record_alert("project-index", "项目资料重新索引失败", str(exc), target="project-sources", dedupe_key=f"project-refresh:{project_id}:{source_id}")
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return project.to_dict()
 

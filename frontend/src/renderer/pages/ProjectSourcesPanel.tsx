@@ -35,12 +35,24 @@ export default function ProjectSourcesPanel({ projectId, workspacePath, apiBaseU
   const [showGlobalMemories, setShowGlobalMemories] = useState(false);
   const [memoryProjects, setMemoryProjects] = useState<Array<{project_id:string;name:string}>>([]);
   const [memoryText, setMemoryText] = useState('');
+  const [contextBudget, setContextBudget] = useState(1600);
+  const [contextStatus, setContextStatus] = useState<{ conflicts: Array<{ key: string; claims: Array<{ source: string; value: string }> }>; errors: Array<{ file: string; reason: string }>; budget: number; total_tokens: number; sources: number; priority: string[] } | null>(null);
+  const [budgetBusy, setBudgetBusy] = useState(false);
   const loadMemories = () => api<{memories:Array<{id:string;text:string}>}>(apiBaseUrl,`/api/projects/${encodeURIComponent(projectId)}/memories`).then(r=>setProjectMemories(r.memories)).catch(()=>setProjectMemories([]));
   const loadGlobalMemories = () => api<{memories:Array<{id:string;text:string}>}>(apiBaseUrl,'/api/projects/memories/global').then(r=>setGlobalMemories(r.memories)).catch(()=>setGlobalMemories([]));
   const load = () => backend.getProjectSources(projectId).then((result) => { setData(result); setInstructions(result.instructions); setError(''); })
     .catch((exc) => setError(exc instanceof Error ? exc.message : String(exc)));
   useEffect(() => { setData(null); void load(); }, [projectId]);
   useEffect(() => { void loadMemories(); void loadGlobalMemories(); }, [projectId]);
+  useEffect(() => {
+    let cancelled = false;
+    const root = workspacePath ? `&root=${encodeURIComponent(workspacePath)}` : '';
+    void Promise.all([
+      api<{ tokens: number }>(apiBaseUrl, '/api/settings/project-context-budget'),
+      api<typeof contextStatus>(apiBaseUrl, `/api/projects/${encodeURIComponent(projectId)}/context-status?${root.slice(1)}`),
+    ]).then(([budget, status]) => { if (!cancelled) { setContextBudget(budget.tokens); setContextStatus(status); } }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [apiBaseUrl, projectId, workspacePath]);
   useEffect(() => { void api<{projects:Array<{project_id:string;name:string}>}>(apiBaseUrl,'/api/projects').then(r=>setMemoryProjects(r.projects)).catch(()=>setMemoryProjects([])); }, [apiBaseUrl]);
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +102,16 @@ export default function ProjectSourcesPanel({ projectId, workspacePath, apiBaseU
         void api(apiBaseUrl, `/api/projects/${encodeURIComponent(projectId)}`, { method: 'PUT', json: { memory_scope: next } })
           .then(() => setMemoryScope(next)).catch((exc) => setError(exc instanceof Error ? exc.message : String(exc))).finally(() => setScopeBusy(false));
       }} />{memoryScope === 'project-only' ? '仅本项目记忆' : '项目 + 全局记忆'}</label>
+    <div className="grid gap-2 rounded-lg border border-line p-3" aria-label="共享知识上下文状态">
+      <h4 className="m-0 text-[12px] font-semibold">共享知识上下文</h4>
+      <label className="flex items-center gap-2 text-[11.5px] text-fg-2">每轮预算 <input aria-label="项目共享知识 token 预算" type="number" min={256} max={12000} value={contextBudget} onChange={(event) => setContextBudget(Number(event.target.value))} className="w-24 rounded border border-line bg-surface px-2 py-1" /> tokens
+        <button type="button" disabled={budgetBusy || contextBudget < 256 || contextBudget > 12000} onClick={() => { setBudgetBusy(true); void api<{ tokens: number }>(apiBaseUrl, '/api/settings/project-context-budget', { method: 'PUT', json: { tokens: contextBudget } }).then((r) => setContextBudget(r.tokens)).catch((exc) => setError(String(exc))).finally(() => setBudgetBusy(false)); }} className="rounded border border-line px-2 py-1">{budgetBusy ? '保存中…' : '保存预算'}</button>
+      </label>
+      {contextStatus && <p className="m-0 text-[11px] text-fg-3">自动发现 {contextStatus.sources} 份来源 · 约 {contextStatus.total_tokens} tokens · 优先级：{contextStatus.priority.join(' → ')}</p>}
+      {!!contextStatus?.total_tokens && contextStatus.total_tokens > contextBudget && <p role="status" className="m-0 rounded bg-warning/10 p-2 text-[11.5px] text-warning">已截断：保留约 {contextBudget} / 共 {contextStatus.total_tokens} tokens。优先保留项目指令、NOTES.md、AGENTS/CLAUDE，再保留索引匹配。</p>}
+      {!!contextStatus?.conflicts.length && <div role="alert" className="rounded bg-warning/10 p-2 text-[11.5px] text-warning"><strong>来源冲突</strong>{contextStatus.conflicts.map((conflict) => <div key={conflict.key}><b>{conflict.key}</b>{conflict.claims.map((claim) => <div key={`${claim.source}:${claim.value}`}>{claim.source}：{claim.value}</div>)}</div>)}</div>}
+      {!!contextStatus?.errors.length && <div role="alert" className="rounded bg-danger-soft p-2 text-[11.5px] text-danger">索引失败：{contextStatus.errors.map((item) => <div key={item.file}>{item.file}：{item.reason}</div>)}</div>}
+    </div>
     <div className="grid gap-2 rounded-lg border border-edge p-3">
       <h4 className="m-0 text-[12px] font-semibold">项目专属记忆</h4>
       <p className="m-0 text-[11px] text-fg-3">Agent 在项目会话中写入的记忆默认保存在此；召回遵循上方范围设置。</p>

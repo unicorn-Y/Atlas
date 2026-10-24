@@ -464,33 +464,79 @@ class AgentOrchestrator:
                 }
                 for hit in hits
             ], ensure_ascii=False))
-        # Project knowledge is shared across the project's conversations. Retrieve a
-        # small, source-labelled slice on every turn so notes are available without
-        # requiring the agent to remember to call the search tool first.
+        # Project knowledge is shared across the project's conversations. The budget
+        # is configurable and explicit truncation/conflicts travel with the context.
+        from atlas.config import load_user_settings
+        budget_tokens = load_user_settings().get("project_context_token_budget", 1600)
+        try: budget_tokens = min(12000, max(256, int(budget_tokens)))
+        except (TypeError, ValueError): budget_tokens = 1600
+        knowledge: list[tuple[str, str]] = []
+        try:
+            source_data = await self._projects.get_sources(project.project_id)
+            if source_data and source_data.get("instructions"):
+                knowledge.append(("项目资料指令", str(source_data["instructions"])))
+        except Exception as exc:
+            from atlas.diagnostic_alerts import record_alert
+            record_alert("project-index", "项目指令读取失败", str(exc), target="project-sources", dedupe_key=f"project-instructions:{project.project_id}")
+        if project.workspace_path and not project.workspace_path.startswith("ssh://"):
+            root = Path(project.workspace_path)
+            for rel in (".atlas/NOTES.md", "AGENTS.md", "CLAUDE.md"):
+                source_path = root / rel
+                if not source_path.exists():
+                    continue
+                try:
+                    if source_path.stat().st_size > 256 * 1024:
+                        raise ValueError("文件超过 256 KiB 索引上限")
+                    content = source_path.read_text(encoding="utf-8")
+                    if content.strip(): knowledge.append((str(source_path), content))
+                except (OSError, UnicodeError, ValueError) as exc:
+                    from atlas.diagnostic_alerts import record_alert
+                    detail = f"{source_path}: {exc}"
+                    parts.append(f"Project knowledge index error: {detail}")
+                    record_alert("project-index", "项目知识索引失败", detail, target="project-sources", dedupe_key=f"project-index:{project.project_id}:{source_path}")
+        # Search errors stay actionable in both this context and the persistent alerts view.
         if query:
             try:
                 source_hits = await self._projects.search_sources(project.project_id, query[:80], limit=4)
-            except Exception:
-                log.debug("agent.project_source_search_failed", exc_info=True)
+                for hit in source_hits:
+                    label = str(hit.get("path") or hit.get("title") or "项目资料")
+                    knowledge.append((label, str(hit.get("snippet") or "")))
+            except Exception as exc:
+                from atlas.diagnostic_alerts import record_alert
+                record_alert("project-index", "项目资料索引查询失败", str(exc), target="project-sources", dedupe_key=f"project-search:{project.project_id}")
+                parts.append(f"Project knowledge index error: {exc}")
                 source_hits = []
-            if source_hits:
-                remaining = 3200
-                snippets = []
-                for item in source_hits:
-                    snippet = str(item.get("snippet") or "")[:min(900, remaining)]
-                    if not snippet:
-                        continue
-                    label = str(item.get("title") or "项目资料")
-                    source_path = str(item.get("path") or "")
-                    entry = f"- {label}" + (f" ({source_path})" if source_path else "") + f"\n  {snippet}"
-                    if len(entry) > remaining:
-                        entry = entry[:remaining]
-                    snippets.append(entry)
-                    remaining -= len(entry)
-                    if remaining <= 0:
-                        break
-                if snippets:
-                    parts.append("Relevant shared project knowledge (source-labelled):\n" + "\n".join(snippets))
+        # Find same-key assertions with different values and preserve both source labels.
+        claims: dict[str, list[tuple[str, str]]] = {}
+        for label, content in knowledge:
+            for line in content.splitlines():
+                match = re.match(r"^\s*([^:：]{1,48})[:：]\s*(.{1,180})$", line)
+                if match:
+                    key = re.sub(r"\s+", " ", match.group(1)).strip().lower()
+                    value = match.group(2).strip()
+                    claims.setdefault(key, []).append((label, value))
+        conflicts = [(key, entries) for key, entries in claims.items() if len({value for _, value in entries}) > 1]
+        if conflicts:
+            parts.append("SOURCE CONFLICTS — do not silently choose one; ask the user which source is current:\n" + "\n".join(
+                f"- {key}: " + " | ".join(f"{source} says {value}" for source, value in entries) for key, entries in conflicts[:20]
+            ))
+        rendered: list[str] = []
+        total_chars = sum(len(label) + len(content) for label, content in knowledge)
+        remaining_chars = budget_tokens * 4
+        kept_chars = 0
+        for label, content in knowledge:
+            entry = f"- {label}\n  {content.strip()}"
+            if remaining_chars <= 0: break
+            kept = entry[:remaining_chars]
+            rendered.append(kept)
+            remaining_chars -= len(kept)
+            kept_chars += len(kept)
+        if rendered:
+            parts.append("Relevant shared project knowledge (source-labelled; priority: project instructions, NOTES.md, AGENTS/CLAUDE rules, then indexed matches):\n" + "\n".join(rendered))
+        total_tokens = (total_chars + 3) // 4
+        kept_tokens = (kept_chars + 3) // 4
+        if total_tokens > kept_tokens:
+            parts.append(f"Shared knowledge budget truncated: kept {kept_tokens} / {total_tokens} estimated tokens; priority order is project instructions → NOTES.md → AGENTS/CLAUDE → indexed source matches.")
         return "\n".join(parts)
 
     async def _use_skill_result(self, raw_name: str) -> dict[str, Any]:
