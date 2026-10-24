@@ -152,10 +152,14 @@ export default function BrowserSettingsSection({ apiBaseUrl, initialSettings, cl
     <fieldset className="m-0 grid list-none gap-1.5 border-0 p-0">
       <legend className="sr-only">浏览器接管方式</legend>
       {BROWSER_MODES.map((option) => <label key={option.value} className="flex cursor-pointer items-start gap-2.5 rounded-xl px-2 py-1.5 text-[13px] hover:bg-hover">
-        <input type="radio" name="browser-mode" className="mt-1" checked={mode === option.value} onChange={() => patch({ mode: option.value })} />
+        <input type="radio" name="browser-mode" className="mt-1" checked={mode === option.value} onChange={() => patch({ mode: option.value, ...(option.value !== 'standalone' ? { incognito: false } : {}) })} />
         <span className="min-w-0"><span className="text-fg">{option.label}</span><small className="block text-[12px] text-fg-3">{option.hint}</small></span>
       </label>)}
     </fieldset>
+    <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-xl card-surface p-3 text-[12.5px] text-fg-2">
+      <input type="checkbox" checked={!!settings.incognito} onChange={(event) => patch({ incognito: event.target.checked, ...(event.target.checked ? { mode: 'standalone' } : {}) })} />
+      <span>隐私浏览：使用 Atlas 独立浏览器的无痕窗口，不读取或保存任何浏览器登录状态。</span>
+    </label>
     {mode === 'cdp' && <label className="mt-2 block text-[13px] text-fg-2">CDP 调试地址
       <input value={settings.cdp_url ?? ''} onChange={(event) => patch({ cdp_url: event.target.value })} placeholder="例如 http://127.0.0.1:9222" aria-label="CDP 调试地址"
         className="mt-1 block h-8 w-full rounded-[9px] bg-sunken px-3 font-mono text-[12.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />

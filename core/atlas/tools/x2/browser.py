@@ -125,12 +125,14 @@ def get_browser_settings() -> dict[str, Any]:
         "profile_browser": str(stored.get("profile_browser") or "chrome"),
         "profile": str(stored.get("profile") or "Default"),
         "profile_sync_interval_minutes": int(stored.get("profile_sync_interval_minutes") or 30),
+        "incognito": bool(stored.get("incognito", False)),
     }
 
 
 def apply_browser_settings(
     mode: str = "", cdp_url: str = "", proxy: str = "", *, profile_browser: str | None = None,
-    profile: str | None = None, profile_sync_interval_minutes: int | None = None, persist: bool = True,
+    profile: str | None = None, profile_sync_interval_minutes: int | None = None,
+    incognito: bool | None = None, persist: bool = True,
 ) -> dict[str, Any]:
     """Validate + persist takeover settings; returns the normalized settings."""
     internal = normalize_mode(mode) if mode else _MODE_ALIASES.get(
@@ -146,6 +148,12 @@ def apply_browser_settings(
         browser = dict(settings.get("browser") or {})
         if mode:
             browser["mode"] = internal
+        if incognito is not None:
+            browser["incognito"] = bool(incognito)
+            if incognito:
+                browser["mode"] = "standalone"
+            elif mode:
+                browser["mode"] = internal
         if cdp_url:
             browser["cdp_url"] = str(cdp_url).strip()
         if proxy:

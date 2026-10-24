@@ -83,6 +83,7 @@ export interface BrowserSettings {
   profile_browser?: 'chrome' | 'edge';
   profile?: string;
   profile_sync_interval_minutes?: number;
+  incognito?: boolean;
   extension?: { url: string; pairing_code: string; extension_path: string; connected: boolean; controller?: string | null };
 }
 

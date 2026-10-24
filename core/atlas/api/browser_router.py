@@ -101,6 +101,7 @@ class BrowserSettingsRequest(BaseModel):
     profile_browser: str | None = None
     profile: str | None = None
     profile_sync_interval_minutes: int | None = None
+    incognito: bool | None = None
 
 
 @router.get("/settings", dependencies=[Depends(_require_trusted_origin)])
@@ -118,7 +119,7 @@ async def save_settings(req: BrowserSettingsRequest) -> dict[str, Any]:
         return apply_browser_settings(
             mode=req.mode or "", cdp_url=req.cdp_url or "", proxy=req.proxy or "",
             profile_browser=req.profile_browser, profile=req.profile,
-            profile_sync_interval_minutes=req.profile_sync_interval_minutes)
+            profile_sync_interval_minutes=req.profile_sync_interval_minutes, incognito=req.incognito)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

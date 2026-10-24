@@ -196,6 +196,19 @@ def _agent_browser_command_env(socket_dir: str) -> dict[str, str]:
     return env
 
 
+def _apply_incognito_arg(browser_env: dict[str, str], session_info: dict[str, Any], enabled: bool) -> None:
+    """Request a private Chromium context only for Atlas-owned isolated sessions."""
+    if not enabled or session_info.get("cdp_url"):
+        return
+    features = session_info.get("features") or {}
+    if features.get("real_profile") or features.get("live_chrome"):
+        return
+    args = [item for item in browser_env.get("AGENT_BROWSER_ARGS", "").split(",") if item]
+    if "--incognito" not in args:
+        args.append("--incognito")
+    browser_env["AGENT_BROWSER_ARGS"] = ",".join(args)
+
+
 _SHARED_HEADED_DAEMON_IDLE_SECONDS = 24 * 3600
 
 
@@ -761,6 +774,8 @@ def _spawn_and_collect(
                              command)
     else:
         _apply_chromium_sandbox_args(browser_env)
+        _apply_incognito_arg(browser_env, session_info,
+                             _bt._browser_cfg("incognito", False, bool, "browser.incognito"))
         # #64867: a local Chromium launch (no --cdp attach) must stay headless on
         # Windows; headed mode is the intentional opt-out (dispatch adds --headed).
         if not session_info.get("cdp_url") and not _cloud._is_headed_mode():
