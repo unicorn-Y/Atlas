@@ -447,6 +447,16 @@ class UsageLedger:
         )
         await self._db.commit()
 
+    async def models_for_conversation(self, conversation_id: str) -> list[str]:
+        """Models that actually served this conversation, most used first."""
+        if self._db is None:
+            return []
+        cursor = await self._db.execute(
+            "SELECT model, COUNT(*) AS n FROM usage_records WHERE conversation_id = ? "
+            "GROUP BY model ORDER BY n DESC", (conversation_id,))
+        rows = await cursor.fetchall()
+        return [str(row[0]) for row in rows if row[0]]
+
     async def query(
         self, *, start: str | None, end: str | None, group_by: str,
     ) -> dict[str, Any]:

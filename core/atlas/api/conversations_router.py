@@ -209,8 +209,14 @@ async def export_conversation_share(
     messages = await asyncio.to_thread(read_session_messages, DATA_ROOT / "engine", conversation_id, limit=100000)
     name = re.sub(r"[^A-Za-z0-9_-]+", "-", str(conversation.get("title") or "conversation")).strip("-")[:64] or "conversation"
     path = DATA_ROOT / "exports" / f"{name}-{conversation_id[:8]}.html"
+    usage_ledger = _service("usage_ledger", services)
+    share_usage = None
+    if usage_ledger is not None:
+        report = await usage_ledger.query(start=None, end=None, group_by="conversation")
+        share_usage = next((row for row in report.get("rows", []) if row.get("key") == conversation_id), None)
+    share_models = await usage_ledger.models_for_conversation(conversation_id) if usage_ledger is not None else []
     export_html(path, title=str(conversation.get("title") or "Atlas conversation"), messages=messages,
-                model=str(conversation.get("model") or ""),
+                model=str(conversation.get("model") or "、".join(share_models)), usage=share_usage,
                 include_tools=bool(req.get("include_tools", True)),
                 include_thinking=bool(req.get("include_thinking", False)))
     return {"path": str(path), "messages": len(messages)}
