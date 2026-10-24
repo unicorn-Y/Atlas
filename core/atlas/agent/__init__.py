@@ -598,6 +598,7 @@ class AgentOrchestrator:
                         tool_deny=list(options.get("tool_deny") or []) + delegate_denials + [
                             "subtask_message", "subtask_status",
                         ], permission_mode=options.get("permission_mode", "full_access"),
+                        read_only=options.get("permission_mode") == "read_only",
                         allowed_paths=options.get("allowed_paths") or [],
                         steer_queue=options.get("steer_queue"),
                         workspace_trusted=bool(options.get("workspace_trusted", False)),

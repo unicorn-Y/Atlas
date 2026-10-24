@@ -98,12 +98,13 @@ async def _research_and_plan(orchestrator: Any, job: dict[str, Any], model: str)
                                     "detail": f"并行调研 Agent 已启动（{backend}）"})
         results = await orchestrator._delegation.delegate_parallel(
             [
-                {"title": "代码结构与相关文件", "goal": f"只读调研目标：{job['goal']}。定位代码结构、关键文件与调用链，提供路径和行号证据。禁止修改文件。", "agent": "general", "agent_model": model, "agent_tools": ["read_file", "local_file", "search_files", "glob", "grep", "coding.repo_map"]},
-                {"title": "依赖、风险与边界", "goal": f"只读调研目标：{job['goal']}。分析相关依赖、兼容性、风险和边界情况，给出依据。禁止修改文件。", "agent": "general", "agent_model": model, "agent_tools": ["read_file", "local_file", "search_files", "glob", "grep", "coding.repo_map"]},
-                {"title": "验证与测试方法", "goal": f"只读调研目标：{job['goal']}。找出适用验证命令、现有测试、验收方法及潜在限制。禁止修改文件。", "agent": "general", "agent_model": model, "agent_tools": ["read_file", "local_file", "search_files", "glob", "grep", "coding.repo_map"]},
+                {"title": "代码结构与相关文件", "goal": f"只读调研目标：{job['goal']}。定位代码结构、关键文件与调用链，提供路径和行号证据。禁止修改文件。", "agent": "general", "agent_model": model, "agent_permission": "read_only", "agent_tools": ["read_file", "local_file", "search_files", "glob", "grep", "coding.repo_map"]},
+                {"title": "依赖、风险与边界", "goal": f"只读调研目标：{job['goal']}。分析相关依赖、兼容性、风险和边界情况，给出依据。禁止修改文件。", "agent": "general", "agent_model": model, "agent_permission": "read_only", "agent_tools": ["read_file", "local_file", "search_files", "glob", "grep", "coding.repo_map"]},
+                {"title": "验证与测试方法", "goal": f"只读调研目标：{job['goal']}。找出适用验证命令、现有测试、验收方法及潜在限制。禁止修改文件。", "agent": "general", "agent_model": model, "agent_permission": "read_only", "agent_tools": ["read_file", "local_file", "search_files", "glob", "grep", "coding.repo_map"]},
             ], max_concurrency=3, cwd=job["workspace"], on_started=on_started,
             on_progress=progress, on_completed=completed, executor="atlas",
-            atlas_options={"model": model, "workspace": job["workspace"], "tool_allow": ["read_file", "local_file", "search_files", "glob", "grep", "coding.repo_map"]},
+            atlas_options={"model": model, "workspace": job["workspace"], "permission_mode": "read_only",
+                           "tool_allow": ["read_file", "local_file", "search_files", "glob", "grep", "coding.repo_map"]},
         )
         job["status"] = "planning"
         evidence = json.dumps(results, ensure_ascii=False, default=str)
