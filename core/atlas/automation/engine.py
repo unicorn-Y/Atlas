@@ -28,10 +28,12 @@ DBOS 落点（integration-map §4 映射）：
 from __future__ import annotations
 
 import asyncio
+import subprocess
 import uuid
 import zoneinfo
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 import structlog
@@ -590,6 +592,9 @@ class AutomationEngine:
         if loop_id:
             await DBOS.cancel_workflow_async(loop_id)
             cancelled.append(loop_id)
+        record = self._require_automation(automation_id)
+        if record["payload"].get("cleanup_policy") == "remove_after_run":
+            self._cleanup_record_worktree(record)
         return {"cancelled": cancelled}
 
     async def remove(self, automation_id: str) -> None:
@@ -602,6 +607,9 @@ class AutomationEngine:
         for workflow_id in await self.active_run_workflows(automation_id):
             await DBOS.cancel_workflow_async(workflow_id)
         await self._stop_interval_loop(automation_id)
+        record = self._store.get(automation_id)
+        if record is not None and record["payload"].get("cleanup_policy") == "remove_after_run":
+            self._cleanup_record_worktree(record)
 
     async def pause(self, automation_id: str, reason: str = "user") -> dict[str, Any]:
         self._require_automation(automation_id)
@@ -643,6 +651,7 @@ class AutomationEngine:
             elif kind == "agent_turn":
                 if self._dispatch_turn is None:
                     raise RuntimeError("dispatch_turn 未注入")
+                execution = self._prepare_execution(record)
                 result = await self._dispatch_turn(
                     {
                         "automation_id": automation_id,
@@ -653,8 +662,17 @@ class AutomationEngine:
                         "skills": payload.get("skills", []),
                         "wake_mode": payload.get("wake_mode", ""),
                         "conversation_id": payload.get("conversation_id", ""),
+                        "workspace": execution.get("workspace", ""),
+                        "worktree_path": execution.get("worktree_path", ""),
+                        "worktree_branch": execution.get("worktree_branch", ""),
+                        "base_branch": execution.get("base_branch", ""),
+                        "cleanup_policy": payload.get("cleanup_policy", "keep"),
                     }
                 )
+                if execution.get("worktree_path"):
+                    result = {"text": result, **{key: value for key, value in execution.items() if key != "workspace"}}
+                    if payload.get("cleanup_policy") == "remove_after_run":
+                        self._cleanup_record_worktree(self._require_automation(automation_id))
             elif kind == "script":
                 result = await self._run_script(payload)
             else:
@@ -664,6 +682,10 @@ class AutomationEngine:
         except Exception as exc:  # 失败进入 consecutive_errors 统计
             log.exception("automation.script_failed", automation_id=record["id"])
             status, error = "error", str(exc)
+        if status != "ok" and payload.get("cleanup_policy") == "remove_after_run":
+            latest = self._store.get(automation_id)
+            if latest is not None:
+                self._cleanup_record_worktree(latest)
         delivery = await self._settle_delivery(record, {"status": status, "result": result})
         return {
             "status": status,
@@ -694,6 +716,59 @@ class AutomationEngine:
         if proc.returncode != 0:
             raise RuntimeError(f"script exit {proc.returncode}: {err[:500] or text[:500]}")
         return {"exit_code": proc.returncode, "stdout": text[:4000]}
+
+    def _prepare_execution(self, record: dict[str, Any]) -> dict[str, str]:
+        """Resolve local cwd or create and durably record a per-run git worktree."""
+        payload = record["payload"]
+        base = str(payload.get("base_directory") or "").strip()
+        if payload.get("execution_mode", "local") != "worktree":
+            return {"workspace": base}
+        root = Path(base).expanduser().resolve()
+        if not root.is_dir():
+            raise ValueError(f"Automation base directory does not exist: {base}")
+
+        def git(*args: str) -> str:
+            proc = subprocess.run(["git", "-C", str(root), *args], capture_output=True,
+                                  text=True, encoding="utf-8", errors="replace")
+            if proc.returncode:
+                raise ValueError(proc.stderr.strip() or "git command failed")
+            return proc.stdout.strip()
+
+        git_root = Path(git("rev-parse", "--show-toplevel")).resolve()
+        base_branch = git("branch", "--show-current") or "HEAD"
+        run_key = uuid.uuid4().hex[:12]
+        branch = f"atlas/automation-{record['id'][:28]}-{run_key}"
+        worktree = git_root / ".atlas-worktrees" / "automations" / f"{record['id']}-{run_key}"
+        worktree.parent.mkdir(parents=True, exist_ok=True)
+        git("worktree", "add", "-b", branch, str(worktree), base_branch)
+        self._store.put({**record, "payload": {**payload, "worktree_path": str(worktree),
+                          "worktree_branch": branch, "base_branch": base_branch}})
+        return {"workspace": str(worktree), "worktree_path": str(worktree),
+                "worktree_branch": branch, "base_branch": base_branch}
+
+    def _cleanup_record_worktree(self, record: dict[str, Any]) -> None:
+        payload = record.get("payload") or {}
+        path = str(payload.get("worktree_path") or "").strip()
+        branch = str(payload.get("worktree_branch") or "").strip()
+        base = str(payload.get("base_directory") or "").strip()
+        if not path or not branch or not base:
+            return
+        root = Path(base).expanduser().resolve()
+        worktree = Path(path).expanduser().resolve()
+        try:
+            repo = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace")
+            if repo.returncode:
+                return
+            git_root = Path(repo.stdout.strip()).resolve()
+            if not worktree.is_relative_to(git_root / ".atlas-worktrees" / "automations"):
+                return
+            subprocess.run(["git", "-C", str(git_root), "worktree", "remove", "--force", str(worktree)],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+            subprocess.run(["git", "-C", str(git_root), "branch", "-D", branch],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        except OSError:
+            log.exception("automation.worktree_cleanup_failed", automation_id=record.get("id"), path=path)
 
     async def _settle_delivery(self, record: dict[str, Any], outcome: dict[str, Any]) -> str:
         """delivery outcome ∈ delivered | not-delivered | unknown | not-requested."""
@@ -771,7 +846,7 @@ class AutomationEngine:
             limit=limit * 2,
             sort_desc=True,
             load_input=False,
-            load_output=False,
+            load_output=True,
         )
         try:
             cron_rows = await DBOS.list_workflows_async(
@@ -779,7 +854,7 @@ class AutomationEngine:
                 limit=limit * 2,
                 sort_desc=True,
                 load_input=False,
-                load_output=False,
+                load_output=True,
             )
         except Exception as exc:  # pragma: no cover - 防御：schedule 过滤不可用时降级
             log.exception("automation.cron_runs_query_failed", error=str(exc))
@@ -803,6 +878,7 @@ class AutomationEngine:
             "completed_at": _iso(getattr(row, "completed_at", None)),
             "error": str(error) if error else "",
             "attributes": getattr(row, "attributes", None) or {},
+            "result": _summarize(getattr(row, "output", None)),
         }
 
     # -- helpers -----------------------------------------------------------------

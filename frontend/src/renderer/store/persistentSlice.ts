@@ -90,7 +90,7 @@ export interface PersistentActions {
   pauseOrResumeDownload: (jobId: string, action: 'pause' | 'resume') => Promise<void>;
   loadAutomations: () => Promise<void>;
   createAutomation: (payload: Record<string, unknown>) => Promise<AutomationRecord | null>;
-  patchAutomation: (id: string, patch: Record<string, unknown>) => Promise<void>;
+  patchAutomation: (id: string, patch: Record<string, unknown>) => Promise<boolean>;
   deleteAutomation: (id: string) => Promise<void>;
   runAutomationNow: (id: string) => Promise<boolean>;
   pauseAutomation: (id: string) => Promise<void>;
@@ -380,7 +380,8 @@ export function createPersistentSlice(
       try {
         const body = await automationsApi.patch(base(), id, patch);
         set((state) => ({ automations: state.automations.map((item) => item.id === id ? body.automation : item) }));
-      } catch (error) { set({ automationsError: errorText(error) }); }
+        return true;
+      } catch (error) { set({ automationsError: errorText(error) }); return false; }
     },
     deleteAutomation: async (id) => {
       try {

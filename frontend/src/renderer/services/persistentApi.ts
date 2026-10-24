@@ -175,6 +175,12 @@ export interface AutomationPayload {
   script?: string;
   timeout_seconds?: number;
   wake_mode?: '' | 'now' | 'next-heartbeat';
+  execution_mode?: 'local' | 'worktree';
+  base_directory?: string;
+  cleanup_policy?: 'keep' | 'remove_after_run';
+  worktree_path?: string;
+  worktree_branch?: string;
+  base_branch?: string;
 }
 export interface AutomationDelivery { mode: 'none' | 'channel'; channel?: string; target?: string }
 export interface AutomationPolicy { missed_run?: 'catchup' | 'skip'; max_catchup?: number; delete_after_run?: boolean; consecutive_error_disable?: number }
@@ -194,7 +200,7 @@ export interface AutomationRecord {
   consecutive_errors?: number;
   paused_reason?: string | null;
 }
-export interface AutomationRun { workflow_id?: string; workflow_run_id?: string; started_at?: string; status?: string; [key: string]: unknown }
+export interface AutomationRun { workflow_id?: string; workflow_run_id?: string; started_at?: string; status?: string; result?: unknown; [key: string]: unknown }
 export interface MigrationReport {
   source: string;
   imported_count: number;

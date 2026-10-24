@@ -55,6 +55,12 @@ class PayloadSpec(BaseModel):
     timeout_seconds: float = 60.0
     wake_mode: Literal["", "now", "next-heartbeat"] = ""
     conversation_id: str = ""
+    execution_mode: Literal["local", "worktree"] = "local"
+    base_directory: str = ""
+    cleanup_policy: Literal["keep", "remove_after_run"] = "keep"
+    worktree_path: str = ""
+    worktree_branch: str = ""
+    base_branch: str = ""
 
 
 class DeliverySpec(BaseModel):

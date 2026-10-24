@@ -20,10 +20,12 @@ interface CreateForm {
   name: string; owner: string; kind: 'cron' | 'interval' | 'date' | 'event' | 'webhook';
   cron: string; everyHours: string; at: string; path: string; glob: string;
   message: string; agent: string; script: string; deliver: 'none' | 'channel'; channel: string; target: string; catchup: boolean;
+  executionMode: 'local' | 'worktree'; baseDirectory: string; cleanupPolicy: 'keep' | 'remove_after_run';
 }
 const EMPTY_FORM: CreateForm = {
   name: '', owner: '', kind: 'cron', cron: '0 9 * * *', everyHours: '4', at: '', path: '', glob: '',
   message: '', agent: '', script: '', deliver: 'none', channel: 'telegram', target: '', catchup: false,
+  executionMode: 'local', baseDirectory: '', cleanupPolicy: 'keep',
 };
 
 /** 持续目标仍长在旧调度形状上（/api/goals），这里保留它们的人话渲染。 */
@@ -81,6 +83,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [editingId, setEditingId] = useState('');
 
   const refresh = useCallback(() => { void loadAutomations(); }, [loadAutomations]);
   useEffect(() => { refresh(); void loadAgents(); }, [refresh, loadAgents]);
@@ -123,13 +126,20 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
               : { kind: 'webhook' },
       payload: form.script.trim()
         ? { kind: 'script', script: form.script, timeout_seconds: 120 }
-        : { kind: 'agent_turn', message: form.message.trim(), agent_id: form.agent || form.owner },
+        : { kind: 'agent_turn', message: form.message.trim(), agent_id: form.agent || form.owner,
+          execution_mode: form.executionMode, base_directory: form.baseDirectory.trim(), cleanup_policy: form.cleanupPolicy },
       delivery: form.deliver === 'channel' ? { mode: 'channel', channel: form.channel, target: form.target.trim() } : { mode: 'none' },
       policy: { missed_run: form.catchup ? 'catchup' : 'skip' },
     };
     void act(async () => {
-      const record = await createAutomation(payload);
-      if (record) { setCreating(false); setSelected(record.id); setForm({ ...EMPTY_FORM }); }
+      if (editingId) {
+        const updated = await useAtlasStore.getState().patchAutomation(editingId, payload);
+        if (!updated) throw new Error(useAtlasStore.getState().automationsError || '保存自动化失败');
+        await loadAutomations(); setCreating(false); setEditingId(''); setForm({ ...EMPTY_FORM });
+      } else {
+        const record = await createAutomation(payload);
+        if (record) { setCreating(false); setSelected(record.id); setForm({ ...EMPTY_FORM }); }
+      }
     }, '自动化已创建');
   };
 
@@ -176,7 +186,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
     {tab === 'goals' && <GoalsPanel apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />}
     {tab === 'tasks' && <>
       {creating && <form className="card glass form mb-3.5" onSubmit={create}>
-        <h2>新建自动化</h2>
+        <h2>{editingId ? '编辑自动化' : '新建自动化'}</h2>
         <div className="two">
           <label>名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="留空则用内容开头" /></label>
           <label>归谁（owner Agent）
@@ -205,6 +215,24 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
           <textarea required={!form.script.trim()} value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })}
             placeholder="例如：整理今天 GitHub 上我关注仓库的新 issue，挑出需要我回复的" />
         </label>
+        {!form.script.trim() && <>
+          <div className="two">
+            <label>执行位置
+              <select value={form.executionMode} onChange={(event) => setForm({ ...form, executionMode: event.target.value as CreateForm['executionMode'] })}>
+                <option value="local">本地工作区</option><option value="worktree">为每次运行新建隔离 worktree</option>
+              </select>
+            </label>
+            {form.executionMode === 'worktree' && <label>完成后处理
+              <select value={form.cleanupPolicy} onChange={(event) => setForm({ ...form, cleanupPolicy: event.target.value as CreateForm['cleanupPolicy'] })}>
+                <option value="keep">保留 worktree 供检查</option><option value="remove_after_run">运行完成后删除 worktree 和分支</option>
+              </select>
+            </label>}
+          </div>
+          <label>基准目录{form.executionMode === 'worktree' ? '（Git 仓库必填）' : '（可选，留空使用 Atlas 默认）'}
+            <input required={form.executionMode === 'worktree'} value={form.baseDirectory} onChange={(event) => setForm({ ...form, baseDirectory: event.target.value })} placeholder="C:\\Projects\\my-app" />
+          </label>
+          {form.executionMode === 'worktree' && <p className="m-0 text-[12px] text-fg-3">每次触发会从所选仓库当前分支创建独立分支和目录；运行记录包含工作树路径、分支和结果。</p>}
+        </>}
         <div className="two">
           <label>交给哪个 Agent
             <select value={form.agent} onChange={(event) => setForm({ ...form, agent: event.target.value })}>
@@ -234,7 +262,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
           <input type="checkbox" checked={form.catchup} onChange={(event) => setForm({ ...form, catchup: event.target.checked })} />
           错过的运行要补跑（否则直接跳过）
         </label>
-        <div className="foot"><button type="button" className="btn ghost" onClick={() => setCreating(false)}>取消</button><button className="btn primary" disabled={busy}>创建自动化</button></div>
+        <div className="foot"><button type="button" className="btn ghost" onClick={() => { setCreating(false); setEditingId(''); }}>取消</button><button className="btn primary" disabled={busy}>{editingId ? '保存更改' : '创建自动化'}</button></div>
       </form>}
 
       <div className="split">
@@ -277,6 +305,12 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
               {(runs[current.id] ?? []).slice(0, 8).map((run, index) => <li key={run.workflow_run_id ?? index} style={{ display: 'flex', gap: 8 }}>
                 <span style={{ color: run.status === 'failed' || run.status === 'error' ? 'var(--danger)' : 'var(--ink2)' }}>{RUN_STATUS[run.status ?? ''] ?? run.status ?? '—'}</span>
                 <span style={{ color: 'var(--ink3)' }}>{relativeTime(run.started_at)}</span>
+                {typeof run.result === 'object' && run.result && <details style={{ minWidth: 0, color: 'var(--ink3)' }}>
+                  <summary className="cursor-pointer">运行详情{typeof (run.result as Record<string, unknown>).worktree_path === 'string' ? ` · worktree ${String((run.result as Record<string, unknown>).worktree_branch ?? '')}` : ''}</summary>
+                  {typeof (run.result as Record<string, unknown>).worktree_path === 'string' && <p className="m-0 break-all">路径：{String((run.result as Record<string, unknown>).worktree_path)}</p>}
+                  {typeof (run.result as Record<string, unknown>).text === 'string' && <pre className="m-0 max-h-32 overflow-auto whitespace-pre-wrap">{String((run.result as Record<string, unknown>).text)}</pre>}
+                  {typeof (run.result as Record<string, unknown>).stdout === 'string' && <pre className="m-0 max-h-32 overflow-auto whitespace-pre-wrap">{String((run.result as Record<string, unknown>).stdout)}</pre>}
+                </details>}
               </li>)}
               {!(runs[current.id] ?? []).length && <li style={{ color: 'var(--ink3)' }}>{engineStarted ? '还没有运行记录' : '引擎未接线，暂无运行记录'}</li>}
             </ul>
@@ -285,6 +319,16 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
               <button className="btn ghost" disabled={busy} onClick={() => void act(() => current.enabled && !current.paused_reason ? pauseAutomation(current.id) : resumeAutomation(current.id), current.enabled && !current.paused_reason ? '已暂停' : '已恢复')}>
                 {current.enabled && !current.paused_reason ? <Pause size={14} /> : <Play size={14} />}{current.enabled && !current.paused_reason ? '暂停' : '恢复'}
               </button>
+              <button className="btn ghost" disabled={busy} onClick={() => {
+                const payload = current.payload ?? {};
+                setForm({ ...EMPTY_FORM, name: current.name, owner: current.owner_agent_id ?? '', kind: current.trigger.kind,
+                  cron: current.trigger.cron_expr ?? EMPTY_FORM.cron, everyHours: String((current.trigger.every_seconds ?? 3600) / 3600),
+                  at: current.trigger.at ?? '', path: current.trigger.event_path ?? '', glob: current.trigger.event_glob ?? '',
+                  message: payload.message ?? '', agent: payload.agent_id ?? '', script: payload.script ?? '',
+                  executionMode: payload.execution_mode ?? 'local', baseDirectory: payload.base_directory ?? '',
+                  cleanupPolicy: payload.cleanup_policy ?? 'keep' });
+                setEditingId(current.id); setCreating(true);
+              }}>编辑</button>
               <button className={`btn ${confirmDelete ? 'danger' : 'ghost'}`} disabled={busy}
                 onClick={() => { if (!confirmDelete) { setConfirmDelete(true); return; } void act(async () => { await deleteAutomation(current.id); setSelected(''); }, '已删除自动化'); }}>
                 <Trash2 size={14} />{confirmDelete ? '确认删除' : '删除'}

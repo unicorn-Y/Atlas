@@ -112,6 +112,12 @@ def normalize_payload(raw: dict[str, Any] | None) -> dict[str, Any]:
         "timeout_seconds": _number(raw.get("timeout_seconds"), DEFAULT_SCRIPT_TIMEOUT),
         "wake_mode": _text(raw.get("wake_mode")),
         "conversation_id": _text(raw.get("conversation_id")),
+        "execution_mode": _text(raw.get("execution_mode"), "local"),
+        "base_directory": _text(raw.get("base_directory")),
+        "cleanup_policy": _text(raw.get("cleanup_policy"), "keep"),
+        "worktree_path": _text(raw.get("worktree_path")),
+        "worktree_branch": _text(raw.get("worktree_branch")),
+        "base_branch": _text(raw.get("base_branch")),
     }
 
 
@@ -240,6 +246,16 @@ def validate_record(record: dict[str, Any]) -> None:
         raise AutomationValidationError(
             f"payload.wake_mode 必须是 {'|'.join(WAKE_MODES).strip('|')} 之一"
         )
+    if _text(payload.get("execution_mode"), "local") not in {"local", "worktree"}:
+        raise AutomationValidationError("payload.execution_mode 必须是 local|worktree")
+    if _text(payload.get("cleanup_policy"), "keep") not in {"keep", "remove_after_run"}:
+        raise AutomationValidationError("payload.cleanup_policy 必须是 keep|remove_after_run")
+    if payload.get("execution_mode") == "worktree":
+        base_directory = _text(payload.get("base_directory"))
+        if not base_directory:
+            raise AutomationValidationError("worktree 模式需要 payload.base_directory")
+        if payload_kind != "agent_turn":
+            raise AutomationValidationError("worktree 模式只支持 agent_turn 自动化")
 
     delivery = record.get("delivery") or {}
     if delivery.get("mode") not in DELIVERY_MODES:

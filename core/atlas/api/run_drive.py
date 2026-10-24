@@ -526,6 +526,7 @@ async def _deliver_agent_notification(text: str, target: str) -> None:
 async def _collect_orchestrator_text(
     message: str, conversation_id: str, *,
     model: str | None = None,
+    workspace: str | None = None,
     active_skill_instructions: list[dict[str, str]] | None = None,
 ) -> str:
     """One unattended orchestrator turn (heartbeat / automation / group); assistant text."""
@@ -544,6 +545,7 @@ async def _collect_orchestrator_text(
         approval_callback=deny_unapproved,
         source_run_id=uuid.uuid4().hex,
         active_skill_instructions=active_skill_instructions,
+        workspace=workspace,
     ):
         event_type = event.get("type")
         if event_type == "error":
@@ -584,12 +586,14 @@ async def _automation_dispatch_turn(payload: dict[str, Any]) -> str:
     return await _server()._collect_orchestrator_text(
         str(payload.get("message") or ""), conversation_id,
         model=str(payload.get("model") or "") or None,
+        workspace=str(payload.get("workspace") or "") or None,
     )
 
 
 async def _automation_deliver(record: dict[str, Any], outcome: dict[str, Any]) -> bool:
     """Automation delivery: owner → apprise, channel → gateway (§4 delivery spec)."""
-    text = str(outcome.get("result") or "").strip()
+    result = outcome.get("result")
+    text = str((result.get("text") or "") if isinstance(result, dict) else result or "").strip()
     if not text:
         return False
     delivery = record.get("delivery") or {}
