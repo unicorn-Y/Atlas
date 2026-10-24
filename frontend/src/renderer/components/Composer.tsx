@@ -30,7 +30,7 @@ export function guessIntent(text: string): Intent | null {
 }
 
 /** Something an @ or # mention can refer to. */
-export interface MentionItem { kind: 'file' | 'conversation' | 'resource'; id: string; label: string; hint?: string }
+export interface MentionItem { kind: 'file' | 'conversation' | 'resource' | 'element'; id: string; label: string; hint?: string }
 
 /** The @, #, or $ query being typed at the end of the draft, if any. */
 export function mentionAt(value: string): { trigger: '@' | '#' | '$'; query: string; start: number } | null {

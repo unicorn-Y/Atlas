@@ -458,9 +458,20 @@ function SessionProposal({ event, store }: { event: AgentEvent; store: Store }) 
 
 /** The Agent stopped to ask something; the run waits until this is answered or stopped. */
 function Question({ event, store }: { event: AgentEvent; store: Store }) {
-  const [texts, setTexts] = useState<Record<string, string>>({});
-  const [selected, setSelected] = useState<Record<string, string[]>>({});
   const eventId = String(event.data.event_id ?? '');
+  const draftKey = `atlas.question-draft.${event.runId}.${eventId}`;
+  const [draft, setDraft] = useState(() => {
+    try { const raw = localStorage.getItem(draftKey); return raw ? JSON.parse(raw) as { texts?: Record<string, string>; selected?: Record<string, string[]> } : {}; }
+    catch { return {}; }
+  });
+  const texts = draft.texts ?? {};
+  const selected = draft.selected ?? {};
+  const setTexts = (update: (value: Record<string, string>) => Record<string, string>) => setDraft((current) => ({ ...current, texts: update(current.texts ?? {}) }));
+  const setSelected = (update: (value: Record<string, string[]>) => Record<string, string[]>) => setDraft((current) => ({ ...current, selected: update(current.selected ?? {}) }));
+  useEffect(() => {
+    try { if (Object.keys(texts).length || Object.keys(selected).length) localStorage.setItem(draftKey, JSON.stringify({ texts, selected })); }
+    catch { /* local storage may be disabled */ }
+  }, [draftKey, texts, selected]);
   const questions = (Array.isArray(event.data.questions) ? event.data.questions : [event.data]).flatMap((raw, index) => {
     if (!raw || typeof raw !== 'object') return [];
     const item = raw as Record<string, unknown>;
@@ -476,7 +487,11 @@ function Question({ event, store }: { event: AgentEvent; store: Store }) {
   const answer = store.answers[eventId];
   const run = store.getRun(event.runId);
   const open = answer === undefined && (!run || !['completed', 'failed', 'cancelled'].includes(run.status));
-  const send = (value: string) => { if (value.trim()) store.answerInput(event.runId, eventId, value.trim()); };
+  const send = (value: string) => {
+    if (!value.trim()) return;
+    store.answerInput(event.runId, eventId, value.trim());
+    try { localStorage.removeItem(draftKey); } catch { /* local storage may be disabled */ }
+  };
   const submitAll = () => {
     const values = Object.fromEntries(questions.map((item) => {
       const text = (texts[item.id] ?? '').trim();

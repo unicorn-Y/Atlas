@@ -284,6 +284,8 @@ export default function App() {
   const [recipesOpen, setRecipesOpen] = useState(false);
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
   const [side, setSide] = useState<{ open: boolean; question?: string }>({ open: false });
+  const [schedulePromptOpen, setSchedulePromptOpen] = useState(false);
+  const scheduleBypass = useRef(false);
   // 发起时就固定目标/会话/工作区：面板不随当前会话切换而重发调研或被卸载。
   const [ultraplan, setUltraplan] = useState<{ goal: string; conversationId: string; workspace: string; title: string } | null>(null);
   const ultraplanStarting = useRef(false);
@@ -644,7 +646,15 @@ export default function App() {
 
   useEffect(() => {
     const addContextFile = (event: Event) => {
-      const path = (event as CustomEvent<{ path?: unknown }>).detail?.path;
+      const detail = (event as CustomEvent<{ path?: unknown; element?: unknown; label?: unknown }>).detail;
+      if (typeof detail?.element === 'string' && detail.element.trim()) {
+        const id = `${String(detail.path ?? '')}#${detail.element}`;
+        setMentions((current) => current.some((item) => item.kind === 'element' && item.id === id)
+          ? current
+          : [...current, { kind: 'element', id, label: String(detail.label ?? detail.element), hint: `${String(detail.path ?? '')} · ${String(detail.element)}` }]);
+        return;
+      }
+      const path = detail?.path;
       if (typeof path !== 'string' || !path.trim()) return;
       setMentions((current) => current.some((item) => item.kind === 'file' && item.id === path)
         ? current
@@ -712,9 +722,16 @@ export default function App() {
 
   const submit = async (fromHome: boolean, immediate = false) => {
     if (!input.trim() && !attachments.length && !files.length && !mentions.length) return;
+    if (!fromHome && activeRun && !runDone && !immediate && !scheduleBypass.current) {
+      setSchedulePromptOpen(true);
+      return;
+    }
+    scheduleBypass.current = false;
     let text = input;
     const images = attachments;
     const documents = files.map(({ name, mime, data_base64 }) => ({ name, mime, data_base64 }));
+    const elementRefs = mentions.filter((item) => item.kind === 'element');
+    if (elementRefs.length) text += `\n\n请根据以下 PPT 元素引用进行精确修改：\n${elementRefs.map((item) => `- ${item.label}（文件/定位：${item.id}）`).join('\n')}`;
     const sessionRefs = mentions.filter((item) => item.kind === 'conversation');
     if (sessionRefs.length) text += `\n\n${sessionRefs.map((item) => `请用 read_session 读取会话 ${item.id}（${item.label}）。`).join('\n')}`;
     for (const reference of mentions.filter((item) => item.kind === 'resource')) {
@@ -2121,6 +2138,10 @@ export default function App() {
             <div className="px-8 pb-5">
               <div className="mx-auto w-[min(760px,100%)]">
                 <Suspense fallback={null}>{queueStrip}{todoStrip}</Suspense>
+                {activeRun && !runDone && <div className="mb-2 flex items-center gap-2 rounded-lg border border-brand/20 bg-brand-soft px-3 py-2 text-[11.5px] text-fg-2" role="status">
+                  <span className="size-1.5 animate-pulse rounded-full bg-brand" />
+                  {activeRun && /^\s*\/review\b/i.test(store.runPrompts[activeRun.id]?.content ?? '') ? 'Reviewing · 正在审查' : '运行中 · 新消息可排队或转为优先任务'}
+                </div>}
                 <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={<>{suggestionHeader}{editBanner}{goalHeader}{recoveryHeader}{runHeader}{rewindBanner}</>} />
                 <div className="mt-1 flex min-w-0 items-center gap-1 px-1 text-[11.5px] text-fg-3">
                   <div className="flex min-w-0 shrink items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div>
@@ -2327,6 +2348,15 @@ export default function App() {
       <pre className="m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-sunken p-3 font-mono text-[12px] leading-relaxed text-fg" tabIndex={0}>{rawText}</pre>
     </Dialog>
     {activeConversation && <Suspense fallback={null}><SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} /></Suspense>}
+    <Dialog open={schedulePromptOpen} onOpenChange={setSchedulePromptOpen} label="安排插话" className="w-[min(480px,92vw)] bg-panel p-5 shadow-xl">
+      <h2 className="m-0 text-[16px] font-semibold text-heading">这条消息怎么交给正在运行的任务？</h2>
+      <p className="mt-2 mb-4 text-[13px] text-fg-3">Atlas 会按文本初步识别意图；请确认执行时机。{/(刚才|上一步|改成|修改|更正|补充|不要|改为)/.test(input) ? '这句话看起来像对当前任务的修正。' : '这句话看起来可能是一个后续任务。'}</p>
+      <div className="grid gap-2">
+        <Button variant="secondary" onClick={() => { scheduleBypass.current = true; setSchedulePromptOpen(false); void submit(false); }}>当前步骤完成后排队</Button>
+        <Button variant="primary" onClick={() => { scheduleBypass.current = true; setSchedulePromptOpen(false); void submit(false, true); }}>停止当前运行，优先处理这条</Button>
+        <Button variant="ghost" onClick={() => setSchedulePromptOpen(false)}>继续编辑</Button>
+      </div>
+    </Dialog>
     {ultraplan && <Suspense fallback={null}><UltraplanPanel open goal={ultraplan.goal}
       apiBaseUrl={store.apiBaseUrl} workspace={ultraplan.workspace}
       conversationId={ultraplan.conversationId} model={store.model} onClose={() => setUltraplan(null)} onToast={notify}

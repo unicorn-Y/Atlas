@@ -16,6 +16,7 @@ export default function SideChat({ open, onClose, conversationId, model, initial
 }) {
   const [question, setQuestion] = useState('');
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [commandError, setCommandError] = useState('');
   const runRef = useRef<string | null>(null);
   const askedInitial = useRef('');
 
@@ -46,7 +47,30 @@ export default function SideChat({ open, onClose, conversationId, model, initial
     try { if (runRef.current) backend.cancelRun(runRef.current); }
     catch (error) { useAtlasStore.setState({ error: error instanceof Error ? error.message : '停止请求失败' }); }
   };
-  const submit = (event: FormEvent) => { event.preventDefault(); ask(question); };
+  const SIDE_COMMANDS = ['/copy', '/diff', '/status'] as const;
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const trimmed = question.trim();
+    setCommandError('');
+    if (trimmed.startsWith('/')) {
+      const [command, ...rest] = trimmed.split(/\s+/);
+      const argument = rest.join(' ');
+      if (!SIDE_COMMANDS.includes(command as typeof SIDE_COMMANDS[number])) { setCommandError('旁聊只支持 /copy、/diff、/status。'); return; }
+      if (command === '/copy') {
+        const answer = turns.at(-1)?.answer;
+        if (!answer) { setCommandError('还没有可复制的旁聊回复。'); return; }
+        void navigator.clipboard.writeText(answer).then(() => setCommandError('已复制最近一条旁聊回复。')).catch(() => setCommandError('复制失败，请检查剪贴板权限。'));
+        setQuestion(''); return;
+      }
+      if (command === '/status') {
+        setTurns((current) => [...current, { question: trimmed, answer: `模型：${model}\n会话：${conversationId}\n模式：临时旁聊（不写入主对话）`, state: 'done' }]);
+        setQuestion(''); return;
+      }
+      ask(`请只读检查当前工作区的 Git diff${argument ? `（范围：${argument}）` : ''}，归纳改动与需要注意的问题；不要修改文件或调用有副作用的操作。`);
+      return;
+    }
+    ask(trimmed);
+  };
   const running = turns.at(-1)?.state === 'running';
 
   return <Dialog open={open} onOpenChange={(next) => { if (!next) { stop(); setTurns([]); onClose(); } }} label="旁问" className="flex h-[min(620px,calc(100vh-48px))] w-[min(680px,calc(100vw-32px))] flex-col">
@@ -67,5 +91,7 @@ export default function SideChat({ open, onClose, conversationId, model, initial
         className="h-10 min-w-0 flex-1 rounded-[11px] bg-sunken px-3.5 text-[14px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />
       {running ? <Button size="lg" onClick={stop}><Square />停止</Button> : <Button size="lg" type="submit" variant="primary" disabled={!question.trim()}><Send />问</Button>}
     </form>
+    {commandError && <p role="status" className="m-0 px-5 pb-3 text-[12px] text-fg-3">{commandError}</p>}
+    {question.startsWith('/') && <div className="flex gap-1.5 px-5 pb-3" aria-label="旁聊可用命令">{SIDE_COMMANDS.filter((command) => command.startsWith(question.split(/\s/)[0])).map((command) => <button key={command} type="button" onClick={() => setQuestion(`${command} `)} className="rounded-md bg-brand-soft px-2 py-1 font-mono text-[11px] text-brand">{command}</button>)}</div>}
   </Dialog>;
 }
