@@ -21,6 +21,7 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
   const [timeline, setTimeline] = useState<PullRequestActivity[] | null | undefined>(undefined);
   const [timelineError, setTimelineError] = useState('');
   const [comment, setComment] = useState('');
+  const [autoMerge, setAutoMerge] = useState(false);
   const apiBaseUrl = useAtlasStore((state) => state.apiBaseUrl);
 
   useEffect(() => {
@@ -29,6 +30,7 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
     backend.getPullRequest(root).then(async (result) => {
       if (stale) return;
       setPr(result);
+      setAutoMerge(Boolean((result as (PullRequestInfo & { auto_merge?: boolean }) | null)?.auto_merge));
       if (!result) { setTimeline([]); return; }
       try {
         const data = await api<PullRequestTimeline>(apiBaseUrl, `/api/git/pr/timeline?root=${encodeURIComponent(root)}`);
@@ -75,6 +77,14 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
     } catch (exc) { setTimelineError(exc instanceof Error ? exc.message : String(exc)); }
     finally { setBusy(''); }
   };
+  const toggleAutoMerge = async (enabled: boolean) => {
+    setBusy('auto-merge'); setError('');
+    try {
+      await api(apiBaseUrl, '/api/git/pr/auto-merge', { method: 'POST', json: { root, enabled } });
+      setAutoMerge(enabled);
+    } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setBusy(''); }
+  };
 
   const field = 'rounded-[9px] bg-sunken px-3 text-[13px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]';
   return <section>
@@ -87,6 +97,7 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
       <button type="button" onClick={() => onOpenUrl(pr.url)} className="mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11.5px] text-fg-2 hover:bg-hover hover:text-fg">
         <ExternalLink size={11} />在浏览器查看 PR
       </button>
+      <label className="mt-2 flex items-center gap-2 text-[11.5px] text-fg-2"><input type="checkbox" checked={autoMerge} disabled={Boolean(busy)} onChange={(event) => void toggleAutoMerge(event.target.checked)} />检查通过后自动合并</label>
       {pr.checks.length > 0 && <ul className="m-0 mt-2 grid list-none gap-1 p-0">
         {pr.checks.map((check) => <li key={check.name} className="flex items-center gap-1.5">
           {failed(check.conclusion) ? <CircleX size={13} className="shrink-0 text-danger" /> : check.conclusion ? <CircleCheck size={13} className="shrink-0 text-ok" /> : <CircleDashed size={13} className="shrink-0 text-fg-3" />}
@@ -109,6 +120,7 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
               <span className="shrink-0">{relativeTime(item.created_at)}</span>
             </div>
             {item.body && <p className="mb-0 mt-1 whitespace-pre-wrap break-words text-fg-2">{item.body}</p>}
+            {item.body && /comment|review/i.test(item.kind) && <button type="button" onClick={() => onAsk(`请处理这条 PR ${item.kind} 意见。先结合仓库现状判断是否适用；如需修改请完成并验证，最后说明处理结果。\n\n作者：${item.author}\n\n${item.body}`)} className="mt-1 rounded-md px-1.5 py-1 text-[11px] text-brand hover:bg-hover">带入当前对话</button>}
             {item.url && <button type="button" onClick={() => onOpenUrl(item.url!)} className="mt-1 inline-flex items-center gap-1 text-fg-3 hover:text-fg"><ExternalLink size={10} />打开活动</button>}
           </li>)}
         </ol>}

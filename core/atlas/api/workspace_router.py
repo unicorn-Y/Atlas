@@ -939,7 +939,8 @@ def _pr_shape(data: dict[str, Any]) -> dict[str, Any]:
     return {"number": data.get("number"), "title": data.get("title"),
             "url": data.get("url"), "state": data.get("state"),
             "draft": data.get("isDraft", False), "base": data.get("baseRefName"),
-            "head": data.get("headRefName"), "checks": checks}
+            "head": data.get("headRefName"), "checks": checks,
+            "auto_merge": bool(data.get("autoMergeRequest"))}
 
 
 @router.get("/api/git/pr")
@@ -950,7 +951,7 @@ async def get_git_pr(
     base, _ = _server()._workspace_path(root)
     try:
         data = _gh_json(base, "pr", "view", "--json",
-                        "number,title,url,state,isDraft,baseRefName,headRefName,statusCheckRollup")
+                        "number,title,url,state,isDraft,baseRefName,headRefName,statusCheckRollup,autoMergeRequest")
     except HTTPException as exc:
         if exc.status_code == 502 and "no pull requests found" in str(exc.detail).lower():
             return {"pr": None}
@@ -987,8 +988,28 @@ async def create_git_pr(
     if created.returncode:
         raise HTTPException(status_code=502, detail=created.stderr.strip())
     result = _gh_json(base, "pr", "view", "--json",
-                      "number,title,url,state,isDraft,baseRefName,headRefName,statusCheckRollup")
+                      "number,title,url,state,isDraft,baseRefName,headRefName,statusCheckRollup,autoMergeRequest")
     return {"pr": _pr_shape(result)}
+
+
+@router.post("/api/git/pr/auto-merge")
+async def set_git_pr_auto_merge(
+    services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any],
+) -> dict[str, Any]:
+    """Enable/disable GitHub's native auto-merge for the current PR."""
+    base = _git_workspace(str(req.get("root", "")))
+    enabled = req.get("enabled")
+    if not isinstance(enabled, bool):
+        raise HTTPException(status_code=422, detail="enabled must be a boolean")
+    command = ["gh", "pr", "merge", "--auto"] if enabled else ["gh", "pr", "merge", "--disable-auto"]
+    try:
+        result = subprocess.run(command, cwd=base, capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", timeout=60)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise HTTPException(status_code=503, detail="Unable to run gh pr merge") from exc
+    if result.returncode:
+        raise HTTPException(status_code=502, detail=result.stderr.strip() or "gh pr merge failed")
+    return {"enabled": enabled}
 
 
 @router.get("/api/git/pr/checks/{check_name}/log")
