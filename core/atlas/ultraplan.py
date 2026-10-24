@@ -56,6 +56,40 @@ def render_markdown(plan: dict[str, Any]) -> str:
     return "\n".join(rows).rstrip() + "\n"
 
 
+async def _complete_resilient(orchestrator: Any, model: str, messages: list[dict[str, Any]], *, max_tokens: int) -> Any:
+    """The plan synthesis call is the one step whose failure throws away all research.
+
+    Retry transient upstream errors (e.g. relay 503) with backoff and then walk the user's
+    fallback chain, instead of failing the whole ultraplan on one bad response.
+    """
+    from atlas.config import load_user_settings
+
+    chain = [str(item) for item in (load_user_settings().get("fallback_chain") or []) if item]
+    candidates = [item for index, item in enumerate([model, *chain]) if item and item not in [model, *chain][:index]]
+    last_error: Exception | None = None
+    for candidate in candidates:
+        for attempt, delay in enumerate((0, 3, 8)):
+            if delay:
+                await asyncio.sleep(delay)
+            try:
+                return await orchestrator._model_router.complete_for(candidate, "planning", messages, max_tokens=max_tokens)
+            except Exception as exc:  # noqa: BLE001 - provider errors vary by transport
+                last_error = exc
+    assert last_error is not None
+    raise last_error
+
+
+def _friendly_error(exc: Exception) -> str:
+    text = str(exc)
+    for marker in (" for url ", " For more information"):
+        text = text.split(marker)[0]
+    if "503" in text or "502" in text or "504" in text:
+        return f"模型服务暂时不可用（{text.strip()}），已重试并尝试备用模型仍失败；调研结果已保留，可稍后点“重新生成计划”。"
+    if "429" in text:
+        return f"模型服务限流（{text.strip()}），已重试仍失败；调研结果已保留，可稍后重新生成计划。"
+    return f"{type(exc).__name__}: {text.strip()}"
+
+
 def _parse_plan(text: str) -> dict[str, Any]:
     raw = text.strip()
     if raw.startswith("```"):
@@ -77,7 +111,8 @@ async def start(orchestrator: Any, *, goal: str, workspace: str, model: str,
 
 
 def public_job(job: dict[str, Any]) -> dict[str, Any]:
-    return {key: job[key] for key in ("id", "status", "goal", "progress", "plan", "error", "path", "steps")}
+    return {**{key: job[key] for key in ("id", "status", "goal", "progress", "plan", "error", "path", "steps")},
+            "can_replan": bool(job.get("evidence")) and job.get("status") == "failed"}
 
 
 async def _research_and_plan(orchestrator: Any, job: dict[str, Any], model: str) -> None:
@@ -106,29 +141,56 @@ async def _research_and_plan(orchestrator: Any, job: dict[str, Any], model: str)
             atlas_options={"model": model, "workspace": job["workspace"], "permission_mode": "read_only",
                            "tool_allow": ["read_file", "local_file", "search_files", "glob", "grep", "coding.repo_map"]},
         )
-        job["status"] = "planning"
-        evidence = json.dumps(results, ensure_ascii=False, default=str)
-        schema = {"goal": "string", "background": "string", "steps": [{"id": "string", "title": "string", "detail": "string", "files": ["string"], "verify": "string"}], "risks": ["string"], "open_questions": ["string"]}
-        prompt = "根据调研证据，仅返回符合指定字段的 JSON 计划，不要执行任务。证据：\n" + evidence + "\n字段结构：\n" + json.dumps(schema, ensure_ascii=False)
-        response = await orchestrator._model_router.complete_for(model, "planning", [{"role": "user", "content": prompt}], max_tokens=6000)
-        try:
-            plan = _parse_plan(response.text)
-        except (ValueError, TypeError, json.JSONDecodeError) as first_error:
-            rewrite = await orchestrator._model_router.complete_for(model, "planning", [
-                {"role": "system", "content": "修复无效计划，只输出符合 JSON schema 的 JSON 对象。"},
-                {"role": "user", "content": f"schema={json.dumps(schema, ensure_ascii=False)}\n原输出={response.text}\n校验错误={first_error}"},
-            ], max_tokens=6000)
-            plan = _parse_plan(rewrite.text)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        slug = re.sub(r"[^a-z0-9]+", "-", plan["goal"].lower()).strip("-")[:32] or "plan"
-        path = Path(job["workspace"]) / ".atlas" / "plans" / f"{stamp}-{slug}.md"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(render_markdown(plan), encoding="utf-8")
-        job.update({"status": "awaiting_approval", "plan": plan, "path": str(path), "steps": [
-            {"id": step["id"], "status": "pending"} for step in plan["steps"]
-        ]})
+        job["evidence"] = json.dumps(results, ensure_ascii=False, default=str)
+        job["model"] = model
+        await _synthesize(orchestrator, job, model)
     except Exception as exc:
-        job.update({"status": "failed", "error": f"{type(exc).__name__}: {exc}"})
+        job.update({"status": "failed", "error": _friendly_error(exc)})
+
+
+async def replan(job_id: str, orchestrator: Any) -> dict[str, Any]:
+    """Re-run only the synthesis step from the research already collected for this job."""
+    job = _JOBS.get(job_id)
+    if job is None:
+        raise KeyError(job_id)
+    if not job.get("evidence"):
+        raise ValueError("这个计划还没有可用的调研结果，请重新发起 /ultraplan")
+    if job.get("status") in {"researching", "planning", "executing"}:
+        raise ValueError("计划正在生成或执行中")
+    job.update({"status": "planning", "error": None})
+
+    async def run() -> None:
+        try:
+            await _synthesize(orchestrator, job, str(job.get("model") or ""))
+        except Exception as exc:
+            job.update({"status": "failed", "error": _friendly_error(exc)})
+
+    asyncio.create_task(run(), name=f"ultraplan-replan-{job_id}")
+    return public_job(job)
+
+
+async def _synthesize(orchestrator: Any, job: dict[str, Any], model: str) -> None:
+    job["status"] = "planning"
+    evidence = str(job["evidence"])
+    schema = {"goal": "string", "background": "string", "steps": [{"id": "string", "title": "string", "detail": "string", "files": ["string"], "verify": "string"}], "risks": ["string"], "open_questions": ["string"]}
+    prompt = "根据调研证据，仅返回符合指定字段的 JSON 计划，不要执行任务。证据：\n" + evidence + "\n字段结构：\n" + json.dumps(schema, ensure_ascii=False)
+    response = await _complete_resilient(orchestrator, model, [{"role": "user", "content": prompt}], max_tokens=6000)
+    try:
+        plan = _parse_plan(response.text)
+    except (ValueError, TypeError, json.JSONDecodeError) as first_error:
+        rewrite = await _complete_resilient(orchestrator, model, [
+            {"role": "system", "content": "修复无效计划，只输出符合 JSON schema 的 JSON 对象。"},
+            {"role": "user", "content": f"schema={json.dumps(schema, ensure_ascii=False)}\n原输出={response.text}\n校验错误={first_error}"},
+        ], max_tokens=6000)
+        plan = _parse_plan(rewrite.text)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    slug = re.sub(r"[^a-z0-9]+", "-", plan["goal"].lower()).strip("-")[:32] or "plan"
+    path = Path(job["workspace"]) / ".atlas" / "plans" / f"{stamp}-{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_markdown(plan), encoding="utf-8")
+    job.update({"status": "awaiting_approval", "plan": plan, "path": str(path), "steps": [
+        {"id": step["id"], "status": "pending"} for step in plan["steps"]
+    ]})
 
 
 def get(job_id: str) -> dict[str, Any]:

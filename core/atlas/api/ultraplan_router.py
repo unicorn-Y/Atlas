@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
-from atlas.ultraplan import claim_execution, discard, execute, get, save_edit, start
+from atlas.ultraplan import claim_execution, discard, execute, get, replan, save_edit, start
 
 router = APIRouter(prefix="/api/ultraplan", tags=["ultraplan"])
 
@@ -59,6 +59,16 @@ async def approve_workflow(job_id: str, services: Annotated[AppServices, Depends
         raise HTTPException(status_code=404, detail="Ultraplan not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/{job_id}/replan")
+async def replan_workflow(job_id: str, services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    try:
+        return await replan(job_id, _orchestrator(services))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Ultraplan not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/{job_id}/discard")

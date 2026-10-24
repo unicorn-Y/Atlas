@@ -275,7 +275,9 @@ export default function App() {
   composerSnapshotRef.current = { text: input, attachments, files, mentions };
   const [recipesOpen, setRecipesOpen] = useState(false);
   const [side, setSide] = useState<{ open: boolean; question?: string }>({ open: false });
-  const [ultraplanGoal, setUltraplanGoal] = useState('');
+  // 发起时就固定目标/会话/工作区：面板不随当前会话切换而重发调研或被卸载。
+  const [ultraplan, setUltraplan] = useState<{ goal: string; conversationId: string; workspace: string; title: string } | null>(null);
+  const ultraplanStarting = useRef(false);
   const [ultraplanArtifact, setUltraplanArtifact] = useState<Artifact | null>(null);
   const [branches, setBranches] = useState<string[]>([]);
   const [gitBranch, setGitBranch] = useState('');
@@ -1306,8 +1308,28 @@ export default function App() {
     { id: 'plan', label: '/plan', hint: store.nextRunMode === 'plan' ? '取消：下一条直接执行' : '下一条先出计划，你批准后再动手', run: () => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan') },
     { id: 'ultraplan', label: '/ultraplan', hint: '并行调研后生成详细计划，批准后按步骤执行', takesArgument: true, run: (goal: string) => {
       if (!goal.trim()) { setToast('在 /ultraplan 后写上目标'); return; }
-      if (!activeConversation || typeof activeConversation.workspace !== 'string' || !activeConversation.workspace) { setToast('高级计划需要先为会话选择工作目录'); return; }
-      setUltraplanGoal(goal.trim());
+      const target = goal.trim();
+      if (ultraplanStarting.current || ultraplan) { setToast('已有一个高级计划在进行中'); return; }
+      if (activeConversation) {
+        if (typeof activeConversation.workspace !== 'string' || !activeConversation.workspace) { setToast('高级计划需要先为会话选择工作目录'); return; }
+        setUltraplan({ goal: target, conversationId: activeConversation.id, workspace: activeConversation.workspace, title: activeConversation.title });
+        return;
+      }
+      // 新会话草稿还没有 conversation：用输入框下方显示的工作区（草稿/默认）先建会话，再开计划面板。
+      const workspace = store.draftWorkspace ?? defaultWorkspace ?? '';
+      if (!workspace) { setToast('高级计划需要先选择工作目录'); return; }
+      ultraplanStarting.current = true;
+      void (async () => {
+        try {
+          if (!store.draftWorkspace) store.setDraftWorkspace(workspace);
+          const title = `高级计划：${target.slice(0, 30)}`;
+          await store.createConversation(title);
+          const conversationId = useAtlasStore.getState().activeConversationId;
+          if (conversationId) setUltraplan({ goal: target, conversationId, workspace, title });
+        } finally {
+          ultraplanStarting.current = false;
+        }
+      })();
     } },
     { id: 'share', label: '/share', hint: '导出当前会话为离线只读 HTML；参数 tools / thinking 可包含对应内容', takesArgument: true, run: (options: string) => {
       if (!activeConversation) { setToast('先打开要分享的会话'); return; }
@@ -2237,10 +2259,10 @@ export default function App() {
       <pre className="m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-sunken p-3 font-mono text-[12px] leading-relaxed text-fg" tabIndex={0}>{rawText}</pre>
     </Dialog>
     {activeConversation && <Suspense fallback={null}><SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} /></Suspense>}
-    {activeConversation && <Suspense fallback={null}><UltraplanPanel open={Boolean(ultraplanGoal)} goal={ultraplanGoal}
-      apiBaseUrl={store.apiBaseUrl} workspace={typeof activeConversation.workspace === 'string' ? activeConversation.workspace : ''}
-      conversationId={activeConversation.id} model={store.model} onClose={() => setUltraplanGoal('')} onToast={notify}
-      onOpenArtifact={(path, title) => { setUltraplanArtifact({ id: `ultraplan-${path}`, runId: '', type: 'file', name: `高级计划：${activeConversation.title}`, path, summary: title, createdAt: new Date().toISOString() }); setInspectorOpen(true); setInspectorTab('artifacts'); }} /></Suspense>}
+    {ultraplan && <Suspense fallback={null}><UltraplanPanel open goal={ultraplan.goal}
+      apiBaseUrl={store.apiBaseUrl} workspace={ultraplan.workspace}
+      conversationId={ultraplan.conversationId} model={store.model} onClose={() => setUltraplan(null)} onToast={notify}
+      onOpenArtifact={(path, title) => { setUltraplanArtifact({ id: `ultraplan-${path}`, runId: '', type: 'file', name: `高级计划：${ultraplan.title}`, path, summary: title, createdAt: new Date().toISOString() }); setInspectorOpen(true); setInspectorTab('artifacts'); }} /></Suspense>}
 
     {view !== 'chat' && view !== 'home' && <Suspense fallback={null}><ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} /></Suspense>}
     <Suspense fallback={null}><SettingsProposalCards apiBaseUrl={store.apiBaseUrl} onModel={(model) => void store.selectModel(model)} onToast={notify} currentModel={store.model} modelName={(id) => store.models.find((model) => model.id === id)?.name ?? id} /></Suspense>

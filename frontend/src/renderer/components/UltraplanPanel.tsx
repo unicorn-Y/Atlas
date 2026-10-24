@@ -5,7 +5,7 @@ import { Dialog } from '../ui/Dialog';
 
 type Step = { id: string; title: string; detail: string; files: string[]; verify: string; annotation?: string };
 type Plan = { goal: string; background: string; steps: Step[]; risks: string[]; open_questions: string[] };
-type Job = { id: string; status: string; progress: Array<{ title: string; status: string; detail: string }>; plan?: Plan; path?: string; error?: string; steps?: Array<{ id: string; status: string; error?: string }> };
+type Job = { id: string; status: string; can_replan?: boolean; progress: Array<{ title: string; status: string; detail: string }>; plan?: Plan; path?: string; error?: string; steps?: Array<{ id: string; status: string; error?: string }> };
 
 export default function UltraplanPanel({ open, goal, apiBaseUrl, workspace, conversationId, model, onClose, onToast, onOpenArtifact }: {
   open: boolean; goal: string; apiBaseUrl: string; workspace: string; conversationId: string; model: string;
@@ -58,7 +58,7 @@ export default function UltraplanPanel({ open, goal, apiBaseUrl, workspace, conv
   return <Dialog open={open} onOpenChange={(value) => { if (!value) onClose(); }} label="高级计划" className="top-[4vh] max-h-[92vh] w-[min(900px,94vw)] -translate-y-0 overflow-y-auto border border-line bg-panel p-5 shadow-xl">
     <div className="flex items-start justify-between gap-4"><div><h2 className="m-0 text-lg font-semibold text-heading">高级计划</h2><div className="mt-1 flex items-center gap-3 text-xs text-fg-3"><span>{job?.path ?? '并行调研后生成结构化计划'}</span>{job?.path && <button className="text-brand hover:underline" onClick={() => onOpenArtifact(job.path!, job.plan?.goal ?? goal)}>在产物面板打开计划</button>}</div></div><Button size="sm" variant="ghost" onClick={onClose}>关闭</Button></div>
     {(busy || ['researching', 'planning'].includes(job?.status ?? '')) && <p role="status" className="mt-4 rounded-lg bg-sunken p-3 text-sm">正在准备计划…</p>}
-    {failure && <p role="alert" className="mt-4 text-sm text-danger">{failure}</p>}{job?.error && <p role="alert" className="mt-4 text-sm text-danger">{job.error}</p>}
+    {failure && <p role="alert" className="mt-4 text-sm text-danger">{failure}</p>}{job?.error && <div role="alert" className="mt-4 flex items-start gap-3 text-sm text-danger"><p className="m-0 flex-1">{job.error}</p>{job.can_replan && <Button variant="secondary" onClick={() => void api<Job>(apiBaseUrl, `/api/ultraplan/${job.id}/replan`, { method: 'POST' }).then(setJob).catch((error) => onToast(`重新生成失败：${error instanceof Error ? error.message : String(error)}`))}>重新生成计划</Button>}</div>}
     {!!job?.progress.length && <section className="mt-4 rounded-lg bg-sunken p-3"><h3 className="m-0 mb-2 text-sm">并行调研进度</h3><div className="grid gap-2">{job.progress.map((item, index) => <div key={`${item.title}-${index}`} className="text-xs"><b>{item.status === 'completed' ? '✓' : item.status === 'failed' ? '!' : '…'} {item.title}</b><div className="mt-1 whitespace-pre-wrap text-fg-3">{item.detail}</div></div>)}</div></section>}
     {job?.plan && <div className="mt-4 grid gap-4">
       <label className="grid gap-1 text-xs text-fg-3">计划目标<input className="rounded-lg border border-line bg-sunken px-3 py-2 text-sm text-fg" value={job.plan.goal} onChange={(e) => change((p) => ({ ...p, goal: e.target.value }))} /></label>
