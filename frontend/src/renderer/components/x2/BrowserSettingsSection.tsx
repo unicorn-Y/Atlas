@@ -6,12 +6,15 @@ import {
 } from '../../services/x2Api';
 import { cn } from '../../ui/cn';
 import { Button } from '../../ui/Button';
+import { api } from '../../services/api';
 
 /** 四种浏览器接管方式；copied-profile / cdp / extension 需要本机配合，standalone 开箱即用。 */
 export const BROWSER_MODES: Array<{ value: BrowserControlMode; label: string; hint: string }> = [
+  { value: 'auto', label: '自动选择', hint: '按扩展 > 已打开的 Chrome > 复制配置 > 独立浏览器的顺序连接。' },
   { value: 'standalone', label: '独立浏览器', hint: 'Atlas 开一个干净的内置浏览器，不碰你平时的登录状态。' },
   { value: 'copied-profile', label: '复制本机配置', hint: '复制日常浏览器的 Cookie 与登录状态，已登录的网站直接可用。' },
-  { value: 'cdp', label: '连接已打开的浏览器（CDP）', hint: '通过调试端口接管你手动打开的 Chrome / Edge。' },
+  { value: 'live_chrome', label: '连接正在使用的 Chrome', hint: '在 chrome://inspect/#remote-debugging 启用发现后接管当前会话。' },
+  { value: 'cdp', label: '自定义 CDP 地址', hint: '连接手动配置的 Chromium DevTools 地址。' },
   { value: 'extension', label: '浏览器扩展', hint: '在你自己的浏览器里装 Atlas 扩展，由扩展代为操作。' },
 ];
 
@@ -93,11 +96,13 @@ export default function BrowserSettingsSection({ apiBaseUrl, initialSettings, cl
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [extension, setExtension] = useState<BrowserSettings['extension']>();
+  const [connectionCheck, setConnectionCheck] = useState('');
   useEffect(() => {
     let stale = false;
     // 设置读取失败不阻塞：保留默认值，只在保险箱列表上给出中文错误。
     getBrowserSettings(apiBaseUrl)
-      .then((body) => { if (!stale) setSettings({ mode: body.mode ?? 'standalone', cdp_url: body.cdp_url ?? '', proxy: body.proxy ?? '' }); })
+      .then((body) => { if (!stale) { setSettings({ ...body, mode: body.mode ?? 'auto', cdp_url: body.cdp_url ?? '', proxy: body.proxy ?? '' }); setExtension(body.extension); } })
       .catch(() => undefined);
     listVaultEntries(apiBaseUrl)
       .then((body) => { if (!stale) { setEntries(normalizeEntries(body)); setError(''); } })
@@ -125,6 +130,13 @@ export default function BrowserSettingsSection({ apiBaseUrl, initialSettings, cl
       .finally(() => setBusy(false));
   };
   const mode = settings.mode ?? 'standalone';
+  const checkConnection = () => {
+    setConnectionCheck('正在检测 Chrome…');
+    api<{ connected: boolean; error?: string }>(apiBaseUrl, '/api/browser/connection-check', { method: 'POST', json: {} })
+      .then((result) => setConnectionCheck(result.connected ? '已发现正在运行的 Chrome。保存选择后浏览器工具会连接该会话。' : (result.error || '未发现调试连接。')))
+      .catch((exc) => setConnectionCheck(exc instanceof Error ? exc.message : String(exc)));
+  };
+  const refreshExtension = () => getBrowserSettings(apiBaseUrl).then((body) => setExtension(body.extension)).catch((exc) => setError(exc instanceof Error ? exc.message : String(exc)));
   return <section aria-label="浏览器" className={className}>
     <div className="flex items-center gap-2">
       <h3 className="m-0 text-[15px] font-semibold text-heading">浏览器</h3>
@@ -149,6 +161,21 @@ export default function BrowserSettingsSection({ apiBaseUrl, initialSettings, cl
         className="mt-1 block h-8 w-full rounded-[9px] bg-sunken px-3 font-mono text-[12.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />
       <small className="mt-1 block text-[12px] text-fg-3">先用 --remote-debugging-port=9222 启动 Chrome / Edge，再把地址填到这里。</small>
     </label>}
+    {mode === 'live_chrome' && <div className="mt-2 rounded-xl card-surface p-3 text-[12.5px] text-fg-2">
+      <p className="m-0 mb-2">在用户自己的 Chrome 打开 <code>chrome://inspect/#remote-debugging</code>，启用远程调试发现，然后点击检测。Atlas 读取 DevToolsActivePort，不会修改 Chrome 配置文件。</p>
+      <Button variant="secondary" onClick={checkConnection}>检测连接</Button>{connectionCheck && <p role="status" className="m-0 mt-2">{connectionCheck}</p>}
+    </div>}
+    {mode === 'copied-profile' && <div className="mt-2 grid gap-2 sm:grid-cols-3">
+      <label className="text-[12.5px] text-fg-2">浏览器<select aria-label="复制配置浏览器" value={settings.profile_browser ?? 'chrome'} onChange={(event) => patch({ profile_browser: event.target.value as 'chrome' | 'edge' })} className="mt-1 h-8 w-full rounded-lg bg-sunken px-2 text-fg"><option value="chrome">Chrome</option><option value="edge">Edge</option></select></label>
+      <label className="text-[12.5px] text-fg-2">Profile 名称<input aria-label="Profile 名称" value={settings.profile ?? 'Default'} onChange={(event) => patch({ profile: event.target.value })} className="mt-1 h-8 w-full rounded-lg bg-sunken px-2 text-fg" /></label>
+      <label className="text-[12.5px] text-fg-2">同步间隔（分钟）<input aria-label="配置同步间隔" type="number" min={1} max={1440} value={settings.profile_sync_interval_minutes ?? 30} onChange={(event) => patch({ profile_sync_interval_minutes: Number(event.target.value) })} className="mt-1 h-8 w-full rounded-lg bg-sunken px-2 text-fg" /></label>
+    </div>}
+    {mode === 'extension' && <div className="mt-2 rounded-xl card-surface p-3 text-[12.5px] text-fg-2">
+      <p className="m-0 mb-2">1. 打开 Chrome 扩展管理页并启用“开发者模式”。<br />2. 选择“加载已解压的扩展程序”，打开下方目录。<br />3. 点击 Atlas 扩展，输入配对码，然后选择标签页并接管。</p>
+      <p className="m-0 mb-2">扩展目录：<code className="break-all">{extension?.extension_path ?? 'browser-extension'}</code></p>
+      <p className="m-0 mb-2">本机配对码：<code className="text-[15px] font-semibold">{extension?.pairing_code ?? '加载中…'}</code>　{extension?.connected ? <span className="text-ok">已连接</span> : <span className="text-fg-3">未连接</span>}</p>
+      <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => void navigator.clipboard.writeText(extension?.extension_path ?? 'browser-extension')}>复制扩展目录</Button><Button variant="secondary" onClick={() => extension?.extension_path && void window.atlasDesktop?.openPath(extension.extension_path)}>打开扩展目录</Button><Button variant="secondary" onClick={refreshExtension}>刷新配对状态</Button></div>
+    </div>}
     <label className="mt-2 block text-[13px] text-fg-2">代理（可选）
       <input value={settings.proxy ?? ''} onChange={(event) => patch({ proxy: event.target.value })} placeholder="例如 http://127.0.0.1:7890" aria-label="代理"
         className="mt-1 block h-8 w-full rounded-[9px] bg-sunken px-3 font-mono text-[12.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />

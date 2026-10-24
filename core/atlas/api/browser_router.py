@@ -98,13 +98,16 @@ class BrowserSettingsRequest(BaseModel):
     mode: str | None = None
     cdp_url: str | None = None
     proxy: str | None = None
+    profile_browser: str | None = None
+    profile: str | None = None
+    profile_sync_interval_minutes: int | None = None
 
 
 @router.get("/settings", dependencies=[Depends(_require_trusted_origin)])
 async def get_settings() -> dict[str, Any]:
     from atlas.tools.x2.browser import get_browser_settings
-
-    return get_browser_settings()
+    from atlas.engine_core.tools.browser_extension_bridge import connection_info
+    return {**get_browser_settings(), "extension": connection_info()}
 
 
 @router.post("/settings", dependencies=[Depends(_require_trusted_origin)])
@@ -113,9 +116,25 @@ async def save_settings(req: BrowserSettingsRequest) -> dict[str, Any]:
 
     try:
         return apply_browser_settings(
-            mode=req.mode or "", cdp_url=req.cdp_url or "", proxy=req.proxy or "")
+            mode=req.mode or "", cdp_url=req.cdp_url or "", proxy=req.proxy or "",
+            profile_browser=req.profile_browser, profile=req.profile,
+            profile_sync_interval_minutes=req.profile_sync_interval_minutes)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/extension/disconnect", dependencies=[Depends(_require_trusted_origin)])
+async def disconnect_extension() -> dict[str, Any]:
+    from atlas.engine_core.tools.browser_extension_bridge import disconnect
+    disconnect()
+    return {"connected": False}
+
+
+@router.post("/connection-check", dependencies=[Depends(_require_trusted_origin)])
+async def browser_connection_check() -> dict[str, Any]:
+    from atlas.engine_core.tools.browser_tool_real_profile import live_chrome_cdp
+    endpoint, error = live_chrome_cdp()
+    return {"connected": endpoint is not None, "endpoint": endpoint, "error": error}
 
 
 # ---------------------------------------------------------------------------

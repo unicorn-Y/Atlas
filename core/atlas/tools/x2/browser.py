@@ -75,8 +75,9 @@ Register = Callable[[dict[str, Any], Callable[[str, dict[str, Any]], Awaitable[d
 # Takeover modes
 # ---------------------------------------------------------------------------
 # Frontend (设置 → 浏览器) spellings -> internal Atlas browser.mode values.
-FRONTEND_MODES = ("standalone", "copied-profile", "cdp", "extension")
+FRONTEND_MODES = ("auto", "standalone", "copied-profile", "cdp", "extension", "live_chrome")
 _MODE_ALIASES = {
+    "auto": "auto",
     "standalone": "standalone",
     "builtin": "standalone",
     "local": "standalone",
@@ -86,13 +87,16 @@ _MODE_ALIASES = {
     "real-profile": "real_profile",
     "cdp": "cdp",
     "extension": "extension",
+    "live_chrome": "live_chrome",
 }
 # Internal mode -> (Hermes backend that must serve the session, config keys).
 _MODE_BACKENDS = {
+    "auto": "auto",
     "standalone": "local",
     "real_profile": "real_profile",
     "cdp": "cdp",
     "extension": "extension",
+    "live_chrome": "cdp",
 }
 
 
@@ -100,35 +104,43 @@ def normalize_mode(mode: str) -> str:
     internal = _MODE_ALIASES.get(str(mode or "").strip().lower())
     if internal is None:
         raise ValueError(
-            f"未知的浏览器接管方式：{mode!r}（可选 standalone / copied-profile / cdp / extension）"
+            f"未知的浏览器接管方式：{mode!r}（可选 auto / standalone / copied-profile / live_chrome / cdp / extension）"
         )
     return internal
 
 
 def to_frontend_mode(mode: str) -> str:
-    return {"standalone": "standalone", "real_profile": "copied-profile",
-            "cdp": "cdp", "extension": "extension"}.get(mode, "standalone")
+    return {"auto": "auto", "standalone": "standalone", "real_profile": "copied-profile",
+            "cdp": "cdp", "extension": "extension", "live_chrome": "live_chrome"}.get(mode, "standalone")
 
 
 def get_browser_settings() -> dict[str, Any]:
     """Browser takeover settings (设置 → 浏览器), frontend field spellings."""
     stored = load_user_settings().get("browser") or {}
-    mode = _MODE_ALIASES.get(str(stored.get("mode") or "standalone").lower(), "standalone")
+    mode = _MODE_ALIASES.get(str(stored.get("mode") or "auto").lower(), "auto")
     return {
         "mode": to_frontend_mode(mode),
         "cdp_url": str(stored.get("cdp_url") or ""),
         "proxy": str(stored.get("proxy") or ""),
+        "profile_browser": str(stored.get("profile_browser") or "chrome"),
+        "profile": str(stored.get("profile") or "Default"),
+        "profile_sync_interval_minutes": int(stored.get("profile_sync_interval_minutes") or 30),
     }
 
 
 def apply_browser_settings(
-    mode: str = "", cdp_url: str = "", proxy: str = "", *, persist: bool = True,
+    mode: str = "", cdp_url: str = "", proxy: str = "", *, profile_browser: str | None = None,
+    profile: str | None = None, profile_sync_interval_minutes: int | None = None, persist: bool = True,
 ) -> dict[str, Any]:
     """Validate + persist takeover settings; returns the normalized settings."""
     internal = normalize_mode(mode) if mode else _MODE_ALIASES.get(
         str(get_browser_settings()["mode"]).lower(), "standalone")
     if internal == "cdp" and not (cdp_url or get_browser_settings().get("cdp_url")):
-        raise ValueError("CDP 接管方式需要提供 cdp_url（Chrome 调试地址）")
+        raise ValueError("自定义 CDP 方式需要提供 cdp_url；使用已打开的 Chrome 请选 live_chrome")
+    if profile_browser is not None and profile_browser not in {"chrome", "edge"}:
+        raise ValueError("profile_browser 只能是 chrome 或 edge")
+    if profile_sync_interval_minutes is not None and not 1 <= profile_sync_interval_minutes <= 1440:
+        raise ValueError("配置同步间隔必须在 1 到 1440 分钟之间")
     if persist:
         settings = load_user_settings()
         browser = dict(settings.get("browser") or {})
@@ -138,6 +150,12 @@ def apply_browser_settings(
             browser["cdp_url"] = str(cdp_url).strip()
         if proxy:
             browser["proxy"] = str(proxy).strip()
+        if profile_browser is not None:
+            browser["profile_browser"] = profile_browser
+        if profile is not None:
+            browser["profile"] = str(profile).strip() or "Default"
+        if profile_sync_interval_minutes is not None:
+            browser["profile_sync_interval_minutes"] = profile_sync_interval_minutes
         settings["browser"] = browser
         save_user_settings(settings)
     return get_browser_settings()
@@ -154,10 +172,12 @@ def backend_request(mode: str, cdp_url: str = "") -> dict[str, Any]:
 
 
 _BROWSER_CONFIG_KEYS = {
+    "auto": {"use_real_profile": True, "cdp_url": ""},
     "standalone": {"use_real_profile": False, "cdp_url": ""},
     "real_profile": {"use_real_profile": True, "cdp_url": ""},
     "cdp": {"use_real_profile": False},
     "extension": {"use_real_profile": False, "cdp_url": ""},
+    "live_chrome": {"use_real_profile": False},
 }
 
 

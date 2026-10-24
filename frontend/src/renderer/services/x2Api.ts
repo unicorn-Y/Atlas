@@ -73,13 +73,17 @@ export const getComputerSteps = (apiBaseUrl: string, runId: string) =>
 
 export type BrowserHandoffResolution = 'open_panel' | 'done' | 'give_up';
 
-export type BrowserControlMode = 'standalone' | 'copied-profile' | 'cdp' | 'extension';
+export type BrowserControlMode = 'auto' | 'standalone' | 'copied-profile' | 'live_chrome' | 'cdp' | 'extension';
 
 /** GET/POST /api/browser/settings：接管方式、CDP 地址与代理。 */
 export interface BrowserSettings {
   mode?: BrowserControlMode;
   cdp_url?: string;
   proxy?: string;
+  profile_browser?: 'chrome' | 'edge';
+  profile?: string;
+  profile_sync_interval_minutes?: number;
+  extension?: { url: string; pairing_code: string; extension_path: string; connected: boolean; controller?: string | null };
 }
 
 /** POST /api/browser/recordings 的返回：一次录制会话。 */
