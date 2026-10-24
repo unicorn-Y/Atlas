@@ -498,4 +498,6 @@ def _aggregate(items: list[dict[str, Any]]) -> dict[str, Any]:
         "cached_input_tokens": cached,
         "cache_hit_rate": round(cached / input_tokens, 4) if input_tokens else None,
         "est_cost": sum(known_costs) if len(known_costs) == len(costs) else None,
+        "known_cost": sum(known_costs),
+        "unpriced_records": len(costs) - len(known_costs),
     }

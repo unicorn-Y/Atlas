@@ -200,6 +200,16 @@ async def import_chatgpt(body: dict[str, Any], services: Annotated[AppServices, 
     return {"imported": len(imported), "conversations": imported}
 
 
+def _insights_cost_text(totals: dict[str, Any]) -> str:
+    if totals.get("est_cost") is not None:
+        return f"≈ {float(totals['est_cost']):.4f}"
+    unpriced = int(totals.get("unpriced_records") or 0)
+    known = float(totals.get("known_cost") or 0)
+    if known > 0:
+        return f"≈ {known:.4f}（另有 {unpriced} 条记录缺价格，未计入）"
+    return "价格未知（该模型未配置价格，可在设置里填写）"
+
+
 @router.get("/api/u4/insights")
 async def get_insights(services: Annotated[AppServices, Depends(get_app_services)], days: int = 7) -> dict[str, Any]:
     if days not in {7, 30}:
@@ -244,8 +254,8 @@ async def get_insights(services: Annotated[AppServices, Depends(get_app_services
         f"# 最近 {days} 天使用习惯报告", "", f"- 会话数：{len(recent)}",
         f"- 平均会话跨度：{f'{average_duration // 3600} 小时 {average_duration % 3600 // 60} 分钟' if average_duration is not None else '未知'}（根据创建与最近更新时间估算）",
         f"- 模型调用：{totals.get('runs', 0)} 次", f"- 输入/输出：{totals.get('input_tokens', 0)} / {totals.get('output_tokens', 0)} tokens",
-        f"- 缓存命中率：{totals.get('cache_hit_rate') if totals.get('cache_hit_rate') is not None else '未知'}",
-        f"- 费用：{totals.get('est_cost') if totals.get('est_cost') is not None else '价格未知'}", "",
+        f"- 缓存命中率：{format(totals['cache_hit_rate'], '.1%') if totals.get('cache_hit_rate') is not None else '未知'}",
+        f"- 费用：{_insights_cost_text(totals)}", "",
         "## 常用模型", *[f"- {row.get('key')}: {row.get('runs', 0)} 次" for row in models],
         "", "## 常用任务类型", *[f"- {name}: {count} 个会话" for name, count in common_tasks],
         "", "## 常用工具", *([f"- {name}: {count} 次" for name, count in common_tools] or ["- 用量记录没有工具调用明细"]),
