@@ -340,6 +340,10 @@ async def delete_preset(preset_id: str, services: Annotated[AppServices, Depends
 
 
 def push_event_enabled(settings: dict[str, Any], event: str) -> bool:
+    from atlas.notifications.busy import defer, status
+    if status()["busy"]:
+        defer("Mobile push", event)
+        return False
     push = settings.get("mobile_push") or {}
     return bool(push.get("enabled") and (push.get("events") or {}).get(event))
 

@@ -73,9 +73,16 @@ class NotificationBus:
 
     async def notify(self, title: str, body: str) -> dict[str, Any]:
         """Deliver one notification; never raises into caller flows."""
+        from atlas.notifications.busy import defer, take_summary
+
+        if defer(title, body):
+            return {"enabled": self.enabled, "sent": [], "failed": [], "error": None, "deferred": True}
         if not self._urls:
             return {"enabled": False, "sent": [], "failed": [], "error": None}
         try:
+            summary = take_summary()
+            if summary:
+                await asyncio.to_thread(self._send_sync, "Atlas busy summary", summary)
             return await asyncio.to_thread(self._send_sync, title, body)
         except Exception as exc:  # notifications must not break task flows
             return {"enabled": True, "sent": [], "failed": self._urls, "error": str(exc)}

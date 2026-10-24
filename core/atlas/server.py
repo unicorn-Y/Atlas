@@ -7,7 +7,7 @@ import os
 import subprocess  # noqa: F401 — compat: tests patch ``atlas.server.subprocess.run``
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -276,6 +276,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     startup_aborted = False
     resume_task: asyncio.Task[None] | None = None
     pr_monitor_task: asyncio.Task[None] | None = None
+    idle_queue_task: asyncio.Task[None] | None = None
+    mail_trigger_task: asyncio.Task[None] | None = None
     cancelled = False
     try:
         model_mgr = ModelManager()
@@ -726,6 +728,79 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         pr_monitor_task = asyncio.create_task(monitor_linked_prs(), name="atlas-pr-monitor")
 
+        async def process_idle_queue() -> None:
+            from atlas.background_tasks import IdleTaskQueue, idle_ready, seconds_since_input
+            queue = IdleTaskQueue(cfg.db_path.parent / "idle-tasks.db")
+            while True:
+                await asyncio.sleep(15)
+                rows = queue.list()
+                if not rows:
+                    continue
+                forced = any(row.get("run_now") for row in rows if row.get("status") == "queued")
+                if not forced and not idle_ready(now=datetime.now().astimezone(), start="01:00", end="07:00",
+                                                 idle_minutes=15, seconds_since_input=seconds_since_input()):
+                    continue
+                item = queue.claim_next()
+                if item is None:
+                    continue
+                conversation_id = str(__import__("uuid").uuid4())
+                run_id = str(__import__("uuid").uuid4())
+                queue.set_status(str(item["id"]), "running", run_id)
+                await memory.save_conversation_metadata(conversation_id, title_hint=str(item["prompt"])[:100])
+                try:
+                    await _handle_run_start("idle-task", {
+                        "run_id": run_id, "conversation_id": conversation_id,
+                        "content": str(item["prompt"]), "workspace": str(item.get("workspace") or "") or None,
+                        "source": "idle-queue",
+                    }, manager)
+                    deadline = asyncio.get_running_loop().time() + 86400
+                    while asyncio.get_running_loop().time() < deadline:
+                        run = manager.runs.get(run_id)
+                        if run is None or run.status in {"completed", "failed", "cancelled"}:
+                            queue.set_status(str(item["id"]), "completed" if run and run.status == "completed" else "failed", run_id)
+                            break
+                        await asyncio.sleep(2)
+                    else:
+                        queue.set_status(str(item["id"]), "failed", run_id)
+                except Exception as exc:  # keep background dispatch alive
+                    queue.set_status(str(item["id"]), "failed", run_id)
+                    log.warning("idle_queue.run_failed", task_id=str(item["id"]), error_type=type(exc).__name__)
+
+        idle_queue_task = asyncio.create_task(process_idle_queue(), name="atlas-idle-task-queue")
+
+        async def poll_mail_triggers() -> None:
+            from atlas.background_tasks import EmailDeduplicator, fetch_matching_imap, get_mail_password, mail_trigger_config
+            loop = asyncio.get_running_loop()
+            last_poll = 0.0
+            while True:
+                await asyncio.sleep(15)
+                config = mail_trigger_config()
+                if not config.get("enabled") or not config.get("server") or not config.get("username"):
+                    continue
+                interval = max(30, int(config.get("interval_seconds", 300)))
+                if loop.time() - last_poll < interval:
+                    continue
+                last_poll = loop.time()
+                password = get_mail_password(str(config["username"]))
+                if not password:
+                    continue
+                dedupe = EmailDeduplicator(cfg.db_path.parent / "email-trigger-seen.db")
+                try:
+                    messages = await asyncio.to_thread(fetch_matching_imap, str(config["server"]),
+                        str(config["username"]), password, list(config.get("rules", [])), dedupe)
+                    for message in messages:
+                        conversation_id = str(__import__("uuid").uuid4())
+                        run_id = str(__import__("uuid").uuid4())
+                        await memory.save_conversation_metadata(conversation_id, title_hint=message["subject"][:100])
+                        await _handle_run_start("email-trigger", {
+                            "run_id": run_id, "conversation_id": conversation_id,
+                            "content": message["task_prompt"], "source": "email-trigger",
+                        }, manager)
+                except Exception as exc:  # never log mailbox contents or credentials
+                    log.warning("mail_trigger.poll_failed", error_type=type(exc).__name__)
+
+        mail_trigger_task = asyncio.create_task(poll_mail_triggers(), name="atlas-mail-trigger")
+
         yield  # app is running
     except BaseException:
         startup_aborted = True
@@ -739,6 +814,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             pr_monitor_task.cancel()
             with suppress(asyncio.CancelledError, Exception):
                 await pr_monitor_task
+        for task in (idle_queue_task, mail_trigger_task):
+            if task is not None:
+                task.cancel()
+                with suppress(asyncio.CancelledError, Exception):
+                    await task
         if deferred_startup is not None:
             # Let deferred startup settle before reverse teardown; a stuck step is bounded.
             try:

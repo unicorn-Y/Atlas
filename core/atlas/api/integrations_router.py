@@ -26,6 +26,77 @@ from atlas.runtime import hub_control
 from atlas.scheduler import ScheduledTask
 router = APIRouter()
 
+
+@router.get("/api/busy")
+async def get_busy_status() -> dict[str, Any]:
+    from atlas.notifications.busy import status
+    return status()
+
+
+@router.post("/api/busy")
+async def update_busy_status(req: dict[str, Any]) -> dict[str, Any]:
+    from atlas.notifications.busy import set_busy
+    seconds = req.get("seconds")
+    if seconds is not None and (not isinstance(seconds, (int, float)) or seconds < 0 or seconds > 30 * 86400):
+        raise HTTPException(status_code=422, detail="seconds must be between 0 and 30 days, or null")
+    return set_busy(float(seconds) if seconds else None)
+
+
+def _idle_queue():
+    from atlas.background_tasks import IdleTaskQueue
+    return IdleTaskQueue(get_config().db_path.parent / "idle-tasks.db")
+
+
+@router.get("/api/idle-tasks")
+async def list_idle_tasks() -> dict[str, Any]:
+    return {"tasks": _idle_queue().list()}
+
+
+@router.post("/api/idle-tasks", status_code=201)
+async def add_idle_task(req: dict[str, Any]) -> dict[str, Any]:
+    import uuid
+    try:
+        return _idle_queue().add(str(req.get("id") or uuid.uuid4().hex), str(req.get("prompt") or ""), str(req.get("workspace") or ""))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.put("/api/idle-tasks/order")
+async def reorder_idle_tasks(req: dict[str, Any]) -> dict[str, Any]:
+    try:
+        _idle_queue().reorder(req.get("ids", []))
+        return {"tasks": _idle_queue().list()}
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.delete("/api/idle-tasks/{task_id}")
+async def remove_idle_task(task_id: str) -> dict[str, Any]:
+    _idle_queue().remove(task_id)
+    return {"deleted": True}
+
+
+@router.post("/api/idle-tasks/{task_id}/run-now")
+async def run_idle_task_now(task_id: str) -> dict[str, Any]:
+    if not _idle_queue().request_run_now(task_id):
+        raise HTTPException(status_code=404, detail="queued task not found")
+    return {"queued": True}
+
+
+@router.get("/api/mail-trigger")
+async def get_mail_trigger() -> dict[str, Any]:
+    from atlas.background_tasks import mail_trigger_config
+    return mail_trigger_config()
+
+
+@router.put("/api/mail-trigger")
+async def put_mail_trigger(req: dict[str, Any]) -> dict[str, Any]:
+    from atlas.background_tasks import save_mail_trigger_config
+    try:
+        return save_mail_trigger_config(req, str(req.get("password")) if req.get("password") else None)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
 def _server() -> Any:
     """Late-bound atlas.server: its module globals stay the seam tests patch."""
     import atlas.server
