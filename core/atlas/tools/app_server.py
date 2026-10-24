@@ -86,47 +86,27 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
             message_id = str(uuid.uuid4())
 
             async def approve(event_id: str, tool_name: str, args: dict[str, Any]) -> str:
+                if acp:
+                    await notify("session/update", {
+                        "sessionId": session_id,
+                        "update": {"sessionUpdate": "tool_call_update",
+                                   "toolCallId": event_id.removeprefix("approval:"),
+                                   "status": "in_progress", "rawInput": args},
+                    })
+                    return "allow"
                 future = asyncio.get_running_loop().create_future()
                 pending_approvals[event_id] = future
-                outbound_id = f"atlas-permission:{uuid.uuid4().hex}"
-                if acp:
-                    permission = asyncio.get_running_loop().create_future()
-                    pending_client_requests[outbound_id] = permission
-                    await outgoing.put({
-                        "jsonrpc": "2.0", "id": outbound_id,
-                        "method": "session/request_permission",
-                        "params": {
-                            "sessionId": session_id,
-                            "toolCall": {
-                                "toolCallId": event_id, "title": tool_name,
-                                "kind": "other", "status": "pending",
-                                "rawInput": args,
-                            },
-                            "options": [
-                                {"optionId": "allow-once", "name": "Allow once", "kind": "allow_once"},
-                                {"optionId": "reject-once", "name": "Reject", "kind": "reject_once"},
-                            ],
-                        },
-                    })
-                else:
-                    await notify("approval/request", {
-                        "session_id": session_id, "event_id": event_id,
-                        "tool_name": tool_name, "arguments": args,
-                    })
+                await notify("approval/request", {
+                    "session_id": session_id, "event_id": event_id,
+                    "tool_name": tool_name, "arguments": args,
+                })
                 try:
-                    if acp:
-                        response = await _wait_with_cancel(permission, cancel)
-                        outcome = response.get("outcome") if isinstance(response, dict) else None
-                        if not isinstance(outcome, dict) or outcome.get("outcome") != "selected":
-                            return "deny"
-                        return "allow" if outcome.get("optionId") == "allow-once" else "deny"
                     result = await _wait_with_cancel(future, cancel)
                     if cancel.is_set():
                         return "deny"
                     return str(result)
                 finally:
                     pending_approvals.pop(event_id, None)
-                    pending_client_requests.pop(outbound_id, None)
 
             async def ask_user(call_id: str, prompt_text: str,
                                options: list[str] | None = None) -> str:
@@ -189,6 +169,13 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
                                 "status": "failed" if event.get("is_error") else "completed",
                                 "rawOutput": str(output or ""),
                             },
+                        })
+                    elif acp and event.get("type") == "plan_updated":
+                        plan = event.get("plan")
+                        entries = plan.get("steps", []) if isinstance(plan, dict) else []
+                        await notify("session/update", {
+                            "sessionId": session_id,
+                            "update": {"sessionUpdate": "plan", "entries": entries},
                         })
                     elif event.get("type") == "error":
                         failure_detail = str(event.get("detail") or "Agent run failed.")
