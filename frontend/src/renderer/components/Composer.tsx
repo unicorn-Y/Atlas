@@ -166,6 +166,7 @@ export default function Composer(props: ComposerProps) {
   const hero = props.variant === 'hero';
   const [expert] = useExpertMode(backend.apiBaseUrl);
   const [ideConnected, setIdeConnected] = useState(false);
+  const [prStatus, setPrStatus] = useState<{ number?: number; title?: string; state?: string; failed?: number; conflict?: boolean; reviewDecision?: string; autoFix?: boolean } | null>(null);
   useEffect(() => {
     let live = true;
     const refresh = () => void api<{ connected: boolean }>(backend.apiBaseUrl, '/api/ide/status')
@@ -173,6 +174,18 @@ export default function Composer(props: ComposerProps) {
     refresh(); const timer = window.setInterval(refresh, 5000);
     return () => { live = false; window.clearInterval(timer); };
   }, []);
+  useEffect(() => {
+    const conversationId = props.contextKey;
+    if (!conversationId || conversationId === 'home') { setPrStatus(null); return; }
+    let live = true;
+    const refresh = () => void api<{ pr?: { number?: number; title?: string; state?: string; reviewDecision?: string } | null; failed?: unknown[]; conflict?: boolean; settings?: { auto_fix?: boolean } }>(
+      backend.apiBaseUrl, `/api/conversations/${encodeURIComponent(conversationId)}/pr`,
+    ).then((value) => {
+      if (live) setPrStatus(value.pr ? { ...value.pr, failed: value.failed?.length ?? 0, conflict: value.conflict, autoFix: value.settings?.auto_fix } : null);
+    }).catch(() => { if (live) setPrStatus(null); });
+    refresh(); const timer = window.setInterval(refresh, 180_000);
+    return () => { live = false; window.clearInterval(timer); };
+  }, [props.contextKey]);
   const attachIdeContext = async () => {
     try {
       const value = await api<{ file?: string | null; selection?: { text: string; startLine: number; endLine: number } | null; workspace?: string | null }>(backend.apiBaseUrl, '/api/ide/context', { method: 'POST' });
@@ -682,6 +695,12 @@ export default function Composer(props: ComposerProps) {
       </div>}
 
       {ideConnected && <span className="ml-1.5 shrink-0 text-[12px] text-brand" title="VS Code 已连接">已连接 VS Code</span>}
+      {prStatus && <button type="button" className="ml-1.5 shrink-0 text-[12px] text-fg-2 hover:text-brand"
+        title={`${prStatus.title ?? ''} ${prStatus.reviewDecision ?? ''}；点击切换自动修复`.trim()}
+        onClick={() => void api(backend.apiBaseUrl, `/api/conversations/${encodeURIComponent(props.contextKey ?? '')}/pr`, { method: 'PATCH', json: { auto_fix: !prStatus.autoFix } })
+          .then(() => setPrStatus((current) => current ? { ...current, autoFix: !current.autoFix } : current)).catch(() => undefined)}>
+        PR #{prStatus.number ?? '?'} · {prStatus.conflict ? '有冲突' : prStatus.failed ? `${prStatus.failed} 项 CI 失败` : prStatus.state ?? '已关联'} · 自动修复{prStatus.autoFix ? '开' : '关'}
+      </button>}
       {hint && <span role={screenReaderMode ? undefined : 'status'} aria-live={screenReaderMode ? undefined : 'polite'}
         aria-atomic={screenReaderMode ? undefined : 'true'} className={cn('ml-1.5 min-w-0 truncate text-[12.5px]', props.listening ? 'text-brand' : 'text-fg-3')}>{hint}</span>}
       <span className="flex-1" />
