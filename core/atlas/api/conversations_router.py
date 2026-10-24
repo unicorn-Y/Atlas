@@ -103,6 +103,11 @@ async def put_conversation_ui_metadata(request: ConversationUiMetadataRequest) -
 
 class ConversationCreateRequest(BaseModel):
     title: str = "New Conversation"
+    parent_conversation_id: str | None = None
+
+
+class PeerInboxReadRequest(BaseModel):
+    message_ids: list[str] = []
 
 
 class ConversationGoalCommandRequest(BaseModel):
@@ -173,6 +178,15 @@ async def create_conversation(
         memory = _atlas_server.memory
     assert memory is not None
     conversation_id = await memory.create_conversation(req.title.strip() or "New Conversation")
+    if req.parent_conversation_id:
+        parent = await memory.get_conversation(req.parent_conversation_id)
+        if parent is None:
+            await memory.delete_conversation(conversation_id)
+            raise HTTPException(status_code=404, detail="Parent conversation not found")
+        await memory.update_conversation(
+            conversation_id, parent_conversation_id=req.parent_conversation_id,
+            workspace=parent.get("workspace"),
+        )
     conversation = await memory.get_conversation(conversation_id)
     assert conversation is not None
     return conversation
@@ -224,6 +238,32 @@ async def get_conversation_messages(
         read_session_messages, DATA_ROOT / "engine", conversation_id,
         limit=limit, before_id=before_id,
     )
+
+
+@router.get("/api/conversations/{conversation_id}/peer-inbox")
+async def get_peer_inbox(
+    services: Annotated[AppServices, Depends(get_app_services)], conversation_id: str,
+    unread_only: bool = Query(False), limit: int = Query(100, ge=1, le=500),
+) -> dict[str, Any]:
+    memory = services.memory or _server().memory
+    if not await memory.get_conversation(conversation_id):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    from atlas.agent.peer_inbox import list_peer_messages
+    items = await asyncio.to_thread(list_peer_messages, conversation_id, unread_only=unread_only, limit=limit)
+    return {"messages": items, "unread_count": sum(item["read_at"] is None for item in items)}
+
+
+@router.post("/api/conversations/{conversation_id}/peer-inbox/read")
+async def mark_peer_inbox_read(
+    services: Annotated[AppServices, Depends(get_app_services)], conversation_id: str,
+    request: PeerInboxReadRequest,
+) -> dict[str, int]:
+    memory = services.memory or _server().memory
+    if not await memory.get_conversation(conversation_id):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    from atlas.agent.peer_inbox import mark_peer_messages_read
+    count = await asyncio.to_thread(mark_peer_messages_read, conversation_id, request.message_ids)
+    return {"marked_read": count}
 
 
 @router.post("/api/conversations/{conversation_id}/share")

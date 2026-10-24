@@ -638,6 +638,21 @@ async def execute_tools_node(
                 result = {"data": {"answer": answer},
                           "content": [{"type": "text", "text": str(answer)}],
                           "is_error": False}
+            elif fn_name == "propose_new_session":
+                if ctx.agent_type not in {"general", "verifier"}:
+                    raise ValueError("只有主 Agent 可以提议另开会话。")
+                if not ctx.input_callback:
+                    raise RuntimeError("当前运行不支持会话提议卡片。")
+                answer = await ctx.input_callback(
+                    tc_id,
+                    str(fn_args.get("description") or "Agent 建议把这项工作放到独立会话。"),
+                    None,
+                    {"proposal": True, "title": str(fn_args.get("title") or "后台会话")[:120],
+                     "task": str(fn_args.get("task") or "")[:8000]},
+                )
+                result = {"data": {"answer": answer},
+                          "content": [{"type": "text", "text": str(answer)}],
+                          "is_error": False}
             elif fn_name == "project_note":
                 if ctx.agent_type not in {"general", "verifier"}:
                     raise ValueError("只有主 Agent 和 general 类型可以写项目记事本。")
@@ -853,11 +868,16 @@ async def execute_tools_node(
                     raise RuntimeError("当前 Atlas 运行时无法启动目标会话。")
                 source_title = str((source or {}).get("title") or ctx.conversation_id or "未知会话")
                 marked = f"来自会话 {source_title}（{ctx.conversation_id or ''}）的消息：\n\n{message}"
+                from atlas.agent.peer_inbox import send_peer_message
+                inbox_item = await asyncio.to_thread(
+                    send_peer_message, str(ctx.conversation_id or ""), conversation_id,
+                    source_title, message,
+                )
                 await _handle_run_start(f"peer:{uuid.uuid4().hex}", {
                     "conversation_id": conversation_id, "content": marked, "source": "peer",
                     "workspace": target.get("workspace"),
                 }, manager=manager)
-                result = {"data": {"conversation_id": conversation_id, "started": True},
+                result = {"data": {"conversation_id": conversation_id, "peer_message_id": inbox_item["id"], "started": True},
                           "content": [{"type": "text", "text": f"已向会话 {target.get('title') or conversation_id} 发送消息并开始运行。"}],
                           "is_error": False}
             elif fn_name == "todo_list":

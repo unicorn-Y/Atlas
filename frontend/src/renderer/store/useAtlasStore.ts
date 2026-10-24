@@ -481,7 +481,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       const parent = get().conversations.find((item) => item.id === parentConversationId);
       const workspace = parent?.workspace || get().draftWorkspace || undefined;
       try {
-        let conversation = await backend.createConversation(title.trim() || '后台任务');
+        let conversation = await backend.createConversation(title.trim() || '后台任务', parentConversationId);
         if (workspace) {
           await backend.updateConversation(conversation.id, { workspace });
           conversation = { ...conversation, workspace };

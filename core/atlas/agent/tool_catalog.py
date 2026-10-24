@@ -108,6 +108,15 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
     }})
     tools.extend([
         {"type": "function", "function": {
+            "name": "propose_new_session",
+            "description": "当任务有清晰、可独立并行的目标且适合在另一个 Atlas 会话继续时，先提出建议；不要自行创建。用户接受后才启动新会话。",
+            "parameters": {"type": "object", "properties": {
+                "title": {"type": "string", "minLength": 1, "maxLength": 120},
+                "description": {"type": "string", "maxLength": 1000},
+                "task": {"type": "string", "minLength": 1, "maxLength": 8000},
+            }, "required": ["title", "task"], "additionalProperties": False},
+        }},
+        {"type": "function", "function": {
             "name": "read_session",
             "description": "读取另一个 Atlas 会话最近的消息。用 conversation_id 或会话标题（title，可部分匹配）指定会话；两者都不给时列出最近的会话（标题+id）供选择。",
             "parameters": {"type": "object", "properties": {

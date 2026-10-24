@@ -295,6 +295,7 @@ export default function App() {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [startupWarning, setStartupWarning] = useState('');
   const [diagnosticUnread, setDiagnosticUnread] = useState(0);
+  const [peerInbox, setPeerInbox] = useState<Array<{ id: string; sender_conversation_id: string; sender_title: string; content: string; created_at: string }>>([]);
   const [besideId, setBesideId] = useState('');
   const [rewound, setRewound] = useState<{ conversationId: string; rewindId: string; text: string } | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState(() => pref('default-workspace') ?? '');
@@ -569,6 +570,17 @@ export default function App() {
     void backend.getConversationGoal(id).then((result) => { if (!stale) setConversationGoal(result.goal); }).catch(() => { if (!stale) setConversationGoal(null); });
     return () => { stale = true; };
   }, [store.activeConversationId, store.connected]);
+  useEffect(() => {
+    const id = store.activeConversationId;
+    if (!id || !store.connected) { setPeerInbox([]); return; }
+    let stale = false;
+    const refresh = () => void api<{ messages: typeof peerInbox }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(id)}/peer-inbox?unread_only=true`)
+      .then((result) => { if (!stale) setPeerInbox(result.messages); })
+      .catch(() => { if (!stale) setPeerInbox([]); });
+    refresh();
+    const timer = window.setInterval(refresh, 5000);
+    return () => { stale = true; window.clearInterval(timer); };
+  }, [store.activeConversationId, store.connected, store.apiBaseUrl]);
   useEffect(() => {
     if (activeEvents.at(-1)?.type !== 'run.completed' || !store.activeConversationId || !store.connected) return;
     void backend.getConversationGoal(store.activeConversationId)
@@ -2086,6 +2098,11 @@ export default function App() {
               <ProgressCapsule run={activeRun} events={activeEvents} onShowAll={() => showInspectorTab('activity')} />
             </div>}
             {computerRunId && <ComputerEdgeBar apiBaseUrl={store.apiBaseUrl} runId={computerRunId} canPause={Boolean(foregroundEvent)} className="shrink-0" />}
+            {!!peerInbox.length && <section className="mx-6 mt-2 rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5" aria-label="跨会话收件箱">
+              <div className="flex items-center justify-between gap-3"><b className="text-[12.5px] text-fg">跨会话收件箱 · {peerInbox.length} 条未读</b>
+                <button className="text-[11.5px] text-fg-3 hover:text-fg" onClick={() => void api<{ marked_read: number }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(store.activeConversationId)}/peer-inbox/read`, { method: 'POST', json: { message_ids: peerInbox.map((item) => item.id) } }).then(() => setPeerInbox([])).catch((error) => setToast(error instanceof Error ? error.message : '标记已读失败'))}>标记已读</button></div>
+              <ul className="mb-0 mt-1 grid max-h-24 gap-1 overflow-auto pl-4 text-[12px] text-fg-2">{peerInbox.map((item) => <li key={item.id}><b>{item.sender_title}</b>：{item.content}</li>)}</ul>
+            </section>}
             {pinnedSummary}
             <TimelineNav threadRef={threadRef} resetKey={store.activeConversationId}
               history={historyWithBranchNotes} items={timelineItems}

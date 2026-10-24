@@ -218,6 +218,7 @@ export interface CheckResults {
 
 export interface ConversationCreateRequest {
   title?: string;
+  parent_conversation_id?: string;
 }
 
 export interface ConversationMessage {

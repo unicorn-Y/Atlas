@@ -167,8 +167,8 @@ export class BackendAdapter {
     else mockModels.current = model;
   }
   async getConversations(): Promise<ConversationSummary[]> { return this.live ? this.request('/api/conversations') : mockConversations; }
-  async createConversation(title = '新对话'): Promise<ConversationSummary> {
-    const request: ConversationCreateRequest = { title };
+  async createConversation(title = '新对话', parentConversationId?: string): Promise<ConversationSummary> {
+    const request: ConversationCreateRequest = { title, ...(parentConversationId ? { parent_conversation_id: parentConversationId } : {}) };
     if (this.live) return this.request('/api/conversations', { method: 'POST', body: JSON.stringify(request) });
     const conversation = { id: crypto.randomUUID(), title };
     mockConversations.unshift(conversation);
