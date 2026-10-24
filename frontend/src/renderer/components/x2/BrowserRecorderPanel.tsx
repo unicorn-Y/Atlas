@@ -97,18 +97,20 @@ export function SkillForm({ apiBaseUrl, recordingId, defaultName }: {
  * 停止后可把步骤存为技能（先预览 SKILL.md 再保存）。
  * 事件来源：宿主直接传某次任务的事件（events），不传则自己从全局运行流里取。
  */
-export default function BrowserRecorderPanel({ apiBaseUrl, runId, events, className }: {
+export default function BrowserRecorderPanel({ apiBaseUrl, runId, events, className, userSteps = [], onRecordingChange }: {
   apiBaseUrl: string;
   /** 只显示这次任务的步骤；缺省时显示所有 browser.step。 */
   runId?: string;
   /** 宿主持有的事件流（如活动任务的 run.events）；缺省时从全局 store 订阅。 */
   events?: AgentEvent[];
+  userSteps?: BrowserStepView[];
+  onRecordingChange?: (recording: boolean, recordingId: string | null) => void;
   className?: string;
 }) {
   const runs = useAtlasStore((state) => state.runs);
   const storeEvents = useMemo(() => runs.flatMap((run) => run.events), [runs]);
   const merged = events ?? storeEvents;
-  const steps = useMemo(() => browserStepsFromEvents(merged, runId), [merged, runId]);
+  const steps = useMemo(() => [...browserStepsFromEvents(merged, runId), ...userSteps], [merged, runId, userSteps]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -122,6 +124,7 @@ export default function BrowserRecorderPanel({ apiBaseUrl, runId, events, classN
       .then((session) => {
         if (starting && session.recording_id) setSessionId(session.recording_id);
         setRecording(starting);
+        onRecordingChange?.(starting, session.recording_id ?? sessionId);
       })
       .catch((exc) => setError(exc instanceof Error ? exc.message : String(exc)))
       .finally(() => setBusy(false));

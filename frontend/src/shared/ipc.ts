@@ -47,6 +47,7 @@ export interface PlatformSettingsState {
   alwaysOnTop: boolean;
   openAtLogin: boolean;
   globalShortcut: GlobalShortcutState;
+  screenshotShortcut: GlobalShortcutState;
 }
 
 export interface AtlasDesktopApi {
@@ -77,6 +78,9 @@ export interface AtlasDesktopApi {
   setAlwaysOnTop?(enabled: boolean): Promise<PlatformSettingsState>;
   /** Register a single OS-wide show/focus shortcut, or clear it with null. */
   setGlobalShortcut?(accelerator: string | null): Promise<GlobalShortcutState>;
+  setScreenshotShortcut?(accelerator: string | null): Promise<GlobalShortcutState>;
+  setScreenshotContext?(conversationId: string, lastInteractionAt: number): void;
+  onSessionScreenshot?(callback: (imageDataUrl: string, conversationId: string) => void): () => void;
   setKeepAwake?(enabled: boolean): Promise<void>;
   setRuntimeState?(state: 'running' | 'waiting' | 'idle'): void;
   /** Open an existing local workspace with a fixed allowlisted IDE CLI (never through a shell). */

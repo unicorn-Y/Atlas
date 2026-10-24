@@ -1,5 +1,5 @@
 import './stdoutSafety.js';
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerSaveBlocker, screen, session, shell, Tray } from 'electron';
+import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerSaveBlocker, screen, session, shell, Tray } from 'electron';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -37,9 +37,11 @@ let windowRef: BrowserWindow | null = null;
 let floatingComposerWindow: BrowserWindow | null = null;
 const conversationWindows = new Map<string, BrowserWindow>();
 type WindowBounds = { x: number; y: number; width: number; height: number };
-type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null; openAtLogin: boolean; windowBounds?: WindowBounds };
-let platformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null, openAtLogin: true };
+type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null; screenshotShortcut: string | null; openAtLogin: boolean; windowBounds?: WindowBounds };
+let platformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null, screenshotShortcut: 'Control+Shift+X', openAtLogin: true };
 let globalShortcutState: GlobalShortcutState = { accelerator: null, registered: false };
+let screenshotShortcutState: GlobalShortcutState = { accelerator: 'Control+Shift+X', registered: false };
+let screenshotContext: { conversationId: string; lastInteractionAt: number } = { conversationId: '', lastInteractionAt: 0 };
 let keepAwakeEnabled = false;
 let keepAwakeBlockerId: number | null = null;
 let runtimeState: 'running' | 'waiting' | 'idle' = 'idle';
@@ -97,11 +99,12 @@ function loadPlatformPreferences(): PlatformPreferences {
     return {
       alwaysOnTop: data.alwaysOnTop === true,
       globalShortcut: typeof data.globalShortcut === 'string' ? data.globalShortcut : null,
+      screenshotShortcut: typeof data.screenshotShortcut === 'string' ? data.screenshotShortcut : 'Control+Shift+X',
       openAtLogin: data.openAtLogin !== false,
       ...(isWindowBounds(data.windowBounds) ? { windowBounds: data.windowBounds } : {}),
     };
   } catch {
-    return { alwaysOnTop: false, globalShortcut: null, openAtLogin: true };
+    return { alwaysOnTop: false, globalShortcut: null, screenshotShortcut: 'Control+Shift+X', openAtLogin: true };
   }
 }
 
@@ -129,7 +132,7 @@ function savePlatformPreferences(next: PlatformPreferences): void {
 }
 
 function platformSettingsSnapshot(): PlatformSettingsState {
-  return { alwaysOnTop: platformPreferences.alwaysOnTop, openAtLogin: platformPreferences.openAtLogin, globalShortcut: { ...globalShortcutState } };
+  return { alwaysOnTop: platformPreferences.alwaysOnTop, openAtLogin: platformPreferences.openAtLogin, globalShortcut: { ...globalShortcutState }, screenshotShortcut: { ...screenshotShortcutState } };
 }
 
 function runtimeDir(): string {
@@ -445,6 +448,49 @@ function tryRegisterGlobalShortcut(accelerator: string | null): GlobalShortcutSt
 
 function registerPreferredGlobalShortcut(): void {
   globalShortcutState = tryRegisterGlobalShortcut(platformPreferences.globalShortcut);
+  screenshotShortcutState = tryRegisterScreenshotShortcut(platformPreferences.screenshotShortcut);
+}
+
+function tryRegisterScreenshotShortcut(accelerator: string | null): GlobalShortcutState {
+  if (!accelerator) return { accelerator: null, registered: false };
+  const invalid = validateGlobalAccelerator(accelerator);
+  if (invalid) return { accelerator, registered: false, error: invalid };
+  try {
+    const registered = globalShortcut.register(accelerator, () => { void captureSessionScreenshot(); });
+    return registered ? { accelerator, registered: true }
+      : { accelerator, registered: false, error: '系统未能注册截图快捷键，可能已被其他应用占用。' };
+  } catch {
+    return { accelerator, registered: false, error: '系统未能注册截图快捷键。' };
+  }
+}
+
+async function captureSessionScreenshot(): Promise<void> {
+  const { conversationId, lastInteractionAt } = screenshotContext;
+  if (!conversationId || Date.now() - lastInteractionAt > 60_000 || !windowRef || windowRef.isDestroyed()) return;
+  try {
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursor);
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'], thumbnailSize: { width: display.size.width, height: display.size.height },
+    });
+    const source = sources.find((item) => item.display_id === String(display.id)) ?? sources[0];
+    if (source?.thumbnail && !source.thumbnail.isEmpty()) {
+      windowRef.webContents.send('app:session-screenshot', source.thumbnail.toDataURL(), conversationId);
+    }
+  } catch (error) { console.error('Session screenshot capture failed:', error); }
+}
+
+function setScreenshotShortcut(accelerator: string | null): GlobalShortcutState {
+  if (accelerator !== null) {
+    const invalid = validateGlobalAccelerator(accelerator);
+    if (invalid) return { accelerator, registered: false, error: invalid };
+  }
+  const previous = platformPreferences.screenshotShortcut;
+  const next = { ...platformPreferences, screenshotShortcut: accelerator };
+  savePlatformPreferences(next);
+  if (previous && screenshotShortcutState.registered) globalShortcut.unregister(previous);
+  screenshotShortcutState = tryRegisterScreenshotShortcut(accelerator);
+  return { ...screenshotShortcutState };
 }
 
 function assertTrustedAppSender(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
@@ -809,6 +855,16 @@ ipcMain.handle('platform:set-global-shortcut', (event, accelerator: unknown) => 
   assertTrustedAppSender(event);
   if (accelerator !== null && typeof accelerator !== 'string') throw new Error('快捷键格式无效。');
   return setGlobalShortcut(accelerator as string | null);
+});
+ipcMain.handle('platform:set-screenshot-shortcut', (event, accelerator: unknown) => {
+  assertTrustedAppSender(event);
+  if (accelerator !== null && typeof accelerator !== 'string') throw new Error('截图快捷键格式无效。');
+  return setScreenshotShortcut(accelerator as string | null);
+});
+ipcMain.on('platform:set-screenshot-context', (event, conversationId: unknown, lastInteractionAt: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof conversationId !== 'string' || typeof lastInteractionAt !== 'number' || !Number.isFinite(lastInteractionAt)) return;
+  screenshotContext = { conversationId: conversationId.slice(0, 128), lastInteractionAt };
 });
 ipcMain.handle('platform:open-workspace-in-editor', async (event, editor: unknown, workspacePath: unknown) => {
   assertTrustedAppSender(event);

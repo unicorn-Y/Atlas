@@ -23,12 +23,14 @@ const initialState: PlatformSettingsState = {
   alwaysOnTop: false,
   openAtLogin: true,
   globalShortcut: { accelerator: null, registered: false },
+  screenshotShortcut: { accelerator: 'Control+Shift+X', registered: false },
 };
 
 export default function PlatformSettingsPanel({ workspacePath }: PlatformSettingsPanelProps) {
   const desktop = window.atlasDesktop;
   const [settings, setSettings] = useState(initialState);
   const [accelerator, setAccelerator] = useState('');
+  const [screenshotAccelerator, setScreenshotAccelerator] = useState('Control+Shift+X');
   const [editor, setEditor] = useState<PlatformEditorId>('vscode');
   const [folder, setFolder] = useState(workspacePath ?? '');
   const [busy, setBusy] = useState(false);
@@ -46,6 +48,7 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
       if (!active) return;
       setSettings(next);
       setAccelerator(next.globalShortcut.accelerator ?? '');
+      setScreenshotAccelerator(next.screenshotShortcut.accelerator ?? '');
     }).catch((reason: unknown) => {
       if (active) setError(reason instanceof Error ? reason.message : String(reason));
     });
@@ -101,6 +104,18 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
     finally { setBusy(false); }
   };
 
+  const saveScreenshotShortcut = async (value: string | null) => {
+    if (!desktop?.setScreenshotShortcut) return;
+    setBusy(true); setError(null); setMessage(null);
+    try {
+      const result = await desktop.setScreenshotShortcut(value);
+      setSettings((current) => ({ ...current, screenshotShortcut: result }));
+      setScreenshotAccelerator(result.accelerator ?? '');
+      setMessage(result.registered ? '会话截图快捷键已注册。' : result.accelerator ? null : '会话截图快捷键已清除。');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setBusy(false); }
+  };
+
   const selectWorkspace = async () => {
     try {
       const selected = await desktop?.selectDirectory(folder || undefined);
@@ -134,6 +149,15 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
         <input type="checkbox" checked={keepAwake} disabled={!available || !desktop?.setKeepAwake || busy} onChange={(event) => void toggleKeepAwake(event.target.checked)} />
         运行中的任务阻止系统自动休眠
       </label>
+    </section>
+
+    <section className="grid gap-3 rounded-xl border border-line p-4">
+      <div><h4 className="m-0 flex items-center gap-2 text-[13.5px] font-medium text-heading"><Keyboard size={16} />连续截图归入会话</h4>
+        <p className="mt-1 mb-0 text-[12px] text-fg-3">最近操作过的会话在 60 秒内接收截图；连续截图会留在同一会话。默认 Ctrl+Shift+X。</p></div>
+      <div className="flex flex-wrap gap-2"><input aria-label="会话截图快捷键" value={screenshotAccelerator} maxLength={80} disabled={!available || busy} onChange={(event) => setScreenshotAccelerator(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void saveScreenshotShortcut(screenshotAccelerator); }} placeholder="Control+Shift+X" className="h-9 min-w-[250px] flex-1 rounded-lg border border-line bg-surface px-2.5 font-mono text-[12px] text-fg" />
+        <button disabled={!available || busy || !screenshotAccelerator.trim()} onClick={() => void saveScreenshotShortcut(screenshotAccelerator)} className="h-9 rounded-lg bg-brand px-3 text-[12px] font-medium text-on-primary disabled:opacity-50">注册</button>
+        <button disabled={!available || busy || !settings.screenshotShortcut.accelerator} onClick={() => void saveScreenshotShortcut(null)} className="h-9 rounded-lg border border-line px-3 text-[12px] text-fg-2 hover:bg-hover disabled:opacity-50">清除</button></div>
+      <p role={settings.screenshotShortcut.error ? 'alert' : 'status'} className={`m-0 text-[12px] ${settings.screenshotShortcut.error ? 'text-danger' : 'text-fg-3'}`}>{settings.screenshotShortcut.error ?? (settings.screenshotShortcut.registered ? `已注册：${settings.screenshotShortcut.accelerator}` : settings.screenshotShortcut.accelerator ? `未注册：${settings.screenshotShortcut.accelerator}` : '尚未注册')}</p>
     </section>
 
     <section className="grid gap-3 rounded-xl border border-line p-4">

@@ -2,12 +2,39 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { ArrowLeft, ArrowRight, BoxSelect, Code2, Crosshair, FileText, Plus, ScrollText, ExternalLink, Globe, Monitor, RotateCw, Smartphone, Tablet, X } from 'lucide-react';
 import type { AgentEvent } from '../../../types/runtime';
 import { backend } from '../../store/useAtlasStore';
-import BrowserRecorderPanel from '../../components/x2/BrowserRecorderPanel';
+import BrowserRecorderPanel, { type BrowserStepView } from '../../components/x2/BrowserRecorderPanel';
+import { api } from '../../services/api';
 import { cn } from '../../ui/cn';
 import { Empty } from './Empty';
 
 /** Must match BROWSER_PARTITION in the Electron main process: pages here never share the app's session. */
 const PARTITION = 'persist:atlas-browser';
+const USER_RECORDER_INSTALL = `(() => {
+  if (window.__atlasUserRecorder) return true;
+  const key = '__atlas_browser_steps';
+  const selector = (el) => {
+    const parts = [];
+    for (; el && el.nodeType === 1 && parts.length < 6; el = el.parentElement) {
+      if (el.id) { parts.unshift('#' + CSS.escape(el.id)); break; }
+      let part = el.tagName.toLowerCase();
+      const label = el.getAttribute('aria-label') || el.getAttribute('name');
+      if (label) part += '[aria-label="' + CSS.escape(label.slice(0, 80)) + '"]';
+      else { const siblings = el.parentElement ? [...el.parentElement.children].filter((node) => node.tagName === el.tagName) : []; if (siblings.length > 1) part += ':nth-of-type(' + (siblings.indexOf(el) + 1) + ')'; }
+      parts.unshift(part);
+    }
+    return parts.join(' > ');
+  };
+  const target = (el) => String(el.getAttribute('aria-label') || el.getAttribute('title') || el.innerText || el.textContent || el.tagName).trim().replace(/\\s+/g, ' ').slice(0, 220);
+  const push = (item) => { try { const old = JSON.parse(localStorage.getItem(key) || '[]'); old.push({ ...item, url: location.href }); localStorage.setItem(key, JSON.stringify(old.slice(-40))); } catch {} };
+  const click = (event) => { const el = event.target?.closest?.('button,a,[role=button],input[type=button],input[type=submit]'); if (el) push({ action: 'click', selector: selector(el), target: target(el) }); };
+  const input = (event) => { const el = event.target; if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) return;
+    const password = el instanceof HTMLInputElement && el.type.toLowerCase() === 'password';
+    push({ action: 'type', selector: selector(el), target: target(el), password_field: password, value: password ? undefined : el.value }); };
+  document.addEventListener('click', click, true); document.addEventListener('change', input, true);
+  window.__atlasUserRecorder = { click, input }; return true;
+})()`;
+const USER_RECORDER_READ = `(() => { try { const key = '__atlas_browser_steps'; const rows = JSON.parse(localStorage.getItem(key) || '[]'); localStorage.removeItem(key); return Array.isArray(rows) ? rows : []; } catch { return []; } })()`;
+const USER_RECORDER_REMOVE = `(() => { const rec = window.__atlasUserRecorder; if (!rec) return; document.removeEventListener('click', rec.click, true); document.removeEventListener('change', rec.input, true); delete window.__atlasUserRecorder; localStorage.removeItem('__atlas_browser_steps'); })()`;
 
 /** Viewport presets for checking a page at other sizes; the panel scales them down to fit. */
 const DEVICES = {
@@ -286,6 +313,8 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   };
   const [device, setDevice] = useState<Device>('fit');
   const [recorderOpen, setRecorderOpen] = useState(false);
+  const [userRecordingId, setUserRecordingId] = useState<string | null>(null);
+  const [recordedUserSteps, setRecordedUserSteps] = useState<BrowserStepView[]>([]);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [stage, setStage] = useState({ width: 0, height: 0 });
   useEffect(() => {
@@ -296,6 +325,50 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
     return () => observer.disconnect();
   }, []);
   const desktop = typeof window !== 'undefined' && Boolean(window.atlasDesktop);
+
+  useEffect(() => {
+    if (!userRecordingId || !apiBaseUrl) {
+      for (const view of viewRefs.current.values()) void view.executeJavaScript(USER_RECORDER_REMOVE).catch(() => undefined);
+      return;
+    }
+    let stale = false;
+    let busy = false;
+    let lastUrl = '';
+    const record = async (step: { action: string; url?: string; selector?: string; target?: string; value?: string; password_field?: boolean }) => {
+      if (stale) return;
+      try {
+        const result = await api<{ step: { index: number; action: string; description?: string; params?: Record<string, unknown>; site?: string } }>(
+          apiBaseUrl, `/api/browser/recordings/${encodeURIComponent(userRecordingId)}/steps`, { method: 'POST', json: step },
+        );
+        const saved = result.step;
+        setRecordedUserSteps((items) => [...items, {
+          id: `user-recording-${saved.index}-${Date.now()}`, index: saved.index + 1,
+          action: saved.action, target: String(saved.params?.target ?? saved.description ?? ''), url: String(saved.site ?? step.url ?? ''),
+        }]);
+      } catch { /* an already stopped recording no longer accepts page events */ }
+    };
+    const poll = async () => {
+      if (stale || busy) return;
+      const view = viewRefs.current.get(activeTabIdRef.current);
+      if (!view) return;
+      busy = true;
+      try {
+        const url = view.getURL();
+        if (url && url !== lastUrl) {
+          lastUrl = url;
+          await record({ action: 'navigate', url });
+          window.setTimeout(() => { void record({ action: 'wait', url, target: '页面加载完成' }); }, 700);
+        }
+        await view.executeJavaScript(USER_RECORDER_INSTALL);
+        const rows = await view.executeJavaScript<Array<{ action: string; url?: string; selector?: string; target?: string; value?: string; password_field?: boolean }>>(USER_RECORDER_READ);
+        if (Array.isArray(rows)) for (const row of rows) await record(row);
+      } catch { /* Some browser pages block script access; continue recording other pages. */ }
+      finally { busy = false; }
+    };
+    const timer = window.setInterval(() => { void poll(); }, 800);
+    void poll();
+    return () => { stale = true; window.clearInterval(timer); };
+  }, [apiBaseUrl, userRecordingId, activeTabId]);
 
   useEffect(() => {
     if (!localFile) { setLocalFileUrl(''); return; }
@@ -612,7 +685,9 @@ ${current}`);
         className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] text-fg-3 hover:bg-hover hover:text-fg">
         <ScrollText size={13} />{recorderOpen ? '收起操作录制' : '操作录制（可存成技能）'}
       </button>
-      {recorderOpen && <BrowserRecorderPanel apiBaseUrl={apiBaseUrl} runId={runId} events={events} className="mt-2 max-h-72 overflow-auto pr-1" />}
+      {recorderOpen && <BrowserRecorderPanel apiBaseUrl={apiBaseUrl} runId={runId} events={events} userSteps={recordedUserSteps}
+        onRecordingChange={(recording, id) => { if (recording) setRecordedUserSteps([]); setUserRecordingId(recording ? id : null); }}
+        className="mt-2 max-h-72 overflow-auto pr-1" />}
     </div>}
   </div>;
 }

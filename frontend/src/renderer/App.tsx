@@ -1068,6 +1068,39 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
+  useEffect(() => {
+    let lastSent = 0;
+    const updateContext = () => {
+      const now = Date.now();
+      if (now - lastSent < 500) return;
+      lastSent = now;
+      window.atlasDesktop?.setScreenshotContext?.(store.activeConversationId, now);
+    };
+    document.addEventListener('pointerdown', updateContext, true);
+    document.addEventListener('keydown', updateContext, true);
+    updateContext();
+    return () => { document.removeEventListener('pointerdown', updateContext, true); document.removeEventListener('keydown', updateContext, true); };
+  }, [store.activeConversationId]);
+  useEffect(() => window.atlasDesktop?.onSessionScreenshot?.((image, conversationId) => {
+    if (conversationId === useAtlasStore.getState().activeConversationId) {
+      setAttachments((items) => items.length < 4 ? [...items, image] : items);
+      setToast('截图已添加到当前会话输入框');
+      return;
+    }
+    const key = `atlas.screenshot.${conversationId}`;
+    try { const pending: unknown = JSON.parse(localStorage.getItem(key) ?? '[]'); localStorage.setItem(key, JSON.stringify([...(Array.isArray(pending) ? pending : []), image].slice(-4))); } catch { /* ignore local cache errors */ }
+  }), []);
+  useEffect(() => {
+    if (!store.activeConversationId) return;
+    const key = `atlas.screenshot.${store.activeConversationId}`;
+    try {
+      const pending: unknown = JSON.parse(localStorage.getItem(key) ?? '[]');
+      if (Array.isArray(pending) && pending.some((item) => typeof item === 'string')) {
+        setAttachments((items) => [...items, ...pending.filter((item): item is string => typeof item === 'string')].slice(0, 4));
+        localStorage.removeItem(key); setToast('最近的会话截图已放入输入框');
+      }
+    } catch { /* corrupt screenshot cache is ignored */ }
+  }, [store.activeConversationId]);
   useEffect(() => () => { recognitionRef.current?.stop(); dictationRef.current?.stream.getTracks().forEach((track) => track.stop()); void dictationRef.current?.context.close(); window.speechSynthesis?.cancel(); }, []);
 
   const paletteItems: PaletteItem[] = [

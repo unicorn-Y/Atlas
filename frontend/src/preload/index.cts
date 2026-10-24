@@ -21,6 +21,13 @@ const desktopApi: AtlasDesktopApi = {
   setAlwaysOnTop: (enabled) => ipcRenderer.invoke('platform:set-always-on-top', enabled),
   setOpenAtLogin: (enabled) => ipcRenderer.invoke('platform:set-open-at-login', enabled),
   setGlobalShortcut: (accelerator) => ipcRenderer.invoke('platform:set-global-shortcut', accelerator),
+  setScreenshotShortcut: (accelerator) => ipcRenderer.invoke('platform:set-screenshot-shortcut', accelerator),
+  setScreenshotContext: (conversationId, lastInteractionAt) => ipcRenderer.send('platform:set-screenshot-context', conversationId, lastInteractionAt),
+  onSessionScreenshot: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, dataUrl: string, conversationId: string) => callback(dataUrl, conversationId);
+    ipcRenderer.on('app:session-screenshot', listener);
+    return () => ipcRenderer.removeListener('app:session-screenshot', listener);
+  },
   setKeepAwake: (enabled) => ipcRenderer.invoke('platform:set-keep-awake', enabled) as Promise<void>,
   setRuntimeState: (state) => ipcRenderer.send('runtime:set-state', state),
   openWorkspaceInEditor: (editor: PlatformEditorId, workspacePath: string) =>

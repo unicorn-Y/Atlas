@@ -126,6 +126,15 @@ class RecordingControlRequest(BaseModel):
     recording_id: str | None = None
 
 
+class BrowserUserStepRequest(BaseModel):
+    action: str
+    url: str = ""
+    selector: str = ""
+    target: str = ""
+    value: str | None = None
+    password_field: bool = False
+
+
 def _recording_summary(doc: dict[str, Any]) -> dict[str, Any]:
     return {
         "recording_id": doc.get("recording_id"),
@@ -158,6 +167,32 @@ async def get_recording(recording_id: str) -> dict[str, Any]:
     if doc is None:
         raise HTTPException(status_code=404, detail=f"没有 id 为 {recording_id!r} 的浏览器录制")
     return {**doc, "step_count": len(doc.get("steps") or [])}
+
+
+@router.post("/recordings/{recording_id}/steps", dependencies=[Depends(_require_trusted_origin)])
+async def append_user_recording_step(recording_id: str, req: BrowserUserStepRequest) -> dict[str, Any]:
+    """Persist an interaction recorded in the embedded webview by its user."""
+    from atlas.tools.x2.browser import get_runtime
+    from atlas.tools.x2.recording import Recorder
+
+    if req.action not in {"navigate", "click", "type", "wait"}:
+        raise HTTPException(status_code=422, detail="unsupported browser recording action")
+    runtime = get_runtime()
+    doc = runtime.recordings.load(recording_id)
+    if doc is None or doc.get("status") != "recording":
+        raise HTTPException(status_code=404, detail="recording is not active")
+    if req.action == "navigate":
+        params = {"url": req.url[:4096]}
+    elif req.action == "wait":
+        params = {"reason": req.target[:256]}
+    elif req.action == "click":
+        params = {"selector": req.selector[:1024], "target": req.target[:300]}
+    else:
+        params = {"selector": req.selector[:1024], "target": req.target[:300], "password_field": req.password_field}
+        if not req.password_field and req.value is not None:
+            params["text"] = req.value[:2000]
+    step = Recorder(doc, runtime.recordings).record(req.action, params)
+    return {"step": step, "step_count": len(doc.get("steps") or [])}
 
 
 @router.delete("/recordings/{recording_id}", dependencies=[Depends(_require_trusted_origin)])
