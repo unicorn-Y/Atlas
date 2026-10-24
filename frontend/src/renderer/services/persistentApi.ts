@@ -230,6 +230,8 @@ export const automationsApi = {
     api<{ runs: AutomationRun[]; limit: number }>(base, `/api/automations/${encodeURIComponent(id)}/runs?limit=${limit}`),
   importLegacy: (base: string) =>
     api<MigrationReport>(base, '/api/automations/import-legacy', { method: 'POST', json: {} }),
+  rotateWebhookSecret: (base: string, id: string) =>
+    api<{ url: string; secret: string }>(base, `/api/automations/${encodeURIComponent(id)}/webhook/rotate-secret`, { method: 'POST', json: {} }),
 };
 
 // -- devices + takeover (W5) ---------------------------------------------------

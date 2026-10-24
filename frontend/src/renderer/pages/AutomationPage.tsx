@@ -1,11 +1,12 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  CalendarClock, FileCog, Globe, HeartPulse, LoaderCircle, Pause, Play, Plus, Power,
+  CalendarClock, Copy, FileCog, Globe, HeartPulse, LoaderCircle, Pause, Play, Plus, Power,
   RefreshCw, Repeat, Timer, Trash2, Upload, X,
 } from 'lucide-react';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { relativeTime } from '../services/api';
 import type { AutomationRecord } from '../services/persistentApi';
+import { automationsApi } from '../services/persistentApi';
 import GoalsPanel from './GoalsPanel';
 import { describeAutomation, describeTrigger } from './automations/describe';
 
@@ -84,6 +85,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
   const [editingId, setEditingId] = useState('');
+  const [webhookCredential, setWebhookCredential] = useState<{ id: string; secret: string; url: string } | null>(null);
 
   const refresh = useCallback(() => { void loadAutomations(); }, [loadAutomations]);
   useEffect(() => { refresh(); void loadAgents(); }, [refresh, loadAgents]);
@@ -299,6 +301,22 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
             {current.payload.execution_mode === 'worktree' && current.payload.worktree_path && <div><dt>最近工作树</dt><dd className="break-all">{current.payload.worktree_branch} · {current.payload.worktree_path}</dd></div>}
             {Boolean(current.consecutive_errors) && <div><dt>连续出错</dt><dd>{current.consecutive_errors} 次（到阈值会自动停用）</dd></div>}
           </dl>
+
+          {current.trigger.kind === 'webhook' && <section className="mt-3 rounded-xl bg-sunken p-3" aria-label="Webhook 入站路由">
+            <h3 className="m-0 text-[13px] font-semibold">外部 Webhook 入站</h3>
+            <p className="my-1 text-[12px] text-fg-3">POST JSON 并设置 <code>X-Atlas-Timestamp</code>（Unix 秒）与 <code>X-Atlas-Signature: sha256=&lt;HMAC-SHA256(secret, timestamp + "." + 原始请求体)&gt;</code>。请求最多 256 KiB，时间戳需在 5 分钟内；签名仅可用一次。密钥仅在生成时显示，请安全保存。</p>
+            <code className="block break-all text-[11px] text-fg-2">{apiBaseUrl.replace(/\/$/, '')}/api/automations/{encodeURIComponent(current.id)}/webhook</code>
+            <button className="btn ghost mt-2" onClick={() => { void navigator.clipboard?.writeText(`${apiBaseUrl.replace(/\/$/, '')}/api/automations/${encodeURIComponent(current.id)}/webhook`).then(() => onToast('Webhook 地址已复制')); }}><Copy size={13} />复制地址</button>
+            {webhookCredential?.id === current.id && <div className="mt-2">
+              <label className="block text-[11px] text-fg-3">新密钥（本次可见）<input readOnly value={webhookCredential.secret} className="mt-1 w-full select-all font-mono" onFocus={(event) => event.currentTarget.select()} /></label>
+              <p className="mb-0 mt-1 break-all text-[11px] text-fg-3">复制请求地址：{webhookCredential.url}</p>
+            </div>}
+            <button className="btn ghost mt-2" disabled={busy || !connected} onClick={() => void act(async () => {
+              const result = await automationsApi.rotateWebhookSecret(apiBaseUrl, current.id);
+              setWebhookCredential({ id: current.id, secret: result.secret, url: `${apiBaseUrl.replace(/\/$/, '')}${result.url}` });
+              await navigator.clipboard?.writeText(result.secret);
+            }, 'Webhook 密钥已轮换并复制到剪贴板')}><RefreshCw size={13} />{webhookCredential?.id === current.id ? '重新轮换密钥' : '生成 / 轮换密钥'}</button>
+          </section>}
 
           {editable(current) ? <>
             <h3 style={{ fontSize: 13, margin: '14px 0 6px' }}>最近运行</h3>

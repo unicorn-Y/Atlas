@@ -9,10 +9,11 @@ run-now / cancel / runs 返回 503。
 
 from __future__ import annotations
 
+import json
 from typing import Any, Literal
 
 import structlog
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from atlas.automation import (
@@ -23,6 +24,7 @@ from atlas.automation import (
 from atlas.automation.engine import AutomationEngine, compute_next_run_at
 from atlas.automation.migrate import import_legacy_schedules
 from atlas.automation.store import normalize_record
+from atlas.automation.webhooks import get_webhook_credentials
 
 log = structlog.get_logger()
 
@@ -101,6 +103,9 @@ class AutomationPatch(BaseModel):
 
 class ImportLegacyRequest(BaseModel):
     toml_path: str | None = Field(default=None, description="缺省 data/schedules.toml")
+
+
+MAX_WEBHOOK_BODY = 256 * 1024
 
 
 def _engine() -> AutomationEngine:
@@ -192,6 +197,7 @@ async def delete_automation(automation_id: str) -> dict[str, Any]:
         raise _not_found(automation_id)
     await engine.remove(automation_id)
     deleted = engine.store.delete(automation_id)
+    get_webhook_credentials().delete(automation_id)
     return {"deleted": deleted}
 
 
@@ -251,6 +257,51 @@ async def resume_automation(automation_id: str) -> dict[str, Any]:
         return await engine.resume(automation_id)
     except KeyError as exc:
         raise _not_found(automation_id) from exc
+
+
+@automation_router.post("/{automation_id}/webhook/rotate-secret")
+async def rotate_webhook_secret(automation_id: str) -> dict[str, Any]:
+    """Rotate a task's webhook signing secret. The plaintext is returned only once."""
+    record = _engine().store.get(automation_id)
+    if record is None:
+        raise _not_found(automation_id)
+    if (record.get("trigger") or {}).get("kind") != "webhook":
+        raise HTTPException(status_code=409, detail="该自动化不是 Webhook 触发")
+    secret = get_webhook_credentials().rotate(automation_id)
+    return {"url": f"/api/automations/{automation_id}/webhook", "secret": secret}
+
+
+@automation_router.post("/{automation_id}/webhook")
+async def receive_automation_webhook(automation_id: str, request: Request) -> dict[str, Any]:
+    """Verify a signed raw request and enqueue it through the normal event trigger."""
+    engine = _require_started_engine()
+    record = engine.store.get(automation_id)
+    if record is None:
+        raise _not_found(automation_id)
+    if (record.get("trigger") or {}).get("kind") != "webhook":
+        raise HTTPException(status_code=409, detail="该自动化不是 Webhook 触发")
+    length = request.headers.get("content-length")
+    if length and (not length.isdecimal() or int(length) > MAX_WEBHOOK_BODY):
+        raise HTTPException(status_code=413, detail="Webhook 请求体超过 256 KiB")
+    raw = await request.body()
+    if len(raw) > MAX_WEBHOOK_BODY:
+        raise HTTPException(status_code=413, detail="Webhook 请求体超过 256 KiB")
+    timestamp = request.headers.get("x-atlas-timestamp", "")
+    signature = request.headers.get("x-atlas-signature", "")
+    if not get_webhook_credentials().verify(automation_id, timestamp, signature, raw):
+        raise HTTPException(status_code=401, detail="Webhook 签名无效、过期或已使用")
+    try:
+        payload = json.loads(raw or b"{}")
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Webhook 请求体必须是 JSON") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Webhook JSON 顶层必须是对象")
+    try:
+        return await engine.trigger_event(automation_id, source="webhook", payload=payload)
+    except KeyError as exc:
+        raise _not_found(automation_id) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @automation_router.post("/import-legacy")

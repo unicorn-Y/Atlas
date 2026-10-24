@@ -28,6 +28,8 @@ DBOS 落点（integration-map §4 映射）：
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import subprocess
 import uuid
 import zoneinfo
@@ -41,6 +43,15 @@ import structlog
 from atlas.automation.store import AutomationStore, normalize_record
 
 log = structlog.get_logger()
+
+
+def _message_with_webhook_payload(
+    message: str, trigger: str, payload: dict[str, Any] | None,
+) -> str:
+    if trigger != "webhook" or not payload:
+        return message
+    encoded = json.dumps(payload, ensure_ascii=False, indent=2)[:64_000]
+    return f"{message}\n\n外部 Webhook 事件数据（JSON）：\n```json\n{encoded}\n```".strip()
 
 HeartbeatTick = Callable[[str, str], Awaitable[Any]]
 DispatchTurn = Callable[[dict[str, Any]], Awaitable[Any]]
@@ -200,21 +211,26 @@ class AutomationEngine:
         store = self._store
 
         @DBOS.step(name="automation_execute")
-        async def automation_execute(automation_id: str, trigger: str) -> dict[str, Any]:
-            return await engine.execute_payload(automation_id, trigger)
+        async def automation_execute(
+            automation_id: str, trigger: str, trigger_payload: dict[str, Any] | None = None,
+        ) -> dict[str, Any]:
+            return await engine.execute_payload(automation_id, trigger, trigger_payload)
 
         @DBOS.step(name="automation_record_outcome")
         async def automation_record_outcome(automation_id: str, run: dict[str, Any]) -> None:
             engine.apply_outcome(automation_id, run)
 
         @DBOS.workflow(name=WORKFLOW_RUN_NAME)
-        async def automation_run(scheduled_or_id: Any, ctx: Any = None) -> dict[str, Any]:
+        async def automation_run(scheduled_or_id: Any, ctx: Any = None, trigger_payload: Any = None) -> dict[str, Any]:
             # cron 触发: (datetime, context dict)；enqueue 触发: (id, trigger str)
             if isinstance(scheduled_or_id, str):
                 automation_id, trigger = scheduled_or_id, str(ctx or "manual")
             else:
                 automation_id, trigger = (ctx or {}).get("automation_id", ""), "cron"
-            run = await automation_execute(automation_id, trigger)
+            run = await automation_execute(
+                automation_id, trigger,
+                trigger_payload if isinstance(trigger_payload, dict) else None,
+            )
             await automation_record_outcome(automation_id, {**run, "trigger": trigger})
             return run
 
@@ -490,6 +506,7 @@ class AutomationEngine:
         trigger: str,
         *,
         delay_seconds: float | None = None,
+        trigger_payload: dict[str, Any] | None = None,
     ) -> Any:
         """Enqueue one ``automation_run``；dedup id 保证同一 automation 同时至多一个活跃 run."""
         from dbos import DBOS
@@ -505,7 +522,9 @@ class AutomationEngine:
         }
         if delay_seconds is not None and delay_seconds > 0:
             options["delay_seconds"] = float(delay_seconds)
-        handle = await DBOS.enqueue_workflow_with_options_async(options, automation_id, trigger)
+        handle = await DBOS.enqueue_workflow_with_options_async(
+            options, automation_id, trigger, trigger_payload or {},
+        )
         log.info(
             "automation.run_enqueued",
             automation_id=automation_id,
@@ -548,7 +567,7 @@ class AutomationEngine:
         self._require_started()
         if not record.get("enabled") or record["state"].get("paused_reason"):
             return {"fired": False, "reason": "paused"}
-        handle = await self._enqueue_run(automation_id, source)
+        handle = await self._enqueue_run(automation_id, source, trigger_payload=payload)
         return {"fired": True, "workflow_id": handle.workflow_id, "payload": payload or {}}
 
     async def _wait_run(self, workflow_id: str, timeout: float) -> Any:
@@ -629,7 +648,10 @@ class AutomationEngine:
 
     # -- payload 执行（step 内运行）-------------------------------------------------
 
-    async def execute_payload(self, automation_id: str, trigger: str) -> dict[str, Any]:
+    async def execute_payload(
+        self, automation_id: str, trigger: str,
+        trigger_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """执行一个 automation 的 payload；在 DBOS step 内调用（可安全做副作用）。"""
         record = self._store.get(automation_id)
         started_at = _utc_now_iso()
@@ -658,7 +680,10 @@ class AutomationEngine:
                     {
                         "automation_id": automation_id,
                         "trigger": trigger,
-                        "message": payload.get("message", ""),
+                        "message": _message_with_webhook_payload(
+                            str(payload.get("message", "")), trigger, trigger_payload,
+                        ),
+                        "webhook_payload": trigger_payload or {},
                         "agent_id": payload.get("agent_id") or record.get("owner_agent_id", ""),
                         "model": payload.get("model", ""),
                         "skills": payload.get("skills", []),
@@ -676,7 +701,7 @@ class AutomationEngine:
                     if payload.get("cleanup_policy") == "remove_after_run":
                         self._cleanup_record_worktree(self._require_automation(automation_id))
             elif kind == "script":
-                result = await self._run_script(payload)
+                result = await self._run_script(payload, trigger_payload=trigger_payload)
             else:
                 raise ValueError(f"未知 payload.kind: {kind!r}")
         except (asyncio.TimeoutError, TimeoutError):
@@ -699,13 +724,16 @@ class AutomationEngine:
             "result": _summarize(result),
         }
 
-    async def _run_script(self, payload: dict[str, Any]) -> dict[str, Any]:
+    async def _run_script(
+        self, payload: dict[str, Any], *, trigger_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         script = str(payload.get("script", ""))
         timeout = float(payload.get("timeout_seconds") or 60.0)
         proc = await asyncio.create_subprocess_shell(
             script,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env={**os.environ, "ATLAS_WEBHOOK_PAYLOAD": json.dumps(trigger_payload or {}, ensure_ascii=False)},
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
