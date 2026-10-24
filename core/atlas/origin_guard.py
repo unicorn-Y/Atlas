@@ -53,6 +53,14 @@ def is_trusted(
             expected = ""
     if expected and token and secrets.compare_digest(token, expected):
         return True
+    if token:
+        try:
+            from atlas.remote_access import remote_token_valid
+
+            if remote_token_valid(token):
+                return True
+        except Exception:
+            pass
     if client_host is not None:
         try:
             if not ipaddress.ip_address(client_host).is_loopback:
@@ -83,10 +91,18 @@ class OriginGuard:
         is_preflight = (scope["type"] == "http" and scope["method"] == "OPTIONS"
                         and "access-control-request-method" in headers)
         origin, token = headers.get("origin"), headers.get(TOKEN_HEADER)
+        if scope["type"] == "websocket" and not token:
+            protocols = [item.strip() for item in headers.get("sec-websocket-protocol", "").split(",")]
+            if len(protocols) > 1 and protocols[0] == "atlas":
+                token = protocols[1]
         fetch_site = headers.get("sec-fetch-site")
         client = scope.get("client")
         client_host = client[0] if client else None
-        if is_preflight or is_trusted(origin, token, self.extra_origins(), fetch_site, client_host):
+        public_remote_document = (
+            scope["type"] == "http" and scope["method"] == "GET"
+            and scope.get("path") == "/remote"
+        )
+        if is_preflight or public_remote_document or is_trusted(origin, token, self.extra_origins(), fetch_site, client_host):
             await self.app(scope, receive, send)
             return
         if scope["type"] == "websocket":

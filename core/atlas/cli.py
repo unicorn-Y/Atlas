@@ -1419,5 +1419,90 @@ def doctor(as_json: bool, check: str | None) -> None:
     sys.exit(EXIT_OK if all_ok else EXIT_RUN_FAILED)
 
 
+
+@main.group("remote")
+def remote_group() -> None:
+    """Open or close a short-lived mobile session to this Atlas machine."""
+
+
+@remote_group.command("start")
+@click.option("--host", default=None, help="Address phones use to reach this machine (default: detected LAN address)")
+@click.option("--ttl-hours", type=click.IntRange(1, 24), default=8, show_default=True)
+@click.option("--port", type=click.IntRange(1, 65535), default=None, help="Atlas API port")
+def remote_start(host: str | None, ttl_hours: int, port: int | None) -> None:
+    """Start the local API if needed and print a temporary mobile URL."""
+    import httpx
+    import subprocess
+    import time
+    from atlas.config import get_config
+    from atlas.remote_access import local_network_address
+
+    selected_port = port or get_config().server_port
+    base = f"http://127.0.0.1:{selected_port}"
+    try:
+        response = httpx.get(f"{base}/api/health", timeout=1.0)
+        response.raise_for_status()
+    except httpx.HTTPError:
+        flags = 0x00000008 | 0x00000200 if os.name == "nt" else 0
+        out = open(os.devnull, "ab")
+        subprocess.Popen([sys.executable, "-m", "atlas.cli", "serve", "--port", str(selected_port)],
+                         stdin=subprocess.DEVNULL, stdout=out, stderr=out,
+                         creationflags=flags, start_new_session=os.name != "nt")
+        deadline = time.monotonic() + 45
+        while time.monotonic() < deadline:
+            try:
+                if httpx.get(f"{base}/api/health", timeout=1.0).is_success:
+                    break
+            except httpx.HTTPError:
+                time.sleep(0.4)
+        else:
+            raise click.ClickException("Atlas 服务启动失败；运行 atlas serve 查看详细错误。")
+    try:
+        grant = httpx.post(f"{base}/api/remote/access", json={
+            "host": host or local_network_address(), "ttl_seconds": ttl_hours * 3600,
+        }, timeout=5.0).json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise click.ClickException(f"远程入口启动失败：{exc}") from exc
+    if not grant.get("url"):
+        raise click.ClickException("Atlas 未能创建远程访问链接。")
+    console.print(f"Remote URL (valid {ttl_hours}h): {grant['url']}")
+    console.print("在同一网络的手机浏览器打开链接；运行 atlas remote stop 可立即撤销。")
+
+
+@remote_group.command("status")
+@click.option("--port", type=click.IntRange(1, 65535), default=None, help="Atlas API port")
+def remote_status(port: int | None) -> None:
+    """Show remote access state or the last connection error."""
+    import httpx
+    from atlas.config import get_config
+
+    selected_port = port or get_config().server_port
+    try:
+        response = httpx.get(f"http://127.0.0.1:{selected_port}/api/remote/status", timeout=3.0)
+        response.raise_for_status()
+        state = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        console.print(f"Remote access unavailable: {exc}; retry after checking Atlas service.")
+        raise click.ClickException("无法连接 Atlas 远程入口") from exc
+    console.print(f"Remote access: {state['active_sessions']} active session(s); LAN address {state['host']}; "
+                  f"latest expiry {state['latest_expiry'] or 'none'}.")
+
+
+@remote_group.command("stop")
+@click.option("--port", type=click.IntRange(1, 65535), default=None, help="Atlas API port")
+def remote_stop(port: int | None) -> None:
+    """Revoke every outstanding temporary mobile session."""
+    import httpx
+    from atlas.config import get_config
+
+    selected_port = port or get_config().server_port
+    try:
+        response = httpx.post(f"http://127.0.0.1:{selected_port}/api/remote/stop", json={}, timeout=3.0)
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        console.print(f"Remote access stop failed: {exc}; retry after checking Atlas service.")
+        raise click.ClickException("无法连接 Atlas 远程入口") from exc
+    console.print(f"Remote access stopped; revoked {response.json().get('revoked', 0)} session(s).")
+
 if __name__ == "__main__":
     cli_main()
