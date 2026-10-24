@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import {
   Archive, ArchiveRestore, ArrowUpDown, AppWindow, Blocks, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
   Folder, FolderOpen, GitBranch, GripVertical, Home, Info, KanbanSquare, MessageSquare, MonitorSmartphone, Moon, MoreHorizontal, PanelLeft,
-  Library, Pencil, Pin, PinOff, Plus, Repeat, Search, Settings, Sparkles, SquarePen, Sun, Trash2, Users, X, Wand2, type LucideIcon,
+  Library, ListTodo, Pencil, Pin, PinOff, Plus, Repeat, Search, Settings, Sparkles, SquarePen, Sun, Trash2, Users, X, Wand2, type LucideIcon,
 } from 'lucide-react';
 import type { ConversationSummary } from '@atlas/backend-adapter';
 import { api } from '../services/api';
@@ -18,6 +18,7 @@ import { Tip } from '../ui/Tooltip';
 import { cn } from '../ui/cn';
 import { nextTheme, themeInfo, type Theme } from './themes';
 import { cleanSearchSnippet, rankSearchHits, searchHitRoleLabel } from '../services/searchHits';
+import TriageBoardDialog from '../components/TriageBoardDialog';
 
 export type View = 'home' | 'chat' | 'groups' | 'agents' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills' | 'devices' | 'evolution' | 'workbench' | 'library';
 
@@ -136,6 +137,7 @@ interface SidebarProps {
 export default function Sidebar(props: SidebarProps) {
   const { mini } = props;
   const [showArchived, setShowArchived] = useState(false);
+  const [triageOpen, setTriageOpen] = useState(false);
   const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState('');
   const [confirmArchive, setConfirmArchive] = useState('');
@@ -840,6 +842,7 @@ export default function Sidebar(props: SidebarProps) {
     </nav>
 
     {mini && <div className="flex flex-col items-center pt-2.5">
+      <Tip label="跨会话收件箱与工作板" side="right"><button aria-label="跨会话收件箱与工作板" onClick={() => setTriageOpen(true)} className="mb-2 grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><ListTodo size={16} /></button></Tip>
       <Tip label="展开任务栏" side="right">
         <button aria-label="展开侧边栏" onClick={props.onToggleMini} className="grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><PanelLeft size={16} /></button>
       </Tip>
@@ -856,6 +859,7 @@ export default function Sidebar(props: SidebarProps) {
       className="mt-1.5 flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] text-fg hover:bg-hover disabled:opacity-60">
       <SquarePen size={16} className="text-fg-2" /><span>新任务</span><Kbd className="ml-auto">Ctrl N</Kbd>
     </button>
+    <button onClick={() => setTriageOpen(true)} aria-label="跨会话收件箱与工作板" className="mt-1 flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[12.5px] text-fg-2 hover:bg-hover"><ListTodo size={15} className="text-brand"/><span>分诊与工作板</span></button>
     <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="历史会话">
       <div className="mb-1.5 flex items-center gap-1 px-1">
         <label className="relative min-w-0 flex-1">
@@ -936,6 +940,7 @@ export default function Sidebar(props: SidebarProps) {
 
     <SidebarConversationDetails conversation={details} open={Boolean(details)} onOpenChange={(open) => { if (!open) setDetails(null); }}
       running={details ? isRunning(details.id) : false} unread={details ? isUnread(details.id) : false} waiting={details ? isWaiting(details) : false} />
+    <TriageBoardDialog apiBaseUrl={backend.apiBaseUrl} open={triageOpen} onOpenChange={setTriageOpen} conversations={props.conversations} onOpenConversation={props.onOpenConversation} />
     <Dialog open={searchDialogOpen} onOpenChange={setSearchDialogOpen} label="搜索侧栏会话"
       className="w-[min(440px,calc(100vw-28px))] border border-line bg-overlay p-4 shadow-2xl" align="top">
       <h2 className="m-0 text-[16px] font-semibold text-heading">搜索会话</h2>
