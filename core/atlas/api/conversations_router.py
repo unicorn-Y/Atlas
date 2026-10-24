@@ -206,7 +206,7 @@ async def export_conversation_share(
     from atlas.engine.session_sync import read_session_messages
     from atlas.sharing import export_html
 
-    messages = await asyncio.to_thread(read_session_messages, DATA_ROOT / "engine", conversation_id, limit=1000)
+    messages = await asyncio.to_thread(read_session_messages, DATA_ROOT / "engine", conversation_id, limit=100000)
     name = re.sub(r"[^A-Za-z0-9_-]+", "-", str(conversation.get("title") or "conversation")).strip("-")[:64] or "conversation"
     path = DATA_ROOT / "exports" / f"{name}-{conversation_id[:8]}.html"
     export_html(path, title=str(conversation.get("title") or "Atlas conversation"), messages=messages,
@@ -214,6 +214,67 @@ async def export_conversation_share(
                 include_tools=bool(req.get("include_tools", True)),
                 include_thinking=bool(req.get("include_thinking", False)))
     return {"path": str(path), "messages": len(messages)}
+
+
+@router.post("/api/conversations/{conversation_id}/pr")
+async def link_conversation_pr(
+    services: Annotated[AppServices, Depends(get_app_services)], conversation_id: str,
+    req: dict[str, Any],
+) -> dict[str, Any]:
+    memory = services.memory or _server().memory
+    conversation = await memory.get_conversation(conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    root = str(conversation.get("workspace") or "")
+    if not root or root.startswith("ssh://"):
+        raise HTTPException(status_code=422, detail="PR automation requires a local conversation workspace")
+    pr = str(req.get("pr") or "").strip()
+    if not pr:
+        raise HTTPException(status_code=422, detail="pr is required")
+    from atlas.pr_automation import PRLinkStore
+    return PRLinkStore().link(conversation_id, root=root, pr=pr)
+
+
+@router.get("/api/conversations/{conversation_id}/pr")
+async def get_conversation_pr(
+    services: Annotated[AppServices, Depends(get_app_services)], conversation_id: str,
+) -> dict[str, Any]:
+    from atlas.pr_automation import PRLinkStore, poll_once
+    memory = services.memory or _server().memory
+    store = PRLinkStore(); link = store.get(conversation_id)
+    if not link:
+        return {"pr": None}
+    loop = asyncio.get_running_loop()
+
+    def run_fix(conversation: str, prompt: str) -> None:
+        async def start() -> None:
+            from atlas.api.run_drive import _handle_run_start
+            await _handle_run_start("pr-autofix", {"conversation_id": conversation, "content": prompt,
+                "workspace": link["root"], "source": "pr-autofix"}, _server().runtime_mgr)
+        loop.create_task(start())
+
+    def archive(conversation: str) -> None:
+        loop.create_task(memory.update_conversation(conversation, archived=True))
+
+    try:
+        result = await asyncio.to_thread(poll_once, link, run_fix=run_fix, archive=archive,
+                                         save=lambda value: store.save(conversation_id, value))
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {**result, "settings": {key: link.get(key) for key in ("auto_fix", "interval_seconds", "max_attempts")}}
+
+
+@router.patch("/api/conversations/{conversation_id}/pr")
+async def update_conversation_pr(
+    conversation_id: str, req: dict[str, Any],
+) -> dict[str, Any]:
+    from atlas.pr_automation import PRLinkStore
+    try:
+        return PRLinkStore().update(conversation_id, req)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/api/conversations/{conversation_id}/search")

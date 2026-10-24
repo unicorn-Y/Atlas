@@ -1313,6 +1313,17 @@ export default function App() {
         setToast(`已导出并复制文件路径：${path}`);
       }).catch((error) => setToast(`导出失败：${error instanceof Error ? error.message : String(error)}`));
     } },
+    { id: 'pr', label: '/pr', hint: '关联 PR；附加 --auto 开启后台 CI 修复', takesArgument: true, run: (value: string) => {
+      if (!activeConversation) { setToast('先打开要关联 PR 的会话'); return; }
+      const pr = value.replace(/\s+--auto\b/i, '').trim();
+      if (!pr) { setToast('用法：/pr <链接或编号> [--auto]'); return; }
+      void api<Record<string, unknown>>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(activeConversation.id)}/pr`, {
+        method: 'POST', json: { pr },
+      }).then(async () => {
+        if (/\s+--auto\b/i.test(value)) await api(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(activeConversation.id)}/pr`, { method: 'PATCH', json: { auto_fix: true } });
+        setToast('PR 已关联；可在输入框旁查看状态');
+      }).catch((error) => setToast(`PR 关联失败：${error instanceof Error ? error.message : String(error)}`));
+    } },
     { id: 'folder', label: '/folder', hint: '选择这个对话的工作目录', run: () => void chooseWorkspace() },
     { id: 'pwd', label: '/pwd', hint: '显示当前对话的工作目录', run: () => {
       const path = activeConversation

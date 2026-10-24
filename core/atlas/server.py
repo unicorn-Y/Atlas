@@ -275,6 +275,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     routes_before_lifespan_extensions = len(app.routes)
     startup_aborted = False
     resume_task: asyncio.Task[None] | None = None
+    pr_monitor_task: asyncio.Task[None] | None = None
     cancelled = False
     try:
         model_mgr = ModelManager()
@@ -689,6 +690,42 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             name="atlas-resume-interrupted-runs",
         )
 
+        async def monitor_linked_prs() -> None:
+            from atlas.pr_automation import PRLinkStore, poll_once
+
+            last_poll: dict[str, float] = {}
+            loop = asyncio.get_running_loop()
+            while True:
+                await asyncio.sleep(15)
+                store = PRLinkStore()
+                for link in store.all():
+                    conversation_id = str(link.get("conversation_id", ""))
+                    now = loop.time()
+                    interval = max(30, int(link.get("interval_seconds", 180)))
+                    if not conversation_id or now - last_poll.get(conversation_id, 0) < interval:
+                        continue
+                    last_poll[conversation_id] = now
+
+                    def run_fix(conversation: str, prompt: str) -> None:
+                        def start() -> None:
+                            asyncio.create_task(_handle_run_start("pr-autofix", {
+                                "conversation_id": conversation, "content": prompt,
+                                "workspace": str(link["root"]), "source": "pr-autofix",
+                            }, manager))
+                        loop.call_soon_threadsafe(start)
+
+                    def archive(conversation: str) -> None:
+                        loop.call_soon_threadsafe(lambda: asyncio.create_task(memory.update_conversation(conversation, archived=True)))
+
+                    try:
+                        await asyncio.to_thread(poll_once, link, run_fix=run_fix, archive=archive,
+                                                save=lambda value: store.save(conversation_id, value))
+                    except (OSError, RuntimeError, ValueError) as exc:
+                        log.warning("pr_monitor.poll_failed", conversation_id=conversation_id,
+                                    error_type=type(exc).__name__)
+
+        pr_monitor_task = asyncio.create_task(monitor_linked_prs(), name="atlas-pr-monitor")
+
         yield  # app is running
     except BaseException:
         startup_aborted = True
@@ -698,6 +735,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             resume_task.cancel()
             with suppress(asyncio.CancelledError, Exception):
                 await resume_task
+        if pr_monitor_task is not None:
+            pr_monitor_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await pr_monitor_task
         if deferred_startup is not None:
             # Let deferred startup settle before reverse teardown; a stuck step is bounded.
             try:
