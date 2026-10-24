@@ -793,6 +793,13 @@ def browser_navigate(url: str, task_id: Optional[str] = None) -> str:
         response["fallback_warning"] = features["fallback_warning"]
     if features.get("real_profile"):  # auditability: this ran on the user's real-profile copy-browser
         response["used_real_profile"] = True
+        # Chrome 127+ on Windows encrypts cookies with app-bound (v20) keys and Chrome 136+ re-keys
+        # non-default data dirs, so a copied profile keeps bookmarks/extensions but never the logins.
+        response["login_state_note"] = (
+            "复制配置模式：书签、扩展等已带入，但网站登录状态不会带入（Chrome 新版对 cookie 做了应用绑定加密，"
+            "复制出的配置无法解密）。页面显示未登录不代表用户没登录。需要用户的登录状态时，请告诉用户在"
+            "设置→浏览器里开启“直连正在使用的 Chrome”或连接 Atlas 浏览器扩展。"
+        )
     # Only a successful, non-blocked navigation becomes the task owner: failed opens
     # and blocked redirects must not retarget follow-up clicks to an irrelevant session.
     _last_active_session_key[effective_task_id] = nav_session_key

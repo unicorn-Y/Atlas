@@ -23,9 +23,35 @@ ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "core"
 sys.path.insert(0, str(CORE))
 CHROME = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
-EXTENSION_CHROME = Path(os.environ.get("ATLAS_U7_EXTENSION_CHROME", str(CHROME)))
 if not CHROME.is_file():
     raise SystemExit(f"Chrome was not found at {CHROME}")
+
+
+def _chrome_for_testing() -> Path:
+    """Stable Chrome 137+ ignores --load-extension, so the extension check needs Chrome for Testing.
+
+    Uses ATLAS_U7_EXTENSION_CHROME when set; otherwise reuses (or downloads once via
+    @puppeteer/browsers) a copy under ATLAS_U7_CFT_DIR, default <repo>/../_tmp/cft.
+    """
+    configured = os.environ.get("ATLAS_U7_EXTENSION_CHROME")
+    if configured:
+        return Path(configured)
+    cache = Path(os.environ.get("ATLAS_U7_CFT_DIR", str(ROOT.parent / "_tmp" / "cft")))
+    found = sorted(cache.glob("chrome/win64-*/chrome-win64/chrome.exe"))
+    if found:
+        return found[-1]
+    import shutil
+    import subprocess as _sp
+    npx = shutil.which("npx") or shutil.which("npx.cmd")
+    if npx is None:
+        return CHROME
+    _sp.run([npx, "-y", "@puppeteer/browsers", "install", "chrome@stable", "--path", str(cache)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900, check=False)
+    found = sorted(cache.glob("chrome/win64-*/chrome-win64/chrome.exe"))
+    return found[-1] if found else CHROME
+
+
+EXTENSION_CHROME = _chrome_for_testing()
 
 
 def check(condition: bool, message: str) -> None:

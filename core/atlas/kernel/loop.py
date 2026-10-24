@@ -2262,9 +2262,9 @@ class AtlasKernel:
                         "outcome": "denied"}
             from atlas.tools.browser_use_compat import browser_use_call
 
-            result = await browser_use_call(
-                operation, browser_arguments, runtime=runtime,
-            )
+            # `runtime` here is the kernel's AgentRunContext, not an X2 browser runtime;
+            # let browser_use_compat resolve the process-wide browser runtime itself.
+            result = await browser_use_call(operation, browser_arguments)
             return {"content": json.dumps(result, ensure_ascii=False, default=str),
                     "data": result, "is_error": not bool(result.get("success")),
                     "outcome": "completed" if result.get("success") else "failed"}

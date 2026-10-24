@@ -6,6 +6,7 @@ Split out of ``tools/browser_tool.py``. Facade-owned state is read through ``_bt
 import functools
 import os
 import shutil
+import subprocess
 from typing import Optional
 
 from atlas.engine_core.hermes_constants import agent_browser_runnable, is_termux as _is_termux_environment
@@ -48,9 +49,32 @@ def _merge_browser_path(existing_path: str = "") -> str:
 
 
 def _browser_install_hint() -> str:
-    if _is_termux_environment():
-        return "npm install -g agent-browser && agent-browser install"
-    return "hermes pm install agent-browser (system libraries: npx playwright install-deps chromium)"
+    # Atlas 不带 Hermes 的 pm 包管理器；npm 全局安装是 Atlas 用户能照做的唯一方式。
+    return "npm install -g agent-browser && agent-browser install"
+
+
+_AUTOINSTALL_ATTEMPTED = False
+
+
+def _autoinstall_agent_browser() -> Optional[str]:
+    """Install agent-browser with npm once per process when it is missing (Atlas has no Hermes pm)."""
+    global _AUTOINSTALL_ATTEMPTED
+    if _AUTOINSTALL_ATTEMPTED or os.environ.get("ATLAS_BROWSER_AUTOINSTALL", "1") == "0":
+        return None
+    _AUTOINSTALL_ATTEMPTED = True
+    npm = shutil.which("npm") or shutil.which("npm.cmd")
+    if npm is None:
+        return None
+    try:
+        subprocess.run([npm, "install", "-g", "agent-browser"], capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=600, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for search_path in (None, _merge_browser_path("")):
+        candidate = shutil.which("agent-browser", path=search_path) if search_path != "" else None
+        if candidate and _agent_browser_candidate_present(candidate):
+            return candidate
+    return None
 
 
 def _agent_browser_candidate_present(path: str | None) -> bool:
@@ -93,6 +117,10 @@ def _find_agent_browser(*, validate: bool = True) -> str:
         installed = pm.installed_package("agent-browser")
         if installed and installed.binary is not None:
             return str(installed.binary)
+    if validate and not termux and pm is None:
+        installed_path = _autoinstall_agent_browser()
+        if installed_path:
+            return installed_path
     raise FileNotFoundError(hint)
 
 

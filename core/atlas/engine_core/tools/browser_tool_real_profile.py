@@ -144,7 +144,8 @@ def _real_profile_cdp() -> tuple[Optional[str], Optional[str]]:
     from atlas.config import load_user_settings
     selected_mode = str((load_user_settings().get("browser") or {}).get("mode") or "").lower()
     config_mode = str(bt._browser_cfg("mode", "", lambda value: str(value or "").lower(), "browser.mode"))
-    mode = selected_mode or config_mode
+    # 没配置时默认"自动"：扩展 > 直连 Chrome > 复制本机配置 > 隔离浏览器（否则新能力默认关着）。
+    mode = selected_mode or config_mode or "auto"
     automatic = mode == "auto"
     if mode == "auto":
         from atlas.engine_core.tools.browser_extension_bridge import is_connected

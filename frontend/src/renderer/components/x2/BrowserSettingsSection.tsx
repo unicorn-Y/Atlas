@@ -12,8 +12,8 @@ import { api } from '../../services/api';
 export const BROWSER_MODES: Array<{ value: BrowserControlMode; label: string; hint: string }> = [
   { value: 'auto', label: '自动选择', hint: '按扩展 > 已打开的 Chrome > 复制配置 > 独立浏览器的顺序连接。' },
   { value: 'standalone', label: '独立浏览器', hint: 'Atlas 开一个干净的内置浏览器，不碰你平时的登录状态。' },
-  { value: 'copied-profile', label: '复制本机配置', hint: '复制日常浏览器的 Cookie 与登录状态，已登录的网站直接可用。' },
-  { value: 'live_chrome', label: '连接正在使用的 Chrome', hint: '在 chrome://inspect/#remote-debugging 启用发现后接管当前会话。' },
+  { value: 'copied-profile', label: '复制本机配置', hint: '复制日常浏览器的书签、扩展和设置在后台运行。注意：新版 Chrome/Edge 对 Cookie 做了应用绑定加密，副本里不会有网站登录状态；需要登录状态请用“连接正在使用的 Chrome”或“浏览器扩展”。' },
+  { value: 'live_chrome', label: '连接正在使用的 Chrome', hint: '在 chrome://inspect/#remote-debugging 启用发现后接管当前会话，能直接用你已登录的网站。' },
   { value: 'cdp', label: '自定义 CDP 地址', hint: '连接手动配置的 Chromium DevTools 地址。' },
   { value: 'extension', label: '浏览器扩展', hint: '在你自己的浏览器里装 Atlas 扩展，由扩展代为操作。' },
 ];
