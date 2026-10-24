@@ -47,6 +47,7 @@ from atlas.api.output_style_settings_router import router as output_style_settin
 from atlas.api.personal_todos_router import router as personal_todos_router
 from atlas.api.projects_router import router as projects_router
 from atlas.api.u6_router import router as u6_router
+from atlas.api.ultraplan_router import router as ultraplan_router
 from atlas.api.records_router import router as records_router
 from atlas.api.runtime import RuntimeManager
 from atlas.api.runtime_router import router as runtime_router
@@ -142,6 +143,7 @@ def create_app(
         library_router,
         expert_mode_router,
         config_editor_router,
+        ultraplan_router,
     ):
         app.include_router(router)
     app.include_router(memory_library_router)

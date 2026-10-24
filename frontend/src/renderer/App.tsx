@@ -7,6 +7,7 @@ import {
 import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/backend-adapter';
 import type { BackendStartupProgress } from '../shared/ipc';
+import type { Artifact } from '../types/artifact';
 import { latestTodos, usageSummary } from './components/runInsights';
 import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
 import KeymapDialog from './components/KeymapDialog';
@@ -17,6 +18,7 @@ const ProgressCapsule = lazy(() => import('./components/ProgressCapsule'));
 const ConversationQueuePanel = lazy(() => import('./components/ConversationQueuePanel'));
 const RecipesDialog = lazy(() => import('./components/RecipesDialog'));
 const SideChat = lazy(() => import('./components/SideChat'));
+const UltraplanPanel = lazy(() => import('./components/UltraplanPanel'));
 const RemoteFolderDialog = lazy(() => import('./components/RemoteFolderDialog'));
 const InitDialog = lazy(() => import('./components/InitDialog'));
 const LspStatusSection = lazy(() => import('./components/LspStatusSection'));
@@ -273,6 +275,8 @@ export default function App() {
   composerSnapshotRef.current = { text: input, attachments, files, mentions };
   const [recipesOpen, setRecipesOpen] = useState(false);
   const [side, setSide] = useState<{ open: boolean; question?: string }>({ open: false });
+  const [ultraplanGoal, setUltraplanGoal] = useState('');
+  const [ultraplanArtifact, setUltraplanArtifact] = useState<Artifact | null>(null);
   const [branches, setBranches] = useState<string[]>([]);
   const [gitBranch, setGitBranch] = useState('');
   const [processCount, setProcessCount] = useState<number | null>(null);
@@ -348,7 +352,8 @@ export default function App() {
     const state = active.some((run) => run.status === 'waiting') ? 'waiting' : active.length ? 'running' : 'idle';
     window.atlasDesktop?.setRuntimeState?.(state);
   }, [store.runs]);
-  const activeArtifacts = store.artifacts.filter((artifact) => artifact.runId === store.activeRunId);
+  const activeArtifacts = [...store.artifacts.filter((artifact) => artifact.runId === store.activeRunId),
+    ...(ultraplanArtifact && ultraplanArtifact.name === `高级计划：${activeConversation?.title ?? ''}` ? [ultraplanArtifact] : [])];
   const activeEvents = activeRun?.events ?? [];
   const runDone = Boolean(activeRun && TERMINAL.includes(activeRun.status));
   const currentPlan = [...activeEvents].reverse().find((event) => event.type === 'run.plan.updated')?.data.plan as { subtasks?: unknown[] } | undefined;
@@ -1301,8 +1306,8 @@ export default function App() {
     { id: 'plan', label: '/plan', hint: store.nextRunMode === 'plan' ? '取消：下一条直接执行' : '下一条先出计划，你批准后再动手', run: () => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan') },
     { id: 'ultraplan', label: '/ultraplan', hint: '并行调研后生成详细计划，批准后按步骤执行', takesArgument: true, run: (goal: string) => {
       if (!goal.trim()) { setToast('在 /ultraplan 后写上目标'); return; }
-      store.setNextRunMode('plan');
-      void store.sendMessage(`高级计划目标：${goal.trim()}\n\n先派发 2～3 个子 agent 并行调研代码结构、相关文件、依赖和风险，再合并证据，输出带步骤、涉及文件、验证方法、风险和逐步勾选项的详细计划。将完整计划保存到当前工作区的 .atlas/plans/ 目录并在回复中提供路径。当前处于计划模式，只做调研和计划，不执行改动；等用户批准后再逐步实施。`);
+      if (!activeConversation || typeof activeConversation.workspace !== 'string' || !activeConversation.workspace) { setToast('高级计划需要先为会话选择工作目录'); return; }
+      setUltraplanGoal(goal.trim());
     } },
     { id: 'share', label: '/share', hint: '导出当前会话为离线只读 HTML；参数 tools / thinking 可包含对应内容', takesArgument: true, run: (options: string) => {
       if (!activeConversation) { setToast('先打开要分享的会话'); return; }
@@ -2232,6 +2237,10 @@ export default function App() {
       <pre className="m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-sunken p-3 font-mono text-[12px] leading-relaxed text-fg" tabIndex={0}>{rawText}</pre>
     </Dialog>
     {activeConversation && <Suspense fallback={null}><SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} /></Suspense>}
+    {activeConversation && <Suspense fallback={null}><UltraplanPanel open={Boolean(ultraplanGoal)} goal={ultraplanGoal}
+      apiBaseUrl={store.apiBaseUrl} workspace={typeof activeConversation.workspace === 'string' ? activeConversation.workspace : ''}
+      conversationId={activeConversation.id} model={store.model} onClose={() => setUltraplanGoal('')} onToast={notify}
+      onOpenArtifact={(path, title) => { setUltraplanArtifact({ id: `ultraplan-${path}`, runId: '', type: 'file', name: `高级计划：${activeConversation.title}`, path, summary: title, createdAt: new Date().toISOString() }); setInspectorOpen(true); setInspectorTab('artifacts'); }} /></Suspense>}
 
     {view !== 'chat' && view !== 'home' && <Suspense fallback={null}><ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} /></Suspense>}
     <Suspense fallback={null}><SettingsProposalCards apiBaseUrl={store.apiBaseUrl} onModel={(model) => void store.selectModel(model)} onToast={notify} currentModel={store.model} modelName={(id) => store.models.find((model) => model.id === id)?.name ?? id} /></Suspense>
