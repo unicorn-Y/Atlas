@@ -1493,7 +1493,7 @@ export default function App() {
     { id: 'help', label: '/help', hint: '列出全部斜杠命令及用法', run: showHelp },
     { id: 'doctor', label: '/doctor', hint: '检查安装与配置并查看修复建议', run: () => setSheet('diagnostics') },
     { id: 'warnings', label: '/warnings', hint: '查看持久告警历史', run: () => { setSheet('diagnostics'); window.setTimeout(() => window.dispatchEvent(new CustomEvent('atlas:diagnostics-tab', { detail: 'alerts' })), 0); } },
-    { id: 'status', label: '/status', hint: '查看运行状态、配置来源和后台任务', run: () => { setSheet('diagnostics'); window.setTimeout(() => window.dispatchEvent(new CustomEvent('atlas:diagnostics-tab', { detail: 'tasks' })), 0); } },
+    { id: 'tasks', label: '/tasks', hint: '任务管理器：查看运行状态、配置来源和后台任务，可逐个结束', run: () => { setSheet('diagnostics'); window.setTimeout(() => window.dispatchEvent(new CustomEvent('atlas:diagnostics-tab', { detail: 'tasks' })), 0); } },
     { id: 'debug', label: '/debug', hint: '切换实时调试浮层（Ctrl+Shift+D）', run: () => window.dispatchEvent(new CustomEvent('atlas:toggle-debug-overlay')) },
     { id: 'memories', label: '/memories', hint: '设置当前对话是否读取和生成记忆', run: () => setSheet('memories') },
     { id: 'teach', label: '/teach', hint: '录制桌面操作并生成可复用技能', run: () => setSheet('teach') },

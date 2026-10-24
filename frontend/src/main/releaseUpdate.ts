@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import path from 'node:path';
 
 export interface ReleaseStatus { supported: boolean; available: boolean; current: string; latest?: string; notes?: string; assetName?: string; error?: string; skipped?: boolean }
@@ -49,8 +49,24 @@ function prefs(userData: string): { skipped?: string; remindAfter?: number } {
 export function setReleasePreference(userData: string, update: { skipped?: string; remindAfter?: number }) {
   const current = prefs(userData); writeFileSync(releasePrefsPath(userData), JSON.stringify({ ...current, ...update }, null, 2), 'utf8');
 }
+let cachedToken: string | null | undefined;
+// Atlas 仓库可能是私有的：依次用 GITHUB_TOKEN / GH_TOKEN 环境变量、`gh auth token` 的登录令牌访问 GitHub API。
+const githubToken = (): string | null => {
+  if (cachedToken !== undefined) return cachedToken;
+  cachedToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || null;
+  if (!cachedToken) {
+    try { cachedToken = execFileSync('gh', ['auth', 'token'], { encoding: 'utf8', timeout: 5000, windowsHide: true }).trim() || null; }
+    catch { cachedToken = null; }
+  }
+  return cachedToken;
+};
+
 const jsonFetch = async (url: string) => {
-  const response = await fetch(url, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Atlas-Desktop-Updater' } });
+  const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'User-Agent': 'Atlas-Desktop-Updater' };
+  const token = /^https:\/\/api\.github\.com\//.test(url) ? githubToken() : null;
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(url, { headers });
+  if (response.status === 404) throw new Error('更新源没有找到发布版（仓库可能是私有的且未登录 gh，或还没有发布过 Release）');
   if (!response.ok) throw new Error(`更新服务返回 HTTP ${response.status}`);
   return response.json() as Promise<Record<string, any>>;
 };

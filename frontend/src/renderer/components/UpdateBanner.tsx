@@ -5,6 +5,8 @@ import type { ReleaseUpdateStatus, SourceUpdateStatus } from '../../shared/ipc';
 const RECHECK_MS = 5 * 60 * 1000;
 const CHANNEL_KEY = 'atlas.preference.update-channel';
 const SOURCE_KEY = 'atlas.preference.release-source';
+// Atlas 自己的发布仓库（私有仓库时主进程会带上 gh 登录令牌）。
+export const DEFAULT_RELEASE_SOURCE = 'https://api.github.com/repos/unicorn-Y/Atlas/releases/latest';
 type View = { channel: 'release' | 'source'; release?: ReleaseUpdateStatus; source?: SourceUpdateStatus };
 export default function UpdateBanner() {
   const [view, setView] = useState<View | null>(null);
@@ -16,12 +18,14 @@ export default function UpdateBanner() {
   useEffect(() => {
     let alive = true;
     const check = async () => {
-      const channel = localStorage.getItem(CHANNEL_KEY) === 'source' ? 'source' : 'release';
+      // 用户没选过通道时沿用原来的源码更新（老用户一直用的“立即更新”），发布版通道需显式切换。
+      const storedChannel = localStorage.getItem(CHANNEL_KEY);
+      const channel = storedChannel === 'release' ? 'release' : 'source';
       if (channel === 'source') {
         const status = await api?.checkForUpdate?.().catch(() => null);
         if (alive) setView({ channel, source: status ?? undefined });
       } else {
-        const source = localStorage.getItem(SOURCE_KEY) ?? '';
+        const source = localStorage.getItem(SOURCE_KEY) || DEFAULT_RELEASE_SOURCE;
         const status = await api?.checkReleaseUpdate?.(source).catch(() => null);
         if (alive) setView({ channel, release: status ?? undefined });
       }
@@ -34,7 +38,7 @@ export default function UpdateBanner() {
     return () => { alive = false; window.clearTimeout(first); window.clearInterval(timer); window.removeEventListener('focus', onFocus); window.removeEventListener('atlas:update-settings-changed', onChange); };
   }, []);
   const download = async () => {
-    const version = view?.release?.latest; const source = localStorage.getItem(SOURCE_KEY) ?? '';
+    const version = view?.release?.latest; const source = localStorage.getItem(SOURCE_KEY) || DEFAULT_RELEASE_SOURCE;
     if (!version || !api?.downloadReleaseUpdate || !api.installReleaseUpdate) return;
     setBusy(true); setProgress(0);
     const off = api.onReleaseDownloadProgress?.(setProgress);
