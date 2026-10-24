@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Captions, MessageSquareText, MicOff, PhoneOff, Hand } from 'lucide-react';
+import { Captions, MessageSquareText, MicOff, PhoneOff, Hand, RotateCcw } from 'lucide-react';
 import { api } from '../services/api';
 
 type Phase = 'listening' | 'thinking' | 'speaking' | 'paused' | 'unavailable';
@@ -14,10 +14,24 @@ interface VoiceOverlayProps {
   reply: string;
   runDone: boolean;
   modelName: string;
+  speechVoice?: string;
+  speechVoices?: SpeechSynthesisVoice[];
+  onSpeechVoiceChange?: (voice: string) => void;
 }
 
 const SENTENCE = /[。！？.!?；;\n]/;
-export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply, runDone, modelName }: VoiceOverlayProps) {
+function voiceFailure(cause: unknown): { category: string; detail: string; next: string } {
+  const error = cause as { name?: string; message?: string };
+  const name = error?.name ?? '';
+  const detail = error?.message || (typeof cause === 'string' ? cause : '语音服务发生未知错误');
+  if (name === 'NotAllowedError' || name === 'SecurityError') return { category: '麦克风权限被拒绝', detail, next: '在系统设置中允许 Atlas 使用麦克风，然后重试。' };
+  if (name === 'NotFoundError' || name === 'OverconstrainedError' || name === 'NotReadableError' || name === 'AbortError' || /device.*not found|no.*microphone|设备.*不可用|没有.*麦克风|设备.*断开/i.test(detail)) return { category: '麦克风设备不可用', detail, next: '连接麦克风，或在音频设置中选择可用设备。' };
+  if (/模型|model|download|未准备|not ready/i.test(detail)) return { category: '语音模型缺失', detail, next: '先在语音设置中下载本地识别模型。' };
+  if (/pcm|音频帧|格式|decode|解码|invalid audio/i.test(detail)) return { category: '音频格式或解码失败', detail, next: '检查麦克风输入格式后重新连接。' };
+  if (/websocket|socket|network|fetch|连接|断开|1011|1006/i.test(detail)) return { category: '语音网络或后端断连', detail, next: '检查 Atlas 后端连接后重试。' };
+  return { category: '语音启动失败', detail, next: '检查麦克风和 Atlas 语音服务后重试，或转为文字。' };
+}
+export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply, runDone, modelName, speechVoice = '', speechVoices = [], onSpeechVoiceChange }: VoiceOverlayProps) {
   const [phase, setPhase] = useState<Phase>('listening');
   const [heard, setHeard] = useState('');
   const [said, setSaid] = useState('');
@@ -26,7 +40,7 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
   const [problem, setProblem] = useState('');
   const [seconds, setSeconds] = useState(0);
   const orbRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<{ socket: WebSocket; stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode } | null>(null);
+  const recognitionRef = useRef<{ socket: WebSocket; stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode; silent: GainNode } | null>(null);
   const levelRef = useRef(0);
   const phaseRef = useRef<Phase>('listening');
   const mutedRef = useRef(false);
@@ -35,39 +49,66 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
   const spokenRef = useRef(0);
   const pendingRef = useRef(0);
   const doneRef = useRef(false);
+  const failureRef = useRef(0);
+  const speechFramesRef = useRef(0);
+  const utteranceAcceptedRef = useRef(false);
   phaseRef.current = phase;
   mutedRef.current = muted;
 
   const listen = useCallback(() => {
     if (mutedRef.current) { setPhase('paused'); return; }
+    if (recognitionRef.current && recognitionRef.current.socket.readyState <= WebSocket.OPEN) return;
     void (async () => {
       try {
         const status = await api<{ ready: boolean; message?: string }>(apiBaseUrl, '/api/asr/status');
         if (!status.ready) { setProblem(status.message || '请先准备本地语音识别模型。'); setPhase('unavailable'); return; }
         const inputDevice = localStorage.getItem('atlas.audio.input-device') || '';
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: { ...(inputDevice ? { deviceId: { exact: inputDevice } } : {}), channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { ...(inputDevice ? { deviceId: { exact: inputDevice } } : {}), channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
         const context = new AudioContext();
         const source = context.createMediaStreamSource(stream);
         const processor = context.createScriptProcessor(4096, 1, 1);
+        const silent = context.createGain(); silent.gain.value = 0;
         const socketUrl = new URL('/ws/asr', apiBaseUrl); socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:';
         const socket = new WebSocket(socketUrl);
-        const session = { socket, stream, context, processor };
+        const session = { socket, stream, context, processor, silent };
         recognitionRef.current = session;
-        let submitted = false;
+        const connectedAt = Date.now();
         socket.onmessage = (event) => {
           try {
             const message = JSON.parse(String(event.data)) as { type?: string; text?: string; detail?: string };
             if (message.type === 'partial') setHeard(message.text || '');
-            if (message.type === 'final' && message.text?.trim() && !submitted) {
-              submitted = true; setHeard(message.text.trim()); recognitionRef.current = null;
-              try { socket.send(JSON.stringify({ type: 'end' })); } catch { /* closed */ }
-              processor.disconnect(); stream.getTracks().forEach((track) => track.stop()); void context.close();
-              staleRunRef.current = trackedRunRef.current ?? runIdRef.current; setSaid(''); setPhase('thinking'); onSendRef.current(message.text.trim());
+            if (message.type === 'final' && message.text?.trim() && !utteranceAcceptedRef.current && (phaseRef.current === 'listening' || phaseRef.current === 'speaking')) {
+              utteranceAcceptedRef.current = true;
+              setHeard(message.text.trim());
+              if (phaseRef.current === 'speaking') window.speechSynthesis?.cancel();
+              pendingRef.current = 0;
+              staleRunRef.current = trackedRunRef.current ?? runIdRef.current; trackedRunRef.current = null;
+              setSaid(''); setPhase('thinking'); onSendRef.current(message.text.trim());
             }
-            if (message.type === 'error') { setProblem(message.detail || '本地语音识别失败。'); setPhase('unavailable'); }
+            if (message.type === 'error') {
+              const failure = voiceFailure(message.detail); setProblem(`${failure.category}：${failure.detail}。${failure.next}`); setPhase('unavailable');
+              if (recognitionRef.current === session) recognitionRef.current = null;
+              try { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'end' })); socket.close(); } catch { /* already closing */ }
+              processor.disconnect(); silent.disconnect(); stream.getTracks().forEach((track) => track.stop()); void context.close();
+            }
           } catch { /* malformed local ASR response */ }
         };
-        socket.onerror = () => { setProblem('本地语音识别连接失败。'); setPhase('unavailable'); };
+        socket.onerror = () => { const failure = voiceFailure('WebSocket 连接失败'); setProblem(`${failure.category}：${failure.detail}。${failure.next}`); };
+        socket.onclose = (event) => {
+          const isCurrent = recognitionRef.current?.socket === socket;
+          if (isCurrent) {
+            recognitionRef.current = null;
+            processor.disconnect(); silent.disconnect(); stream.getTracks().forEach((track) => track.stop()); void context.close();
+          }
+          if (Date.now() - connectedAt > 30_000) failureRef.current = 0;
+          if (isCurrent && !mutedRef.current && event.code !== 1000 && failureRef.current < 2) {
+            failureRef.current += 1;
+            setPhase('thinking');
+            window.setTimeout(() => { if (!mutedRef.current && !recognitionRef.current) listen(); }, 350 * failureRef.current);
+          } else if (isCurrent && !mutedRef.current && event.code !== 1000) {
+            const failure = voiceFailure('WebSocket 语音连接中断'); setProblem(`${failure.category}：${failure.detail}。已重连 2 次仍未恢复。${failure.next}`); setPhase('unavailable');
+          }
+        };
         await new Promise<void>((resolve, reject) => { socket.addEventListener('open', () => resolve(), { once: true }); socket.addEventListener('error', () => reject(new Error('本地语音识别连接失败')), { once: true }); });
         const downsample = (samples: Float32Array, from: number) => {
           if (from <= 16000) return samples;
@@ -77,17 +118,30 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
         };
         processor.onaudioprocess = (event) => {
           if (socket.readyState !== WebSocket.OPEN) return;
-          const samples = downsample(event.inputBuffer.getChannelData(0), context.sampleRate);
+          const input = event.inputBuffer.getChannelData(0);
+          let power = 0; for (const sample of input) power += sample * sample;
+          const voiced = Math.sqrt(power / input.length) > 0.018;
+          speechFramesRef.current = voiced ? speechFramesRef.current + 1 : 0;
+          if (speechFramesRef.current >= 3 && phaseRef.current === 'speaking') {
+            window.speechSynthesis?.cancel(); pendingRef.current = 0; utteranceAcceptedRef.current = false;
+            staleRunRef.current = trackedRunRef.current ?? runIdRef.current; trackedRunRef.current = null;
+            setSaid(''); setPhase('listening');
+          } else if (speechFramesRef.current >= 3 && phaseRef.current === 'listening') utteranceAcceptedRef.current = false;
+          const samples = downsample(input, context.sampleRate);
           const pcm = new Int16Array(samples.length);
           for (let i = 0; i < samples.length; i++) pcm[i] = Math.max(-1, Math.min(1, samples[i])) * 0x7fff;
           socket.send(pcm.buffer);
         };
-        source.connect(processor); processor.connect(context.destination);
+        source.connect(processor); processor.connect(silent); silent.connect(context.destination);
         setProblem(''); setPhase('listening');
       } catch (cause) {
         const session = recognitionRef.current; recognitionRef.current = null;
-        session?.stream.getTracks().forEach((track) => track.stop()); void session?.context.close();
-        setProblem(cause instanceof Error ? cause.message : '本地语音识别启动失败。'); setPhase('unavailable');
+        session?.processor.disconnect(); session?.silent.disconnect(); session?.stream.getTracks().forEach((track) => track.stop()); void session?.context.close();
+        const failure = voiceFailure(cause);
+        if (/websocket|连接/i.test(failure.detail) && failureRef.current < 2 && !mutedRef.current) {
+          failureRef.current += 1; setProblem(`${failure.category}：${failure.detail}。正在尝试重连（${failureRef.current}/2）…`); setPhase('thinking');
+          window.setTimeout(() => { if (!mutedRef.current && !recognitionRef.current) listen(); }, 350 * failureRef.current);
+        } else { setProblem(`${failure.category}：${failure.detail}。${failure.next}`); setPhase('unavailable'); }
       }
     })();
   }, [apiBaseUrl]);
@@ -101,15 +155,16 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
     if (!('speechSynthesis' in window) || !text.trim()) return;
     const utterance = new SpeechSynthesisUtterance(text.trim());
     utterance.lang = 'zh-CN';
+    utterance.voice = window.speechSynthesis.getVoices().find((voice) => voice.name === speechVoice) ?? null;
     pendingRef.current += 1;
     const finish = () => {
       pendingRef.current = Math.max(0, pendingRef.current - 1);
-      if (pendingRef.current === 0 && doneRef.current && phaseRef.current === 'speaking') listen();
+      if (pendingRef.current === 0 && doneRef.current && phaseRef.current === 'speaking') setPhase('listening');
     };
     utterance.onend = finish;
     utterance.onerror = finish;
     window.speechSynthesis.speak(utterance);
-  }, [listen]);
+  }, [listen, speechVoice]);
 
   // Stream the assistant reply into speech sentence by sentence.
   useEffect(() => {
@@ -128,7 +183,7 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
     if (runDone && !doneRef.current) {
       doneRef.current = true;
       if (rest.trim()) { spokenRef.current = reply.length; setPhase('speaking'); speak(rest); }
-      if (pendingRef.current === 0) listen();
+      if (pendingRef.current === 0) setPhase('listening');
     }
   }, [reply, runDone, runId, listen, speak]);
 
@@ -173,7 +228,7 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
       window.removeEventListener('keydown', onKey);
       const recognition = recognitionRef.current;
       recognitionRef.current = null;
-      if (recognition) { try { recognition.socket.send(JSON.stringify({ type: 'end' })); } catch { /* socket closed */ } recognition.processor.disconnect(); recognition.stream.getTracks().forEach((track) => track.stop()); void recognition.context.close(); }
+      if (recognition) { try { recognition.socket.send(JSON.stringify({ type: 'end' })); } catch { /* socket closed */ } recognition.processor.disconnect(); recognition.silent.disconnect(); recognition.stream.getTracks().forEach((track) => track.stop()); void recognition.context.close(); }
       window.speechSynthesis?.cancel();
       stream?.getTracks().forEach((track) => track.stop());
       void (context as AudioContext | null)?.close();
@@ -187,7 +242,7 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
     if (next) {
       const recognition = recognitionRef.current;
       recognitionRef.current = null;
-      if (recognition) { try { recognition.socket.send(JSON.stringify({ type: 'end' })); } catch { /* socket closed */ } recognition.processor.disconnect(); recognition.stream.getTracks().forEach((track) => track.stop()); void recognition.context.close(); }
+      if (recognition) { try { recognition.socket.send(JSON.stringify({ type: 'end' })); } catch { /* socket closed */ } recognition.processor.disconnect(); recognition.silent.disconnect(); recognition.stream.getTracks().forEach((track) => track.stop()); void recognition.context.close(); }
       if (phaseRef.current === 'listening') setPhase('paused');
     } else if (phaseRef.current === 'paused') listen();
   };
@@ -195,16 +250,19 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
     pendingRef.current = 0;
     doneRef.current = true;
     staleRunRef.current = trackedRunRef.current ?? runIdRef.current;
+    trackedRunRef.current = null;
+    utteranceAcceptedRef.current = false;
     window.speechSynthesis?.cancel();
     setHeard('');
+    setSaid(''); setPhase('listening');
     listen();
   };
 
-  const state = phase === 'listening' ? '在听，你可以直接说' : phase === 'thinking' ? 'Atlas 正在想…' : phase === 'speaking' ? '' : phase === 'paused' ? '麦克风已静音' : problem;
+  const state = phase === 'listening' ? '在听，你可以直接说' : phase === 'thinking' ? 'Atlas 正在想…' : phase === 'speaking' ? '正在播报，可随时插话' : phase === 'paused' ? '麦克风已静音' : '';
   const clock = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 
   return <section className="voice" role="dialog" aria-modal="true" aria-label="语音通话">
-    <div className="vtop"><span className="live">正在和 Atlas 通话</span><b>{clock}</b><span>{modelName} · 本机语音</span></div>
+    <div className="vtop"><span className="live">正在和 Atlas 通话</span><b>{clock}</b><label>{modelName} · 本机语音<select aria-label="通话音色" value={speechVoice} onChange={(event) => onSpeechVoiceChange?.(event.target.value)}><option value="">系统默认</option>{speechVoices.filter((voice) => voice.lang.toLowerCase().startsWith('zh')).map((voice) => <option key={voice.name} value={voice.name}>{voice.name}</option>)}</select></label></div>
     <div className="orb" ref={orbRef}>
       <svg viewBox="0 0 400 400" aria-hidden="true">
         <defs>
@@ -223,6 +281,7 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
       {captions && heard && <p className="you">“{heard}”</p>}
       {captions && said && phase !== 'listening' && <p className="atlas">{said}</p>}
       {state && <p className="state">{state}</p>}
+      {phase === 'unavailable' && <div role="alert" className="state"><b>{voiceFailure(problem).category}</b><p>{problem}</p><div className="flex justify-center gap-2"><button onClick={() => { failureRef.current = 0; setPhase('listening'); listen(); }}><RotateCcw size={13} className="mr-1 inline" />重试</button><button onClick={() => onClose(true)}><MessageSquareText size={13} className="mr-1 inline" />转为文字</button></div></div>}
     </div>
     <div className="vctl">
       <div className="vlabel"><button aria-pressed={muted} aria-label="静音" onClick={toggleMute}><MicOff size={20} /></button>静音</div>

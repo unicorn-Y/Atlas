@@ -2327,6 +2327,9 @@ export default function App() {
       reply={reply}
       runDone={runDone}
       modelName={modelName}
+      speechVoice={speechVoice}
+      speechVoices={speechVoices}
+      onSpeechVoiceChange={(value) => { setSpeechVoice(value); setPref('speech-voice', value); }}
     /></Suspense>}
 
     {remoteOpen && <Suspense fallback={null}><RemoteFolderDialog open onClose={() => setRemoteOpen(false)} current={workspacePath}
