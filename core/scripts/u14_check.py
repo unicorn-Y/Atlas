@@ -135,7 +135,7 @@ async def check_remote_access() -> None:
     app = create_app(lifespan=lifespan, services=AppServices(memory=Memory(), runtime_mgr=manager, runtime_resume_handler=_handle_resume))
     with TestClient(app, client=("127.0.0.1", 1234)) as client:
         page = client.get("/remote", headers={"Sec-Fetch-Site": "same-origin"})
-        assert page.status_code == 200 and "Atlas · Remote" in page.text
+        assert page.status_code == 200 and "Atlas · Remote" in page.text and "run.steer" in page.text
         grant_response = client.post("/api/remote/access", json={"host": "192.168.10.4", "ttl_seconds": 600})
         assert grant_response.status_code == 200, grant_response.text
         grant = grant_response.json()
