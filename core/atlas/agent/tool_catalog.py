@@ -67,7 +67,7 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
     tools.extend([
         {"type": "function", "function": {
             "name": "propose_settings_change",
-            "description": "Propose a user setting change. Never apply it yourself: create a review card so the user can approve or reject it. Supported keys: model, notifications.level, advisor_model.",
+            "description": "Propose a user setting change. Never apply it yourself: create a review card so the user can approve or reject it. Supported keys: model (a configured model id), notifications.level (exactly one of: attention = only when Atlas needs the user or a task finishes/fails, all = every event, off = no notifications), advisor_model (a configured model id, or empty to disable). Omit `from`; the card shows the current value itself.",
             "parameters": {"type": "object", "properties": {
                 "key": {"type": "string", "enum": ["model", "notifications.level", "advisor_model"]},
                 "from": {}, "to": {}, "reason": {"type": "string"},

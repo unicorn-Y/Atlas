@@ -71,8 +71,8 @@ export default function U4SettingsPanel({ apiBaseUrl, models, currentModel, them
     const file = event.target.files?.[0]; event.target.value = ''; if (!file) return;
     try {
       const parsed = JSON.parse(await file.text()) as unknown;
-      const result = await api<{ imported: number; conversations: Array<{ title: string; messages: number }> }>(apiBaseUrl, '/api/u4/import/chatgpt', { method: 'POST', json: { conversations: parsed } });
-      setNotice(`导入 ${result.imported} 个 ChatGPT 会话；共 ${result.conversations.reduce((sum, item) => sum + item.messages, 0)} 条消息。`); onToast('ChatGPT 历史已导入'); onImported();
+      const result = await api<{ imported: number; skipped?: number; conversations: Array<{ title: string; messages: number }> }>(apiBaseUrl, '/api/u4/import/chatgpt', { method: 'POST', json: { conversations: parsed } });
+      setNotice(`导入 ${result.imported} 个 ChatGPT 会话；共 ${result.conversations.reduce((sum, item) => sum + item.messages, 0)} 条消息${result.skipped ? `；跳过 ${result.skipped} 个已导入过的会话` : ''}。`); onToast('ChatGPT 历史已导入'); onImported();
     } catch (error) { setNotice(error instanceof Error ? error.message : '无法导入文件'); }
   };
   const savePush = async () => {

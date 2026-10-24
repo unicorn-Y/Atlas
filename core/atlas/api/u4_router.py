@@ -39,9 +39,14 @@ def _write(value: dict[str, Any]) -> None:
     os.replace(temp, path)
 
 
+_NOTIFICATION_LEVELS = ("attention", "all", "off")
+
+
 def create_settings_proposal(*, key: str, old_value: Any, new_value: Any, reason: str = "", conversation_id: str = "") -> dict[str, Any]:
     if key not in {"model", "notifications.level", "advisor_model"}:
         raise ValueError("暂只支持模型、通知级别和顾问模型设置")
+    if key == "notifications.level" and new_value not in _NOTIFICATION_LEVELS:
+        raise ValueError(f"通知级别只能是 {', '.join(_NOTIFICATION_LEVELS)}（attention=只在需要我时，all=全部，off=关闭），收到 {new_value!r}")
     proposal = {"id": uuid.uuid4().hex, "key": key, "from": old_value, "to": new_value,
                 "reason": reason[:500], "conversation_id": conversation_id,
                 "created_at": datetime.now(UTC).isoformat(), "status": "pending"}
@@ -143,6 +148,24 @@ async def resolve_proposal(proposal_id: str, body: dict[str, Any], services: Ann
     return proposal
 
 
+def _chatgpt_branch(mapping: dict[str, Any], current_node: Any) -> list[dict[str, Any]]:
+    """Walk the export tree from current_node up to the root, so edited/regenerated
+    branches the user abandoned are not mixed into the transcript."""
+    nodes = {key: value for key, value in mapping.items() if isinstance(value, dict)}
+    if isinstance(current_node, str) and current_node in nodes:
+        chain, seen, cursor = [], set(), current_node
+        while isinstance(cursor, str) and cursor in nodes and cursor not in seen:
+            seen.add(cursor)
+            chain.append(nodes[cursor])
+            cursor = nodes[cursor].get("parent")
+        return list(reversed(chain))
+    # 旧格式/手工样例没有 current_node：按时间排序兜底，message 为 null 的根节点排最前。
+    def created(node: dict[str, Any]) -> float:
+        message = node.get("message") if isinstance(node.get("message"), dict) else {}
+        return float(message.get("create_time") or 0)
+    return sorted(nodes.values(), key=lambda node: (created(node), str(node.get("id") or "")))
+
+
 def normalize_chatgpt_conversations(payload: Any) -> list[dict[str, Any]]:
     """Convert OpenAI's conversations.json mapping tree to plain role/content turns."""
     if isinstance(payload, dict):
@@ -156,12 +179,11 @@ def normalize_chatgpt_conversations(payload: Any) -> list[dict[str, Any]]:
         mapping = conversation.get("mapping")
         messages = []
         if isinstance(mapping, dict):
-            nodes = sorted(mapping.values(), key=lambda node: (
-                float((node or {}).get("message", {}).get("create_time") or 0),
-                str((node or {}).get("id") or ""),
-            ))
-            for node in nodes:
-                message = (node or {}).get("message") or {}
+            for node in _chatgpt_branch(mapping, conversation.get("current_node")):
+                message = node.get("message") if isinstance(node.get("message"), dict) else {}
+                metadata = message.get("metadata") if isinstance(message.get("metadata"), dict) else {}
+                if metadata.get("is_visually_hidden_from_conversation"):
+                    continue
                 author = message.get("author") or {}
                 role = author.get("role")
                 content = message.get("content") or {}
@@ -170,7 +192,8 @@ def normalize_chatgpt_conversations(payload: Any) -> list[dict[str, Any]]:
                 if role in {"user", "assistant"} and text:
                     messages.append({"role": role, "content": text})
         if messages:
-            result.append({"title": str(conversation.get("title") or "ChatGPT 对话")[:120], "messages": messages})
+            result.append({"title": str(conversation.get("title") or "ChatGPT 对话")[:120], "messages": messages,
+                           "source_id": str(conversation.get("conversation_id") or conversation.get("id") or "")})
     return result
 
 
@@ -189,7 +212,13 @@ async def import_chatgpt(body: dict[str, Any], services: Annotated[AppServices, 
     imported = []
     if memory is None:
         raise HTTPException(status_code=503, detail="会话服务尚未就绪")
+    data = _read()
+    seen_ids: dict[str, str] = data.setdefault("chatgpt_imported", {})
+    skipped = 0
     for item in conversations:
+        if item["source_id"] and item["source_id"] in seen_ids:
+            skipped += 1
+            continue
         conversation_id = await memory.create_conversation(f"ChatGPT · {item['title']}")
         for message in item["messages"]:
             await __import__("asyncio").to_thread(
@@ -197,7 +226,10 @@ async def import_chatgpt(body: dict[str, Any], services: Annotated[AppServices, 
                 message["role"], message["content"], {"external_source": "chatgpt"},
             )
         imported.append({"conversation_id": conversation_id, "title": item["title"], "messages": len(item["messages"])})
-    return {"imported": len(imported), "conversations": imported}
+        if item["source_id"]:
+            seen_ids[item["source_id"]] = conversation_id
+            _write(data)
+    return {"imported": len(imported), "skipped": skipped, "conversations": imported}
 
 
 def _insights_cost_text(totals: dict[str, Any]) -> str:
@@ -283,6 +315,13 @@ async def save_preset(body: dict[str, Any], services: Annotated[AppServices, Dep
     if not label:
         raise HTTPException(status_code=422, detail="预设名称不能为空")
     preset = {key: body.get(key) for key in ("label", "workspace", "model", "reasoning_effort", "env", "skills")}
+    workspace = str(preset.get("workspace") or "").strip()
+    if workspace:
+        if not Path(workspace).is_absolute():
+            raise HTTPException(status_code=422, detail=f"工作目录必须是绝对路径：{workspace}")
+        if not Path(workspace).is_dir():
+            raise HTTPException(status_code=422, detail=f"工作目录不存在：{workspace}")
+    preset["workspace"] = workspace
     preset.update({"id": str(body.get("id") or uuid.uuid4().hex), "updated_at": datetime.now(UTC).isoformat()})
     data = _read()
     presets = data.setdefault("presets", [])

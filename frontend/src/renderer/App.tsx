@@ -1807,7 +1807,7 @@ export default function App() {
     {activeConversation && <Suspense fallback={null}><SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} /></Suspense>}
 
     {view !== 'chat' && view !== 'home' && <Suspense fallback={null}><ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} /></Suspense>}
-    <Suspense fallback={null}><SettingsProposalCards apiBaseUrl={store.apiBaseUrl} onModel={(model) => void store.selectModel(model)} onToast={notify} /></Suspense>
+    <Suspense fallback={null}><SettingsProposalCards apiBaseUrl={store.apiBaseUrl} onModel={(model) => void store.selectModel(model)} onToast={notify} currentModel={store.model} modelName={(id) => store.models.find((model) => model.id === id)?.name ?? id} /></Suspense>
     {toast && <div role="status" className="pop anim-pop fixed bottom-7 left-1/2 z-[80] -translate-x-1/2 rounded-xl px-4 py-2.5 text-[13.5px] text-fg">{toast}</div>}
   </TooltipProvider>;
 }
