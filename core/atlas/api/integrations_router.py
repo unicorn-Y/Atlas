@@ -34,12 +34,18 @@ async def get_busy_status() -> dict[str, Any]:
 
 
 @router.post("/api/busy")
-async def update_busy_status(req: dict[str, Any]) -> dict[str, Any]:
-    from atlas.notifications.busy import set_busy
+async def update_busy_status(req: dict[str, Any], services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    from atlas.notifications.busy import set_busy, take_summary
     seconds = req.get("seconds")
     if seconds is not None and (not isinstance(seconds, (int, float)) or seconds < 0 or seconds > 30 * 86400):
         raise HTTPException(status_code=422, detail="seconds must be between 0 and 30 days, or null")
-    return set_busy(float(seconds) if seconds else None)
+    result = set_busy(float(seconds) if seconds else None)
+    if not result["busy"]:
+        summary = take_summary()
+        notifications = services.notifications
+        if summary and notifications is not None:
+            await notifications.notify("Atlas busy summary", summary)
+    return result
 
 
 def _idle_queue():

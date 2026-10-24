@@ -279,6 +279,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pr_monitor_task: asyncio.Task[None] | None = None
     idle_queue_task: asyncio.Task[None] | None = None
     mail_trigger_task: asyncio.Task[None] | None = None
+    busy_summary_task: asyncio.Task[None] | None = None
     kanban_dispatch_task: asyncio.Task[None] | None = None
     cancelled = False
     try:
@@ -807,6 +808,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         mail_trigger_task = asyncio.create_task(poll_mail_triggers(), name="atlas-mail-trigger")
 
+        async def flush_expired_busy_summary() -> None:
+            from atlas.notifications.busy import status as busy_status, take_summary
+            previous = busy_status()["busy"]
+            while True:
+                await asyncio.sleep(10)
+                current = busy_status()["busy"]
+                if previous and not current:
+                    summary = take_summary()
+                    if summary and notifications is not None:
+                        await notifications.notify("Atlas busy summary", summary)
+                previous = current
+
+        busy_summary_task = asyncio.create_task(flush_expired_busy_summary(), name="atlas-busy-summary")
+
         async def dispatch_kanban_tasks() -> None:
             from atlas.kanban import atlas_kanban_store
             store = atlas_kanban_store()
@@ -875,6 +890,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             mail_trigger_task.cancel()
             with suppress(asyncio.CancelledError, Exception):
                 await mail_trigger_task
+        if busy_summary_task is not None:
+            busy_summary_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await busy_summary_task
         if kanban_dispatch_task is not None:
             kanban_dispatch_task.cancel()
             with suppress(asyncio.CancelledError, Exception):
