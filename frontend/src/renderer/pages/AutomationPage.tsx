@@ -158,10 +158,11 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
     <header className="page-head">
       <div><h1>自动化</h1><p>让 Atlas 按时、或者在某件事发生时替你做事。心跳和定时任务都在这里。</p></div>
       {tab === 'tasks' && <div className="btns">
-        <button className={emergency.paused ? 'btn primary' : 'btn danger'} disabled={!connected || emergencyBusy} aria-label={emergency.paused ? '恢复全局自动化' : '紧急暂停所有自动化'}
+        <button className={emergency.paused ? 'btn primary' : 'btn danger'} disabled={!connected || emergencyBusy} aria-label={emergency.paused ? '恢复全局自动化' : '紧急暂停：停止所有自动化和正在运行的任务'} title="紧急暂停：停止所有自动化、正在运行的对话任务、子 Agent、后台进程和浏览器会话；恢复只重新启用暂停前启用的自动化"
           onClick={() => { setEmergencyBusy(true); void (emergency.paused ? automationsApi.emergencyResume(apiBaseUrl) : automationsApi.emergencyPause(apiBaseUrl)).then((result) => {
             setEmergency({ paused: result.paused, affected: 'affected' in result ? result.affected : emergency.affected });
-            onToast(result.paused ? `全局暂停完成：${result.affected?.length ?? 0} 项自动化已处理` : `已恢复 ${result.resumed?.length ?? 0} 项此前启用的自动化${result.failures?.length ? `；${result.failures.length} 项失败` : ''}`);
+            const activity = (result as { activity?: { stopped: Array<{ id: string; name?: string }>; failed: Array<{ id: string; name?: string; reason?: string }> } }).activity;
+            onToast(result.paused ? `全局暂停完成：${result.affected?.length ?? 0} 项自动化已处理；停止 ${activity?.stopped.length ?? 0} 项正在运行的任务（对话/子 Agent/后台进程/浏览器）${activity?.failed.length ? `，${activity.failed.length} 项停止失败：${activity.failed.map((item) => `${item.name ?? item.id}（${item.reason ?? '未知原因'}）`).join('；')}` : ''}` : `已恢复 ${result.resumed?.length ?? 0} 项此前启用的自动化${result.failures?.length ? `；${result.failures.length} 项失败` : ''}`);
             refresh();
           }).catch((error) => onToast(`全局控制失败：${error instanceof Error ? error.message : String(error)}`)).finally(() => setEmergencyBusy(false)); }}>
           {emergencyBusy ? <LoaderCircle size={15} className="spin" /> : emergency.paused ? <Play size={15} /> : <Pause size={15} />}{emergency.paused ? '恢复全部' : '紧急暂停全部'}

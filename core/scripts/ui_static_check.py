@@ -71,6 +71,13 @@ for path in sorted((ROOT / "core" / "atlas").rglob("*.py")):
                 and "encoding" not in keywords):
             problems.append(f"{path.relative_to(ROOT)}:{node.lineno} subprocess {name}(text=True) without encoding=\"utf-8\"")
 
+# Backend: on a source checkout DATA_ROOT is the repository root; state files must go under
+# DATA_ROOT / "data" (U10 sidebar metadata and U13 emergency-pause manifest both landed in the repo root).
+for path in sorted((ROOT / "core" / "atlas").rglob("*.py")):
+    for number, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1):
+        if re.search(r'DATA_ROOT\s*/\s*"[^"/]+\.(json|jsonl|db|sqlite|txt|log|yaml|toml)"', line) and "legacy" not in line:
+            problems.append(f"{path.relative_to(ROOT)}:{number} state file written directly under DATA_ROOT (use DATA_ROOT / \"data\" / ...)")
+
 if problems:
     print("\n".join(problems))
     sys.exit(1)

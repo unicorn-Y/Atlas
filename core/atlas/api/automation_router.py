@@ -153,7 +153,7 @@ async def list_automations() -> dict[str, Any]:
 @automation_router.get("/global-pause")
 async def global_pause_status() -> dict[str, Any]:
     from atlas.config import DATA_ROOT
-    path = DATA_ROOT / "automation-emergency-pause.json"
+    path = DATA_ROOT / "data" / "automation-emergency-pause.json"
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -161,8 +161,17 @@ async def global_pause_status() -> dict[str, Any]:
 
 
 @automation_router.post("/global-pause")
-async def global_pause() -> dict[str, Any]:
-    return await _engine().emergency_pause()
+async def global_pause(request: Request) -> dict[str, Any]:
+    result = await _engine().emergency_pause()
+    # 总刹车不只停自动化：正在跑的对话任务、子 agent、后台进程、浏览器会话也一并停下。
+    services = getattr(request.app.state, "services", None)
+    if services is not None:
+        from atlas.api.diagnostics_router import stop_all_activity
+        try:
+            result["activity"] = await stop_all_activity(services)
+        except Exception as exc:
+            result["activity"] = {"stopped": [], "failed": [{"id": "*", "kind": "全部活动", "reason": str(exc)}]}
+    return result
 
 
 @automation_router.post("/global-resume")

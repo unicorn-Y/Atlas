@@ -223,6 +223,32 @@ async def get_diagnostic_tasks(services: Annotated[AppServices, Depends(get_app_
             "note": "CPU/内存仅对操作系统可枚举子进程提供；当前 Python 运行时未暴露该数据。"}
 
 
+_EMERGENCY_KINDS = {"会话运行", "子 agent", "后台进程", "浏览器会话"}
+
+
+async def stop_all_activity(services: AppServices) -> dict[str, Any]:
+    """Emergency brake for everything Atlas is actively doing outside the automation engine.
+
+    Reuses the task manager's listing and per-item stop so both paths stay identical. Stopped
+    conversation runs are cancelled (not resumable); the caller reports them so the user knows.
+    """
+    listing = await get_diagnostic_tasks(services)
+    stopped: list[dict[str, Any]] = []
+    failed: list[dict[str, Any]] = []
+    for task in listing.get("tasks", []):
+        if task.get("kind") not in _EMERGENCY_KINDS or not task.get("stoppable", True):
+            continue
+        if str(task.get("status") or "").lower() in {"completed", "failed", "cancelled", "exited", "done"}:
+            continue
+        try:
+            result = await stop_diagnostic_task(services, str(task["id"]))
+        except Exception as exc:  # one stuck item must not abort the brake for the rest
+            result = {"stopped": False, "reason": str(exc)}
+        row = {"id": task["id"], "kind": task.get("kind"), "name": task.get("name")}
+        (stopped if result.get("stopped") else failed).append({**row, **({"reason": result.get("reason")} if not result.get("stopped") else {})})
+    return {"stopped": stopped, "failed": failed}
+
+
 @router.post("/api/diagnostics/tasks/{run_id}/stop")
 async def stop_diagnostic_task(services: Annotated[AppServices, Depends(get_app_services)], run_id: str) -> dict[str, Any]:
     if run_id.startswith("browser:"):

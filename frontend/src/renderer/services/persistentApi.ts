@@ -227,7 +227,7 @@ export const automationsApi = {
   resume: (base: string, id: string) =>
     api<Record<string, unknown>>(base, `/api/automations/${encodeURIComponent(id)}/resume`, { method: 'POST' }),
     emergencyStatus: (base: string) => api<{ paused: boolean; affected?: Array<{ id: string; name?: string; cancelled?: number; error?: string }>; resumed?: string[]; failures?: Array<{ id: string; error: string }> }>(base, '/api/automations/global-pause'),
-    emergencyPause: (base: string) => api<{ paused: boolean; affected?: Array<{ id: string; name?: string; cancelled?: number; error?: string }>; resumed?: string[]; failures?: Array<{ id: string; error: string }> }>(base, '/api/automations/global-pause', { method: 'POST' }),
+    emergencyPause: (base: string) => api<{ paused: boolean; affected?: Array<{ id: string; name?: string; cancelled?: number; error?: string }>; activity?: { stopped: Array<{ id: string; kind?: string; name?: string }>; failed: Array<{ id: string; kind?: string; name?: string; reason?: string }> }; resumed?: string[]; failures?: Array<{ id: string; error: string }> }>(base, '/api/automations/global-pause', { method: 'POST' }),
     emergencyResume: (base: string) => api<{ paused: boolean; affected?: Array<{ id: string; name?: string; cancelled?: number; error?: string }>; resumed?: string[]; failures?: Array<{ id: string; error: string }> }>(base, '/api/automations/global-resume', { method: 'POST' }),
   runs: (base: string, id: string, limit = 20) =>
     api<{ runs: AutomationRun[]; limit: number }>(base, `/api/automations/${encodeURIComponent(id)}/runs?limit=${limit}`),

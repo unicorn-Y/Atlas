@@ -667,7 +667,7 @@ class AutomationEngine:
         if lock is None:
             lock = self._emergency_lock = asyncio.Lock()
         async with lock:
-            manifest = DATA_ROOT / "automation-emergency-pause.json"
+            manifest = DATA_ROOT / "data" / "automation-emergency-pause.json"
             records = self._store.list()
             state = {"version": 1, "paused": True, "resume_ids": [r["id"] for r in records
                      if r.get("enabled") and not r.get("state", {}).get("paused_reason")],
@@ -705,7 +705,7 @@ class AutomationEngine:
         if lock is None:
             lock = self._emergency_lock = asyncio.Lock()
         async with lock:
-            manifest = DATA_ROOT / "automation-emergency-pause.json"
+            manifest = DATA_ROOT / "data" / "automation-emergency-pause.json"
             try:
                 state = json.loads(manifest.read_text(encoding="utf-8"))
             except (OSError, ValueError):
@@ -729,7 +729,7 @@ class AutomationEngine:
         import json
         from atlas.config import DATA_ROOT
         try:
-            return bool(json.loads((DATA_ROOT / "automation-emergency-pause.json").read_text(encoding="utf-8")).get("paused"))
+            return bool(json.loads((DATA_ROOT / "data" / "automation-emergency-pause.json").read_text(encoding="utf-8")).get("paused"))
         except (OSError, ValueError, AttributeError):
             return False
 
