@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
+from atlas.project_settings import get_session_gateway_key, load_session_config, save_session_config, set_session_gateway_key
 from atlas.ssh import ssh_workspaces
 
 router = APIRouter()
@@ -238,6 +239,60 @@ async def get_conversation_messages(
         read_session_messages, DATA_ROOT / "engine", conversation_id,
         limit=limit, before_id=before_id,
     )
+
+
+@router.get("/api/conversations/{conversation_id}/settings")
+async def get_conversation_scoped_settings(
+    services: Annotated[AppServices, Depends(get_app_services)], conversation_id: str,
+) -> dict[str, Any]:
+    memory = services.memory or _server().memory
+    if memory is None or await memory.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"config": load_session_config(conversation_id),
+            "api_key_configured": bool(get_session_gateway_key(conversation_id))}
+
+
+@router.put("/api/conversations/{conversation_id}/settings")
+async def put_conversation_scoped_settings(
+    services: Annotated[AppServices, Depends(get_app_services)], conversation_id: str,
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    memory = services.memory or _server().memory
+    if memory is None or await memory.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    config = load_session_config(conversation_id)
+    models = config.setdefault("models", {})
+    if "default_model" in request:
+        value = request["default_model"]
+        if not isinstance(value, str):
+            raise HTTPException(status_code=422, detail="default_model must be text")
+        model_mgr = services.model_mgr or _server().model_mgr
+        if value and not any(str(item.get("id")) == value for item in model_mgr.list_models()):
+            raise HTTPException(status_code=422, detail="Default model is not configured")
+        if value:
+            models["default"] = value
+        else:
+            models.pop("default", None)
+    if "gateway_base_url" in request:
+        value = request["gateway_base_url"]
+        if not isinstance(value, str) or (value and not value.strip().startswith(("http://", "https://"))):
+            raise HTTPException(status_code=422, detail="gateway_base_url must use http:// or https://")
+        gateway = models.setdefault("gateway", {})
+        if value.strip():
+            gateway["base_url"] = value.strip().rstrip("/")
+        else:
+            gateway.pop("base_url", None)
+        if not gateway:
+            models.pop("gateway", None)
+    try:
+        save_session_config(conversation_id, config)
+        if request.get("clear_api_key") is True:
+            set_session_gateway_key(conversation_id, None)
+        elif "api_key" in request:
+            set_session_gateway_key(conversation_id, str(request.get("api_key") or ""))
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=500, detail="会话设置保存失败；请检查本机系统凭据库。") from exc
+    return await get_conversation_scoped_settings(services, conversation_id)
 
 
 @router.get("/api/conversations/{conversation_id}/peer-inbox")

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { FolderGit2, LoaderCircle, Plus, RefreshCw, Search, X } from 'lucide-react';
 import { api, relativeTime } from '../services/api';
 import ProjectSourcesPanel from './ProjectSourcesPanel';
+import ProjectModelSettings from './ProjectModelSettings';
 import { ProjectIcon, PROJECT_ICON_OPTIONS } from './ProjectIcon';
 
 interface Project { project_id: string; name: string; workspace_path: string; repo_url: string; status: string; current_goal: string; current_state: string; color: string; icon: string; updated_at?: string }
@@ -192,6 +193,7 @@ export default function CodePage({ apiBaseUrl, connected, onToast }: { apiBaseUr
             <button className="btn ghost" disabled={busy || (color === current.color && icon === current.icon)}>保存外观</button>
           </div>
         </form>
+        <ProjectModelSettings projectId={current.project_id} apiBaseUrl={apiBaseUrl} onToast={onToast} />
         <ProjectSourcesPanel projectId={current.project_id} workspacePath={current.workspace_path} apiBaseUrl={apiBaseUrl} onToast={onToast} />
         <form onSubmit={(event) => void recall(event)} style={{ marginTop: 18 }}>
           <label className="field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="在这个项目的历史对话里找…" aria-label="项目历史搜索" /></label>

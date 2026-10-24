@@ -196,6 +196,7 @@ class RunRequest:
     agent_type: str = "general"
     moa: bool = False
     workspace_rules: list[dict[str, Any]] | None = None
+    ignore_workspace_rules: bool = False
     mode: str = "act"
     tool_allow: list[str] | None = None
     tool_deny: list[str] | None = None
@@ -750,7 +751,7 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
         initial_messages.append(SystemMessage(content=_TOOL_RESULT_BOUNDARY_GUIDANCE))
     workspace_rules = list(request.workspace_rules or [])
     discovered_rules: list[dict[str, Any]] = []
-    if request.workspace:
+    if request.workspace and not request.ignore_workspace_rules:
         try:
             from atlas.agent.project_instructions import load_project_instructions
 

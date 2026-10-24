@@ -45,6 +45,7 @@ class RunState:
         "updated_at", "waiting_for", "persisted_sequence",
         "dynamic_plan_mode", "plan_approval_callback", "plan_mode_callback", "end_conversation_reason",
         "end_conversation_callback",
+        "config_override", "ignore_project_config", "ignore_workspace_rules",
         "resume_attempts", "resume_context",
     )
 
@@ -109,6 +110,9 @@ class RunState:
         self.plan_mode_callback: Any = None
         self.end_conversation_reason = ""
         self.end_conversation_callback: Any = None
+        self.config_override: dict[str, Any] | None = None
+        self.ignore_project_config = False
+        self.ignore_workspace_rules = False
 
     def next_envelope(self, event: str, data: dict[str, Any]) -> dict[str, Any]:
         """Build a Runtime Event envelope and append to log."""
@@ -159,6 +163,9 @@ def _resume_context(run: "RunState") -> dict[str, Any]:
         "profile_id": run.profile_id,
         "project_id": run.project_id,
         "reasoning_effort": run.reasoning_effort,
+        "config_override": run.config_override,
+        "ignore_project_config": run.ignore_project_config,
+        "ignore_workspace_rules": run.ignore_workspace_rules,
     }
     return {key: value for key, value in context.items() if value not in (None, "", [], False)}
 

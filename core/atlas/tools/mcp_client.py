@@ -395,6 +395,14 @@ def resolve_mcp_env(env: dict[str, Any]) -> tuple[dict[str, str], list[str]]:
     referenced_keys: set[str] = set()
     for raw_key, raw_value in env.items():
         key, value = str(raw_key), str(raw_value or "")
+        if value.startswith("{{secret:") and value.endswith("}}"):
+            try:
+                from atlas.secrets_store import resolve_handles
+
+                value = resolve_handles(value)
+            except ValueError:
+                missing.append(f"{key} (missing saved secret)")
+                value = ""
         reference = _ENV_REFERENCE.fullmatch(value)
         if reference:
             referenced_keys.add(key)

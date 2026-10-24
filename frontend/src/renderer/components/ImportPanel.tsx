@@ -6,11 +6,12 @@ import { cn } from '../ui/cn';
 import { api } from '../services/api';
 import styles from '../App.module.css';
 
-type ImportSource = 'claude' | 'codex';
+type ImportSource = 'claude' | 'codex' | 'openclaw';
 
 const SOURCE_META: Record<ImportSource, { label: string; hint: string }> = {
   claude: { label: '从 Claude Code 导入', hint: '读取 Claude Code 的配置：MCP 服务、Hooks、CLAUDE.md 等规则文件、技能、子 Agent 定义、自定义命令和模型偏好；历史会话可在下方逐条预览后选择导入。不会改动 Claude Code 的文件。' },
   codex: { label: '从 Codex 导入', hint: '读取 Codex 的配置；历史会话可在下方逐条预览后选择导入。不会改动 Codex 的文件。' },
+  openclaw: { label: '从 OpenClaw 导入', hint: '扫描 OpenClaw 的 MCP、工作区说明、技能和子 Agent；历史会话会逐条预览后选择导入。只读源文件，不导入源凭据。' },
 };
 
 const KIND_LABEL: Record<string, string> = {
@@ -47,7 +48,7 @@ function formatHistoryTime(value: string): string {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString();
 }
 
-/** Pick the two import entries (Claude Code / Codex), scan, check off a list, then import and see a short report. */
+/** Scan Claude Code / Codex / OpenClaw, review entries, then import selected files and sessions. */
 export default function ImportPanel({ workspace }: { workspace?: string }) {
   const apiBaseUrl = useAtlasStore((state) => state.apiBaseUrl);
   const refreshConversations = useAtlasStore((state) => state.refreshConversations);
@@ -159,7 +160,7 @@ export default function ImportPanel({ workspace }: { workspace?: string }) {
 
   return <section className={styles.settingsCard} aria-label="从其他工具导入">
     <h2>导入其他工具的配置</h2>
-    <p style={{ marginBottom: 12 }}>把 Claude Code 或 Codex 里已有的东西搬进 Atlas。导入前先扫描列出清单，勾选之后才会真正导入。</p>
+    <p style={{ marginBottom: 12 }}>把 Claude Code、Codex 或 OpenClaw 里已有的内容搬进 Atlas。导入前先扫描列出清单，勾选之后才会真正导入。</p>
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       {(Object.keys(SOURCE_META) as ImportSource[]).map((key) => (
         <button key={key} className={source === key ? styles.settingsAction : styles.settingsActionSecondary} disabled={scanning || importing}

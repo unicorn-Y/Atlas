@@ -34,8 +34,8 @@ async def scan_external_history(
 ) -> dict[str, Any]:
     """List recent text-bearing sessions under the recognized local history roots."""
     del services  # The scan reads only the current user's recognized local roots.
-    if source not in {"claude", "codex"}:
-        raise HTTPException(status_code=422, detail="source must be claude or codex")
+    if source not in {"claude", "codex", "openclaw"}:
+        raise HTTPException(status_code=422, detail="source must be claude, codex, or openclaw")
     from atlas.runtime.external_import import list_external_history
 
     try:
@@ -51,8 +51,8 @@ async def import_external_history(
 ) -> dict[str, Any]:
     """Import explicitly selected text turns through Memory + canonical SessionDB."""
     source = str(request.get("source") or "")
-    if source not in {"claude", "codex"}:
-        raise HTTPException(status_code=422, detail="source must be claude or codex")
+    if source not in {"claude", "codex", "openclaw"}:
+        raise HTTPException(status_code=422, detail="source must be claude, codex, or openclaw")
     raw_keys = request.get("session_keys")
     if not isinstance(raw_keys, list) or any(not isinstance(key, str) for key in raw_keys):
         raise HTTPException(status_code=422, detail="session_keys must be an array of session keys")

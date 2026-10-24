@@ -314,6 +314,23 @@ def version() -> None:
     console.print("Atlas v0.1.0")
 
 
+@main.command("config-migrate")
+@click.option("--rollback", is_flag=True, help="Restore sanitized pre-v2 config/settings backups")
+def config_migrate(rollback: bool) -> None:
+    """Show or run the versioned local config migration; credentials remain in the OS keyring."""
+    from atlas.config import CONFIG_PATH, USER_SETTINGS_PATH
+    from atlas.config_migrations import migrate_configuration, rollback_configuration_migration
+
+    if rollback:
+        restored = rollback_configuration_migration(CONFIG_PATH, USER_SETTINGS_PATH)
+        console.print(json.dumps({"rollback": restored}, ensure_ascii=False))
+        return
+    result = migrate_configuration(CONFIG_PATH, USER_SETTINGS_PATH)
+    console.print(json.dumps(result, ensure_ascii=False))
+    if result.get("config_error") or result.get("settings_error"):
+        raise click.ClickException("配置迁移未完成；原文件已保留，请修复系统凭据库后重试。")
+
+
 @main.command("exec")
 @click.argument("prompt", required=False)
 @click.option("--model", "-m", default=None, help="Model to use")
@@ -329,16 +346,24 @@ def version() -> None:
               help="Write the final assistant response to this file")
 @click.option("--approve-writes", is_flag=True,
               help="Approve write-capable tool calls for this non-interactive run")
+@click.option("--project-id", default=None, help="Run within one Atlas project configuration/credential scope")
+@click.option("--config-override", type=click.Path(dir_okay=False, path_type=Path), default=None,
+              help="Apply a strict temporary JSON config override for this run only")
+@click.option("--ignore-project-config", is_flag=True, help="Ignore the selected project's saved config for this run")
+@click.option("--ignore-workspace-rules", is_flag=True, help="Skip AGENTS.md / CLAUDE.md workspace instructions for this run")
 def exec_command(
     prompt: str | None, model: str | None, workspace: Path,
     conversation_id: str | None, output_format: str, json_output: bool,
     output_schema: Path | None, output_last_message: Path | None, approve_writes: bool,
+    project_id: str | None, config_override: Path | None, ignore_project_config: bool,
+    ignore_workspace_rules: bool,
 ) -> None:
     """Run one non-interactive agent turn; PROMPT may also come from stdin."""
     from atlas.agent import AgentOrchestrator
     from atlas.config import DATA_ROOT
     from atlas.memory import MemoryStore
     from atlas.models import ModelManager
+    from atlas.project_context import project_scoped_events, validate_config_override
 
     user_prompt = prompt if prompt is not None else sys.stdin.read()
     user_prompt = user_prompt.strip()
@@ -349,6 +374,13 @@ def exec_command(
         raise click.BadParameter(f"workspace is not a directory: {root}", param_hint="--workspace")
     if json_output:
         output_format = "jsonl"
+    temporary_config = None
+    if config_override:
+        try:
+            raw_override = json.loads(config_override.read_text(encoding="utf-8"))
+            temporary_config = validate_config_override(raw_override)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            raise click.BadParameter(f"invalid temporary config override: {exc}", param_hint="--config-override") from exc
     schema: dict[str, Any] | None = None
     if output_schema:
         try:
@@ -386,10 +418,17 @@ def exec_command(
                     run_prompt += "\n\nReturn only a JSON value that strictly matches this JSON Schema:\n" + json.dumps(schema, ensure_ascii=False)
                     if attempt:
                         run_prompt += f"\nYour previous response failed schema validation: {validation_error}. Rewrite it now."
-                async for event in orchestrator.run(
+                run_events = orchestrator.run(
                     run_prompt, conv_id, workspace=str(root), workspace_trusted=True,
                     permission_mode="ask_writes",
+                    project_id=project_id,
+                    ignore_workspace_rules=ignore_workspace_rules,
                     approval_callback=approve_once if approve_writes else None,
+                )
+                async for event in project_scoped_events(
+                    project_id, run_events, config_override=temporary_config,
+                    ignore_project_config=ignore_project_config,
+                    session_id=conv_id,
                 ):
                     kind = event.get("type")
                     if kind == "chunk":

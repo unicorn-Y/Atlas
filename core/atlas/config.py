@@ -75,6 +75,43 @@ class AtlasConfig:
     def get(self, dotted_key: str, default: Any = None) -> Any:
         """Get a nested value like ``cfg.get('server.port', 8765)``."""
         keys = dotted_key.split(".")
+        try:
+            from atlas.project_context import current_config_override, current_project_id, current_session_id, project_config_ignored
+            from atlas.project_settings import load_project_config
+
+            override_node: Any = current_config_override()
+            for key in keys:
+                if not isinstance(override_node, dict) or key not in override_node:
+                    override_node = None
+                    break
+                override_node = override_node[key]
+            if override_node is not None:
+                return override_node
+            session_id = current_session_id()
+            if session_id:
+                from atlas.project_settings import load_session_config
+
+                session_node: Any = load_session_config(session_id)
+                for key in keys:
+                    if not isinstance(session_node, dict) or key not in session_node:
+                        session_node = None
+                        break
+                    session_node = session_node[key]
+                if session_node is not None:
+                    return session_node
+            project_id = current_project_id()
+            if project_id and not project_config_ignored():
+                project_node: Any = load_project_config(project_id)
+                for key in keys:
+                    if not isinstance(project_node, dict) or key not in project_node:
+                        project_node = None
+                        break
+                    project_node = project_node[key]
+                if project_node is not None:
+                    return project_node
+        except (ImportError, ValueError):
+            # A malformed/removed project context must not prevent Atlas boot.
+            pass
         node: Any = self._data
         for k in keys:
             if isinstance(node, dict):
@@ -135,6 +172,14 @@ class AtlasConfig:
         env = os.environ.get("ATLAS_API_KEY")
         if env:
             return env
+        try:
+            from atlas.config_migrations import GLOBAL_GATEWAY_KEY, _keyring
+
+            protected = _keyring().get(GLOBAL_GATEWAY_KEY)
+            if protected:
+                return protected
+        except Exception:
+            pass
         return str(self.get("models.gateway.api_key", ""))
 
     @property
@@ -254,6 +299,13 @@ def load_config(path: Path | None = None) -> AtlasConfig:
         else:
             log.warning("config.not_found", path=str(cfg_path))
             return AtlasConfig()
+
+    if path is None:
+        from atlas.config_migrations import migrate_configuration
+
+        migration = migrate_configuration(cfg_path, USER_SETTINGS_PATH)
+        if migration.get("settings_error") or migration.get("config_error"):
+            log.warning("config.migration_incomplete", status=migration)
 
     with open(cfg_path, "rb") as f:
         data = tomllib.load(f)

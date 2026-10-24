@@ -35,7 +35,7 @@ from typing import Any
 from atlas.config import DATA_ROOT, load_user_settings, save_user_settings
 from atlas.runtime.hooks import HookStore, parse_claude_hooks
 
-SOURCES = ("claude", "codex")
+SOURCES = ("claude", "codex", "openclaw")
 
 # Claude hook events Atlas owns natively; all other Claude events keep working
 # through the live-read Claude settings layer and are not imported.
@@ -142,6 +142,27 @@ def _canonical_mcp(raw: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _protect_mcp_env(source: str, path: Path | None, name: str,
+                     env: Mapping[str, Any]) -> dict[str, str]:
+    """Move imported credential-looking environment values to the local vault."""
+    from atlas.secrets_store import set_secret
+
+    protected: dict[str, str] = {}
+    for key, value in env.items():
+        key_text, value_text = str(key), str(value)
+        upper = key_text.upper()
+        if value_text and not value_text.startswith("{{secret:") and any(
+            token in upper for token in ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
+        ):
+            identity = hashlib.sha256(f"{source}\0{path}\0{name}\0{key_text}".encode("utf-8")).hexdigest()[:24].upper()
+            secret_name = f"IMPORT_{identity}"
+            set_secret(secret_name, value_text, f"Imported MCP credential for {name}: {key_text}")
+            protected[key_text] = f"{{{{secret:{secret_name}}}}}"
+        else:
+            protected[key_text] = value_text
+    return protected
+
+
 def _servers_equal(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
     keys = ("transport", "command", "args", "env", "url")
     return all(left.get(key) == right.get(key) for key in keys)
@@ -208,10 +229,19 @@ def _extend_auto_start(text: str, names: Sequence[str]) -> str:
 
 
 def _read_source_mcp(source: str, path: Path, name: str) -> Mapping[str, Any] | None:
-    data = _load_json(path) if source == "claude" else _load_toml(path)
+    data = _load_json(path) if source in {"claude", "openclaw"} else _load_toml(path)
     if not isinstance(data, dict):
         return None
-    servers = data.get("mcpServers" if source == "claude" else "mcp_servers", {})
+    if source == "claude":
+        servers = data.get("mcpServers", {})
+    elif source == "openclaw":
+        servers = data.get("mcpServers")
+        if not isinstance(servers, dict):
+            tools = data.get("tools") if isinstance(data.get("tools"), dict) else {}
+            mcp = tools.get("mcp") if isinstance(tools.get("mcp"), dict) else {}
+            servers = tools.get("servers") if isinstance(tools.get("servers"), dict) else mcp.get("servers", {})
+    else:
+        servers = data.get("mcp_servers", {})
     raw = servers.get(name) if isinstance(servers, dict) else None
     return raw if isinstance(raw, dict) else None
 
@@ -291,7 +321,7 @@ def scan_external(source: str, *, workspace: Path | None = None,
     home = _source_home(source_home)
     ws = Path(workspace).expanduser() if workspace else None
     paths = _atlas_layout(atlas_home)
-    scanner = _scan_claude if source == "claude" else _scan_codex
+    scanner = {"claude": _scan_claude, "codex": _scan_codex, "openclaw": _scan_openclaw}[source]
     items, roots = scanner(home, ws, paths)
     sources = [str(root) for root in roots if root.exists()]
     return {"source": source, "items": items, "sources": sources}
@@ -468,6 +498,54 @@ def _scan_codex(home: Path, ws: Path | None,
     return items, _codex_roots(home)
 
 
+def _openclaw_roots(home: Path) -> list[Path]:
+    root = home / ".openclaw"
+    return [root / "openclaw.json", root / "workspace", root / "agents"]
+
+
+def _scan_openclaw(home: Path, ws: Path | None,
+                   paths: dict[str, Path]) -> tuple[list[dict[str, Any]], list[Path]]:
+    root = home / ".openclaw"
+    items: list[dict[str, Any]] = []
+    config_path = root / "openclaw.json"
+    config = _load_json(config_path)
+    existing_servers = _atlas_servers(paths["config_toml"])
+    servers: Any = {}
+    if isinstance(config, dict):
+        servers = config.get("mcpServers")
+        if not isinstance(servers, dict):
+            tools = config.get("tools") if isinstance(config.get("tools"), dict) else {}
+            servers = tools.get("servers") if isinstance(tools.get("servers"), dict) else tools.get("mcp", {}).get("servers", {}) if isinstance(tools.get("mcp"), dict) else {}
+    if isinstance(servers, dict):
+        for name, raw in servers.items():
+            if not isinstance(raw, dict) or not (raw.get("command") or raw.get("url")):
+                continue
+            entry = _canonical_mcp(raw)
+            if name in existing_servers:
+                same = _servers_equal(_canonical_mcp(existing_servers[name]), entry)
+                items.append(_item("mcp", name, config_path, "skip", conflict=not same,
+                                   detail="Atlas 已有内容一致的同名服务器" if same else "Atlas 已有同名但配置不同的服务器，默认跳过"))
+            else:
+                items.append(_item("mcp", name, config_path, "import", detail=_mcp_detail(entry)))
+
+    if ws is not None:
+        for source in (root / "workspace" / "AGENTS.md", root / "workspace" / "SOUL.md",
+                       root / "workspace" / "USER.md", root / "AGENTS.md"):
+            item = _rules_item(source, f"OpenClaw {source.name}", ws)
+            if item:
+                items.append(item)
+    items.extend(_scan_skill_dirs(root / "skills", "OpenClaw", paths["skills"]))
+    items.extend(_scan_md_files("agents", root / "agents", "OpenClaw", paths["agents"]))
+    sessions = root / "agents"
+    if sessions.is_dir():
+        count = sum(1 for path in sessions.glob("*/sessions/*.jsonl") if path.is_file())
+        if count:
+            items.append(_item("history", f"OpenClaw 会话历史（{count} 条）", sessions, "skip",
+                               detail="请在下方逐条预览后选择导入；源会话文件只读"))
+    items.sort(key=lambda item: _KIND_ORDER.index(item["kind"]))
+    return items, _openclaw_roots(home)
+
+
 # ---------------------------------------------------------------------------
 # Read-only transcript discovery for the dedicated external-history API
 # ---------------------------------------------------------------------------
@@ -483,6 +561,10 @@ def _history_roots(source: str) -> tuple[Path, ...]:
         codex_home = os.environ.get("CODEX_HOME")
         home = Path(codex_home).expanduser() if codex_home else Path.home() / ".codex"
         return home / "sessions", home / "archived_sessions"
+    if source == "openclaw":
+        openclaw_home = os.environ.get("OPENCLAW_HOME")
+        root = Path(openclaw_home).expanduser() if openclaw_home else Path.home() / ".openclaw"
+        return (root / "agents",)
     raise ValueError(f"source must be one of {SOURCES}: got {source!r}")
 
 
@@ -596,7 +678,7 @@ def _append_transcript_message(
 ) -> None:
     if role not in {"user", "assistant"}:
         return
-    text = _text_from_blocks(content, codex=source == "codex")
+    text = _text_from_blocks(content, codex=source != "claude")
     if not text:
         return
     timestamp = _timestamp(timestamp_value)
@@ -665,7 +747,7 @@ def _parse_history_file(source: str, root: Path, path: Path, size: int, modified
                         message.get("content"), row.get("timestamp") or message.get("timestamp"),
                         row.get("uuid") or message.get("id"), occurrences, records,
                     )
-                else:
+                elif source == "codex":
                     row_type = row.get("type")
                     payload = row.get("payload")
                     if not isinstance(payload, dict):
@@ -692,6 +774,23 @@ def _parse_history_file(source: str, root: Path, path: Path, size: int, modified
                                 fallback, payload.get("timestamp") or row.get("timestamp"),
                                 payload.get("id") or row.get("id"), records,
                             ))
+                else:
+                    row_type = str(row.get("type") or "")
+                    if row_type in {"session", "session_meta", "metadata"}:
+                        title = title or str(row.get("title") or row.get("label") or "").strip()
+                        continue
+                    message = row.get("message") if isinstance(row.get("message"), dict) else row
+                    role = message.get("role")
+                    if role not in {"user", "assistant"}:
+                        continue
+                    if message.get("isMeta") or message.get("isSidechain") or message.get("isCompactSummary"):
+                        continue
+                    _append_transcript_message(
+                        messages, source, session_key, role,
+                        message.get("content", message.get("text")),
+                        row.get("timestamp") or message.get("timestamp"),
+                        row.get("id") or message.get("id"), occurrences, records,
+                    )
     except OSError:
         return None
 
@@ -1002,6 +1101,7 @@ def _import_mcp(source: str, name: str, path: Path | None, item: dict[str, Any],
     if raw is None:
         return False, "源 MCP 配置已不可读"
     entry = _canonical_mcp(raw)
+    entry["env"] = _protect_mcp_env(source, path, name, entry.get("env", {}))
 
     config_path = paths["config_toml"]
     text = config_path.read_text(encoding="utf-8") if config_path.exists() else ""

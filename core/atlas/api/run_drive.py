@@ -1227,6 +1227,16 @@ async def _handle_run_start(
     memory = getattr(services, "memory", None) or getattr(_server(), "memory", None)
     orchestrator = getattr(services, "orchestrator", None) or getattr(_server(), "orchestrator", None)
     projects = getattr(services, "projects", None) or getattr(_server(), "projects", None)
+    from atlas.project_context import project_scope, validate_config_override
+
+    try:
+        config_override = validate_config_override(data.get("config_override", {})) if "config_override" in data else None
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+    ignore_project_config = data.get("ignore_project_config", False)
+    ignore_workspace_rules = data.get("ignore_workspace_rules", False)
+    if not isinstance(ignore_project_config, bool) or not isinstance(ignore_workspace_rules, bool):
+        raise ValueError("ignore_project_config and ignore_workspace_rules must be booleans")
     run_id = data.get("run_id") or str(uuid.uuid4())
     existing = manager.runs.get(run_id)
     if existing:
@@ -1436,6 +1446,24 @@ async def _handle_run_start(
     conv_id = data.get("conversation_id") or (
         prior_run.conversation_id if prior_run else str(uuid.uuid4())
     )
+    run_project_id = str(data.get("project_id") or "").strip() or None
+    if run_project_id and projects is not None and await projects.get(run_project_id) is None:
+        invalid_run = RunState(run_id, str(conv_id), str(model_id or ""))
+        await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
+            "category": "validation", "detail": "project_id does not reference an existing project",
+        }))
+        return
+    if not run_project_id and projects is not None:
+        try:
+            project_db = projects._require_db()
+            cursor = await project_db.execute(
+                "SELECT project_id FROM project_conversations WHERE conversation_id=? "
+                "ORDER BY rowid DESC LIMIT 1", (conv_id,),
+            )
+            project_row = await cursor.fetchone()
+            run_project_id = str(project_row["project_id"]) if project_row else None
+        except Exception:
+            log.exception("run.project_scope_lookup_failed", conversation_id=conv_id)
     # C6:/review 拦截——命中审查指令时把正文改写为派发提示词，并固定审查配置。
     # 放在正文（含附件）就绪之后、档案合并之前，让后续统一的 run 组装吃到强制值。
     try:
@@ -1507,7 +1535,14 @@ async def _handle_run_start(
             log.info("review.intercepted", run_id=run_id,
                      workspace=str(review_workspace), scope=review_scope.get("scope"))
     assert model_mgr is not None
-    run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+    with project_scope(run_project_id, config_override=config_override,
+                       ignore_project_config=ignore_project_config, session_id=str(conv_id)):
+        model_id = model_id or model_mgr.current_model
+    run = RunState(run_id, conv_id, model_id)
+    run.project_id = run_project_id
+    run.config_override = config_override
+    run.ignore_project_config = ignore_project_config
+    run.ignore_workspace_rules = ignore_workspace_rules
     session_env = data.get("session_env", {})
     if not isinstance(session_env, dict) or len(session_env) > 64 or any(
         not isinstance(key, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", key)
@@ -1844,7 +1879,7 @@ async def _handle_run_start(
         rule_roots = list(dict.fromkeys([*([run.workspace] if run.workspace else []), *run.extra_roots]))
         run.workspace_rules = []
         untrusted_roots = []
-        for root in rule_roots:
+        for root in ([] if run.ignore_workspace_rules else rule_roots):
             from atlas.api.workspace_router import collect_workspace_rules
 
             rules = await collect_workspace_rules(root)
@@ -2169,6 +2204,15 @@ async def resume_run_after_restart(
     run.profile_id = context.get("profile_id") or run.profile_id
     run.project_id = context.get("project_id") or run.project_id
     run.reasoning_effort = context.get("reasoning_effort") or run.reasoning_effort
+    try:
+        from atlas.project_context import validate_config_override
+
+        run.config_override = validate_config_override(context.get("config_override")) if context.get("config_override") else None
+    except ValueError:
+        log.warning("run.resume_invalid_config_override", run_id=run.run_id)
+        run.config_override = None
+    run.ignore_project_config = bool(context.get("ignore_project_config"))
+    run.ignore_workspace_rules = bool(context.get("ignore_workspace_rules"))
 
     # Rebuild the workspace rule context the same way a fresh run does, so a
     # resumed run is subject to the rules that exist now rather than the ones
@@ -2178,7 +2222,7 @@ async def resume_run_after_restart(
     run.workspace_rules = []
     rule_roots = list(dict.fromkeys([*([workspace] if workspace else []), *run.extra_roots]))
     untrusted_roots = []
-    for root in rule_roots:
+    for root in ([] if run.ignore_workspace_rules else rule_roots):
         from atlas.api.workspace_router import collect_workspace_rules
 
         try:
@@ -2932,6 +2976,7 @@ async def _execute_run(
                 str(Path(workspace).expanduser().resolve()), False,
             )),
             workspace_rules=workspace_rules,
+            ignore_workspace_rules=run.ignore_workspace_rules,
             mode=mode,
             tool_allow=run.tool_allow,
             tool_deny=run.tool_deny,
@@ -2953,7 +2998,13 @@ async def _execute_run(
             subtask_group_completed=subtask_group_completed,
             force_plan=(mode == "plan"),
         )
-        async for event in orchestrator_events:
+        from atlas.project_context import project_scoped_events
+
+        async for event in project_scoped_events(
+            run.project_id, orchestrator_events, config_override=run.config_override,
+            ignore_project_config=run.ignore_project_config,
+            session_id=run.conversation_id,
+        ):
             if await check_pause_cancel():
                 run.status = "cancelled"
                 await cancel_local_foreground()

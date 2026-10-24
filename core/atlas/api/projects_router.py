@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 from atlas.config import load_user_settings, save_user_settings
+from atlas.project_settings import get_project_gateway_key, load_project_config, save_project_config, set_project_gateway_key
 from atlas.diagnostic_alerts import record_alert
 from atlas.diagnostic_alerts import _read as read_alerts
 
@@ -122,6 +123,69 @@ async def list_projects(
             item["conversation_ids"] = await projects.list_conversations(project.project_id)
         items.append(item)
     return {"projects": items}
+
+
+@router.get("/api/projects/{project_id}/settings")
+async def get_project_settings(
+    services: Annotated[AppServices, Depends(get_app_services)], project_id: str,
+) -> dict[str, Any]:
+    projects = services.projects or _server().projects
+    project = await projects.get(project_id) if projects else None
+    if project is None:
+        raise HTTPException(status_code=404, detail="找不到这个项目。")
+    return {
+        "config": load_project_config(project_id),
+        "api_key_configured": bool(get_project_gateway_key(project_id)),
+        "credential_scope": f"project:{project_id}",
+    }
+
+
+@router.put("/api/projects/{project_id}/settings")
+async def put_project_settings(
+    services: Annotated[AppServices, Depends(get_app_services)], project_id: str,
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    projects = services.projects or _server().projects
+    project = await projects.get(project_id) if projects else None
+    if project is None:
+        raise HTTPException(status_code=404, detail="找不到这个项目。")
+    current = load_project_config(project_id)
+    for key in ("default_model", "gateway_base_url"):
+        if key not in request:
+            continue
+        value = request[key]
+        if not isinstance(value, str):
+            raise HTTPException(status_code=422, detail=f"{key} 必须是文本")
+        if key == "gateway_base_url" and value and not value.strip().startswith(("http://", "https://")):
+            raise HTTPException(status_code=422, detail="服务地址必须以 http:// 或 https:// 开头")
+        if key == "default_model":
+            model_mgr = services.model_mgr or _server().model_mgr
+            if value and not any(str(item.get("id")) == value for item in model_mgr.list_models()):
+                raise HTTPException(status_code=422, detail="默认模型必须来自已配置的模型列表")
+    models = current.setdefault("models", {})
+    if "default_model" in request:
+        if request["default_model"]:
+            models["default"] = request["default_model"]
+        else:
+            models.pop("default", None)
+    if "gateway_base_url" in request:
+        gateway = models.setdefault("gateway", {})
+        value = request["gateway_base_url"].strip().rstrip("/")
+        if value:
+            gateway["base_url"] = value
+        else:
+            gateway.pop("base_url", None)
+        if not gateway:
+            models.pop("gateway", None)
+    try:
+        save_project_config(project_id, current)
+        if request.get("clear_api_key") is True:
+            set_project_gateway_key(project_id, None)
+        elif "api_key" in request:
+            set_project_gateway_key(project_id, str(request.get("api_key") or ""))
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=500, detail=f"项目设置保存失败：{exc}") from exc
+    return await get_project_settings(services, project_id)
 
 
 @router.post("/api/projects", status_code=201)

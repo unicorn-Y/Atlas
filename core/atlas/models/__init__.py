@@ -15,6 +15,8 @@ from atlas.config import get_config, load_user_settings, save_user_settings
 from atlas.models import catalog as _catalog
 from atlas.models import models_dev as _models_dev
 from atlas.models import reasoning_effort as _reasoning_effort
+from atlas.project_context import current_project_id, current_session_id
+from atlas.project_settings import get_project_gateway_key, get_session_gateway_key, set_project_gateway_key
 
 log = structlog.get_logger()
 
@@ -101,7 +103,13 @@ class ModelManager:
         self._favorites: set[str] = {"claude-opus-4", "claude-sonnet-4", "gpt-4o"}
         settings_base = str(settings.get("gateway_base_url") or "")
         self._api_base = settings_base or cfg.gateway_base_url
-        self._api_key = str(settings.get("api_key") or cfg.gateway_api_key)
+        self._global_api_key = str(settings.get("api_key") or cfg.gateway_api_key)
+        try:
+            from atlas.config_migrations import GLOBAL_GATEWAY_KEY
+
+            self._global_api_key = str(self._credential_store().get(GLOBAL_GATEWAY_KEY) or self._global_api_key)
+        except Exception:
+            pass
         self._model_router = None
         self._gateway_source = "user-settings" if settings_base else "atlas.toml"
         self._toml_gateway_base_url = cfg.gateway_base_url
@@ -168,6 +176,9 @@ class ModelManager:
 
     @property
     def gateway_base_url(self) -> str:
+        project_id = current_project_id()
+        if project_id:
+            return str(get_config().get("models.gateway.base_url", self._api_base))
         return self._api_base
 
     @property
@@ -181,11 +192,17 @@ class ModelManager:
 
     @property
     def api_key_configured(self) -> bool:
-        return bool(self._api_key)
+        return bool(self.gateway_api_key)
 
     @property
     def gateway_api_key(self) -> str:
-        return self._api_key
+        session_id = current_session_id()
+        if session_id:
+            return str(get_session_gateway_key(session_id)
+                       or (get_project_gateway_key(current_project_id()) if current_project_id() else None)
+                       or self._global_api_key)
+        project_id = current_project_id()
+        return str(get_project_gateway_key(project_id) or "") if project_id else self._global_api_key
 
     @property
     def model_router(self):
@@ -197,12 +214,27 @@ class ModelManager:
         return self._model_router
 
     def update_provider(self, base_url: str, api_key: str | None) -> None:
+        project_id = current_project_id()
+        if project_id:
+            from atlas.project_settings import load_project_config, save_project_config
+
+            project_config = load_project_config(project_id)
+            models = project_config.setdefault("models", {})
+            gateway = models.setdefault("gateway", {})
+            gateway["base_url"] = base_url.rstrip("/")
+            save_project_config(project_id, project_config)
+            if api_key:
+                set_project_gateway_key(project_id, api_key)
+            return
         if self._api_base != base_url.rstrip("/"):
             for entry in self._providers.values():
                 entry.pop("api_mode_probe", None)
         self._api_base = base_url.rstrip("/")
         if api_key:
-            self._api_key = api_key
+            from atlas.config_migrations import GLOBAL_GATEWAY_KEY
+
+            self._credential_store().set(GLOBAL_GATEWAY_KEY, api_key)
+            self._global_api_key = api_key
             for entry in self._providers.values():
                 entry.pop("api_mode_probe", None)
         self._gateway_source = "user-settings"
@@ -210,9 +242,9 @@ class ModelManager:
 
     def _persist_settings(self) -> None:
         current = load_user_settings()
+        current.pop("api_key", None)
         current.update({
             "gateway_base_url": self._api_base,
-            "api_key": self._api_key,
             "selected_model": self._current,
             "custom_models": [model for model in self._models if model.get("custom")],
             "providers": self._providers,
@@ -221,23 +253,49 @@ class ModelManager:
 
     @property
     def current_model(self) -> str:
+        session_id = current_session_id()
+        if session_id:
+            from atlas.project_settings import load_session_config
+
+            value = load_session_config(session_id).get("models", {}).get("default")
+            if value:
+                return str(value)
+        project_id = current_project_id()
+        if project_id:
+            return str(get_config().get("models.default", self._current))
         return self._current
 
     @property
     def current_litellm_model(self) -> str:
         """Return the LiteLLM model string for the currently selected model."""
+        selected = self.current_model
         for m in self._models:
-            if m["id"] == self._current:
+            if m["id"] == selected:
                 return m["litellm_model"]
-        return self._current  # fallback: use raw ID
+        return selected  # fallback: use raw ID
 
     def select(self, model_id: str) -> None:
         """Switch the active model."""
         valid_ids = {m["id"] for m in self._models}
         if model_id not in valid_ids:
             raise ValueError(f"Unknown model: {model_id}. Available: {valid_ids}")
-        self._current = model_id
-        self._persist_settings()
+        project_id = current_project_id()
+        session_id = current_session_id()
+        if session_id:
+            from atlas.project_settings import load_session_config, save_session_config
+
+            session_config = load_session_config(session_id)
+            session_config.setdefault("models", {})["default"] = model_id
+            save_session_config(session_id, session_config)
+        elif project_id:
+            from atlas.project_settings import load_project_config, save_project_config
+
+            project_config = load_project_config(project_id)
+            project_config.setdefault("models", {})["default"] = model_id
+            save_project_config(project_id, project_config)
+        else:
+            self._current = model_id
+            self._persist_settings()
         log.info("model_manager.select", model=model_id)
 
     def list_models(self) -> list[dict[str, Any]]:
@@ -247,7 +305,7 @@ class ModelManager:
             result.append({
                 **m,
                 "favorite": m["id"] in self._favorites,
-                "selected": m["id"] == self._current,
+                "selected": m["id"] == self.current_model,
                 "api_key_configured": bool(self.resolve_model_api_key(str(m["id"])))
                 if m.get("custom") else False,
                 # 附加字段（additive）：models.dev（allow_network=False）← 模型条目手填 capabilities 覆盖。
@@ -267,7 +325,7 @@ class ModelManager:
         provider = _catalog.resolve_catalog_id(str(model.get("hermes_provider") or model.get("provider") or ""))
         if provider != "anthropic":
             return None
-        if self._api_key or self.resolve_api_key(provider) or os.environ.get("ANTHROPIC_API_KEY"):
+        if self.gateway_api_key or self.resolve_api_key(provider) or (not current_project_id() and os.environ.get("ANTHROPIC_API_KEY")):
             return None
         return "所选 Claude 模型尚未配置可用密钥。请在设置 → 模型中配置服务商或网关密钥，再重新发送。"
 
@@ -557,6 +615,10 @@ class ModelManager:
     def resolve_api_key(self, provider_id: str) -> str | None:
         """池中首个非冷却 key 的原文（keyring 读取）；无可用 key / 未配置返回 None。"""
         pid = _catalog.resolve_catalog_id(str(provider_id or "").strip()) or ""
+        # Provider pools are global until a project has explicitly provisioned
+        # its own pool; never borrow a different project's provider credentials.
+        if current_project_id():
+            return None
         keys = self._providers.get(pid, {}).get("keys", [])
         now = time.time()
         store: Any = None
@@ -614,6 +676,8 @@ class ModelManager:
 
     def resolve_model_api_key(self, model_id: str) -> str | None:
         """Return the OS-stored key for one custom model, if configured."""
+        if current_project_id():
+            return None
         try:
             return self._credential_store().get(self._model_keyring_account(model_id))
         except Exception as exc:
