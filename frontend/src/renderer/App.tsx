@@ -1922,14 +1922,15 @@ function TranscriptDialog({ conversationId, messages, events, onClose }: {
       setLoading(true);
       const pages: HistoryMessage[][] = [];
       let beforeId: string | undefined;
-      for (let pageIndex = 0; pageIndex < 100; pageIndex += 1) {
+      while (true) {
         const page = await backend.getMessages(conversationId, { limit: 1000, ...(beforeId ? { beforeId } : {}) });
         if (stale) return;
         if (!page.length) break;
         pages.unshift(page);
         if (page.length < 1000) break;
-        beforeId = String(page[0]?.id ?? '');
-        if (!beforeId) break;
+        const nextBeforeId = String(page[0]?.id ?? '');
+        if (!nextBeforeId || nextBeforeId === beforeId) break;
+        beforeId = nextBeforeId;
       }
       setAllMessages(pages.flat());
       setLoading(false);
