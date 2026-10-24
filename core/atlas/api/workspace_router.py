@@ -940,7 +940,8 @@ def _pr_shape(data: dict[str, Any]) -> dict[str, Any]:
             "url": data.get("url"), "state": data.get("state"),
             "draft": data.get("isDraft", False), "base": data.get("baseRefName"),
             "head": data.get("headRefName"), "checks": checks,
-            "auto_merge": bool(data.get("autoMergeRequest"))}
+            "auto_merge": bool(data.get("autoMergeRequest")),
+            "auto_merge_method": (data.get("autoMergeRequest") or {}).get("mergeMethod") if isinstance(data.get("autoMergeRequest"), dict) else None}
 
 
 @router.get("/api/git/pr")
@@ -1044,8 +1045,13 @@ async def run_git_pr_wizard(
     status = run(["git", "status", "--porcelain", "--", *paths], "读取所选改动").stdout
     available = {line[3:].strip().strip('"') for line in status.splitlines() if len(line) >= 4}
     chosen = list(dict.fromkeys(paths))
+    already_committed = False
     if any(p not in available for p in chosen):
-        raise HTTPException(status_code=409, detail="所选文件已不再是未提交改动，请刷新改动列表后重试。")
+        last_paths = set(run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"], "检查上一提交").stdout.splitlines())
+        last_message = run(["git", "log", "-1", "--format=%s"], "检查上一提交说明").stdout.strip()
+        already_committed = all(p in last_paths for p in chosen) and last_message == message.strip()
+        if not already_committed:
+            raise HTTPException(status_code=409, detail="所选文件已不再是未提交改动，请刷新改动列表后重试。")
     current = run(["git", "branch", "--show-current"], "读取当前分支").stdout.strip()
     default = ""
     try:
@@ -1060,17 +1066,25 @@ async def run_git_pr_wizard(
     if target != current:
         exists = subprocess.run(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{target}"], cwd=base)
         run(["git", "switch", target] if exists.returncode == 0 else ["git", "switch", "-c", target], "切换/创建分支")
-    run(["git", "add", "--", *chosen], "暂存所选文件")
-    commit = run(["git", "commit", "-m", message.strip()], "创建提交")
+    if already_committed:
+        commit = run(["git", "rev-parse", "--short", "HEAD"], "读取已完成提交")
+    else:
+        run(["git", "add", "--", *chosen], "暂存所选文件")
+        commit = run(["git", "commit", "-m", message.strip()], "创建提交")
     run(["git", "push", "-u", "origin", "HEAD"], "推送分支")
     args = ["gh", "pr", "create", "--title", title.strip(), "--body", body]
     if req.get("base"):
         args.extend(["--base", str(req["base"])])
     if req.get("draft") is True:
         args.append("--draft")
-    run(args, "创建 PR", 60)
-    pr = _gh_json(base, "pr", "view", "--json", "number,title,url,state,isDraft,baseRefName,headRefName,statusCheckRollup,autoMergeRequest")
-    return {"commit": commit.stdout.strip().splitlines()[-1] if commit.stdout.strip() else "已提交", "branch": target, "pr": _pr_shape(pr)}
+    try:
+        existing = _gh_json(base, "pr", "view", "--json", "number,title,url,state,isDraft,baseRefName,headRefName,statusCheckRollup,autoMergeRequest")
+    except HTTPException as exc:
+        if exc.status_code != 502 or "no pull requests found" not in str(exc.detail).lower():
+            raise
+        run(args, "创建 PR", 60)
+        existing = _gh_json(base, "pr", "view", "--json", "number,title,url,state,isDraft,baseRefName,headRefName,statusCheckRollup,autoMergeRequest")
+    return {"commit": commit.stdout.strip().splitlines()[-1] if commit.stdout.strip() else "已提交", "branch": target, "pr": _pr_shape(existing)}
 
 
 @router.post("/api/git/pr/draft")

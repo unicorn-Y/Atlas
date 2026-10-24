@@ -22,6 +22,7 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
   const [timelineError, setTimelineError] = useState('');
   const [comment, setComment] = useState('');
   const [autoMerge, setAutoMerge] = useState(false);
+  const [mergeMethod, setMergeMethod] = useState<'squash' | 'merge' | 'rebase'>('squash');
   const apiBaseUrl = useAtlasStore((state) => state.apiBaseUrl);
 
   useEffect(() => {
@@ -31,6 +32,8 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
       if (stale) return;
       setPr(result);
       setAutoMerge(Boolean((result as (PullRequestInfo & { auto_merge?: boolean }) | null)?.auto_merge));
+      const method = (result as (PullRequestInfo & { auto_merge_method?: string }) | null)?.auto_merge_method;
+      if (method === 'MERGE' || method === 'REBASE' || method === 'SQUASH') setMergeMethod(method.toLowerCase() as 'squash' | 'merge' | 'rebase');
       if (!result) { setTimeline([]); return; }
       try {
         const data = await api<PullRequestTimeline>(apiBaseUrl, `/api/git/pr/timeline?root=${encodeURIComponent(root)}`);
@@ -80,8 +83,8 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
   const toggleAutoMerge = async (enabled: boolean) => {
     setBusy('auto-merge'); setError('');
     try {
-      await api(apiBaseUrl, '/api/git/pr/auto-merge', { method: 'POST', json: { root, enabled } });
-      setAutoMerge(enabled);
+      const result = await api<{ enabled: boolean; auto_merge?: { mergeMethod?: string } | null }>(apiBaseUrl, '/api/git/pr/auto-merge', { method: 'POST', json: { root, enabled, method: mergeMethod } });
+      setAutoMerge(result.enabled);
     } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
     finally { setBusy(''); }
   };
@@ -97,7 +100,7 @@ export default function PullRequestSection({ root, refreshKey, onOpenUrl, onAsk 
       <button type="button" onClick={() => onOpenUrl(pr.url)} className="mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11.5px] text-fg-2 hover:bg-hover hover:text-fg">
         <ExternalLink size={11} />在浏览器查看 PR
       </button>
-      <label className="mt-2 flex items-center gap-2 text-[11.5px] text-fg-2"><input type="checkbox" checked={autoMerge} disabled={Boolean(busy)} onChange={(event) => void toggleAutoMerge(event.target.checked)} />检查通过后自动合并</label>
+      <div className="mt-2 flex items-center gap-2 text-[11.5px] text-fg-2"><label className="flex items-center gap-2"><input type="checkbox" checked={autoMerge} disabled={Boolean(busy)} onChange={(event) => void toggleAutoMerge(event.target.checked)} />自动合并</label><select aria-label="自动合并方式" value={mergeMethod} disabled={Boolean(busy)} onChange={(event) => setMergeMethod(event.target.value as 'squash' | 'merge' | 'rebase')} className="rounded-md border border-line bg-surface px-1.5 py-1"><option value="squash">squash</option><option value="merge">merge</option><option value="rebase">rebase</option></select><span>· {autoMerge ? '已从 GitHub 读取开启状态' : '关闭'}</span></div>
       {pr.checks.length > 0 && <ul className="m-0 mt-2 grid list-none gap-1 p-0">
         {pr.checks.map((check) => <li key={check.name} className="flex items-center gap-1.5">
           {failed(check.conclusion) ? <CircleX size={13} className="shrink-0 text-danger" /> : check.conclusion ? <CircleCheck size={13} className="shrink-0 text-ok" /> : <CircleDashed size={13} className="shrink-0 text-fg-3" />}
