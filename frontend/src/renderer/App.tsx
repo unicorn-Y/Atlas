@@ -341,7 +341,7 @@ export default function App() {
   const [username, setUsername] = useState(() => pref('username')?.trim() || 'User');
   const [statusBar, setStatusBar] = useState(readStatusBarPreferences);
   const [maximized, setMaximized] = useState(false);
-  const [conversationGoal, setConversationGoal] = useState<{ text: string; status: string; turns_used: number; max_turns: number; subgoals: unknown[] } | null>(null);
+  const [conversationGoal, setConversationGoal] = useState<{ text: string; status: string; turns_used: number; max_turns: number; subgoals: string[]; completed_subgoals?: number[] } | null>(null);
   const updateStatusBar = (key: keyof StatusBarPreferences, visible: boolean) => setStatusBar((current) => {
     const next = { ...current, [key]: visible };
     setPref('statusbar', JSON.stringify(next));
@@ -569,7 +569,7 @@ export default function App() {
     const id = store.activeConversationId;
     if (!id || !store.connected) { setConversationGoal(null); return; }
     let stale = false;
-    void backend.getConversationGoal(id).then((result) => { if (!stale) setConversationGoal(result.goal); }).catch(() => { if (!stale) setConversationGoal(null); });
+    void backend.getConversationGoal(id).then((result) => { if (!stale) setConversationGoal(result.goal as typeof conversationGoal); }).catch(() => { if (!stale) setConversationGoal(null); });
     return () => { stale = true; };
   }, [store.activeConversationId, store.connected]);
   useEffect(() => {
@@ -586,7 +586,7 @@ export default function App() {
   useEffect(() => {
     if (activeEvents.at(-1)?.type !== 'run.completed' || !store.activeConversationId || !store.connected) return;
     void backend.getConversationGoal(store.activeConversationId)
-      .then((result) => setConversationGoal(result.goal))
+      .then((result) => setConversationGoal(result.goal as typeof conversationGoal))
       .catch(() => setConversationGoal(null));
   }, [activeEvents, store.activeConversationId, store.connected]);
   // After onboarding, open model settings once when no gateway key is saved.
@@ -1351,10 +1351,12 @@ export default function App() {
         showInspectorTab('changes');
         const requested = target.trim(); if (!requested) return;
         const workspace = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : '';
-        void api<Array<{ id: string; files?: unknown[] }>>(store.apiBaseUrl, `/api/checkpoints${workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''}`).then(async (checkpoints) => {
+        void api<Array<{ id: string; files?: Array<string | { path?: string; exists?: boolean }> }>>(store.apiBaseUrl, `/api/checkpoints${workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''}`).then(async (checkpoints) => {
           const checkpoint = requested.toLowerCase() === 'latest' ? checkpoints[0] : checkpoints.find((item) => item.id === requested);
           if (!checkpoint) { setToast('没有找到这个工作区检查点'); return; }
-          if (!window.confirm(`将工作区恢复到检查点 ${checkpoint.id}，继续吗？`)) return;
+          const files = (checkpoint.files ?? []).map((item) => typeof item === 'string' ? item : `${item.path ?? '未知路径'}${item.exists === false ? '（恢复时删除）' : ''}`);
+          const impact = files.length ? files.map((file) => `• ${file}`).join('\n') : '此检查点没有文件清单。';
+          if (!window.confirm(`将工作区恢复到检查点 ${checkpoint.id}，可能覆盖或删除以下文件：\n\n${impact}\n\n继续吗？`)) return;
           const result = await api<{ result: { restored?: unknown[] } }>(store.apiBaseUrl, '/api/agent/capabilities/workspace.checkpoint.restore/invoke', { method: 'POST', json: { checkpoint_id: checkpoint.id } });
           setToast(`已恢复 ${result.result?.restored?.length ?? checkpoint.files?.length ?? 0} 个文件`);
         }).catch((error) => setToast(`检查点恢复失败：${error instanceof Error ? error.message : String(error)}`));
@@ -1551,7 +1553,7 @@ export default function App() {
     { id: 'agents', label: '/agents', hint: '打开 Agents 页：常驻 Agent 花名册与详情', run: () => go('agents') },
     { id: 'ps', label: '/ps', hint: '查看后台进程和最近输出', run: () => showInspectorTab('processes') },
     { id: 'stop', label: '/stop', hint: '停止后台进程；不带编号时停止当前运行', takesArgument: true, run: (id: string) => { if (!id.trim()) store.stopTask(); else void backend.killProcess(id.trim()).then(() => setToast('后台进程已停止')).catch((error) => setToast(String(error))); } },
-    { id: 'goal', label: '/goal', hint: '设置、查看、暂停、恢复或清除当前会话目标', takesArgument: true, run: (command: string) => { if (!activeConversation) { setToast('先打开一个对话再设置目标'); return; } void backend.runConversationGoalCommand(activeConversation.id, command).then((result) => { setConversationGoal(result.goal); setToast(result.output); if (result.prompt) void store.sendMessage(result.prompt); }).catch((error) => setToast(error instanceof Error ? error.message : String(error))); } },
+    { id: 'goal', label: '/goal', hint: '设置、查看、暂停、恢复、管理子目标（subgoal add/done）或清除目标', takesArgument: true, run: (command: string) => { if (!activeConversation) { setToast('先打开一个对话再设置目标'); return; } void backend.runConversationGoalCommand(activeConversation.id, command).then((result) => { setConversationGoal(result.goal as typeof conversationGoal); setToast(result.output); if (result.prompt) void store.sendMessage(result.prompt); }).catch((error) => setToast(error instanceof Error ? error.message : String(error))); } },
     { id: 'copy', label: '/copy', hint: '复制最近一条 Atlas 回复', run: () => { const text = [...messages].reverse().find((item) => item.role === 'assistant')?.content; if (text) void navigator.clipboard.writeText(text).then(() => setToast('已复制最近回复')).catch(() => setToast('复制失败')); else setToast('还没有可复制的回复'); } },
     ...store.skills.map((skill) => ({
       id: `skill-${skill.name}`, label: `/${skill.name}`,
@@ -1828,6 +1830,15 @@ export default function App() {
     ? Math.min(100, Math.round(latestUsage.context_tokens / effectiveContextLimit * 100)) : null;
   const rewind = async (messageId: string, files: boolean) => {
     const conversationId = storeRef.current.activeConversationId;
+    if (files) {
+      const preview = await api<{ changes: Array<{ path: string; status: string; binary: boolean }>; removed_messages: number; legacy: boolean }>(
+        storeRef.current.apiBaseUrl, `/api/conversations/${encodeURIComponent(conversationId)}/rewind/preview`,
+        { method: 'POST', json: { message_id: messageId } },
+      );
+      const rows = preview.changes.map((item) => `• ${item.status === 'added' ? '删除新增文件' : item.status === 'deleted' ? '恢复已删除文件' : '恢复修改文件'}：${item.path}${item.binary ? '（二进制）' : ''}`);
+      const details = rows.length ? rows.join('\n') : preview.legacy ? '此旧会话没有可用的文件检查点，后端将按旧撤销记录恢复。' : '工作区文件没有变化。';
+      if (!window.confirm(`撤销将移除 ${preview.removed_messages} 条消息，并恢复以下工作区文件：\n\n${details}\n\n继续？`)) return;
+    }
     const result = await storeRef.current.rewindTo(messageId, files);
     if (!result) return;
     const parts = [`撤回了 ${result.removed_messages} 条消息`];
@@ -1929,7 +1940,7 @@ export default function App() {
     } catch (error) { notify(error instanceof Error ? error.message : '目标操作失败'); }
   };
   const goalHeader = conversationGoal && <div className="mb-2 flex items-center gap-2 rounded-lg bg-brand-soft px-2.5 py-1.5 text-[12px] text-fg-2" aria-label="当前会话目标">
-    <ListChecks size={13} className="shrink-0 text-brand" /><span className="min-w-0 flex-1 truncate">目标：{conversationGoal.text}</span>
+    <ListChecks size={13} className="shrink-0 text-brand" /><span className="min-w-0 flex-1 truncate" title={conversationGoal.subgoals?.length ? conversationGoal.subgoals.map((item, index) => `${conversationGoal.completed_subgoals?.includes(index + 1) ? '✓' : '○'} ${index + 1}. ${item}`).join('\n') : conversationGoal.text}>目标：{conversationGoal.text}{conversationGoal.subgoals?.length ? ` · 子目标 ${conversationGoal.completed_subgoals?.length ?? 0}/${conversationGoal.subgoals.length}` : ''}</span>
     <span className="shrink-0 text-fg-3">{conversationGoal.status === 'active' ? '进行中' : conversationGoal.status === 'paused' ? '已暂停' : conversationGoal.status === 'done' ? '已完成' : conversationGoal.status} · {conversationGoal.turns_used}/{conversationGoal.max_turns}</span>
     <button type="button" title={conversationGoal.status === 'paused' ? '继续目标' : '暂停目标'} aria-label={conversationGoal.status === 'paused' ? '继续目标' : '暂停目标'} onClick={() => void updateGoal(conversationGoal.status === 'paused' ? 'resume' : 'pause')} className="rounded px-1.5 py-1 hover:bg-hover">{conversationGoal.status === 'paused' ? '继续' : '暂停'}</button>
     <button type="button" title="编辑目标" aria-label="编辑目标" onClick={() => { const value = window.prompt('编辑当前目标', conversationGoal.text); if (value?.trim()) void updateGoal(`edit ${value.trim()}`); }} className="rounded px-1.5 py-1 hover:bg-hover">编辑</button>

@@ -81,6 +81,7 @@ class GoalState:
     consecutive_parse_failures: int = 0
     consecutive_transport_failures: int = 0
     subgoals: list[str] = field(default_factory=list)
+    completed_subgoals: list[int] = field(default_factory=list)
     waiting_on_pid: int | None = None
     waiting_on_session: str | None = None
     waiting_until: float = 0.0
@@ -98,6 +99,9 @@ class GoalState:
         data = json.loads(raw)
         data["contract"] = GoalContract.from_dict(data.get("contract"))
         data["gates"] = [GoalGate.from_dict(g) for g in data.get("gates", []) if isinstance(g, dict) and g.get("command")]
+        data["subgoals"] = [str(item.get("text") or "") if isinstance(item, dict) else str(item)
+                             for item in data.get("subgoals", [])]
+        data["completed_subgoals"] = [int(i) for i in data.get("completed_subgoals", []) if str(i).isdigit()]
         fields = cls.__dataclass_fields__
         return cls(**{key: value for key, value in data.items() if key in fields})
 
@@ -105,7 +109,8 @@ class GoalState:
         return bool(self.contract and not self.contract.is_empty())
 
     def render_subgoals_block(self) -> str:
-        return "\n".join(f"- {i}. {text}" for i, text in enumerate(self.subgoals, 1))
+        return "\n".join(f"- [{'x' if i in self.completed_subgoals else ' '}] {i}. {text}"
+                          for i, text in enumerate(self.subgoals, 1))
 
     def clear_wait(self) -> None:
         self.waiting_on_pid = self.waiting_on_session = self.waiting_reason = None
@@ -142,7 +147,7 @@ def _save(session_id: str, home: str | Path | None, state: GoalState | None) -> 
 
 def goal_kick_prompt(goal: str, last_user_message: Any = None) -> str:
     suffix = f"\n\nUser's original request: {last_user_message}" if isinstance(last_user_message, str) and last_user_message.strip() else ""
-    return f"[Working toward this goal]\n{goal}{suffix}\n\nMake concrete progress toward the goal. Continue until it is complete or you are blocked."
+    return f"[Working toward this goal]\n{goal}{suffix}\n\nMake concrete progress toward the goal. If it is a multi-step task, decompose it into resumable subgoals and keep each subgoal's progress explicit. Continue until all subgoals are complete, the goal is complete, or you are blocked."
 
 class GoalManager:
     def __init__(self, session_id: str, *, home: str | Path | None = None, default_max_turns: int = DEFAULT_MAX_TURNS):
@@ -190,8 +195,16 @@ class GoalManager:
         if not text: raise ValueError("subgoal text is empty")
         self._require().subgoals.append(text); self._save(); return text
     def remove_subgoal(self, index: int): return self._pop("subgoals", index)
-    def clear_subgoals(self): return self._clear_items("subgoals")
+    def clear_subgoals(self):
+        return self._clear_items("subgoals")
     def render_subgoals(self): return self._state.render_subgoals_block() if self._state else "(no active goal)"
+    def complete_subgoal(self, index: int, completed: bool = True):
+        state = self._require(); index = int(index)
+        if index < 1 or index > len(state.subgoals): raise IndexError(f"index out of range (1..{len(state.subgoals)})")
+        done = set(state.completed_subgoals)
+        (done.add if completed else done.discard)(index)
+        state.completed_subgoals = sorted(done); self._save()
+        return state.subgoals[index - 1]
     def add_gate(self, command: str, *, timeout_seconds=None, max_retries=None):
         gate = GoalGate((command or "").strip(), int(timeout_seconds or 120), int(max_retries or 3))
         if not gate.command: raise ValueError("gate command is empty")
@@ -202,9 +215,17 @@ class GoalManager:
     def _pop(self, attr, index):
         items = getattr(self._require(), attr); idx = int(index) - 1
         if idx < 0 or idx >= len(items): raise IndexError(f"index out of range (1..{len(items)})")
-        item = items.pop(idx); self._save(); return item
+        item = items.pop(idx)
+        if attr == "subgoals":
+            self._state.completed_subgoals = sorted(
+                done - 1 if done > idx + 1 else done
+                for done in self._state.completed_subgoals if done != idx + 1
+            )
+        self._save(); return item
     def _clear_items(self, attr):
-        state = self._require(); count = len(getattr(state, attr)); setattr(state, attr, []); self._save(); return count
+        state = self._require(); count = len(getattr(state, attr)); setattr(state, attr, [])
+        if attr == "subgoals": state.completed_subgoals = []
+        self._save(); return count
     def wait_on(self, pid: int, reason: str = ""):
         s = self._require(); s.waiting_on_pid = int(pid); s.waiting_reason = reason; s.waiting_since = time.time(); self._save(); return s
     def stop_waiting(self):
@@ -223,7 +244,12 @@ class GoalManager:
     def next_continuation_prompt(self):
         s = self._state
         if not s or s.status != "active": return None
-        return goal_kick_prompt(s.goal + ("\n" + s.contract.render_block() if s.has_contract() else ""))
+        remaining = [f"{i}. {text}" for i, text in enumerate(s.subgoals, 1) if i not in s.completed_subgoals]
+        progress = "\nSubgoal progress (persisted):\n" + "\n".join(
+            f"- [{'x' if i in s.completed_subgoals else ' '}] {i}. {text}" for i, text in enumerate(s.subgoals, 1)
+        ) if s.subgoals else ""
+        next_step = f"\nResume at the first incomplete subgoal: {remaining[0]}" if remaining else ""
+        return goal_kick_prompt(s.goal + ("\n" + s.contract.render_block() if s.has_contract() else "") + progress + next_step)
     def render_contract(self): return self._state.contract.render_block() if self._state and self._state.has_contract() else "(no completion contract)"
     def evaluate_after_turn(self, response: str, *, judge: Callable | None = None, **kwargs):
         s = self._state

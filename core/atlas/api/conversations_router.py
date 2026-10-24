@@ -1117,6 +1117,44 @@ async def rewind_conversation(
     }
 
 
+@router.post("/api/conversations/{conversation_id}/rewind/preview")
+async def preview_rewind_request(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str, req: dict[str, Any],
+) -> dict[str, Any]:
+    """List workspace files that the requested undo would restore, before mutation."""
+    memory = services.memory
+    if memory is None:
+        from atlas import server as _atlas_server
+        memory = _atlas_server.memory
+    assert memory is not None
+    if await memory.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="找不到这段对话。")
+    if _conversation_has_active_run(conversation_id):
+        raise HTTPException(status_code=409, detail="这段对话仍在运行，请等它结束后再回退。")
+    message_id = req.get("message_id")
+    if not isinstance(message_id, str) or not message_id:
+        raise HTTPException(status_code=400, detail="请选择要回退到的消息。")
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_all_messages
+    from atlas.rewind import list_points, preview
+    points = await asyncio.to_thread(list_points, conversation_id)
+    messages = await asyncio.to_thread(read_session_all_messages, DATA_ROOT / "engine", conversation_id)
+    target = next((index for index, item in enumerate(messages) if str(item.get("id")) == message_id), None)
+    if target is None:
+        raise HTTPException(status_code=404, detail="找不到这段对话或指定消息。")
+    turn_start = next((index for index in range(target, -1, -1) if messages[index].get("role") == "user"), target)
+    after_message_id = str(messages[turn_start - 1].get("id")) if turn_start > 0 else None
+    selected = next((point for point in points if point.after_message_id == after_message_id), None)
+    if selected is None:
+        return {"message_id": message_id, "legacy": True, "changes": [], "removed_messages": len(messages) - turn_start}
+    snapshot = await asyncio.to_thread(preview, selected.point_id)
+    return {"message_id": message_id, "legacy": False, "point_id": selected.point_id,
+            "removed_messages": len(messages) - turn_start,
+            "changes": [{"path": item.path, "status": item.status, "binary": item.binary}
+                        for item in snapshot.changes]}
+
+
 @router.post("/api/conversations/{conversation_id}/rewind/{rewind_id}/redo")
 async def redo_conversation_rewind(
     services: Annotated[AppServices, Depends(get_app_services)],

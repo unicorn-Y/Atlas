@@ -94,6 +94,26 @@ def _gate_clear(mgr, arg):
     return GoalCommandResult(f"✓ Cleared {count} gate{'s' if count != 1 else ''}.")
 
 
+def _subgoal(mgr, arg):
+    if not mgr.has_goal():
+        return GoalCommandResult("/goal subgoal: set a goal first.", error=True)
+    if not arg or arg.lower() == "list":
+        return GoalCommandResult(mgr.render_subgoals())
+    verb, _, rest = arg.partition(" ")
+    verb, rest = verb.lower(), rest.strip()
+    if verb == "add" and rest:
+        index = len(mgr.state.subgoals) + 1
+        item = mgr.add_subgoal(rest)
+        return GoalCommandResult(f"✓ Subgoal {index} saved: {item}")
+    if verb in {"done", "complete", "reopen"} and rest.isdigit():
+        item = mgr.complete_subgoal(int(rest), completed=verb != "reopen")
+        return GoalCommandResult(f"{'✓ Completed' if verb != 'reopen' else '↻ Reopened'} subgoal {rest}: {item}")
+    if verb == "clear" and not rest:
+        count = mgr.clear_subgoals()
+        return GoalCommandResult(f"✓ Cleared {count} subgoal(s).")
+    return GoalCommandResult("Usage: /goal subgoal [list | add <text> | done <N> | reopen <N> | clear]", error=True)
+
+
 _GATE_HANDLERS = {"add": _gate_add, "remove": _gate_remove, "rm": _gate_remove, "clear": _gate_clear}
 _EXACT_HANDLERS = {
     "": _status, "status": _status, "show": _show, "pause": _pause,
@@ -106,6 +126,7 @@ _EXACT_HANDLERS = {
 _BARE_CONTROL_VERBS = frozenset({"resume", "continue", "unpause", "pause", "status", "show", "unwait"})
 # First words that make a command goal control (the gateway busy path dispatches these).
 _CONTROL_FIRST_WORDS = _BARE_CONTROL_VERBS | {"wait", "gate"}
+_CONTROL_FIRST_WORDS = _CONTROL_FIRST_WORDS | {"subgoal"}
 
 
 def _bare_control(mgr, verb, rest, render):
@@ -209,6 +230,9 @@ def dispatch_goal_command(
         if verb == "gate":
             prefix = "/goal gate"
             return _gate(mgr, rest, authorize_gate)
+        if verb == "subgoal":
+            prefix = "/goal subgoal"
+            return _subgoal(mgr, rest)
         return _set(mgr, rest if verb == "draft" else arg,
                     drafting=verb == "draft", last_user_message=last_user_message,
                     render=render, progress=progress)

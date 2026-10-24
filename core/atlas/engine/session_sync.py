@@ -1007,7 +1007,8 @@ def goal_command(home: str | Path, conversation_id: str, command: str) -> dict[s
         "output": result.output, "prompt": result.prompt, "kickoff": result.kickoff,
         "error": result.error,
         "goal": ({"text": state.goal, "status": state.status, "turns_used": state.turns_used,
-                  "max_turns": state.max_turns, "subgoals": state.subgoals}
+                  "max_turns": state.max_turns, "subgoals": state.subgoals,
+                  "completed_subgoals": state.completed_subgoals}
                  if state is not None else None),
     }
 
