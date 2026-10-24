@@ -1501,12 +1501,13 @@ export default function App() {
   function showHelp() {
     const categories = ['会话', '工作区', '模型', '工具', '诊断', '技能'];
     setRawTextTitle('命令帮助');
-    setRawText(categories.map((category) => {
+    const commandIndex = categories.map((category) => {
       const commands = slashCommands.filter((command) => command.group === category
         || (category === '工作区' && command.group === '任务')
         || (category === '模型' && command.group === '状态'));
       return commands.length ? `## ${category}\n${commands.map((command) => `${command.label}${command.takesArgument ? ' <参数>' : ''} — ${command.hint}`).join('\n')}` : '';
-    }).filter(Boolean).join('\n\n'));
+    }).filter(Boolean).join('\n\n');
+    setRawText(`${commandIndex}\n\n## 快捷键\n- Ctrl / ⌘ + K：搜索会话和命令\n- Ctrl / ⌘ + ,：打开设置\n- Enter：发送；Shift + Enter：换行\n- Esc：关闭当前弹层\n\n更多快捷键可在「设置 → 快捷键」查看和自定义。`);
   }
   slashCommands.forEach((command) => {
     command.group ??= command.id.startsWith('skill-') ? '技能'
