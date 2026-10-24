@@ -32,6 +32,19 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
     """Assemble model-facing tool names for Atlas runtime telemetry."""
     """Assemble model-facing tool names for Atlas runtime telemetry."""
     tools = agent._mcp.get_tools_for_llm() if agent._mcp else []
+    tools.extend([
+        {"type": "function", "function": {"name": "ide_get_selection",
+         "description": "Read the current VS Code file, selection, and workspace from the connected IDE.",
+         "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}},
+        {"type": "function", "function": {"name": "ide_get_diagnostics",
+         "description": "Read current VS Code errors and warnings.",
+         "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}},
+        {"type": "function", "function": {"name": "ide_open_diff",
+         "description": "Open a before/after diff in the connected VS Code window.",
+         "parameters": {"type": "object", "properties": {
+             "file": {"type": "string"}, "before": {"type": "string"}, "after": {"type": "string"},
+         }, "required": ["file", "before", "after"], "additionalProperties": False}}},
+    ])
     if agent._custom_tools is not None:
         tools.extend(agent._custom_tools.model_tools())
     if agent._local_execution:

@@ -578,7 +578,19 @@ async def execute_tools_node(
                 })
 
         try:
-            if fn_name == "create_checkpoint":
+            if fn_name in {"ide_get_selection", "ide_get_diagnostics", "ide_open_diff"}:
+                from atlas.tools.ide_bridge import request as ide_request
+
+                method = {
+                    "ide_get_selection": "context",
+                    "ide_get_diagnostics": "diagnostics",
+                    "ide_open_diff": "open_diff",
+                }[fn_name]
+                value = await ide_request(method, fn_args)
+                result = {"data": value, "content": [{
+                    "type": "text", "text": json.dumps(value, ensure_ascii=False),
+                }], "is_error": False}
+            elif fn_name == "create_checkpoint":
                 if ssh_checkpoint_callback and (workspace or "").startswith("ssh://"):
                     data = await ssh_checkpoint_callback("create", fn_args)
                 else:

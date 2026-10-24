@@ -12,6 +12,7 @@ import { Tip } from '../ui/Tooltip';
 import DrawingPad from './DrawingPad';
 import { ExpertModeToggle, useExpertMode } from './settings/ExpertModePanel';
 import { backend } from '../store/useAtlasStore';
+import { api } from '../services/api';
 
 type Intent = { label: string; icon: LucideIcon; note?: string };
 
@@ -164,6 +165,23 @@ interface ComposerProps {
 export default function Composer(props: ComposerProps) {
   const hero = props.variant === 'hero';
   const [expert] = useExpertMode(backend.apiBaseUrl);
+  const [ideConnected, setIdeConnected] = useState(false);
+  useEffect(() => {
+    let live = true;
+    const refresh = () => void api<{ connected: boolean }>(backend.apiBaseUrl, '/api/ide/status')
+      .then((value) => { if (live) setIdeConnected(value.connected); }).catch(() => { if (live) setIdeConnected(false); });
+    refresh(); const timer = window.setInterval(refresh, 5000);
+    return () => { live = false; window.clearInterval(timer); };
+  }, []);
+  const attachIdeContext = async () => {
+    try {
+      const value = await api<{ file?: string | null; selection?: { text: string; startLine: number; endLine: number } | null; workspace?: string | null }>(backend.apiBaseUrl, '/api/ide/context', { method: 'POST' });
+      const context = value.selection
+        ? `\n\n[VS Code 选区：${value.file ?? ''}:${value.selection.startLine}-${value.selection.endLine}]\n${value.selection.text}`
+        : value.file ? `\n\n[VS Code 当前文件：${value.file}]` : '';
+      if (context) props.onChange(`${props.value}${context}`);
+    } catch { setIdeConnected(false); }
+  };
   const [enterToSend, setEnterToSend] = useState(readEnterToSend);
   const [vimEnabled, setVimEnabled] = useState(() => { try { return localStorage.getItem('atlas.preference.vim-mode') === 'true'; } catch { return false; } });
   const [vimMode, setVimMode] = useState<'normal' | 'insert'>('insert');
@@ -628,6 +646,7 @@ export default function Composer(props: ComposerProps) {
         </MenuTrigger>
         <MenuContent align="start" side="top">
           <MenuLabel>添加到消息</MenuLabel>
+          {ideConnected && <MenuItem onSelect={() => void attachIdeContext()}><Code2 size={15} />附加 VS Code 当前选区/文件</MenuItem>}
           <MenuItem onSelect={() => fileRef.current?.click()}><Paperclip size={15} />附件</MenuItem>
           <MenuItem disabled={!props.value.trim()} onSelect={saveStash}><Save size={15} />暂存当前输入</MenuItem>
           <MenuItem onSelect={() => { setStashes(readStash()); setStashOpen(true); }}><Save size={15} />查看输入暂存</MenuItem>
@@ -662,6 +681,7 @@ export default function Composer(props: ComposerProps) {
         })}
       </div>}
 
+      {ideConnected && <span className="ml-1.5 shrink-0 text-[12px] text-brand" title="VS Code 已连接">已连接 VS Code</span>}
       {hint && <span role={screenReaderMode ? undefined : 'status'} aria-live={screenReaderMode ? undefined : 'polite'}
         aria-atomic={screenReaderMode ? undefined : 'true'} className={cn('ml-1.5 min-w-0 truncate text-[12.5px]', props.listening ? 'text-brand' : 'text-fg-3')}>{hint}</span>}
       <span className="flex-1" />

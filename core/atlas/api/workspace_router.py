@@ -38,6 +38,21 @@ from atlas.api.dependencies import get_app_services
 
 router = APIRouter()
 
+
+@router.get("/api/ide/status")
+async def ide_status() -> dict[str, Any]:
+    """Report whether the user's local VS Code bridge lock file is present."""
+    from atlas.tools.ide_bridge import connected
+
+    return {"connected": connected(), "name": "VS Code" if connected() else ""}
+
+
+@router.post("/api/ide/context")
+async def ide_context() -> dict[str, Any]:
+    from atlas.tools.ide_bridge import request
+
+    return await request("context")
+
 log = structlog.get_logger()
 
 
