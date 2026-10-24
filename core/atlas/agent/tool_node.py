@@ -299,6 +299,7 @@ async def execute_tools_node(
                                 "run_checks", "execute_code", "delegate_task", "delegate_parallel",
                                 "project_note", "create_checkpoint", "restore_checkpoint",
                                 "kanban_create_board", "kanban_create_task", "kanban_update_task",
+                                "kanban_create", "kanban_update",
                                 "subtask_message",
                                 # X2 computer surface (legacy alias names); observe is read-only.
                                 "computer_window", "computer_mouse", "computer_keyboard",
@@ -662,8 +663,12 @@ async def execute_tools_node(
                 elif fn_name == "kanban_list":
                     board_id = str(fn_args["board_id"])
                     data = await asyncio.to_thread(store.tasks, board_id)
-                elif fn_name == "kanban_create_task":
+                elif fn_name in {"kanban_create_task", "kanban_create"}:
                     board_id = str(fn_args["board_id"])
+                    if fn_args.get("parent"):
+                        fn_args["dependencies"] = list(dict.fromkeys([
+                            *fn_args.get("dependencies", []), str(fn_args["parent"]),
+                        ]))
                     data = await asyncio.to_thread(store.create_task, board_id, fn_args)
                     created_hook = await run_user_hook(user_hook_callback, "TaskCreated", {
                         "task": data, "task_id": data.get("id"), "board_id": board_id,

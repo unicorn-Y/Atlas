@@ -83,6 +83,20 @@ async def update_kanban_task(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@router.get("/api/kanban/boards/{board_id}/tasks/{task_id}/runs")
+async def get_kanban_task_runs(board_id: str, task_id: str) -> dict[str, Any]:
+    store = _server()._kanban_store()
+    if not any(task.get("id") == task_id for task in store.tasks(board_id)):
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"runs": store.run_history(task_id)}
+
+
+@router.get("/api/kanban/profiles")
+async def list_kanban_profiles() -> dict[str, Any]:
+    from atlas.kanban import available_role_profiles
+    return {"profiles": available_role_profiles()}
+
+
 @router.get("/api/recipes")
 async def list_recipes(
     services: Annotated[AppServices, Depends(get_app_services)],

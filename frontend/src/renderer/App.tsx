@@ -2048,7 +2048,7 @@ export default function App() {
             terminalCommand={terminalCommand} onSendToAtlas={(text) => { setInput((current) => `${current.trim() ? `${current.trimEnd()}\n\n` : ''}终端输出：\n\`\`\`\n${text.trimEnd()}\n\`\`\`\n\n`); setToast('已把终端输出放进输入框'); }} />}
         </div>}
 
-    {view === 'board' && <BoardPage conversations={store.conversations} runs={store.runs} queue={store.queue} unread={store.unread} archived={store.archived}
+    {view === 'board' && <BoardPage apiBaseUrl={store.apiBaseUrl} conversations={store.conversations} runs={store.runs} queue={store.queue} unread={store.unread} archived={store.archived}
       onOpen={openConversation} onStop={store.stopRun} onArchive={store.toggleArchived} />}
     {view === 'agents' && <AgentsOverview runs={store.runs} conversations={store.conversations} apiBaseUrl={store.apiBaseUrl} onOpen={openConversation} onStop={store.stopRun} roster={<AgentsPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} username={username} />} />}
     {view === 'devices' && <DevicesPage onToast={notify} />}

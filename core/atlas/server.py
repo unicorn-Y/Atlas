@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import subprocess  # noqa: F401 — compat: tests patch ``atlas.server.subprocess.run``
 from collections.abc import AsyncIterator
@@ -278,6 +279,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pr_monitor_task: asyncio.Task[None] | None = None
     idle_queue_task: asyncio.Task[None] | None = None
     mail_trigger_task: asyncio.Task[None] | None = None
+    kanban_dispatch_task: asyncio.Task[None] | None = None
     cancelled = False
     try:
         model_mgr = ModelManager()
@@ -722,7 +724,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     try:
                         await asyncio.to_thread(poll_once, link, run_fix=run_fix, archive=archive,
                                                 save=lambda value: store.save(conversation_id, value))
-                    except (OSError, RuntimeError, ValueError) as exc:
+                    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
                         log.warning("pr_monitor.poll_failed", conversation_id=conversation_id,
                                     error_type=type(exc).__name__)
 
@@ -730,6 +732,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         async def process_idle_queue() -> None:
             from atlas.background_tasks import IdleTaskQueue, idle_ready, seconds_since_input
+
             queue = IdleTaskQueue(cfg.db_path.parent / "idle-tasks.db")
             while True:
                 await asyncio.sleep(15)
@@ -769,7 +772,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         idle_queue_task = asyncio.create_task(process_idle_queue(), name="atlas-idle-task-queue")
 
         async def poll_mail_triggers() -> None:
-            from atlas.background_tasks import EmailDeduplicator, fetch_matching_imap, get_mail_password, mail_trigger_config
+            from atlas.background_tasks import (
+                EmailDeduplicator, fetch_matching_imap, get_mail_password, mail_trigger_config,
+            )
+
             loop = asyncio.get_running_loop()
             last_poll = 0.0
             while True:
@@ -796,10 +802,57 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                             "run_id": run_id, "conversation_id": conversation_id,
                             "content": message["task_prompt"], "source": "email-trigger",
                         }, manager)
-                except Exception as exc:  # never log mailbox contents or credentials
+                except Exception as exc:  # do not log server responses or mailbox contents
                     log.warning("mail_trigger.poll_failed", error_type=type(exc).__name__)
 
         mail_trigger_task = asyncio.create_task(poll_mail_triggers(), name="atlas-mail-trigger")
+
+        async def dispatch_kanban_tasks() -> None:
+            from atlas.kanban import atlas_kanban_store
+            store = atlas_kanban_store()
+            active: dict[str, tuple[str, str, float, int]] = {}
+            while True:
+                await asyncio.sleep(10)
+                for task_id, (board_id, run_id, started, timeout) in list(active.items()):
+                    run = manager.runs.get(run_id)
+                    if run and run.status in {"completed", "failed", "cancelled"}:
+                        output = ""
+                        last = next((event for event in reversed(run.events) if event.get("event") in {"run.completed", "run.failed", "run.cancelled"}), None)
+                        if last:
+                            output = str(last.get("detail") or last.get("summary") or last.get("event"))
+                        if run.status == "completed":
+                            store.update_task(board_id, task_id, {"status": "done", "output": output, "run_id": run_id})
+                        else:
+                            store.record_failure(board_id, task_id, output or run.status)
+                        active.pop(task_id, None)
+                    elif asyncio.get_running_loop().time() - started > timeout:
+                        if run:
+                            run.cancel_event.set()
+                        store.record_failure(board_id, task_id, "Task timed out")
+                        active.pop(task_id, None)
+                for board in store.boards():
+                    try:
+                        ready = store.dispatch_ready(str(board["id"]), concurrency=3)
+                    except (ValueError, OSError):
+                        continue
+                    for task in ready:
+                        task_id, board_id = str(task["id"]), str(task["board_id"])
+                        run_id = str(__import__("uuid").uuid4())
+                        store.update_task(board_id, task_id, {"run_id": run_id})
+                        conversation_id = str(__import__("uuid").uuid4())
+                        await memory.save_conversation_metadata(conversation_id, title_hint=str(task["title"])[:100])
+                        active[task_id] = (board_id, run_id, asyncio.get_running_loop().time(), int(task.get("timeout_seconds", 1800)))
+                        try:
+                            await _handle_run_start("kanban-worker", {
+                                "run_id": run_id, "conversation_id": conversation_id,
+                                "content": str(task["title"]) + ("\n\n" + str(task["description"]) if task.get("description") else ""),
+                                "workspace": None, "source": "kanban", "profile_id": str(task.get("assignee") or "") or None,
+                            }, manager)
+                        except Exception as exc:
+                            store.record_failure(board_id, task_id, type(exc).__name__)
+                            active.pop(task_id, None)
+
+        kanban_dispatch_task = asyncio.create_task(dispatch_kanban_tasks(), name="atlas-kanban-dispatch")
 
         yield  # app is running
     except BaseException:
@@ -814,11 +867,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             pr_monitor_task.cancel()
             with suppress(asyncio.CancelledError, Exception):
                 await pr_monitor_task
-        for task in (idle_queue_task, mail_trigger_task):
-            if task is not None:
-                task.cancel()
-                with suppress(asyncio.CancelledError, Exception):
-                    await task
+        if idle_queue_task is not None:
+            idle_queue_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await idle_queue_task
+        if mail_trigger_task is not None:
+            mail_trigger_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await mail_trigger_task
+        if kanban_dispatch_task is not None:
+            kanban_dispatch_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await kanban_dispatch_task
         if deferred_startup is not None:
             # Let deferred startup settle before reverse teardown; a stuck step is bounded.
             try:

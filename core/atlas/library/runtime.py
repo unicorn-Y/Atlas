@@ -405,6 +405,7 @@ async def _github_dir(client: Any, repo: str, path: str, ref: str, *, budget: li
 # Builtins the model needs rarely; MCP tools (server__tool) are always deferrable.
 DEFERRABLE_BUILTINS = frozenset({
     "kanban_create_board", "kanban_list", "kanban_create_task", "kanban_update_task",
+    "kanban_create", "kanban_update",
     "create_document", "create_spreadsheet", "create_presentation", "read_office",
     "create_checkpoint", "list_checkpoints", "restore_checkpoint", "git_pr_create", "git_pr_comment",
     "list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource", "automation_manage",

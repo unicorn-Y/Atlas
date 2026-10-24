@@ -165,6 +165,26 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
             }, "required": ["board_id", "task_id"], "additionalProperties": False},
         },
     }])
+    tools.extend([
+        {"type": "function", "function": {"name": "kanban_create",
+         "description": "Create a task on an Atlas coordination board. Assign a role profile and an optional parent dependency.",
+         "parameters": {"type": "object", "properties": {
+             "board_id": {"type": "string"}, "title": {"type": "string"},
+             "description": {"type": "string"}, "assignee": {"type": "string"},
+             "parent": {"type": "string"}, "dependencies": {"type": "array", "items": {"type": "string"}},
+             "max_attempts": {"type": "integer", "minimum": 1, "maximum": 10},
+             "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+         }, "required": ["board_id", "title"], "additionalProperties": False}}},
+        {"type": "function", "function": {"name": "kanban_update",
+         "description": "Update an Atlas task card's status, assignee, output, or run record.",
+         "parameters": {"type": "object", "properties": {
+             "board_id": {"type": "string"}, "task_id": {"type": "string"},
+             "status": {"type": "string", "enum": ["todo", "running", "blocked", "review", "done"]},
+             "assignee": {"type": "string"}, "output": {"type": "string"}, "run_id": {"type": "string"},
+             "max_attempts": {"type": "integer", "minimum": 1, "maximum": 10},
+             "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+         }, "required": ["board_id", "task_id"], "additionalProperties": False}}},
+    ])
     if agent._projects is not None:
         tools.append({"type": "function", "function": {
             "name": "project_sources_search",

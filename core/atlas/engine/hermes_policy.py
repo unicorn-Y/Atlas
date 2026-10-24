@@ -22,6 +22,7 @@ _checkpoint_lock = threading.Lock()
 _ATLAS_WRITE_TOOLS = {
     "project_note", "create_checkpoint", "restore_checkpoint",
     "kanban_create_board", "kanban_create_task", "kanban_update_task",
+    "kanban_create", "kanban_update",
     "create_document", "create_spreadsheet", "create_presentation", "run_checks",
     "delegate_task", "delegate_parallel", "subtask_message",
     # X2 computer surface (legacy alias names); observe is read-only and

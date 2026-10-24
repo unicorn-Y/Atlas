@@ -35,10 +35,20 @@ class KanbanStore:
                             title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', assignee TEXT NOT NULL DEFAULT '',
                             dependencies TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL DEFAULT 'todo',
                             output TEXT NOT NULL DEFAULT '', run_id TEXT NOT NULL DEFAULT '',
+                            attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
+                            timeout_seconds INTEGER NOT NULL DEFAULT 1800,
                             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                         );
                         CREATE INDEX IF NOT EXISTS kanban_tasks_board_status ON kanban_tasks(board_id, status);
                     """)
+                    columns = {row[1] for row in db.execute("PRAGMA table_info(kanban_tasks)")}
+                    if "attempts" not in columns:
+                        db.execute("ALTER TABLE kanban_tasks ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+                    if "max_attempts" not in columns:
+                        db.execute("ALTER TABLE kanban_tasks ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 3")
+                    if "timeout_seconds" not in columns:
+                        db.execute("ALTER TABLE kanban_tasks ADD COLUMN timeout_seconds INTEGER NOT NULL DEFAULT 1800")
+                    db.execute("CREATE TABLE IF NOT EXISTS kanban_task_runs (id TEXT PRIMARY KEY, task_id TEXT NOT NULL, status TEXT NOT NULL, output TEXT NOT NULL DEFAULT '', started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, finished_at TEXT)")
                 _INITIALIZED_DATABASES.add(key)
 
     def _connect(self) -> sqlite3.Connection:
@@ -77,19 +87,23 @@ class KanbanStore:
         status = str(value.get("status", "todo"))
         if status not in STATUSES:
             raise ValueError("invalid task status")
+        max_attempts = int(value.get("max_attempts", 3))
+        timeout_seconds = int(value.get("timeout_seconds", 1800))
+        if not 1 <= max_attempts <= 10 or not 1 <= timeout_seconds <= 86400:
+            raise ValueError("max_attempts must be 1..10 and timeout_seconds 1..86400")
         with self._connect() as db:
             if db.execute("SELECT 1 FROM kanban_boards WHERE id=?", (board_id,)).fetchone() is None:
                 raise KeyError("board not found")
             for dep in dependencies:
                 if db.execute("SELECT 1 FROM kanban_tasks WHERE id=? AND board_id=?", (dep, board_id)).fetchone() is None:
                     raise ValueError(f"unknown dependency: {dep}")
-            db.execute("INSERT INTO kanban_tasks(id,board_id,title,description,assignee,dependencies,status,run_id) VALUES (?,?,?,?,?,?,?,?)",
+            db.execute("INSERT INTO kanban_tasks(id,board_id,title,description,assignee,dependencies,status,run_id,max_attempts,timeout_seconds) VALUES (?,?,?,?,?,?,?,?,?,?)",
                        (task_id, board_id, title.strip(), str(value.get("description", "")),
                         str(value.get("assignee", "")), json.dumps(dependencies), status,
-                        str(value.get("run_id", ""))))
+                        str(value.get("run_id", "")), max_attempts, timeout_seconds))
         return next(task for task in self.tasks(board_id) if task["id"] == task_id)
     def update_task(self, board_id: str, task_id: str, changes: dict[str, Any]) -> dict[str, Any]:
-        allowed = {"title", "description", "assignee", "dependencies", "status", "output", "run_id"}
+        allowed = {"title", "description", "assignee", "dependencies", "status", "output", "run_id", "max_attempts", "timeout_seconds"}
         if set(changes) - allowed:
             raise ValueError("unsupported task fields")
         current = next((task for task in self.tasks(board_id) if task["id"] == task_id), None)
@@ -98,6 +112,8 @@ class KanbanStore:
         merged = {**current, **changes}
         if merged["status"] not in STATUSES:
             raise ValueError("invalid task status")
+        if not 1 <= int(merged.get("max_attempts", 3)) <= 10 or not 1 <= int(merged.get("timeout_seconds", 1800)) <= 86400:
+            raise ValueError("max_attempts must be 1..10 and timeout_seconds 1..86400")
         deps = merged.get("dependencies", [])
         if not isinstance(deps, list) or task_id in deps:
             raise ValueError("invalid or self-referential dependencies")
@@ -126,15 +142,63 @@ class KanbanStore:
         ):
             raise ValueError("dependencies must be done before a task can run")
         with self._connect() as db:
-            db.execute("UPDATE kanban_tasks SET title=?,description=?,assignee=?,dependencies=?,status=?,output=?,run_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND board_id=?",
+            db.execute("UPDATE kanban_tasks SET title=?,description=?,assignee=?,dependencies=?,status=?,output=?,run_id=?,max_attempts=?,timeout_seconds=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND board_id=?",
                        (merged["title"], merged["description"], merged["assignee"], json.dumps(deps),
-                        merged["status"], merged["output"], merged["run_id"], task_id, board_id))
+                        merged["status"], merged["output"], merged["run_id"], merged["max_attempts"],
+                        merged["timeout_seconds"], task_id, board_id))
+            if merged["status"] != current["status"] or ("output" in changes and merged["output"] != current["output"]):
+                db.execute("INSERT INTO kanban_task_runs(id,task_id,status,output,finished_at) VALUES(?,?,?,?,?)",
+                           (str(uuid.uuid4()), task_id, merged["status"], str(merged["output"])[-20000:],
+                            None if merged["status"] == "running" else __import__("datetime").datetime.now().isoformat()))
         return next(task for task in self.tasks(board_id) if task["id"] == task_id)
 
     def delete_task(self, board_id: str, task_id: str) -> None:
         """Remove a newly-created task when its TaskCreated hook blocks creation."""
         with self._connect() as db:
             db.execute("DELETE FROM kanban_tasks WHERE board_id=? AND id=?", (board_id, task_id))
+
+    def dispatch_ready(self, board_id: str, *, concurrency: int = 3) -> list[dict[str, Any]]:
+        """Atomically claim dependency-ready tasks up to the board's concurrency limit."""
+        if not 1 <= concurrency <= 32:
+            raise ValueError("concurrency must be 1..32")
+        with self._connect() as db:
+            db.row_factory = sqlite3.Row
+            db.execute("BEGIN IMMEDIATE")
+            active = db.execute("SELECT COUNT(*) FROM kanban_tasks WHERE board_id=? AND status='running'", (board_id,)).fetchone()[0]
+            slots = max(0, concurrency - int(active))
+            if not slots:
+                return []
+            rows = db.execute("SELECT * FROM kanban_tasks WHERE board_id=? AND status='todo' ORDER BY created_at", (board_id,)).fetchall()
+            claimed = []
+            for row in rows:
+                if len(claimed) >= slots:
+                    break
+                deps = json.loads(row["dependencies"])
+                if any(db.execute("SELECT status FROM kanban_tasks WHERE id=?", (dep,)).fetchone()[0] != "done" for dep in deps):
+                    continue
+                db.execute("UPDATE kanban_tasks SET status='running',attempts=attempts+1,updated_at=CURRENT_TIMESTAMP WHERE id=?", (row["id"],))
+                db.execute("INSERT INTO kanban_task_runs(id,task_id,status,output) VALUES(?,?,?,?)",
+                           (str(uuid.uuid4()), row["id"], "running", ""))
+                claimed.append(row["id"])
+            return [dict(db.execute("SELECT * FROM kanban_tasks WHERE id=?", (task_id,)).fetchone()) for task_id in claimed]
+
+    def record_failure(self, board_id: str, task_id: str, detail: str) -> dict[str, Any]:
+        current = next((item for item in self.tasks(board_id) if item["id"] == task_id), None)
+        if current is None: raise KeyError("task not found")
+        next_status = "todo" if int(current["attempts"]) < int(current["max_attempts"]) else "blocked"
+        return self.update_task(board_id, task_id, {"status": next_status, "output": detail[-20000:]})
+
+    def run_history(self, task_id: str) -> list[dict[str, Any]]:
+        with self._connect() as db:
+            db.row_factory = sqlite3.Row
+            return [dict(row) for row in db.execute("SELECT * FROM kanban_task_runs WHERE task_id=? ORDER BY started_at DESC", (task_id,))]
+
+
+def available_role_profiles() -> list[str]:
+    """Return only profile basenames so secrets and runtime config never escape."""
+    from atlas.config import DATA_ROOT
+    directory = DATA_ROOT / "data" / "profiles"
+    return sorted(path.stem for path in directory.glob("*.toml")) if directory.is_dir() else []
 
 
 def atlas_kanban_store() -> KanbanStore:
