@@ -26,7 +26,6 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from atlas.config import get_config
 from atlas.logs import LOG_DIR
 
 
@@ -246,13 +245,19 @@ class KernelWorkflowSubagentRunner:
             status = str(result.get("status") or "failed")
             summary = str(result.get("result") or "Workflow node returned no result.")
             if status == "cancelled":
+                group_data["session_id"] = str(result.get("session_id") or "")
+                group_data["tokens"] = result.get("tokens") or {}
                 await complete(status, summary)
                 if parent_cancel is not None and parent_cancel.is_set():
                     raise asyncio.CancelledError
                 raise RuntimeError("Workflow node was cancelled")
             if status != "completed":
+                group_data["session_id"] = str(result.get("session_id") or "")
+                group_data["tokens"] = result.get("tokens") or {}
                 await complete("failed", summary)
                 raise RuntimeError(summary)
+            group_data["session_id"] = str(result.get("session_id") or "")
+            group_data["tokens"] = result.get("tokens") or {}
             await complete(status, summary)
             return NodeResult(
                 response=summary,
