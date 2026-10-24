@@ -2433,13 +2433,16 @@ async def _execute_run(
             event_model = str(row.get("model") or model_id or run.model)
             model_config = next((item for item in model_mgr.list_models()
                                  if item.get("litellm_model") == event_model
-                                 or item.get("id") == event_model), {}) if model_mgr else {}
+                                 or item.get("id") == event_model
+                                 or str(item.get("litellm_model") or "").rsplit("/", 1)[-1] == event_model
+                                 or str(item.get("native_model") or "") == event_model), {}) if model_mgr else {}
             try:
                 await usage_ledger.record(
                     run_id=run.run_id, conversation_id=run.conversation_id,
                     subtask_id=row.get("subtask_id"), model=event_model,
                     started_at=run.started_at, usage=row,
                     price=model_config.get("price"),
+                    native_model=model_config.get("native_model"),
                 )
             except Exception:
                 log.exception(

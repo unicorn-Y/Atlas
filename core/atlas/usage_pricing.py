@@ -39,6 +39,7 @@ def estimate_cost(
     model: str, *, input_tokens: int, output_tokens: int,
     cached_input_tokens: int = 0, cache_write_tokens: int = 0,
     price: dict[str, Any] | None = None,
+    native_model: str | None = None,
 ) -> Decimal | None:
     """Return estimated USD; custom ``{input, output, cached_input}`` rates override snapshots."""
     if price is not None:
@@ -48,8 +49,10 @@ def estimate_cost(
         input_rate, output_rate, cached_rate = rates
         write_rate = input_rate
     else:
-        model_key = (model or "").strip().lower().rsplit("/", 1)[-1]
-        if model_key not in _PRICE_TABLE:
+        candidates = [model, (model or "").strip().rsplit("/", 1)[-1], native_model or ""]
+        model_key = next((key for value in candidates
+                          if (key := str(value).strip().lower().rsplit("/", 1)[-1]) in _PRICE_TABLE), None)
+        if model_key is None:
             return None
         input_rate, output_rate, cached_rate, write_rate = _PRICE_TABLE[model_key]
 

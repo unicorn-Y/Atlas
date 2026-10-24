@@ -220,6 +220,7 @@ export default function App() {
   const [editing, setEditing] = useState<{ id: string; original: string } | null>(null);
   const editingDraftRef = useRef<{ text: string; attachments: string[]; files: Array<RunFile & { size: number }>; mentions: MentionItem[] } | null>(null);
   const [rawText, setRawText] = useState<string | null>(null);
+  const [rawTextTitle, setRawTextTitle] = useState('最近回复的原始文本');
   const [browserUrl, setBrowserUrl] = useState('');
   const [terminalCommand, setTerminalCommand] = useState<{ id: string; text: string } | null>(null);
   const [mentions, setMentions] = useState<MentionItem[]>([]);
@@ -1082,7 +1083,7 @@ export default function App() {
       { id: 'raw', label: '/raw', hint: '查看最近一条 Atlas 回复的原始文本并复制', run: () => {
         const latest = [...messages].reverse().find((item) => item.role === 'assistant')?.content || reply;
         if (!latest) { setToast('当前还没有可查看的回复'); return; }
-        setRawText(latest);
+        setRawTextTitle('最近回复的原始文本'); setRawText(latest);
       } },
       { id: 'auto-review', label: '/auto-review', hint: '兼容入口：目前只调用 /review，默认审查未提交改动；没有独立自动审查策略或授权设置', run: () => { void store.sendMessage('/review'); } },
       { id: 'ask-selection', label: '/ask-selection', hint: '把当前选中的文字放进消息草稿', run: askSelectedText },
@@ -1107,13 +1108,6 @@ export default function App() {
     { id: 'usage', label: '/usage', hint: '查看用量和费用', run: () => setSheet('usage') },
     { id: 'cost', label: '/cost', hint: '查看本会话 Token、缓存、费用与耗时', run: () => {
       if (!activeConversation) { setToast('先打开一个会话再查看 /cost'); return; }
-      void api<{ input_tokens: number; output_tokens: number; cached_input_tokens: number; cache_hit_rate: number | null; est_cost: number | null; duration_seconds: number | null }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(activeConversation.id)}/stats`)
-        .then((stats) => {
-          const duration = stats.duration_seconds === null ? '未知' : `${Math.floor(stats.duration_seconds / 3600)} 小时 ${Math.floor(stats.duration_seconds % 3600 / 60)} 分钟`;
-          const cost = stats.est_cost === null ? '价格未知' : `$${stats.est_cost.toFixed(6)}`;
-          const cache = stats.cache_hit_rate === null ? '未知' : `${(stats.cache_hit_rate * 100).toFixed(1)}%`;
-          setToast(`本会话：输入 ${stats.input_tokens} · 输出 ${stats.output_tokens} · 缓存命中 ${cache} · 费用 ${cost} · 耗时 ${duration}`);
-        }).catch((error) => setToast(`读取会话费用失败：${error instanceof Error ? error.message : String(error)}`));
       setSheet('usage');
     } },
     { id: 'help', label: '/help', hint: '列出全部斜杠命令及用法', run: showHelp },
@@ -1143,13 +1137,22 @@ export default function App() {
     })),
   ];
   function showHelp() {
-    setRawText(slashCommands.map((command) => `${command.label}${command.takesArgument ? ' <参数>' : ''} — ${command.hint}`).join('\n'));
+    const categories = ['会话', '工作区', '模型', '工具', '诊断', '技能'];
+    setRawTextTitle('命令帮助');
+    setRawText(categories.map((category) => {
+      const commands = slashCommands.filter((command) => command.group === category
+        || (category === '工作区' && command.group === '任务')
+        || (category === '模型' && command.group === '状态'));
+      return commands.length ? `## ${category}\n${commands.map((command) => `${command.label}${command.takesArgument ? ' <参数>' : ''} — ${command.hint}`).join('\n')}` : '';
+    }).filter(Boolean).join('\n\n'));
   }
   slashCommands.forEach((command) => {
     command.group ??= command.id.startsWith('skill-') ? '技能'
-      : ['new', 'clear', 'resume', 'fork', 'undo', 'redo', 'rename', 'export'].includes(command.id) ? '会话'
-        : ['goal', 'plan', 'agents', 'ps', 'stop', 'status'].includes(command.id) ? '任务'
-          : ['model', 'permissions', 'usage', 'context', 'diff'].includes(command.id) ? '状态' : '工具';
+      : ['new', 'clear', 'resume', 'fork', 'undo', 'redo', 'rename', 'export', 'handoff'].includes(command.id) ? '会话'
+        : ['folder', 'pwd', 'cd', 'init', 'ide', 'worktree', 'open'].includes(command.id) ? '工作区'
+          : ['model', 'reasoning', 'usage', 'cost'].includes(command.id) ? '模型'
+            : ['doctor', 'config', 'release-notes', 'help', 'version'].includes(command.id) ? '诊断'
+              : command.id.startsWith('skill-') ? '技能' : '工具';
   });
   const conversationsRef = useRef(store.conversations);
   conversationsRef.current = store.conversations;
@@ -1688,7 +1691,7 @@ export default function App() {
             <div className="set-row"><div>自动朗读新回复<small>用本机语音逐句读出 Atlas 的回答</small></div><button className="switch" role="switch" aria-label="自动朗读新回复" aria-checked={voiceOutput} onClick={toggleVoiceOutput} /></div>
           </div>
         </section>}
-        {sheet === 'usage' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">用量</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">每次任务用了多少 token、缓存帮你省了多少、大概花了多少钱。</p><UsagePanel username={username} onSaveUsername={saveUsername} /></section>}
+        {sheet === 'usage' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">用量</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">每次任务用了多少 token、缓存帮你省了多少、大概花了多少钱。</p><UsagePanel username={username} onSaveUsername={saveUsername} apiBaseUrl={store.apiBaseUrl} conversationId={activeConversation?.id ?? null} onOpenModels={() => setSheet('models')} /></section>}
         {sheet === 'plugins' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">插件与扩展</h3>
           <p className="mt-1 mb-5 text-[13px] text-fg-3">给 Atlas 增加新的工具和能力，也可以把 Claude Code / Codex 里已有的配置搬进来。</p>
@@ -1757,9 +1760,9 @@ export default function App() {
       }} /></Suspense>}
     {recipesOpen && <RecipesDialog open onClose={() => setRecipesOpen(false)} recipes={store.recipes}
       onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} />}
-    <Dialog open={rawText !== null} onOpenChange={(open) => { if (!open) setRawText(null); }} label="最近回复的原始文本" className="flex max-h-[82vh] w-[min(900px,92vw)] flex-col bg-panel p-4 shadow-xl">
+    <Dialog open={rawText !== null} onOpenChange={(open) => { if (!open) setRawText(null); }} label={rawTextTitle} className="flex max-h-[82vh] w-[min(900px,92vw)] flex-col bg-panel p-4 shadow-xl">
       <div className="mb-3 flex items-center gap-2">
-        <h2 className="m-0 text-[15px] font-semibold text-heading">最近回复的原始文本</h2>
+        <h2 className="m-0 text-[15px] font-semibold text-heading">{rawTextTitle}</h2>
         <span className="flex-1" />
         <button type="button" aria-label="复制原始回复" onClick={() => {
           if (!rawText) return;

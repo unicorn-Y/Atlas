@@ -422,6 +422,7 @@ class UsageLedger:
         self, *, run_id: str, conversation_id: str, subtask_id: str | None,
         model: str, started_at: str, usage: dict[str, Any],
         price: dict[str, Any] | None = None,
+        native_model: str | None = None,
     ) -> None:
         if self._db is None:
             return
@@ -431,7 +432,7 @@ class UsageLedger:
             "cached_input_tokens": max(0, int(usage.get("cached_input_tokens") or 0)),
             "cache_write_tokens": max(0, int(usage.get("cache_write_tokens") or 0)),
         }
-        cost = estimate_cost(model, **values, price=price)
+        cost = estimate_cost(model, **values, price=price, native_model=native_model)
         await self._db.execute(
             """INSERT INTO usage_records
             (run_id, conversation_id, subtask_id, model, started_at, input_tokens,

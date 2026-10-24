@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { UsageGroup, UsageReport, UsageRow } from '@atlas/backend-adapter';
 import { backend, useAtlasStore } from '../store/useAtlasStore';
 import { cn } from '../ui/cn';
+import { api } from '../services/api';
 
 const RANGES: Array<[string, number | null]> = [['近 7 天', 7], ['近 30 天', 30], ['全部', null]];
 const GROUPS: Array<[UsageGroup, string]> = [['day', '按天'], ['conversation', '按对话'], ['model', '按模型']];
@@ -20,6 +21,13 @@ function isoDaysAgo(days: number): string {
 interface UsagePanelProps {
   username?: string;
   onSaveUsername?: (username: string) => void;
+  apiBaseUrl?: string;
+  conversationId?: string | null;
+  onOpenModels?: () => void;
+}
+interface ConversationStats {
+  input_tokens: number; output_tokens: number; cached_input_tokens: number;
+  cache_hit_rate: number | null; est_cost: number | null; duration_seconds: number | null;
 }
 
 function readLocalProfile(): { name: string; about: string } {
@@ -30,7 +38,7 @@ function readLocalProfile(): { name: string; about: string } {
 }
 
 /** Token usage and cost from the backend ledger: totals, a per-day bar chart, and the table behind it. */
-export default function UsagePanel({ username, onSaveUsername }: UsagePanelProps = {}) {
+export default function UsagePanel({ username, onSaveUsername, apiBaseUrl = '', conversationId, onOpenModels }: UsagePanelProps = {}) {
   const conversations = useAtlasStore((state) => state.conversations);
   const [savedProfile] = useState(readLocalProfile);
   const [displayName, setDisplayName] = useState(username ?? savedProfile.name ?? '');
@@ -40,6 +48,7 @@ export default function UsagePanel({ username, onSaveUsername }: UsagePanelProps
   const [group, setGroup] = useState<UsageGroup>('day');
   const [report, setReport] = useState<UsageReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sessionStats, setSessionStats] = useState<ConversationStats | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -49,6 +58,16 @@ export default function UsagePanel({ username, onSaveUsername }: UsagePanelProps
       .catch((exc: unknown) => { if (live) setError(exc instanceof Error ? exc.message : String(exc)); });
     return () => { live = false; };
   }, [group, days]);
+
+  useEffect(() => {
+    let live = true;
+    setSessionStats(null);
+    if (!conversationId || !apiBaseUrl) return () => { live = false; };
+    void api<ConversationStats>(apiBaseUrl, `/api/conversations/${encodeURIComponent(conversationId)}/stats`)
+      .then((value) => { if (live) setSessionStats(value); })
+      .catch(() => { if (live) setSessionStats(null); });
+    return () => { live = false; };
+  }, [apiBaseUrl, conversationId]);
 
   const [heat, setHeat] = useState<UsageReport | null>(null);
 
@@ -82,6 +101,17 @@ export default function UsagePanel({ username, onSaveUsername }: UsagePanelProps
 
   const pill = 'h-8 rounded-lg px-3 text-[12.5px] transition-colors';
   return <div className="grid max-w-[720px] gap-5 text-[13px] text-fg-2">
+    {conversationId && <section aria-label="本会话用量" className="rounded-xl card-surface p-4">
+      <h4 className="m-0 text-[13.5px] font-medium text-heading">本会话</h4>
+      {sessionStats ? <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <Tile label="输入 Token" value={tokens(sessionStats.input_tokens)} />
+        <Tile label="输出 Token" value={tokens(sessionStats.output_tokens)} />
+        <Tile label="缓存命中" value={percent(sessionStats.cache_hit_rate)} />
+        <Tile label="估算费用" value={cost(sessionStats.est_cost)} />
+        <Tile label="耗时" value={sessionStats.duration_seconds === null ? '未知' : `${Math.floor(sessionStats.duration_seconds / 3600)}小时${Math.floor(sessionStats.duration_seconds % 3600 / 60)}分`} />
+      </div> : <p className="mt-2 mb-0 text-[12px] text-fg-3">正在读取本会话用量…</p>}
+      {sessionStats?.est_cost === null && <p className="mt-2 mb-0 text-[12px] text-fg-3">该模型未配置价格，可在设置里填写。 <button type="button" onClick={onOpenModels} className="text-brand underline">打开模型设置</button></p>}
+    </section>}
     <form onSubmit={saveProfile} className="rounded-xl card-surface p-4">
       <div className="flex items-start justify-between gap-3">
         <div><h4 className="m-0 text-[13.5px] font-medium text-heading">本机资料</h4><p className="mt-1 mb-0 text-[12px] text-fg-3">用于这台电脑上的 Atlas 个性化显示，不是云账号或在线个人主页。</p></div>
