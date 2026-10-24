@@ -70,7 +70,7 @@ def is_review_request(content: str) -> bool:
         return False
     normalized = " ".join(content.split())
     lowered = normalized.lower()
-    for prefix in ("/review", "/审查"):
+    for prefix in ("/review", "/审查", "/security-review", "/simplify"):
         if lowered.startswith(prefix):
             rest = normalized[len(prefix):]
             if rest == "" or rest[0].isspace():
@@ -79,16 +79,22 @@ def is_review_request(content: str) -> bool:
 
 
 def parse_scope(content: str) -> dict[str, Any]:
-    """{"scope": working_tree|branch|commit, "ref": str|None, "user_prompt": str}."""
+    """Parse review mode and range. Modes: general, security, cleanup-only."""
     tokens = " ".join(str(content or "").split()).split(" ")
     body = tokens[1:]
+    mode = "security" if tokens[0].lower() == "/security-review" else (
+        "cleanup-only" if tokens[0].lower() == "/simplify" else "general")
+    if mode == "general" and body and body[0].lower() in {"security", "security-review", "安全"}:
+        mode, body = "security", body[1:]
+    elif mode == "general" and body and body[0].lower() in {"simplify", "cleanup", "cleanup-only", "简化", "清理"}:
+        mode, body = "cleanup-only", body[1:]
     scope: str = "working_tree"
     ref: str | None = None
     if len(body) >= 2 and body[0].lower() in {"branch", "分支"}:
         scope, ref, body = "branch", body[1], body[2:]
     elif len(body) >= 2 and body[0].lower() in {"commit", "提交"}:
         scope, ref, body = "commit", body[1], body[2:]
-    return {"scope": scope, "ref": ref, "user_prompt": " ".join(body).strip()}
+    return {"scope": scope, "ref": ref, "mode": mode, "user_prompt": " ".join(body).strip()}
 
 
 def scope_label(scope_result: dict[str, Any]) -> str:
@@ -190,8 +196,15 @@ def build_child_goal(scope_result: dict[str, Any], user_prompt: str = "") -> str
     """
     label = scope_result.get("scope_label") or scope_label(scope_result)
     focus = " ".join(str(user_prompt or "").split())
+    mode = str(scope_result.get("mode") or "general")
+    mode_guidance = {
+        "security": "安全审查档：只报告由本次改动引入或显著扩大的安全问题。逐项检查信任边界、认证/授权、注入、路径/命令拼接、敏感数据泄露、加密与随机数、依赖/反序列化、竞态和拒绝服务。说明攻击前提、可达路径、影响与证据；排除纯合规猜测和无利用路径的泛化建议。",
+        "cleanup-only": "cleanup-only / simplify 档：仅审查可证明的重复逻辑、过度复杂实现、低效路径和可安全简化点；不得把新功能、行为变更、重命名偏好或一般缺陷混入结果。修复建议必须保持外部行为不变，并说明等价性验证方式。",
+        "general": "通用正确性审查档：查找本次改动中的确定缺陷、回归和边界错误。",
+    }.get(mode, "通用正确性审查档。")
     lines = [
-        f"独立代码审查：{label}。" + (f"用户特别关注：{focus}" if focus else ""),
+        f"独立代码审查（{mode}）：{label}。" + (f"用户特别关注：{focus}" if focus else ""),
+        mode_guidance,
         "",
         "你是 /review 派出的独立高级审查员，一位只读的调查员。下面给出的差异文本是你的起点证据；"
         "不要只看 diff 下结论，先打开涉及的文件读上下文，能验证的就去验证（跑测试、lint、类型检查），"
@@ -248,7 +261,7 @@ def build_dispatch_prompt(scope_result: dict[str, Any], user_prompt: str = "") -
         "作为 goal 参数传入，不要改写、不要删减。",
         "2. 子任务返回后，从返回文本里提取 findings JSON 数组（提取第一个以 [ 开头、以 ] 结尾的块），"
         f"原样调用 submit_findings 提交：findings_json 传数组原文，不要重新格式化、不要增删字段；"
-        f'同时传 scope="{scope}"、scope_label="{label}"。子任务没有返回数组时，findings_json 传 "[]"。',
+        f'同时传 scope="{scope}"、scope_label="{label}"、mode="{scope_result.get("mode", "general")}"。子任务没有返回数组时，findings_json 传 "[]"。',
         "3. 最后输出一段简短中文总结：按 blocker/major/minor 分别报数；一条都没有时写「没有发现问题」。",
         "",
         "findings 条目字段：file、line（1 起始或 null）、range（[起,止] 或 null）、"
@@ -617,7 +630,7 @@ def run_review_command(
 
 
 async def emit_findings_event(
-    event_queue: Any, *, scope: str, scope_label: str, workspace: str, findings: list[dict[str, Any]],
+    event_queue: Any, *, scope: str, scope_label: str, workspace: str, findings: list[dict[str, Any]], mode: str = "general",
 ) -> None:
     if event_queue is None:
         return
@@ -625,6 +638,7 @@ async def emit_findings_event(
         "type": "review.findings",
         "data": {
             "scope": str(scope or "working_tree"),
+            "mode": mode if mode in {"general", "security", "cleanup-only"} else "general",
             "scope_label": str(scope_label or SCOPE_LABELS.get(str(scope), "当前未提交改动")),
             "workspace": str(workspace or ""),
             "findings": findings,
@@ -653,6 +667,7 @@ async def handle_agent_tool(name: str, arguments: dict[str, Any], ctx: Any) -> t
         await emit_findings_event(
             getattr(ctx, "event_queue", None),
             scope=scope, scope_label=label, workspace=workspace, findings=findings,
+            mode=str(arguments.get("mode") or "general"),
         )
         data = {"scope": scope, "scope_label": label, "count": len(findings), "findings": findings}
         text = (
@@ -689,6 +704,7 @@ _REVIEW_TOOL_SCHEMAS: tuple[tuple[str, dict[str, Any]], ...] = (
             "findings_json": {"type": "string", "description": "JSON array of findings, verbatim from the reviewer."},
             "scope": {"type": "string", "description": "Review scope: working_tree, branch, or commit."},
             "scope_label": {"type": "string", "description": "Chinese display label of the review scope."},
+            "mode": {"type": "string", "enum": ["general", "security", "cleanup-only"]},
         }, "required": ["findings_json"], "additionalProperties": False},
     }),
 )

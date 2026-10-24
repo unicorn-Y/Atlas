@@ -28,6 +28,8 @@ export const fixMessage = (finding: ReviewFinding) =>
 
 /** /review 的结构化结论：头部计数、逐条展开、一键发回对话修复。 */
 export default function ReviewFindingsCard({ item, store }: { item: Extract<TimelineItem, { kind: 'review' }>; store: Store }) {
+  const modeLabel = item.mode === 'security' ? '安全审查' : item.mode === 'cleanup-only' ? '清理式审查' : '代码审查';
+  const modeNote = item.mode === 'security' ? '仅列出有证据支持的安全问题；报告攻击前提与影响。' : item.mode === 'cleanup-only' ? '仅列出保持外部行为不变的简化建议。' : '';
   const [copied, setCopied] = useState(false);
   const [dismissed, setDismissed] = useState<number[]>([]);
   const [sent, setSent] = useState<number[]>([]);
@@ -38,7 +40,7 @@ export default function ReviewFindingsCard({ item, store }: { item: Extract<Time
   if (!item.findings.length) {
     return <div className="my-4 overflow-hidden rounded-xl card-surface">
       <div className="flex items-center gap-2.5 border-l-[3px] border-ok bg-ok-soft px-4 py-3 text-[13px] text-ok">
-        <ShieldCheck size={16} className="shrink-0" />代码审查 · {item.scopeLabel}：没有发现问题
+        <ShieldCheck size={16} className="shrink-0" />{modeLabel} · {item.scopeLabel}：没有发现问题{modeNote && <span className="ml-1 text-[12px] opacity-80">{modeNote}</span>}
       </div>
     </div>;
   }
@@ -92,7 +94,8 @@ export default function ReviewFindingsCard({ item, store }: { item: Extract<Time
   }}>
     <div className="flex flex-wrap items-center gap-2 px-4 py-3">
       <SearchCheck size={16} className="shrink-0 text-brand" />
-      <b className="text-[14px] font-semibold text-heading">代码审查 · {item.scopeLabel}</b>
+      <b className="text-[14px] font-semibold text-heading">{modeLabel} · {item.scopeLabel}</b>
+      {modeNote && <span className="basis-full text-[12px] text-fg-3">{modeNote} 点击 Fix 或 Apply fixes 后会把选中的建议提交为一个可检查的修复回合。</span>}
       <span className="ml-auto flex items-center gap-1.5 text-[11.5px]">
         {(Object.keys(counts) as Array<ReviewFinding['severity']>).map((severity) =>
           <span key={severity} className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 tabular-nums', FINDING_SEVERITY[severity].chip, counts[severity] === 0 && 'opacity-40')}>

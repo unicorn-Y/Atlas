@@ -1468,9 +1468,11 @@ export default function App() {
         if (!latest) { setToast('当前还没有可查看的回复'); return; }
         setRawTextTitle('最近回复的原始文本'); setRawText(latest);
       } },
-      { id: 'auto-review', label: '/auto-review', hint: '兼容入口：目前只调用 /review，默认审查未提交改动；没有独立自动审查策略或授权设置', run: () => { void store.sendMessage('/review'); } },
+      { id: 'auto-review', label: '/auto-review', hint: '审查当前未提交改动', run: () => { void store.sendMessage('/review'); } },
       { id: 'ask-selection', label: '/ask-selection', hint: '把当前选中的文字放进消息草稿', run: askSelectedText },
     { id: 'review', label: '/review', hint: '代码审查：branch <名> / commit <sha>，默认审查未提交改动', takesArgument: true, run: (arg: string) => { const focus = arg.trim(); void store.sendMessage(focus ? `/review ${focus}` : '/review'); } },
+    { id: 'security-review', label: '/security-review', hint: '按安全检查清单只读审查当前未提交改动，可追加 branch <名> / commit <sha>', takesArgument: true, run: (arg: string) => { void store.sendMessage(`/security-review ${arg.trim()}`.trim()); } },
+    { id: 'simplify', label: '/simplify', hint: '只审查可保持行为不变的简化与清理项', takesArgument: true, run: (arg: string) => { void store.sendMessage(`/simplify ${arg.trim()}`.trim()); } },
     { id: 'recipe', label: '/recipe', hint: '打开配方，带参数复跑保存过的任务', run: () => setRecipesOpen(true) },
     { id: 'workflow', label: '/workflow', hint: '规划并启动动态子 Agent DAG：/workflow <目标>', takesArgument: true, run: (goal: string) => { void startDynamicWorkflow(goal).catch((error) => setToast(`工作流启动失败：${error instanceof Error ? error.message : String(error)}`)); } },
     { id: 'dwf', label: '/dwf', hint: '查看工作流运行、节点输出、错误、产物并管理已保存定义', run: () => setWorkflowManagerOpen(true) },

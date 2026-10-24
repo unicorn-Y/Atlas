@@ -91,7 +91,7 @@ export type TimelineItem =
   /** LSP 在编辑后报的新问题：默认收成一行，可展开看明细。 */
   | { kind: 'lsp'; id: string; path: string; count: number; diagnostics: LspDiagnosticItem[] }
   /** /review 代码审查的结构化结论，由 ReviewFindingsCard 渲染；findings 为空即「没有发现问题」。 */
-  | { kind: 'review'; id: string; scope: string; scopeLabel: string; workspace: string; findings: ReviewFinding[] }
+  | { kind: 'review'; id: string; scope: string; scopeLabel: string; workspace: string; mode?: 'general' | 'security' | 'cleanup-only'; findings: ReviewFinding[] }
   | { kind: 'artifact'; id: string; name: string; summary: string }
   | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
   | { kind: 'failed'; id: string; detail: string; service?: string; reason?: string; retryAfterSeconds?: number; status?: number };
@@ -702,6 +702,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         items.push({
           kind: 'review', id: event.id,
           scope: String(data.scope ?? 'working_tree'),
+          mode: data.mode === 'security' || data.mode === 'cleanup-only' ? data.mode : 'general',
           scopeLabel: String(data.scope_label ?? '当前未提交改动'),
           workspace: String(data.workspace ?? ''),
           findings: parseFindings(data.findings),

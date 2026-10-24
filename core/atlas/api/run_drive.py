@@ -1487,6 +1487,7 @@ async def _handle_run_start(
             try:
                 review_scope = parse_scope(content)
                 review_diff = collect_diff(str(review_workspace), review_scope)
+                review_diff["mode"] = review_scope.get("mode", "general")
             except ValueError as exc:
                 invalid_run = RunState(run_id, conv_id, str(data.get("model", "")))
                 await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
