@@ -101,7 +101,8 @@ def check_openclaw_import() -> None:
 async def check_remote_access() -> None:
     from atlas.api.app_services import AppServices
     from atlas.api.application import create_app
-    from atlas.api.runtime import RuntimeManager
+    from atlas.api.runtime import RunState, RuntimeManager
+    from atlas.api.run_drive import _handle_resume
     from atlas.remote_access import remote_token_valid
     from atlas.origin_guard import is_trusted
 
@@ -111,7 +112,12 @@ async def check_remote_access() -> None:
     @asynccontextmanager
     async def lifespan(_app):
         yield
-    app = create_app(lifespan=lifespan, services=AppServices(memory=Memory(), runtime_mgr=RuntimeManager()))
+    manager = RuntimeManager()
+    run = RunState("remote-run", "session-one", "fixture-model")
+    run.next_envelope("approval.required", {"approval_id": "approval-one", "description": "Fixture approval", "tool": "write"})
+    run.status = "waiting"
+    manager.runs[run.run_id] = run
+    app = create_app(lifespan=lifespan, services=AppServices(memory=Memory(), runtime_mgr=manager, runtime_resume_handler=_handle_resume))
     with TestClient(app, client=("127.0.0.1", 1234)) as client:
         page = client.get("/remote", headers={"Sec-Fetch-Site": "same-origin"})
         assert page.status_code == 200 and "Atlas · Remote" in page.text
@@ -123,6 +129,11 @@ async def check_remote_access() -> None:
         assert is_trusted(None, token, client_host="192.168.10.9")
         tasks = client.get("/api/remote/tasks", headers={"X-Atlas-Api-Token": token})
         assert tasks.status_code == 200 and tasks.json()[0]["id"] == "session-one"
+        assert tasks.json()[0]["run_id"] == "remote-run" and tasks.json()[0]["waiting_for"] == "approval"
+        with client.websocket_connect("/ws/chat", subprotocols=["atlas", token]) as ws:
+            ws.send_json({"type": "resume", "run_id": "remote-run", "after_sequence": 0})
+            replay = ws.receive_json()
+            assert replay["event"] == "approval.required" and replay["data"]["approval_id"] == "approval-one"
         assert "#" in grant["url"] and grant["url"].startswith("http://192.168.10.4:")
         stopped = client.post("/api/remote/stop", json={"session_id": grant["session_id"]})
         assert stopped.status_code == 200 and stopped.json()["revoked"] == 1
