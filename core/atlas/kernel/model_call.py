@@ -775,6 +775,17 @@ async def complete_stream(
     for candidate_index, candidate in enumerate(candidates):
         if candidate_index and is_cooling(candidate):
             continue
+        if candidate_index and last_error is not None and on_attempt is not None:
+            published = on_attempt({
+                "ok": False, "fallback": True,
+                "from_model": candidates[candidate_index - 1],
+                "model": candidate,
+                "category": last_error.category,
+                "status": last_error.status,
+                "detail": str(last_error),
+            })
+            if asyncio.iscoroutine(published):
+                await published
         try:
             route = await router.resolve(candidate, "conversation")
         except Exception as exc:

@@ -14,13 +14,43 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from atlas.config import get_config
+from atlas.config import get_config, load_user_settings, save_user_settings
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 
 router = APIRouter()
 log = structlog.get_logger(__name__)
+
+
+@router.get("/api/models/fallback")
+async def get_fallback_chain(services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    model_mgr = _resolved_model_mgr(services)
+    models = [str(item.get("id")) for item in model_mgr.list_models() if item.get("id")]
+    settings = load_user_settings()
+    chain = settings.get("fallback_chain", [])
+    if not isinstance(chain, list):
+        chain = []
+    return {"models": models, "chain": [item for item in chain if item in models]}
+
+
+@router.put("/api/models/fallback")
+async def set_fallback_chain(
+    services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any],
+) -> dict[str, Any]:
+    model_mgr = _resolved_model_mgr(services)
+    configured = {str(item.get("id")) for item in model_mgr.list_models() if item.get("id")}
+    chain = req.get("chain")
+    if not isinstance(chain, list) or any(not isinstance(item, str) for item in chain):
+        raise HTTPException(status_code=400, detail="chain must be a list of model ids")
+    chain = list(dict.fromkeys(item for item in chain if item != model_mgr.current_model))
+    unknown = [item for item in chain if item not in configured]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"unknown fallback models: {', '.join(unknown)}")
+    settings = load_user_settings()
+    settings["fallback_chain"] = chain
+    save_user_settings(settings)
+    return {"status": "ok", "chain": chain}
 
 
 def _server() -> Any:

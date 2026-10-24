@@ -363,8 +363,11 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
                    else "MODEL_UNAVAILABLE"}
             state.abort = True
             return
+    from atlas.config import load_user_settings
+    user_fallbacks = load_user_settings().get("fallback_chain", [])
     runtime.fallback_models = list(
         selected_config.get("fallback")
+        or (user_fallbacks if isinstance(user_fallbacks, list) else [])
         or _agent.get_config().get("models.fallback", []) or []
     )
     state.litellm_model = str(selected_config.get("litellm_model") or runtime.model)

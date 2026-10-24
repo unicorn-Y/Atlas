@@ -1465,6 +1465,12 @@ class AtlasKernel:
                                 ))
 
                 async def on_attempt(event: dict[str, Any]) -> None:
+                    if event.get("fallback"):
+                        await event_queue.put(emit(
+                            "run_status", status="model_fallback",
+                            text=(f"主模型 {event.get('from_model')} 失败（{event.get('detail') or event.get('category')}），"
+                                  f"已切到 {event.get('model')}"),
+                        ))
                     await record_model_attempt(event, purpose="conversation")
 
                 overflow_retry_used = False
