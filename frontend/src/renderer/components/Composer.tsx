@@ -121,6 +121,7 @@ interface ComposerProps {
   attachments: string[];
   onRemoveAttachment: (index: number) => void;
   onPickImages: (files: FileList | null) => void;
+  onPickFolders?: (folders: Array<{ name: string; path: string; count: number }>) => void;
   listening: boolean;
   onToggleMic: () => void;
   models: ModelInfo[];
@@ -436,11 +437,23 @@ export default function Composer(props: ComposerProps) {
       && ((enterToSend && !event.shiftKey) || (!enterToSend && event.ctrlKey))) { event.preventDefault(); submit(); }
   };
   const hasFiles = (event: DragEvent<HTMLFormElement>) => Array.from(event.dataTransfer.types).includes('Files');
+  const droppedFolders = async (event: DragEvent<HTMLFormElement>) => {
+    const folders: Array<{ name: string; path: string; count: number }> = [];
+    for (const item of Array.from(event.dataTransfer.items)) {
+      const entry = (item as DataTransferItem & { webkitGetAsEntry?: () => FileSystemEntry | null }).webkitGetAsEntry?.();
+      if (entry?.isDirectory) {
+        const droppedFile = item.getAsFile() as (File & { path?: string }) | null;
+        folders.push({ name: entry.name, path: droppedFile?.path || entry.fullPath || entry.name, count: await countDroppedFiles(entry as FileSystemDirectoryEntry) });
+      }
+    }
+    if (folders.length) props.onPickFolders?.(folders);
+    else props.onPickImages(event.dataTransfer.files);
+  };
 
   return <form onSubmit={submit} data-expert={expert || undefined}
     onDragOver={(event) => { if (!hasFiles(event)) return; event.preventDefault(); setDragging(true); }}
     onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
-    onDrop={(event) => { if (!hasFiles(event)) return; event.preventDefault(); setDragging(false); props.onPickImages(event.dataTransfer.files); }}
+    onDrop={(event) => { if (!hasFiles(event)) return; event.preventDefault(); setDragging(false); void droppedFolders(event); }}
     className={cn('raised relative rounded-[22px] transition-shadow focus-within:shadow-[0_0_0_1px_var(--line-strong),0_1px_2px_rgba(0,0,0,.04),0_6px_20px_-6px_rgba(0,0,0,.12)]',
       hero ? 'px-4 pt-4 pb-2.5' : 'px-3.5 pt-3 pb-2',
       expert && 'shadow-[var(--shadow-raised),0_0_0_1.5px_var(--brand-soft)]',
@@ -636,4 +649,20 @@ export default function Composer(props: ComposerProps) {
       </dl>
     </Dialog>
   </form>;
+}
+
+function countDroppedFiles(directory: FileSystemDirectoryEntry): Promise<number> {
+  return new Promise((resolve) => {
+    let count = 0;
+    const reader = directory.createReader();
+    const read = () => reader.readEntries(async (entries) => {
+      if (!entries.length) { resolve(count); return; }
+      const nestedCounts = await Promise.all(entries.map((entry) => entry.isFile ? Promise.resolve(1)
+        : entry.isDirectory ? countDroppedFiles(entry as FileSystemDirectoryEntry) : Promise.resolve(0)));
+      count += nestedCounts.reduce((sum, value) => sum + value, 0);
+      // DirectoryReader may return at most one batch at a time.
+      window.setTimeout(read, 0);
+    }, () => resolve(count));
+    read();
+  });
 }

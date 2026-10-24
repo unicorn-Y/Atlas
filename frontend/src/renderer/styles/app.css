@@ -249,6 +249,22 @@ code, pre, kbd, samp { font-family: var(--atlas-mono-font, ui-monospace, SFMono-
   [data-theme=dark] .hljs-string, [data-theme=dark] .hljs-attr { color: #8fd3b6; }
   [data-theme=dark] .hljs-number, [data-theme=dark] .hljs-literal { color: #e8b27a; }
   [data-theme=dark] .hljs-title, [data-theme=dark] .hljs-function { color: #8fb8e8; }
+  [data-code-theme="light-soft"] .hljs-keyword, [data-code-theme="light-soft"] .hljs-built_in { color: #7353a6; }
+  [data-code-theme="light-soft"] .hljs-string, [data-code-theme="light-soft"] .hljs-attr { color: #287c5d; }
+  [data-code-theme="light-soft"] .hljs-number, [data-code-theme="light-soft"] .hljs-literal { color: #a75b22; }
+  [data-code-theme="light-soft"] .hljs-title, [data-code-theme="light-soft"] .hljs-function { color: #2b639b; }
+  [data-code-theme="light-vivid"] .hljs-keyword, [data-code-theme="light-vivid"] .hljs-built_in { color: #5b21b6; }
+  [data-code-theme="light-vivid"] .hljs-string, [data-code-theme="light-vivid"] .hljs-attr { color: #047857; }
+  [data-code-theme="light-vivid"] .hljs-number, [data-code-theme="light-vivid"] .hljs-literal { color: #c2410c; }
+  [data-code-theme="light-vivid"] .hljs-title, [data-code-theme="light-vivid"] .hljs-function { color: #1d4ed8; }
+  [data-code-theme="dark-soft"] .hljs-keyword, [data-code-theme="dark-soft"] .hljs-built_in { color: #c4a7e7; }
+  [data-code-theme="dark-soft"] .hljs-string, [data-code-theme="dark-soft"] .hljs-attr { color: #9bd3bc; }
+  [data-code-theme="dark-soft"] .hljs-number, [data-code-theme="dark-soft"] .hljs-literal { color: #e8b77f; }
+  [data-code-theme="dark-soft"] .hljs-title, [data-code-theme="dark-soft"] .hljs-function { color: #9bbfe7; }
+  [data-code-theme="dark-vivid"] .hljs-keyword, [data-code-theme="dark-vivid"] .hljs-built_in { color: #d8b4fe; }
+  [data-code-theme="dark-vivid"] .hljs-string, [data-code-theme="dark-vivid"] .hljs-attr { color: #6ee7b7; }
+  [data-code-theme="dark-vivid"] .hljs-number, [data-code-theme="dark-vivid"] .hljs-literal { color: #fdba74; }
+  [data-code-theme="dark-vivid"] .hljs-title, [data-code-theme="dark-vivid"] .hljs-function { color: #93c5fd; }
 }
 
 /* The one orchestrated motion: the armillary turns while Atlas works. */

@@ -11,6 +11,8 @@ export interface AppearanceNotificationsPanelProps {
   onSaveUsername: (username: string) => void;
   onToast?: (message: string) => void;
   section?: 'appearance' | 'notifications' | 'all';
+  speechVoice?: string; speechVoices?: SpeechSynthesisVoice[]; speechRate?: number;
+  onSpeechVoiceChange?: (value: string) => void; onSpeechRateChange?: (value: number) => void; onSpeechPreview?: () => void;
 }
 
 const CATEGORY_LABELS: Array<[NotificationKind, string, string]> = [
@@ -25,7 +27,7 @@ const COLOR_LABELS: Array<[keyof CustomTheme['colors'], string]> = [
   ['background', '背景'], ['foreground', '文字'], ['accent', '强调色'], ['surface', '面板'], ['codeBackground', '代码区'],
 ];
 
-export default function AppearanceNotificationsPanel({ theme, onThemeChange, onToast, section = 'appearance' }: AppearanceNotificationsPanelProps) {
+export default function AppearanceNotificationsPanel({ theme, onThemeChange, onToast, section = 'appearance', speechVoice = '', speechVoices = [], speechRate = 1, onSpeechVoiceChange, onSpeechRateChange, onSpeechPreview }: AppearanceNotificationsPanelProps) {
   const [custom, setCustom] = useState<CustomTheme>(() => readCustomTheme() ?? createCustomTheme(theme));
   const [customActive, setCustomActive] = useState(() => {
     try { return localStorage.getItem('atlas.preference.appearance') === 'custom' && readCustomTheme() !== null; } catch { return false; }
@@ -35,6 +37,7 @@ export default function AppearanceNotificationsPanel({ theme, onThemeChange, onT
   const [themeMessage, setThemeMessage] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationPreferences>(readNotificationPreferences);
   const [permission, setPermission] = useState(() => typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
+  const [codeTheme, setCodeTheme] = useState(() => { try { return localStorage.getItem('atlas.code-theme') || 'auto'; } catch { return 'auto'; } });
   const previewState = useRef({ previewActive, customActive, theme });
 
   useEffect(() => {
@@ -46,6 +49,11 @@ export default function AppearanceNotificationsPanel({ theme, onThemeChange, onT
   }, [custom, previewActive]);
 
   useEffect(() => { previewState.current = { previewActive, customActive, theme }; }, [customActive, previewActive, theme]);
+  useEffect(() => {
+    const resolved = codeTheme === 'auto' ? (theme === 'dark' ? 'dark-vivid' : 'light-soft') : codeTheme;
+    document.documentElement.dataset.codeTheme = resolved;
+    try { localStorage.setItem('atlas.code-theme', codeTheme); } catch { /* storage unavailable */ }
+  }, [codeTheme, theme]);
   useEffect(() => () => {
     const current = previewState.current;
     if (current.previewActive && !current.customActive) applyStoredTheme(current.theme);
@@ -154,6 +162,20 @@ export default function AppearanceNotificationsPanel({ theme, onThemeChange, onT
       <div>
         <h3 id="appearance-title" className="m-0 flex items-center gap-2 text-[16px] font-semibold text-heading"><Palette size={17} /> 外观</h3>
         <p className="mt-1 mb-0 text-[12.5px] text-fg-3">只保存在这台设备的本地偏好里。</p>
+      </div>
+
+      <div className="rounded-xl card-surface px-4">
+        <SettingRow label="代码语法高亮" hint="自动会跟随明暗主题；也可以固定选择配色。">
+          <select aria-label="代码语法高亮主题" value={codeTheme} onChange={(event) => setCodeTheme(event.target.value)} className="h-8 rounded-lg border border-line bg-surface px-2 text-[12px] text-fg">
+            <option value="auto">自动跟随外观</option><option value="light-soft">浅色 · 柔和</option><option value="light-vivid">浅色 · 鲜明</option><option value="dark-soft">深色 · 柔和</option><option value="dark-vivid">深色 · 鲜明</option>
+          </select>
+        </SettingRow>
+        <pre className="mb-3 overflow-auto rounded-lg bg-code p-3"><code className="hljs language-typescript"><span className="hljs-keyword">const</span> label = <span className="hljs-string">'Atlas'</span>;</code></pre>
+      </div>
+      <div className="rounded-xl card-surface px-4">
+        <SettingRow label="朗读音色" hint="选择系统提供的中文语音。"><select aria-label="设置朗读音色" value={speechVoice} onChange={(event) => onSpeechVoiceChange?.(event.target.value)} className="max-w-[230px] h-8 rounded-lg border border-line bg-surface px-2 text-[12px] text-fg"><option value="">系统默认</option>{speechVoices.filter((voice) => voice.lang.toLowerCase().startsWith('zh')).map((voice) => <option key={voice.name} value={voice.name}>{voice.name}</option>)}</select></SettingRow>
+        <SettingRow label="朗读语速" hint="速度范围 0.8× 至 1.5×。"><select aria-label="设置朗读语速" value={speechRate} onChange={(event) => onSpeechRateChange?.(Number(event.target.value))} className="h-8 rounded-lg border border-line bg-surface px-2 text-[12px] text-fg">{[0.8, 1, 1.2, 1.5].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}</select></SettingRow>
+        <div className="flex justify-end border-t border-line py-2"><button type="button" onClick={onSpeechPreview} className="rounded-md px-2.5 py-1.5 text-[12px] text-brand hover:bg-hover">试听当前音色</button></div>
       </div>
 
       <div role="radiogroup" aria-label="内置主题" className="grid grid-cols-3 gap-3">
