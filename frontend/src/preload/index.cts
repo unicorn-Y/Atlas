@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AtlasDeepLink, AtlasDesktopApi, BackendStartupProgress, PlatformEditorId } from '../shared/ipc.js';
+import type { AtlasDeepLink, AtlasDesktopApi, BackendStartupProgress, PlatformEditorId, ReleaseUpdateStatus } from '../shared/ipc.js';
 import { BACKEND_STARTUP_CHANNEL } from '../shared/ipc.js';
 
 const desktopApi: AtlasDesktopApi = {
@@ -13,6 +13,12 @@ const desktopApi: AtlasDesktopApi = {
   setTheme: (theme) => ipcRenderer.send('window:theme', theme),
   checkForUpdate: () => ipcRenderer.invoke('update:check'),
   applyUpdate: () => ipcRenderer.invoke('update:apply') as Promise<boolean>,
+  checkReleaseUpdate: (source: string) => ipcRenderer.invoke('update:release-check', source) as Promise<ReleaseUpdateStatus>,
+  downloadReleaseUpdate: (source: string, version: string) => ipcRenderer.invoke('update:release-download', source, version) as Promise<string>,
+  installReleaseUpdate: () => ipcRenderer.invoke('update:release-install') as Promise<boolean>,
+  skipReleaseVersion: (version: string) => ipcRenderer.invoke('update:release-skip', version) as Promise<void>,
+  remindReleaseLater: () => ipcRenderer.invoke('update:release-snooze') as Promise<void>,
+  onReleaseDownloadProgress: (callback) => { const listener = (_event: Electron.IpcRendererEvent, percent: number) => callback(percent); ipcRenderer.on('update:release-progress', listener); return () => ipcRenderer.removeListener('update:release-progress', listener); },
   getSkillCenterToken: () => ipcRenderer.invoke('skill-center:token') as Promise<string | undefined>,
   selectDirectory: (defaultPath) => ipcRenderer.invoke('dialog:open-directory', defaultPath) as Promise<string | null>,
   openPath: (target) => ipcRenderer.invoke('shell:open-path', target) as Promise<string>,

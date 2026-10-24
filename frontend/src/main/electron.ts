@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ensureBackendRunning, readRunningBackendPid, stopManagedBackend, terminateBackendPid } from './backendProcess.js';
 import { checkSourceUpdate, launchSourceUpdater, sourceRoot } from './sourceUpdate.js';
+import { checkReleaseUpdate, downloadVerifiedInstaller, launchVerifiedInstaller, setReleasePreference } from './releaseUpdate.js';
 import {
   BACKEND_STARTUP_CHANNEL,
   type AtlasDeepLink,
@@ -941,6 +942,7 @@ ipcMain.on('window:close', () => windowRef?.close());
 // Source mode (running from a git checkout without the Vite dev server): updates are
 // pulled and rebuilt by scripts/atlas-update.mjs instead of reinstalling a package.
 const updateRoot = () => (!app.isPackaged && !process.env.VITE_DEV_SERVER_URL ? sourceRoot(app.getAppPath()) : null);
+let releaseInstallerPath = '';
 ipcMain.handle('update:check', () => checkSourceUpdate(updateRoot()));
 ipcMain.handle('update:apply', async () => {
   const root = updateRoot();
@@ -950,6 +952,25 @@ ipcMain.handle('update:apply', async () => {
   setImmediate(() => { explicitQuit = true; app.quit(); });
   return true;
 });
+ipcMain.handle('update:release-check', (_event, source: unknown) => checkReleaseUpdate(typeof source === 'string' ? source : '', app.getVersion(), app.getPath('userData')));
+ipcMain.handle('update:release-download', async (_event, source: unknown, version: unknown) => {
+  if (typeof source !== 'string' || typeof version !== 'string') throw new Error('更新源和版本号不能为空。');
+  releaseInstallerPath = await downloadVerifiedInstaller(source, version, app.getPath('userData'), (percent) => {
+    if (windowRef && !windowRef.isDestroyed()) windowRef.webContents.send('update:release-progress', percent);
+  });
+  return releaseInstallerPath;
+});
+ipcMain.handle('update:release-install', async () => {
+  if (!releaseInstallerPath) throw new Error('请先下载并验证更新包。');
+  await stopManagedBackend();
+  launchVerifiedInstaller(releaseInstallerPath, app.getPath('exe'), () => { explicitQuit = true; app.quit(); }, (error) => console.error(`Release installer failed to start: ${error.message}`));
+  return true;
+});
+ipcMain.handle('update:release-skip', (_event, version: unknown) => {
+  if (typeof version !== 'string' || !/^v?\d+\.\d+\.\d+/.test(version)) throw new Error('版本号无效。');
+  setReleasePreference(app.getPath('userData'), { skipped: version });
+});
+ipcMain.handle('update:release-snooze', () => setReleasePreference(app.getPath('userData'), { remindAfter: Date.now() + 24 * 60 * 60 * 1000 }));
 ipcMain.on('window:theme', (_event, theme: unknown) => {
   const icon = typeof theme === 'string' ? themeIcon(theme) : undefined;
   if (icon && windowRef && !windowRef.isDestroyed()) windowRef.setIcon(icon);

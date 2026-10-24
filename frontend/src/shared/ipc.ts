@@ -23,6 +23,7 @@ export interface SourceUpdateStatus {
   blocked?: string;
   error?: string;
 }
+export interface ReleaseUpdateStatus { supported: boolean; available: boolean; current: string; latest?: string; notes?: string; assetName?: string; error?: string; skipped?: boolean }
 
 export type AtlasSettingsSection =
   | 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels'
@@ -72,6 +73,12 @@ export interface AtlasDesktopApi {
   checkForUpdate?(): Promise<SourceUpdateStatus>;
   /** Source mode only: quit, pull, rebuild and relaunch. Resolves false when not possible. */
   applyUpdate?(): Promise<boolean>;
+  checkReleaseUpdate?(source: string): Promise<ReleaseUpdateStatus>;
+  downloadReleaseUpdate?(source: string, version: string): Promise<string>;
+  installReleaseUpdate?(): Promise<boolean>;
+  skipReleaseVersion?(version: string): Promise<void>;
+  remindReleaseLater?(): Promise<void>;
+  onReleaseDownloadProgress?(callback: (percent: number) => void): () => void;
   /** Read native platform preferences and global shortcut registration state. */
   getPlatformSettings?(): Promise<PlatformSettingsState>;
   setOpenAtLogin?(enabled: boolean): Promise<PlatformSettingsState>;
