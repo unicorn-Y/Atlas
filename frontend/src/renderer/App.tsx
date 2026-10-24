@@ -1303,6 +1303,16 @@ export default function App() {
       store.setNextRunMode('plan');
       void store.sendMessage(`高级计划目标：${goal.trim()}\n\n先派发 2～3 个子 agent 并行调研代码结构、相关文件、依赖和风险，再合并证据，输出带步骤、涉及文件、验证方法、风险和逐步勾选项的详细计划。将完整计划保存到当前工作区的 .atlas/plans/ 目录并在回复中提供路径。当前处于计划模式，只做调研和计划，不执行改动；等用户批准后再逐步实施。`);
     } },
+    { id: 'share', label: '/share', hint: '导出当前会话为离线只读 HTML；参数 tools / thinking 可包含对应内容', takesArgument: true, run: (options: string) => {
+      if (!activeConversation) { setToast('先打开要分享的会话'); return; }
+      void api<{ path: string }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(activeConversation.id)}/share`, {
+        method: 'POST', json: { include_tools: /\btools\b/i.test(options), include_thinking: /\bthinking\b/i.test(options) },
+      }).then(async ({ path }) => {
+        await navigator.clipboard?.writeText(path).catch(() => undefined);
+        await window.atlasDesktop?.openPath?.(path).catch(() => undefined);
+        setToast(`已导出并复制文件路径：${path}`);
+      }).catch((error) => setToast(`导出失败：${error instanceof Error ? error.message : String(error)}`));
+    } },
     { id: 'folder', label: '/folder', hint: '选择这个对话的工作目录', run: () => void chooseWorkspace() },
     { id: 'pwd', label: '/pwd', hint: '显示当前对话的工作目录', run: () => {
       const path = activeConversation

@@ -189,6 +189,33 @@ async def get_conversation_messages(
     )
 
 
+@router.post("/api/conversations/{conversation_id}/share")
+async def export_conversation_share(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str,
+    req: dict[str, Any],
+) -> dict[str, Any]:
+    memory = services.memory
+    if memory is None:
+        from atlas import server as _atlas_server
+        memory = _atlas_server.memory
+    conversation = await memory.get_conversation(conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_messages
+    from atlas.sharing import export_html
+
+    messages = await asyncio.to_thread(read_session_messages, DATA_ROOT / "engine", conversation_id, limit=1000)
+    name = re.sub(r"[^A-Za-z0-9_-]+", "-", str(conversation.get("title") or "conversation")).strip("-")[:64] or "conversation"
+    path = DATA_ROOT / "exports" / f"{name}-{conversation_id[:8]}.html"
+    export_html(path, title=str(conversation.get("title") or "Atlas conversation"), messages=messages,
+                model=str(conversation.get("model") or ""),
+                include_tools=bool(req.get("include_tools", True)),
+                include_thinking=bool(req.get("include_thinking", False)))
+    return {"path": str(path), "messages": len(messages)}
+
+
 @router.get("/api/conversations/{conversation_id}/search")
 async def search_conversation_messages(
     services: Annotated[AppServices, Depends(get_app_services)],
