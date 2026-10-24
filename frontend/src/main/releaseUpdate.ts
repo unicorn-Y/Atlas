@@ -12,6 +12,16 @@ export function compareSemver(a: string, b: string): number {
   for (let i = 0; i < 3; i += 1) { const diff = (left[i] ?? 0) - (right[i] ?? 0); if (diff) return diff > 0 ? 1 : -1; }
   return 0;
 }
+export function hasAuthenticodeSignature(pe: Buffer): boolean {
+  if (pe.length < 256 || pe.toString('ascii', 0, 2) !== 'MZ') return false;
+  const peOffset = pe.readUInt32LE(0x3c);
+  if (peOffset + 24 > pe.length || pe.toString('ascii', peOffset, peOffset + 4) !== 'PE\0\0') return false;
+  const optional = peOffset + 24; const magic = pe.readUInt16LE(optional);
+  const directoryOffset = magic === 0x10b ? 96 : magic === 0x20b ? 112 : 0;
+  if (!directoryOffset) return false;
+  const certEntry = optional + directoryOffset + (4 * 8);
+  return certEntry + 8 <= pe.length && pe.readUInt32LE(certEntry + 4) > 0;
+}
 function releasePrefsPath(userData: string) { return path.join(userData, 'release-update-prefs.json'); }
 function prefs(userData: string): { skipped?: string; remindAfter?: number } {
   try { return JSON.parse(readFileSync(releasePrefsPath(userData), 'utf8')) as { skipped?: string; remindAfter?: number }; } catch { return {}; }
@@ -69,15 +79,16 @@ export async function downloadVerifiedInstaller(source: string, expectedVersion:
   const stream = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream);
   stream.on('data', (chunk: Buffer) => { received += chunk.length; if (total) progress(Math.min(99, Math.round(received * 100 / total))); });
   await pipeline(stream, createWriteStream(target));
-  const actual = createHash('sha256').update(readFileSync(target)).digest('hex');
+  const installerBytes = readFileSync(target);
+  const actual = createHash('sha256').update(installerBytes).digest('hex');
   if (actual.toLowerCase() !== expected.toLowerCase()) throw new Error(`SHA256 不匹配：期望 ${expected}，实际 ${actual}；安装已拒绝。`);
-  if (process.platform === 'win32') {
+  if (process.platform === 'win32' && hasAuthenticodeSignature(installerBytes)) {
     const quote = target.replace(/'/g, "''");
     const verifier = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-AuthenticodeSignature -LiteralPath '${quote}').Status`], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     const output: Buffer[] = []; verifier.stdout.on('data', (chunk) => output.push(Buffer.from(chunk)));
     const error: Buffer[] = []; verifier.stderr.on('data', (chunk) => error.push(Buffer.from(chunk)));
     const status = await new Promise<string>((resolve, reject) => { verifier.once('error', reject); verifier.once('close', (code) => code === 0 ? resolve(Buffer.concat(output).toString('utf8').trim()) : reject(new Error(Buffer.concat(error).toString('utf8') || 'Authenticode 校验失败'))); });
-    if (status !== 'Valid' && status !== 'NotSigned') throw new Error(`Windows Authenticode 签名无效：${status}`);
+    if (status !== 'Valid') throw new Error(`Windows Authenticode 签名无效：${status}`);
   }
   progress(100); return target;
 }
