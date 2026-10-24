@@ -1,4 +1,4 @@
-"""Read-only discovery and explicit import of Claude Code / Codex transcripts."""
+"""Read-only discovery and explicit import of Claude Code / Codex / OpenClaw transcripts."""
 
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ async def import_external_history(
             try:
                 conversation_id = str(receipt.get("conversation_id") or "") if isinstance(receipt, dict) else ""
                 if not conversation_id or await memory.get_conversation(conversation_id) is None:
-                    provider = "Claude Code" if source == "claude" else "Codex"
+                    provider = {"claude": "Claude Code", "codex": "Codex", "openclaw": "OpenClaw"}[source]
                     conversation_id = await memory.create_conversation(f"{provider} · {session['title']}")
                     receipts[key] = {"conversation_id": conversation_id, "completed": False}
                     await asyncio.to_thread(_save_history_index, index)

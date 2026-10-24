@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import tempfile
 import time
 from contextlib import asynccontextmanager
@@ -95,7 +96,21 @@ def check_openclaw_import() -> None:
         from atlas.tools.mcp_client import resolve_mcp_env
         env, problems = resolve_mcp_env({"FIXTURE_API_KEY": "{{secret:IMPORT_" + content.split("{{secret:IMPORT_", 1)[1].split("}", 1)[0] + "}}"})
         assert not problems and env["FIXTURE_API_KEY"] == "SYNTHETIC-KEY"
-    print("U14 OpenClaw config import and MCP secret resolution PASS")
+        sessions = source / "agents" / "main" / "sessions"
+        sessions.mkdir(parents=True)
+        history = sessions / "fixture.jsonl"
+        history.write_text("\n".join([
+            json.dumps({"type": "session", "title": "OpenClaw fixture session"}),
+            json.dumps({"type": "message", "message": {"role": "user", "content": "synthetic question", "id": "u1"}}),
+            json.dumps({"type": "message", "message": {"role": "assistant", "content": "synthetic answer", "id": "a1"}}),
+        ]) + "\n", encoding="utf-8")
+        from atlas.runtime.external_import import load_external_history
+        with patch.dict(os.environ, {"OPENCLAW_HOME": str(source)}), \
+             patch("atlas.runtime.external_import._HISTORY_INDEX_PATH", root / "history-index.json"):
+            imported = load_external_history("openclaw")
+        assert imported["total_files"] == 1, imported
+        assert [row["content"] for row in imported["sessions"][0]["messages"]] == ["synthetic question", "synthetic answer"]
+    print("U14 OpenClaw config, text session import and MCP secret resolution PASS")
 
 
 async def check_remote_access() -> None:
