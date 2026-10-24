@@ -132,7 +132,9 @@ class ModelManager:
             if existing is None:
                 self.add_model(custom, persist=False)
             else:
-                self._models[existing] = {**self._models[existing], **custom, "custom": True}
+                # 整条替换而不是合并：合并会把 atlas.toml 条目里的 base_url 等字段带进来，
+                # 用户定义里没写的接口地址会被旧值顶替，请求发到错误的服务商。
+                self._models[existing] = {**custom, "custom": True}
 
         # A user may keep a provider-specific display name for an ID that also exists in
         # the built-in catalog (for example the same DeepSeek route through d1api). Keep
