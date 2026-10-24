@@ -189,6 +189,15 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
                     "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]},
                 }, "required": ["step", "status"], "additionalProperties": False}},
         }, ["plan"]),
+        _function_schema("goal_subgoal", (
+            "Persist resumable milestones for the active conversation goal. Use this only when a long-term goal "
+            "needs multiple steps: add concise milestones before execution, mark each completed milestone when "
+            "its work is actually done, and list progress when resuming. Do not add trivial one-step tasks."
+        ), {
+            "action": {"type": "string", "enum": ["add", "complete", "reopen", "list"]},
+            "text": {"type": "string", "description": "Required for add; one concrete, independently verifiable milestone."},
+            "index": {"type": "integer", "minimum": 1, "description": "Required for complete/reopen; 1-based milestone number."},
+        }, ["action"]),
         _function_schema("EnterPlanMode", "Switch this run into a read-only planning phase before implementation.", {
             "reason": {"type": "string"},
         }),

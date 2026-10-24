@@ -147,7 +147,7 @@ def _save(session_id: str, home: str | Path | None, state: GoalState | None) -> 
 
 def goal_kick_prompt(goal: str, last_user_message: Any = None) -> str:
     suffix = f"\n\nUser's original request: {last_user_message}" if isinstance(last_user_message, str) and last_user_message.strip() else ""
-    return f"[Working toward this goal]\n{goal}{suffix}\n\nMake concrete progress toward the goal. If it is a multi-step task, decompose it into resumable subgoals and keep each subgoal's progress explicit. Continue until all subgoals are complete, the goal is complete, or you are blocked."
+    return f"[Working toward this goal]\n{goal}{suffix}\n\nMake concrete progress toward the goal. If it needs multiple steps, use the goal_subgoal tool to save concise, independently verifiable milestones before implementation, then mark each one complete only after finishing it. When resuming, list saved milestones and continue with the first incomplete one. Continue until all subgoals are complete, the goal is complete, or you are blocked."
 
 class GoalManager:
     def __init__(self, session_id: str, *, home: str | Path | None = None, default_max_turns: int = DEFAULT_MAX_TURNS):

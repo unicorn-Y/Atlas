@@ -1206,6 +1206,35 @@ async def execute_tools_node(
                     )}],
                     "is_error": False,
                 }
+            elif fn_name == "goal_subgoal":
+                conversation_id = str(getattr(ctx, "conversation_id", "") or "").strip()
+                if not conversation_id:
+                    raise ValueError("conversation goal progress requires an active conversation")
+                action = str(fn_args.get("action") or "").strip().lower()
+                if action == "add":
+                    text = str(fn_args.get("text") or "").strip()
+                    if not text:
+                        raise ValueError("goal_subgoal add requires milestone text")
+                    command = f"subgoal add {text}"
+                elif action in {"complete", "reopen"}:
+                    index = fn_args.get("index")
+                    if not isinstance(index, int) or index < 1:
+                        raise ValueError("goal_subgoal complete/reopen requires a positive 1-based index")
+                    command = f"subgoal {('done' if action == 'complete' else 'reopen')} {index}"
+                elif action == "list":
+                    command = "subgoal list"
+                else:
+                    raise ValueError("goal_subgoal action must be add, complete, reopen or list")
+                from atlas.config import DATA_ROOT
+                from atlas.engine.session_sync import goal_command
+                result_data = await asyncio.to_thread(
+                    goal_command, DATA_ROOT / "engine", conversation_id, command,
+                )
+                if result_data.get("error"):
+                    raise ValueError(result_data["output"])
+                data = {"output": result_data.get("output", ""), "goal": result_data.get("goal")}
+                result = {"data": data, "content": [{"type": "text", "text": str(data["output"])}],
+                          "is_error": False}
             elif fn_name in {"ReportFindings", "submit_findings", "review_command"}:
                 from atlas.review import engine as review_engine
 

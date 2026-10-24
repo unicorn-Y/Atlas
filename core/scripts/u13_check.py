@@ -11,6 +11,7 @@ from atlas.engine_core.goals import GoalManager
 from atlas.rewind import RewindManager
 from atlas.agent.checkpoints import ShadowGitCheckpointStore
 from atlas.review.engine import build_child_goal, parse_scope
+from atlas.kernel.tools import kernel_tool_schemas
 
 
 def check_goal_resume() -> None:
@@ -25,6 +26,9 @@ def check_goal_resume() -> None:
         prompt = resumed.next_continuation_prompt()
         assert "Resume at the first incomplete subgoal: 2. Implement and verify" in prompt
         assert "[x] 1. Inspect requirements" in resumed.render_subgoals()
+        schemas = {item["function"]["name"] for item in kernel_tool_schemas(include_workflow=False)}
+        assert "goal_subgoal" in schemas
+        assert "fn_name == \"goal_subgoal\"" in Path("core/atlas/agent/tool_node.py").read_text(encoding="utf-8")
 
 
 def check_workspace_rewind() -> None:
