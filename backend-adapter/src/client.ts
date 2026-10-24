@@ -652,6 +652,45 @@ export class BackendAdapter {
     this.sendOnRun(runId, { type: 'subtask.message', run_id: runId, subtask_id: subtaskId, text, event_id: eventId });
   }
 
+  /** Runs the backend still holds as running or waiting (input/approval/plan), per conversation. */
+  async liveBackendRuns(): Promise<Array<{ conversation_id: string; run_id: string; status: string; waiting_for: string | null }>> {
+    if (!this.live) return [];
+    const result = await this.request<{ items: Array<{ conversation_id: string; run_id: string; status: string; waiting_for: string | null }> }>('/api/conversation-activity');
+    return (result.items ?? []).filter((item) => item.status === 'running' || item.status === 'waiting');
+  }
+
+  /**
+   * Re-attach to a run that is still alive on the backend after the renderer lost it (page reload,
+   * reopened window) and replay all of its events, so pending question/approval cards come back and
+   * can be answered. Registers the socket so respondToInput/approve reach this run.
+   */
+  async attachRun(runId: string, onEvent: (event: RuntimeStreamEvent) => void): Promise<void> {
+    if (!this.live) await this.initialize(3000);
+    if (!this.live || this.runSockets.has(runId)) return;
+    await new Promise<void>((resolve) => {
+      const socket = new WebSocket(`${this.baseUrl.replace(/^http/, 'ws')}/ws/chat`);
+      this.runSockets.set(runId, socket);
+      let lastSequence = 0;
+      socket.addEventListener('open', () => {
+        socket.send(JSON.stringify({ type: 'resume', run_id: runId, after_sequence: 0 }));
+      }, { once: true });
+      socket.addEventListener('message', (message) => {
+        let event: RuntimeStreamEvent;
+        try { event = JSON.parse(String(message.data)) as RuntimeStreamEvent; } catch { return; }
+        if (!('type' in event) || event.type !== 'agent_event') return;
+        const runtimeEvent = event as RuntimeEventEnvelope;
+        if (runtimeEvent.run_id !== runId || runtimeEvent.sequence <= lastSequence) return;
+        lastSequence = runtimeEvent.sequence;
+        localStorage.setItem(`atlas.runtime.cursor.${runId}`, String(lastSequence));
+        onEvent(runtimeEvent);
+        if (['run.completed', 'run.failed', 'run.cancelled'].includes(runtimeEvent.event)) socket.close(1000, 'Run complete');
+      });
+      const done = () => { if (this.runSockets.get(runId) === socket) this.runSockets.delete(runId); resolve(); };
+      socket.addEventListener('close', done, { once: true });
+      socket.addEventListener('error', done, { once: true });
+    });
+  }
+
   respondToInput(runId: string, eventId: string, text: string): void {
     this.sendOnRun(runId, { type: 'input.response', event_id: eventId, text });
   }

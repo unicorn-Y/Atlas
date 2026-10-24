@@ -403,6 +403,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         void backend.summarizeConversationBranch(previousId).catch(() => undefined);
       }
       const run = [...get().runs].reverse().find((item) => item.conversationId === conversation.id);
+      if (!run || terminal.has(run.status)) void reattachActiveRun(conversation.id);
       set((state) => ({ activeConversationId: conversation.id, activeRunId: run?.id ?? null, loadingMessagesConversationId: null, error: null, errorDetail: null, paused: run?.status === 'paused', unread: state.unread.filter((id) => id !== conversation.id), model: state.conversationModels[conversation.id] ?? state.model }));
       if (run && !terminal.has(run.status)) return;
       // 缓存过的会话先立刻显示上次的内容，刷新在后台进行，不再闪「正在载入」。
@@ -1213,6 +1214,40 @@ async function startRun(conversationId: string, item: QueuedMessage) {
       if (current && !terminal.has(current.status)) get().appendEvent({ id: `${run.id}:transport-failure`, runId: run.id, sequence: current.lastEventSequence + 1, type: 'run.failed', timestamp: new Date().toISOString(), data: { detail: errorText(error, '运行启动失败') } });
     })
     .finally(() => buffer.dispose());
+}
+
+const reattaching = new Set<string>();
+
+/**
+ * After a reload the renderer forgets runs that are still alive on the backend (for example one
+ * waiting for a question-card answer), so the card would vanish and the run would wait forever.
+ * Ask the backend which runs of this conversation are still running/waiting and replay them.
+ */
+async function reattachActiveRun(conversationId: string) {
+  const { getState: get, setState: set } = useAtlasStore;
+  if (reattaching.has(conversationId) || activeRunFor(conversationId)) return;
+  reattaching.add(conversationId);
+  try {
+    const items = await backend.liveBackendRuns().catch(() => []);
+    for (const item of items.filter((entry) => entry.conversation_id === conversationId)) {
+      if (get().getRun(item.run_id)) continue;
+      const conversation = get().conversations.find((entry) => entry.id === conversationId);
+      const timestamp = new Date().toISOString();
+      const run: AgentRun = { id: item.run_id, conversationId, title: conversation?.title ?? '运行中的任务', status: 'running', phase: 'execution', startedAt: timestamp, updatedAt: timestamp, lastEventSequence: 0, events: [] };
+      set((state) => state.activeConversationId === conversationId
+        ? { runs: [...state.runs, run], activeRunId: run.id, busy: true }
+        : { runs: [...state.runs, run] });
+      const buffer = createEventBuffer((events) => { for (const event of events) get().appendEvent(event); });
+      const handleEvent = (envelope: RuntimeEventEnvelope) => {
+        if (!isRuntimeEvent(envelope)) return;
+        const event = normalizeRuntimeEvent(envelope);
+        if (event) buffer.push(event);
+      };
+      void backend.attachRun(item.run_id, handleEvent).finally(() => buffer.dispose());
+    }
+  } finally {
+    reattaching.delete(conversationId);
+  }
 }
 
 function activeRunFor(conversationId: string): AgentRun | undefined {
