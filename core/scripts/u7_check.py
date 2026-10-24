@@ -137,6 +137,8 @@ def navigate_and_wait_network_failure(ws_url: str, url: str) -> str:
     """Capture Chromium's Network.loadingFailed error for a navigation on one CDP socket."""
     from websockets.sync.client import connect
     with connect(ws_url, open_timeout=6, close_timeout=2, max_size=2_000_000) as ws:
+        failed: list[str] = []
+
         def send_and_wait(command_id: int, method: str, params: dict[str, Any] | None = None) -> None:
             ws.send(json.dumps({"id": command_id, "method": method, "params": params or {}}))
             until = time.monotonic() + 8
@@ -145,11 +147,16 @@ def navigate_and_wait_network_failure(ws_url: str, url: str) -> str:
                     message = json.loads(ws.recv(timeout=2))
                 except TimeoutError:
                     continue
+                # A fast DNS failure can arrive before Page.navigate's reply; keep it.
+                if message.get("method") == "Network.loadingFailed":
+                    failed.append(str((message.get("params") or {}).get("errorText") or ""))
                 if message.get("id") == command_id:
                     return
         send_and_wait(1, "Network.enable")
         send_and_wait(2, "Page.enable")
         send_and_wait(3, "Page.navigate", {"url": url})
+        if failed:
+            return failed[0]
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
             try:
