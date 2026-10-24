@@ -151,16 +151,22 @@ def version() -> None:
 @main.command("exec")
 @click.argument("prompt", required=False)
 @click.option("--model", "-m", default=None, help="Model to use")
-@click.option("--workspace", type=click.Path(file_okay=False, path_type=Path), default=".",
+@click.option("--workspace", "--cwd", type=click.Path(file_okay=False, path_type=Path), default=".",
               show_default=True, help="Workspace directory for this run")
-@click.option("--conversation-id", default=None, help="Resume an existing Atlas conversation")
+@click.option("--conversation-id", "--resume", default=None, help="Resume an existing Atlas conversation")
 @click.option("--output-format", type=click.Choice(["text", "jsonl"]), default="text",
               show_default=True, help="Stream plain text or one JSON object per event")
+@click.option("--json", "json_output", is_flag=True, help="Alias for --output-format jsonl")
+@click.option("--output-schema", type=click.Path(dir_okay=False, path_type=Path), default=None,
+              help="Require the final response to match this JSON Schema file")
+@click.option("--output-last-message", type=click.Path(dir_okay=False, path_type=Path), default=None,
+              help="Write the final assistant response to this file")
 @click.option("--approve-writes", is_flag=True,
               help="Approve write-capable tool calls for this non-interactive run")
 def exec_command(
     prompt: str | None, model: str | None, workspace: Path,
-    conversation_id: str | None, output_format: str, approve_writes: bool,
+    conversation_id: str | None, output_format: str, json_output: bool,
+    output_schema: Path | None, output_last_message: Path | None, approve_writes: bool,
 ) -> None:
     """Run one non-interactive agent turn; PROMPT may also come from stdin."""
     from atlas.agent import AgentOrchestrator
@@ -175,6 +181,14 @@ def exec_command(
     root = workspace.expanduser().resolve()
     if not root.is_dir():
         raise click.BadParameter(f"workspace is not a directory: {root}", param_hint="--workspace")
+    if json_output:
+        output_format = "jsonl"
+    schema: dict[str, Any] | None = None
+    if output_schema:
+        try:
+            schema = json.loads(output_schema.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise click.BadParameter(f"cannot read JSON Schema: {exc}", param_hint="--output-schema") from exc
 
     async def _run_once() -> bool:
         model_mgr = ModelManager()
@@ -195,19 +209,54 @@ def exec_command(
                 return "allow" if approve_writes else "deny"
 
             failed = False
-            async for event in orchestrator.run(
-                user_prompt, conv_id, workspace=str(root), workspace_trusted=True,
-                permission_mode="ask_writes",
-                approval_callback=approve_once if approve_writes else None,
-            ):
-                if output_format == "jsonl":
-                    _write_line(event, sys.stdout)
-                elif event.get("type") == "chunk":
-                    print(str(event.get("content", "")), end="", flush=True)
-                elif event.get("type") == "error":
-                    failed = True
-                    print(str(event.get("detail", "Agent run failed")), file=sys.stderr)
-            if output_format == "text":
+            if output_format == "jsonl":
+                _write_line({"type": "start", "session_id": conv_id}, sys.stdout)
+            final_text = ""
+            for attempt in range(3):
+                parts: list[str] = []
+                run_prompt = user_prompt
+                if schema is not None:
+                    run_prompt += "\n\nReturn only a JSON value that strictly matches this JSON Schema:\n" + json.dumps(schema, ensure_ascii=False)
+                    if attempt:
+                        run_prompt += f"\nYour previous response failed schema validation: {validation_error}. Rewrite it now."
+                async for event in orchestrator.run(
+                    run_prompt, conv_id, workspace=str(root), workspace_trusted=True,
+                    permission_mode="ask_writes",
+                    approval_callback=approve_once if approve_writes else None,
+                ):
+                    kind = event.get("type")
+                    if kind == "chunk":
+                        part = str(event.get("content", "")); parts.append(part)
+                        if output_format == "jsonl":
+                            _write_line({"type": "text_delta", "text": part}, sys.stdout)
+                        else:
+                            print(part, end="", flush=True)
+                    elif output_format == "jsonl" and kind in {"tool_call", "tool_result", "usage"}:
+                        _write_line(event, sys.stdout)
+                    elif kind == "error":
+                        failed = True
+                        print(str(event.get("detail", "Agent run failed")), file=sys.stderr)
+                final_text = "".join(parts)
+                if failed:
+                    break
+                if schema is None:
+                    break
+                try:
+                    import jsonschema
+                    jsonschema.validate(json.loads(final_text), schema)
+                    validation_error = ""
+                    break
+                except Exception as exc:
+                    validation_error = str(exc)
+                    if attempt == 2:
+                        failed = True
+                        print(f"Final response did not match --output-schema: {validation_error}", file=sys.stderr)
+            if output_last_message:
+                output_last_message.parent.mkdir(parents=True, exist_ok=True)
+                output_last_message.write_text(final_text, encoding="utf-8")
+            if output_format == "jsonl":
+                _write_line({"type": "end", "session_id": conv_id, "status": "failed" if failed else "completed"}, sys.stdout)
+            elif final_text:
                 print()
             return failed
         finally:
