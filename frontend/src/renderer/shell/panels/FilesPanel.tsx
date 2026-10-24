@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { ChevronLeft, ChevronRight, Code2, Copy, Download, Eye, ExternalLink, File, Folder, FolderOpen, History, LoaderCircle, RefreshCw, RotateCcw, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { WorkspaceEntry, WorkspaceFile } from '@atlas/backend-adapter';
 import type { PlatformEditorId } from '../../../shared/ipc';
+import type { AgentEvent } from '../../../types/runtime';
 import { backend, useAtlasStore } from '../../store/useAtlasStore';
 import { Button } from '../../ui/Button';
 import { cn } from '../../ui/cn';
@@ -63,13 +64,15 @@ export const ancestorPaths = (file: string): string[] => {
   return out;
 };
 
-export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, onPreview }: {
+export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, onPreview, runEvents = [], onShowChanges }: {
   workspace?: string | null; onChooseWorkspace: () => void; refreshKey: string; onPreview: (url: string) => void;
+  runEvents?: AgentEvent[]; onShowChanges?: () => void;
 }) {
   const [dirs, setDirs] = useState<Record<string, WorkspaceEntry[]>>({});
   const [expanded, setExpanded] = useState<string[]>([]);
   const [loading, setLoading] = useState<string[]>([]);
   const [fileQuery, setFileQuery] = useState('');
+  const [showRunFiles, setShowRunFiles] = useState(false);
   const [searchResults, setSearchResults] = useState<Array<{ path: string; name: string; type: string }>>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
@@ -175,6 +178,15 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     const value = absolute && workspace ? absoluteWorkspacePath(workspace, path) ?? path : path;
     try { await navigator.clipboard.writeText(value); setError(''); }
     catch (exc) { setError(`复制路径失败：${exc instanceof Error ? exc.message : String(exc)}`); }
+  };
+  const copyFileContent = async (path: string) => {
+    if (!workspace || contextMenu?.directory) return;
+    try {
+      const result = await backend.getWorkspaceFile(workspace, path);
+      if (result.binary) throw new Error('二进制文件没有可复制的文本内容');
+      await navigator.clipboard.writeText(result.content);
+      setError('已复制文件内容');
+    } catch (exc) { setError(`复制文件内容失败：${exc instanceof Error ? exc.message : String(exc)}`); }
   };
   const revealInFolder = async (path: string, directory = false) => {
     if (!window.atlasDesktop?.openPath || !workspace) return;
@@ -344,9 +356,30 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     try { await backend.restoreVersion(workspace, file.path, version.id); setVersion(null); setReloads((value) => value + 1); setError(''); }
     catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
   };
+  const restoreHistoryVersion = async (versionId: string) => {
+    if (!workspace || !file) return;
+    try { await backend.restoreVersion(workspace, file.path, versionId); setVersion(null); setReloads((value) => value + 1); setError('已还原；当前内容的快照已保存，可在历史版本中撤销'); }
+    catch (exc) { setError(`还原失败：${exc instanceof Error ? exc.message : String(exc)}`); }
+  };
   // An earlier version only has its text; previews that load the file by URL would show the current one.
   const shown = version?.file ?? file;
   const previewing = Boolean(shown && canPreview(shown.path) && mode === 'preview' && (!version || MARKDOWN.test(shown.path)));
+  const runFiles = useMemo(() => {
+    const found = new Set<string>();
+    const visit = (value: unknown) => {
+      if (typeof value === 'string') {
+        if (value.trimStart().startsWith('{')) { try { visit(JSON.parse(value) as unknown); } catch { /* plain text */ } }
+        return;
+      }
+      if (!value || typeof value !== 'object') return;
+      for (const [key, item] of Object.entries(value)) {
+        if (/^(path|file|file_path|filepath)$/i.test(key) && typeof item === 'string' && !item.startsWith('http')) found.add(item.replace(/\\/g, '/'));
+        else visit(item);
+      }
+    };
+    for (const event of runEvents) if (event.type === 'tool.started' || event.type === 'tool.completed') visit(event.data);
+    return [...found].sort((a, b) => a.localeCompare(b));
+  }, [runEvents]);
 
   return <div className="flex h-full min-h-0 flex-col gap-3">
     <div className="flex items-center gap-2">
@@ -362,6 +395,10 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
       {searching && <LoaderCircle size={13} aria-label="正在搜索" className="spin shrink-0 text-fg-3" />}
       {fileQuery && <button type="button" aria-label="清除文件搜索" onClick={() => setFileQuery('')} className="grid size-6 place-items-center rounded text-fg-3 hover:bg-hover hover:text-fg"><X size={12} /></button>}
     </div>
+    {runEvents.length > 0 && <div className="rounded-lg border border-line bg-surface">
+      <button type="button" aria-expanded={showRunFiles} onClick={() => setShowRunFiles((value) => !value)} className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-[12px] text-fg-2 hover:bg-hover"><span className="flex-1">本会话访问的文件</span><span className="text-fg-3">{runFiles.length}</span><ChevronRight size={13} className={cn('transition-transform', showRunFiles && 'rotate-90')} /></button>
+      {showRunFiles && <div className="max-h-36 overflow-auto border-t border-line p-1">{runFiles.length ? runFiles.map((path) => <div key={path} className="flex items-center gap-1"><button type="button" title={path} onClick={() => selectFile(path)} className="min-w-0 flex-1 truncate rounded px-2 py-1 text-left text-[11.5px] text-fg-2 hover:bg-hover">{path}</button><button type="button" onClick={onShowChanges} className="shrink-0 rounded px-2 py-1 text-[10.5px] text-brand hover:bg-hover">查看 diff</button></div>) : <p className="m-0 px-2 py-2 text-[11px] text-fg-3">当前运行记录里没有文件访问事件。</p>}</div>}
+    </div>}
     {error && <p role="alert" className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-[12.5px] text-danger">{error}</p>}
     {searchError && <p role="alert" className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-[12px] text-danger">文件搜索失败：{searchError}</p>}
     <div className={cn('min-h-0 overflow-auto', file ? 'max-h-[42%] shrink-0' : 'flex-1')} role={fileQuery.trim() ? 'listbox' : 'tree'} aria-label={fileQuery.trim() ? '文件搜索结果' : '工作目录文件'}>
@@ -415,7 +452,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     {file && <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl card-surface">
       <div className="flex items-center gap-2 px-3 py-2 text-[12px] text-fg-2 shadow-[inset_0_-1px_0_var(--line)]">
         <File size={13} className="shrink-0 text-fg-3" /><code className="min-w-0 flex-1 truncate font-mono">{file.path}</code>
-        <FileHistoryMenu workspace={workspace} path={file.path} onView={setVersion} onError={setError} />
+        <FileHistoryMenu workspace={workspace} path={file.path} onView={setVersion} onRestore={(item) => void restoreHistoryVersion(item.id)} onError={setError} />
         {canPreview(file.path) && <div className="flex shrink-0 rounded-md bg-sunken p-0.5" role="group" aria-label="显示方式">
           {(['preview', 'code'] as const).map((value) => <button key={value} onClick={() => setMode(value)} aria-pressed={mode === value} title={value === 'preview' ? '预览' : '源码'}
             className={cn('grid h-5 w-6 place-items-center rounded', mode === value ? 'bg-overlay text-fg shadow-sm' : 'text-fg-3 hover:text-fg')}>{value === 'preview' ? <Eye size={12} /> : <Code2 size={12} />}</button>)}
@@ -523,6 +560,8 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
         className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">在 Atlas 中打开</button>}
       {!contextMenu.directory && <button type="button" role="menuitem" onClick={() => { addFileToContext(contextMenu.path); setContextMenu(null); }}
         className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">加入消息上下文</button>}
+      {!contextMenu.directory && <button type="button" role="menuitem" onClick={() => { void copyFileContent(contextMenu.path); setContextMenu(null); }}
+        className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">复制文件内容</button>}
       {!contextMenu.directory && window.atlasDesktop?.openPath && !workspace.startsWith('ssh://') && <button type="button" role="menuitem" onClick={() => { void openExternal(contextMenu.path); setContextMenu(null); }}
         className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">在外部程序中打开</button>}
       {!contextMenu.directory && window.atlasDesktop?.openFileInEditor && !workspace.startsWith('ssh://') && (['vscode', 'cursor', 'zed', 'idea', 'pycharm'] as const).map((editor) => <button key={editor} type="button" role="menuitem" onClick={() => { void openInEditor(contextMenu.path, editor); setContextMenu(null); }}
