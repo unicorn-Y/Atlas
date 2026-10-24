@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -31,8 +32,28 @@ async def _wait_with_cancel(future: asyncio.Future[Any], cancel: asyncio.Event) 
         await asyncio.gather(cancel_wait, return_exceptions=True)
 
 
+def _claim_stdio_channel() -> tuple[Any, Any]:
+    """Keep the JSON-RPC pipes for ourselves and hand child processes harmless fds.
+
+    On Windows a thread blocked in ReadFile on the stdin pipe also blocks any child process
+    (git, shells, tools) that inherits that same handle, so a prompt hangs right after the
+    first event. Children inheriting fd 1 would also write stray bytes into the protocol
+    stream. Duplicate the real pipes for the server, then point fd 0 at NUL and fd 1 at stderr.
+    """
+    rpc_in = os.fdopen(os.dup(0), "r", encoding="utf-8", newline="\n")
+    rpc_out = os.fdopen(os.dup(1), "w", encoding="utf-8", newline="\n")
+    null_fd = os.open(os.devnull, os.O_RDONLY)
+    os.dup2(null_fd, 0)
+    os.close(null_fd)
+    os.dup2(2, 1)
+    sys.stdin = open(os.devnull, encoding="utf-8")
+    sys.stdout = sys.stderr
+    return rpc_in, rpc_out
+
+
 async def serve_stdio(*, workspace: str | None = None) -> None:
     """Serve newline-delimited JSON-RPC requests and streamed run notifications."""
+    rpc_in, rpc_out = _claim_stdio_channel()
     from atlas.agent import AgentOrchestrator
     from atlas.config import DATA_ROOT
     from atlas.kernel.tools import kernel_tool_schemas
@@ -62,8 +83,8 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
                 message = await outgoing.get()
                 if message is None:
                     return
-                sys.stdout.write(json.dumps(message, ensure_ascii=False, default=str) + "\n")
-                sys.stdout.flush()
+                rpc_out.write(json.dumps(message, ensure_ascii=False, default=str) + "\n")
+                rpc_out.flush()
 
         writer = asyncio.create_task(write_output(), name="atlas-app-server-stdout")
 
@@ -203,7 +224,7 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
                 active_tasks.pop(session_id, None)
 
         while True:
-            line = await asyncio.to_thread(sys.stdin.readline)
+            line = await asyncio.to_thread(rpc_in.readline)
             if not line:
                 break
             try:
