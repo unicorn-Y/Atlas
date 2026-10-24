@@ -143,7 +143,7 @@ This is the source map consumed by `atlas.upstream.watch`. The rows track Hermes
 
 `config.py`, `hermes_constants.py`, `utils.py`, `agent/model_metadata.py`, `agent/turn_usage.py`, `agent/ssl_verify.py`, `agent/async_utils.py`, `agent/session_persistence.py`, `agent/session_activity.py`, `agent/skill_commands.py`, `agent/memory_manager.py`, `agent/vault_store.py`, `state/dashboard_procs.py`, `state/session_keys.py`, `state/startup_watchdog.py`, `state/sqlite_safe_read.py`, `state/timefmt.py`, `tools/tool_backend_helpers.py`, `tools/file_tools.py`, and the browser `computer_use/_platform.py` support are Atlas-owned adapters or narrow local implementations around the listed source ports.
 
-The Hermes CUA plugin, provider plugin manager, auxiliary-client bootstrap, and unsupported cloud/extension/real-profile browser providers were not carried forward. Atlas uses its native computer runtime, ModelRouter, plugin runtime, and local browser path. The upstream watcher intentionally reports source diffs as review data; it does not merge or apply them.
+Atlas now includes concrete browser takeover paths for a copied Chrome/Edge profile, a Chrome with remote debugging enabled, and the paired MV3 extension, plus auxiliary screenshot vision through ModelRouter. The Hermes provider plugin registry and cloud-browser providers remain out of scope; Atlas uses its native computer runtime, ModelRouter, plugin runtime, and local browser path. The upstream watcher intentionally reports source diffs as review data; it does not merge or apply them.
 
 ## BOOT-1 import-check repair
 
