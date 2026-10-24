@@ -29,7 +29,7 @@ export function guessIntent(text: string): Intent | null {
 }
 
 /** Something an @ or # mention can refer to. */
-export interface MentionItem { kind: 'file' | 'conversation'; id: string; label: string; hint?: string }
+export interface MentionItem { kind: 'file' | 'conversation' | 'resource'; id: string; label: string; hint?: string }
 
 /** The @, #, or $ query being typed at the end of the draft, if any. */
 export function mentionAt(value: string): { trigger: '@' | '#' | '$'; query: string; start: number } | null {
@@ -465,7 +465,7 @@ export default function Composer(props: ComposerProps) {
         className={cn('flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-[13.5px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand', index === cursor && 'bg-selected')}>
         {'skillName' in item ? <span className="flex shrink-0 items-center gap-1.5 font-mono text-[13px] text-fg"><Sparkles size={13} className="text-brand" />{item.label}</span>
           : 'run' in item ? <span className="shrink-0 font-mono text-[13px] text-fg">{item.label}</span>
-          : <span className="flex min-w-0 shrink-0 items-center gap-1.5 text-fg">{item.kind === 'file' ? <AtSign size={13} className="text-fg-3" /> : <Hash size={13} className="text-fg-3" />}<span className="max-w-[260px] truncate">{item.label}</span></span>}
+          : <span className="flex min-w-0 shrink-0 items-center gap-1.5 text-fg">{item.kind === 'conversation' ? <Hash size={13} className="text-fg-3" /> : <AtSign size={13} className="text-fg-3" />}<span className="max-w-[260px] truncate">{item.label}</span></span>}
         {('run' in item || 'skillName' in item) && item.source && <span className="shrink-0 rounded bg-sunken px-1.5 py-0.5 text-[10.5px] text-fg-3">{item.source}</span>}
         {('run' in item || 'skillName' in item) && item.group && <span className="shrink-0 rounded bg-sunken px-1.5 py-0.5 text-[10.5px] text-fg-3">{item.group}</span>}
         {item.hint && <span className="min-w-0 truncate text-[12.5px] text-fg-3">{item.hint}</span>}
@@ -516,7 +516,7 @@ export default function Composer(props: ComposerProps) {
     </div>}
     {props.mentions && props.mentions.length > 0 && <div className="mt-2.5 flex flex-wrap gap-2" aria-label="引用的上下文">
       {props.mentions.map((item) => <span key={`${item.kind}:${item.id}`} className="inline-flex max-w-[260px] items-center gap-1 rounded-lg bg-brand-soft py-1 pr-1 pl-2 text-[12.5px] text-fg">
-        {item.kind === 'file' ? <AtSign size={12} className="shrink-0" /> : <Hash size={12} className="shrink-0" />}<span className="min-w-0 truncate" title={item.hint ?? item.label}>{item.label}</span>
+        {item.kind === 'conversation' ? <Hash size={12} className="shrink-0" /> : <AtSign size={12} className="shrink-0" />}<span className="min-w-0 truncate" title={item.hint ?? item.label}>{item.label}</span>
         <button type="button" aria-label={`移除引用 ${item.label}`} onClick={() => props.onRemoveMention?.(item)} className="grid size-5 place-items-center rounded-md hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"><X size={12} /></button>
       </span>)}
     </div>}

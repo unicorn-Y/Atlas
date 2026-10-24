@@ -799,6 +799,43 @@ async def execute_tools_node(
                         max_tokens=900, temperature=0.2,
                     )
                     result = {"content": [{"type": "text", "text": answer.text}], "is_error": False}
+            elif fn_name == "read_session":
+                conversation_id = str(fn_args.get("conversation_id") or "").strip()
+                if not conversation_id or await agent._memory.get_conversation(conversation_id) is None:
+                    raise ValueError("找不到指定会话。")
+                try:
+                    limit = max(1, min(50, int(fn_args.get("limit", 10))))
+                except (TypeError, ValueError):
+                    limit = 10
+                rows = await agent._memory.get_messages_with_rowid(conversation_id)
+                messages = [{"role": str(row.get("role", "")), "content": str(row.get("content", ""))}
+                            for row in rows[-limit:]]
+                result = {"data": {"conversation_id": conversation_id, "messages": messages},
+                          "content": [{"type": "text", "text": json.dumps(messages, ensure_ascii=False)}],
+                          "is_error": False}
+            elif fn_name == "send_to_session":
+                conversation_id = str(fn_args.get("conversation_id") or "").strip()
+                message = str(fn_args.get("message") or "").strip()
+                target = await agent._memory.get_conversation(conversation_id) if conversation_id else None
+                source = await agent._memory.get_conversation(str(ctx.conversation_id or "")) if ctx.conversation_id else None
+                if target is None:
+                    raise ValueError("找不到目标会话。")
+                if not message:
+                    raise ValueError("消息不能为空。")
+                from atlas import server
+                from atlas.api.run_drive import _handle_run_start
+                manager = getattr(server, "runtime_mgr", None)
+                if manager is None:
+                    raise RuntimeError("当前 Atlas 运行时无法启动目标会话。")
+                source_title = str((source or {}).get("title") or ctx.conversation_id or "未知会话")
+                marked = f"来自会话 {source_title}（{ctx.conversation_id or ''}）的消息：\n\n{message}"
+                await _handle_run_start(f"peer:{uuid.uuid4().hex}", {
+                    "conversation_id": conversation_id, "content": marked, "source": "peer",
+                    "workspace": target.get("workspace"),
+                }, manager=manager)
+                result = {"data": {"conversation_id": conversation_id, "started": True},
+                          "content": [{"type": "text", "text": f"已向会话 {target.get('title') or conversation_id} 发送消息并开始运行。"}],
+                          "is_error": False}
             elif fn_name == "todo_list":
                 if fn_args.get("todos") is not None:
                     snapshot = ctx.todo_store.write(

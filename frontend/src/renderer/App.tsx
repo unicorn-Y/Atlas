@@ -612,9 +612,21 @@ export default function App() {
 
   const submit = async (fromHome: boolean, immediate = false) => {
     if (!input.trim() && !attachments.length && !files.length && !mentions.length) return;
-    const text = input;
+    let text = input;
     const images = attachments;
     const documents = files.map(({ name, mime, data_base64 }) => ({ name, mime, data_base64 }));
+    const sessionRefs = mentions.filter((item) => item.kind === 'conversation');
+    if (sessionRefs.length) text += `\n\n${sessionRefs.map((item) => `请用 read_session 读取会话 ${item.id}（${item.label}）。`).join('\n')}`;
+    for (const reference of mentions.filter((item) => item.kind === 'resource')) {
+      const [server_name, ...uriParts] = reference.id.split('\n');
+      const uri = uriParts.join('\n');
+      const payload = await api<{ contents: Array<{ text?: string; mime_type?: string }> }>(store.apiBaseUrl, '/api/mcp/resources/read', {
+        method: 'POST', json: { server_name, uri },
+      });
+      const content = payload.contents.map((item) => item.text ?? '').join('\n');
+      const bytes = new TextEncoder().encode(content); let binary = ''; bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+      documents.push({ name: `mcp-${reference.label.replace(/[^\p{L}\p{N}._-]+/gu, '_')}.txt`, mime: 'text/plain', data_base64: btoa(binary) });
+    }
     // `!command` runs straight in the terminal panel instead of going to the Agent.
     if (!fromHome && text.trim().startsWith('!') && text.trim().length > 1) {
       if (typeof activeConversation?.workspace !== 'string' || !activeConversation.workspace) { setToast('先选工作目录，终端会在那里打开'); return; }
@@ -656,7 +668,7 @@ export default function App() {
         store.beginConversationDraft(defaultWorkspace || null);
       }
     }
-    const refs = { files: mentions.filter((item) => item.kind === 'file').map((item) => item.id), conversations: mentions.filter((item) => item.kind === 'conversation').map((item) => item.id).slice(0, 3) };
+    const refs = { files: mentions.filter((item) => item.kind === 'file').map((item) => item.id), conversations: [] };
     setMentions([]);
     const messageSkills = resolveMessageSkillReferences(text, store.skills.map((skill) => skill.name));
     if (immediate && activeRun && !runDone) void store.sendNow(text, images, documents, refs);
@@ -1288,11 +1300,23 @@ export default function App() {
       return store.conversations.filter((item) => item.id !== store.activeConversationId && item.title.toLowerCase().includes(q) && !taken.has(`conversation:${item.id}`))
         .slice(0, 8).map((item) => ({ kind: 'conversation' as const, id: item.id, label: item.title, hint: relativeTime(item.updated_at) }));
     }
+    const q = query.toLocaleLowerCase();
+    const sessions = store.conversations.filter((item) => item.id !== store.activeConversationId && item.title.toLocaleLowerCase().includes(q) && !taken.has(`conversation:${item.id}`))
+      .slice(0, 6).map((item) => ({ kind: 'conversation' as const, id: item.id, label: item.title, hint: `会话 · ${item.id}` }));
+    const mcp = await api<{ servers: Array<{ name: string; resources?: Array<{ uri: string; name?: string; title?: string; description?: string }> }> }>(store.apiBaseUrl, '/api/mcp/resources').catch(() => ({ servers: [] }));
+    const resources = mcp.servers.flatMap((server) => (server.resources ?? []).map((resource) => ({
+      kind: 'resource' as const, id: `${server.name}\n${resource.uri}`,
+      label: resource.title || resource.name || resource.uri,
+      hint: `MCP · ${server.name} · ${resource.description || resource.uri}`,
+    }))).filter((item) => item.label.toLocaleLowerCase().includes(q) || item.hint?.toLocaleLowerCase().includes(q))
+      .filter((item) => !taken.has(`resource:${item.id}`)).slice(0, 6);
     const root = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : '';
     // @ refers to files in the working directory; without one there is nothing to search.
-    if (!root || !query) return [];
+    if (!query) return [...sessions, ...resources].slice(0, 12);
+    if (!root) return [...sessions, ...resources].slice(0, 12);
     const hits = await backend.searchWorkspace(root, query, 12);
-    return hits.filter((hit) => hit.type === 'file' && !taken.has(`file:${hit.path}`)).map((hit) => ({ kind: 'file' as const, id: hit.path, label: hit.name, hint: hit.path }));
+    const files = hits.filter((hit) => hit.type === 'file' && !taken.has(`file:${hit.path}`)).map((hit) => ({ kind: 'file' as const, id: hit.path, label: hit.name, hint: hit.path }));
+    return [...files, ...sessions, ...resources].slice(0, 12);
   };
   const currentModel = store.models.find((model) => model.id === store.model);
   const worktreeActive = Boolean(activeConversation?.worktree_path);
@@ -1788,7 +1812,7 @@ export default function App() {
       </nav>
       <div className="relative min-h-0 overflow-auto px-8 pt-7 pb-8">
         <button aria-label="关闭设置" onClick={() => setSheet(null)} className="absolute top-4 right-4 grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={17} /></button>
-        {sheet === 'models' && <><div className="mb-4 flex items-center justify-between rounded-xl border border-edge bg-sunken px-3 py-2"><span className="text-[12px] text-fg-2">主模型失败后，按备用链顺序继续本轮</span><Button size="sm" variant="secondary" onClick={() => setFallbackOpen(true)}>备用模型链</Button></div><SettingsPage username={username} onSaveUsername={saveUsername} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} errorDetail={store.errorDetail} models={store.models} selectedModel={store.model} subagentsEnabled={store.subagentsEnabled} subagentDefaultModel={store.subagentDefaultModel} onSaveSubagentSettings={(enabled, model) => store.saveSubagentSettings(enabled, model)} providers={store.providers} reasoningStages={store.reasoningStages} onBack={() => setSheet(null)} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} statusBar={statusBar} onStatusBarChange={updateStatusBar} onLoadProviders={store.loadProviders} onSaveProviderConfig={store.saveProviderConfig} onAddProviderKey={(providerId, secret, label) => store.addProviderKey(providerId, secret, label)} onRemoveProviderKey={(providerId, keyId) => void store.removeProviderKey(providerId, keyId)} onUpdateModel={(modelId, patch) => store.updateCustomModel(modelId, patch)} onDeleteModel={(modelId) => void store.deleteCustomModel(modelId)} onSaveReasoningStages={(config) => void store.saveReasoningStages(config)} /></>}
+        {sheet === 'models' && <><div className="mb-4 flex items-center justify-between rounded-xl border border-edge bg-sunken px-3 py-2"><span className="text-[12px] text-fg-2">主模型失败后，按备用链顺序继续本轮</span><Button size="sm" variant="secondary" onClick={() => setFallbackOpen(true)}>备用模型链</Button></div><SettingsPage username={username} onSaveUsername={saveUsername} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} errorDetail={store.errorDetail} models={store.models} selectedModel={store.model} subagentsEnabled={store.subagentsEnabled} subagentDefaultModel={store.subagentDefaultModel} onSaveSubagentSettings={(enabled, model) => store.saveSubagentSettings(enabled, model)} providers={store.providers} reasoningStages={store.reasoningStages} onBack={() => setSheet(null)} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} statusBar={statusBar} onStatusBarChange={updateStatusBar} onLoadProviders={store.loadProviders} onSaveProviderConfig={store.saveProviderConfig} onAddProviderKey={(providerId, secret, label) => store.addProviderKey(providerId, secret, label)} onRemoveProviderKey={(providerId, keyId) => void store.removeProviderKey(providerId, keyId)} onUpdateModel={(modelId, patch) => store.updateCustomModel(modelId, patch)} onDeleteModel={(modelId) => store.deleteCustomModel(modelId)} onSaveReasoningStages={(config) => store.saveReasoningStages(config)} /></>}
         {sheet === 'advanced' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">高级设置</h3>
           <p className="mt-1 mb-5 text-[13px] text-fg-3">配置会话压缩使用的辅助模型。</p>

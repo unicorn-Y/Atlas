@@ -93,6 +93,22 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
             "merge": {"type": "boolean"},
         }, "required": [], "additionalProperties": False},
     }})
+    tools.extend([
+        {"type": "function", "function": {
+            "name": "read_session",
+            "description": "读取另一个 Atlas 会话最近的消息。",
+            "parameters": {"type": "object", "properties": {
+                "conversation_id": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            }, "required": ["conversation_id"], "additionalProperties": False},
+        }},
+        {"type": "function", "function": {
+            "name": "send_to_session",
+            "description": "向另一个 Atlas 会话发送消息，并立刻开始那边的一轮运行。消息会注明来源会话。",
+            "parameters": {"type": "object", "properties": {
+                "conversation_id": {"type": "string"}, "message": {"type": "string"},
+            }, "required": ["conversation_id", "message"], "additionalProperties": False},
+        }},
+    ])
     tools.append({"type": "function", "function": {
         "name": "project_note",
         "description": "Append durable project guidance to .atlas/NOTES.md. Use for repeatable test/build commands, code conventions, user preferences, and known pitfalls. Do not store one-time task details.",
