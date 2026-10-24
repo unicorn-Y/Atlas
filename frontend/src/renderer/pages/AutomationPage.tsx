@@ -86,9 +86,11 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
   const [importing, setImporting] = useState(false);
   const [editingId, setEditingId] = useState('');
   const [webhookCredential, setWebhookCredential] = useState<{ id: string; secret: string; url: string } | null>(null);
+  const [emergency, setEmergency] = useState<{ paused: boolean; affected?: Array<{ id: string; name?: string; cancelled?: number; error?: string }> }>({ paused: false });
+  const [emergencyBusy, setEmergencyBusy] = useState(false);
 
   const refresh = useCallback(() => { void loadAutomations(); }, [loadAutomations]);
-  useEffect(() => { refresh(); void loadAgents(); }, [refresh, loadAgents]);
+  useEffect(() => { refresh(); void loadAgents(); void automationsApi.emergencyStatus(apiBaseUrl).then(setEmergency).catch(() => undefined); }, [refresh, loadAgents, apiBaseUrl]);
   useEffect(() => setConfirmDelete(false), [selected]);
   useEffect(() => {
     if (selected || !automations.length) return;
@@ -156,6 +158,14 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
     <header className="page-head">
       <div><h1>自动化</h1><p>让 Atlas 按时、或者在某件事发生时替你做事。心跳和定时任务都在这里。</p></div>
       {tab === 'tasks' && <div className="btns">
+        <button className={emergency.paused ? 'btn primary' : 'btn danger'} disabled={!connected || emergencyBusy} aria-label={emergency.paused ? '恢复全局自动化' : '紧急暂停所有自动化'}
+          onClick={() => { setEmergencyBusy(true); void (emergency.paused ? automationsApi.emergencyResume(apiBaseUrl) : automationsApi.emergencyPause(apiBaseUrl)).then((result) => {
+            setEmergency({ paused: result.paused, affected: 'affected' in result ? result.affected : emergency.affected });
+            onToast(result.paused ? `全局暂停完成：${result.affected?.length ?? 0} 项自动化已处理` : `已恢复 ${result.resumed?.length ?? 0} 项此前启用的自动化${result.failures?.length ? `；${result.failures.length} 项失败` : ''}`);
+            refresh();
+          }).catch((error) => onToast(`全局控制失败：${error instanceof Error ? error.message : String(error)}`)).finally(() => setEmergencyBusy(false)); }}>
+          {emergencyBusy ? <LoaderCircle size={15} className="spin" /> : emergency.paused ? <Play size={15} /> : <Pause size={15} />}{emergency.paused ? '恢复全部' : '紧急暂停全部'}
+        </button>
         <button className="btn ghost" onClick={() => void refresh()} disabled={loading} aria-label="刷新自动化">{loading ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />}</button>
         <button className="btn" disabled={importing || !connected} onClick={() => void doImport()} title="把旧版 /api/schedules 的调度一次性导入">
           {importing ? <LoaderCircle size={15} className="spin" /> : <Upload size={15} />}导入旧调度
@@ -174,6 +184,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
     {engineStarted === false && <div className="error-note" role="status" style={{ background: 'var(--sunken)', color: 'var(--fg-2)' }}>
       <Power size={15} />自动化引擎（DBOS）还没有接线：列表和编辑可用，「立即运行 / 运行历史」暂不可用。
     </div>}
+    {emergency.paused && <div className="error-note" role="status"><strong>全局紧急暂停中。</strong> 新触发已阻止；恢复只会重新启用暂停前已启用的任务。{emergency.affected?.map((item) => <span key={item.id} className="block">{item.name ?? item.id}：{item.error ? `失败：${item.error}` : `已停止 ${item.cancelled ?? 0} 个运行`}</span>)}</div>}
 
     {migrationReport && <details className="card glass mb-3.5 px-4 py-3" aria-label="导入报告">
       <summary className="cursor-pointer select-none text-[13px] text-fg-2">

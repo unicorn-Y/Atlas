@@ -150,10 +150,32 @@ async def list_automations() -> dict[str, Any]:
     return {"automations": items, "engine_started": engine.started}
 
 
+@automation_router.get("/global-pause")
+async def global_pause_status() -> dict[str, Any]:
+    from atlas.config import DATA_ROOT
+    path = DATA_ROOT / "automation-emergency-pause.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"paused": False, "resume_ids": [], "affected": []}
+
+
+@automation_router.post("/global-pause")
+async def global_pause() -> dict[str, Any]:
+    return await _engine().emergency_pause()
+
+
+@automation_router.post("/global-resume")
+async def global_resume() -> dict[str, Any]:
+    return await _engine().emergency_resume()
+
+
 @automation_router.post("")
 async def create_automation(body: AutomationCreate) -> dict[str, Any]:
     engine = _engine()
     record = normalize_record(body.model_dump())
+    if engine._global_pause_active():
+        record["state"]["paused_reason"] = "global-emergency"
     record["name"] = record["name"] or record["id"]
     try:
         saved = engine.store.put(record)
@@ -182,6 +204,8 @@ async def patch_automation(automation_id: str, body: AutomationPatch) -> dict[st
         if section in updates and isinstance(updates[section], dict):
             updates[section] = {**record[section], **updates[section]}
     merged = {**record, **updates}
+    if engine._global_pause_active() and merged.get("enabled") and not (merged.get("state") or {}).get("paused_reason"):
+        merged["state"] = {**(merged.get("state") or {}), "paused_reason": "global-emergency"}
     try:
         saved = engine.store.put(merged)
     except AutomationValidationError as exc:
@@ -257,6 +281,8 @@ async def resume_automation(automation_id: str) -> dict[str, Any]:
         return await engine.resume(automation_id)
     except KeyError as exc:
         raise _not_found(automation_id) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @automation_router.post("/{automation_id}/webhook/rotate-secret")

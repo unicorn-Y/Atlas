@@ -222,6 +222,8 @@ class AutomationEngine:
 
         @DBOS.workflow(name=WORKFLOW_RUN_NAME)
         async def automation_run(scheduled_or_id: Any, ctx: Any = None, trigger_payload: Any = None) -> dict[str, Any]:
+            if engine._global_pause_active():
+                return {"status": "paused", "reason": "global-emergency-pause"}
             # cron 触发: (datetime, context dict)；enqueue 触发: (id, trigger str)
             if isinstance(scheduled_or_id, str):
                 automation_id, trigger = scheduled_or_id, str(ctx or "manual")
@@ -239,7 +241,8 @@ class AutomationEngine:
             while True:
                 record = store.get(automation_id)
                 if (
-                    record is None
+                    engine._global_pause_active()
+                    or record is None
                     or not record.get("enabled")
                     or record["state"].get("paused_reason")
                 ):
@@ -346,9 +349,10 @@ class AutomationEngine:
             return
         await self._sync_automation(normalize_record(record))
 
-    async def _sync_automation(self, record: dict[str, Any]) -> None:
+    async def _sync_automation(self, record: dict[str, Any], *, emergency_resume: bool = False) -> None:
         kind = record["trigger"]["kind"]
-        enabled = bool(record.get("enabled")) and not record["state"].get("paused_reason")
+        enabled = (bool(record.get("enabled")) and not record["state"].get("paused_reason")
+                   and (emergency_resume or not self._global_pause_active()))
         if kind == "cron":
             self._sync_cron_schedule(record, enabled)
         elif kind == "interval":
@@ -512,6 +516,8 @@ class AutomationEngine:
         from dbos import DBOS
 
         self._require_started()
+        if self._global_pause_active():
+            raise RuntimeError("所有自动化正处于全局紧急暂停状态")
         options: dict[str, Any] = {
             "workflow_name": WORKFLOW_RUN_NAME,
             "queue_name": self.QUEUE_NAME,
@@ -550,6 +556,8 @@ class AutomationEngine:
         """
         record = self._require_automation(automation_id)
         self._require_started()
+        if self._global_pause_active():
+            raise RuntimeError("所有自动化正处于全局紧急暂停状态")
         if not record.get("enabled") or record["state"].get("paused_reason"):
             raise RuntimeError("automation 已停用或暂停，先 resume 再 run-now")
         handle = await self._enqueue_run(automation_id, trigger)
@@ -565,6 +573,8 @@ class AutomationEngine:
         """Event/webhook 入口：经 dedup 入队（同一 automation 活跃时合并为既有 run）。"""
         record = self._require_automation(automation_id)
         self._require_started()
+        if self._global_pause_active():
+            return {"fired": False, "reason": "global-emergency-pause"}
         if not record.get("enabled") or record["state"].get("paused_reason"):
             return {"fired": False, "reason": "paused"}
         handle = await self._enqueue_run(automation_id, source, trigger_payload=payload)
@@ -639,12 +649,89 @@ class AutomationEngine:
         await self._sync_automation(record)  # cron→pause schedule；interval→cancel loop/runs
         return {"id": automation_id, "paused": True, "reason": reason}
 
-    async def resume(self, automation_id: str) -> dict[str, Any]:
+    async def resume(self, automation_id: str, *, emergency_resume: bool = False) -> dict[str, Any]:
         self._require_automation(automation_id)
+        if self._global_pause_active() and not emergency_resume:
+            raise RuntimeError("全局紧急暂停期间不能单独恢复自动化")
         self._store.update_state(automation_id, paused_reason=None)
         record = self._require_automation(automation_id)
-        await self._sync_automation(record)
+        await self._sync_automation(record, emergency_resume=emergency_resume)
         return {"id": automation_id, "paused": False}
+
+    async def emergency_pause(self) -> dict[str, Any]:
+        """Pause every automation, persist the exact resume set, then cancel active runs."""
+        from atlas.config import DATA_ROOT
+        import json, os, tempfile
+
+        lock = getattr(self, "_emergency_lock", None)
+        if lock is None:
+            lock = self._emergency_lock = asyncio.Lock()
+        async with lock:
+            manifest = DATA_ROOT / "automation-emergency-pause.json"
+            records = self._store.list()
+            state = {"version": 1, "paused": True, "resume_ids": [r["id"] for r in records
+                     if r.get("enabled") and not r.get("state", {}).get("paused_reason")],
+                     "affected": [], "updated_at": __import__("time").time()}
+            manifest.parent.mkdir(parents=True, exist_ok=True)
+            fd, temporary = tempfile.mkstemp(prefix=".automation-emergency-", dir=manifest.parent)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    json.dump(state, handle, ensure_ascii=False)
+                    handle.flush(); os.fsync(handle.fileno())
+                os.replace(temporary, manifest)
+            finally:
+                if os.path.exists(temporary): os.unlink(temporary)
+            for record in records:
+                aid = str(record["id"])
+                try:
+                    if record.get("enabled") and not record.get("state", {}).get("paused_reason"):
+                        await self.pause(aid, reason="global-emergency")
+                    cancelled = await self.cancel(aid)
+                    state["affected"].append({"id": aid, "name": record.get("name", aid),
+                                              "cancelled": len(cancelled.get("cancelled", [])), "error": None})
+                except Exception as exc:
+                    state["affected"].append({"id": aid, "name": record.get("name", aid),
+                                              "cancelled": 0, "error": str(exc)})
+            state["updated_at"] = __import__("time").time()
+            manifest.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+            return state
+
+    async def emergency_resume(self) -> dict[str, Any]:
+        """Resume only automations recorded as enabled before the global pause."""
+        from atlas.config import DATA_ROOT
+        import json
+
+        lock = getattr(self, "_emergency_lock", None)
+        if lock is None:
+            lock = self._emergency_lock = asyncio.Lock()
+        async with lock:
+            manifest = DATA_ROOT / "automation-emergency-pause.json"
+            try:
+                state = json.loads(manifest.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                state = {"paused": False, "resume_ids": [], "affected": []}
+            resumed, failures = [], []
+            for aid in state.get("resume_ids", []):
+                record = self._store.get(str(aid))
+                if not record or not record.get("enabled") or record.get("state", {}).get("paused_reason") != "global-emergency":
+                    continue
+                try:
+                    await self.resume(str(aid), emergency_resume=True); resumed.append(str(aid))
+                except Exception as exc:
+                    failures.append({"id": aid, "error": str(exc)})
+            state.update({"paused": False, "resume_ids": [], "resumed": resumed, "failures": failures})
+            manifest.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+            return state
+
+    @staticmethod
+    def _global_pause_active() -> bool:
+        """Authoritative gate for manual, event and newly-added triggers."""
+        import json
+        from atlas.config import DATA_ROOT
+        try:
+            return bool(json.loads((DATA_ROOT / "automation-emergency-pause.json").read_text(encoding="utf-8")).get("paused"))
+        except (OSError, ValueError, AttributeError):
+            return False
 
     # -- payload 执行（step 内运行）-------------------------------------------------
 
