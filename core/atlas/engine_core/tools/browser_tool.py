@@ -773,7 +773,7 @@ def browser_navigate(url: str, task_id: Optional[str] = None) -> str:
     result = _session._run_browser_command(nav_session_key, "open", [url],
                                   timeout=_get_open_command_timeout(first_open=is_first_nav))
     if not result.get("success"):
-        return _dumps(_err(result.get("error", "Navigation failed")))
+        return _dumps(_err(_explain_navigation_error(str(result.get("error") or "Navigation failed"))))
 
     data = result.get("data", {})
     title = data.get("title", "")
@@ -783,6 +783,11 @@ def browser_navigate(url: str, task_id: Optional[str] = None) -> str:
         return blocked
 
     response = {"success": True, "url": final_url, "title": title}
+    mode = str((session_info.get("features") or {}).get("live_chrome") and "live_chrome"
+               or _browser_cfg("mode", "", lambda value: str(value or "").lower(), "browser.mode"))
+    response["browser_target"] = ("real_profile" if (session_info.get("features") or {}).get("real_profile")
+                                  else "live_chrome" if mode == "live_chrome"
+                                  else "cdp" if session_info.get("cdp_url") else "atlas")
     features = session_info.get("features") or {}
     if features.get("real_profile"):  # auditability: this ran on the user's real-profile copy-browser
         response["used_real_profile"] = True
@@ -793,6 +798,34 @@ def browser_navigate(url: str, task_id: Optional[str] = None) -> str:
     _add_navigate_warnings(response, title, session_info if is_first_nav else None)
     _attach_auto_snapshot(response, nav_session_key)
     return _dumps(response)
+
+
+def _explain_navigation_error(error: str) -> str:
+    """Turn common Chromium network failures into actionable tool feedback."""
+    lowered = error.lower()
+    try:
+        from atlas.config import load_user_settings
+        proxy_configured = bool(((load_user_settings().get("browser") or {}).get("proxy") or "").strip())
+    except Exception:
+        proxy_configured = False
+    try:
+        import urllib.request
+        system_proxy_configured = bool(urllib.request.getproxies())
+    except Exception:
+        system_proxy_configured = False
+    if any(term in lowered for term in ("name_not_resolved", "name not resolved", "enotfound", "dns_probe", "nxdomain")):
+        return f"DNS lookup failed: {error}. Check the hostname, DNS settings, and VPN/network connection."
+    if any(term in lowered for term in ("cert_authority", "certificate", "ssl_protocol", "privacy error")):
+        return f"TLS/certificate validation failed: {error}. Check the computer's date and certificate trust; if an inspection proxy is used, install its CA certificate."
+    if any(term in lowered for term in ("proxy", "tunnel_connection_failed")):
+        return f"The browser could not reach its proxy: {error}. " + ("A browser proxy is configured; verify its address and availability." if proxy_configured else "Check the system proxy and VPN settings.")
+    if any(term in lowered for term in ("timed out", "timeout", "err_timed_out", "navigation timeout")):
+        return f"The page load timed out: {error}. Check the site's availability, network latency, and proxy/VPN settings, then retry."
+    if "http_response_code_failure" in lowered and system_proxy_configured:
+        return f"The browser received an invalid HTTP response while loading the page: {error}. A system proxy is configured; verify that proxy and its upstream DNS/network path."
+    if "http_response_code_failure" in lowered:
+        return f"The browser received an invalid HTTP response while loading the page: {error}. Check the site and any system proxy/VPN settings."
+    return f"Page load failed: {error}. Check the URL, network connection, DNS, certificates, and system proxy settings."
 
 
 def _add_navigate_warnings(response: dict[str, Any], title: str, first_nav_session: Optional[dict[str, Any]]) -> None:
