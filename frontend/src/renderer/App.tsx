@@ -1032,6 +1032,16 @@ export default function App() {
         case 'focusComposer': document.querySelector<HTMLTextAreaElement>('textarea[aria-label="消息内容"]')?.focus(); break;
         case 'stopRun': if (store.busy) store.stopTask(); break;
         case 'sendNow': void submit(false, true); break;
+        case 'stashInput': {
+          const value = input.trim();
+          if (!value) { window.dispatchEvent(new Event('atlas:open-input-stash')); break; }
+          const key = `atlas.input-stash.${store.activeConversationId || 'home'}`;
+          let saved: Array<{ id: string; text: string; createdAt: string }> = [];
+          try { const parsed: unknown = JSON.parse(localStorage.getItem(key) ?? '[]'); if (Array.isArray(parsed)) saved = parsed.filter((item) => item && typeof item.text === 'string'); } catch { /* corrupt stash is ignored */ }
+          saved.push({ id: crypto.randomUUID(), text: input, createdAt: new Date().toISOString() });
+          try { localStorage.setItem(key, JSON.stringify(saved.slice(-30))); } catch { /* storage unavailable */ }
+          setInput(''); writeDraft(store.activeConversationId, ''); window.dispatchEvent(new Event('atlas:open-input-stash')); break;
+        }
         case 'sidebarSearch': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.search' } })); break;
         case 'sidebarProjectPicker': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.project-picker' } })); break;
         case 'sidebarNextGroup': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.next-group' } })); break;
@@ -1213,6 +1223,14 @@ export default function App() {
     { id: 'version', label: '/version', hint: '显示 Atlas 版本', run: () => setToast(`Atlas ${__APP_VERSION__}`) },
     { id: 'diff', label: '/diff', hint: '查看本次运行的文件改动', run: () => showInspectorTab('changes') },
     { id: 'model', label: '/model', hint: '选择或切换模型', takesArgument: true, run: (query: string) => { const found = store.models.find((item) => item.id.toLowerCase() === query.trim().toLowerCase() || (item.name ?? '').toLowerCase() === query.trim().toLowerCase()); if (found) void store.selectModel(found.id); else setSheet('models'); } },
+    { id: 'editor', label: '/editor', hint: '用系统默认编辑器撰写长消息', run: () => {
+      const open = window.atlasDesktop?.openMessageEditor;
+      if (!open) { setToast('外部编辑器只在桌面版可用'); return; }
+      void open(input).then((text) => { if (text !== null) { setInput(text); writeDraft(store.activeConversationId, text); } }).catch((error) => setToast(`编辑器打开失败：${error instanceof Error ? error.message : String(error)}`));
+    } },
+    { id: 'vim', label: '/vim', hint: '切换输入框 Vim 模式', run: () => {
+      const enabled = pref('vim-mode') !== 'true'; setPref('vim-mode', String(enabled)); window.dispatchEvent(new Event('atlas:vim-toggle')); setToast(`Vim 模式已${enabled ? '开启' : '关闭'}`);
+    } },
     { id: 'fallback', label: '/fallback', hint: '配置主模型失败后的备用模型顺序', run: () => setFallbackOpen(true) },
     { id: 'reasoning', label: '/reasoning', hint: '打开模型选择，查看当前可用的推理强度', run: () => setSheet('models') },
     { id: 'usage', label: '/usage', hint: '查看用量和费用', run: () => setSheet('usage') },
@@ -1440,6 +1458,11 @@ export default function App() {
     value: input, onChange: setInput, attachments, onPickImages: addFiles, onPickFolders: addFolderReferences, listening, onToggleMic: toggleSpeechInput,
     attachmentProgress, failedAttachmentCount: failedAttachmentReads.length, onRetryFailedAttachments: retryFailedAttachments,
     onEnhancePrompt: enhancePrompt, onAttachDrawing: attachDrawing, contextKey: store.activeConversationId,
+    onExternalEditor: () => {
+      const open = window.atlasDesktop?.openMessageEditor;
+      if (!open) { setToast('外部编辑器只在桌面版可用'); return; }
+      void open(input).then((text) => { if (text !== null) { setInput(text); writeDraft(store.activeConversationId, text); } }).catch((error) => setToast(`编辑器打开失败：${error instanceof Error ? error.message : String(error)}`));
+    },
     onRemoveAttachment: (index: number) => setAttachments((items) => items.filter((_, position) => position !== index)),
     files, onRemoveFile: (index: number) => setFiles((items) => items.filter((_, position) => position !== index)),
     findMentions, mentions, onAddMention: (item: MentionItem) => { if (item.id) setMentions((current) => [...current, item]); },
@@ -1568,6 +1591,18 @@ export default function App() {
       <Button size="sm" variant="ghost" aria-label={store.paused ? '继续当前运行' : '暂停当前运行'} onClick={() => store.togglePaused()}>{store.paused ? <Play /> : <Pause />}{store.paused ? '继续' : '暂停'}</Button>
       <Button size="sm" variant="ghost" aria-label="停止当前生成或运行" onClick={() => store.stopTask()}><Square />停止</Button>
     </>}
+  </div>;
+  const failedRun = [...store.runs].reverse().find((run) => run.conversationId === store.activeConversationId && run.status === 'failed' && store.runPrompts[run.id]);
+  const queuedRecovery = (store.queue[store.activeConversationId] ?? []).length > 0;
+  const recoveryHeader = (failedRun || queuedRecovery) && <div className="mb-2 flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[12px] text-fg-2">
+    <span className="flex-1">上次有未完成的任务</span>
+    <button type="button" className="rounded-md bg-brand px-2.5 py-1 text-white" onClick={() => queuedRecovery ? store.resumeQueue(store.activeConversationId) : failedRun && store.retryRun(failedRun.id)}>继续</button>
+    <button type="button" className="rounded-md px-2 py-1 text-fg-3 hover:bg-hover" onClick={() => {
+      useAtlasStore.setState((state) => {
+        const runPrompts = { ...state.runPrompts }; if (failedRun) delete runPrompts[failedRun.id];
+        return { runPrompts, queue: { ...state.queue, [store.activeConversationId]: [] } };
+      });
+    }}>丢弃</button>
   </div>;
   const updateGoal = async (command: string) => {
     const id = store.activeConversationId;
@@ -1768,7 +1803,7 @@ export default function App() {
             <div className="px-8 pb-5">
               <div className="mx-auto w-[min(760px,100%)]">
                 <Suspense fallback={null}>{queueStrip}{todoStrip}</Suspense>
-                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={<>{editBanner}{goalHeader}{runHeader}{rewindBanner}</>} />
+                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={<>{editBanner}{goalHeader}{recoveryHeader}{runHeader}{rewindBanner}</>} />
                 <div className="mt-1 flex min-w-0 items-center gap-1 px-1 text-[11.5px] text-fg-3">
                   <div className="flex min-w-0 shrink items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div>
                   <span className="flex-1" />

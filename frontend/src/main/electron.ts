@@ -2,7 +2,7 @@ import './stdoutSafety.js';
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerSaveBlocker, screen, session, shell, Tray } from 'electron';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { setImmediate } from 'node:timers';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -881,6 +881,27 @@ ipcMain.handle('shell:open-path', async (event, target?: unknown) => {
   if (RUNNABLE.test(target)) { shell.showItemInFolder(target); return 'revealed'; }
   const error = await shell.openPath(target);
   return error || 'opened';
+});
+
+ipcMain.handle('editor:open-message', async (event, rawText?: unknown) => {
+  if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame) {
+    throw new Error('External editor can only be opened from the Atlas main window');
+  }
+  const tempDir = mkdtempSync(path.join(app.getPath('temp'), 'atlas-message-'));
+  const filePath = path.join(tempDir, 'message.md');
+  writeFileSync(filePath, typeof rawText === 'string' ? rawText : '', 'utf8');
+  const configured = process.env.VISUAL || process.env.EDITOR || '';
+  const parts = configured.match(/(?:"[^"]*"|'[^']*'|[^\s]+)/g)?.map((item) => item.replace(/^(?:"(.*)"|'(.*)')$/, (_match, doubleQuoted, singleQuoted) => doubleQuoted ?? singleQuoted)) ?? [];
+  const command = parts[0] || (process.platform === 'win32' ? 'notepad.exe' : process.platform === 'darwin' ? 'open' : 'xdg-open');
+  const args = [...parts.slice(1), ...(command === 'open' ? ['-W', '-t', filePath] : [filePath])];
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(command, args, { stdio: 'ignore', windowsHide: true });
+      child.once('error', reject);
+      child.once('exit', (code) => code === 0 || code === null ? resolve() : reject(new Error(`Editor exited with code ${code}`)));
+    });
+    return readFileSync(filePath, 'utf8');
+  } finally { rmSync(tempDir, { recursive: true, force: true }); }
 });
 ipcMain.handle('skill-center:token', (event) => {
   if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame) {

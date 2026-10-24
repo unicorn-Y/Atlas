@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { Accessibility, ArrowLeft, ArrowRight, ArrowUp, AtSign, ChevronDown, Code2, File as FileIcon, Film, Hash, ImagePlus, Image as ImageIcon, Keyboard, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, Sparkles, RotateCcw, X, type LucideIcon } from 'lucide-react';
+import { Accessibility, ArrowLeft, ArrowRight, ArrowUp, AtSign, ChevronDown, Code2, ExternalLink, File as FileIcon, Film, Hash, ImagePlus, Image as ImageIcon, Keyboard, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, Sparkles, RotateCcw, Save, X, type LucideIcon } from 'lucide-react';
 import type { ModelInfo } from '@atlas/backend-adapter';
 import { fuzzyScore } from '../services/fuzzy';
 import { matchSlashCommands, registerSlashCommands, type SlashCommand } from '../services/slashCommands';
@@ -148,6 +148,7 @@ interface ComposerProps {
   onRemoveMention?: (item: MentionItem) => void;
   /** Called instead of inserting pasted text longer than LONG_PASTE characters. */
   onLongPaste?: (text: string) => void;
+  onExternalEditor?: () => void;
   attachmentProgress?: string;
   failedAttachmentCount?: number;
   onRetryFailedAttachments?: () => void;
@@ -164,8 +165,38 @@ export default function Composer(props: ComposerProps) {
   const hero = props.variant === 'hero';
   const [expert] = useExpertMode(backend.apiBaseUrl);
   const [enterToSend, setEnterToSend] = useState(readEnterToSend);
+  const [vimEnabled, setVimEnabled] = useState(() => { try { return localStorage.getItem('atlas.vim-mode') === 'true'; } catch { return false; } });
+  const [vimMode, setVimMode] = useState<'normal' | 'insert'>('insert');
+  const [stashOpen, setStashOpen] = useState(false);
+  const stashKey = `atlas.input-stash.${props.contextKey || 'home'}`;
+  const readStash = () => { try { const value: unknown = JSON.parse(localStorage.getItem(stashKey) ?? '[]'); return Array.isArray(value) ? value.filter((item): item is { id: string; text: string; createdAt: string } => Boolean(item && typeof item.id === 'string' && typeof item.text === 'string')) : []; } catch { return []; } };
+  const [stashes, setStashes] = useState(readStash);
   const [showShortcutHints, setShowShortcutHints] = useState(() => { try { return localStorage.getItem('atlas.shortcut-hints') !== 'false'; } catch { return true; } });
   const textRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const toggle = () => { const enabled = localStorage.getItem('atlas.vim-mode') === 'true'; setVimEnabled(enabled); setVimMode(enabled ? 'normal' : 'insert'); };
+    const openStash = () => { setStashes(readStash()); setStashOpen(true); };
+    window.addEventListener('atlas:vim-toggle', toggle);
+    window.addEventListener('atlas:open-input-stash', openStash);
+    return () => { window.removeEventListener('atlas:vim-toggle', toggle); window.removeEventListener('atlas:open-input-stash', openStash); };
+  }, [stashKey]);
+  useEffect(() => setStashes(readStash()), [stashKey]);
+  const saveStash = () => {
+    if (!props.value.trim()) { setStashOpen(true); setStashes(readStash()); return; }
+    const next = [...readStash(), { id: crypto.randomUUID(), text: props.value, createdAt: new Date().toISOString() }].slice(-30);
+    try { localStorage.setItem(stashKey, JSON.stringify(next)); } catch { /* local storage unavailable */ }
+    setStashes(next); props.onChange(''); setStashOpen(true);
+  };
+  const restoreStash = (id: string) => {
+    const item = stashes.find((entry) => entry.id === id); if (!item) return;
+    props.onChange(item.text); const next = stashes.filter((entry) => entry.id !== id);
+    try { localStorage.setItem(stashKey, JSON.stringify(next)); } catch { /* local storage unavailable */ }
+    setStashes(next); setStashOpen(false); window.requestAnimationFrame(() => textRef.current?.focus());
+  };
+  const deleteStash = (id: string) => {
+    const next = stashes.filter((entry) => entry.id !== id); setStashes(next);
+    try { localStorage.setItem(stashKey, JSON.stringify(next)); } catch { /* local storage unavailable */ }
+  };
   const valueRef = useRef(props.value);
   valueRef.current = props.value;
   const textareaId = useId();
@@ -181,6 +212,7 @@ export default function Composer(props: ComposerProps) {
   const historyRef = useRef<string[]>([]);
   const historyDraftRef = useRef('');
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const vimPendingDelete = useRef(false);
   useEffect(() => { historyRef.current = readHistory(); }, []);
   useEffect(() => {
     const refresh = () => setShowShortcutHints(readShortcutHints());
@@ -410,6 +442,58 @@ export default function Composer(props: ComposerProps) {
     ...(props.attachments.length > 1 ? [{ keys: '← / →', description: '在多张图片的预览中切换图片。' }] : []),
   ];
   const onKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (vimEnabled && !event.nativeEvent.isComposing) {
+      const textarea = event.currentTarget;
+      const value = props.value;
+      const position = textarea.selectionStart;
+      const select = (next: number) => { window.requestAnimationFrame(() => textarea.setSelectionRange(Math.max(0, Math.min(value.length, next)), Math.max(0, Math.min(value.length, next)))); };
+      if (vimMode === 'insert' && event.key === 'Escape') { event.preventDefault(); setVimMode('normal'); vimPendingDelete.current = false; return; }
+      if (vimMode === 'normal') {
+        if (event.key === 'i' || event.key === 'a' || event.key === 'o') {
+          event.preventDefault();
+          if (event.key === 'a') select(position + 1);
+          if (event.key === 'o') {
+            const lineEnd = value.indexOf('\n', position); const insertAt = lineEnd < 0 ? value.length : lineEnd;
+            props.onChange(value.slice(0, insertAt) + '\n' + value.slice(insertAt)); select(insertAt + 1);
+          }
+          setVimMode('insert'); return;
+        }
+        if (event.key === 'Escape') { event.preventDefault(); vimPendingDelete.current = false; return; }
+        event.preventDefault();
+        if (event.key === 'd') {
+          if (vimPendingDelete.current) {
+            const start = value.lastIndexOf('\n', Math.max(0, position - 1)) + 1;
+            const end = value.indexOf('\n', position);
+            props.onChange(value.slice(0, start) + value.slice(end < 0 ? value.length : end + 1)); select(start);
+            vimPendingDelete.current = false;
+          } else vimPendingDelete.current = true;
+          return;
+        }
+        vimPendingDelete.current = false;
+        if (event.key === 'x' && position < value.length) { props.onChange(value.slice(0, position) + value.slice(position + 1)); select(position); return; }
+        if (event.key === '0') { select(value.lastIndexOf('\n', Math.max(0, position - 1)) + 1); return; }
+        if (event.key === '$') { const end = value.indexOf('\n', position); select(end < 0 ? value.length : end); return; }
+        if (event.key === 'w' || event.key === 'b') {
+          const next = event.key === 'w' ? (value.slice(position).search(/\s/) < 0 ? value.length : position + value.slice(position).search(/\s/) + 1) : Math.max(0, value.slice(0, position).trimEnd().search(/\s+\S*$/));
+          select(next); return;
+        }
+        if (['h', 'j', 'k', 'l'].includes(event.key)) {
+          const start = value.lastIndexOf('\n', Math.max(0, position - 1)) + 1;
+          const endIndex = value.indexOf('\n', position); const end = endIndex < 0 ? value.length : endIndex;
+          const column = position - start;
+          let next = position;
+          if (event.key === 'h') next = Math.max(start, position - 1);
+          if (event.key === 'l') next = Math.min(end, position + 1);
+          if (event.key === 'j' || event.key === 'k') {
+            const targetStart = event.key === 'j' ? end + (end < value.length ? 1 : 0) : Math.max(0, start - 1 - (start > 0 ? 1 : 0));
+            const targetEndIndex = value.indexOf('\n', targetStart); const targetEnd = targetEndIndex < 0 ? value.length : targetEndIndex;
+            next = Math.min(targetStart + column, targetEnd);
+          }
+          select(next); return;
+        }
+        return;
+      }
+    }
     if (event.key === 'Tab' && event.shiftKey && props.onCyclePermission) {
       event.preventDefault();
       props.onCyclePermission();
@@ -494,7 +578,7 @@ export default function Composer(props: ComposerProps) {
       className={cn('block w-full resize-none border-0 bg-transparent p-0 text-fg outline-none placeholder:text-fg-3',
         hero ? 'min-h-[60px] text-[16px] leading-[1.65]' : 'min-h-[26px] text-[15px] leading-[1.6]')} />
     <span id={`${textareaId}-help`} className="sr-only">按 Enter 发送，Shift 加 Enter 换行；建议列表可用上下方向键选择、Tab 补全，Escape 关闭。选中文字后按 Alt 加 Shift 加 A，可将选中文字放入消息草稿。</span>
-    {showShortcutHints && <div className="mt-1 text-[10.5px] text-fg-3" aria-label="快捷键提示">Enter 发送 · Shift+Enter 换行 · Ctrl+P 切换模型 · ? 或 /keymap 查看快捷键</div>}
+    {showShortcutHints && <div className="mt-1 flex items-center gap-2 text-[10.5px] text-fg-3" aria-label="快捷键提示">Enter 发送 · Shift+Enter 换行 · Ctrl+P 切换模型 · Ctrl+Shift+S 暂存 · ? 或 /keymap 查看快捷键 {vimEnabled && <span className="rounded bg-brand-soft px-1.5 py-0.5 font-mono text-brand">VIM {vimMode.toUpperCase()}</span>}</div>}
     <span id={`${textareaId}-screen-reader-help`} className={screenReaderMode ? 'sr-only' : 'hidden'}>屏幕阅读增强已开启。建议列表打开时焦点保留在消息输入框；使用上下方向键浏览，当前项和运行提示会自动播报，Enter 选择，Escape 关闭。</span>
     <span id={`${textareaId}-status`} role={screenReaderMode ? undefined : 'status'} aria-live={screenReaderMode ? undefined : 'polite'}
       aria-atomic={screenReaderMode ? undefined : 'true'} aria-hidden={screenReaderMode || undefined}
@@ -545,6 +629,9 @@ export default function Composer(props: ComposerProps) {
         <MenuContent align="start" side="top">
           <MenuLabel>添加到消息</MenuLabel>
           <MenuItem onSelect={() => fileRef.current?.click()}><Paperclip size={15} />附件</MenuItem>
+          <MenuItem disabled={!props.value.trim()} onSelect={saveStash}><Save size={15} />暂存当前输入</MenuItem>
+          <MenuItem onSelect={() => { setStashes(readStash()); setStashOpen(true); }}><Save size={15} />查看输入暂存</MenuItem>
+          {props.onExternalEditor && <MenuItem onSelect={props.onExternalEditor}><ExternalLink size={15} />用外部编辑器撰写</MenuItem>}
           <MenuItem onSelect={() => props.onChange(`${props.value}${props.value && !props.value.endsWith(' ') ? ' ' : ''}/goal `)}><Sparkles size={15} />目标命令</MenuItem>
           {props.onEnhancePrompt && <MenuItem disabled={!props.value.trim() || enhancing} onSelect={() => void enhancePrompt()}><Sparkles size={15} />{enhancing ? '正在增强提示词…' : '增强提示词'}</MenuItem>}
           <MenuSeparator />
@@ -647,6 +734,14 @@ export default function Composer(props: ComposerProps) {
           <dd className="m-0 border-t border-line py-2 leading-relaxed text-fg-2">{description}</dd>
         </div>)}
       </dl>
+    </Dialog>
+    <Dialog open={stashOpen} onOpenChange={setStashOpen} label="输入暂存" className="max-h-[82vh] w-[min(620px,92vw)] overflow-auto bg-panel p-5 shadow-xl">
+      <div className="flex items-center"><h2 className="m-0 flex-1 text-[16px] font-semibold text-heading">输入暂存</h2><button type="button" className="rounded p-1 text-fg-3 hover:bg-hover" aria-label="关闭" onClick={() => setStashOpen(false)}><X size={16} /></button></div>
+      <p className="mt-1 text-[12px] text-fg-3">只保存在本机，按会话分别记录。</p>
+      <div className="mt-3 space-y-2">{stashes.map((item) => <div key={item.id} className="rounded-xl border border-edge bg-sunken p-3">
+        <div className="flex items-center gap-2"><span className="flex-1 text-[11px] text-fg-3">{new Date(item.createdAt).toLocaleString()}</span><button type="button" className="rounded px-2 py-1 text-[11px] text-brand hover:bg-hover" onClick={() => restoreStash(item.id)}>取回</button><button type="button" aria-label="删除暂存" className="rounded p-1 text-fg-3 hover:bg-hover" onClick={() => deleteStash(item.id)}><X size={13} /></button></div>
+        <pre className="m-0 mt-2 max-h-28 overflow-auto whitespace-pre-wrap text-[12px] text-fg-2">{item.text}</pre>
+      </div>)}{!stashes.length && <p className="rounded-xl bg-sunken p-4 text-[12px] text-fg-3">此会话还没有暂存输入。</p>}</div>
     </Dialog>
   </form>;
 }
