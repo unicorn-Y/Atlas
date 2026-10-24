@@ -2393,9 +2393,9 @@ async def _execute_run(
                     channel = str(push.get("channel") or "").strip()
                     chat_id = str(push.get("chat_id") or "").strip()
                     if channel and chat_id:
-                        manager = get_channel_manager()
+                        channel_manager = get_channel_manager()
                         text = f"Atlas {event_kind}：{str(data.get('title') or data.get('message') or run.user_input or run.run_id)[:300]}"
-                        await manager.send(channel, chat_id, text)
+                        await channel_manager.send(channel, chat_id, text)
             except Exception:
                 log.warning("u4.mobile_push_failed", event=event, run_id=run.run_id, exc_info=True)
         if event == "run.started":
