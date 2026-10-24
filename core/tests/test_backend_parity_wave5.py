@@ -105,7 +105,7 @@ async def test_atlas_subtask_inherits_read_only_and_cannot_redelegate(monkeypatc
     assert calls[0]["allowed_paths"] == ["C:/repo"]
     # Worker mode: no user memory/skills/planning, and the prompt forbids asking the user.
     assert calls[0]["worker"] is True
-    assert "不要向用户提问" in _args_prompt(calls)
+    assert "ask the user questions" in _args_prompt(calls)
     assert progress == ["已完成。"]
     assert await calls[0]["approval_callback"]("approval:x", "write_file", {"path": "x"}) == "allow"
     assert approval[0][2]["subtask_id"] == "subtask-a"
