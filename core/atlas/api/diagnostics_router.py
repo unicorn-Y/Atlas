@@ -39,6 +39,10 @@ def _flatten(value: Any, prefix: str = "") -> dict[str, Any]:
 def _safe_value(key: str, value: Any) -> Any:
     if any(word in key.lower() for word in ("key", "token", "secret", "password", "credential")):
         return "（已隐藏）"
+    if isinstance(value, dict):
+        return {str(name): _safe_value(f"{key}.{name}", item) for name, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_safe_value(key, item) for item in value]
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     return json.dumps(value, ensure_ascii=False)[:500]
@@ -161,15 +165,29 @@ async def get_diagnostic_tasks(services: Annotated[AppServices, Depends(get_app_
             usage = run.usage[-1] if run.usage else {}
             if not isinstance(usage, dict): usage = {}
             cpu, memory = _process_resources()
+            tool_starts: dict[str, tuple[str, float]] = {}
+            recent_tools: list[dict[str, Any]] = []
+            for event in run.events[-100:]:
+                event_data = event.get("data", {}) if isinstance(event, dict) else {}
+                call_id = str(event_data.get("tool_call_id", "")) if isinstance(event_data, dict) else ""
+                if not call_id: continue
+                timestamp = str(event.get("timestamp", ""))
+                try: moment = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).timestamp()
+                except (ValueError, TypeError): continue
+                if event.get("event") == "tool.started": tool_starts[call_id] = (str(event_data.get("tool_name") or event_data.get("name") or "工具"), moment)
+                elif event.get("event") == "tool.completed" and call_id in tool_starts:
+                    name, started = tool_starts.pop(call_id)
+                    recent_tools.append({"name": name, "duration_ms": round((moment - started) * 1000)})
+            for name, started in tool_starts.values(): recent_tools.append({"name": name, "duration_ms": round((time.time() - started) * 1000), "running": True})
             tasks.append({"id": run.run_id, "kind": "会话运行", "name": run.user_input[:100] or run.conversation_id,
                           "status": run.status, "model": usage.get("model", run.model), "duration_ms": usage.get("duration_ms"),
                           "input_tokens": usage.get("input_tokens"), "output_tokens": usage.get("output_tokens"),
                           "cached_tokens": usage.get("cached_tokens", usage.get("cache_read")),
-                          "cpu_percent": cpu, "memory_bytes": memory, "stoppable": True})
+                          "cpu_percent": cpu, "memory_bytes": memory, "recent_tools": recent_tools[-5:], "stoppable": True})
         for sub_id, child in getattr(run, "subtasks", {}).items():
             if isinstance(child, dict) and str(child.get("status", "running")) in {"running", "waiting"}:
-                tasks.append({"id": f"subagent:{run.run_id}:{sub_id}", "kind": "子 agent", "name": str(child.get("title") or child.get("task") or sub_id),
-                              "status": str(child.get("status", "running")), "stoppable": False})
+                tasks.append({"id": f"subagent:{run.run_id}:{sub_id}", "kind": "子 agent", "name": str(child.get("goal") or child.get("title") or child.get("task") or sub_id),
+                              "status": str(child.get("status", "running")), "stoppable": True})
     local = services.local_execution
     for item in getattr(local, "_processes", {}).values() if local is not None else []:
         if item.state == "running":
@@ -215,6 +233,14 @@ async def stop_diagnostic_task(services: Annotated[AppServices, Depends(get_app_
             return {"stopped": True}
         except Exception as exc:
             return {"stopped": False, "reason": str(exc)}
+    if run_id.startswith("subagent:"):
+        _, parent_id, child_id = run_id.split(":", 2)
+        run = getattr(services.runtime_mgr, "runs", {}).get(parent_id)
+        child = run.subtasks.get(child_id) if run is not None else None
+        cancel = child.get("cancel_event") if isinstance(child, dict) else None
+        if cancel is None: return {"stopped": False, "reason": "子 agent 已结束或不存在。"}
+        cancel.set()
+        return {"stopped": True}
     if run_id.startswith("process:") and services.local_execution is not None:
         process_id = run_id[8:]
         record = services.local_execution._processes.get(process_id)

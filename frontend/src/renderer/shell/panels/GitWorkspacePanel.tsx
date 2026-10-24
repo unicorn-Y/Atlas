@@ -215,11 +215,12 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
       {prWizard && <form onSubmit={(event) => void submitPrWizard(event)} className="grid gap-2 rounded-xl border border-brand/30 bg-sunken p-3">
         <div className="flex items-center justify-between"><strong className="text-[12px] text-fg">提交并开 PR</strong><button type="button" onClick={() => setPrWizard(false)} className="text-[11px] text-fg-3">关闭</button></div>
         <p className="m-0 text-[10.5px] text-fg-3">已勾选 {selected.length} 个文件；默认分支会自动新建 atlas 分支。模型生成后可编辑所有文本。</p>
-        <button type="button" disabled={busy || !selected.length} onClick={() => void generatePrDraft()} className={action}><Sparkles size={12} />{busy === 'draft' ? '生成中…' : '模型生成提交说明、标题和描述'}</button>
+        <button type="button" disabled={Boolean(busy) || !selected.length} onClick={() => void generatePrDraft()} className={action}><Sparkles size={12} />{busy === 'draft' ? '生成中…' : '模型生成提交说明、标题和描述'}</button>
         <input aria-label="提交说明" required value={prDraft.message} onChange={(e) => setPrDraft({ ...prDraft, message: e.target.value })} placeholder="提交说明" className={field} />
         <input aria-label="PR 标题" required value={prDraft.title} onChange={(e) => setPrDraft({ ...prDraft, title: e.target.value })} placeholder="PR 标题" className={field} />
         <textarea aria-label="PR 描述" required rows={3} value={prDraft.body} onChange={(e) => setPrDraft({ ...prDraft, body: e.target.value })} placeholder="PR 描述" className={`${field} py-2`} />
-        <input aria-label="目标分支（可选）" value={prDraft.branch} onChange={(e) => setPrDraft({ ...prDraft, branch: e.target.value })} placeholder="目标分支（留空自动选择/沿用）" className={field} />
+        <select aria-label="选择已有分支" value="" onChange={(event) => { if (event.target.value) setPrDraft({ ...prDraft, branch: event.target.value }); }} className={field}><option value="">从已有分支选择…</option>{workspace.branches.map((branch) => <option key={branch} value={branch}>{branch}</option>)}</select>
+        <input aria-label="目标分支（输入新分支名或修改选择）" value={prDraft.branch} onChange={(e) => setPrDraft({ ...prDraft, branch: e.target.value })} placeholder="新分支名（留空自动创建/沿用）" className={field} />
         <button disabled={Boolean(busy) || !selected.length} className="primary-fill h-8 rounded-lg text-[12px] text-white disabled:opacity-50">{busy === 'pr-wizard' ? '提交、推送并创建 PR…' : '提交 → 推送 → 创建并关联 PR'}</button>
       </form>}
     </>}
