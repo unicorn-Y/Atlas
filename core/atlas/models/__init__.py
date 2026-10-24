@@ -103,13 +103,11 @@ class ModelManager:
         self._favorites: set[str] = {"claude-opus-4", "claude-sonnet-4", "gpt-4o"}
         settings_base = str(settings.get("gateway_base_url") or "")
         self._api_base = settings_base or cfg.gateway_base_url
-        self._global_api_key = str(settings.get("api_key") or cfg.gateway_api_key)
-        try:
-            from atlas.config_migrations import GLOBAL_GATEWAY_KEY
-
-            self._global_api_key = str(self._credential_store().get(GLOBAL_GATEWAY_KEY) or self._global_api_key)
-        except Exception:
-            pass
+        # A plaintext key only survives migration when the keyring holds a *different* key (another
+        # checkout of Atlas for this OS user), so a key still present in user-settings must win.
+        self._global_api_key = str(settings.get("api_key") or "")
+        if not self._global_api_key:
+            self._global_api_key = cfg.gateway_api_key
         self._model_router = None
         self._gateway_source = "user-settings" if settings_base else "atlas.toml"
         self._toml_gateway_base_url = cfg.gateway_base_url

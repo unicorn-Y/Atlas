@@ -38,14 +38,21 @@ def check_scoped_config_and_credential_migration() -> None:
             result = migrate_configuration(config, settings)
             assert result["config_version"] == 2 and result["settings_version"] == 2
             assert GLOBAL_GATEWAY_KEY in keyring.values
+            # Two different keys: user-settings' (effective) one goes to the main entry, the shadowed
+            # atlas.toml one is parked in the superseded entry — neither is silently dropped.
+            assert keyring.values[GLOBAL_GATEWAY_KEY] == "SETTINGS-SECRET"
+            assert keyring.values.get("atlas.gateway.api_key.superseded") == "MIGRATION-SECRET"
         assert "MIGRATION-SECRET" not in config.read_text(encoding="utf-8")
+        assert 'default = "global"' in config.read_text(encoding="utf-8")  # rest of atlas.toml untouched
         assert "SETTINGS-SECRET" not in settings.read_text(encoding="utf-8")
         rollback = rollback_configuration_migration(config, settings)
         assert rollback == {"config": True, "settings": True}
         assert "MIGRATION-SECRET" not in config.read_text(encoding="utf-8")
         assert "SETTINGS-SECRET" not in settings.read_text(encoding="utf-8")
 
-    with patch("atlas.project_settings._credential_store", return_value=keyring):
+    # Keep the check out of the real data dir: project/session config goes to a throwaway file.
+    scratch_settings = Path(tempfile.mkdtemp(prefix="atlas-u14-projects-")) / "project-settings.json"
+    with patch("atlas.project_settings._credential_store", return_value=keyring), patch("atlas.project_settings._PATH", scratch_settings):
         save_project_config("alpha", {"models": {"default": "alpha-model", "gateway": {"base_url": "https://alpha.test"}}})
         save_project_config("beta", {"models": {"default": "beta-model"}})
         set_project_gateway_key("alpha", "ALPHA-ONLY")

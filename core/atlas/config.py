@@ -172,15 +172,16 @@ class AtlasConfig:
         env = os.environ.get("ATLAS_API_KEY")
         if env:
             return env
+        # Plaintext left in atlas.toml means migration hit a conflicting keyring entry: prefer it.
+        plaintext = str(self.get("models.gateway.api_key", "") or "")
+        if plaintext:
+            return plaintext
         try:
             from atlas.config_migrations import GLOBAL_GATEWAY_KEY, _keyring
 
-            protected = _keyring().get(GLOBAL_GATEWAY_KEY)
-            if protected:
-                return protected
+            return str(_keyring().get(GLOBAL_GATEWAY_KEY) or "")
         except Exception:
-            pass
-        return str(self.get("models.gateway.api_key", ""))
+            return ""
 
     @property
     def custom_models(self) -> list[dict[str, Any]]:
