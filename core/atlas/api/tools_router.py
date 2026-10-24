@@ -100,6 +100,28 @@ async def kill_agent_process(
     return {"id": process_id, "status": "exited", "exit_code": record.exit_code}
 
 
+@router.post("/api/processes/{process_id}/stdin")
+async def write_agent_process_stdin(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    process_id: str, payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Send one line or raw text to a running process started with an open stdin."""
+    runtime = _service("local_execution", services)
+    record = runtime._processes.get(process_id) if runtime else None
+    if record is None:
+        raise HTTPException(status_code=404, detail="Process not found")
+    action = str(payload.get("action") or "submit_stdin")
+    if action not in {"write_stdin", "submit_stdin", "close_stdin"}:
+        raise HTTPException(status_code=422, detail="Unsupported stdin action")
+    data = payload.get("data", "")
+    if not isinstance(data, str) or len(data) > 16_000:
+        raise HTTPException(status_code=422, detail="stdin data must be text up to 16000 characters")
+    try:
+        return await runtime._write_process_stdin(record, action, data)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.websocket("/ws/terminal")
 async def ws_terminal(ws: WebSocket, cwd: str = Query(...)) -> None:
     await ws.accept()

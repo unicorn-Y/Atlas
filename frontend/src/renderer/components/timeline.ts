@@ -621,8 +621,12 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
       }
       case 'run.compaction.progress': {
         closeReply(); closeBlocks();
+        const before = typeof data.before_tokens === 'number' ? data.before_tokens.toLocaleString() : '';
+        const after = typeof data.after_tokens === 'number' ? data.after_tokens.toLocaleString() : '';
+        const duration = typeof data.duration_ms === 'number' ? ` · ${Math.max(0, data.duration_ms)} ms` : '';
+        const count = before && after ? `（${before} → ${after} tokens）` : '';
         items.push({ kind: 'notice', id: event.id, tone: 'verify',
-          text: `正在整理对话上下文${typeof data.percent === 'number' ? `（${Math.max(0, Math.min(100, data.percent))}%）` : ''}` });
+          text: `上下文整理完成${count}${duration}` });
         break;
       }
       case 'context.window.switched': {

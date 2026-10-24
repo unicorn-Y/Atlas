@@ -1314,6 +1314,7 @@ class AtlasKernel:
 
                 if turn_index == 0:
                     prep_mark("setup")
+                compaction_started = time.monotonic()
                 compaction = await prepare_compaction()
                 if turn_index == 0:
                     prep_mark("compaction")
@@ -1321,6 +1322,7 @@ class AtlasKernel:
                     yield emit("run.compaction.progress", data={
                         "phase": compaction.method, "before_tokens": compaction.before_tokens,
                         "after_tokens": compaction.after_tokens,
+                        "duration_ms": round((time.monotonic() - compaction_started) * 1000),
                     })
                 context_state = context_manager.warning_state(
                     estimate_tokens(messages), model_window,
@@ -1334,12 +1336,14 @@ class AtlasKernel:
                         "blocking_tokens": thresholds.blocking,
                     })
                 if context_state["is_at_blocking_limit"]:
+                    compaction_started = time.monotonic()
                     forced = await prepare_compaction(force=True)
                     if forced.method != "none":
                         yield emit("run.compaction.progress", data={
                             "phase": forced.method, "before_tokens": forced.before_tokens,
                             "after_tokens": forced.after_tokens,
                             "trigger": "blocking_threshold",
+                            "duration_ms": round((time.monotonic() - compaction_started) * 1000),
                         })
                     context_state = context_manager.warning_state(
                         estimate_tokens(messages), model_window,
@@ -1664,6 +1668,7 @@ class AtlasKernel:
                                 or overflow_retry_used):
                             raise stream_error
                         overflow_retry_used = True
+                        compaction_started = time.monotonic()
                         compaction = await prepare_compaction(force=True)
                         if compaction.method == "none":
                             raise stream_error
@@ -1672,6 +1677,7 @@ class AtlasKernel:
                             "before_tokens": compaction.before_tokens,
                             "after_tokens": compaction.after_tokens,
                             "trigger": "provider_context_window_exceeded",
+                            "duration_ms": round((time.monotonic() - compaction_started) * 1000),
                         })
                         partial_response_text.clear()
                         state.streamed_text = ""

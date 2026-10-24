@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import {
   Activity, Brain, Check, ChevronRight, Code2, FileDiff, FileText, GitBranch,
   Globe, Image, ListChecks, LoaderCircle, MessageCircleQuestion, Monitor,
@@ -8,6 +8,7 @@ import { cn } from '../../ui/cn';
 import ClipboardAction from '../message-actions/ClipboardAction';
 import ImagePreview from '../message-actions/ImagePreview';
 import { duration, type Step, type ToolCategory } from '../timeline';
+import { useAtlasStore } from '../../store/useAtlasStore';
 
 export const CATEGORY: Record<ToolCategory, { label: string; icon: LucideIcon }> = {
   'file-read': { label: '读取文件', icon: FileText },
@@ -33,6 +34,25 @@ export const CATEGORY: Record<ToolCategory, { label: string; icon: LucideIcon }>
 };
 
 const compact = (value: string) => value.replace(/\s+/g, ' ').trim();
+function findProcessId(...values: Array<string | undefined>): string {
+  for (const value of values) {
+    if (!value) continue;
+    try {
+      const parsed = JSON.parse(value) as Record<string, unknown>;
+      const id = parsed.execution_id ?? parsed.process_id ?? parsed.session_id;
+      if (typeof id === 'string' && id) return id;
+    } catch {
+      const match = /(?:execution_id|process_id|session_id)[=: ]+["']?([\w-]+)/i.exec(value);
+      if (match?.[1]) return match[1];
+    }
+  }
+  return '';
+}
+function searchLinks(value?: string): string[] {
+  if (!value) return [];
+  const found = value.match(/https?:\/\/[^\s<>"')\]]+/g) ?? [];
+  return [...new Set(found.map((item) => item.replace(/[.,;:!?]+$/, '')))].slice(0, 5);
+}
 
 export default function ToolExecutionCard({ step, live, children }: {
   step: Step;
@@ -40,10 +60,27 @@ export default function ToolExecutionCard({ step, live, children }: {
   children?: ReactNode;
 }) {
   const [open, setOpen] = useState(step.state === 'failed');
+  const [stdin, setStdin] = useState('');
+  const [stdinStatus, setStdinStatus] = useState('');
   const active = step.state === 'running' && live;
   const hasDetails = Boolean(step.input || step.result || step.output || step.fullOutputPath);
   const hasCopyableFailureReason = Boolean(step.failureReason && !['工具返回失败状态', '子任务执行失败', 'Hook 执行失败'].includes(step.failureReason));
   const { label, icon: Icon } = CATEGORY[step.category] ?? CATEGORY.other;
+  const processId = findProcessId(step.result, step.output);
+  const sources = step.category === 'search' ? searchLinks(step.result) : [];
+  const submitStdin = (event: FormEvent) => {
+    event.preventDefault();
+    if (!processId || !stdin.trim()) return;
+    const baseUrl = useAtlasStore.getState().apiBaseUrl.replace(/\/$/, '');
+    void fetch(`${baseUrl}/api/processes/${encodeURIComponent(processId)}/stdin`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'submit_stdin', data: stdin }),
+    }).then(async (response) => {
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(body.detail ?? `HTTP ${response.status}`));
+      setStdin(''); setStdinStatus('已发送');
+    }).catch((error: unknown) => setStdinStatus(error instanceof Error ? error.message : '发送失败'));
+  };
   const mcpTool = /^(?:mcp__|mcp\.)/i.test(step.toolName) || /"server(?:_name)?"\s*:/.test(step.input ?? '');
   const mcpServer = (() => {
     const explicit = /"server(?:_name)?"\s*:\s*"([^"]+)"/.exec(step.input ?? '')?.[1];
@@ -79,10 +116,17 @@ export default function ToolExecutionCard({ step, live, children }: {
         </span>
       </div>
       {step.summary && <p className="m-0 mt-1.5 pl-[23px] break-words leading-[1.55] text-fg-2">{compact(step.summary)}</p>}
+      {active && step.category === 'search' && <p className="m-0 mt-1.5 pl-[23px] text-[11.5px] text-fg-3">正在搜索：{step.target || '整理查询'}</p>}
+      {sources.length > 0 && <div className="mt-2 ml-[23px] grid gap-1" aria-label="搜索命中来源">{sources.map((source) => <a key={source} href={source} target="_blank" rel="noreferrer" className="truncate text-[11.5px] text-brand underline decoration-brand/30 underline-offset-2">{source}</a>)}</div>}
       {step.failureReason && <p role="alert" className="m-0 mt-2 flex items-start gap-2 rounded-lg bg-danger-soft px-2.5 py-2 pl-[23px] leading-[1.55] text-danger">
         <span className="min-w-0 flex-1 break-words">失败原因：{step.failureReason}</span>
         {step.state === 'failed' && hasCopyableFailureReason && <ClipboardAction text={step.failureReason} label="复制失败原因" />}
       </p>}
+      {processId && step.state === 'running' && <form onSubmit={submitStdin} className="mt-2 ml-[23px] flex gap-1.5" aria-label="向运行进程输入">
+        <input value={stdin} onChange={(event) => setStdin(event.target.value)} aria-label="终端输入" placeholder="输入内容并发送给运行中的进程…" className="h-8 min-w-0 flex-1 rounded-md bg-sunken px-2.5 text-[12px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />
+        <button type="submit" disabled={!stdin.trim()} className="rounded-md bg-brand px-2.5 text-[11.5px] text-white disabled:opacity-40">发送</button>
+        {stdinStatus && <span role="status" className="self-center text-[11px] text-fg-3">{stdinStatus}</span>}
+      </form>}
       {step.imagePreview && <div className="mt-2 ml-[23px] max-w-48 [&_img]:!max-h-32 [&_img]:rounded-lg [&_img]:border [&_img]:border-line [&_img]:object-contain">
         <ImagePreview src={step.imagePreview} alt={step.target || '工具读取的图片'} title="点击预览工具返回的图片" />
       </div>}
