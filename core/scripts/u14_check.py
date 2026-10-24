@@ -169,6 +169,8 @@ def check_bot_loop_and_page_find() -> None:
         duplicate = MessageEvent(channel="webhook", account="one", event_id="2", chat_id="room", sender_id="bot", kind=MessageType.TEXT, text="hello", sender_is_bot=True)
         ok, reason = queue.admit_bot_event(duplicate, now=1001)
         assert not ok and "repeated" in reason
+        separate_chat = MessageEvent(channel="webhook", account="one", event_id="other", chat_id="different-room", sender_id="bot", kind=MessageType.TEXT, text="hello", sender_is_bot=True)
+        assert queue.admit_bot_event(separate_chat, now=1002)[0]
         queue.record_outbound_bot_content("echo", channel="webhook", account="one", chat_id="room", now=1000)
         echo = MessageEvent(channel="webhook", account="one", event_id="3", chat_id="room", sender_id="bot", kind=MessageType.TEXT, text="echo", sender_is_bot=True)
         ok, reason = queue.admit_bot_event(echo, now=1001)

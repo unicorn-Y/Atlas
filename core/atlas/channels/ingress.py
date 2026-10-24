@@ -221,8 +221,9 @@ class IngressQueue:
                 reason = "outbound echo suppressed"
             else:
                 repeated = self._db.execute(
-                    "SELECT COUNT(*) FROM bot_loop_activity WHERE fingerprint=? AND kind='inbound' AND created_at>=?",
-                    (fingerprint, timestamp - 300),
+                    "SELECT COUNT(*) FROM bot_loop_activity WHERE fingerprint=? AND kind='inbound' "
+                    "AND channel=? AND account=? AND chat_id=? AND created_at>=?",
+                    (fingerprint, event.channel, event.account, event.chat_id, timestamp - 300),
                 ).fetchone()[0]
                 burst = self._db.execute(
                     "SELECT COUNT(*) FROM bot_loop_activity WHERE channel=? AND account=? AND chat_id=? "
