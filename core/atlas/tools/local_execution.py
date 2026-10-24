@@ -33,6 +33,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+
+def _redact_nested(value: Any, redact: Any) -> Any:
+    if isinstance(value, str): return redact(value)
+    if isinstance(value, list): return [_redact_nested(item, redact) for item in value]
+    if isinstance(value, tuple): return tuple(_redact_nested(item, redact) for item in value)
+    if isinstance(value, dict): return {key: _redact_nested(item, redact) for key, item in value.items()}
+    return value
+
 import structlog
 
 from atlas.config import get_config
@@ -456,7 +464,7 @@ LOCAL_TOOLS = [
             "cwd": {"type": "string"},
             "env": {"type": "object", "additionalProperties": {
                 "type": ["string", "null"],
-                "description": "String overrides a variable; null removes it from the inherited environment.",
+                "description": "String overrides a variable; {{secret:NAME}} resolves a saved secret handle at launch. null removes it from the inherited environment.",
             }},
             "stdin": {"type": "string"},
             "timeout": {"type": "number"},
@@ -487,7 +495,7 @@ LOCAL_TOOLS = [
             "cwd": {"type": "string"},
             "env": {"type": "object", "additionalProperties": {
                 "type": ["string", "null"],
-                "description": "String overrides a variable; null removes it from the inherited environment.",
+                "description": "String overrides a variable; {{secret:NAME}} resolves a saved secret handle at launch. null removes it from the inherited environment.",
             }},
             "stdin": {"type": "string"},
             "timeout": {"type": "number"},
@@ -518,7 +526,7 @@ LOCAL_TOOLS = [
             "cwd": {"type": "string"},
             "env": {"type": "object", "additionalProperties": {
                 "type": ["string", "null"],
-                "description": "String overrides a variable; null removes it from the inherited environment.",
+                "description": "String overrides a variable; {{secret:NAME}} resolves a saved secret handle at launch. null removes it from the inherited environment.",
             }},
             "stdin": {"type": "string"},
             "timeout": {"type": "number"},
@@ -826,6 +834,35 @@ class LocalExecutionRuntime:
             return Path.cwd().resolve()
 
     async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        *,
+        run_id: str | None = None,
+        output_callback: OutputCallback | None = None,
+        event_callback: Any = None,
+        cancel_event: Any = None,
+    ) -> dict[str, Any]:
+        from atlas import secrets_store
+        args = dict(arguments or {})
+        project_id = args.pop("_atlas_project_id", None)
+        if isinstance(args.get("env"), dict):
+            try:
+                args["env"] = secrets_store.resolve_env(args["env"], project_id)
+            except ValueError as exc:
+                return self._error(str(exc))
+        original_callback = output_callback
+        if original_callback is not None:
+            async def safe_output(*items: Any, **kwargs: Any) -> Any:
+                if items and isinstance(items[0], str): items = (secrets_store.redact(items[0]), *items[1:])
+                if "text" in kwargs: kwargs["text"] = secrets_store.redact(kwargs["text"])
+                return await original_callback(*items, **kwargs)
+            output_callback = safe_output
+        result = await self._call_tool_unredacted(name, args, run_id=run_id, output_callback=output_callback,
+            event_callback=event_callback, cancel_event=cancel_event)
+        return _redact_nested(result, secrets_store.redact)
+
+    async def _call_tool_unredacted(
         self,
         name: str,
         arguments: dict[str, Any] | None = None,
@@ -1659,11 +1696,15 @@ class LocalExecutionRuntime:
             return
         path = record.stdout_path if name == "stdout" else record.stderr_path
         decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        from atlas.secrets_store import StreamingRedactor
+        redactor = StreamingRedactor()
         while chunk := await reader.read(4096):
             record.output_bytes_total += len(chunk)
+            text = redactor.feed(decoder.decode(chunk))
+            safe_chunk = text.encode("utf-8")
             remaining = max(0, MAX_PROCESS_LOG_BYTES - record.log_bytes_stored)
-            stored = chunk[:remaining]
-            dropped = len(chunk) - len(stored)
+            stored = safe_chunk[:remaining]
+            dropped = len(safe_chunk) - len(stored)
             if stored:
                 with path.open("ab") as stream:
                     stream.write(stored)
@@ -1686,7 +1727,6 @@ class LocalExecutionRuntime:
                     else:
                         record.stderr_size += len(marker)
                     record.truncation_marker_written = True
-            text = decoder.decode(chunk)
             if record.watch_patterns:
                 watched = record.watch_tail + text
                 matches = [pattern for pattern in record.watch_patterns if pattern in watched]
@@ -1703,9 +1743,17 @@ class LocalExecutionRuntime:
                     log.debug(
                         "local_execution.output_callback_failed", execution_id=record.execution_id
                     )
-        if callback is not None:
-            remainder = decoder.decode(b"", final=True)
-            if remainder:
+        remainder = redactor.feed(decoder.decode(b"", final=True), final=True)
+        if remainder:
+            safe_remainder = remainder.encode("utf-8")
+            remaining = max(0, MAX_PROCESS_LOG_BYTES - record.log_bytes_stored)
+            stored = safe_remainder[:remaining]
+            if stored:
+                with path.open("ab") as stream: stream.write(stored)
+                record.log_bytes_stored += len(stored)
+                if name == "stdout": record.stdout_size += len(stored)
+                else: record.stderr_size += len(stored)
+            if callback is not None:
                 try:
                     result = callback(record.execution_id, name, remainder)
                     if asyncio.iscoroutine(result):

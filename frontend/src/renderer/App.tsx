@@ -94,6 +94,9 @@ const ExpertModeBadge = lazy(() => import('./components/settings/ExpertModePanel
 const OutputStyleSettingsPanel = lazy(() => import('./components/settings/OutputStyleSettingsPanel'));
 const McpResourcesPanel = lazy(() => import('./components/settings/McpResourcesPanel'));
 const LocalModelsPanel = lazy(() => import('./components/settings/LocalModelsPanel'));
+const DesktopTeachPanel = lazy(() => import('./components/settings/DesktopTeachPanel'));
+const DesktopTeachOverlay = lazy(() => import('./components/settings/DesktopTeachPanel').then((module) => ({ default: module.DesktopTeachOverlay })));
+const SecretsPanel = lazy(() => import('./components/settings/SecretsPanel'));
 const LinearIntegrationPanel = lazy(() => import('./components/settings/LinearIntegrationPanel'));
 const OPEN_EXPERT_SETTINGS = 'atlas:open-expert-settings';
 import Sidebar, { MORE_NAV, NAV, type View } from './shell/Sidebar';
@@ -111,10 +114,12 @@ import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 import { cleanSearchSnippet, rankSearchHits, searchHitRoleLabel } from './services/searchHits';
 
-type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage' | 'memories';
+type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage' | 'memories' | 'teach' | 'secrets';
 
 const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['models', '模型与服务', SlidersHorizontal, 'provider 模型 model API key 密钥 reasoning 推理 连接'],
+  ['secrets', '密钥库', Lock, 'secrets 密钥 keyring credential handle token'],
+  ['teach', '桌面教学', Monitor, 'teach 录制 桌面 操作 教学 技能 skill'],
   ['mainConfig', '主体配置', FileCog, 'atlas.toml config 配置 文件 user-settings 界面设置 当前生效 备份 恢复 编辑'],
   ['expert', '专家模式', Zap, 'expert 专家 模式 切换 覆盖 overlay 额外配置 附加说明 提示词 技能 插件 工具 MCP 同步 仓库 安装 卸载'],
   ['network', '模型网络', Server, 'proxy 代理 CA certificate certificate authority 网络 HTTPS TLS'],
@@ -1473,6 +1478,7 @@ export default function App() {
     { id: 'help', label: '/help', hint: '列出全部斜杠命令及用法', run: showHelp },
     { id: 'doctor', label: '/doctor', hint: '检查安装与配置并查看修复建议', run: () => setSheet('diagnostics') },
     { id: 'memories', label: '/memories', hint: '设置当前对话是否读取和生成记忆', run: () => setSheet('memories') },
+    { id: 'teach', label: '/teach', hint: '录制桌面操作并生成可复用技能', run: () => setSheet('teach') },
     { id: 'config', label: '/config', hint: '打开配置面板', run: () => setSheet('mainConfig') },
     { id: 'whatsnew', label: '/whatsnew', hint: '查看仓库提交中的新功能亮点', run: () => { void api<{ source: string; highlights: Array<string | { date?: string; title?: string }> }>(store.apiBaseUrl, '/api/u6/whatsnew').then((result) => { setRawTextTitle('有什么新功能'); setRawText(result.highlights.map((item) => typeof item === 'string' ? item : `${item.date || ''} ${item.title || ''}`.trim()).filter(Boolean).join('\n') || '仓库里还没有可显示的更新亮点。'); }).catch((error) => setToast(`读取更新说明失败：${error instanceof Error ? error.message : String(error)}`)); } },
     { id: 'release-notes', label: '/release-notes', hint: '查看完整更新说明（按版本索引）', run: () => { void api<{ changelog?: string; highlights: Array<string | { date?: string; title?: string }> }>(store.apiBaseUrl, '/api/u6/whatsnew').then((result) => { setRawTextTitle('更新说明'); setRawText(result.changelog || result.highlights.map((item) => typeof item === 'string' ? item : `${item.date || ''} ${item.title || ''}`.trim()).filter(Boolean).join('\n')); }); } },
@@ -2206,6 +2212,8 @@ export default function App() {
         {sheet === 'diagnostics' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">本机诊断</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">只读检查本机 Atlas 状态；报告不会上传原始配置、日志、密钥或路径。</p><DiagnosticsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'security' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">工作区安全</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理当前对话后续运行的权限与 Docker 隔离。工作区规则仍在首次读取时由你确认。</p>{activeConversation ? <WorkspaceSecurityPanel apiBaseUrl={store.apiBaseUrl} conversation={activeConversation} onChange={(patch) => store.setConversationSettings(activeConversation.id, patch)} /> : <div className="rounded-xl bg-sunken p-4 text-[13px] text-fg-3">先打开一个对话，再配置该对话的工作区权限和沙箱。</div>}</section>}
         {sheet === 'memories' && (activeConversation ? <ConversationMemoryPanel apiBaseUrl={store.apiBaseUrl} conversationId={activeConversation.id} /> : <p className="m-0 rounded-xl bg-sunken p-4 text-[13px] text-fg-3">先打开一个对话，再设置该对话的记忆读取与生成。</p>)}
+        {sheet === 'teach' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">桌面操作教学</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">演示一次操作，校正步骤、试运行，再保存为本机技能。</p><DesktopTeachPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
+        {sheet === 'secrets' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">密钥库</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理本机通用凭据。Agent 可在命令环境中用句柄引用。</p><SecretsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'commands' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">自定义斜杠命令</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">查看所有已发现命令；这里只能新建和编辑 Atlas 用户级命令，项目、Claude 与插件命令保持只读。</p><CustomCommandsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'limits' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">运行限制</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">控制新运行的主循环轮数上限，并查看当前可用的 token/费用预算边界。</p><RunLimitsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'storage' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">存储与保留</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">查看 Atlas 数据占用，并配置旧会话的保留规则。</p><StorageRetentionPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
@@ -2216,6 +2224,7 @@ export default function App() {
     </Suspense>
 
     <PersonalTodos apiBaseUrl={store.apiBaseUrl} connected={store.connected} />
+    <Suspense fallback={null}><DesktopTeachOverlay apiBaseUrl={store.apiBaseUrl} /></Suspense>
     {paletteOpen && <Suspense fallback={null}><Palette items={paletteItems} open onClose={() => setPaletteOpen(false)} search={searchMessages} /></Suspense>}
     {resumePickerOpen && <Suspense fallback={null}><ResumePickerDialog apiBaseUrl={store.apiBaseUrl} conversations={store.conversations} onClose={() => setResumePickerOpen(false)} onSelect={openConversation} /></Suspense>}
     {transcriptOpen && <TranscriptDialog conversationId={store.activeConversationId} messages={threadMessages} events={activeEvents} onClose={() => setTranscriptOpen(false)} />}

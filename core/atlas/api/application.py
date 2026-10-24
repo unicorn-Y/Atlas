@@ -18,6 +18,7 @@ from atlas.api.channel_router import router as channel_router
 from atlas.api.conversations_router import router as conversations_router
 from atlas.api.conversation_activity_router import router as conversation_activity_router
 from atlas.api.computer_router import router as computer_router
+from atlas.api.secrets_router import router as secrets_router
 from atlas.api.device_router import router as device_router
 from atlas.api.evolution_router import evolution_router
 from atlas.api.upstream_router import upstream_router
@@ -97,6 +98,7 @@ def create_app(
         models_router,
         agent_backends_router,
         computer_router,
+        secrets_router,
         browser_router,
         skills_market_router,
         evolution_router,
