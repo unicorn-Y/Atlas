@@ -208,6 +208,7 @@ class RunRequest:
     worker: bool = False
     stable_system_prefix: str | None = None
     memory_scope_id: str = ""
+    session_env: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -320,6 +321,7 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
         read_only=request.read_only,
         permission_mode=request.permission_mode,
         allowed_paths=request.allowed_paths or [],
+        session_env=request.session_env,
         user_hook_callback=callbacks.user_hook_callback,
         ssh_tool_callback=callbacks.ssh_tool_callback,
         ssh_checkpoint_callback=callbacks.ssh_checkpoint_callback,

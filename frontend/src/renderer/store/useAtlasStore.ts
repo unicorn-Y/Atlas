@@ -75,6 +75,7 @@ interface AtlasState extends PersistentSlice {
   runs: AgentRun[];
   activeRunId: string | null;
   artifacts: Artifact[];
+  addArtifact: (artifact: Artifact) => void;
   /** Follow-up messages waiting for their conversation's run to end; sent in order. */
   queue: Record<string, QueuedMessage[]>;
   /** A stopped run pauses its conversation's queue instead of starting the next message. */
@@ -714,6 +715,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     },
 
     getRun: (runId) => get().runs.find((run) => run.id === runId),
+    addArtifact: (artifact) => set((state) => ({ artifacts: [...state.artifacts.filter((item) => item.id !== artifact.id), artifact] })),
     setActiveRun: (runId) => {
       const run = get().runs.find((item) => item.id === runId);
       set({ activeRunId: runId, activeConversationId: run?.conversationId ?? get().activeConversationId, paused: run?.status === 'paused' });
@@ -1147,6 +1149,24 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   const state = get();
   const worktree = state.worktreeRequests[conversationId];
   const supportsEffort = Boolean(state.models.find((model) => model.id === state.model)?.supports_reasoning_effort);
+  const envByConversationKey = 'atlas.preference.session-env-by-conversation';
+  let envByConversation: Record<string, Record<string, string>> = {};
+  try {
+    const parsed = JSON.parse(storageGet(envByConversationKey) ?? '{}') as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) envByConversation = parsed as Record<string, Record<string, string>>;
+  } catch { /* invalid local preset cache is ignored */ }
+  const nextEnv = storageGet('atlas.preference.session-env-next');
+  if (nextEnv) {
+    try {
+      const parsed = JSON.parse(nextEnv) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+          && Object.values(parsed).every((value) => typeof value === 'string')) {
+        envByConversation[conversationId] = parsed as Record<string, string>;
+        storageSet(envByConversationKey, JSON.stringify(envByConversation));
+      }
+    } catch { /* malformed preset data is dropped */ }
+    storageSet('atlas.preference.session-env-next', null);
+  }
   if (worktree) useAtlasStore.getState().requestWorktree(conversationId, null);
   // agent_id rides along for persistent-agent runs (integration-map §5: WS run.start
   // gains an optional agent_id/group_id). The adapter's RunStartRequest type predates
@@ -1159,6 +1179,7 @@ async function startRun(conversationId: string, item: QueuedMessage) {
     ...(item.agentId ? { agent_id: item.agentId } : {}),
     ...(interrupted ? { resume_from: interrupted.id } : {}),
     ...(state.reasoningEffort && supportsEffort ? { reasoning_effort: state.reasoningEffort } : {}),
+    ...(envByConversation[conversationId] ? { session_env: envByConversation[conversationId] } : {}),
     ...(worktree && !conversation?.worktree_path ? { worktree } : {}),
     ...(overrides?.tool_allow ? { tool_allow: overrides.tool_allow } : {}),
     ...(overrides?.tool_deny?.length ? { tool_deny: overrides.tool_deny } : {}),

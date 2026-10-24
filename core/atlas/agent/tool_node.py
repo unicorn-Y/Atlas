@@ -772,6 +772,33 @@ async def execute_tools_node(
                     result = {"data": data, "content": [{
                         "type": "text", "text": json.dumps(data, ensure_ascii=False),
                     }], "is_error": False}
+            elif fn_name == "propose_settings_change":
+                from atlas.api.u4_router import create_settings_proposal
+
+                proposal = create_settings_proposal(
+                    key=str(fn_args.get("key") or ""), old_value=fn_args.get("from"),
+                    new_value=fn_args.get("to"), reason=str(fn_args.get("reason") or ""),
+                    conversation_id=str(ctx.conversation_id or ""),
+                )
+                await ctx.event_queue.put({"type": "settings.proposal", "proposal": proposal})
+                result = {"data": proposal, "content": [{
+                    "type": "text", "text": "设置修改提议已交给用户确认；等待用户逐项批准。",
+                }], "is_error": False}
+            elif fn_name == "ask_advisor":
+                from atlas.api.u4_router import _read
+
+                advisor_model = str((_read().get("settings") or {}).get("advisor_model") or "").strip()
+                if not advisor_model:
+                    result = {"content": [{"type": "text", "text": "尚未设置顾问模型。请先在设置里选择一个顾问模型，或用 /advisor 查看可用模型。"}], "is_error": True}
+                else:
+                    prompt = str(fn_args.get("question") or "").strip()
+                    context_text = str(fn_args.get("context") or "").strip()[:6000]
+                    answer = await agent._model_router.complete_for(
+                        advisor_model, "advisor", [{"role": "user", "content":
+                            f"请作为顾问给出独立、简洁的建议。问题：\n{prompt}\n\n必要上下文：\n{context_text}"}],
+                        max_tokens=900, temperature=0.2,
+                    )
+                    result = {"content": [{"type": "text", "text": answer.text}], "is_error": False}
             elif fn_name == "todo_list":
                 if fn_args.get("todos") is not None:
                     snapshot = ctx.todo_store.write(
@@ -1198,6 +1225,9 @@ async def execute_tools_node(
                         })
                 result = await ctx.kernel_edit.execute(fn_name, fn_args)
             elif fn_name.startswith("local_") and agent._local_execution:
+                if ctx.session_env and fn_name in {"local_process", "local_exec", "local_shell"}:
+                    explicit_env = fn_args.get("env") if isinstance(fn_args.get("env"), dict) else {}
+                    fn_args["env"] = {**ctx.session_env, **explicit_env}
                 if ctx.mode == "plan":
                     action = str(fn_args.get("action", ""))
                     if fn_name != "local_file" or action not in {

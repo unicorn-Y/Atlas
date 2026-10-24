@@ -1503,6 +1503,17 @@ async def _handle_run_start(
                      workspace=str(review_workspace), scope=review_scope.get("scope"))
     assert model_mgr is not None
     run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+    session_env = data.get("session_env", {})
+    if not isinstance(session_env, dict) or len(session_env) > 64 or any(
+        not isinstance(key, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", key)
+        or not isinstance(value, str) or len(value) > 2048
+        for key, value in session_env.items()
+    ):
+        await manager.send(conn_id, run.next_envelope("run.failed", {
+            "category": "validation", "detail": "会话预设环境变量格式无效。",
+        }))
+        return
+    run.session_env = dict(session_env)
     if isinstance(data.get("telegram_user_id"), int):
         run.telegram_user_id = data["telegram_user_id"]
     # T06.2：任务焦点绑定 —— run.start 可显式携带 task_id（调度任务 / 续接
@@ -2371,6 +2382,22 @@ async def _execute_run(
 
     async def emit(event: str, data: dict[str, Any]) -> None:
         """Emit an event envelope to the client."""
+        event_kind = {"run.completed": "completion", "run.failed": "failure", "approval.required": "approval"}.get(event)
+        if event_kind:
+            try:
+                from atlas.api.u4_router import _read, push_event_enabled
+                from atlas.api.channel_router import get_channel_manager
+
+                push = ((_read().get("settings") or {}).get("mobile_push") or {})
+                if push_event_enabled({"mobile_push": push}, event_kind):
+                    channel = str(push.get("channel") or "").strip()
+                    chat_id = str(push.get("chat_id") or "").strip()
+                    if channel and chat_id:
+                        manager = get_channel_manager()
+                        text = f"Atlas {event_kind}：{str(data.get('title') or data.get('message') or run.user_input or run.run_id)[:300]}"
+                        await manager.send(channel, chat_id, text)
+            except Exception:
+                log.warning("u4.mobile_push_failed", event=event, run_id=run.run_id, exc_info=True)
         if event == "run.started":
             data = {
                 **data,
@@ -2914,6 +2941,7 @@ async def _execute_run(
             project_id=run.project_id,
             task_id=run.task_id,
             reasoning_effort=reasoning_effort,
+            session_env=run.session_env,
             subtask_started=subtask_started,
             subtask_progress=subtask_progress,
             subtask_completed=subtask_completed,

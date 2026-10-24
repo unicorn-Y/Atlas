@@ -150,6 +150,7 @@ export default function UsagePanel({ username, onSaveUsername, apiBaseUrl = '', 
       <Tile label="缓存命中" value={percent(totals.cache_hit_rate)} hint="输入里由模型服务缓存提供的比例，越高越省钱" />
       <Tile label="估算费用" value={cost(totals.est_cost)} hint="按模型设置里填的价格估算；有模型没填价格时显示「价格未知」" />
     </div>}
+    {totals?.est_cost === null && <p className="m-0 rounded-xl card-surface px-4 py-3 text-[12px] text-fg-3">该模型未配置价格，可在模型设置里填写。 <button type="button" onClick={onOpenModels} className="text-brand underline">打开模型设置</button></p>}
 
     {noUsage && <p className="m-0 rounded-xl card-surface px-4 py-3 text-fg-3">这段时间还没有用量记录。新的任务跑完后会出现在这里。</p>}
 

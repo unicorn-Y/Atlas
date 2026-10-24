@@ -73,6 +73,8 @@ const ExtensionPackagesPanel = lazy(() => import('./components/settings/Extensio
 const ExtensionCatalogPanel = lazy(() => import('./components/settings/ExtensionCatalogPanel'));
 const AppearanceNotificationsPanel = lazy(() => import('./components/settings/AppearanceNotificationsPanel'));
 const WorkspaceSecurityPanel = lazy(() => import('./components/settings/WorkspaceSecurityPanel'));
+const U4SettingsPanel = lazy(() => import('./components/settings/U4SettingsPanel'));
+const SettingsProposalCards = lazy(() => import('./components/SettingsProposalCards'));
 const CustomCommandsPanel = lazy(() => import('./components/settings/CustomCommandsPanel'));
 const RunLimitsPanel = lazy(() => import('./components/settings/RunLimitsPanel'));
 const PlatformSettingsPanel = lazy(() => import('./components/settings/PlatformSettingsPanel'));
@@ -100,7 +102,7 @@ import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 
-type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig';
+type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig';
 
 const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['models', '模型与服务', SlidersHorizontal, 'provider 模型 model API key 密钥 reasoning 推理 连接'],
@@ -111,6 +113,7 @@ const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['channels', 'Gateway 与渠道账号', Radio, 'gateway channel 渠道 账号'],
   ['localModels', '本地模型', Cpu, 'local 本地模型'],
   ['advanced', '高级', Settings, 'compression 压缩 高级'],
+  ['u4', '会话与顾问', UserCog, '顾问 advisor 会话预设 preset ChatGPT 导入 手机推送 语言字号字体'],
   ['usage', '用量', Gauge, 'usage token cost 费用 预算 个人资料 profile'],
   ['limits', '运行限制', Gauge, 'run limits max turns 轮数 token budget cost limit 费用上限'],
   ['profiles', '角色', UserCog, 'profile 角色 agent'],
@@ -194,6 +197,13 @@ export default function App() {
   const [inspectorOpen, setInspectorOpen] = useState(() => pref('canvas') === 'true');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('artifacts');
   const [theme, setTheme] = useState<Theme>(() => initialTheme());
+  useEffect(() => {
+    if (pref('theme-mode') !== 'system') return;
+    const query = window.matchMedia('(prefers-color-scheme: dark)');
+    const update = () => setTheme(query.matches ? 'dark' : 'light');
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
   const [sideMini, setSideMini] = useState(() => pref('sidebar-mini') === 'true');
   // Narrow windows collapse the sidebar to icons without touching the saved preference.
   const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 900px)').matches);
@@ -1106,6 +1116,20 @@ export default function App() {
     { id: 'model', label: '/model', hint: '选择或切换模型', takesArgument: true, run: (query: string) => { const found = store.models.find((item) => item.id.toLowerCase() === query.trim().toLowerCase() || (item.name ?? '').toLowerCase() === query.trim().toLowerCase()); if (found) void store.selectModel(found.id); else setSheet('models'); } },
     { id: 'reasoning', label: '/reasoning', hint: '打开模型选择，查看当前可用的推理强度', run: () => setSheet('models') },
     { id: 'usage', label: '/usage', hint: '查看用量和费用', run: () => setSheet('usage') },
+    { id: 'insights', label: '/insights', hint: '生成最近 7 天使用习惯报告', takesArgument: true, run: (range: string) => {
+      const days = range.trim() === '30' ? 30 : 7;
+      void api<{ path: string; markdown: string }>(store.apiBaseUrl, `/api/u4/insights?days=${days}`).then((report) => {
+        const id = `u4-insights-${Date.now()}`;
+        useAtlasStore.getState().addArtifact({ id, runId: id, type: 'report', name: `最近 ${days} 天使用习惯报告`, path: report.path, summary: report.markdown, createdAt: new Date().toISOString() });
+        useAtlasStore.getState().setActiveRun(id); showInspectorTab('artifacts'); setToast('使用习惯报告已加入产物面板');
+      }).catch((error) => setToast(`生成报告失败：${error instanceof Error ? error.message : String(error)}`));
+    } },
+    { id: 'advisor', label: '/advisor', hint: '查看或切换顾问模型', takesArgument: true, run: (model: string) => {
+      if (model.trim()) void api(store.apiBaseUrl, '/api/u4/settings', { method: 'PUT', json: { advisor_model: model.trim() } }).then(() => setToast(`顾问模型已设为 ${model.trim()}`)).catch((error) => setToast(`设置顾问模型失败：${String(error)}`));
+      else { setSheet('u4'); setToast('在「会话与顾问」里查看或切换顾问模型'); }
+    } },
+    { id: 'preset', label: '/preset', hint: '查看、保存并应用会话预设', run: () => setSheet('u4') },
+    { id: 'import-chatgpt', label: '/import-chatgpt', hint: '导入 ChatGPT 官方导出包的 conversations.json', run: () => setSheet('u4') },
     { id: 'cost', label: '/cost', hint: '查看本会话 Token、缓存、费用与耗时', run: () => {
       if (!activeConversation) { setToast('先打开一个会话再查看 /cost'); return; }
       setSheet('usage');
@@ -1113,7 +1137,7 @@ export default function App() {
     { id: 'help', label: '/help', hint: '列出全部斜杠命令及用法', run: showHelp },
     { id: 'doctor', label: '/doctor', hint: '检查安装与配置并查看修复建议', run: () => setSheet('diagnostics') },
     { id: 'config', label: '/config', hint: '打开配置面板', run: () => setSheet('mainConfig') },
-    { id: 'release-notes', label: '/release-notes', hint: '查看本版本更新说明', run: () => setRawText(`Atlas ${__APP_VERSION__} 更新说明\n\n本版本包括会话整理、任务交接、会话导入导出、用量统计、语音、通知与托盘、定时任务和诊断帮助界面。`) },
+    { id: 'release-notes', label: '/release-notes', hint: '查看本版本更新说明', run: () => { setRawTextTitle('更新说明'); setRawText(`Atlas ${__APP_VERSION__} 更新说明\n\n本版本包括会话整理、任务交接、会话导入导出、用量统计、语音、通知与托盘、定时任务和诊断帮助界面。`); } },
     { id: 'status', label: '/status', hint: '显示版本、模型、API 连通性和工具状态', run: () => setToast(`Atlas ${__APP_VERSION__} · ${modelName} · ${store.connected ? 'API 已连接' : 'API 未连接'} · 工具 ${store.tools.length} 个可用 · 推理 ${store.reasoningEffort || '默认'} · ${PERMISSION[permission].label}`) },
     { id: 'permissions', label: '/permissions', hint: '切换当前对话权限模式', run: () => { if (!activeConversation) { setToast('先打开一个对话再切换权限'); return; } setToast(`权限模式：${PERMISSION[cyclePermission()].label}`); } },
     { id: 'agents', label: '/agents', hint: '打开 Agents 页：常驻 Agent 花名册与详情', run: () => go('agents') },
@@ -1148,10 +1172,10 @@ export default function App() {
   }
   slashCommands.forEach((command) => {
     command.group ??= command.id.startsWith('skill-') ? '技能'
-      : ['new', 'clear', 'resume', 'fork', 'undo', 'redo', 'rename', 'export', 'handoff'].includes(command.id) ? '会话'
+      : ['new', 'clear', 'resume', 'fork', 'undo', 'redo', 'rename', 'export', 'handoff', 'preset', 'import-chatgpt'].includes(command.id) ? '会话'
         : ['folder', 'pwd', 'cd', 'init', 'ide', 'worktree', 'open'].includes(command.id) ? '工作区'
-          : ['model', 'reasoning', 'usage', 'cost'].includes(command.id) ? '模型'
-            : ['doctor', 'config', 'release-notes', 'help', 'version'].includes(command.id) ? '诊断'
+          : ['model', 'reasoning', 'usage', 'cost', 'advisor'].includes(command.id) ? '模型'
+            : ['doctor', 'config', 'release-notes', 'help', 'version', 'insights'].includes(command.id) ? '诊断'
               : command.id.startsWith('skill-') ? '技能' : '工具';
   });
   const conversationsRef = useRef(store.conversations);
@@ -1691,6 +1715,14 @@ export default function App() {
             <div className="set-row"><div>自动朗读新回复<small>用本机语音逐句读出 Atlas 的回答</small></div><button className="switch" role="switch" aria-label="自动朗读新回复" aria-checked={voiceOutput} onClick={toggleVoiceOutput} /></div>
           </div>
         </section>}
+        {sheet === 'u4' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">会话与顾问</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">顾问模型、会话预设、历史导入、手机推送、字体与语言。</p><U4SettingsPanel apiBaseUrl={store.apiBaseUrl} models={store.models} currentModel={store.model} theme={theme} onThemeChange={chooseTheme} onToast={notify} onImported={() => void store.refreshConversations()} onApplyPreset={(preset) => {
+          store.beginConversationDraft(preset.workspace || null);
+          if (preset.model) void store.selectModel(preset.model);
+          if (preset.reasoning_effort) store.setReasoningEffort(preset.reasoning_effort as Parameters<typeof store.setReasoningEffort>[0]);
+          for (const skill of preset.skills ?? []) store.applySkill(skill);
+          try { localStorage.setItem('atlas.preference.session-env-next', JSON.stringify(preset.env ?? {})); } catch { /* local-only */ }
+          setSheet(null); go('chat'); notify(`已应用会话预设「${preset.label}」`);
+        }} /></section>}
         {sheet === 'usage' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">用量</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">每次任务用了多少 token、缓存帮你省了多少、大概花了多少钱。</p><UsagePanel username={username} onSaveUsername={saveUsername} apiBaseUrl={store.apiBaseUrl} conversationId={activeConversation?.id ?? null} onOpenModels={() => setSheet('models')} /></section>}
         {sheet === 'plugins' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">插件与扩展</h3>
@@ -1775,6 +1807,7 @@ export default function App() {
     {activeConversation && <Suspense fallback={null}><SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} /></Suspense>}
 
     {view !== 'chat' && view !== 'home' && <Suspense fallback={null}><ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} /></Suspense>}
+    <Suspense fallback={null}><SettingsProposalCards apiBaseUrl={store.apiBaseUrl} onModel={(model) => void store.selectModel(model)} onToast={notify} /></Suspense>
     {toast && <div role="status" className="pop anim-pop fixed bottom-7 left-1/2 z-[80] -translate-x-1/2 rounded-xl px-4 py-2.5 text-[13.5px] text-fg">{toast}</div>}
   </TooltipProvider>;
 }

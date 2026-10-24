@@ -24,6 +24,7 @@ from atlas.api.upstream_router import upstream_router
 from atlas.api.group_router import router as group_router
 from atlas.api.skills_router import router as skills_router
 from atlas.api.usage_router import router as usage_router
+from atlas.api.u4_router import router as u4_router
 from atlas.api.health_router import router as health_router
 from atlas.api.integrations_router import router as integrations_router
 from atlas.api.local_models_router import router as local_models_router
@@ -133,6 +134,7 @@ def create_app(
         scheduling_router,
         tools_router,
         usage_router,
+        u4_router,
         workspace_router,
         workbench_router,
         library_router,

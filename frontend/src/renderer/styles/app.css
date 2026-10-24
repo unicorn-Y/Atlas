@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "./legacy.css" layer(components);
 
+code, pre, kbd, samp { font-family: var(--atlas-mono-font, ui-monospace, SFMono-Regular, Consolas, monospace) !important; }
+
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
 /*
@@ -10,6 +12,8 @@
  * Brass (--brand) stays reserved for Atlas itself: the mark, and anything that shows Atlas is working.
  */
 :root, [data-theme=light] {
+  font-size: var(--atlas-font-size, 16px);
+  font-family: var(--atlas-font, inherit);
   --bg: #F4F3F0;
   --desk: var(--bg);
   --sheet-bg: #FFFFFF;

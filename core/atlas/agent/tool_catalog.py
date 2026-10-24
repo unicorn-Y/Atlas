@@ -64,6 +64,23 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
             "automation_id": {"type": "string", "description": "精确 id（可选，优先于 query）"},
         }, "required": ["action"], "additionalProperties": False},
     }})
+    tools.extend([
+        {"type": "function", "function": {
+            "name": "propose_settings_change",
+            "description": "Propose a user setting change. Never apply it yourself: create a review card so the user can approve or reject it. Supported keys: model, notifications.level, advisor_model.",
+            "parameters": {"type": "object", "properties": {
+                "key": {"type": "string", "enum": ["model", "notifications.level", "advisor_model"]},
+                "from": {}, "to": {}, "reason": {"type": "string"},
+            }, "required": ["key", "to"], "additionalProperties": False},
+        }},
+        {"type": "function", "function": {
+            "name": "ask_advisor",
+            "description": "Consult the user's configured advisor model for a second opinion on an important decision. Return the advisor's answer without treating it as authoritative.",
+            "parameters": {"type": "object", "properties": {
+                "question": {"type": "string"}, "context": {"type": "string"},
+            }, "required": ["question"], "additionalProperties": False},
+        }},
+    ])
     tools.append({"type": "function", "function": {
         "name": "todo_list",
         "description": "Track a bounded task list for multi-step work. Replace or merge with todos; call with no todos to read. List every required item, keep one in_progress, and mark completed only after verification.",

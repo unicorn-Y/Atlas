@@ -68,6 +68,9 @@ export function saveCustomTheme(value: unknown): CustomTheme {
 
 /** Return the built-in base used to initialize App before its theme effect runs. */
 export function initialTheme(fallback: Theme = 'light'): Theme {
+  if (storageGet('atlas.preference.theme-mode') === 'system' && typeof matchMedia !== 'undefined') {
+    return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
   const saved = storageGet(APPEARANCE_KEY);
   if (saved === 'custom') return readCustomTheme()?.base ?? fallback;
   return isTheme(saved) ? saved : fallback;

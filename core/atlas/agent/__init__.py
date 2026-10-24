@@ -273,6 +273,7 @@ class AgentRunContext:
     read_only: bool = False
     permission_mode: str = "full_access"
     allowed_paths: list[str] = field(default_factory=list)
+    session_env: dict[str, str] = field(default_factory=dict)
     hermes_preapproved_writes: set[str] = field(default_factory=set)
     process_notifications: asyncio.Queue[dict[str, Any]] = field(default_factory=asyncio.Queue)
     parent_process_event_callback: Callable[..., Any] | None = None
@@ -816,6 +817,7 @@ class AgentOrchestrator:
         worker: bool = False,
         stable_system_prefix: str | None = None,
         memory_scope_id: str = "",
+        session_env: dict[str, str] | None = None,
         parent_process_event_callback: Callable[..., Any] | None = None,
         source: str = "foreground",
     ) -> AsyncIterator[dict[str, Any]]:
@@ -856,6 +858,7 @@ class AgentOrchestrator:
             task_id=task_id, reasoning_effort=reasoning_effort, worker=worker,
             stable_system_prefix=stable_system_prefix,
             memory_scope_id=memory_scope_id,
+            session_env=dict(session_env or {}),
         )
         callbacks = RunCallbacks(
             cancel_event=cancel_event, pause_event=pause_event,

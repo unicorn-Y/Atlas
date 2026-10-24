@@ -38,6 +38,7 @@ class RunState:
         "permission_mode", "allowed_paths", "trust_future", "trust_event_id",
         "executor", "sandbox", "extra_roots",
         "trust_roots",
+        "session_env",
         "project_id",
         "task_id",
         "telegram_user_id",
@@ -99,6 +100,7 @@ class RunState:
         self.sandbox: dict[str, Any] | None = None
         self.extra_roots: list[str] = []
         self.trust_roots: list[str] = []
+        self.session_env: dict[str, str] = {}
         self.project_id: str | None = None
         self.task_id: str | None = None
         self.telegram_user_id: int | None = None
