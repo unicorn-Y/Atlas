@@ -328,4 +328,22 @@ async def delete_vault_entry(item_id: str) -> dict[str, Any]:
     return {"status": "ok"}
 
 
+class VaultRotateRequest(BaseModel):
+    password: str
+
+
+@router.put("/vault/{item_id}/password", dependencies=[Depends(_require_trusted_origin)])
+async def rotate_vault_password(item_id: str, req: VaultRotateRequest) -> dict[str, bool]:
+    if not req.password:
+        raise HTTPException(status_code=422, detail="password is required")
+    store = await asyncio.to_thread(_vault_store)
+    try:
+        updated = await asyncio.to_thread(store.rotate_login_password, item_id, req.password)
+    except Exception as exc:  # noqa: BLE001 - vault errors contain metadata only
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not updated:
+        raise HTTPException(status_code=404, detail="vault entry not found")
+    return {"updated": True}
+
+
 __all__ = ["router", "set_vault_store_factory"]

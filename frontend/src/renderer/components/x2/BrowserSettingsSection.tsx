@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Check, CircleAlert, KeyRound, LoaderCircle, Trash2 } from 'lucide-react';
 import {
-  addVaultEntry, deleteVaultEntry, getBrowserSettings, listVaultEntries, normalizeEntries, saveBrowserSettings,
+  addVaultEntry, deleteVaultEntry, getBrowserSettings, listVaultEntries, normalizeEntries, rotateVaultPassword, saveBrowserSettings,
   type BrowserControlMode, type BrowserSettings, type VaultEntry, type VaultNewEntry,
 } from '../../services/x2Api';
 import { cn } from '../../ui/cn';
@@ -22,11 +22,12 @@ export const BROWSER_MODES: Array<{ value: BrowserControlMode; label: string; hi
  * 凭据保险箱列表：只显示句柄信息（名称、用户名、网址），保存后永不回显密码。
  * 新增在下面的表单里，删除需点两次确认。
  */
-export function VaultManager({ entries, busy, onAdd, onDelete, className }: {
+export function VaultManager({ entries, busy, onAdd, onDelete, onRotate, className }: {
   entries: VaultEntry[];
   busy: boolean;
   onAdd: (entry: VaultNewEntry) => Promise<boolean>;
   onDelete: (id: string) => void;
+  onRotate?: (id: string, password: string) => Promise<boolean>;
   className?: string;
 }) {
   const [label, setLabel] = useState('');
@@ -35,6 +36,8 @@ export function VaultManager({ entries, busy, onAdd, onDelete, className }: {
   const [url, setUrl] = useState('');
   const [adding, setAdding] = useState(false);
   const [armedId, setArmedId] = useState('');
+  const [rotateId, setRotateId] = useState('');
+  const [rotationPassword, setRotationPassword] = useState('');
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (adding || busy || !label.trim() || !password) return;
@@ -60,6 +63,11 @@ export function VaultManager({ entries, busy, onAdd, onDelete, className }: {
               armedId === entry.id ? 'bg-danger-soft text-danger' : 'text-fg-3 hover:text-fg')}>
             <Trash2 size={13} />{armedId === entry.id ? '再点一次确认' : '删除'}
           </button>
+          {onRotate && <button type="button" onClick={() => { setRotateId(rotateId === entry.id ? '' : entry.id); setRotationPassword(''); }} className="rounded-lg px-2 py-1 text-[12px] text-fg-3 hover:bg-hover hover:text-fg">轮换</button>}
+          {onRotate && rotateId === entry.id && <form className="flex w-full gap-2" onSubmit={(event) => { event.preventDefault(); if (rotationPassword) void onRotate(entry.id, rotationPassword).then((ok) => { if (ok) { setRotateId(''); setRotationPassword(''); } }); }}>
+            <input type="password" autoComplete="new-password" aria-label={`凭据 ${entry.label} 的新密码`} required value={rotationPassword} onChange={(event) => setRotationPassword(event.target.value)} placeholder="新密码" className="h-8 min-w-0 flex-1 rounded-lg bg-sunken px-2 text-[12px] text-fg" />
+            <Button size="sm" variant="secondary" type="submit" disabled={busy || !rotationPassword}>保存新密码</Button>
+          </form>}
         </li>)}
       </ul>
       : <p className="m-0 mb-3 text-[13px] text-fg-3">还没有存过网站凭据。</p>}
@@ -129,6 +137,8 @@ export default function BrowserSettingsSection({ apiBaseUrl, initialSettings, cl
       .catch((exc) => setError(exc instanceof Error ? exc.message : String(exc)))
       .finally(() => setBusy(false));
   };
+  const rotate = (id: string, password: string) => rotateVaultPassword(apiBaseUrl, id, password)
+    .then(() => true).catch((exc) => { setError(exc instanceof Error ? exc.message : String(exc)); return false; });
   const mode = settings.mode ?? 'standalone';
   const checkConnection = () => {
     setConnectionCheck('正在检测 Chrome…');
@@ -190,7 +200,7 @@ export default function BrowserSettingsSection({ apiBaseUrl, initialSettings, cl
       {error && <span role="alert" className="flex items-center gap-1 text-[12.5px] text-danger"><CircleAlert size={13} />{error}</span>}
     </div>
     <div className="mt-4 border-t border-line pt-3">
-      <VaultManager entries={entries ?? []} busy={busy} onAdd={add} onDelete={remove} />
+      <VaultManager entries={entries ?? []} busy={busy} onAdd={add} onDelete={remove} onRotate={rotate} />
     </div>
   </section>;
 }

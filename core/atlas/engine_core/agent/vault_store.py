@@ -414,6 +414,24 @@ class VaultStore:
             self._write_all(remaining)
             return True
 
+    def rotate_login_password(self, item_id: str, password: str) -> bool:
+        """Replace a stored login password without returning or logging its value."""
+        value = str(password or "")
+        if not value:
+            raise VaultError("password is required")
+        with self._locked():
+            items = self._read_all()
+            record = next((item for item in items if item.get("id") == item_id), None)
+            if record is None:
+                return False
+            if record.get("kind") != "login":
+                raise VaultError("only login credentials support password rotation")
+            secret = dict(record.get("secret") or {})
+            secret["password"] = value
+            record["secret"] = secret
+            self._write_all(items)
+        return True
+
     def get_meta(self, item_id: str) -> Optional[VaultItemMeta]:
         with self._locked():
             for rec in self._read_all():

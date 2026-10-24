@@ -142,6 +142,9 @@ export const addVaultEntry = (apiBaseUrl: string, entry: VaultNewEntry) =>
 export const deleteVaultEntry = (apiBaseUrl: string, id: string) =>
   api<void>(apiBaseUrl, `/api/browser/vault/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
+export const rotateVaultPassword = (apiBaseUrl: string, id: string, password: string) =>
+  api<{ updated: boolean }>(apiBaseUrl, `/api/browser/vault/${encodeURIComponent(id)}/password`, { method: 'PUT', json: { password } });
+
 /** 后端可能返回裸数组或 { entries: [...] }，两种都接。 */
 export const normalizeEntries = (value: VaultEntry[] | { entries?: VaultEntry[] } | undefined): VaultEntry[] =>
   Array.isArray(value) ? value : value?.entries ?? [];
