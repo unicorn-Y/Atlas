@@ -25,6 +25,17 @@ from fastapi import Request, WebSocket, WebSocketDisconnect
 
 from atlas.skills.dependencies import dependency_preflight
 router = APIRouter()
+_terminal_buffers: dict[str, str] = {}
+
+
+@router.put("/api/terminal/buffer")
+async def update_terminal_buffer(payload: dict[str, Any]) -> dict[str, bool]:
+    tab_id = str(payload.get("tab_id", ""))[:240]
+    text = payload.get("text")
+    if not tab_id or not isinstance(text, str):
+        raise HTTPException(status_code=422, detail="tab_id and text are required")
+    _terminal_buffers[tab_id] = text[-200_000:]
+    return {"saved": True}
 log = structlog.get_logger(__name__)
 
 def _server() -> Any:

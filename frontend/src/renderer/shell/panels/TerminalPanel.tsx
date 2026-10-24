@@ -6,6 +6,7 @@ import { ChevronRight, CircleStop, MessageSquarePlus, Plus, Power, RotateCcw, X 
 import type { ProcessInfo } from '@atlas/backend-adapter';
 import { backend } from '../../store/useAtlasStore';
 import { relativeTime } from '../../services/api';
+import { api } from '../../services/api';
 import { cn } from '../../ui/cn';
 
 const cssVar = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -40,14 +41,15 @@ export default function TerminalPanel({ conversationId, cwd, active, command, on
     : [...sessions, { conversationId, cwd }];
   return <div className="h-full min-h-0">
     {renderedSessions.map((session) => <div key={session.conversationId} className="h-full min-h-0" hidden={session.conversationId !== conversationId}>
-      <ConversationTerminals cwd={session.cwd} active={active && session.conversationId === conversationId}
+      <ConversationTerminals bufferScope={session.conversationId} cwd={session.cwd} active={active && session.conversationId === conversationId}
         command={session.conversationId === conversationId ? command : null} onSendToAtlas={onSendToAtlas} />
     </div>)}
   </div>;
 }
 
-function ConversationTerminals({ cwd, active, command, onSendToAtlas }: {
+function ConversationTerminals({ cwd, active, command, onSendToAtlas, bufferScope = 'draft' }: {
   cwd: string; active: boolean;
+  bufferScope?: string;
   command?: { id: string; text: string } | null;
   onSendToAtlas: (text: string) => void;
 }) {
@@ -121,7 +123,7 @@ function ConversationTerminals({ cwd, active, command, onSendToAtlas }: {
     </div>
     <div className="min-h-0 flex-1">
       {tabs.map((tab) => <div key={tab.id} role="tabpanel" aria-label={tab.title} hidden={activeId !== tab.id} className="h-full min-h-0">
-        <TerminalSession cwd={cwd} active={active && activeId === tab.id} command={commandOwner?.id === command?.id && commandOwner?.tabId === tab.id ? command : null}
+        <TerminalSession bufferId={`${bufferScope}:${tab.id}`} cwd={cwd} active={active && activeId === tab.id} command={commandOwner?.id === command?.id && commandOwner?.tabId === tab.id ? command : null}
           onSendToAtlas={onSendToAtlas} />
       </div>)}
       {!tabs.length && <div className="grid h-full place-items-center text-[13px] text-fg-3">终端已全部关闭。<button type="button" onClick={addTerminal} className="ml-1 text-brand underline">新建终端</button></div>}
@@ -129,8 +131,9 @@ function ConversationTerminals({ cwd, active, command, onSendToAtlas }: {
   </div>;
 }
 
-function TerminalSession({ cwd, active, command, onSendToAtlas }: {
+function TerminalSession({ cwd, active, command, onSendToAtlas, bufferId = 'draft:terminal-1' }: {
   cwd: string; active: boolean; command?: { id: string; text: string } | null; onSendToAtlas: (text: string) => void;
+  bufferId?: string;
 }) {
   const [session, setSession] = useState(0);
   const [closed, setClosed] = useState(false);
@@ -158,6 +161,17 @@ function TerminalSession({ cwd, active, command, onSendToAtlas }: {
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
+    let bufferTimer: number | null = null;
+    const publishBuffer = () => {
+      const activeBuffer = term.buffer.active;
+      const first = Math.max(0, activeBuffer.length - 500);
+      const text = Array.from({ length: activeBuffer.length - first }, (_, index) => activeBuffer.getLine(first + index)?.translateToString(true) ?? '').join('\n');
+      void api(backend.apiBaseUrl, '/api/terminal/buffer', { method: 'PUT', json: { tab_id: bufferId, text } }).catch(() => undefined);
+    };
+    const bufferSubscription = term.onWriteParsed(() => {
+      if (bufferTimer !== null) window.clearTimeout(bufferTimer);
+      bufferTimer = window.setTimeout(publishBuffer, 250);
+    });
     termRef.current = term;
     const selected = term.onSelectionChange(() => setSelection(term.getSelection()));
     setStatus('connecting');
@@ -180,7 +194,7 @@ function TerminalSession({ cwd, active, command, onSendToAtlas }: {
     const observer = new ResizeObserver(safeFit);
     observer.observe(host);
     fitRef.current = safeFit;
-    return () => { disposed = true; observer.disconnect(); input.dispose(); resize.dispose(); selected.dispose(); socket.close(); term.dispose(); fitRef.current = null; termRef.current = null; setSelection(''); };
+    return () => { disposed = true; bufferSubscription.dispose(); if (bufferTimer !== null) window.clearTimeout(bufferTimer); observer.disconnect(); input.dispose(); resize.dispose(); selected.dispose(); socket.close(); term.dispose(); fitRef.current = null; termRef.current = null; setSelection(''); };
   }, [cwd, session, closed]);
 
   // Run a `!command` from the composer once, when the shell is connected.

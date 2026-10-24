@@ -2560,6 +2560,18 @@ class AtlasKernel:
                                     "content": message.get("content", "")})
             result = history[-limit:]
             return {"content": json.dumps(result, ensure_ascii=False), "data": {"items": result}}
+        if name == "read_terminal":
+            from atlas.api.tools_router import _terminal_buffers
+            from atlas.kernel.tools import read_terminal_buffers
+            try:
+                limit = max(1, min(500, int(arguments.get("lines", 80) or 80)))
+            except (TypeError, ValueError):
+                limit = 80
+            requested = str(arguments.get("tab_id") or "")
+            result = read_terminal_buffers(_terminal_buffers, requested, limit)
+            if requested and not result:
+                return {"content": f"No Atlas terminal buffer found for tab {requested!r}.", "is_error": True}
+            return {"content": json.dumps(result, ensure_ascii=False), "data": {"items": result}}
         if name in {"new_context", "new_context_window"}:
             callback = getattr(runtime, "new_context_window_callback", None)
             hermes_agent = getattr(runtime, "hermes_agent", None)
