@@ -464,6 +464,33 @@ class AgentOrchestrator:
                 }
                 for hit in hits
             ], ensure_ascii=False))
+        # Project knowledge is shared across the project's conversations. Retrieve a
+        # small, source-labelled slice on every turn so notes are available without
+        # requiring the agent to remember to call the search tool first.
+        if query:
+            try:
+                source_hits = await self._projects.search_sources(project.project_id, query[:80], limit=4)
+            except Exception:
+                log.debug("agent.project_source_search_failed", exc_info=True)
+                source_hits = []
+            if source_hits:
+                remaining = 3200
+                snippets = []
+                for item in source_hits:
+                    snippet = str(item.get("snippet") or "")[:min(900, remaining)]
+                    if not snippet:
+                        continue
+                    label = str(item.get("title") or "项目资料")
+                    source_path = str(item.get("path") or "")
+                    entry = f"- {label}" + (f" ({source_path})" if source_path else "") + f"\n  {snippet}"
+                    if len(entry) > remaining:
+                        entry = entry[:remaining]
+                    snippets.append(entry)
+                    remaining -= len(entry)
+                    if remaining <= 0:
+                        break
+                if snippets:
+                    parts.append("Relevant shared project knowledge (source-labelled):\n" + "\n".join(snippets))
         return "\n".join(parts)
 
     async def _use_skill_result(self, raw_name: str) -> dict[str, Any]:
