@@ -16,13 +16,14 @@ export function greeting() {
   return hour < 5 ? '夜深了' : hour < 11 ? '早上好' : hour < 13 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
 }
 
-export default function HomeView({ username, composer, notice, recent, onOpen, onSuggest }: {
+export default function HomeView({ username, composer, notice, recent, onOpen, onSuggest, suggestions = SUGGESTIONS }: {
   username: string;
   composer: ReactNode;
   notice?: ReactNode;
   recent: ConversationSummary[];
   onOpen: (conversation: ConversationSummary) => void;
   onSuggest: (suggestion: Suggestion) => void;
+  suggestions?: Suggestion[];
 }) {
   return <div className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
     <div className="relative mx-auto w-[min(800px,100%)] px-6 pt-[14vh] pb-16">
@@ -33,7 +34,7 @@ export default function HomeView({ username, composer, notice, recent, onOpen, o
       {composer}
       {notice}
       <div className="mt-4 flex flex-wrap gap-2">
-        {SUGGESTIONS.map((suggestion) => <button key={suggestion.label} onClick={() => onSuggest(suggestion)}
+        {suggestions.map((suggestion) => <button key={suggestion.label} onClick={() => onSuggest(suggestion)}
           className="h-8 rounded-full px-3.5 text-[13px] text-fg-2 shadow-[inset_0_0_0_1px_var(--line-strong)] transition-colors hover:bg-hover hover:text-fg">
           {suggestion.label}
         </button>)}

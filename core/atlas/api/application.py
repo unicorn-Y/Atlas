@@ -46,6 +46,7 @@ from atlas.api.model_catalog_preferences_router import router as model_catalog_p
 from atlas.api.output_style_settings_router import router as output_style_settings_router
 from atlas.api.personal_todos_router import router as personal_todos_router
 from atlas.api.projects_router import router as projects_router
+from atlas.api.u6_router import router as u6_router
 from atlas.api.records_router import router as records_router
 from atlas.api.runtime import RuntimeManager
 from atlas.api.runtime_router import router as runtime_router
@@ -127,6 +128,7 @@ def create_app(
         output_style_settings_router,
         personal_todos_router,
         projects_router,
+        u6_router,
         records_router,
         skills_router,
         runtime_router,

@@ -2,7 +2,7 @@ import { lazy, startTransition, Suspense, useCallback, useEffect, useMemo, useRe
 import { useShallow } from 'zustand/react/shallow';
 import {
   AudioLines, Bell, BookMarked, Brain, Copy, Cpu, Keyboard, Monitor, Radio, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Settings,
-  SlidersHorizontal, Square, Sun, Zap, FileCog, Volume2, X, Gauge, Search, File as FileIcon,
+  SlidersHorizontal, Square, Sun, Zap, FileCog, Volume2, X, Gauge, Search, Pin, File as FileIcon,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/backend-adapter';
@@ -231,6 +231,11 @@ export default function App() {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [input, setInput] = useState('');
   const [pendingProjectId, setPendingProjectId] = useState('');
+  const [summaryEnabled, setSummaryEnabled] = useState(() => pref('pinned-summary') !== 'false');
+  const [proactiveEnabled, setProactiveEnabled] = useState(() => pref('suggestions') !== 'false');
+  const [turnSuggestions, setTurnSuggestions] = useState<string[]>([]);
+  const generatedSuggestionsRun = useRef('');
+  const [homeGitStatus, setHomeGitStatus] = useState<{ isGit: boolean; changed: number; languages: string[] }>({ isGit: false, changed: 0, languages: [] });
   const [homeMode, setHomeMode] = useState('chat');
   const [createPrompt, setCreatePrompt] = useState('');
   const [toast, setToast] = useState('');
@@ -321,6 +326,18 @@ export default function App() {
   const planSteps = Array.isArray(currentPlan?.subtasks) ? currentPlan.subtasks.filter((step): step is { status?: string } => Boolean(step) && typeof step === 'object') : [];
   const completedPlanSteps = planSteps.filter((step) => step.status === 'completed').length;
   const messages = (store.conversationMessages[store.activeConversationId] ?? []).filter((message) => message.role === 'user' || message.role === 'assistant');
+  useEffect(() => {
+    if (!activeRun || activeRun.conversationId !== store.activeConversationId || activeRun.status !== 'completed') return;
+    if (!proactiveEnabled || generatedSuggestionsRun.current === activeRun.id) return;
+    const response = [...messages].reverse().find((message) => message.role === 'assistant')?.content ?? '';
+    if (!response.trim()) return;
+    generatedSuggestionsRun.current = activeRun.id;
+    setTurnSuggestions([]);
+    const goal = messages.find((message) => message.role === 'user')?.content ?? '';
+    void api<{ suggestions: string[] }>(store.apiBaseUrl, '/api/u6/suggestions', { method: 'POST', json: { goal, response } })
+      .then((result) => setTurnSuggestions(Array.isArray(result.suggestions) ? result.suggestions.slice(0, 3) : []))
+      .catch(() => setTurnSuggestions([]));
+  }, [activeRun?.id, activeRun?.status, activeRun?.conversationId, messages, proactiveEnabled, store.activeConversationId, store.apiBaseUrl]);
   // Once a run finishes the store reloads saved history, which then also contains the run's own turn.
   // The live activity already shows that turn (with its steps), so stop the history just before it.
   const runPrompt = activeRun && activeRun.conversationId === store.activeConversationId
@@ -1232,6 +1249,19 @@ export default function App() {
       const enabled = pref('vim-mode') !== 'true'; setPref('vim-mode', String(enabled)); window.dispatchEvent(new Event('atlas:vim-toggle')); setToast(`Vim 模式已${enabled ? '开启' : '关闭'}`);
     } },
     { id: 'fallback', label: '/fallback', hint: '配置主模型失败后的备用模型顺序', run: () => setFallbackOpen(true) },
+    { id: 'suggestions', label: '/suggestions', hint: '开启或关闭每轮结束后的主动建议', takesArgument: true, run: (value: string) => {
+      const arg = value.trim().toLowerCase();
+      const enabled = arg === 'on' ? true : arg === 'off' ? false : !proactiveEnabled;
+      if (arg && arg !== 'on' && arg !== 'off') { setToast('用法：/suggestions on|off'); return; }
+      setProactiveEnabled(enabled); setPref('suggestions', String(enabled)); if (!enabled) setTurnSuggestions([]);
+      setToast(`主动建议已${enabled ? '开启' : '关闭'}`);
+    } },
+    { id: 'summary', label: '/summary', hint: '开启或关闭置顶任务摘要', takesArgument: true, run: (value: string) => {
+      const arg = value.trim().toLowerCase();
+      const enabled = arg === 'on' ? true : arg === 'off' ? false : !summaryEnabled;
+      if (arg && arg !== 'on' && arg !== 'off') { setToast('用法：/summary on|off'); return; }
+      setSummaryEnabled(enabled); setPref('pinned-summary', String(enabled)); setToast(`置顶摘要已${enabled ? '开启' : '关闭'}`);
+    } },
     { id: 'reasoning', label: '/reasoning', hint: '打开模型选择，查看当前可用的推理强度', run: () => setSheet('models') },
     { id: 'usage', label: '/usage', hint: '查看用量和费用', run: () => setSheet('usage') },
     { id: 'insights', label: '/insights', hint: '生成最近 7 天使用习惯报告', takesArgument: true, run: (range: string) => {
@@ -1326,6 +1356,31 @@ export default function App() {
   const remoteHost = /^ssh:\/\/([^/]+)\//.exec(workspacePath)?.[1] ?? '';
   const workspaceName = workspacePath
     ? `${remoteHost ? `${remoteHost}:` : ''}${workspacePath.split(/[\\/]/).filter(Boolean).pop() ?? workspacePath}` : '';
+  useEffect(() => {
+    let stale = false;
+    if (!workspacePath) { setHomeGitStatus({ isGit: false, changed: 0, languages: [] }); return; }
+    void api<{ is_git: boolean; changed: number; languages: string[] }>(store.apiBaseUrl, `/api/u6/environment?workspace=${encodeURIComponent(workspacePath)}`)
+      .then((value) => { if (!stale) setHomeGitStatus({ isGit: value.is_git, changed: value.changed, languages: value.languages }); })
+      .catch(() => { if (!stale) setHomeGitStatus({ isGit: false, changed: 0, languages: [] }); });
+    return () => { stale = true; };
+  }, [store.apiBaseUrl, workspacePath]);
+  const homeSuggestions = useMemo<Suggestion[]>(() => {
+    const rows: Suggestion[] = [];
+    if (workspacePath) {
+      rows.push(homeGitStatus.isGit
+        ? homeGitStatus.changed ? { label: `检查 ${homeGitStatus.changed} 项未提交改动`, text: `检查当前工作区的 ${homeGitStatus.changed} 项未提交改动，按风险和影响分组说明。` }
+          : { label: `梳理 ${workspaceName} 项目`, text: `梳理当前 Git 项目 ${workspaceName} 的结构、主要语言和关键入口。` }
+        : { label: `了解 ${workspaceName} 工作区`, text: `了解工作区 ${workspacePath} 的目录结构和主要文件类型。` });
+      const language = store.skills.find((skill) => /python|typescript|javascript|rust|golang/i.test(skill.name));
+      if (language) rows.push({ label: `用 ${language.name} 技能开始`, text: `结合当前工作区，使用 ${language.name} 技能检查我接下来的改动。` });
+      else if (homeGitStatus.languages.length) rows.push({ label: `${homeGitStatus.languages[0]} 项目建议`, text: `结合当前 ${homeGitStatus.languages.join('、')} 项目结构，建议一个值得优先处理的改进并说明原因。` });
+    }
+    const recent = store.conversations.find((item) => item.id !== store.activeConversationId);
+    if (recent) rows.push({ label: `继续：${recent.title.slice(0, 18)}`, text: `请继续会话“${recent.title}”的工作，先用 read_session 读取会话 ${recent.id}。` });
+    if (rows.length < 3) rows.push({ label: '整理今天的待办', text: '帮我把今天要做的事按轻重缓急理一理。' });
+    if (rows.length < 4) rows.push({ label: '画一张产品海报', text: '一张极简风格的产品海报，深色背景，主体居中，柔和的顶光', mode: 'image' });
+    return rows.slice(0, 4);
+  }, [workspacePath, workspaceName, homeGitStatus, store.skills, store.conversations, store.activeConversationId]);
   // 自定义命令跟工作目录走：换了目录或连上后端就重取一次，供 / 菜单使用。
   useEffect(() => { void store.reloadCommands(workspacePath || undefined); }, [store.connected, workspacePath]);
   const permission: PermissionMode = (activeConversation?.permission_mode as PermissionMode | undefined) ?? 'full_access';
@@ -1619,6 +1674,18 @@ export default function App() {
     <button type="button" title="编辑目标" aria-label="编辑目标" onClick={() => { const value = window.prompt('编辑当前目标', conversationGoal.text); if (value?.trim()) void updateGoal(`edit ${value.trim()}`); }} className="rounded px-1.5 py-1 hover:bg-hover">编辑</button>
     <button type="button" title="清除目标" aria-label="清除目标" onClick={() => void updateGoal('clear')} className="rounded px-1.5 py-1 text-danger hover:bg-hover">清除</button>
   </div>;
+  const pinnedSummary = summaryEnabled && messages.some((message) => message.role === 'user') && <div className="mx-8 mt-2 mb-1 flex items-start gap-2 rounded-xl border border-edge bg-panel/95 px-3 py-2 shadow-sm">
+    <Pin size={13} className="mt-0.5 shrink-0 text-brand" />
+    <div className="min-w-0 flex-1 text-[11.5px] leading-relaxed text-fg-2">
+      <div className="truncate"><b className="text-fg">任务：</b>{messages.find((message) => message.role === 'user')?.content.replace(/\s+/g, ' ').slice(0, 200)}</div>
+      {(() => { const progress = [...messages].reverse().find((message) => message.role === 'assistant')?.content.replace(/\s+/g, ' ').slice(0, 220); return progress ? <div className="mt-0.5 truncate"><b className="text-fg">进度：</b>{progress}</div> : null; })()}
+    </div>
+    <button type="button" aria-label="关闭置顶摘要" className="rounded px-1 text-fg-3 hover:bg-hover" onClick={() => { setSummaryEnabled(false); setPref('pinned-summary', 'false'); }}><X size={13} /></button>
+  </div>;
+  const suggestionHeader = turnSuggestions.length > 0 && <div className="mb-2 flex flex-wrap items-center gap-1.5" aria-label="下一步建议">
+    <span className="mr-1 text-[11px] text-fg-3">下一步可以：</span>
+    {turnSuggestions.map((suggestion) => <button key={suggestion} type="button" className="rounded-full bg-brand-soft px-2.5 py-1 text-[11.5px] text-fg hover:bg-hover" onClick={() => { setTurnSuggestions([]); void store.sendMessage(suggestion); }}>{suggestion}</button>)}
+  </div>;
 
   const localUrls = useMemo(() => {
     const found: string[] = [];
@@ -1774,7 +1841,7 @@ export default function App() {
         </div>}
 
         <Suspense fallback={<div aria-label="正在加载页面" className="flex flex-1 flex-col gap-3 p-6" aria-busy="true"><div className="h-5 w-36 animate-pulse rounded bg-hover" /><div className="h-24 animate-pulse rounded-xl bg-sunken" /><div className="h-10 animate-pulse rounded-lg bg-sunken" /></div>}>
-        {view === 'home' && <HomeView username={username} notice={errorNote} recent={store.conversations.slice(0, 3)} onOpen={openConversation} onSuggest={suggest}
+        {view === 'home' && <HomeView username={username} notice={errorNote} recent={store.conversations.slice(0, 3)} onOpen={openConversation} onSuggest={suggest} suggestions={homeSuggestions}
           composer={<><Composer {...composerBase} variant="hero" onSubmit={() => void submit(true)}
             placeholder={homeMode === 'image' ? '描述你想要的画面，Atlas 会带你去图像工作台' : '描述一件事，Atlas 会把它做完'}
             modes={{ value: homeMode, options: HOME_MODES, onChange: (id) => { if (id === 'voice') startVoice(); else setHomeMode(id); } }} />
@@ -1786,6 +1853,7 @@ export default function App() {
               <ProgressCapsule run={activeRun} events={activeEvents} onShowAll={() => showInspectorTab('activity')} />
             </div>}
             {computerRunId && <ComputerEdgeBar apiBaseUrl={store.apiBaseUrl} runId={computerRunId} canPause={Boolean(foregroundEvent)} className="shrink-0" />}
+            {pinnedSummary}
             <TimelineNav threadRef={threadRef} resetKey={store.activeConversationId}
               history={historyWithBranchNotes} items={timelineItems}
               hasEarlier={Boolean(store.messagesHasEarlier[store.activeConversationId])}
@@ -1803,7 +1871,7 @@ export default function App() {
             <div className="px-8 pb-5">
               <div className="mx-auto w-[min(760px,100%)]">
                 <Suspense fallback={null}>{queueStrip}{todoStrip}</Suspense>
-                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={<>{editBanner}{goalHeader}{recoveryHeader}{runHeader}{rewindBanner}</>} />
+                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={<>{suggestionHeader}{editBanner}{goalHeader}{recoveryHeader}{runHeader}{rewindBanner}</>} />
                 <div className="mt-1 flex min-w-0 items-center gap-1 px-1 text-[11.5px] text-fg-3">
                   <div className="flex min-w-0 shrink items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div>
                   <span className="flex-1" />
@@ -1899,6 +1967,7 @@ export default function App() {
             onSpeechRateChange={(value) => { setSpeechRate(value); setPref('speech-rate', String(value)); }}
             onSpeechPreview={() => { window.speechSynthesis.cancel(); speakText('你好，我是 Atlas。当前音色和语速可以在这里试听。'); }} />
           <div className="set-list">
+            <div className="set-row"><div>置顶任务摘要<small>在长对话顶部显示首条目标和最近进度</small></div><button className="switch" role="switch" aria-label="置顶任务摘要" aria-checked={summaryEnabled} onClick={() => { const next = !summaryEnabled; setSummaryEnabled(next); setPref('pinned-summary', String(next)); }} /></div>
             <div className="set-row"><div>收起侧边栏<small>只显示图标，给内容更多空间</small></div><button className="switch" role="switch" aria-label="收起侧边栏" aria-checked={sideMini} onClick={toggleMini} /></div>
             <div className="set-row"><div>自动朗读新回复<small>用本机语音逐句读出 Atlas 的回答</small></div><button className="switch" role="switch" aria-label="自动朗读新回复" aria-checked={voiceOutput} onClick={toggleVoiceOutput} /></div>
           </div>
