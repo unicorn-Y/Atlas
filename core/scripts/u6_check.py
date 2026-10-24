@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from atlas.api import u6_router
 from atlas.api.app_services import AppServices
+from atlas.projects import ProjectStore
 
 
 class _Db:
@@ -76,6 +77,25 @@ async def main() -> None:
             workspace = root / "workspace"; workspace.mkdir(); (workspace / "app.py").write_text("print('ok')", encoding="utf-8")
             environment = await u6_router.workspace_environment(str(workspace))
             assert "Python" in environment["languages"]
+
+            projects = ProjectStore(data / "projects.db")
+            await projects.init()
+            project = await projects.create_project("U6 临时项目", str(workspace), color="#7654AB", default_model="deepseek-v4.1-flash")
+            await projects.attach_conversation(project.project_id, "u6-check-conversation")
+            assert (await projects.find_by_conversation("u6-check-conversation")).project_id == project.project_id
+            assert await projects.list_conversations(project.project_id) == ["u6-check-conversation"]
+            assert await projects.delete_project(project.project_id)
+            assert await projects.find_by_conversation("u6-check-conversation") is None
+            await projects.close()
+
+            repo = Path(__file__).parents[2]
+            app_source = (repo / "frontend" / "src" / "renderer" / "App.tsx").read_text(encoding="utf-8")
+            composer_source = (repo / "frontend" / "src" / "renderer" / "components" / "Composer.tsx").read_text(encoding="utf-8")
+            browser_source = (repo / "core" / "atlas" / "api" / "browser_router.py").read_text(encoding="utf-8")
+            assert "/api/mcp/resources/read" in app_source and "kind: 'resource'" in app_source
+            assert "atlas.input-stash." in composer_source and "vimEnabled" in composer_source
+            assert "queuedRecovery" in app_source and "failedRun" in app_source
+            assert '"/recordings/{recording_id}/steps"' in browser_source
 
         assert (await u6_router.whatsnew())["source"] in {"git", "CHANGELOG.md"}
 
