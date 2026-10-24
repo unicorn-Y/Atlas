@@ -581,6 +581,7 @@ class MemoryStore:
         sandbox_set: bool = False,
         extra_roots: list[str] | None = None,
         source: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> bool:
         """Update optional conversation fields. Returns True if found."""
         assert self._db is not None
@@ -596,6 +597,7 @@ class MemoryStore:
         fields["sandbox"] = json.dumps(sandbox) if sandbox_set else None
         fields["extra_roots"] = None if extra_roots is None else json.dumps(extra_roots)
         fields["source"] = source
+        fields["metadata"] = json.dumps(metadata, ensure_ascii=False) if metadata is not None else None
         if not any(value is not None for value in fields.values()):
             cursor = await self._db.execute(
                 "SELECT 1 FROM conversations WHERE id=?", (conversation_id,)

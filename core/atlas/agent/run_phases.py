@@ -531,6 +531,8 @@ def _schedule_library_write(agent: Any, state: _RunState, full_response: Any) ->
         library = get_library()
         if library is None:
             return
+        if isinstance(state.context, dict) and state.context.get("generate_memories") is False:
+            return
         assistant_text = full_response if isinstance(full_response, str) else str(full_response or "")
         library.schedule_turn(
             user_text=str(state.message or ""),
@@ -607,7 +609,17 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
                 read_session_messages, DATA_ROOT / "engine", request.conversation_id,
                 limit=_agent.get_config().max_context_messages,
             )
-            state.context = await _merge_library_recall({}, state.message)
+            conversation = await agent._memory.get_conversation(request.conversation_id) if getattr(agent, "_memory", None) else None
+            metadata = {}
+            if conversation:
+                try:
+                    metadata = json.loads(conversation.get("metadata") or "{}")
+                except (TypeError, ValueError):
+                    metadata = {}
+            state.context = {"use_memories": metadata.get("use_memories", True),
+                             "generate_memories": metadata.get("generate_memories", True)}
+            if state.context["use_memories"]:
+                state.context = await _merge_library_recall(state.context, state.message)
         runtime.maintenance_context = {
             "project_state": state.plan.to_dict() if state.plan else None,
             "unresolved_work": [

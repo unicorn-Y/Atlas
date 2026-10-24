@@ -51,6 +51,8 @@ class ConversationUpdateRequest(BaseModel):
     executor: str | None = None
     sandbox: dict[str, Any] | None = None
     extra_roots: list[str] | None = None
+    use_memories: bool | None = None
+    generate_memories: bool | None = None
 
 
 class ConversationUiMetadataRequest(BaseModel):
@@ -157,6 +159,21 @@ async def create_conversation(
     conversation_id = await memory.create_conversation(req.title.strip() or "New Conversation")
     conversation = await memory.get_conversation(conversation_id)
     assert conversation is not None
+    return conversation
+
+
+@router.get("/api/conversations/{conversation_id}")
+async def get_conversation_settings(
+    services: Annotated[AppServices, Depends(get_app_services)], conversation_id: str,
+) -> dict[str, Any]:
+    memory = services.memory
+    if memory is None:
+        from atlas import server as _atlas_server
+        memory = _atlas_server.memory
+    assert memory is not None
+    conversation = await memory.get_conversation(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
 
 
@@ -534,6 +551,7 @@ async def update_conversation(
         memory = _atlas_server.memory
     assert memory is not None
     values = req.model_dump(exclude_unset=True)
+    memory_options = {key: values.pop(key) for key in ("use_memories", "generate_memories") if key in values}
     if values.get("permission_mode") not in {
         None, "full_access", "ask_each", "ask_writes", "auto_file", "plan", "read_only",
     }:
@@ -577,6 +595,18 @@ async def update_conversation(
             sandbox.get("network", False), bool
         ):
             raise HTTPException(status_code=400, detail="invalid sandbox settings")
+    existing = await memory.get_conversation(conversation_id) if memory_options else None
+    if memory_options and existing is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    metadata = {}
+    if memory_options:
+        try:
+            metadata = json.loads(existing.get("metadata") or "{}")
+        except (TypeError, ValueError):
+            metadata = {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        metadata.update(memory_options)
     ok = await memory.update_conversation(
         conversation_id,
         title=values.get("title"), pinned=values.get("pinned"),
@@ -585,6 +615,7 @@ async def update_conversation(
         allowed_paths=values.get("allowed_paths"), executor=values.get("executor"),
         sandbox=values.get("sandbox"), sandbox_set="sandbox" in values,
         extra_roots=values.get("extra_roots"),
+        metadata=metadata if memory_options else None,
     )
     if not ok:
         raise HTTPException(status_code=404, detail="Conversation not found")
