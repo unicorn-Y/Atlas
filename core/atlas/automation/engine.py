@@ -492,7 +492,7 @@ class AutomationEngine:
         delay_seconds: float | None = None,
     ) -> Any:
         """Enqueue one ``automation_run``；dedup id 保证同一 automation 同时至多一个活跃 run."""
-        from dbos import DBOS, EnqueueOptions
+        from dbos import DBOS
 
         self._require_started()
         options: dict[str, Any] = {
@@ -593,13 +593,15 @@ class AutomationEngine:
             await DBOS.cancel_workflow_async(loop_id)
             cancelled.append(loop_id)
         record = self._require_automation(automation_id)
-        if record["payload"].get("cleanup_policy") == "remove_after_run":
-            self._cleanup_record_worktree(record)
+        self._cleanup_record_worktree(record)
         return {"cancelled": cancelled}
 
     async def remove(self, automation_id: str) -> None:
         """Delete 之前的 DBOS 清理：cron schedule、活跃 run、interval loop。"""
         if not self._started:
+            record = self._store.get(automation_id)
+            if record is not None:
+                self._cleanup_record_worktree(record)
             return
         from dbos import DBOS
 
@@ -608,7 +610,7 @@ class AutomationEngine:
             await DBOS.cancel_workflow_async(workflow_id)
         await self._stop_interval_loop(automation_id)
         record = self._store.get(automation_id)
-        if record is not None and record["payload"].get("cleanup_policy") == "remove_after_run":
+        if record is not None:
             self._cleanup_record_worktree(record)
 
     async def pause(self, automation_id: str, reason: str = "user") -> dict[str, Any]:

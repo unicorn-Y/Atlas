@@ -296,6 +296,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
             <div><dt>归属</dt><dd>{current.owner_agent_id ? agentsById.get(current.owner_agent_id)?.name ?? current.owner_agent_id : '系统'}</dd></div>
             <div><dt>下次运行</dt><dd>{current.enabled && !current.paused_reason && current.next_run_at ? `${new Date(current.next_run_at).toLocaleString()}（${relativeTime(current.next_run_at)}）` : '未排期'}</dd></div>
             <div><dt>上次运行</dt><dd>{current.last_run_at ? `${new Date(current.last_run_at).toLocaleString()}（${relativeTime(current.last_run_at)}）` : '还没运行过'}</dd></div>
+            {current.payload.execution_mode === 'worktree' && current.payload.worktree_path && <div><dt>最近工作树</dt><dd className="break-all">{current.payload.worktree_branch} · {current.payload.worktree_path}</dd></div>}
             {Boolean(current.consecutive_errors) && <div><dt>连续出错</dt><dd>{current.consecutive_errors} 次（到阈值会自动停用）</dd></div>}
           </dl>
 
@@ -304,13 +305,14 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4, fontSize: 12.5 }}>
               {(runs[current.id] ?? []).slice(0, 8).map((run, index) => <li key={run.workflow_run_id ?? index} style={{ display: 'flex', gap: 8 }}>
                 <span style={{ color: run.status === 'failed' || run.status === 'error' ? 'var(--danger)' : 'var(--ink2)' }}>{RUN_STATUS[run.status ?? ''] ?? run.status ?? '—'}</span>
-                <span style={{ color: 'var(--ink3)' }}>{relativeTime(run.started_at)}</span>
+                <span style={{ color: 'var(--ink3)' }}>{relativeTime(run.started_at ?? (typeof run.created_at === 'string' ? run.created_at : undefined))}</span>
                 {typeof run.result === 'object' && run.result && <details style={{ minWidth: 0, color: 'var(--ink3)' }}>
                   <summary className="cursor-pointer">运行详情{typeof (run.result as Record<string, unknown>).worktree_path === 'string' ? ` · worktree ${String((run.result as Record<string, unknown>).worktree_branch ?? '')}` : ''}</summary>
                   {typeof (run.result as Record<string, unknown>).worktree_path === 'string' && <p className="m-0 break-all">路径：{String((run.result as Record<string, unknown>).worktree_path)}</p>}
                   {typeof (run.result as Record<string, unknown>).text === 'string' && <pre className="m-0 max-h-32 overflow-auto whitespace-pre-wrap">{String((run.result as Record<string, unknown>).text)}</pre>}
                   {typeof (run.result as Record<string, unknown>).stdout === 'string' && <pre className="m-0 max-h-32 overflow-auto whitespace-pre-wrap">{String((run.result as Record<string, unknown>).stdout)}</pre>}
                 </details>}
+                {typeof run.error === 'string' && run.error && <details style={{ minWidth: 0, color: 'var(--danger)' }}><summary className="cursor-pointer">错误详情</summary><p className="m-0 whitespace-pre-wrap">{run.error}</p></details>}
               </li>)}
               {!(runs[current.id] ?? []).length && <li style={{ color: 'var(--ink3)' }}>{engineStarted ? '还没有运行记录' : '引擎未接线，暂无运行记录'}</li>}
             </ul>
