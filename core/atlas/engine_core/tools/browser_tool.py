@@ -789,6 +789,8 @@ def browser_navigate(url: str, task_id: Optional[str] = None) -> str:
                                   else "live_chrome" if mode == "live_chrome"
                                   else "cdp" if session_info.get("cdp_url") else "atlas")
     features = session_info.get("features") or {}
+    if features.get("fallback_warning"):
+        response["fallback_warning"] = features["fallback_warning"]
     if features.get("real_profile"):  # auditability: this ran on the user's real-profile copy-browser
         response["used_real_profile"] = True
     # Only a successful, non-blocked navigation becomes the task owner: failed opens

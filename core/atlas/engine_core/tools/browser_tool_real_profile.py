@@ -131,6 +131,13 @@ def _real_profile_snapshot_error(err: str) -> str:
     return f"{_RP}{err}"
 
 
+def _auto_fallback(cache: dict, error: str) -> tuple[None, None]:
+    """Use Atlas' isolated browser as the last automatic choice and expose why."""
+    cache.clear()
+    cache.update(lane="atlas", fallback_warning=_real_profile_snapshot_error(error))
+    return None, None
+
+
 def _real_profile_cdp() -> tuple[Optional[str], Optional[str]]:
     """Return a CDP URL for the user-data copy, refreshing it on configured cadence."""
     bt = _origin()
@@ -138,6 +145,7 @@ def _real_profile_cdp() -> tuple[Optional[str], Optional[str]]:
     selected_mode = str((load_user_settings().get("browser") or {}).get("mode") or "").lower()
     config_mode = str(bt._browser_cfg("mode", "", lambda value: str(value or "").lower(), "browser.mode"))
     mode = selected_mode or config_mode
+    automatic = mode == "auto"
     if mode == "auto":
         from atlas.engine_core.tools.browser_extension_bridge import is_connected
         if is_connected():
@@ -146,10 +154,10 @@ def _real_profile_cdp() -> tuple[Optional[str], Optional[str]]:
         live_endpoint, live_error = live_chrome_cdp()
         if live_endpoint:
             bt._real_profile_cdp_cache["lane"] = "live_chrome"
+            bt._real_profile_cdp_cache.pop("fallback_warning", None)
             return live_endpoint, None
         # A missing live endpoint is an expected auto-selection probe. The copied
-        # profile is next; errors copying it are surfaced instead of silently
-        # pretending its login state is present.
+        # profile is next; if that also fails, fall back to Atlas with a visible reason.
         mode = "real_profile"
     if mode == "cdp":
         settings = load_user_settings().get("browser") or {}
@@ -171,6 +179,8 @@ def _real_profile_cdp() -> tuple[Optional[str], Optional[str]]:
     browser, source, selected = _browser_paths()
     unsupported = _real_profile_unsupported_reason(browser)
     if unsupported:
+        if automatic:
+            return _auto_fallback(bt._real_profile_cdp_cache, unsupported)
         return None, unsupported
     cache = bt._real_profile_cdp_cache
     copy_dir = Path(cache.get("profile_dir") or "")
@@ -185,11 +195,13 @@ def _real_profile_cdp() -> tuple[Optional[str], Optional[str]]:
         return cdp, None
     copied, err = snapshot_real_profile(browser, str(source))
     if err or not copied:
-        return None, _real_profile_snapshot_error(err or "profile copy failed")
+        detail = _real_profile_snapshot_error(err or "profile copy failed")
+        return _auto_fallback(cache, detail) if automatic else (None, detail)
     copy_dir = Path(copied)
     executable = _binary(browser)
     if not executable:
-        return None, _RP + f"the {browser} browser executable was not found."
+        detail = _RP + f"the {browser} browser executable was not found."
+        return _auto_fallback(cache, detail) if automatic else (None, detail)
     try:
         (copy_dir / "DevToolsActivePort").unlink(missing_ok=True)
         args = [executable, f"--user-data-dir={copy_dir}", f"--profile-directory={selected}",
@@ -199,7 +211,8 @@ def _real_profile_cdp() -> tuple[Optional[str], Optional[str]]:
                                 stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         bt._real_profile_chrome_procs.append(proc)
     except OSError as exc:
-        return None, _RP + f"Chrome/Edge could not start on the private profile copy: {exc}"
+        detail = _RP + f"Chrome/Edge could not start on the private profile copy: {exc}"
+        return _auto_fallback(cache, detail) if automatic else (None, detail)
     port_file = copy_dir / "DevToolsActivePort"
     deadline = time.monotonic() + 25
     while time.monotonic() < deadline:
@@ -208,17 +221,20 @@ def _real_profile_cdp() -> tuple[Optional[str], Optional[str]]:
             if port.isdigit() and _cdp_ready(f"http://127.0.0.1:{port}"):
                 cdp = f"http://127.0.0.1:{port}"
                 cache.update(cdp=cdp, profile_dir=str(copy_dir), synced_at=now, browser=browser, lane="real_profile")
+                cache.pop("fallback_warning", None)
                 return cdp, None
         except (OSError, IndexError):
             pass
         if proc.poll() is not None:
-            return None, _RP + "Chrome/Edge exited while starting the profile copy."
+            detail = _RP + "Chrome/Edge exited while starting the profile copy."
+            return _auto_fallback(cache, detail) if automatic else (None, detail)
         time.sleep(0.2)
     try:
         proc.terminate()
     except OSError:
         pass
-    return None, _RP + "Chrome/Edge did not expose its local DevTools endpoint in time."
+    detail = _RP + "Chrome/Edge did not expose its local DevTools endpoint in time."
+    return _auto_fallback(cache, detail) if automatic else (None, detail)
 
 
 def _cdp_ready(url: str) -> bool:

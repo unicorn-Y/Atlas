@@ -304,7 +304,11 @@ def _create_local_session(task_id: str, allow_real_profile: bool = True) -> dict
     if _bt._is_browser_use_cli_mode() and _lp._using_lightpanda_engine():
         return _create_lightpanda_session(task_id)
 
-    info = _session_record("h", None, {"local": True})
+    features = {"local": True}
+    warning = _bt._real_profile_cdp_cache.get("fallback_warning")
+    if warning:
+        features["fallback_warning"] = str(warning)
+    info = _session_record("h", None, features)
     _bt.logger.info("Created local browser session %s for task %s", info["session_name"], task_id)
     return info
 
