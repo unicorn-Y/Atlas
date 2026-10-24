@@ -128,6 +128,7 @@ interface SidebarProps {
   onOpenInWindow?: (id: string) => void;
   onSetUnread?: (id: string, unread: boolean) => void;
   onSetWorkspace?: (id: string, workspace: string) => void;
+  onJumpMessage?: (conversationId: string, messageId: string) => void;
   waiting?: string[];
 }
 
@@ -139,6 +140,7 @@ export default function Sidebar(props: SidebarProps) {
   const [confirmArchive, setConfirmArchive] = useState('');
   const [labels, setLabels] = useState<Record<string, string>>(() => readJson(STORE_KEYS.labels, {}));
   const [manualUnread, setManualUnread] = useState<string[]>(() => readJson(STORE_KEYS.unread, []));
+  const [metadataReady, setMetadataReady] = useState(false);
   const [mode, setMode] = useState<Arrange>(() => readJson<Arrange>(STORE_KEYS.arrange, 'time'));
   const [manualOrder, setManualOrder] = useState<string[]>(() => readJson(STORE_KEYS.manualOrder, []));
   const [sectionOrder, setSectionOrder] = useState<string[]>(() => readJson(STORE_KEYS.sectionOrder, []));
@@ -151,6 +153,7 @@ export default function Sidebar(props: SidebarProps) {
   const [activityConversation, setActivityConversation] = useState<ConversationSummary | null>(null);
   const [filterText, setFilterText] = useState('');
   const [contentMatches, setContentMatches] = useState<string[] | null>(null);
+  const [contentHits, setContentHits] = useState<Array<{ id: string | number; conversation_id: string; content: string; snippet?: string; title?: string }>>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [projectPickerQuery, setProjectPickerQuery] = useState('');
@@ -176,13 +179,35 @@ export default function Sidebar(props: SidebarProps) {
   const longPress = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number; key: string } | null>(null);
   const suppressTouchClickUntil = useRef(0);
 
-  useEffect(() => writeJson(STORE_KEYS.labels, labels), [labels]);
-  useEffect(() => writeJson(STORE_KEYS.unread, manualUnread), [manualUnread]);
-  useEffect(() => writeJson(STORE_KEYS.arrange, mode), [mode]);
-  useEffect(() => writeJson(STORE_KEYS.manualOrder, manualOrder), [manualOrder]);
-  useEffect(() => writeJson(STORE_KEYS.sectionOrder, sectionOrder), [sectionOrder]);
-  useEffect(() => writeJson(STORE_KEYS.groups, customGroups), [customGroups]);
-  useEffect(() => writeJson(STORE_KEYS.members, customMembers), [customMembers]);
+  useEffect(() => {
+    let stale = false;
+    void api<{ metadata?: Record<string, unknown> }>(backend.apiBaseUrl, '/api/ui/conversation-metadata').then(async (result) => {
+      if (stale) return;
+      const remote = result.metadata ?? {};
+      const keys = [STORE_KEYS.labels, STORE_KEYS.unread, STORE_KEYS.arrange, STORE_KEYS.manualOrder, STORE_KEYS.sectionOrder, STORE_KEYS.groups, STORE_KEYS.members];
+      const local = Object.fromEntries(keys.map((key) => [key, readJson(key, undefined)]));
+      const migrated = !Object.keys(remote).length;
+      const value = (key: string) => remote[key] ?? (migrated ? local[key] : undefined);
+      if (value(STORE_KEYS.labels)) setLabels(value(STORE_KEYS.labels) as Record<string, string>);
+      if (value(STORE_KEYS.unread)) setManualUnread(value(STORE_KEYS.unread) as string[]);
+      if (value(STORE_KEYS.arrange)) setMode(value(STORE_KEYS.arrange) as Arrange);
+      if (value(STORE_KEYS.manualOrder)) setManualOrder(value(STORE_KEYS.manualOrder) as string[]);
+      if (value(STORE_KEYS.sectionOrder)) setSectionOrder(value(STORE_KEYS.sectionOrder) as string[]);
+      if (value(STORE_KEYS.groups)) setCustomGroups(value(STORE_KEYS.groups) as CustomGroup[]);
+      if (value(STORE_KEYS.members)) setCustomMembers(value(STORE_KEYS.members) as Record<string, string>);
+      setMetadataReady(true);
+      if (migrated) await api(backend.apiBaseUrl, '/api/ui/conversation-metadata', { method: 'PUT', json: { metadata: Object.fromEntries(keys.map((key) => [key, local[key]]).filter(([, item]) => item !== undefined)) } });
+    }).catch(() => { if (!stale) setMetadataReady(true); });
+    return () => { stale = true; };
+  }, []);
+  useEffect(() => {
+    if (!metadataReady) return;
+    const metadata = { [STORE_KEYS.labels]: labels, [STORE_KEYS.unread]: manualUnread, [STORE_KEYS.arrange]: mode,
+      [STORE_KEYS.manualOrder]: manualOrder, [STORE_KEYS.sectionOrder]: sectionOrder,
+      [STORE_KEYS.groups]: customGroups, [STORE_KEYS.members]: customMembers };
+    const timer = window.setTimeout(() => { void api(backend.apiBaseUrl, '/api/ui/conversation-metadata', { method: 'PUT', json: { metadata } }).catch(() => undefined); }, 250);
+    return () => window.clearTimeout(timer);
+  }, [metadataReady, labels, manualUnread, mode, manualOrder, sectionOrder, customGroups, customMembers]);
   useEffect(() => writeJson(STORE_KEYS.collapsed, collapsed), [collapsed]);
   useEffect(() => {
     if (props.activeConversationId) {
@@ -235,12 +260,12 @@ export default function Sidebar(props: SidebarProps) {
   useEffect(() => () => { if (longPress.current) clearTimeout(longPress.current.timer); }, []);
   useEffect(() => {
     const query = filterText.trim();
-    if (!query) { setContentMatches(null); return; }
+    if (!query) { setContentMatches(null); setContentHits([]); return; }
     let stale = false;
     const timer = window.setTimeout(() => {
-      void api<Array<{ conversation_id: string }>>(backend.apiBaseUrl, `/api/search?limit=100&q=${encodeURIComponent(query)}`)
-        .then((rows) => { if (!stale) setContentMatches([...new Set(rows.map((row) => row.conversation_id))]); })
-        .catch(() => { if (!stale) setContentMatches([]); });
+      void api<Array<{ id: string | number; conversation_id: string; content: string; snippet?: string; title?: string }>>(backend.apiBaseUrl, `/api/search?limit=100&q=${encodeURIComponent(query)}`)
+        .then((rows) => { if (!stale) { setContentHits(rows); setContentMatches([...new Set(rows.map((row) => row.conversation_id))]); } })
+        .catch(() => { if (!stale) { setContentMatches([]); setContentHits([]); } });
     }, 180);
     return () => { stale = true; window.clearTimeout(timer); };
   }, [filterText]);
@@ -829,6 +854,15 @@ export default function Sidebar(props: SidebarProps) {
           </MenuContent>
         </Menu>
       </div>
+      {query && contentHits.length > 0 && <div className="mb-2 max-h-36 overflow-auto rounded-lg bg-sunken p-1" aria-label="正文搜索结果">
+        {contentHits.slice(0, 5).map((hit) => {
+          const conversation = props.conversations.find((item) => item.id === hit.conversation_id);
+          const snippet = (hit.snippet || hit.content).replace(/\s+/g, ' ').slice(0, 90);
+          return <button key={String(hit.id)} type="button" onClick={() => conversation && props.onJumpMessage?.(hit.conversation_id, String(hit.id))} className="block w-full rounded-md px-2 py-1.5 text-left hover:bg-hover">
+            <span className="block truncate text-[11px] text-fg-3">{conversation?.title ?? hit.title ?? '对话'}</span><span className="block truncate text-[11.5px] text-fg-2">{snippet}</span>
+          </button>;
+        })}
+      </div>}
       {selectionMode && <div className="mb-2 grid gap-1 rounded-lg border border-line bg-sunken p-1.5">
         <div className="flex items-center justify-between px-1 text-[11px] text-fg-2"><span>已选 {filteredSelectedCount} 项</span>
           <span className="flex items-center gap-2">

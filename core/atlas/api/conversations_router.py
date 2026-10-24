@@ -53,6 +53,36 @@ class ConversationUpdateRequest(BaseModel):
     extra_roots: list[str] | None = None
 
 
+class ConversationUiMetadataRequest(BaseModel):
+    metadata: dict[str, Any]
+
+
+@router.get("/api/ui/conversation-metadata")
+async def get_conversation_ui_metadata() -> dict[str, Any]:
+    from atlas.config import DATA_ROOT
+    path = DATA_ROOT / "conversation-ui-metadata.json"
+    try:
+        value = await asyncio.to_thread(path.read_text, encoding="utf-8")
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, dict) else {"metadata": {}}
+    except FileNotFoundError:
+        return {"metadata": {}}
+    except (OSError, json.JSONDecodeError):
+        return {"metadata": {}}
+
+
+@router.put("/api/ui/conversation-metadata")
+async def put_conversation_ui_metadata(request: ConversationUiMetadataRequest) -> dict[str, bool]:
+    from atlas.config import DATA_ROOT
+    path = DATA_ROOT / "conversation-ui-metadata.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".json.tmp")
+    payload = json.dumps({"metadata": request.metadata}, ensure_ascii=False, indent=2)
+    await asyncio.to_thread(temporary.write_text, payload, encoding="utf-8")
+    await asyncio.to_thread(temporary.replace, path)
+    return {"saved": True}
+
+
 class ConversationCreateRequest(BaseModel):
     title: str = "New Conversation"
 

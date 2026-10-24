@@ -451,7 +451,7 @@ export default function MessageThread({ history, username, historyActions, empty
         if (row.message.role === 'user' && isTodoEdit(row.message.content)) return <div className="my-3 flex items-center gap-2 text-[12.5px] text-fg-2">
           <ListChecks size={13} className="shrink-0 text-brand" /><span>{todoEditNotice(row.message.content)}</span>
         </div>;
-        return <ConversationMessage role={row.message.role === 'user' ? 'user' : 'assistant'} content={row.message.content} username={username} continued={row.continued} actions={historyActions(row.message)} />;
+        return <ConversationMessage id={String(row.message.id)} role={row.message.role === 'user' ? 'user' : 'assistant'} content={row.message.content} username={username} continued={row.continued} actions={historyActions(row.message)} />;
       case 'empty':
         return emptyState;
       case 'timeline':

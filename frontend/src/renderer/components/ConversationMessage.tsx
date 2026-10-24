@@ -245,7 +245,8 @@ function MarkdownBody({ content, streaming }: { content: string; streaming: bool
  * One chat turn. The user speaks in the UI face inside a bubble; Atlas answers in serif, unboxed.
  * memo 化：历史消息在流式输出期间属性不变，不随每次 delta 重渲染。
  */
-const ConversationMessage = memo(function ConversationMessage({ role, content, username, status, working = false, continued = false, note, actions, streaming = false }: {
+const ConversationMessage = memo(function ConversationMessage({ id, role, content, username, status, working = false, continued = false, note, actions, streaming = false }: {
+  id?: string;
   role: 'user' | 'assistant'; content: string; username: string; status?: string; working?: boolean;
   /** Small label above a user bubble, e.g. that it was folded into a running task. */
   note?: string;
@@ -281,6 +282,7 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
   }, [selectionTooltip]);
   const buildContextActions = (range = selectionRangeWithin(messageRootRef.current)): ContextAction[] => [
       ...(content ? [{ id: 'copy-message', label: '复制消息', onSelect: () => navigator.clipboard.writeText(content) }] : []),
+      ...(content ? [{ id: 'copy-message-markdown', label: '复制为 Markdown', onSelect: () => navigator.clipboard.writeText(content) }] : []),
       ...historyContextActions(actions),
       ...(range ? [{ id: 'add-selection-to-draft', label: '将选中文本加入消息草稿', restoreFocus: false, onSelect: () => {
         const selection = window.getSelection();
@@ -370,7 +372,7 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
     </button>}
   </>;
   if (role === 'assistant' && continued) {
-    return <div ref={messageRootRef} className="group my-3" data-message-role="assistant" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
+    return <div ref={messageRootRef} className="group my-3" data-message-id={id} data-message-role="assistant" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
       {assistantContent}
       {selectionActionTooltip}
       {content && <div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
@@ -385,7 +387,7 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
     </div>;
   }
   if (role === 'user') {
-    return <div ref={messageRootRef} className="group my-5 flex flex-col items-end gap-1" data-message-role="user" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
+    return <div ref={messageRootRef} className="group my-5 flex flex-col items-end gap-1" data-message-id={id} data-message-role="user" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
       {note && <span className="text-[11.5px] text-fg-3">{note}</span>}
       <div data-message-content className="max-w-[80%] whitespace-pre-wrap rounded-[18px] bg-[var(--user-bubble)] px-4 py-2 text-[14px] leading-[1.65] text-fg" title={username}>{content}</div>
       {selectionActionTooltip}
@@ -401,7 +403,7 @@ const ConversationMessage = memo(function ConversationMessage({ role, content, u
     </div>;
   }
   // Replies read as plain text under the user's turn (Codex 26.1007, Claude 2.37337): no avatar, no name.
-  return <div ref={messageRootRef} className="group my-5" data-message-role="assistant" aria-label="Atlas 的回复" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
+  return <div ref={messageRootRef} className="group my-5" data-message-id={id} data-message-role="assistant" aria-label="Atlas 的回复" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
     <div className="min-w-0">
       {(working || status) && <div className="mb-1.5 flex items-center gap-2 text-[12px] text-fg-3">
         {working && <Mark className="size-4" working />}
