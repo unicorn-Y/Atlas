@@ -146,7 +146,6 @@ async def create_project(
             default_preset_id=str(req.get("default_preset_id", "") or ""),
         )
     except ValueError as exc:
-        record_alert("project-index", "项目资料索引失败", str(exc), target="project-sources", dedupe_key=f"project-add:{project_id}:{req.get('path') or req.get('title')}")
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return project.to_dict()
 
@@ -185,7 +184,6 @@ async def import_project(
             repo_url=await asyncio.to_thread(origin_url),
         )
     except ValueError as exc:
-        record_alert("project-index", "项目资料重新索引失败", str(exc), target="project-sources", dedupe_key=f"project-refresh:{project_id}:{source_id}")
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return project.to_dict()
 
@@ -469,6 +467,7 @@ async def post_project_source(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="找不到这个项目。") from exc
     except ValueError as exc:
+        record_alert("project-index", "项目资料索引失败", str(exc), target="project-sources", dedupe_key=f"project-add:{project_id}:{req.get('path') or req.get('title')}")
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -504,6 +503,7 @@ async def refresh_project_source(
             project_id, source_id, web_extractor=_extract_project_url,
         )
     except ValueError as exc:
+        record_alert("project-index", "项目资料重新索引失败", str(exc), target="project-sources", dedupe_key=f"project-refresh:{project_id}:{source_id}")
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if result is None:
         raise HTTPException(status_code=404, detail="找不到这条项目资料。")
