@@ -6,11 +6,9 @@ import asyncio
 from datetime import datetime
 from email.message import EmailMessage
 import json
-import os
 from pathlib import Path
 import sys
 import tempfile
-import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "core"))
@@ -136,17 +134,20 @@ async def check_acp_live() -> None:
         if event.get("id") == 2: session_id = str(event["result"]["sessionId"])
     send({"jsonrpc": "2.0", "id": 3, "method": "session/prompt", "params": {
         "sessionId": session_id,
-        "prompt": "Use the available file reading tool to read README.md, then tell me its first heading.",
+        "prompt": f"You must invoke the glob tool with pattern=README.md and path={workspace}. Do not answer without calling the tool.",
     }})
     await process.stdin.drain()
     got_text = False; got_tool = False; sent_cancel = False; got_response = False
+    rpc_error = False
     deadline = asyncio.get_running_loop().time() + 240
     while asyncio.get_running_loop().time() < deadline and not got_response:
         try: line = await asyncio.wait_for(process.stdout.readline(), timeout=30)
         except asyncio.TimeoutError: continue
         if not line: break
         event = json.loads(line)
-        if event.get("id") == 3: got_response = True
+        if event.get("id") == 3:
+            got_response = True
+            rpc_error = "error" in event or (event.get("result", {}).get("stopReason") == "error")
         update = event.get("params", {}).get("update", {})
         got_text |= update.get("sessionUpdate") == "agent_message_chunk"
         got_tool |= update.get("sessionUpdate") in {"tool_call", "tool_call_update"}
@@ -156,7 +157,10 @@ async def check_acp_live() -> None:
     process.stdin.close()
     try: await asyncio.wait_for(process.wait(), timeout=15)
     except asyncio.TimeoutError: process.kill(); await process.wait()
-    assert got_text and got_tool and sent_cancel, "ACP live session missed text/tool/cancel updates"
+    assert got_text and got_tool and sent_cancel and not rpc_error, (
+        f"ACP live session missed text/tool/cancel updates (text={got_text}, tool={got_tool}, "
+        f"cancel={sent_cancel}, rpc_error={rpc_error})"
+    )
 
 
 def check_exec_and_sdk_live() -> None:
