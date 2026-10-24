@@ -425,7 +425,12 @@ class ComputerUseRuntime:
         except asyncio.CancelledError:
             return self._error("Computer Use action was stopped.")
         except Exception as exc:
-            return self._error(f"{name} failed: {exc}")
+            message = f"{name} failed: {exc}"
+            lowered = str(exc).lower()
+            if name == "computer_observe" and any(value in lowered for value in ("access is denied", "access denied", "screen capture", "capture permission")):
+                message += (". Windows blocked screen capture. Check Windows Settings → Privacy & security → "
+                            "Screen capture/Graphics capture, allow desktop-app access, then restart Atlas and retry.")
+            return self._error(message)
         finally:
             if self._active_calls.get(run_key) is action_task:
                 self._active_calls.pop(run_key, None)
