@@ -10,6 +10,15 @@ _CURRENT: contextvars.ContextVar["AcpFilesystem | None"] = contextvars.ContextVa
 )
 
 
+def capabilities_from_initialize(params: dict[str, Any]) -> dict[str, bool]:
+    client = params.get("clientCapabilities")
+    fs = client.get("fs") if isinstance(client, dict) else None
+    return {
+        "read": bool(isinstance(fs, dict) and fs.get("readTextFile")),
+        "write": bool(isinstance(fs, dict) and fs.get("writeTextFile")),
+    }
+
+
 class AcpFilesystem:
     def __init__(self, session_id: str, workspace: str,
                  request: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]], *,

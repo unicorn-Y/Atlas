@@ -132,13 +132,18 @@ async def check_acp_live() -> None:
 
 
 async def check_acp_fake_client_fs() -> None:
-    from atlas.tools.acp_fs import AcpFilesystem, edit_file, local_file
+    from atlas.tools.acp_fs import AcpFilesystem, capabilities_from_initialize, edit_file, local_file
     with tempfile.TemporaryDirectory(prefix="atlas-u8-acp-fs-") as directory:
         requests: list[tuple[str, dict[str, object]]] = []
+        declared = capabilities_from_initialize({"clientCapabilities": {
+            "fs": {"readTextFile": True, "writeTextFile": True},
+        }})
+        assert declared == {"read": True, "write": True}
         async def client_request(method: str, params: dict[str, object]) -> dict[str, object]:
             requests.append((method, params))
             return {"content": "editor buffer value"} if method == "fs/read_text_file" else {}
-        bridge = AcpFilesystem("fake-session", directory, client_request)
+        bridge = AcpFilesystem("fake-session", directory, client_request,
+                               read_enabled=declared["read"], write_enabled=declared["write"])
         read = await local_file(bridge, action="read", path="editor.txt")
         assert read["data"]["content"] == "editor buffer value"
         await edit_file(bridge, path="editor.txt", old_text="editor buffer value",

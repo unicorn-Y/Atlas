@@ -77,7 +77,9 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
         pending_inputs: dict[str, asyncio.Future[str]] = {}
         pending_client_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
         session_fs: dict[str, dict[str, bool]] = {}
-        from atlas.tools.acp_fs import AcpFilesystem, reset_current, set_current
+        from atlas.tools.acp_fs import (
+            AcpFilesystem, capabilities_from_initialize, reset_current, set_current,
+        )
         outgoing: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
         async def write_output() -> None:
@@ -270,12 +272,7 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
                             "code": -32002, "message": "Atlas supports ACP protocol version 1 only.",
                         })
                         continue
-                    capabilities = params.get("clientCapabilities")
-                    fs_capabilities = capabilities.get("fs") if isinstance(capabilities, dict) else None
-                    session_fs["__initialize__"] = {
-                        "read": bool(isinstance(fs_capabilities, dict) and fs_capabilities.get("readTextFile")),
-                        "write": bool(isinstance(fs_capabilities, dict) and fs_capabilities.get("writeTextFile")),
-                    }
+                    session_fs["__initialize__"] = capabilities_from_initialize(params)
                     await response(request_id, result={
                         "protocolVersion": 1,
                         "agentInfo": {"name": "Atlas", "version": "0.1.0"},
