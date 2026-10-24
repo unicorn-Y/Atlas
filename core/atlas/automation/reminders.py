@@ -491,6 +491,44 @@ async def create_reminder(*, message: str, due_at: str = "", due_text: str = "",
             "context": context}
 
 
+async def create_self_wakeup(*, message: str, due_at: str = "", due_text: str = "",
+                             conversation_id: str, engine: Any = None,
+                             config: Any = None) -> dict[str, Any]:
+    """Schedule a bounded agent turn in the conversation that requested it."""
+    text = str(message or "").strip()
+    target = str(conversation_id or "").strip()
+    if not text or not target:
+        raise ReminderError("自我唤醒需要消息和当前会话")
+    reference = now_local(config)
+    raw_due = str(due_at or "").strip()
+    if raw_due:
+        try:
+            due = attach_user_timezone(datetime.fromisoformat(raw_due.replace(" ", "T", 1)), config)
+        except ValueError as exc:
+            raise ReminderError(f"due_at 非法 ISO 时间: {raw_due!r}") from exc
+    else:
+        due = parse_due(due_text, now=reference, config=config)
+    if due.astimezone(UTC) <= reference.astimezone(UTC):
+        raise ReminderError("唤醒时间必须晚于当前时间")
+    automation_engine = _engine(engine)
+    automation_id = "wake-" + uuid.uuid4().hex[:12]
+    record = normalize_record({
+        "id": automation_id,
+        "name": f"自我唤醒：{text[:80]}",
+        "enabled": True,
+        "trigger": {"kind": "date", "at": due.isoformat()},
+        "payload": {"kind": "agent_turn", "message": text, "wake_mode": "now", "conversation_id": target},
+        "delivery": {"mode": "none"},
+        "policy": {"missed_run": "skip", "delete_after_run": False},
+        "created_at": reference.isoformat(),
+        "updated_at": reference.isoformat(),
+    })
+    validate_record(record)
+    saved = automation_engine.store.put(record)
+    await automation_engine.sync_automation(saved)
+    return {"created": True, "automation": saved, "due_at": due.isoformat(), "conversation_id": target}
+
+
 async def cancel_reminder(*, query: str = "", automation_id: str = "",
                           now: datetime | None = None, context: str = "",
                           engine: Any = None, config: Any = None) -> dict[str, Any]:

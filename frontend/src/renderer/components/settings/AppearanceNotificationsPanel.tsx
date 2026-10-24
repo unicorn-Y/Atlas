@@ -59,6 +59,22 @@ export default function AppearanceNotificationsPanel({ theme, onThemeChange, onT
       return next;
     });
   };
+  const setNotificationLevel = (level: NotificationPreferences['level']) => {
+    updateNotifications({ level, enabled: level !== 'off',
+      completionMode: level === 'all' ? 'always' : level === 'off' ? 'never' : 'background',
+      categories: level === 'all'
+        ? { completion: true, failure: true, approval: true, question: true, background: true }
+        : { completion: level === 'attention', failure: level === 'attention', approval: level === 'attention', question: level === 'attention', background: false } });
+  };
+  const sendTestNotification = async () => {
+    if (typeof Notification === 'undefined') { onToast?.('当前环境不支持系统通知'); return; }
+    let currentPermission = Notification.permission;
+    if (currentPermission === 'default') currentPermission = await Notification.requestPermission();
+    setPermission(currentPermission);
+    if (currentPermission !== 'granted') { onToast?.('系统通知权限未开启'); return; }
+    new Notification('Atlas 测试通知', { body: '系统通知可以正常显示。' });
+    onToast?.('已发送测试通知');
+  };
 
   const setColor = (key: keyof CustomTheme['colors'], value: string) => {
     setCustom((current) => ({ ...current, colors: { ...current.colors, [key]: value } }));
@@ -179,6 +195,7 @@ export default function AppearanceNotificationsPanel({ theme, onThemeChange, onT
         <p className="mt-1 mb-0 text-[12.5px] text-fg-3">通知渠道使用本机系统权限；外部 Webhook 仍在通知服务面板单独配置。</p>
       </div>
       <div className="rounded-xl card-surface px-4">
+        <SettingRow label="通知级别" hint="需要关注的事件、全部事件或关闭通知"><select aria-label="通知级别" value={notifications.level} onChange={(event) => setNotificationLevel(event.target.value as NotificationPreferences['level'])} className="h-8 rounded-lg border border-line bg-surface px-2 text-[12px] text-fg"><option value="attention">只在需要我时</option><option value="all">全部</option><option value="off">关闭</option></select></SettingRow>
         <SettingRow label="启用桌面通知" hint="关闭后不再发送系统通知"><input type="checkbox" checked={notifications.enabled} onChange={(event) => updateNotifications({ enabled: event.target.checked })} /></SettingRow>
         <SettingRow label="任务完成时" hint="选择 Atlas 在哪种情况下显示完成提醒"><select value={notifications.completionMode} onChange={(event) => updateNotifications({ completionMode: event.target.value as NotificationPreferences['completionMode'] })} className="h-8 rounded-lg border border-line bg-surface px-2 text-[12px] text-fg"><option value="never">从不</option><option value="background">仅在后台</option><option value="always">始终</option></select></SettingRow>
         {CATEGORY_LABELS.map(([kind, label, hint]) => <SettingRow key={kind} label={label} hint={hint}><input type="checkbox" checked={notifications.categories[kind]} onChange={(event) => updateNotifications({ categories: { ...notifications.categories, [kind]: event.target.checked } })} /></SettingRow>)}
@@ -196,6 +213,7 @@ export default function AppearanceNotificationsPanel({ theme, onThemeChange, onT
         <div><div className="text-[12.5px] text-fg">系统权限：{permissionLabel(permission)}</div><small className="mt-0.5 block text-[11.5px] text-fg-3">Atlas 无法覆盖操作系统或浏览器的通知权限。</small></div>
         {permission !== 'granted' && permission !== 'unsupported' && <button onClick={() => void requestPermission()} className="h-8 rounded-lg border border-line px-3 text-[12px] text-fg-2 hover:bg-hover">请求权限</button>}
       </div>
+      <div className="flex items-center justify-between gap-3 rounded-xl card-surface px-4 py-3"><span className="text-[12.5px] text-fg-2">确认系统是否允许 Atlas 显示通知</span><button type="button" onClick={() => void sendTestNotification()} className="h-8 rounded-lg border border-line px-3 text-[12px] text-fg-2 hover:bg-hover">发送测试通知</button></div>
     </section>}
   </div>;
 }

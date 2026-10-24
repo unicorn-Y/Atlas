@@ -696,6 +696,7 @@ async def execute_tools_node(
                     ReminderError,
                     cancel_reminder,
                     create_reminder,
+                    create_self_wakeup,
                     find_reminder,
                     list_reminders,
                     update_reminder,
@@ -718,6 +719,15 @@ async def execute_tools_node(
                             due_at=str(fn_args.get("due_at") or ""),
                             due_text=str(fn_args.get("due_text") or ""),
                             source_binding=source_binding,
+                            engine=engine, config=config,
+                        )
+                    elif action == "wakeup":
+                        message = str(fn_args.get("message") or "").strip()
+                        data = await create_self_wakeup(
+                            message=message,
+                            due_at=str(fn_args.get("due_at") or ""),
+                            due_text=str(fn_args.get("due_text") or ""),
+                            conversation_id=str(ctx.conversation_id or ""),
                             engine=engine, config=config,
                         )
                     elif action == "cancel":

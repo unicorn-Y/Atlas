@@ -76,6 +76,8 @@ export interface AtlasDesktopApi {
   setAlwaysOnTop?(enabled: boolean): Promise<PlatformSettingsState>;
   /** Register a single OS-wide show/focus shortcut, or clear it with null. */
   setGlobalShortcut?(accelerator: string | null): Promise<GlobalShortcutState>;
+  setKeepAwake?(enabled: boolean): Promise<void>;
+  setRuntimeState?(state: 'running' | 'waiting' | 'idle'): void;
   /** Open an existing local workspace with a fixed allowlisted IDE CLI (never through a shell). */
   openWorkspaceInEditor?(editor: PlatformEditorId, workspacePath: string): Promise<void>;
   /** Open the small native floating composer. The desktop shell forwards submitted text to the main UI. */

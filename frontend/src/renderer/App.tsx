@@ -236,6 +236,7 @@ export default function App() {
   const [rewound, setRewound] = useState<{ conversationId: string; rewindId: string; text: string } | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState(() => pref('default-workspace') ?? '');
   const [tabs, setTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
+  const [closedTabs, setClosedTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('closed-tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
   const [bindings, setBindings] = useState(loadBindings);
   useEffect(() => {
     const update = () => setBindings(loadBindings());
@@ -244,6 +245,9 @@ export default function App() {
   }, []);
   const [listening, setListening] = useState(false);
   const [voiceOutput, setVoiceOutput] = useState(() => pref('voice-output') === 'true');
+  const [speechRate, setSpeechRate] = useState(() => Number(pref('speech-rate') || 1));
+  const [speechVoice, setSpeechVoice] = useState(() => pref('speech-voice') || '');
+  const [speechVoices, setSpeechVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [username, setUsername] = useState(() => pref('username')?.trim() || 'User');
   const [statusBar, setStatusBar] = useState(readStatusBarPreferences);
   const [maximized, setMaximized] = useState(false);
@@ -254,11 +258,24 @@ export default function App() {
     return next;
   });
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const dictationRef = useRef<{ socket: WebSocket; stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode; prefix: string; finalText: string } | null>(null);
   const spokenSequenceRef = useRef(0);
   const spokenRunRef = useRef('');
   const speechBufferRef = useRef('');
   const firstRunShownRef = useRef(false);
   const threadRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+    const refresh = () => setSpeechVoices(window.speechSynthesis.getVoices());
+    refresh(); window.speechSynthesis.addEventListener('voiceschanged', refresh);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', refresh);
+  }, []);
+  const speakText = (text: string) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = speechRate;
+    utterance.voice = speechVoices.find((voice) => voice.name === speechVoice) ?? null;
+    window.speechSynthesis.speak(utterance);
+  };
 
   const activeConversation = store.conversations.find((item) => item.id === store.activeConversationId);
   useEffect(() => {
@@ -267,6 +284,12 @@ export default function App() {
     if (recentWorkspace) { setPref('default-workspace', recentWorkspace); setDefaultWorkspace(recentWorkspace); }
   }, [defaultWorkspace, store.conversations, store.conversationsLoading]);
   const activeRun = store.runs.find((run) => run.id === store.activeRunId);
+  useEffect(() => { if (pref('keep-awake') === 'true') void window.atlasDesktop?.setKeepAwake?.(true); }, []);
+  useEffect(() => {
+    const active = store.runs.filter((run) => !TERMINAL.includes(run.status));
+    const state = active.some((run) => run.status === 'waiting') ? 'waiting' : active.length ? 'running' : 'idle';
+    window.atlasDesktop?.setRuntimeState?.(state);
+  }, [store.runs]);
   const activeArtifacts = store.artifacts.filter((artifact) => artifact.runId === store.activeRunId);
   const activeEvents = activeRun?.events ?? [];
   const runDone = Boolean(activeRun && TERMINAL.includes(activeRun.status));
@@ -488,18 +511,18 @@ export default function App() {
           const boundary = speechBufferRef.current.search(punctuation);
           const phrase = speechBufferRef.current.slice(0, boundary + 1).trim();
           speechBufferRef.current = speechBufferRef.current.slice(boundary + 1);
-          if (phrase) window.speechSynthesis.speak(new SpeechSynthesisUtterance(phrase));
+          if (phrase) speakText(phrase);
         }
       } else if (event.type === 'run.completed') {
         const remainder = speechBufferRef.current.trim();
-        if (remainder) window.speechSynthesis.speak(new SpeechSynthesisUtterance(remainder));
+        if (remainder) speakText(remainder);
         speechBufferRef.current = '';
       } else if (['run.failed', 'run.cancelled'].includes(event.type)) {
         speechBufferRef.current = '';
         window.speechSynthesis.cancel();
       }
     }
-  }, [activeEvents, activeRun, voiceOutput, voiceOpen]);
+  }, [activeEvents, activeRun, voiceOutput, voiceOpen, speechRate, speechVoice, speechVoices]);
 
   useEffect(() => {
     if (!toast) return;
@@ -691,29 +714,65 @@ export default function App() {
     setToast(`工作目录：${picked}`);
   };
   const toggleSpeechInput = async () => {
-    if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; setListening(false); return; }
-    const { getSpeechRecognition } = await import('./components/VoiceOverlay');
-    const Constructor = getSpeechRecognition();
-    if (!Constructor) { setToast('这台设备不支持语音识别'); return; }
-    const recognition = new Constructor();
-    recognition.lang = 'zh-CN';
-    recognition.interimResults = true;
-    const prefix = input.trim();
-    recognition.onresult = (event) => {
-      const transcript = Array.from(event.results).map((result) => result[0].transcript).join('');
-      if (transcript) setInput(`${prefix}${prefix ? ' ' : ''}${transcript}`);
-    };
-    recognition.onerror = () => setToast('语音识别不可用，请检查麦克风权限和网络');
-    recognition.onend = () => { recognitionRef.current = null; setListening(false); };
-    recognitionRef.current = recognition;
-    setListening(true);
-    recognition.start();
+    if (dictationRef.current) {
+      const session = dictationRef.current;
+      dictationRef.current = null;
+      try { session.socket.send(JSON.stringify({ type: 'end' })); } catch { /* socket already closed */ }
+      session.processor.disconnect(); session.stream.getTracks().forEach((track) => track.stop());
+      void session.context.close(); setListening(false); return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) { setToast('当前环境无法访问麦克风'); return; }
+    try {
+      const status = await api<{ ready: boolean; message?: string }>(store.apiBaseUrl, '/api/asr/status');
+      if (!status.ready) { setToast(status.message || '请先在语音设置中准备本地识别模型'); return; }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+      const context = new AudioContext();
+      const source = context.createMediaStreamSource(stream);
+      const processor = context.createScriptProcessor(4096, 1, 1);
+      const socketUrl = new URL('/ws/asr', store.apiBaseUrl);
+      socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+      const socket = new WebSocket(socketUrl);
+      const session = { socket, stream, context, processor, prefix: input.trim(), finalText: '' };
+      dictationRef.current = session;
+      const render = (partial = '') => setInput(`${session.prefix}${session.prefix ? ' ' : ''}${session.finalText}${partial}`);
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(String(event.data)) as { type?: string; text?: string; detail?: string };
+          if (message.type === 'final' && message.text) { session.finalText += `${session.finalText ? ' ' : ''}${message.text}`; render(); }
+          else if (message.type === 'partial') render(message.text || '');
+          else if (message.type === 'error') setToast(message.detail || '本地语音识别失败');
+        } catch { /* ignore malformed ASR event */ }
+      };
+      socket.onerror = () => setToast('本地语音识别连接失败');
+      socket.onclose = () => { if (dictationRef.current === session) { dictationRef.current = null; setListening(false); } };
+      await new Promise<void>((resolve, reject) => { socket.addEventListener('open', () => resolve(), { once: true }); socket.addEventListener('error', () => reject(new Error('本地语音识别连接失败')), { once: true }); });
+      const downsample = (samples: Float32Array, from: number) => {
+        if (from <= 16000) return samples;
+        const ratio = from / 16000;
+        const output = new Float32Array(Math.floor(samples.length / ratio));
+        for (let i = 0; i < output.length; i++) output[i] = samples[Math.floor(i * ratio)];
+        return output;
+      };
+      processor.onaudioprocess = (event) => {
+        if (socket.readyState !== WebSocket.OPEN) return;
+        const samples = downsample(event.inputBuffer.getChannelData(0), context.sampleRate);
+        const pcm = new Int16Array(samples.length);
+        for (let i = 0; i < samples.length; i++) pcm[i] = Math.max(-1, Math.min(1, samples[i])) * 0x7fff;
+        socket.send(pcm.buffer);
+      };
+      source.connect(processor); processor.connect(context.destination);
+      setListening(true); setToast('正在使用本地语音识别；再次点击麦克风结束');
+    } catch (error) {
+      dictationRef.current?.stream.getTracks().forEach((track) => track.stop());
+      dictationRef.current = null; setListening(false);
+      setToast(`语音听写启动失败：${error instanceof Error ? error.message : String(error)}`);
+    }
   };
   const readLastReply = () => {
     const lastReply = [...messages].reverse().find((message) => message.role === 'assistant')?.content || (runDone ? reply : '');
     if (!lastReply || !('speechSynthesis' in window)) { setToast('还没有可以朗读的回复'); return; }
     window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance(lastReply));
+    speakText(lastReply);
   };
   const toggleVoiceOutput = () => {
     const enabled = !voiceOutput;
@@ -803,14 +862,24 @@ export default function App() {
     setTabs((current) => { const next = current.filter((id) => known.has(id)); return next.length === current.length ? current : next; });
   }, [store.conversations]);
   useEffect(() => { setPref('tabs', JSON.stringify(tabs)); }, [tabs]);
+  useEffect(() => { setPref('closed-tabs', JSON.stringify(closedTabs.slice(-12))); }, [closedTabs]);
   const closeTab = (id: string) => {
     const index = tabs.indexOf(id);
     const next = tabs.filter((item) => item !== id);
+    setClosedTabs((current) => [...current.filter((item) => item !== id), id].slice(-12));
     setTabs(next);
     if (id !== store.activeConversationId || view !== 'chat') return;
     const neighbour = next[Math.min(index, next.length - 1)];
     const conversation = neighbour ? store.conversations.find((item) => item.id === neighbour) : undefined;
     if (conversation) openConversation(conversation); else go('home');
+  };
+  const reopenClosedTab = () => {
+    const id = [...closedTabs].reverse().find((candidate) => store.conversations.some((item) => item.id === candidate));
+    if (!id) { setToast('没有最近关闭的会话'); return; }
+    setClosedTabs((current) => { const index = current.lastIndexOf(id); return current.filter((_, itemIndex) => itemIndex !== index); });
+    setTabs((current) => current.includes(id) ? current : [...current, id].slice(-12));
+    const conversation = store.conversations.find((item) => item.id === id);
+    if (conversation) openConversation(conversation);
   };
   const cycleTab = (step: number) => {
     if (tabs.length < 2) return;
@@ -822,6 +891,9 @@ export default function App() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (voiceOpen || (event.target as HTMLElement | null)?.closest?.('[data-shortcut-recorder]')) return;
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 't') {
+        event.preventDefault(); reopenClosedTab(); return;
+      }
       const target = event.target as HTMLElement | null;
       if (event.key === '?' && !event.ctrlKey && !event.metaKey && !event.altKey && !target?.closest('input,textarea,[contenteditable="true"]')) {
         event.preventDefault(); setKeymapOpen((value) => !value); return;
@@ -859,13 +931,14 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
-  useEffect(() => () => { recognitionRef.current?.stop(); window.speechSynthesis?.cancel(); }, []);
+  useEffect(() => () => { recognitionRef.current?.stop(); dictationRef.current?.stream.getTracks().forEach((track) => track.stop()); void dictationRef.current?.context.close(); window.speechSynthesis?.cancel(); }, []);
 
   const paletteItems: PaletteItem[] = [
     { id: 'new', group: '操作', label: '新任务', hint: 'Ctrl N', icon: <Plus />, run: newTask },
     { id: 'voice', group: '操作', label: '开始语音通话', icon: <AudioLines />, run: startVoice },
     ...THEMES.filter((item) => item.id !== theme).map((item) => ({ id: `theme-${item.id}`, group: '外观', label: `切换到${item.label}`, hint: item.hint, icon: item.id === 'dark' ? <Moon /> : <Sun />, run: () => chooseTheme(item.id) })),
     { id: 'settings', group: '操作', label: '设置', hint: 'Ctrl ,', icon: <Settings />, run: () => setSheet('models') },
+    { id: 'reopen-tab', group: '操作', label: '重新打开最近关闭的会话', hint: 'Ctrl Shift T', run: reopenClosedTab },
     ...(activeConversation ? [{ id: 'export', group: '操作', label: '导出当前对话', icon: <Download />, run: () => void store.exportConversation(activeConversation.id) }] : []),
     ...(activeConversation ? [{ id: 'side', group: '操作', label: '旁问', hint: '/btw', icon: <MessagesSquare />, run: () => setSide({ open: true }) }] : []),
     ...store.recipes.map((recipe) => ({ id: `recipe-${recipe.id}`, group: '配方', label: recipe.name, icon: <BookMarked />, run: () => setRecipesOpen(true) })),
@@ -917,9 +990,29 @@ export default function App() {
         '请先据此承接原任务，再处理我接下来提出的新问题。'].join('\n');
       newTask(); setInput(`交接摘要：\n${handoff}\n\n我的新问题：`);
     } },
+    { id: 'handoff', label: '/handoff', hint: '将当前任务摘要交接到新会话', run: () => {
+      if (!activeConversation) { newTask(); return; }
+      const recent = messages.filter((item) => (item.role === 'user' || item.role === 'assistant') && item.content.trim()).slice(-12);
+      const handoff = [`原对话：${activeConversation.title || '未命名任务'}`, '任务交接摘要（保留目标、决策、进度和待办）：',
+        ...recent.map((item) => `${item.role === 'user' ? '用户' : 'Atlas'}：${item.content.replace(/\s+/g, ' ').slice(0, item.role === 'user' ? 420 : 640)}`),
+        '请先确认当前进度和下一步，再处理我接下来提出的新问题。'].join('\n');
+      newTask(); setInput(`请承接以下任务：\n\n${handoff}\n\n我的新问题：`);
+    } },
     { id: 'clear', label: '/clear', hint: '开始一段新对话', run: newTask },
     ...(activeConversation ? [
+      { id: 'tag', label: '/tag', hint: '给当前会话加颜色标签，可在侧栏按标签搜索', takesArgument: true, run: (value: string) => {
+        const label = value.trim().toLowerCase();
+        const choices: Record<string, string> = { red: 'red', orange: 'orange', yellow: 'yellow', green: 'green', blue: 'blue', purple: 'purple', 红: 'red', 橙: 'orange', 黄: 'yellow', 绿: 'green', 蓝: 'blue', 紫: 'purple', clear: '' };
+        if (!(label in choices)) { setToast('用法：/tag 红|橙|黄|绿|蓝|紫|clear'); return; }
+        window.dispatchEvent(new CustomEvent('atlas:conversation-label', { detail: { id: activeConversation.id, label: choices[label] || null } }));
+        setToast(choices[label] ? `已设置${value.trim()}色标签` : '已清除会话标签');
+      } },
       { id: 'export', label: '/export', hint: '导出当前对话为 JSON', run: () => void store.exportConversation(activeConversation.id) },
+      { id: 'export-clipboard', label: '/export-clipboard', hint: '复制当前对话 Markdown（含工具调用摘要）', run: () => {
+        const toolSummary = activeEvents.filter((event) => /tool|command/i.test(event.type)).map((event) => `- ${event.type}`).join('\n');
+        const transcript = messages.map((item) => `### ${item.role === 'user' ? '用户' : item.role === 'assistant' ? 'Atlas' : '工具'}\n\n${item.content}`).join('\n\n');
+        void navigator.clipboard.writeText(`# ${activeConversation.title || 'Atlas 会话'}\n\n${transcript}${toolSummary ? `\n\n## 工具调用摘要\n\n${toolSummary}` : ''}`).then(() => setToast('会话 Markdown 已复制')).catch(() => setToast('剪贴板不可用'));
+      } },
       { id: 'rename', label: '/rename', hint: '把后面的文字设为对话名称', takesArgument: true, run: (title: string) => { if (title.trim()) void store.renameConversation(activeConversation.id, title); else setToast('在 /rename 后面写上新名称'); } },
       { id: 'resume', label: '/resume', hint: '继续打开最近对话，或按名称搜索', takesArgument: true, run: (query: string) => { const target = query.trim() ? store.conversations.find((item) => item.id === query.trim() || item.title.toLowerCase().includes(query.trim().toLowerCase())) : store.conversations[0]; if (target) openConversation(target); else setToast('没有找到可恢复的对话'); } },
       { id: 'fork', label: '/fork', hint: '从最近消息或指定检查点分叉', takesArgument: true, run: (target: string) => {
@@ -1012,6 +1105,21 @@ export default function App() {
     { id: 'model', label: '/model', hint: '选择或切换模型', takesArgument: true, run: (query: string) => { const found = store.models.find((item) => item.id.toLowerCase() === query.trim().toLowerCase() || (item.name ?? '').toLowerCase() === query.trim().toLowerCase()); if (found) void store.selectModel(found.id); else setSheet('models'); } },
     { id: 'reasoning', label: '/reasoning', hint: '打开模型选择，查看当前可用的推理强度', run: () => setSheet('models') },
     { id: 'usage', label: '/usage', hint: '查看用量和费用', run: () => setSheet('usage') },
+    { id: 'cost', label: '/cost', hint: '查看本会话 Token、缓存、费用与耗时', run: () => {
+      if (!activeConversation) { setToast('先打开一个会话再查看 /cost'); return; }
+      void api<{ input_tokens: number; output_tokens: number; cached_input_tokens: number; cache_hit_rate: number | null; est_cost: number | null; duration_seconds: number | null }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(activeConversation.id)}/stats`)
+        .then((stats) => {
+          const duration = stats.duration_seconds === null ? '未知' : `${Math.floor(stats.duration_seconds / 3600)} 小时 ${Math.floor(stats.duration_seconds % 3600 / 60)} 分钟`;
+          const cost = stats.est_cost === null ? '价格未知' : `$${stats.est_cost.toFixed(6)}`;
+          const cache = stats.cache_hit_rate === null ? '未知' : `${(stats.cache_hit_rate * 100).toFixed(1)}%`;
+          setToast(`本会话：输入 ${stats.input_tokens} · 输出 ${stats.output_tokens} · 缓存命中 ${cache} · 费用 ${cost} · 耗时 ${duration}`);
+        }).catch((error) => setToast(`读取会话费用失败：${error instanceof Error ? error.message : String(error)}`));
+      setSheet('usage');
+    } },
+    { id: 'help', label: '/help', hint: '列出全部斜杠命令及用法', run: showHelp },
+    { id: 'doctor', label: '/doctor', hint: '检查安装与配置并查看修复建议', run: () => setSheet('diagnostics') },
+    { id: 'config', label: '/config', hint: '打开配置面板', run: () => setSheet('mainConfig') },
+    { id: 'release-notes', label: '/release-notes', hint: '查看本版本更新说明', run: () => setRawText(`Atlas ${__APP_VERSION__} 更新说明\n\n本版本包括会话整理、任务交接、会话导入导出、用量统计、语音、通知与托盘、定时任务和诊断帮助界面。`) },
     { id: 'status', label: '/status', hint: '显示版本、模型、API 连通性和工具状态', run: () => setToast(`Atlas ${__APP_VERSION__} · ${modelName} · ${store.connected ? 'API 已连接' : 'API 未连接'} · 工具 ${store.tools.length} 个可用 · 推理 ${store.reasoningEffort || '默认'} · ${PERMISSION[permission].label}`) },
     { id: 'permissions', label: '/permissions', hint: '切换当前对话权限模式', run: () => { if (!activeConversation) { setToast('先打开一个对话再切换权限'); return; } setToast(`权限模式：${PERMISSION[cyclePermission()].label}`); } },
     { id: 'agents', label: '/agents', hint: '打开 Agents 页：常驻 Agent 花名册与详情', run: () => go('agents') },
@@ -1034,6 +1142,9 @@ export default function App() {
       run: (argument: string) => void runCustomCommand(command, argument),
     })),
   ];
+  function showHelp() {
+    setRawText(slashCommands.map((command) => `${command.label}${command.takesArgument ? ' <参数>' : ''} — ${command.hint}`).join('\n'));
+  }
   slashCommands.forEach((command) => {
     command.group ??= command.id.startsWith('skill-') ? '技能'
       : ['new', 'clear', 'resume', 'fork', 'undo', 'redo', 'rename', 'export'].includes(command.id) ? '会话'
@@ -1211,6 +1322,13 @@ export default function App() {
         <summary className="cursor-pointer select-none text-[12px] text-fg-3 hover:text-fg-2">详细信息</summary>
         <pre className="mt-1 mb-0 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-[11.5px] text-fg-3">{store.errorDetail}</pre>
       </details>}
+      {/rate.?limit|quota|额度|限流|429|余额/i.test(`${store.error} ${store.errorDetail ?? ''}`) && <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" className="rounded-md border border-danger/30 px-2 py-1 text-[11.5px] hover:bg-danger/10" onClick={() => {
+          if (!activeRun) { setToast('当前没有可重试的任务'); return; }
+          setToast('30 秒后重试当前任务'); window.setTimeout(() => { if (useAtlasStore.getState().runPrompts[activeRun.id]) void useAtlasStore.getState().retryRun(activeRun.id); }, 30_000);
+        }}>等待 30 秒后重试</button>
+        <button type="button" className="rounded-md border border-danger/30 px-2 py-1 text-[11.5px] hover:bg-danger/10" onClick={() => setSheet('models')}>换模型</button>
+      </div>}
     </div>
     <button aria-label="关闭错误提示" onClick={store.dismissError} className="grid size-6 shrink-0 place-items-center rounded-md hover:bg-hover"><X size={14} /></button>
   </div>;
@@ -1397,7 +1515,7 @@ export default function App() {
             {showTabs
               ? <TabStrip tabs={tabs} conversations={store.conversations} activeId={store.activeConversationId} running={runningConversations} onSelect={openConversation} onClose={closeTab} />
               : pageTitle && <span className="truncate text-[13.5px] text-fg-2">{pageTitle}</span>}
-            {view === 'chat' && <ForkTree conversations={store.conversations} activeId={store.activeConversationId} onOpen={openConversation} />}
+            {view === 'chat' && <ForkTree conversations={store.conversations} activeId={store.activeConversationId} onOpen={openConversation} running={runningConversations} waiting={waitingConversations} />}
             {connection}
           </div>
           {/* With tabs the left group already fills the bar; its empty part still drags the window. */}
@@ -1412,6 +1530,10 @@ export default function App() {
                 <MenuItem onSelect={startVoice}><AudioLines />语音通话</MenuItem>
                 {view === 'chat' && <MenuItem onSelect={readLastReply}><Volume2 />朗读最近的回复</MenuItem>}
                 <MenuItem checked={voiceOutput} onSelect={toggleVoiceOutput}>自动朗读新回复</MenuItem>
+                <div className="grid gap-1.5 border-t border-line px-2.5 py-2 text-[11.5px] text-fg-3" onPointerDown={(event) => event.stopPropagation()}>
+                  <label className="flex items-center justify-between gap-3">音色<select aria-label="朗读音色" value={speechVoice} onChange={(event) => { setSpeechVoice(event.target.value); setPref('speech-voice', event.target.value); }} className="max-w-[170px] rounded-md border border-line bg-surface px-1.5 py-1 text-fg">{speechVoices.filter((voice) => voice.lang.toLowerCase().startsWith('zh')).map((voice) => <option key={voice.name} value={voice.name}>{voice.name}</option>)}</select></label>
+                  <label className="flex items-center justify-between gap-3">语速<select aria-label="朗读语速" value={speechRate} onChange={(event) => { const rate = Number(event.target.value); setSpeechRate(rate); setPref('speech-rate', String(rate)); }} className="rounded-md border border-line bg-surface px-1.5 py-1 text-fg">{[0.8, 1, 1.2, 1.5].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}</select></label>
+                </div>
               </MenuContent>
             </Menu>
             {view === 'chat' && <Tip label="任务面板"><button aria-label="切换任务面板" aria-pressed={inspectorOpen} onClick={() => toggleInspector()}

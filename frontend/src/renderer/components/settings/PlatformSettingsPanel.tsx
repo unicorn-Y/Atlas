@@ -34,6 +34,7 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [keepAwake, setKeepAwake] = useState(() => { try { return localStorage.getItem('atlas.preference.keep-awake') === 'true'; } catch { return false; } });
 
   useEffect(() => {
     if (workspacePath) setFolder(workspacePath);
@@ -50,6 +51,9 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
     });
     return () => { active = false; };
   }, [desktop]);
+  useEffect(() => {
+    if (keepAwake) void desktop?.setKeepAwake?.(true).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
+  }, [desktop, keepAwake]);
 
   const setShortcutResult = (next: GlobalShortcutState) => {
     setSettings((current) => ({ ...current, globalShortcut: next }));
@@ -74,6 +78,18 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
       setMessage(enabled ? '已启用登录时启动 Atlas。' : '已关闭登录时启动 Atlas。');
     }
     catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setBusy(false); }
+  };
+
+  const toggleKeepAwake = async (enabled: boolean) => {
+    if (!desktop?.setKeepAwake) return;
+    setBusy(true); setError(null); setMessage(null);
+    try {
+      await desktop.setKeepAwake(enabled);
+      setKeepAwake(enabled);
+      try { localStorage.setItem('atlas.preference.keep-awake', String(enabled)); } catch { /* preference remains active for this session */ }
+      setMessage(enabled ? '运行任务时将阻止系统自动休眠。' : '运行任务时允许系统自动休眠。');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setBusy(false); }
   };
 
@@ -111,6 +127,14 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
     </div>
 
     {!available && <p role="status" className="m-0 rounded-xl border border-line p-3 text-[12px] text-fg-3">这些平台功能需要在 Atlas 桌面应用中使用。</p>}
+
+    <section className="grid gap-3 rounded-xl border border-line p-4">
+      <h4 className="m-0 text-[13.5px] font-medium text-heading">任务运行时防休眠</h4>
+      <label className="flex items-center gap-2.5 text-[12.5px] text-fg-2">
+        <input type="checkbox" checked={keepAwake} disabled={!available || !desktop?.setKeepAwake || busy} onChange={(event) => void toggleKeepAwake(event.target.checked)} />
+        运行中的任务阻止系统自动休眠
+      </label>
+    </section>
 
     <section className="grid gap-3 rounded-xl border border-line p-4">
       <h4 className="m-0 text-[13.5px] font-medium text-heading">登录时启动</h4>

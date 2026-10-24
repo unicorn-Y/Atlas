@@ -227,6 +227,14 @@ async def get_conversation_stats(
         read_session_all_messages, DATA_ROOT / "engine", conversation_id,
     )
     user_turns = sum(1 for item in messages if item.get("role") == "user")
+    timestamps = [str(item.get("created_at")) for item in messages if item.get("created_at")]
+    parsed_timestamps = []
+    for value in timestamps:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            parsed_timestamps.append(parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed)
+        except ValueError:
+            continue
     usage_ledger = _service("usage_ledger", services)
     usage = None
     if usage_ledger is not None:
@@ -239,7 +247,12 @@ async def get_conversation_stats(
         "runs": usage.get("runs", 0) if usage else 0,
         "input_tokens": usage.get("input_tokens", 0) if usage else 0,
         "output_tokens": usage.get("output_tokens", 0) if usage else 0,
+        "cached_input_tokens": usage.get("cached_input_tokens", 0) if usage else 0,
+        "cache_hit_rate": usage.get("cache_hit_rate") if usage else None,
         "est_cost": usage.get("est_cost") if usage else None,
+        "started_at": min(parsed_timestamps).isoformat() if parsed_timestamps else None,
+        "last_activity_at": max(parsed_timestamps).isoformat() if parsed_timestamps else None,
+        "duration_seconds": max(0, int((max(parsed_timestamps) - min(parsed_timestamps)).total_seconds())) if parsed_timestamps else None,
     }
 
 
@@ -475,7 +488,7 @@ async def truncate_conversation(
     if not message_id:
         raise HTTPException(status_code=400, detail="from_message_id is required")
     from atlas.config import DATA_ROOT
-    from atlas.engine.session_sync import atlas_turn_ordinal, restore_session, rewind_user_turn, read_session_all_messages
+    from atlas.engine.session_sync import atlas_turn_ordinal, rewind_user_turn, read_session_all_messages
 
     messages = await asyncio.to_thread(read_session_all_messages, DATA_ROOT / "engine", conversation_id)
 

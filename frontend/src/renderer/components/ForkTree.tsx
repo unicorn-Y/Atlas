@@ -10,8 +10,8 @@ export const loadConversationBranches = (
 ) => activeId ? load(activeId) : Promise.resolve([]);
 
 /** The family of conversations forked from one another, with the open one marked; pick any to jump. */
-export default function ForkTree({ conversations, activeId, onOpen }: {
-  conversations: ConversationSummary[]; activeId: string; onOpen: (conversation: ConversationSummary) => void;
+export default function ForkTree({ conversations, activeId, onOpen, running = [], waiting = [] }: {
+  conversations: ConversationSummary[]; activeId: string; onOpen: (conversation: ConversationSummary) => void; running?: string[]; waiting?: string[];
 }) {
   const [tree, setTree] = useState<Array<{ id: string; parent_session_id?: string | null; title: string }> | null>(null);
   useEffect(() => {
@@ -59,6 +59,7 @@ export default function ForkTree({ conversations, activeId, onOpen }: {
       {rows.map(({ item, depth }) => <MenuItem key={item.id} checked={item.id === activeId} onSelect={() => { if (item.id !== activeId) onOpen(item); }}>
         <span className="flex min-w-0 items-center gap-1.5" style={{ paddingLeft: depth * 14 }}>
           {depth > 0 && <span className="shrink-0 text-fg-3">└</span>}
+          {waiting.includes(item.id) ? <i title="等待输入或审批" className="size-1.5 shrink-0 rounded-full bg-brand" /> : running.includes(item.id) ? <i title="运行中" className="size-1.5 shrink-0 animate-pulse rounded-full bg-brand" /> : <i title="空闲" className="size-1.5 shrink-0 rounded-full bg-fg-3/40" />}
           <span className="truncate">{item.title || '未命名对话'}</span>
         </span>
       </MenuItem>)}

@@ -40,6 +40,8 @@ export default function DiagnosticsPanel({ apiBaseUrl }: { apiBaseUrl: string })
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [modelProbe, setModelProbe] = useState<{ ok: boolean; message: string } | null>(null);
+  const [probingModel, setProbingModel] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
@@ -66,6 +68,23 @@ export default function DiagnosticsPanel({ apiBaseUrl }: { apiBaseUrl: string })
       setMessage('无法访问剪贴板；可以选中下方报告文本并手动复制。');
     }
   };
+  const probeModel = async () => {
+    setProbingModel(true); setModelProbe(null);
+    try { setModelProbe(await api(apiBaseUrl, '/api/settings/test-connection', { method: 'POST', json: {} })); }
+    catch (reason) { setModelProbe({ ok: false, message: reason instanceof Error ? reason.message : String(reason) }); }
+    finally { setProbingModel(false); }
+  };
+  const advice = (check: DiagnosticCheck) => {
+    if (check.status === 'ok') return '';
+    if (check.id === 'backend') return '建议重启 Atlas 后端并查看启动日志。';
+    if (check.id.startsWith('component:')) return '可在设置中重试对应组件；MCP 项请检查服务器配置和启动日志。';
+    if (check.id.includes('config') || check.id === 'user_settings') return '先备份本机配置，再使用设置面板修复格式或恢复有效配置。';
+    if (check.id === 'model_config') return '检查设置中的模型和凭据，然后运行模型连通性测试。';
+    if (check.id === 'python_dependencies') return '在 Atlas 的 Python 环境中重新安装项目依赖。';
+    if (check.id === 'disk_space') return '清理数据盘空间后重新启动 Atlas。';
+    if (check.id === 'network_proxy') return '如果当前网络需要代理，请设置 HTTP(S)_PROXY 后重试。';
+    return check.detail;
+  };
 
   return <section className={styles.settingsCard} aria-label="诊断报告">
     <div className={styles.settingsCardHeading}>
@@ -74,7 +93,7 @@ export default function DiagnosticsPanel({ apiBaseUrl }: { apiBaseUrl: string })
         {loading ? '检查中…' : '刷新检查'}
       </button>
     </div>
-    <p>只读取本机后端状态和配置文件格式，不发送网络请求或上传报告。密钥、令牌、配置内容和本机路径不会写入诊断结果。</p>
+    <p>诊断报告只读取本机后端状态和配置文件格式，不上传报告。密钥、令牌、配置内容和本机路径不会写入报告。单独点击模型连通性测试时，会向当前模型发送一条短测试请求。</p>
     {error && <p className={styles.settingsError} role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
     {report && <div aria-live="polite">
@@ -83,13 +102,15 @@ export default function DiagnosticsPanel({ apiBaseUrl }: { apiBaseUrl: string })
       </p>
       <ul>
         {report.checks.map((check) => <li key={check.id}>
-          <strong>{check.label}</strong>：{check.detail}
+          <strong>{check.label}</strong>：{check.detail}{advice(check) && <small className="block text-fg-3">建议：{advice(check)}</small>}
         </li>)}
       </ul>
       <div className="my-3 flex flex-wrap gap-2">
+        <button className={styles.settingsActionSecondary} type="button" disabled={probingModel} onClick={() => void probeModel()}>{probingModel ? '测试模型连接中…' : '测试模型连通性'}</button>
         <button className={styles.settingsActionSecondary} type="button" onClick={() => void copyReport()}>复制 JSON</button>
         <button className={styles.settingsActionSecondary} type="button" onClick={() => saveReport(report)}>导出 JSON</button>
       </div>
+      {modelProbe && <p role={modelProbe.ok ? 'status' : 'alert'} className={modelProbe.ok ? styles.settingsSuccess : styles.settingsError}>{modelProbe.ok ? '模型连通性通过。' : `模型连通性失败：${modelProbe.message}`}</p>}
       <label>可复制的诊断报告
         <textarea readOnly rows={10} value={JSON.stringify(report, null, 2)} onFocus={(event) => event.currentTarget.select()} />
       </label>

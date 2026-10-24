@@ -1,5 +1,5 @@
 import './stdoutSafety.js';
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, session, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerSaveBlocker, screen, session, shell, Tray } from 'electron';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
@@ -40,6 +40,9 @@ type WindowBounds = { x: number; y: number; width: number; height: number };
 type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null; openAtLogin: boolean; windowBounds?: WindowBounds };
 let platformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null, openAtLogin: true };
 let globalShortcutState: GlobalShortcutState = { accelerator: null, registered: false };
+let keepAwakeEnabled = false;
+let keepAwakeBlockerId: number | null = null;
+let runtimeState: 'running' | 'waiting' | 'idle' = 'idle';
 let pendingDeepLinks: AtlasDeepLink[] = [];
 let deepLinkSubscriber: Electron.WebContents | null = null;
 process.env.ATLAS_SKILL_CENTER_TOKEN ??= randomBytes(32).toString('base64url');
@@ -198,8 +201,28 @@ function createTray(): void {
   if (trayRef) return;
   const image = nativeImage.createFromPath(path.join(app.getAppPath(), 'assets', 'icon', 'icon-dark.png'));
   trayRef = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
-  trayRef.setToolTip('Atlas');
+  trayRef.setToolTip('Atlas · 空闲');
   trayRef.on('double-click', focusAtlasWindow);
+  updateRuntimeState(runtimeState);
+  buildTrayMenu();
+}
+
+function updateRuntimeState(state: 'running' | 'waiting' | 'idle'): void {
+  runtimeState = state;
+  const running = state === 'running' && keepAwakeEnabled;
+  if (running && (keepAwakeBlockerId === null || !powerSaveBlocker.isStarted(keepAwakeBlockerId))) {
+    keepAwakeBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+  } else if (!running && keepAwakeBlockerId !== null) {
+    if (powerSaveBlocker.isStarted(keepAwakeBlockerId)) powerSaveBlocker.stop(keepAwakeBlockerId);
+    keepAwakeBlockerId = null;
+  }
+  const label = state === 'running' ? '运行中' : state === 'waiting' ? '等待你处理' : '空闲';
+  if (trayRef) {
+    const color = state === 'running' ? '#3e63dd' : state === 'waiting' ? '#e2a336' : '#30a46c';
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="#20232b"/><path d="M8 23 15.8 7 24 23h-4l-4.2-8.4L12 23z" fill="white"/><circle cx="25" cy="7" r="5" fill="${color}" stroke="#fff" stroke-width="1.5"/></svg>`;
+    trayRef.setImage(nativeImage.createFromDataURL(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`));
+    trayRef.setToolTip(`Atlas · ${label}`);
+  }
   buildTrayMenu();
 }
 
@@ -744,6 +767,16 @@ ipcMain.handle('platform:set-always-on-top', (event, enabled: unknown) => {
   savePlatformPreferences({ ...platformPreferences, alwaysOnTop: enabled });
   if (windowRef && !windowRef.isDestroyed()) windowRef.setAlwaysOnTop(enabled);
   return platformSettingsSnapshot();
+});
+ipcMain.handle('platform:set-keep-awake', (event, enabled: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof enabled !== 'boolean') throw new Error('防休眠设置必须是布尔值。');
+  keepAwakeEnabled = enabled;
+  updateRuntimeState(runtimeState);
+});
+ipcMain.on('runtime:set-state', (event, state: unknown) => {
+  assertTrustedAppSender(event);
+  if (state === 'running' || state === 'waiting' || state === 'idle') updateRuntimeState(state);
 });
 ipcMain.handle('platform:set-open-at-login', (event, enabled: unknown) => {
   assertTrustedAppSender(event);

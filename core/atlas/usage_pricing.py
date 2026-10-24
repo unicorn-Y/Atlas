@@ -26,6 +26,12 @@ _PRICE_TABLE: dict[str, tuple[Decimal, Decimal, Decimal, Decimal]] = {
     "deepseek-r1": (Decimal("0.15"), Decimal("0.60"), Decimal("0.003"), Decimal("0.15")),
     "deepseek-chat": (Decimal("0.15"), Decimal("0.60"), Decimal("0.003"), Decimal("0.15")),
     "deepseek-reasoner": (Decimal("0.15"), Decimal("0.60"), Decimal("0.003"), Decimal("0.15")),
+    # DeepSeek API pricing, peak USD/M tokens (checked 2026-10-24); cache write is
+    # estimated at the cache-miss rate because the vendor lists only cache-hit,
+    # cache-miss and output prices. https://api-docs.deepseek.com/quick_start/pricing/
+    "deepseek-v4.1-flash": (Decimal("0.30"), Decimal("1.20"), Decimal("0.006"), Decimal("0.30")),
+    "deepseek-v4-flash": (Decimal("0.30"), Decimal("1.20"), Decimal("0.006"), Decimal("0.30")),
+    "deepseek-flash": (Decimal("0.30"), Decimal("1.20"), Decimal("0.006"), Decimal("0.30")),
 }
 
 

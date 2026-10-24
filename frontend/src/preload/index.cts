@@ -20,6 +20,8 @@ const desktopApi: AtlasDesktopApi = {
   setAlwaysOnTop: (enabled) => ipcRenderer.invoke('platform:set-always-on-top', enabled),
   setOpenAtLogin: (enabled) => ipcRenderer.invoke('platform:set-open-at-login', enabled),
   setGlobalShortcut: (accelerator) => ipcRenderer.invoke('platform:set-global-shortcut', accelerator),
+  setKeepAwake: (enabled) => ipcRenderer.invoke('platform:set-keep-awake', enabled) as Promise<void>,
+  setRuntimeState: (state) => ipcRenderer.send('runtime:set-state', state),
   openWorkspaceInEditor: (editor: PlatformEditorId, workspacePath: string) =>
     ipcRenderer.invoke('platform:open-workspace-in-editor', editor, workspacePath),
   showFloatingComposer: () => ipcRenderer.invoke('floating-composer:show'),

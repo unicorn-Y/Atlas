@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import json
+import importlib.util
+import os
 import sqlite3
+import sys
+import shutil
 from datetime import datetime, timezone
 from typing import Annotated, Any
 
@@ -16,7 +20,7 @@ from fastapi import APIRouter, Depends
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
-from atlas.config import CONFIG_PATH, USER_SETTINGS_PATH
+from atlas.config import CONFIG_PATH, DATA_ROOT, USER_SETTINGS_PATH
 
 router = APIRouter()
 
@@ -90,6 +94,33 @@ async def get_diagnostics(
         "status": "error" if backend_state == "failed" else "warning" if backend_state == "starting" else "ok",
         "detail": {"ready": "服务已就绪。", "starting": "部分组件仍在启动。", "failed": "有组件启动失败；报告不包含原始错误或路径。"}[backend_state],
     }]
+    checks.append({
+        "id": "python_runtime", "label": "Python 运行环境",
+        "status": "ok" if sys.version_info >= (3, 11) else "warning",
+        "detail": f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}。" +
+                  ("运行版本满足当前要求。" if sys.version_info >= (3, 11) else "建议使用 Python 3.11 或更新版本。"),
+    })
+    missing_modules = [name for name in ("fastapi", "uvicorn", "litellm") if importlib.util.find_spec(name) is None]
+    checks.append({
+        "id": "python_dependencies", "label": "Python 依赖",
+        "status": "warning" if missing_modules else "ok",
+        "detail": f"缺少依赖：{', '.join(missing_modules)}。建议在 Atlas 的 core 环境重新安装依赖。" if missing_modules else "核心运行依赖均可导入。",
+    })
+    try:
+        free_bytes = shutil.disk_usage(DATA_ROOT).free
+        checks.append({
+            "id": "disk_space", "label": "数据盘空间",
+            "status": "warning" if free_bytes < 2 * 1024 ** 3 else "ok",
+            "detail": f"可用空间约 {free_bytes // 1024 ** 3} GB。" + ("建议清理磁盘后重试。" if free_bytes < 2 * 1024 ** 3 else "空间充足。"),
+        })
+    except OSError:
+        checks.append({"id": "disk_space", "label": "数据盘空间", "status": "unknown", "detail": "无法读取数据盘空间；检查目录访问权限。"})
+    proxy_configured = any(os.environ.get(key) for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"))
+    checks.append({
+        "id": "network_proxy", "label": "网络代理配置",
+        "status": "ok" if proxy_configured else "unknown",
+        "detail": "检测到代理环境变量（值已隐藏）。" if proxy_configured else "未检测到代理；需要代理时请在系统网络或启动环境中配置。此检查不会连接外网。",
+    })
     from atlas.engine_core.state.hermes_state_wal import is_sqlite_wal_reset_vulnerable
 
     sqlite_unsafe = is_sqlite_wal_reset_vulnerable(sqlite3.sqlite_version_info)

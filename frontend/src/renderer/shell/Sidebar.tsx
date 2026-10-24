@@ -150,6 +150,7 @@ export default function Sidebar(props: SidebarProps) {
   const [activityEvents, setActivityEvents] = useState<ConversationActivityEvent[]>([]);
   const [activityConversation, setActivityConversation] = useState<ConversationSummary | null>(null);
   const [filterText, setFilterText] = useState('');
+  const [contentMatches, setContentMatches] = useState<string[] | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [projectPickerQuery, setProjectPickerQuery] = useState('');
@@ -190,6 +191,15 @@ export default function Sidebar(props: SidebarProps) {
     }
   }, [props.activeConversationId]);
   useEffect(() => {
+    const onTag = (event: Event) => {
+      const detail = (event as CustomEvent<{ id?: string; label?: string | null }>).detail;
+      if (!detail?.id) return;
+      setLabel(detail.id, typeof detail.label === 'string' ? detail.label : null);
+    };
+    window.addEventListener('atlas:conversation-label', onTag);
+    return () => window.removeEventListener('atlas:conversation-label', onTag);
+  }, []);
+  useEffect(() => {
     if (!props.conversationsLoading) {
       const currentIds = new Set(props.conversations.map((item) => item.id));
       setManualUnread((current) => current.filter((id) => currentIds.has(id)));
@@ -223,6 +233,17 @@ export default function Sidebar(props: SidebarProps) {
     return () => { stale = true; window.removeEventListener('atlas:session-status-activity', refresh); };
   }, []);
   useEffect(() => () => { if (longPress.current) clearTimeout(longPress.current.timer); }, []);
+  useEffect(() => {
+    const query = filterText.trim();
+    if (!query) { setContentMatches(null); return; }
+    let stale = false;
+    const timer = window.setTimeout(() => {
+      void api<Array<{ conversation_id: string }>>(backend.apiBaseUrl, `/api/search?limit=100&q=${encodeURIComponent(query)}`)
+        .then((rows) => { if (!stale) setContentMatches([...new Set(rows.map((row) => row.conversation_id))]); })
+        .catch(() => { if (!stale) setContentMatches([]); });
+    }, 180);
+    return () => { stale = true; window.clearTimeout(timer); };
+  }, [filterText]);
 
   const setLabel = (id: string, label: string | null) => setLabels((current) => {
     const next = { ...current };
@@ -241,8 +262,11 @@ export default function Sidebar(props: SidebarProps) {
   const query = filterText.trim().toLocaleLowerCase();
   const matches = (conversation: ConversationSummary) => {
     const relatedProjects = projects.filter((project) => (project.conversation_ids ?? []).includes(conversation.id)).map((project) => project.name);
-    const text = [conversation.title, conversation.id, pathOf(conversation), conversation.worktree_branch, conversation.base_branch, ...relatedProjects].join(' ').toLocaleLowerCase();
-    if (query && !text.includes(query)) return false;
+    const selectedLabel = labels[conversation.id];
+    const text = [conversation.title, conversation.id, pathOf(conversation), conversation.worktree_branch, conversation.base_branch, selectedLabel, LABELS.find((label) => label.id === selectedLabel)?.name, ...relatedProjects].join(' ').toLocaleLowerCase();
+    const titleMatch = !query || text.includes(query);
+    const contentMatch = !query || (contentMatches?.includes(conversation.id) ?? false);
+    if (query && !titleMatch && !contentMatch) return false;
     const archived = props.archived.includes(conversation.id);
     if (statusFilter === 'archived') return archived;
     if (archived) return false;

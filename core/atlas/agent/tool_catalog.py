@@ -46,16 +46,17 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
     tools.append({"type": "function", "function": {
         "name": "automation_manage",
         "description": (
-            "Manage Atlas reminders/automations (E8). Actions: create | cancel | "
+            "Manage Atlas reminders/automations (E8). Actions: create | wakeup | cancel | "
             "update | list. Use create when the user asks to be reminded at/near a "
             "time (\"明天上午9点提醒我交报告\"); cancel when they ask to drop a "
             "reminder (\"取消那个提醒\"); update when they move/reschedule it "
             "(\"改到下午\"); list before answering questions about pending reminders. "
+            "Use wakeup for an agent-authored 'later' continuation in this same conversation. "
             "This writes the real AutomationStore and syncs the existing "
             "AutomationEngine — never invent a second scheduler."
         ),
         "parameters": {"type": "object", "properties": {
-            "action": {"type": "string", "enum": ["create", "cancel", "update", "list"]},
+            "action": {"type": "string", "enum": ["create", "wakeup", "cancel", "update", "list"]},
             "message": {"type": "string", "description": "提醒正文（create/update）"},
             "due_at": {"type": "string", "description": "ISO 8601 绝对时间（优先）"},
             "due_text": {"type": "string", "description": "自然语言时间，如 明天上午9点 / 今天下午3点"},

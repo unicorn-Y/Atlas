@@ -1,8 +1,10 @@
 export type NotificationKind = 'completion' | 'failure' | 'approval' | 'question' | 'background';
 export type CompletionNotificationMode = 'never' | 'background' | 'always';
+export type NotificationLevel = 'attention' | 'all' | 'off';
 
 export interface NotificationPreferences {
   enabled: boolean;
+  level: NotificationLevel;
   categories: Record<NotificationKind, boolean>;
   completionMode: CompletionNotificationMode;
   sound: boolean;
@@ -13,6 +15,7 @@ export interface NotificationPreferences {
 const KEY = 'atlas.preference.notifications';
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   enabled: true,
+  level: 'attention',
   categories: { completion: true, failure: true, approval: true, question: true, background: false },
   completionMode: 'background',
   sound: true,
@@ -35,6 +38,7 @@ export function readNotificationPreferences(): NotificationPreferences {
   const quietHours = value.quietHours && typeof value.quietHours === 'object' ? value.quietHours : {};
   return {
     enabled: typeof value.enabled === 'boolean' ? value.enabled : DEFAULT_NOTIFICATION_PREFERENCES.enabled,
+    level: value.level === 'all' || value.level === 'off' ? value.level : 'attention',
     categories: Object.fromEntries(Object.keys(DEFAULT_NOTIFICATION_PREFERENCES.categories).map((kind) => [
       kind,
       typeof (categories as Record<string, unknown>)[kind] === 'boolean'
@@ -71,6 +75,8 @@ function isQuietTime(now: Date, start: string, end: string): boolean {
 /** Used by Atlas's existing native notification hook before constructing a desktop alert. */
 export function shouldNotify(kind: NotificationKind, now = new Date(), focused = typeof document !== 'undefined' && document.hasFocus()): boolean {
   const preferences = readNotificationPreferences();
+  if (preferences.level === 'off') return false;
+  if (preferences.level === 'attention' && kind === 'background') return false;
   if (!preferences.enabled || !preferences.categories[kind] || preferences.focusMode) return false;
   if (preferences.quietHours.enabled && isQuietTime(now, preferences.quietHours.start, preferences.quietHours.end)) return false;
   if (kind === 'completion') {
