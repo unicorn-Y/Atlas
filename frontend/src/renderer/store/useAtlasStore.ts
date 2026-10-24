@@ -163,6 +163,7 @@ interface AtlasState extends PersistentSlice {
   moveQueued: (conversationId: string, id: string, beforeId: string | null) => void;
   restoreQueued: (conversationId: string, item: QueuedMessage, index: number) => void;
   sendQueuedNow: (conversationId: string, id: string) => void;
+  sendNow: (content: string, attachments?: string[], files?: RunFile[], refs?: ContextRefs) => Promise<void>;
   steerQueued: (conversationId: string, id: string) => void;
   /** Hands a user-edited todo list to the Agent: steered into the running task, or sent as a new message once it ended. */
   submitTodos: (conversationId: string, todos: TodoItem[]) => boolean;
@@ -830,6 +831,19 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       const running = activeRunFor(conversationId);
       try { if (running) backend.cancelRun(running.id); else dispatchQueue(conversationId); }
       catch (error) { set({ ...errorPatch(error, '停止请求失败'), queuePaused: { ...get().queuePaused, [conversationId]: true } }); }
+    },
+    sendNow: async (content, attachments = [], files = [], refs) => {
+      const message = content.trim() || (attachments.length || files.length ? '请查看附件。' : '');
+      if (!message) return;
+      const conversationId = get().activeConversationId;
+      if (!conversationId || !activeRunFor(conversationId)) { await get().sendMessage(message, attachments, files, refs); return; }
+      const item: QueuedMessage = { id: crypto.randomUUID(), content: message, attachments, files,
+        ...(refs && (refs.files.length || refs.conversations.length) ? { refs } : {}) };
+      set((state) => ({ queue: { ...state.queue, [conversationId]: [item, ...(state.queue[conversationId] ?? [])] },
+        queuePaused: { ...state.queuePaused, [conversationId]: false } }));
+      const running = activeRunFor(conversationId);
+      if (running) { try { backend.cancelRun(running.id); } catch (error) { set(errorPatch(error, '停止请求失败')); } }
+      else dispatchQueue(conversationId);
     },
     submitTodos: (conversationId, todos) => {
       const running = activeRunFor(conversationId);

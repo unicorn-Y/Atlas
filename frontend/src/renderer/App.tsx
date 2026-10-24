@@ -2,7 +2,7 @@ import { lazy, startTransition, Suspense, useCallback, useEffect, useMemo, useRe
 import { useShallow } from 'zustand/react/shallow';
 import {
   AudioLines, Bell, BookMarked, Brain, Copy, Cpu, Keyboard, Monitor, Radio, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Settings,
-  SlidersHorizontal, Square, Sun, Zap, FileCog, Volume2, X, Gauge, Search,
+  SlidersHorizontal, Square, Sun, Zap, FileCog, Volume2, X, Gauge, Search, File as FileIcon,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/backend-adapter';
@@ -27,6 +27,7 @@ const RunSetupMenu = lazy(() => import('./components/RunSetupMenu'));
 const TabStrip = lazy(() => import('./components/TabStrip'));
 const OnboardingDialog = lazy(() => import('./components/OnboardingDialog'));
 const SidePane = lazy(() => import('./components/SidePane'));
+const ResumePickerDialog = lazy(() => import('./components/ResumePickerDialog'));
 import { loadBindings, matchShortcut } from './services/shortcuts';
 import type { CustomCommandInfo, PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
@@ -53,6 +54,7 @@ const BoardPage = lazy(() => import('./pages/BoardPage'));
 const ProfilesPanel = lazy(() => import('./pages/ProfilesPanel'));
 const HooksPanel = lazy(() => import('./pages/HooksPanel'));
 const AgentsPage = lazy(() => import('./pages/agents/AgentsPage'));
+const AgentsOverview = lazy(() => import('./pages/agents/AgentsOverview'));
 const DevicesPage = lazy(() => import('./pages/DevicesPage'));
 const WorkbenchPage = lazy(() => import('./pages/WorkbenchPage'));
 const GroupsView = lazy(() => import('./pages/GroupsView'));
@@ -137,7 +139,7 @@ const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
 ];
 
 const TERMINAL = ['completed', 'failed', 'cancelled'];
-const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', queued: '排队中', paused: '已暂停', waiting: '等你确认', waiting_approval: '等你确认', completed: '已完成', failed: '出错了', cancelled: '已停止' };
+const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', queued: '排队中', paused: '已暂停', waiting: '等你确认', waiting_approval: '等你确认', completed: '已完成', failed: '出错了', cancelled: '已中断' };
 const HOME_MODES: ComposerMode[] = [
   { id: 'chat', label: '对话', icon: MessageCircle },
   { id: 'image', label: '图像', icon: ImageIcon },
@@ -198,6 +200,10 @@ export default function App() {
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('artifacts');
   const [theme, setTheme] = useState<Theme>(() => initialTheme());
   useEffect(() => {
+    const saved = (() => { try { return localStorage.getItem('atlas.code-theme') || 'auto'; } catch { return 'auto'; } })();
+    document.documentElement.dataset.codeTheme = saved === 'auto' ? (theme === 'dark' ? 'dark-vivid' : 'light-soft') : saved;
+  }, [theme]);
+  useEffect(() => {
     if (pref('theme-mode') !== 'system') return;
     const query = window.matchMedia('(prefers-color-scheme: dark)');
     const update = () => setTheme(query.matches ? 'dark' : 'light');
@@ -216,6 +222,8 @@ export default function App() {
   const [sheet, setSheet] = useState<SheetPane | null>(null);
   const [settingsQuery, setSettingsQuery] = useState('');
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [resumePickerOpen, setResumePickerOpen] = useState(false);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [keymapOpen, setKeymapOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -243,6 +251,7 @@ export default function App() {
   const [processCount, setProcessCount] = useState<number | null>(null);
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [startupWarning, setStartupWarning] = useState('');
   const [besideId, setBesideId] = useState('');
   const [rewound, setRewound] = useState<{ conversationId: string; rewindId: string; text: string } | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState(() => pref('default-workspace') ?? '');
@@ -571,6 +580,17 @@ export default function App() {
   useEffect(() => {
     if (store.connected && store.configLoaded && !store.apiKeyConfigured && pref('onboarded') !== 'true') setOnboardingOpen(true);
   }, [store.connected, store.configLoaded, store.apiKeyConfigured]);
+  useEffect(() => {
+    if (!store.connected) return;
+    let stale = false;
+    void api<{ checks?: Array<{ id: string; label: string; status: string; detail: string }> }>(store.apiBaseUrl, '/api/diagnostics')
+      .then((report) => {
+        if (stale) return;
+        const problems = (report.checks ?? []).filter((check) => ['warning', 'error'].includes(check.status));
+        setStartupWarning(problems.length ? problems.slice(0, 3).map((check) => `${check.label}：${check.detail}`).join('；') : '');
+      }).catch(() => undefined);
+    return () => { stale = true; };
+  }, [store.connected, store.apiBaseUrl]);
   const closeOnboarding = () => { setOnboardingOpen(false); setPref('onboarded', 'true'); };
 
   const startVoice = async () => {
@@ -581,7 +601,7 @@ export default function App() {
     setVoiceOpen(true);
   };
 
-  const submit = async (fromHome: boolean) => {
+  const submit = async (fromHome: boolean, immediate = false) => {
     if (!input.trim() && !attachments.length && !files.length && !mentions.length) return;
     const text = input;
     const images = attachments;
@@ -630,7 +650,8 @@ export default function App() {
     const refs = { files: mentions.filter((item) => item.kind === 'file').map((item) => item.id), conversations: mentions.filter((item) => item.kind === 'conversation').map((item) => item.id).slice(0, 3) };
     setMentions([]);
     const messageSkills = resolveMessageSkillReferences(text, store.skills.map((skill) => skill.name));
-    void store.sendMessage(text, images, documents, refs, undefined, undefined, messageSkills);
+    if (immediate && activeRun && !runDone) void store.sendNow(text, images, documents, refs);
+    else void store.sendMessage(text, images, documents, refs, undefined, undefined, messageSkills);
   };
   /** Images go to the model as pictures; every other file rides along as a document. */
   const addFiles = (picked: FileList | null) => {
@@ -640,6 +661,17 @@ export default function App() {
     addDocuments(all.filter((file) => !imageTypes.includes(file.type)));
     const images = all.filter((file) => imageTypes.includes(file.type));
     if (images.length) addImages(images);
+  };
+  const addFolderReferences = (folders: Array<{ name: string; path: string; count: number }>) => {
+    const references = folders.map((folder) => {
+      const json = JSON.stringify({ folder_reference: folder.path, file_count: folder.count });
+      const bytes = new TextEncoder().encode(json);
+      let binary = '';
+      bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+      return { name: `📁 ${folder.name}（${folder.count} 个文件）`, mime: 'application/vnd.atlas.folder-reference+json', data_base64: btoa(binary), size: bytes.length };
+    });
+    setFiles((current) => [...current, ...references]);
+    setToast(`已加入 ${folders.length} 个文件夹引用；只发送路径和文件数`);
   };
   const addDocuments = (picked: File[]) => {
     if (!picked.length) return;
@@ -919,6 +951,26 @@ export default function App() {
         askSelectedText();
         return;
       }
+      if (event.ctrlKey && !event.altKey && !event.shiftKey && /^[1-9]$/.test(event.key)) {
+        const target = tabs[Number(event.key) - 1];
+        if (target) { event.preventDefault(); const conversation = store.conversations.find((item) => item.id === target); if (conversation) openConversation(conversation); }
+        return;
+      }
+      if (event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 't') {
+        const focused = document.activeElement;
+        if (inspectorTab === 'browser' && inspectorOpen && focused?.tagName.toLowerCase() === 'webview') return;
+        event.preventDefault(); setTranscriptOpen(true); return;
+      }
+      if (event.key === 'Escape') {
+        if (event.defaultPrevented) return;
+        const target = event.target;
+        const draft = target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement ? target.value : '';
+        const overlay = document.querySelector('[role="dialog"], [role="menu"]');
+        if (draft.trim() || overlay || !store.busy) return;
+        event.preventDefault();
+        store.stopTask();
+        return;
+      }
       const action = matchShortcut(event, bindings);
       if (!action) return;
       event.preventDefault();
@@ -933,6 +985,7 @@ export default function App() {
         case 'toggleInspector': if (view === 'chat') toggleInspector(); break;
         case 'focusComposer': document.querySelector<HTMLTextAreaElement>('textarea[aria-label="消息内容"]')?.focus(); break;
         case 'stopRun': if (store.busy) store.stopTask(); break;
+        case 'sendNow': void submit(false, true); break;
         case 'sidebarSearch': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.search' } })); break;
         case 'sidebarProjectPicker': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.project-picker' } })); break;
         case 'sidebarNextGroup': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.next-group' } })); break;
@@ -1025,7 +1078,7 @@ export default function App() {
         void navigator.clipboard.writeText(`# ${activeConversation.title || 'Atlas 会话'}\n\n${transcript}${toolSummary ? `\n\n## 工具调用摘要\n\n${toolSummary}` : ''}`).then(() => setToast('会话 Markdown 已复制')).catch(() => setToast('剪贴板不可用'));
       } },
       { id: 'rename', label: '/rename', hint: '把后面的文字设为对话名称', takesArgument: true, run: (title: string) => { if (title.trim()) void store.renameConversation(activeConversation.id, title); else setToast('在 /rename 后面写上新名称'); } },
-      { id: 'resume', label: '/resume', hint: '继续打开最近对话，或按名称搜索', takesArgument: true, run: (query: string) => { const target = query.trim() ? store.conversations.find((item) => item.id === query.trim() || item.title.toLowerCase().includes(query.trim().toLowerCase())) : store.conversations[0]; if (target) openConversation(target); else setToast('没有找到可恢复的对话'); } },
+      { id: 'resume', label: '/resume', hint: '继续打开最近对话，或按名称搜索', takesArgument: true, run: (query: string) => { const target = query.trim() ? store.conversations.find((item) => item.id === query.trim() || item.title.toLowerCase().includes(query.trim().toLowerCase())) : null; if (target) openConversation(target); else if (!query.trim()) setResumePickerOpen(true); else setToast('没有找到可恢复的对话'); } },
       { id: 'fork', label: '/fork', hint: '从最近消息或指定检查点分叉', takesArgument: true, run: (target: string) => {
         const requested = target.trim();
         if (!requested) { const last = [...messages].reverse().find((item) => item.role === 'user'); if (last) void store.forkFrom(last.id); else setToast('当前对话还没有用户消息'); return; }
@@ -1184,14 +1237,21 @@ export default function App() {
     if (!store.connected) return [];
     // Quote the text so FTS treats it as a phrase instead of query syntax.
     const hits = await api<Array<{ id: number | string; conversation_id: string; content: string }>>(store.apiBaseUrl, `/api/search?limit=12&q=${encodeURIComponent(`"${query.replace(/"/g, '""')}"`)}`);
-    return hits.flatMap((hit) => {
+    const messageItems = hits.flatMap((hit) => {
       const conversation = conversationsRef.current.find((item) => item.id === hit.conversation_id);
       if (!conversation) return [];
       const at = hit.content.toLowerCase().indexOf(query.toLowerCase());
       const excerpt = hit.content.slice(Math.max(0, at - 16), Math.max(0, at - 16) + 60).replace(/\s+/g, ' ');
       return [{ id: `m-${hit.id}`, group: '消息内容', label: excerpt || conversation.title, hint: conversation.title, run: () => openConversation(conversation) }];
     });
-  }, [store.apiBaseUrl, store.connected]);
+    const root = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : '';
+    const fileItems = root ? (await backend.searchWorkspace(root, query, 40)).filter((hit) => hit.type === 'file').map((hit) => ({
+      id: `file-${hit.path}`, group: '工作区文件', label: hit.name, hint: hit.path, icon: <FileIcon />,
+      run: () => { go('chat'); store.requestFileOpen(hit.path); showInspectorTab('files'); },
+      runAlt: () => { go('chat'); window.dispatchEvent(new CustomEvent('atlas:add-context-file', { detail: { path: hit.path } })); },
+    })) : [];
+    return [...fileItems, ...messageItems];
+  }, [store.apiBaseUrl, store.connected, activeConversation?.workspace, go, showInspectorTab]);
   const workspacePath = activeConversation
     ? (typeof activeConversation.workspace === 'string' ? activeConversation.workspace : '')
     : store.draftWorkspace !== null ? store.draftWorkspace : defaultWorkspace ?? '';
@@ -1315,7 +1375,7 @@ export default function App() {
     </Tip>
   </>;
   const composerBase = {
-    value: input, onChange: setInput, attachments, onPickImages: addFiles, listening, onToggleMic: toggleSpeechInput,
+    value: input, onChange: setInput, attachments, onPickImages: addFiles, onPickFolders: addFolderReferences, listening, onToggleMic: toggleSpeechInput,
     attachmentProgress, failedAttachmentCount: failedAttachmentReads.length, onRetryFailedAttachments: retryFailedAttachments,
     onEnhancePrompt: enhancePrompt, onAttachDrawing: attachDrawing, contextKey: store.activeConversationId,
     onRemoveAttachment: (index: number) => setAttachments((items) => items.filter((_, position) => position !== index)),
@@ -1447,9 +1507,20 @@ export default function App() {
       <Button size="sm" variant="ghost" aria-label="停止当前生成或运行" onClick={() => store.stopTask()}><Square />停止</Button>
     </>}
   </div>;
+  const updateGoal = async (command: string) => {
+    const id = store.activeConversationId;
+    if (!id) return;
+    try {
+      const result = await api<{ goal: typeof conversationGoal }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(id)}/goal`, { method: 'POST', json: { command } });
+      setConversationGoal(result.goal);
+    } catch (error) { notify(error instanceof Error ? error.message : '目标操作失败'); }
+  };
   const goalHeader = conversationGoal && <div className="mb-2 flex items-center gap-2 rounded-lg bg-brand-soft px-2.5 py-1.5 text-[12px] text-fg-2" aria-label="当前会话目标">
     <ListChecks size={13} className="shrink-0 text-brand" /><span className="min-w-0 flex-1 truncate">目标：{conversationGoal.text}</span>
     <span className="shrink-0 text-fg-3">{conversationGoal.status === 'active' ? '进行中' : conversationGoal.status === 'paused' ? '已暂停' : conversationGoal.status === 'done' ? '已完成' : conversationGoal.status} · {conversationGoal.turns_used}/{conversationGoal.max_turns}</span>
+    <button type="button" title={conversationGoal.status === 'paused' ? '继续目标' : '暂停目标'} aria-label={conversationGoal.status === 'paused' ? '继续目标' : '暂停目标'} onClick={() => void updateGoal(conversationGoal.status === 'paused' ? 'resume' : 'pause')} className="rounded px-1.5 py-1 hover:bg-hover">{conversationGoal.status === 'paused' ? '继续' : '暂停'}</button>
+    <button type="button" title="编辑目标" aria-label="编辑目标" onClick={() => { const value = window.prompt('编辑当前目标', conversationGoal.text); if (value?.trim()) void updateGoal(`edit ${value.trim()}`); }} className="rounded px-1.5 py-1 hover:bg-hover">编辑</button>
+    <button type="button" title="清除目标" aria-label="清除目标" onClick={() => void updateGoal('clear')} className="rounded px-1.5 py-1 text-danger hover:bg-hover">清除</button>
   </div>;
 
   const localUrls = useMemo(() => {
@@ -1527,6 +1598,15 @@ export default function App() {
         conversations={store.conversations} conversationsLoading={store.conversationsLoading}
         activeConversationId={store.activeConversationId} loadingConversationId={store.loadingMessagesConversationId}
         onOpenConversation={openConversation} onNewTask={newTask} creating={store.creatingConversation} onSearch={() => setPaletteOpen(true)}
+        onJumpMessage={async (conversationId, messageId) => {
+          const target = store.conversations.find((item) => item.id === conversationId);
+          if (!target) return;
+          await openConversation(target);
+          window.setTimeout(() => {
+            const row = Array.from(document.querySelectorAll<HTMLElement>('[data-message-id]')).find((item) => item.dataset.messageId === messageId);
+            row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 250);
+        }}
         username={username} subtitle={store.connected ? modelName : store.backendStarting ? '后端启动中…' : '后端没有连接'}
         theme={theme} onToggleTheme={toggleTheme} onSettings={() => setSheet('models')}
         pinned={store.pinned} archived={store.archived} unread={store.unread}
@@ -1560,6 +1640,7 @@ export default function App() {
                 <div className="grid gap-1.5 border-t border-line px-2.5 py-2 text-[11.5px] text-fg-3" onPointerDown={(event) => event.stopPropagation()}>
                   <label className="flex items-center justify-between gap-3">音色<select aria-label="朗读音色" value={speechVoice} onChange={(event) => { setSpeechVoice(event.target.value); setPref('speech-voice', event.target.value); }} className="max-w-[170px] rounded-md border border-line bg-surface px-1.5 py-1 text-fg">{speechVoices.filter((voice) => voice.lang.toLowerCase().startsWith('zh')).map((voice) => <option key={voice.name} value={voice.name}>{voice.name}</option>)}</select></label>
                   <label className="flex items-center justify-between gap-3">语速<select aria-label="朗读语速" value={speechRate} onChange={(event) => { const rate = Number(event.target.value); setSpeechRate(rate); setPref('speech-rate', String(rate)); }} className="rounded-md border border-line bg-surface px-1.5 py-1 text-fg">{[0.8, 1, 1.2, 1.5].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}</select></label>
+                  <button type="button" onClick={() => { window.speechSynthesis.cancel(); speakText('你好，我是 Atlas。当前音色和语速可以在这里试听。'); }} className="justify-self-end rounded-md px-2 py-1 text-[11.5px] text-fg-2 hover:bg-hover">试听</button>
                 </div>
               </MenuContent>
             </Menu>
@@ -1573,6 +1654,7 @@ export default function App() {
           </div>
         </header>
         <UpdateBanner />
+        {startupWarning && <div role="alert" className="flex items-center gap-3 border-b border-danger/20 bg-danger/10 px-4 py-2 text-[12.5px] text-fg"><ShieldAsk size={15} className="shrink-0 text-danger" /><button type="button" onClick={() => setSheet('diagnostics')} className="min-w-0 flex-1 truncate text-left hover:underline">启动检查发现问题：{startupWarning} · 点击查看 /doctor</button><button type="button" aria-label="关闭启动告警" onClick={() => setStartupWarning('')} className="grid size-6 place-items-center rounded hover:bg-hover"><X size={13} /></button></div>}
         {startupProgress?.phase === 'failed' && !store.connected && <div role="alert" className="mx-4 mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger/25 bg-danger-soft px-4 py-3 text-[12.5px] text-danger">
           <div className="min-w-0"><p className="m-0 font-medium">Atlas 后端启动失败</p><p className="mb-0 mt-1 break-words opacity-85">{startupProgress.message ?? startupProgress.detail ?? '启动遇到问题，Atlas 会在稍后自动重试。'}</p></div>
           <div className="flex shrink-0 gap-2">
@@ -1652,7 +1734,7 @@ export default function App() {
 
     {view === 'board' && <BoardPage conversations={store.conversations} runs={store.runs} queue={store.queue} unread={store.unread} archived={store.archived}
       onOpen={openConversation} onStop={store.stopRun} onArchive={store.toggleArchived} />}
-    {view === 'agents' && <AgentsPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} username={username} />}
+    {view === 'agents' && <AgentsOverview runs={store.runs} conversations={store.conversations} apiBaseUrl={store.apiBaseUrl} onOpen={openConversation} onStop={store.stopRun} roster={<AgentsPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} username={username} />} />}
     {view === 'devices' && <DevicesPage onToast={notify} />}
     {view === 'workbench' && <WorkbenchPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
     {(view === 'skills' || view === 'library') && <LibraryPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
@@ -1709,7 +1791,11 @@ export default function App() {
         {sheet === 'appearance' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">外观与语音</h3>
           <p className="mt-1 mb-5 text-[13px] text-fg-3">只影响这台电脑。</p>
-          <AppearanceNotificationsPanel theme={theme} onThemeChange={chooseTheme} username={username} onSaveUsername={saveUsername} onToast={notify} section="appearance" />
+          <AppearanceNotificationsPanel theme={theme} onThemeChange={chooseTheme} username={username} onSaveUsername={saveUsername} onToast={notify} section="appearance"
+            speechVoice={speechVoice} speechVoices={speechVoices} speechRate={speechRate}
+            onSpeechVoiceChange={(value) => { setSpeechVoice(value); setPref('speech-voice', value); }}
+            onSpeechRateChange={(value) => { setSpeechRate(value); setPref('speech-rate', String(value)); }}
+            onSpeechPreview={() => { window.speechSynthesis.cancel(); speakText('你好，我是 Atlas。当前音色和语速可以在这里试听。'); }} />
           <div className="set-list">
             <div className="set-row"><div>收起侧边栏<small>只显示图标，给内容更多空间</small></div><button className="switch" role="switch" aria-label="收起侧边栏" aria-checked={sideMini} onClick={toggleMini} /></div>
             <div className="set-row"><div>自动朗读新回复<small>用本机语音逐句读出 Atlas 的回答</small></div><button className="switch" role="switch" aria-label="自动朗读新回复" aria-checked={voiceOutput} onClick={toggleVoiceOutput} /></div>
@@ -1762,6 +1848,8 @@ export default function App() {
 
     <PersonalTodos apiBaseUrl={store.apiBaseUrl} connected={store.connected} />
     {paletteOpen && <Suspense fallback={null}><Palette items={paletteItems} open onClose={() => setPaletteOpen(false)} search={searchMessages} /></Suspense>}
+    {resumePickerOpen && <Suspense fallback={null}><ResumePickerDialog apiBaseUrl={store.apiBaseUrl} conversations={store.conversations} onClose={() => setResumePickerOpen(false)} onSelect={openConversation} /></Suspense>}
+    {transcriptOpen && <TranscriptDialog conversationId={store.activeConversationId} messages={threadMessages} events={activeEvents} onClose={() => setTranscriptOpen(false)} />}
     {keymapOpen && <KeymapDialog onClose={() => setKeymapOpen(false)} />}
 
     {voiceOpen && <Suspense fallback={null}><VoiceOverlay
@@ -1810,6 +1898,49 @@ export default function App() {
     <Suspense fallback={null}><SettingsProposalCards apiBaseUrl={store.apiBaseUrl} onModel={(model) => void store.selectModel(model)} onToast={notify} currentModel={store.model} modelName={(id) => store.models.find((model) => model.id === id)?.name ?? id} /></Suspense>
     {toast && <div role="status" className="pop anim-pop fixed bottom-7 left-1/2 z-[80] -translate-x-1/2 rounded-xl px-4 py-2.5 text-[13.5px] text-fg">{toast}</div>}
   </TooltipProvider>;
+}
+
+function TranscriptDialog({ conversationId, messages, events, onClose }: {
+  conversationId: string;
+  messages: HistoryMessage[]; events: Array<{ type: string; timestamp?: string; data: Record<string, unknown> }>;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [allMessages, setAllMessages] = useState(messages);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => { const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); onClose(); } }; window.addEventListener('keydown', closeOnEscape); return () => window.removeEventListener('keydown', closeOnEscape); }, [onClose]);
+  useEffect(() => {
+    if (!conversationId) return;
+    let stale = false;
+    void (async () => {
+      setLoading(true);
+      const pages: HistoryMessage[][] = [];
+      let beforeId: string | undefined;
+      for (let pageIndex = 0; pageIndex < 100; pageIndex += 1) {
+        const page = await backend.getMessages(conversationId, { limit: 1000, ...(beforeId ? { beforeId } : {}) });
+        if (stale) return;
+        if (!page.length) break;
+        pages.unshift(page);
+        if (page.length < 1000) break;
+        beforeId = String(page[0]?.id ?? '');
+        if (!beforeId) break;
+      }
+      setAllMessages(pages.flat());
+      setLoading(false);
+    })().catch(() => { if (!stale) { setAllMessages(messages); setLoading(false); } });
+    return () => { stale = true; };
+  }, [conversationId]);
+  const text = useMemo(() => [
+    ...allMessages.map((item) => `[${item.role}] ${item.content}`),
+    ...events.map((event) => `[${event.timestamp ?? ''}] ${event.type}\n${JSON.stringify(event.data, null, 2)}`),
+  ].join('\n\n'), [allMessages, events]);
+  const filtered = useMemo(() => query.trim() ? text.split(/\n\n/).filter((line) => line.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).join('\n\n') : text, [query, text]);
+  return <div role="dialog" aria-modal="true" aria-label="完整对话记录" className="fixed inset-0 z-[100] flex flex-col bg-panel p-4 text-fg">
+    <div className="flex items-center gap-2 border-b border-line pb-3"><h2 className="m-0 text-[15px] font-semibold">完整对话记录</h2><span className="text-[12px] text-fg-3">{loading ? '正在读取完整历史…' : `${allMessages.length} 条消息 · ${events.length} 个运行事件`}</span><span className="flex-1" /><button type="button" onClick={() => void navigator.clipboard.writeText(filtered)} className="rounded-lg px-3 py-1.5 text-[12px] hover:bg-hover">复制文本</button><button type="button" aria-label="关闭完整对话记录" onClick={onClose} className="rounded-lg px-3 py-1.5 text-[12px] hover:bg-hover">关闭</button></div>
+    <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索全部对话记录…" aria-label="搜索完整对话记录" className="my-3 h-9 rounded-lg border border-line bg-sunken px-3 text-[13px] outline-none focus:border-brand" />
+    <pre className="m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-code p-4 font-mono text-[12px] leading-5 text-fg-2">{filtered || '没有匹配的记录'}</pre>
+    <span className="pt-2 text-[11px] text-fg-3">Ctrl+T 关闭 · Esc 关闭</span>
+  </div>;
 }
 
 function MessageAction({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
