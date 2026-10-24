@@ -109,6 +109,10 @@ export default function McpServersPanel({ apiBaseUrl }: { apiBaseUrl: string }) 
   }, [apiBaseUrl]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    const timer = window.setInterval(() => { void loadMcpServers(apiBaseUrl).then(setServers).catch(() => undefined); }, busy.startsWith('restart:') || busy === 'add' ? 450 : 1200);
+    return () => window.clearInterval(timer);
+  }, [apiBaseUrl, busy]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();

@@ -44,6 +44,13 @@ export default function ToolExecutionCard({ step, live, children }: {
   const hasDetails = Boolean(step.input || step.result || step.output || step.fullOutputPath);
   const hasCopyableFailureReason = Boolean(step.failureReason && !['工具返回失败状态', '子任务执行失败', 'Hook 执行失败'].includes(step.failureReason));
   const { label, icon: Icon } = CATEGORY[step.category] ?? CATEGORY.other;
+  const mcpTool = /^(?:mcp__|mcp\.)/i.test(step.toolName) || /"server(?:_name)?"\s*:/.test(step.input ?? '');
+  const mcpServer = (() => {
+    const explicit = /"server(?:_name)?"\s*:\s*"([^"]+)"/.exec(step.input ?? '')?.[1];
+    const encoded = /^mcp__(.+?)__(.+)$/i.exec(step.toolName)?.[1];
+    const dotted = /^mcp\.([^.]+)\./i.exec(step.toolName)?.[1];
+    return explicit || encoded || dotted || 'MCP';
+  })();
   const status = step.state === 'failed' ? '失败'
     : step.state === 'cancelled' ? '已取消'
       : active ? '进行中'
@@ -60,6 +67,7 @@ export default function ToolExecutionCard({ step, live, children }: {
         <Icon size={15} className={cn('shrink-0', step.state === 'failed' ? 'text-danger' : active ? 'text-brand' : 'text-fg-3')} />
         <span className="shrink-0 font-medium text-fg">{label}</span>
         {step.target && <span className="min-w-0 truncate text-[10.5px] text-fg-3">{step.toolName}</span>}
+        {mcpTool && <span className="shrink-0 rounded bg-brand-soft px-1.5 py-0.5 text-[10.5px] text-brand">{mcpServer} · MCP</span>}
         <code className="min-w-0 truncate rounded-[5px] bg-code px-1.5 font-mono text-[11.5px] text-fg-2" title={step.target ?? step.toolName}>
           {step.target || step.toolName}
         </code>
