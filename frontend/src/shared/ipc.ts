@@ -113,4 +113,6 @@ export interface AtlasDesktopApi {
   onDeepLink?(callback: (route: AtlasDeepLink) => void): () => void;
   /** Backend startup progress (H8 §10.3): fires during boot; `ready`/`failed` are terminal. */
   onBackendStartupProgress(callback: (progress: BackendStartupProgress) => void): () => void;
+  /** Receive Ctrl+F from a focused embedded page (its keyboard events do not bubble to React). */
+  onBrowserFind?(callback: () => void): () => void;
 }

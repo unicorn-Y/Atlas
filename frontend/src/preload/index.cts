@@ -87,6 +87,11 @@ const desktopApi: AtlasDesktopApi = {
     ipcRenderer.on(BACKEND_STARTUP_CHANNEL, listener);
     return () => ipcRenderer.removeListener(BACKEND_STARTUP_CHANNEL, listener);
   },
+  onBrowserFind: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('browser:find', listener);
+    return () => ipcRenderer.removeListener('browser:find', listener);
+  },
 };
 
 contextBridge.exposeInMainWorld('atlasDesktop', desktopApi);

@@ -685,6 +685,12 @@ function lockDownWebviews() {
       if (params.src && !/^(https?:|file:|about:blank)/i.test(params.src)) event.preventDefault();
     });
     if (contents.getType() === 'webview') {
+      contents.on('before-input-event', (event, input) => {
+        if ((input.control || input.meta) && input.key.toLowerCase() === 'f') {
+          event.preventDefault();
+          if (windowRef && !windowRef.isDestroyed()) windowRef.webContents.send('browser:find');
+        }
+      });
       // Links that would open a new window stay in the panel instead.
       contents.setWindowOpenHandler(({ url }) => {
         if (/^https?:/i.test(url)) void contents.loadURL(url);

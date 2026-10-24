@@ -70,6 +70,8 @@ interface WebviewElement extends HTMLElement {
   openDevTools(): void;
   executeJavaScript<T>(code: string): Promise<T>;
   capturePage(): Promise<{ toDataURL(): string }>;
+  findInPage(text: string, options?: { forward?: boolean; findNext?: boolean; matchCase?: boolean }): number;
+  stopFindInPage(action: 'clearSelection' | 'keepSelection' | 'activateSelection'): void;
 }
 
 interface BrowserTab {
@@ -232,6 +234,10 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   const [annotation, setAnnotation] = useState('');
   const [localFile, setLocalFile] = useState<File | null>(null);
   const [localFileUrl, setLocalFileUrl] = useState('');
+  const [findOpen, setFindOpen] = useState(false);
+  const [findText, setFindText] = useState('');
+  const [findCount, setFindCount] = useState({ activeMatchOrdinal: 0, matches: 0 });
+  const findInputRef = useRef<HTMLInputElement | null>(null);
   const localFileInput = useRef<HTMLInputElement | null>(null);
   const addressInputRef = useRef<HTMLInputElement | null>(null);
   const tabsRef = useRef(tabs);
@@ -285,9 +291,13 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
       const detail = event as Event & { title?: string };
       if (detail.title) setTabs((previous) => previous.map((tab) => tab.id === id ? { ...tab, title: detail.title! } : tab));
     };
+    const found = (event: Event) => {
+      const result = (event as Event & { result?: { activeMatchOrdinal: number; matches: number } }).result;
+      if (result && activeTabIdRef.current === id) setFindCount(result);
+    };
     const listeners: Array<[string, EventListener]> = [
       ['did-start-loading', start], ['did-stop-loading', stop], ['did-navigate', sync],
-      ['did-navigate-in-page', sync], ['did-fail-load', failed], ['page-title-updated', title],
+      ['did-navigate-in-page', sync], ['did-fail-load', failed], ['page-title-updated', title], ['found-in-page', found],
     ];
     for (const [name, listener] of listeners) view.addEventListener(name, listener);
     boundViewRefs.current.set(id, { view, listeners });
@@ -325,6 +335,35 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
     return () => observer.disconnect();
   }, []);
   const desktop = typeof window !== 'undefined' && Boolean(window.atlasDesktop);
+
+  const closeFind = () => {
+    viewRefs.current.get(activeTabIdRef.current)?.stopFindInPage('clearSelection');
+    setFindOpen(false);
+    setFindText('');
+    setFindCount({ activeMatchOrdinal: 0, matches: 0 });
+  };
+  const searchPage = (query: string, forward = true, findNext = false) => {
+    setFindText(query);
+    const view = viewRefs.current.get(activeTabIdRef.current);
+    if (!query.trim() || !view) {
+      view?.stopFindInPage('clearSelection');
+      setFindCount({ activeMatchOrdinal: 0, matches: 0 });
+      return;
+    }
+    view.findInPage(query, { forward, findNext, matchCase: false });
+  };
+  useEffect(() => {
+    const open = () => { setFindOpen(true); window.requestAnimationFrame(() => { findInputRef.current?.focus(); findInputRef.current?.select(); }); };
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); open(); }
+      else if (event.key === 'Escape' && findOpen) { event.preventDefault(); closeFind(); }
+    };
+    const onFind = () => open();
+    const unsubscribe = window.atlasDesktop?.onBrowserFind?.(onFind);
+    document.addEventListener('keydown', onKey, true);
+    window.addEventListener('atlas:browser-find', onFind);
+    return () => { unsubscribe?.(); document.removeEventListener('keydown', onKey, true); window.removeEventListener('atlas:browser-find', onFind); };
+  }, [findOpen]);
 
   useEffect(() => {
     if (!userRecordingId || !apiBaseUrl) {
@@ -385,6 +424,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
     if (!tab) return;
     setLocalFile(null);
     setPendingPick(null);
+    if (findOpen) closeFind();
     setTabs((previous) => previous.map((item) => item.id === id ? {
       ...item, url: next, address: next, initialUrl: item.initialUrl || next,
       title: tabTitle(next),
@@ -416,6 +456,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
     const title = typeof latest.data.title === 'string' && latest.data.title ? latest.data.title : tabTitle(nextUrl);
     setLocalFile(null);
     setPendingPick(null);
+    if (findOpen) closeFind();
     setTabs((previous) => previous.map((item) => item.id === activeId
       ? { ...item, initialUrl: item.initialUrl || nextUrl, url: nextUrl, address: nextUrl, title }
       : item));
@@ -614,6 +655,16 @@ ${current}`);
         }} className={button}><ScrollText size={15} /></button>}
       <button type="button" aria-label="开发者工具" disabled={!activeTab?.url || Boolean(localFile)} onClick={() => activeView?.openDevTools()} className={button}><Code2 size={15} /></button>
     </form>
+    {findOpen && <div className="flex items-center gap-1 rounded-lg border border-line bg-surface px-2 py-1" role="search" aria-label="页内查找">
+      <input ref={findInputRef} value={findText} onChange={(event) => searchPage(event.target.value)} onKeyDown={(event) => {
+        if (event.key === 'Enter') { event.preventDefault(); searchPage(findText, !event.shiftKey, true); }
+        if (event.key === 'Escape') { event.preventDefault(); closeFind(); }
+      }} placeholder="查找当前页面" aria-label="查找文本" className="h-7 min-w-0 flex-1 bg-transparent text-[12px] outline-none" />
+      <span className="min-w-12 text-center text-[11px] text-fg-3" aria-live="polite">{findText ? `${findCount.matches ? findCount.activeMatchOrdinal : 0}/${findCount.matches}` : '0/0'}</span>
+      <button type="button" aria-label="上一个匹配" title="上一个匹配" disabled={!findCount.matches} onClick={() => searchPage(findText, false, true)} className={button}><ArrowLeft size={14} /></button>
+      <button type="button" aria-label="下一个匹配" title="下一个匹配" disabled={!findCount.matches} onClick={() => searchPage(findText, true, true)} className={button}><ArrowRight size={14} /></button>
+      <button type="button" aria-label="关闭查找" title="关闭（Esc）" onClick={closeFind} className={button}><X size={14} /></button>
+    </div>}
     {activeTab?.url && !localFile && <div className="flex items-center gap-0.5 text-[12px]" role="group" aria-label="预览尺寸">
       {(Object.keys(DEVICES) as Device[]).map((key) => {
         const Icon = DEVICES[key].icon;
