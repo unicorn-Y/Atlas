@@ -357,12 +357,20 @@ async def request_runtime_shutdown(
     expected = os.environ.get("ATLAS_SHUTDOWN_TOKEN", "")
     supplied = request.headers.get("x-atlas-backend-shutdown-token", "")
     callback = getattr(request.app.state, "desktop_shutdown_callback", None)
-    if not expected or not secrets.compare_digest(supplied, expected) or not callable(callback):
+    daemon_mode = os.environ.get("ATLAS_AUTOMATION_DAEMON") == "1"
+    if not expected or not secrets.compare_digest(supplied, expected) or not (callable(callback) or daemon_mode):
         raise HTTPException(status_code=403, detail="Backend shutdown is not authorized")
     from atlas.api.skills_market_router import get_market
 
     await get_market().cancel_pending_searches()
-    asyncio.get_running_loop().call_soon(callback)
+    if callable(callback):
+        asyncio.get_running_loop().call_soon(callback)
+    else:
+        # Let the response flush, then signal uvicorn so lifespan shutdown closes DBOS cleanly.
+        def stop_daemon() -> None:
+            import signal
+            os.kill(os.getpid(), signal.SIGTERM)
+        asyncio.get_running_loop().call_later(0.25, stop_daemon)
     return {"status": "shutting_down"}
 
 

@@ -61,6 +61,167 @@ def serve(port: int | None, reload: bool) -> None:
     )
 
 
+@main.group()
+def daemon() -> None:
+    """Manage Atlas's independent, persistent automation server."""
+
+
+def _daemon_control_file() -> Path:
+    from atlas.config import DATA_ROOT
+    return DATA_ROOT / "data" / "runtime" / "automation-daemon.json"
+
+
+def _daemon_request(method: str, path: str, port: int, *, token: str = "", timeout: float = 3.0):
+    import httpx
+    headers = {"X-Atlas-Backend-Shutdown-Token": token} if token else {}
+    return httpx.request(method, f"http://127.0.0.1:{port}{path}", headers=headers, timeout=timeout)
+
+
+@daemon.command("start")
+@click.option("--port", default=None, type=int, help="API port (default: Atlas server port)")
+def daemon_start(port: int | None) -> None:
+    """Start a detached local server that keeps DBOS automations running after the UI exits."""
+    import json as json_module
+    import os
+    import secrets
+    import subprocess
+    import time
+    import httpx
+
+    from atlas.config import get_config
+
+    control = _daemon_control_file()
+    selected_port = port or get_config().server_port
+    if control.is_file():
+        try:
+            info = json_module.loads(control.read_text(encoding="utf-8"))
+            response = _daemon_request("GET", "/api/health", int(info["port"]), timeout=1.0)
+            if response.is_success:
+                console.print(f"Automation daemon already running (pid={info['pid']}, port={info['port']}).")
+                return
+        except (OSError, ValueError, KeyError, TypeError, json_module.JSONDecodeError, httpx.HTTPError):
+            pass
+        control.unlink(missing_ok=True)
+
+    try:
+        occupied = _daemon_request("GET", "/api/health", selected_port, timeout=1.0)
+        if occupied.is_success:
+            raise click.ClickException(
+                f"Atlas is already serving port {selected_port} without a daemon control record. "
+                "Stop the current backend before starting the independent automation daemon."
+            )
+    except httpx.HTTPError:
+        pass
+
+    control.parent.mkdir(parents=True, exist_ok=True)
+    log_path = control.parent.parent / "logs" / "automation-daemon.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    shutdown_token = secrets.token_urlsafe(32)
+    env = {**os.environ, "ATLAS_AUTOMATION_DAEMON": "1", "ATLAS_SHUTDOWN_TOKEN": shutdown_token}
+    flags = 0x00000008 | 0x00000200 if os.name == "nt" else 0
+    with log_path.open("ab") as log_file:
+        process = subprocess.Popen(
+            [sys.executable, "-m", "atlas.cli", "serve", "--port", str(selected_port)],
+            env=env, cwd=os.getcwd(), stdin=subprocess.DEVNULL,
+            stdout=log_file, stderr=log_file, creationflags=flags,
+            start_new_session=os.name != "nt",
+        )
+    deadline = time.time() + 60
+    while time.time() < deadline and process.poll() is None:
+        try:
+            response = _daemon_request("GET", "/api/health", selected_port, timeout=1.0)
+            if response.is_success:
+                control.write_text(json_module.dumps({"pid": process.pid, "port": selected_port,
+                    "shutdown_token": shutdown_token, "started_at": time.time()}, indent=2), encoding="utf-8")
+                console.print(f"Automation daemon started (pid={process.pid}, port={selected_port}).")
+                return
+        except httpx.HTTPError:
+            pass
+        time.sleep(0.5)
+    raise click.ClickException(f"Automation daemon failed to become healthy; see {log_path}")
+
+
+@daemon.command("status")
+def daemon_status() -> None:
+    """Show daemon health and active automation count."""
+    import json as json_module
+    import httpx
+
+    control = _daemon_control_file()
+    if not control.is_file():
+        console.print("Automation daemon is not running.")
+        return
+    try:
+        info = json_module.loads(control.read_text(encoding="utf-8"))
+        health = _daemon_request("GET", "/api/health", int(info["port"]), timeout=2.0)
+        response = _daemon_request("GET", "/api/automations", int(info["port"]), timeout=3.0)
+        automations = response.json().get("automations", []) if response.is_success else []
+        console.print(f"Automation daemon healthy (pid={info['pid']}, port={info['port']}); "
+                      f"{sum(bool(item.get('enabled')) for item in automations)} enabled automations.")
+        if not health.is_success:
+            raise httpx.HTTPError("unhealthy")
+    except (OSError, ValueError, KeyError, TypeError, json_module.JSONDecodeError, httpx.HTTPError):
+        console.print("Automation daemon control record exists, but its server is not healthy.")
+
+
+@daemon.command("stop")
+def daemon_stop() -> None:
+    """Gracefully stop the server and release its DBOS/data locks."""
+    import json as json_module
+    import time
+    import httpx
+
+    control = _daemon_control_file()
+    if not control.is_file():
+        console.print("Automation daemon is not running.")
+        return
+    try:
+        info = json_module.loads(control.read_text(encoding="utf-8"))
+        _daemon_request("POST", "/api/runtime/shutdown", int(info["port"]),
+                        token=str(info.get("shutdown_token", "")), timeout=3.0)
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            try:
+                _daemon_request("GET", "/api/health", int(info["port"]), timeout=0.5)
+            except httpx.HTTPError:
+                break
+            time.sleep(0.25)
+        else:
+            raise click.ClickException("Daemon did not release its server port within 30 seconds")
+    except (OSError, ValueError, KeyError, TypeError, json_module.JSONDecodeError) as exc:
+        raise click.ClickException(f"Could not stop automation daemon: {exc}") from exc
+    control.unlink(missing_ok=True)
+    console.print("Automation daemon stopped; DBOS and data locks released.")
+
+
+@daemon.command("enable-startup")
+def daemon_enable_startup() -> None:
+    """Start the detached daemon at Windows user login."""
+    if os.name != "nt":
+        raise click.ClickException("Automatic login startup is currently supported on Windows only.")
+    import winreg
+    command = f'"{sys.executable}" -m atlas.cli daemon start'
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0,
+                        winreg.KEY_SET_VALUE) as key:
+        winreg.SetValueEx(key, "AtlasAutomationDaemon", 0, winreg.REG_SZ, command)
+    console.print("Automation daemon will start at your next Windows login; closing the UI does not stop it.")
+
+
+@daemon.command("disable-startup")
+def daemon_disable_startup() -> None:
+    """Remove Atlas's Windows login startup entry without stopping a running daemon."""
+    if os.name != "nt":
+        raise click.ClickException("Automatic login startup is currently supported on Windows only.")
+    import winreg
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0,
+                        winreg.KEY_SET_VALUE) as key:
+        try:
+            winreg.DeleteValue(key, "AtlasAutomationDaemon")
+        except FileNotFoundError:
+            pass
+    console.print("Automation daemon will no longer start at Windows login; any running daemon remains active.")
+
+
 @main.command()
 @click.option("--model", "-m", default=None, help="Model to use")
 def chat(model: str | None) -> None:
