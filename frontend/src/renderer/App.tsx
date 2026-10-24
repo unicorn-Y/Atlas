@@ -1298,6 +1298,11 @@ export default function App() {
     ] : []),
     ...(activeRun && runDone && store.runPrompts[activeRun.id] ? [{ id: 'retry', label: '/retry', hint: '把上一条要求重新执行一遍', run: () => store.retryRun(activeRun.id) }] : []),
     { id: 'plan', label: '/plan', hint: store.nextRunMode === 'plan' ? '取消：下一条直接执行' : '下一条先出计划，你批准后再动手', run: () => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan') },
+    { id: 'ultraplan', label: '/ultraplan', hint: '并行调研后生成详细计划，批准后按步骤执行', takesArgument: true, run: (goal: string) => {
+      if (!goal.trim()) { setToast('在 /ultraplan 后写上目标'); return; }
+      store.setNextRunMode('plan');
+      void store.sendMessage(`高级计划目标：${goal.trim()}\n\n先派发 2～3 个子 agent 并行调研代码结构、相关文件、依赖和风险，再合并证据，输出带步骤、涉及文件、验证方法、风险和逐步勾选项的详细计划。将完整计划保存到当前工作区的 .atlas/plans/ 目录并在回复中提供路径。当前处于计划模式，只做调研和计划，不执行改动；等用户批准后再逐步实施。`);
+    } },
     { id: 'folder', label: '/folder', hint: '选择这个对话的工作目录', run: () => void chooseWorkspace() },
     { id: 'pwd', label: '/pwd', hint: '显示当前对话的工作目录', run: () => {
       const path = activeConversation
