@@ -195,10 +195,12 @@ class KanbanStore:
 
 
 def available_role_profiles() -> list[str]:
-    """Return only profile basenames so secrets and runtime config never escape."""
-    from atlas.config import DATA_ROOT
-    directory = DATA_ROOT / "data" / "profiles"
-    return sorted(path.stem for path in directory.glob("*.toml")) if directory.is_dir() else []
+    """Return profile ids only; descriptions, credentials and profile settings stay private."""
+    from atlas.config import get_config
+    from atlas.task_artifacts import TomlRecordStore, seed_profiles
+    store = TomlRecordStore(get_config().db_path.parent, "profiles")
+    seed_profiles(store)
+    return sorted(str(profile["id"]) for profile in store.list() if profile.get("id"))
 
 
 def atlas_kanban_store() -> KanbanStore:

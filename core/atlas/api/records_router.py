@@ -10,8 +10,7 @@ import asyncio
 import re
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
