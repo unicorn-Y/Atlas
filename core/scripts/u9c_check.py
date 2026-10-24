@@ -101,6 +101,7 @@ def check_release_verification(temp: Path) -> None:
       const mod = await import({json.dumps(helper.as_uri())});
       const source = {json.dumps(server.base + '/latest')};
       if (mod.compareSemver('v9.2.0','9.1.9') <= 0) throw new Error('semver comparison failed');
+      if (mod.compareSemver('9.2.0-rc.2','9.2.0-rc.10') >= 0 || mod.compareSemver('9.2.0-rc.10','9.2.0') >= 0) throw new Error('prerelease semver comparison failed');
       const status = await mod.checkReleaseUpdate(source, '9.1.0', {json.dumps(str(temp / 'user-data'))});
       if (!status.available || status.latest !== 'v9.2.0') throw new Error('release check failed');
       const file = await mod.downloadVerifiedInstaller(source, '9.2.0', {json.dumps(str(temp / 'user-data'))}, () => {{}});

@@ -6,10 +6,30 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 
 export interface ReleaseStatus { supported: boolean; available: boolean; current: string; latest?: string; notes?: string; assetName?: string; error?: string; skipped?: boolean }
-const semver = (raw: string) => raw.replace(/^v/, '').split(/[+-]/, 1)[0].split('.').map((part) => Number(part));
+type Semver = { core: [number, number, number]; prerelease: Array<string | number> };
+function semver(raw: string): Semver {
+  const match = raw.trim().match(/^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/);
+  if (!match) throw new TypeError(`无效的语义化版本号：${raw}`);
+  const prerelease = match[4] ? match[4].split('.').map((part) => {
+    if (!part || !/^[0-9A-Za-z-]+$/.test(part) || (/^\d+$/.test(part) && part.length > 1 && part.startsWith('0'))) {
+      throw new TypeError(`无效的语义化版本预发布标识：${raw}`);
+    }
+    return /^\d+$/.test(part) ? Number(part) : part;
+  }) : [];
+  return { core: [Number(match[1]), Number(match[2]), Number(match[3])], prerelease };
+}
 export function compareSemver(a: string, b: string): number {
   const left = semver(a); const right = semver(b);
-  for (let i = 0; i < 3; i += 1) { const diff = (left[i] ?? 0) - (right[i] ?? 0); if (diff) return diff > 0 ? 1 : -1; }
+  for (let i = 0; i < 3; i += 1) { const diff = left.core[i] - right.core[i]; if (diff) return diff > 0 ? 1 : -1; }
+  if (!left.prerelease.length || !right.prerelease.length) return left.prerelease.length === right.prerelease.length ? 0 : left.prerelease.length ? -1 : 1;
+  for (let i = 0; i < Math.min(left.prerelease.length, right.prerelease.length); i += 1) {
+    const l = left.prerelease[i]; const r = right.prerelease[i];
+    if (l === r) continue;
+    if (typeof l === 'number' && typeof r !== 'number') return -1;
+    if (typeof l !== 'number' && typeof r === 'number') return 1;
+    return l < r ? -1 : 1;
+  }
+  if (left.prerelease.length !== right.prerelease.length) return left.prerelease.length < right.prerelease.length ? -1 : 1;
   return 0;
 }
 export function hasAuthenticodeSignature(pe: Buffer): boolean {
@@ -39,7 +59,7 @@ export async function checkReleaseUpdate(source: string, current: string, userDa
   try {
     const release = await jsonFetch(source.trim());
     const latest = String(release.tag_name ?? release.name ?? '').trim();
-    if (!/^v?\d+\.\d+\.\d+/.test(latest)) throw new Error('Release tag 不是语义化版本号。');
+    semver(latest);
     const asset = (release.assets as Array<{ name: string; browser_download_url: string }> | undefined)?.find((item) => /setup\.exe$/i.test(item.name));
     const p = prefs(userData);
     const skipped = p.skipped === latest;
