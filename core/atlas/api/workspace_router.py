@@ -51,7 +51,10 @@ async def ide_status() -> dict[str, Any]:
 async def ide_context() -> dict[str, Any]:
     from atlas.tools.ide_bridge import request
 
-    return await request("context")
+    try:
+        return await request("context")
+    except (ConnectionError, OSError, RuntimeError, TimeoutError) as exc:
+        raise HTTPException(status_code=503, detail=f"没有连接到 VS Code（请安装并启用 Atlas IDE Bridge 扩展）：{exc}") from exc
 
 log = structlog.get_logger()
 

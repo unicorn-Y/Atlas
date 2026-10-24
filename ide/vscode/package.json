@@ -4,17 +4,35 @@
   "description": "Connects the active VS Code editor to Atlas on localhost.",
   "version": "0.1.0",
   "publisher": "atlas-local",
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Other"],
-  "activationEvents": ["*"],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
-  "scripts": { "compile": "tsc -p .", "package": "vsce package" },
-  "dependencies": { "ws": "^8.18.0" },
+  "scripts": {
+    "compile": "tsc -p . --noEmit && node -e \"require('esbuild').buildSync({entryPoints:['src/extension.ts'],bundle:true,platform:'node',format:'cjs',target:'node18',external:['vscode'],outfile:'out/extension.js'})\"",
+    "package": "npm run compile && vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/vscode": "^1.85.0",
     "@types/ws": "^8.5.13",
     "typescript": "^5.7.2",
-    "@vscode/vsce": "^3.2.1"
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.24.0"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "只把当前编辑器的文件、选区和诊断通过带令牌的本机连接交给 Atlas。"
+    }
   }
 }
