@@ -7,7 +7,6 @@ injection — never a module-level singleton — so two app instances stay isola
 from __future__ import annotations
 
 import asyncio
-import base64
 import hashlib
 import json
 import os
@@ -16,10 +15,8 @@ import fnmatch
 import mimetypes
 import re
 import shlex
-import shutil
 import subprocess
 import tempfile
-import time
 import uuid
 from contextlib import suppress
 from pathlib import Path, PurePosixPath
@@ -42,9 +39,12 @@ router = APIRouter()
 @router.get("/api/ide/status")
 async def ide_status() -> dict[str, Any]:
     """Report whether the user's local VS Code bridge lock file is present."""
-    from atlas.tools.ide_bridge import connected
-
-    return {"connected": connected(), "name": "VS Code" if connected() else ""}
+    from atlas.tools.ide_bridge import request
+    try:
+        await request("context")
+        return {"connected": True, "name": "VS Code"}
+    except (ConnectionError, OSError, RuntimeError, TimeoutError):
+        return {"connected": False, "name": ""}
 
 
 @router.post("/api/ide/context")
@@ -1273,7 +1273,7 @@ async def collect_workspace_rules(root: str) -> dict[str, Any]:
             path = str(PurePosixPath(base) / name)
             try:
                 raw = await ssh_workspaces.read_bytes(host, path)
-            except Exception as exc:  # noqa: BLE001 — async SSH/SFTP transports use provider-specific errors
+            except Exception:  # noqa: BLE001 — async SSH/SFTP transports use provider-specific errors
                 log.exception("workspace.rules_ssh_read_failed", host=host, path=path)
                 continue
             files.append({"path": path, "bytes": len(raw),
