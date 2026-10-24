@@ -618,7 +618,13 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
                     metadata = {}
             state.context = {"use_memories": metadata.get("use_memories", True),
                              "generate_memories": metadata.get("generate_memories", True)}
-            if state.context["use_memories"]:
+            project_only = False
+            projects = getattr(agent, "_projects", None)
+            if projects is not None:
+                project = await projects.find_by_conversation(request.conversation_id)
+                project_only = bool(project and project.memory_scope == "project-only")
+            state.context["project_memory_scope"] = "project-only" if project_only else "global"
+            if state.context["use_memories"] and not project_only:
                 state.context = await _merge_library_recall(state.context, state.message)
         runtime.maintenance_context = {
             "project_state": state.plan.to_dict() if state.plan else None,

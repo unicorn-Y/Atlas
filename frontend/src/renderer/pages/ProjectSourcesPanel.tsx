@@ -28,9 +28,18 @@ export default function ProjectSourcesPanel({ projectId, workspacePath, apiBaseU
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [memoryScope, setMemoryScope] = useState<'global' | 'project-only'>('global');
+  const [scopeBusy, setScopeBusy] = useState(false);
   const load = () => backend.getProjectSources(projectId).then((result) => { setData(result); setInstructions(result.instructions); setError(''); })
     .catch((exc) => setError(exc instanceof Error ? exc.message : String(exc)));
   useEffect(() => { setData(null); void load(); }, [projectId]);
+  useEffect(() => {
+    let cancelled = false;
+    void api<{ memory_scope?: 'global' | 'project-only' }>(apiBaseUrl, `/api/projects/${encodeURIComponent(projectId)}`)
+      .then((project) => { if (!cancelled) setMemoryScope(project.memory_scope === 'project-only' ? 'project-only' : 'global'); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [apiBaseUrl, projectId]);
   useEffect(() => {
     let cancelled = false;
     setNotes(''); setSavedNotes(''); setNotesError('');
@@ -65,6 +74,13 @@ export default function ProjectSourcesPanel({ projectId, workspacePath, apiBaseU
   const field = 'rounded-[9px] bg-sunken px-3 text-[13px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]';
   return <section className="mt-5 grid gap-3 text-[13px]" aria-label="项目资料">
     <h3 className="m-0 text-[14px] font-semibold text-heading">项目资料</h3>
+    <label className="flex items-center gap-2 rounded-lg bg-sunken p-2.5 text-fg-2"><input type="checkbox" checked={memoryScope === 'project-only'} disabled={scopeBusy}
+      onChange={(event) => {
+        const next = event.target.checked ? 'project-only' : 'global';
+        setScopeBusy(true);
+        void api(apiBaseUrl, `/api/projects/${encodeURIComponent(projectId)}`, { method: 'PUT', json: { memory_scope: next } })
+          .then(() => setMemoryScope(next)).catch((exc) => setError(exc instanceof Error ? exc.message : String(exc))).finally(() => setScopeBusy(false));
+      }} />只在本项目内使用记忆</label>
     {error && <p role="alert" className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-[12.5px] text-danger">{error}</p>}
     <label className="grid gap-1 text-fg-2">项目指令（这个项目里的每次任务都会带上）
       <textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} rows={3} maxLength={8000}

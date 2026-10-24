@@ -174,6 +174,10 @@ async def get_conversation_settings(
     conversation = await memory.get_conversation(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    try:
+        conversation["metadata"] = json.loads(conversation.get("metadata") or "{}")
+    except (TypeError, ValueError):
+        conversation["metadata"] = {}
     return conversation
 
 

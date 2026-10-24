@@ -38,6 +38,7 @@ class Project:
     current_state: str = ""
     active_task_ids: list[str] = field(default_factory=list)
     memory_refs: list[str] = field(default_factory=list)
+    memory_scope: str = "global"
     skill_refs: list[str] = field(default_factory=list)
     default_model: str = ""
     default_preset_id: str = ""
@@ -86,6 +87,7 @@ class ProjectStore:
                 active_task_ids TEXT NOT NULL DEFAULT '[]',
                 memory_refs TEXT NOT NULL DEFAULT '[]',
                 skill_refs TEXT NOT NULL DEFAULT '[]',
+                memory_scope TEXT NOT NULL DEFAULT 'global',
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
@@ -129,6 +131,8 @@ class ProjectStore:
             await self._db.execute("ALTER TABLE projects ADD COLUMN default_preset_id TEXT NOT NULL DEFAULT ''")
         if "pinned" not in columns:
             await self._db.execute("ALTER TABLE projects ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
+        if "memory_scope" not in columns:
+            await self._db.execute("ALTER TABLE projects ADD COLUMN memory_scope TEXT NOT NULL DEFAULT 'global'")
         await self._db.commit()
 
     async def close(self) -> None:
@@ -214,7 +218,7 @@ class ProjectStore:
         allowed = {
             "name", "workspace_path", "repo_url", "status", "current_goal",
             "current_state", "active_task_ids", "memory_refs", "skill_refs", "color", "icon",
-            "default_model", "default_preset_id", "pinned",
+            "default_model", "default_preset_id", "pinned", "memory_scope",
         }
         updates = {key: value for key, value in fields.items() if key in allowed}
         if "name" in updates:
@@ -227,6 +231,8 @@ class ProjectStore:
             updates["name"] = name
         if "status" in updates and updates["status"] not in PROJECT_STATUSES:
             raise ValueError(f"invalid project status: {updates['status']}")
+        if "memory_scope" in updates and updates["memory_scope"] not in {"global", "project-only"}:
+            raise ValueError("memory_scope must be global or project-only")
         if "color" in updates:
             color = str(updates["color"] or "")
             if color and (len(color) not in (4, 7) or color[0] != "#" or any(char not in "0123456789abcdefABCDEF" for char in color[1:])):

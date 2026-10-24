@@ -242,6 +242,9 @@ async def detach_project_conversation(
 
         projects = _atlas_server.projects
     assert projects is not None
+    project = await projects.get(project_id)
+    if project and project.memory_scope == "project-only":
+        raise HTTPException(status_code=409, detail="This project uses project-only memory; move the project to global memory before detaching conversations")
     if not await projects.detach_conversation(project_id, conversation_id):
         raise HTTPException(status_code=404, detail="Association not found")
     return {"status": "ok"}
