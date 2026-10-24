@@ -257,8 +257,9 @@ async def get_conversation_pr(
         loop.create_task(memory.update_conversation(conversation, archived=True))
 
     try:
-        result = await asyncio.to_thread(poll_once, link, run_fix=run_fix, archive=archive,
-                                         save=lambda value: store.save(conversation_id, value))
+        # Status refresh is read-only; only the lifespan monitor performs auto-fix,
+        # so opening the PR card cannot race the background poll into duplicate runs.
+        result = await asyncio.to_thread(poll_once, {**link, "auto_fix": False}, run_fix=run_fix, archive=archive)
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {**result, "settings": {key: link.get(key) for key in ("auto_fix", "interval_seconds", "max_attempts")}}
