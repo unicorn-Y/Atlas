@@ -1336,6 +1336,7 @@ export default function App() {
       { id: 'side', label: '/side', hint: '在侧聊中追问，不打断主对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) },
       { id: 'worktree', label: '/worktree', hint: '查看当前对话的独立工作树', run: () => showInspectorTab('context') },
       { id: 'dashboard', label: '/dashboard', hint: '打开当前对话的持久工作面板', run: () => showInspectorTab('dashboard') },
+      { id: 'overview', label: '/overview', hint: '汇总当前任务计划、来源、生成文件和会话摘要', run: () => showInspectorTab('overview') },
     ] : []),
     ...(activeRun && runDone && store.runPrompts[activeRun.id] ? [{ id: 'retry', label: '/retry', hint: '把上一条要求重新执行一遍', run: () => store.retryRun(activeRun.id) }] : []),
     { id: 'plan', label: '/plan', hint: store.nextRunMode === 'plan' ? '取消：下一条直接执行' : '下一条先出计划，你批准后再动手', run: () => store.setNextRunMode(store.nextRunMode === 'plan' ? 'act' : 'plan') },
