@@ -212,6 +212,7 @@ def exec_command(
             if output_format == "jsonl":
                 _write_line({"type": "start", "session_id": conv_id}, sys.stdout)
             final_text = ""
+            validation_error = ""
             for attempt in range(3):
                 parts: list[str] = []
                 run_prompt = user_prompt
