@@ -30,6 +30,7 @@ from atlas.channels.contract import (
     MessageEvent,
     MessageType,
     SendResult,
+    causality_fields,
 )
 
 logger = logging.getLogger(__name__)
@@ -174,10 +175,8 @@ class SlackAdapter(ChannelAdapter):
         subtype = event.get("subtype") or ""
         if subtype in _SKIP_SUBTYPES:
             return None
-        user = event.get("user") or ""
-        if not user or event.get("bot_id"):
-            return None
-        if self._bot_user_id and user == self._bot_user_id:
+        user = event.get("user") or event.get("bot_id") or ""
+        if not user:
             return None
 
         channel = str(event.get("channel") or "")
@@ -222,12 +221,14 @@ class SlackAdapter(ChannelAdapter):
             text=text,
             thread_id=thread_ts,
             sender_name=str(profile.get("display_name") or profile.get("real_name") or ""),
+            sender_is_bot=bool(event.get("bot_id") or event.get("bot_profile")),
             is_group=is_group,
             is_mention=is_mention,
             reply_to_event_id=thread_ts if thread_ts and thread_ts != ts else "",
             attachments=attachments,
             ts=ts_value,
             raw=dict(event),
+            **causality_fields(event, self.name, str(event.get("client_msg_id") or f"{channel}:{ts}")),
         )
 
     # -- outbound -----------------------------------------------------------------

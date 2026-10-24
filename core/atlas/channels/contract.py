@@ -56,12 +56,36 @@ class MessageEvent:
     text: str = ""
     thread_id: str = ""
     sender_name: str = ""
+    sender_is_bot: bool = False
     is_group: bool = False
     is_mention: bool = False
     reply_to_event_id: str = ""
+    source_channel: str = ""
+    source_event_id: str = ""
+    causal_id: str = ""
+    bot_depth: int = 0
     attachments: list[Attachment] = field(default_factory=list)
     ts: float = 0.0
     raw: dict[str, Any] = field(default_factory=dict)
+
+
+def causality_fields(raw: dict[str, Any], channel: str, event_id: str) -> dict[str, Any]:
+    """Preserve Atlas loop metadata carried by adapters that support message metadata."""
+    marker = raw.get("_atlas") or raw.get("atlas") or {}
+    if not marker and isinstance(raw.get("metadata"), dict):
+        marker = raw["metadata"].get("_atlas") or raw["metadata"].get("atlas") or {}
+    if not isinstance(marker, dict):
+        marker = {}
+    try:
+        depth = max(0, min(100, int(marker.get("bot_depth", 0) or 0)))
+    except (TypeError, ValueError):
+        depth = 0
+    return {
+        "source_channel": str(marker.get("source_channel") or channel),
+        "source_event_id": str(marker.get("source_event_id") or event_id),
+        "causal_id": str(marker.get("causal_id") or f"{channel}:{event_id}"),
+        "bot_depth": depth,
+    }
 
 
 @dataclass(slots=True)

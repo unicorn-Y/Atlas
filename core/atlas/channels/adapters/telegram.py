@@ -29,6 +29,7 @@ from atlas.channels.contract import (
     MessageEvent,
     MessageType,
     SendResult,
+    causality_fields,
 )
 from atlas.channels.credentials import channel_credentials
 
@@ -247,12 +248,14 @@ class TelegramAdapter(ChannelAdapter):
                 for part in (str(sender.get("first_name", "")), str(sender.get("last_name", "")))
                 if part
             ).strip(),
+            sender_is_bot=bool(sender.get("is_bot", False)),
             is_group=is_group,
             is_mention=reply_to_bot or self._contains_bot_mention(message, text),
             reply_to_event_id=str(reply.get("message_id") or ""),
             attachments=attachments,
             ts=float(message.get("date", 0) or 0.0),
             raw=message,
+            **causality_fields(message, self.name, str(message.get("message_id", ""))),
         )
 
     def _contains_bot_mention(self, message: dict[str, Any], text: str) -> bool:

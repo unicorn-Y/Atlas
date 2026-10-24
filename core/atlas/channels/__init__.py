@@ -25,6 +25,7 @@ Adapters never import agent code; the dispatcher seam is the only outbound edge.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import contextlib
 import json
 import logging
@@ -54,6 +55,10 @@ from atlas.channels.ingress import IngressQueue
 from atlas.channels.routing import resolve_route
 
 logger = logging.getLogger(__name__)
+
+_CURRENT_CAUSALITY: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "atlas_channel_causality", default=None
+)
 
 #: Gateway-side dispatch seam: routed event + resolved agent (Wave 2 wiring).
 DispatchHandler = Callable[[MessageEvent, str | None], Awaitable[None]]
@@ -488,6 +493,15 @@ class ChannelManager:
         async def sink(event: MessageEvent) -> None:
             state = self._state(event.channel)
             state.received += 1
+            admitted, reason = self.ingress.admit_bot_event(event)
+            if not admitted:
+                state.dropped += 1
+                logger.warning(
+                    "丢弃 bot 回环消息 channel=%s account=%s chat=%s sender=%s event=%s reason=%s causal_id=%s",
+                    event.channel, event.account, event.chat_id, event.sender_id,
+                    event.event_id, reason, event.causal_id,
+                )
+                return
             accepted = self.ingress.enqueue_inbound(event)
             if not accepted:
                 logger.debug("丢弃重复入站事件 %s/%s", event.channel, event.event_id)
@@ -561,7 +575,16 @@ class ChannelManager:
                             self._drain_requested = False
                             return
                         try:
-                            await self._dispatcher(event, agent_id)
+                            token = _CURRENT_CAUSALITY.set({
+                                "source_channel": event.source_channel or event.channel,
+                                "source_event_id": event.source_event_id or event.event_id,
+                                "causal_id": event.causal_id or f"{event.channel}:{event.event_id}",
+                                "bot_depth": event.bot_depth,
+                            })
+                            try:
+                                await self._dispatcher(event, agent_id)
+                            finally:
+                                _CURRENT_CAUSALITY.reset(token)
                         except Exception as exc:
                             logger.exception("渠道入站任务处理失败 %s", event.channel)
                             self.ingress.fail(
@@ -585,6 +608,10 @@ class ChannelManager:
         key: str | None = None,
     ) -> str:
         """Queue one outbound message; returns its idempotency key."""
+        cause = _CURRENT_CAUSALITY.get()
+        if cause is not None:
+            metadata = dict(metadata or {})
+            metadata["_atlas"] = {**cause, "bot_depth": min(100, int(cause.get("bot_depth", 0)) + 1)}
         payload = None
         if attachments:
             from dataclasses import asdict
@@ -657,6 +684,12 @@ class ChannelManager:
                     if result.ok:
                         self.delivery.mark_delivered(record.id, result.message_id)
                         state.delivered += 1
+                        if not (record.metadata or {}).get("test"):
+                            self.ingress.record_outbound_bot_content(
+                                record.content, channel=record.channel, account=record.account,
+                                chat_id=record.chat_id,
+                                causal_id=str((record.metadata or {}).get("_atlas", {}).get("causal_id", "")),
+                            )
                     else:
                         logger.warning("渠道发送未成功 %s", record.channel)
                         self.delivery.fail(

@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import hashlib
+import re
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -50,9 +52,14 @@ def event_from_payload(data: dict[str, Any]) -> MessageEvent:
         text=str(data.get("text", "")),
         thread_id=str(data.get("thread_id", "")),
         sender_name=str(data.get("sender_name", "")),
+        sender_is_bot=bool(data.get("sender_is_bot", False)),
         is_group=bool(data.get("is_group", False)),
         is_mention=bool(data.get("is_mention", False)),
         reply_to_event_id=str(data.get("reply_to_event_id", "")),
+        source_channel=str(data.get("source_channel", "")),
+        source_event_id=str(data.get("source_event_id", "")),
+        causal_id=str(data.get("causal_id", "")),
+        bot_depth=max(0, int(data.get("bot_depth", 0) or 0)),
         attachments=attachments,
         ts=float(data.get("ts", 0.0)),
         raw=dict(data.get("raw") or {}),
@@ -122,6 +129,13 @@ class IngressQueue:
                 "CREATE UNIQUE INDEX IF NOT EXISTS ux_inbound_tombstone "
                 "ON inbound_tombstones(channel, account, event_id)"
             )
+            self._db.execute(
+                "CREATE TABLE IF NOT EXISTS bot_loop_activity ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, fingerprint TEXT NOT NULL, "
+                "channel TEXT NOT NULL, account TEXT NOT NULL, chat_id TEXT NOT NULL, "
+                "sender_id TEXT NOT NULL, kind TEXT NOT NULL, created_at REAL NOT NULL)"
+            )
+            self._db.execute("CREATE INDEX IF NOT EXISTS ix_bot_loop_recent ON bot_loop_activity(fingerprint, created_at)")
 
     def close(self) -> None:
         self._db.close()
@@ -162,6 +176,68 @@ class IngressQueue:
 
     def tombstone_count(self) -> int:
         return int(self._db.execute("SELECT COUNT(*) FROM inbound_tombstones").fetchone()[0])
+
+    @staticmethod
+    def _content_fingerprint(text: str) -> str:
+        normalized = re.sub(r"\s+", " ", text).strip().casefold()
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest() if normalized else ""
+
+    def record_outbound_bot_content(
+        self, text: str, *, channel: str = "", account: str = "", chat_id: str = "",
+        causal_id: str = "", now: float | None = None,
+    ) -> None:
+        fingerprint = self._content_fingerprint(text)
+        if not fingerprint:
+            return
+        timestamp = time.time() if now is None else now
+        with self._db:
+            self._db.execute(
+                "INSERT INTO bot_loop_activity(fingerprint, channel, account, chat_id, sender_id, kind, created_at) "
+                "VALUES (?, ?, ?, ?, ?, 'outbound', ?)", (fingerprint, channel, account, chat_id, causal_id, timestamp)
+            )
+            self._db.execute("DELETE FROM bot_loop_activity WHERE created_at < ?", (timestamp - 600,))
+
+    def admit_bot_event(
+        self, event: MessageEvent, *, maximum_depth: int = 3, max_per_chat: int = 4,
+        window_seconds: float = 60.0, now: float | None = None,
+    ) -> tuple[bool, str]:
+        """Record and apply durable echo, repetition, depth, and per-chat loop limits."""
+        if not event.sender_is_bot:
+            return True, ""
+        if event.bot_depth >= maximum_depth:
+            return False, "maximum bot reply depth reached"
+        fingerprint = self._content_fingerprint(event.text)
+        if not fingerprint:
+            return True, ""
+        timestamp = time.time() if now is None else now
+        with self._db:
+            self._db.execute("DELETE FROM bot_loop_activity WHERE created_at < ?", (timestamp - 600,))
+            prior_outbound = self._db.execute(
+                "SELECT 1 FROM bot_loop_activity WHERE fingerprint=? AND kind='outbound' AND channel=? AND account=? "
+                "AND chat_id=? AND created_at>=? LIMIT 1",
+                (fingerprint, event.channel, event.account, event.chat_id, timestamp - 600),
+            ).fetchone()
+            if prior_outbound:
+                reason = "outbound echo suppressed"
+            else:
+                repeated = self._db.execute(
+                    "SELECT COUNT(*) FROM bot_loop_activity WHERE fingerprint=? AND kind='inbound' AND created_at>=?",
+                    (fingerprint, timestamp - 300),
+                ).fetchone()[0]
+                burst = self._db.execute(
+                    "SELECT COUNT(*) FROM bot_loop_activity WHERE channel=? AND account=? AND chat_id=? "
+                    "AND sender_id=? AND kind='inbound' AND created_at>=?",
+                    (event.channel, event.account, event.chat_id, event.sender_id, timestamp - window_seconds),
+                ).fetchone()[0]
+                reason = "repeated bot content suppressed" if repeated >= 1 else (
+                    "bot reply frequency limit reached" if burst >= max_per_chat else ""
+                )
+            self._db.execute(
+                "INSERT INTO bot_loop_activity(fingerprint, channel, account, chat_id, sender_id, kind, created_at) "
+                "VALUES (?, ?, ?, ?, ?, 'inbound', ?)",
+                (fingerprint, event.channel, event.account, event.chat_id, event.sender_id, timestamp),
+            )
+        return not reason, reason
 
     # -- claim / ack / fail --------------------------------------------------
 

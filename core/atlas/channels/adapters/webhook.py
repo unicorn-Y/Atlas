@@ -26,6 +26,7 @@ from atlas.channels.contract import (
     MessageEvent,
     MessageType,
     SendResult,
+    causality_fields,
 )
 
 SIGNATURE_HEADER = "x-atlas-signature"
@@ -137,9 +138,11 @@ def parse_inbound(
         text=str(data.get("text") or data.get("prompt") or ""),
         thread_id=str(data.get("thread_id") or ""),
         sender_name=str(data.get("sender_name") or ""),
+        sender_is_bot=bool(data.get("sender_is_bot", data.get("is_bot", False))),
         is_group=bool(data.get("is_group", False)),
         is_mention=bool(data.get("is_mention", True)),
         reply_to_event_id=str(data.get("reply_to_event_id") or ""),
+        **causality_fields(dict(data), str(data.get("channel") or channel), str(data.get("event_id") or "")),
         attachments=attachments,
         ts=float(data.get("ts") or time.time()),
         raw=dict(data),
@@ -193,6 +196,7 @@ class WebhookAdapter(ChannelAdapter):
             "text": str(content),
             "reply_to": str(reply_to),
             "metadata": dict(metadata or {}),
+            "_atlas": dict((metadata or {}).get("_atlas") or {}),
             "attachments": [
                 {
                     "kind": item.kind.value,

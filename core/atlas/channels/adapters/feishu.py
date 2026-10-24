@@ -42,6 +42,7 @@ from atlas.channels.contract import (
     MessageEvent,
     MessageType,
     SendResult,
+    causality_fields,
 )
 
 logger = logging.getLogger(__name__)
@@ -340,12 +341,16 @@ class FeishuAdapter(ChannelAdapter):
         chat_type = str(_get(message, "chat_type") or "p2p")
         sender_id = str(_get(sender, "sender_id", "open_id")
                         or _get(sender, "sender_id", "user_id") or "")
+        event_raw = {"message": message if isinstance(message, dict) else str(message)}
+        sender_type = str(_get(sender, "sender_type") or "")
+        event_id_value = event_id or str(_get(message, "message_id") or "")
         return MessageEvent(
             channel=self.name,
             account=self.account_id(),
-            event_id=event_id or str(_get(message, "message_id") or ""),
+            event_id=event_id_value,
             chat_id=str(_get(message, "chat_id") or ""),
             sender_id=sender_id,
+            sender_is_bot=sender_type in {"app", "bot"},
             kind=kind if (attachments or not text) else MessageType.TEXT,
             text=text,
             thread_id="",
@@ -355,7 +360,8 @@ class FeishuAdapter(ChannelAdapter):
             reply_to_event_id=root_id,
             attachments=attachments,
             ts=ts,
-            raw={"message": message if isinstance(message, dict) else str(message)},
+            raw=event_raw,
+            **causality_fields(event_raw, self.name, event_id_value),
         )
 
     # -- outbound -----------------------------------------------------------------
