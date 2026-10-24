@@ -1362,6 +1362,7 @@ export default function App() {
         .catch((error) => setToast(String(error)));
     } },
     { id: 'pr', label: '/pr', hint: '关联 PR；附加 --auto 开启后台 CI 修复', takesArgument: true, run: (value: string) => {
+      if (value.trim().toLowerCase() === 'new') { window.dispatchEvent(new CustomEvent('atlas:open-pr-wizard')); return; }
       if (!activeConversation) { setToast('先打开要关联 PR 的会话'); return; }
       const pr = value.replace(/\s+--auto\b/i, '').trim();
       if (!pr) { setToast('用法：/pr <链接或编号> [--auto]'); return; }

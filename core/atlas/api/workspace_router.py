@@ -1001,7 +1001,10 @@ async def set_git_pr_auto_merge(
     enabled = req.get("enabled")
     if not isinstance(enabled, bool):
         raise HTTPException(status_code=422, detail="enabled must be a boolean")
-    command = ["gh", "pr", "merge", "--auto"] if enabled else ["gh", "pr", "merge", "--disable-auto"]
+    method = str(req.get("method", "squash"))
+    if method not in {"squash", "merge", "rebase"}:
+        raise HTTPException(status_code=422, detail="method must be squash, merge or rebase")
+    command = ["gh", "pr", "merge", "--auto", f"--{method}"] if enabled else ["gh", "pr", "merge", "--disable-auto"]
     try:
         result = subprocess.run(command, cwd=base, capture_output=True, text=True,
                                 encoding="utf-8", errors="replace", timeout=60)
@@ -1009,7 +1012,99 @@ async def set_git_pr_auto_merge(
         raise HTTPException(status_code=503, detail="Unable to run gh pr merge") from exc
     if result.returncode:
         raise HTTPException(status_code=502, detail=result.stderr.strip() or "gh pr merge failed")
-    return {"enabled": enabled}
+    try:
+        data = _gh_json(base, "pr", "view", "--json", "autoMergeRequest")
+    except HTTPException:
+        raise
+    return {"enabled": bool(data.get("autoMergeRequest")), "auto_merge": data.get("autoMergeRequest"), "method": method}
+
+
+@router.post("/api/git/pr/wizard")
+async def run_git_pr_wizard(
+    services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any],
+) -> dict[str, Any]:
+    """Run the editable PR wizard's commit → push → create steps with phase-specific errors."""
+    base = _git_workspace(str(req.get("root", "")))
+    paths, message = req.get("paths"), req.get("message")
+    title, body = req.get("title"), req.get("body")
+    branch = req.get("branch")
+    if not isinstance(paths, list) or not paths or any(not isinstance(p, str) for p in paths):
+        raise HTTPException(status_code=422, detail="至少选择一个要提交的文件。")
+    if not isinstance(message, str) or not message.strip() or not isinstance(title, str) or not title.strip() or not isinstance(body, str):
+        raise HTTPException(status_code=422, detail="提交说明、PR 标题和说明都必须先填写。")
+    def run(args: list[str], phase: str, timeout: int = 120) -> subprocess.CompletedProcess[str]:
+        try:
+            result = subprocess.run(args, cwd=base, capture_output=True, text=True,
+                                    encoding="utf-8", errors="replace", timeout=timeout)
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise HTTPException(status_code=502, detail=f"{phase}失败：{exc}") from exc
+        if result.returncode:
+            raise HTTPException(status_code=502, detail=f"{phase}失败：{result.stderr.strip() or result.stdout.strip()}")
+        return result
+    status = run(["git", "status", "--porcelain", "--", *paths], "读取所选改动").stdout
+    available = {line[3:].strip().strip('"') for line in status.splitlines() if len(line) >= 4}
+    chosen = list(dict.fromkeys(paths))
+    if any(p not in available for p in chosen):
+        raise HTTPException(status_code=409, detail="所选文件已不再是未提交改动，请刷新改动列表后重试。")
+    current = run(["git", "branch", "--show-current"], "读取当前分支").stdout.strip()
+    default = ""
+    try:
+        default = run(["git", "symbolic-ref", "refs/remotes/origin/HEAD"], "读取默认分支").stdout.strip().split("/", 2)[-1]
+    except HTTPException:
+        pass
+    target = str(branch or current).strip()
+    if not target:
+        raise HTTPException(status_code=409, detail="当前处于 detached HEAD，请在向导中指定分支后重试。")
+    if current == default or current in {"main", "master"} and not branch:
+        target = str(branch or f"atlas/{__import__('datetime').datetime.now().strftime('%Y%m%d-%H%M%S')}").strip()
+    if target != current:
+        exists = subprocess.run(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{target}"], cwd=base)
+        run(["git", "switch", target] if exists.returncode == 0 else ["git", "switch", "-c", target], "切换/创建分支")
+    run(["git", "add", "--", *chosen], "暂存所选文件")
+    commit = run(["git", "commit", "-m", message.strip()], "创建提交")
+    run(["git", "push", "-u", "origin", "HEAD"], "推送分支")
+    args = ["gh", "pr", "create", "--title", title.strip(), "--body", body]
+    if req.get("base"):
+        args.extend(["--base", str(req["base"])])
+    if req.get("draft") is True:
+        args.append("--draft")
+    run(args, "创建 PR", 60)
+    pr = _gh_json(base, "pr", "view", "--json", "number,title,url,state,isDraft,baseRefName,headRefName,statusCheckRollup,autoMergeRequest")
+    return {"commit": commit.stdout.strip().splitlines()[-1] if commit.stdout.strip() else "已提交", "branch": target, "pr": _pr_shape(pr)}
+
+
+@router.post("/api/git/pr/draft")
+async def draft_git_pr(
+    services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any],
+) -> dict[str, str]:
+    base = _git_workspace(str(req.get("root", "")))
+    paths = req.get("paths")
+    if not isinstance(paths, list) or not paths or any(not isinstance(p, str) for p in paths):
+        raise HTTPException(status_code=422, detail="至少选择一个要提交的文件。")
+    diff = subprocess.run(["git", "diff", "--", *paths], cwd=base, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=30)
+    staged = subprocess.run(["git", "diff", "--cached", "--", *paths], cwd=base, capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", timeout=30)
+    summary = (diff.stdout + "\n" + staged.stdout)[:18000]
+    if not summary.strip():
+        summary = "所选文件为新增文件；文件名：" + ", ".join(paths)
+    model_mgr = services.model_mgr
+    if model_mgr is None:
+        from atlas import server as _atlas_server
+        model_mgr = _atlas_server.model_mgr
+    if model_mgr is None or model_mgr.model_router is None:
+        raise HTTPException(status_code=503, detail="没有可用模型，无法生成提交说明；可手动填写后重试。")
+    try:
+        route = await model_mgr.model_router.resolve(model_mgr.current_model, "prompt_enhance")
+        result = await model_mgr.model_router.complete(route, messages=[
+            {"role": "system", "content": "根据 git diff 生成简洁的提交说明、PR 标题和 PR 描述。返回 JSON 对象，字段为 message、title、body。仅总结 diff 可证实的内容，不要添加事实。"},
+            {"role": "user", "content": summary},
+        ], max_tokens=1200, temperature=0.2, timeout=40)
+        text = str(getattr(result, "text", "") or "").strip()
+        data = json.loads(text[text.find("{"):text.rfind("}") + 1])
+        return {key: str(data.get(key, "")) for key in ("message", "title", "body")}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"模型生成失败：{exc}；可手动填写后重试。") from exc
 
 
 @router.get("/api/git/pr/checks/{check_name}/log")

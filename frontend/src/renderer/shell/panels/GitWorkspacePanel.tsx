@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { GitBranch, GitCommitHorizontal, GitPullRequest, LoaderCircle, RefreshCw, Upload } from 'lucide-react';
+import { GitBranch, GitCommitHorizontal, GitPullRequest, LoaderCircle, RefreshCw, Sparkles, Upload } from 'lucide-react';
 import { useAtlasStore } from '../../store/useAtlasStore';
 import { api } from '../../services/api';
 
@@ -20,6 +20,8 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [prWizard, setPrWizard] = useState(false);
+  const [prDraft, setPrDraft] = useState({ message: '', title: '', body: '', branch: '' });
 
   const load = useCallback(async () => {
     if (!root || !apiBaseUrl) return;
@@ -49,7 +51,38 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
     void load();
   }, [load, refreshKey]);
 
+  const generatePrDraft = async () => {
+    if (!selected.length) { setError('先勾选要提交的改动文件。'); return; }
+    setBusy('draft'); setError('');
+    try {
+      const draft = await api<typeof prDraft>(apiBaseUrl, '/api/git/pr/draft', { method: 'POST', json: { root, paths: selected } });
+      setPrDraft((old) => ({ ...old, ...draft }));
+    } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setBusy(''); }
+  };
+
+  const submitPrWizard = async (event: FormEvent) => {
+    event.preventDefault();
+    if (busy || !selected.length) return;
+    setBusy('pr-wizard'); setError(''); setNotice('');
+    try {
+      const result = await api<{ commit: string; branch: string; pr: { number: number; url: string } }>(apiBaseUrl, '/api/git/pr/wizard', {
+        method: 'POST', json: { root, paths: selected, ...prDraft },
+      });
+      if (conversationId) await api(apiBaseUrl, `/api/conversations/${encodeURIComponent(conversationId)}/pr`, { method: 'POST', json: { pr: result.pr.url } });
+      setNotice(`已提交并创建 PR #${result.pr.number}（${result.branch}）`);
+      onToast?.(`PR #${result.pr.number} 已关联当前会话`); setPrWizard(false); setPrDraft({ message: '', title: '', body: '', branch: '' });
+      await load(); onChanged?.();
+    } catch (exc) { setError(`${exc instanceof Error ? exc.message : String(exc)}。修正后可重试；已完成的 Git 步骤会保留。`); }
+    finally { setBusy(''); }
+  };
+
   const paths = useMemo(() => workspace?.status.map((item) => item.path) ?? [], [workspace]);
+  useEffect(() => {
+    const open = () => { setPrWizard(true); setSelected((old) => old.length ? old : paths); };
+    window.addEventListener('atlas:open-pr-wizard', open);
+    return () => window.removeEventListener('atlas:open-pr-wizard', open);
+  }, [paths]);
   const allSelected = paths.length > 0 && paths.every((path) => selected.includes(path));
   const selectedLabel = `${selected.length} 个文件`;
 
@@ -125,6 +158,7 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
   return <section className="grid gap-3">
     <div className="flex items-center justify-between gap-2">
       <h3 className="m-0 flex items-center gap-1.5 text-[12.5px] font-semibold text-fg-2"><GitBranch size={13} />Git 工作区</h3>
+      <button type="button" onClick={() => { setPrWizard(true); setSelected((old) => old.length ? old : paths); }} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-brand hover:bg-hover"><GitPullRequest size={12} />提交并开 PR</button>
       <button type="button" aria-label="刷新 Git 工作区和历史" onClick={() => void load()} disabled={loading || Boolean(busy)} className="rounded-md p-1 text-fg-3 hover:bg-hover hover:text-fg disabled:opacity-50">
         {loading ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={12} />}
       </button>
@@ -177,6 +211,17 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
           </div>
         </form>
       </div>
+
+      {prWizard && <form onSubmit={(event) => void submitPrWizard(event)} className="grid gap-2 rounded-xl border border-brand/30 bg-sunken p-3">
+        <div className="flex items-center justify-between"><strong className="text-[12px] text-fg">提交并开 PR</strong><button type="button" onClick={() => setPrWizard(false)} className="text-[11px] text-fg-3">关闭</button></div>
+        <p className="m-0 text-[10.5px] text-fg-3">已勾选 {selected.length} 个文件；默认分支会自动新建 atlas 分支。模型生成后可编辑所有文本。</p>
+        <button type="button" disabled={busy || !selected.length} onClick={() => void generatePrDraft()} className={action}><Sparkles size={12} />{busy === 'draft' ? '生成中…' : '模型生成提交说明、标题和描述'}</button>
+        <input aria-label="提交说明" required value={prDraft.message} onChange={(e) => setPrDraft({ ...prDraft, message: e.target.value })} placeholder="提交说明" className={field} />
+        <input aria-label="PR 标题" required value={prDraft.title} onChange={(e) => setPrDraft({ ...prDraft, title: e.target.value })} placeholder="PR 标题" className={field} />
+        <textarea aria-label="PR 描述" required rows={3} value={prDraft.body} onChange={(e) => setPrDraft({ ...prDraft, body: e.target.value })} placeholder="PR 描述" className={`${field} py-2`} />
+        <input aria-label="目标分支（可选）" value={prDraft.branch} onChange={(e) => setPrDraft({ ...prDraft, branch: e.target.value })} placeholder="目标分支（留空自动选择/沿用）" className={field} />
+        <button disabled={Boolean(busy) || !selected.length} className="primary-fill h-8 rounded-lg text-[12px] text-white disabled:opacity-50">{busy === 'pr-wizard' ? '提交、推送并创建 PR…' : '提交 → 推送 → 创建并关联 PR'}</button>
+      </form>}
     </>}
 
     <div>
