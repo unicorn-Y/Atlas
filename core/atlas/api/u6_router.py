@@ -50,7 +50,7 @@ def _size(path: Path) -> int:
 
 @router.get("/api/u6/storage")
 async def storage_usage() -> dict[str, Any]:
-    labels = {"sessions": "会话数据库", "logs": "运行日志", "artifacts": "任务产物", "cache": "缓存", "snapshots": "工作区快照", "models": "模型下载"}
+    labels = {"sessions": "会话数据库（清理只删除已归档会话）", "logs": "运行日志", "artifacts": "任务产物", "cache": "缓存", "snapshots": "工作区快照", "models": "模型下载"}
     return {"categories": [{"id": key, "label": label, "bytes": sum(_size(p) for p in _data_paths()[key]), "can_clear": True} for key, label in labels.items()]}
 
 
@@ -62,8 +62,10 @@ async def clear_storage(category: str, request: dict[str, Any], services: Annota
     released = sum(_size(path) for path in paths[category])
     if category == "sessions":
         if services.memory is None: raise HTTPException(status_code=503, detail="会话数据库尚未就绪")
+        # 只清理已归档的会话：一键删光全部会话不可撤销，代价远超省下的空间。
         for conversation in await services.memory.list_conversations(limit=None):
-            await services.memory.delete_conversation(conversation["id"])
+            if conversation.get("archived") and not conversation.get("pinned"):
+                await services.memory.delete_conversation(conversation["id"])
         try:
             await services.memory._db.execute("VACUUM")
         except Exception: pass
@@ -123,11 +125,73 @@ async def whatsnew() -> dict[str, Any]:
     from atlas.config import PROJECT_ROOT
     changelog = PROJECT_ROOT / "CHANGELOG.md"
     if changelog.is_file(): return {"source": "CHANGELOG.md", "highlights": changelog.read_text(encoding="utf-8", errors="replace")[:12000].splitlines()[:100]}
+    import asyncio
     try:
-        result = await __import__("asyncio").to_thread(subprocess.run, ["git", "-C", str(PROJECT_ROOT), "log", "-50", "--date=short", "--pretty=format:%cs%x09%s"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
-        lines = [line.split("\t", 1) for line in result.stdout.splitlines() if "U6-" in line or "U5-" in line or "U4-" in line or "U3-" in line or "U2-" in line or "U1-" in line]
-        return {"source": "git", "highlights": [{"date": parts[0], "title": parts[1]} for parts in lines[:40] if len(parts) == 2]}
-    except (OSError, subprocess.SubprocessError): return {"source": "git", "highlights": []}
+        head = await asyncio.to_thread(subprocess.run, ["git", "-C", str(PROJECT_ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
+        result = await asyncio.to_thread(subprocess.run, ["git", "-C", str(PROJECT_ROOT), "log", "-80", "--no-merges", "--date=short", "--pretty=format:%cs%x09%s"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return {"source": "git", "highlights": []}
+    commits = [line.split("\t", 1) for line in (result.stdout or "").splitlines()]
+    commits = [parts for parts in commits if len(parts) == 2 and parts[1].strip()]
+    raw = [{"date": parts[0], "title": parts[1]} for parts in commits[:40]]
+    version = (head.stdout or "").strip()
+    from atlas.config import DATA_ROOT
+    cache_path = DATA_ROOT / "data" / "whatsnew-cache.json"
+    try:
+        cached = json.loads(cache_path.read_text(encoding="utf-8"))
+        if cached.get("version") == version and cached.get("highlights"):
+            return {"source": "git+model", "version": version, "highlights": cached["highlights"]}
+    except (OSError, ValueError):
+        pass
+    # 提交标题是给开发者看的（"U6-8 增补项目与前端连线检查"），交给模型改写成用户能看懂的更新亮点，按版本缓存。
+    highlights = await _rewrite_highlights([f"{date} {title}" for date, title in commits])
+    if not highlights:
+        return {"source": "git", "version": version, "highlights": raw}
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps({"version": version, "highlights": highlights}, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+    return {"source": "git+model", "version": version, "highlights": highlights}
+
+
+async def _rewrite_highlights(commit_lines: list[str]) -> list[dict[str, str]]:
+    if not commit_lines:
+        return []
+    try:
+        import atlas.server
+        router_client = getattr(atlas.server.orchestrator, "_model_router", None)
+        model_mgr = getattr(atlas.server, "model_mgr", None)
+        settings = load_user_settings()
+        models = [str(settings.get("compression_model") or ""), str(getattr(model_mgr, "current_model", "") or ""),
+                  *[str(item) for item in (settings.get("fallback_chain") or [])]]
+        models = [item for index, item in enumerate(models) if item and item not in models[:index]]
+    except Exception:
+        return []
+    if router_client is None:
+        return []
+    prompt = (
+        "下面是 Atlas（桌面 AI 助手）最近的开发提交记录。请整理成给普通用户看的“有什么新功能”：\n"
+        "- 最多 12 条，每条一句话说清用户能用它做什么，例如“主模型挂了会自动换备用模型接着干，并在对话里提示”；\n"
+        "- 合并同一功能的多次提交，忽略纯内部的测试、检查、重构、验收提交；修复只保留用户能感知到的；\n"
+        "- 只返回 JSON 数组，每项 {\"date\": \"YYYY-MM-DD\", \"title\": \"一句话\"}，按日期从新到旧。\n\n"
+        + "\n".join(commit_lines[:80])
+    )
+    for model in models:
+        try:
+            result = await router_client.complete_for(model, "whatsnew", [{"role": "user", "content": prompt}],
+                                                      max_tokens=1200, temperature=0.2)
+        except Exception:
+            continue
+        text = str(getattr(result, "text", "")).strip()
+        start, end = text.find("["), text.rfind("]")
+        try:
+            items = json.loads(text[start:end + 1]) if start >= 0 and end > start else []
+        except ValueError:
+            return []
+        return [{"date": str(item.get("date") or ""), "title": str(item.get("title") or "").strip()}
+                for item in items if isinstance(item, dict) and str(item.get("title") or "").strip()][:12]
+    return []
 
 
 @router.get("/api/u6/retention/run")
@@ -197,29 +261,45 @@ async def generate_suggestions(
         orchestrator = atlas.server.orchestrator
     router_client = getattr(orchestrator, "_model_router", None)
     model_mgr = services.model_mgr
-    model = str(load_user_settings().get("compression_model") or "")
-    if not model and model_mgr is not None:
-        model = str(model_mgr.current_model)
-    if router_client is None or not model:
+    settings = load_user_settings()
+    # 依次尝试：压缩/辅助模型 → 本轮实际完成回复的模型 → 当前主模型 → 备用链；主模型挂了建议也能出。
+    candidates = [str(settings.get("compression_model") or ""), str(request.get("model") or ""),
+                  str(model_mgr.current_model) if model_mgr is not None else "",
+                  *[str(item) for item in (settings.get("fallback_chain") or [])]]
+    models = [item for index, item in enumerate(candidates) if item and item not in candidates[:index]]
+    if router_client is None or not models:
         return {"suggestions": []}
     goal = str(request.get("goal") or "")[:1200]
     response = str(request.get("response") or "")[:6000]
     if not response.strip():
         return {"suggestions": []}
-    try:
-        result = await router_client.complete_for(model, "suggestions", [{
-            "role": "user", "content": (
-                "根据本轮用户目标和 Atlas 回复，给出 2 到 3 条具体、互不重复的下一步建议。"
-                "只返回 JSON 数组，每项是简短的中文可执行请求字符串，不要解释。\n"
-                f"目标：{goal}\n回复：{response}"
-            ),
-        }], max_tokens=220, temperature=0.35)
+    prompt = (
+        "根据本轮用户目标和 Atlas 回复，给出 2 到 3 条用户接下来很可能真的想让 Atlas 做的具体请求。\n"
+        "要求：每条是能直接发给 Atlas 执行的完整中文请求（例如“把这个函数补上单元测试并运行”），"
+        "要结合回复里的具体对象（文件、命令、结论）；禁止“继续”“确认”“收到”“好的”“谢谢”这类没有具体内容的话；"
+        "如果这一轮只是寒暄、简单问答或已经彻底完成、没有有价值的后续，就返回空数组 []。\n"
+        "只返回 JSON 数组，不要解释。\n"
+        f"目标：{goal}\n回复：{response}"
+    )
+    for model in models:
+        try:
+            result = await router_client.complete_for(model, "suggestions", [{"role": "user", "content": prompt}],
+                                                      max_tokens=260, temperature=0.35)
+        except Exception:  # 建议是可选的：这个模型不可用就试下一个，全失败就不显示。
+            continue
         raw = str(getattr(result, "text", "")).strip()
         start, end = raw.find("["), raw.rfind("]")
-        suggestions = json.loads(raw[start:end + 1]) if start >= 0 and end > start else []
+        try:
+            suggestions = json.loads(raw[start:end + 1]) if start >= 0 and end > start else []
+        except ValueError:
+            return {"suggestions": []}
         if not isinstance(suggestions, list):
             return {"suggestions": []}
-        cleaned = [item.strip()[:180] for item in suggestions if isinstance(item, str) and item.strip()]
+        cleaned = [item.strip()[:180] for item in suggestions
+                   if isinstance(item, str) and len(item.strip()) >= 6
+                   and item.strip().rstrip("。.!！") not in _GENERIC_SUGGESTIONS]
         return {"suggestions": cleaned[:3] if len(cleaned) >= 2 else []}
-    except Exception as exc:  # Suggestions are optional and must not fail the completed run.
-        raise HTTPException(status_code=502, detail="主动建议生成失败") from exc
+    return {"suggestions": []}
+
+
+_GENERIC_SUGGESTIONS = {"继续", "请继续", "继续吧", "确认", "收到", "好的", "好", "谢谢", "明白", "没问题", "OK", "ok"}

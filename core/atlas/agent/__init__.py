@@ -286,6 +286,8 @@ class AgentRunContext:
     model: str | None = None
     truncated_tool_retries: int = 0
     fallback_models: list[str] = field(default_factory=list)
+    # 本轮已切到的备用模型：切换后这一轮剩下的模型调用直接用它，不再反复先撞挂掉的主模型。
+    sticky_fallback_model: str | None = None
     failed_models: set[str] = field(default_factory=set)
     recovery_retries: int = 0
     context_compression_attempted: bool = False

@@ -168,6 +168,38 @@ def _attach_turn_context(messages: list[dict[str, Any]], current_text: str, curr
 _PREWARM_TASKS: set["asyncio.Task[Any]"] = set()
 
 
+def _sticky_fallback_route(runtime: Any, model_id: str) -> tuple[str, list[str]]:
+    chain = [str(item) for item in (getattr(runtime, "fallback_models", None) or []) if item]
+    sticky = getattr(runtime, "sticky_fallback_model", None)
+    if sticky and sticky != model_id:
+        return sticky, [item for item in chain if item not in {sticky, model_id}]
+    return model_id, chain
+
+
+def _short_failure_reason(event: dict[str, Any]) -> str:
+    status = event.get("status")
+    category = str(event.get("category") or "")
+    detail = str(event.get("detail") or "")
+    for marker in (" for url ", "\nFor more information", " For more information"):
+        detail = detail.split(marker)[0]
+    detail = detail.replace("Server error ", "").replace("Client error ", "").strip().strip("'\"")
+    text = detail or category
+    if status and str(status) not in text:
+        text = f"{status} {text}".strip()
+    return text[:80]
+
+
+def _model_display_name(agent: Any, model_id: str) -> str:
+    """Prefer the user's configured model name (e.g. "DeepSeek V4.1 Flash (d1api)") over the raw id."""
+    try:
+        for item in agent._model_router.model_manager.list_models():
+            if item.get("id") == model_id:
+                return str(item.get("name") or model_id)
+    except Exception:
+        pass
+    return model_id
+
+
 async def _prewarm_route(agent: Any, model_id: str) -> None:
     """Open the provider connection while the run assembles its prompt (TLS off the critical path)."""
     try:
@@ -1466,11 +1498,15 @@ class AtlasKernel:
 
                 async def on_attempt(event: dict[str, Any]) -> None:
                     if event.get("fallback"):
-                        await event_queue.put(emit(
-                            "run_status", status="model_fallback",
-                            text=(f"主模型 {event.get('from_model')} 失败（{event.get('detail') or event.get('category')}），"
-                                  f"已切到 {event.get('model')}"),
-                        ))
+                        if runtime is not None and event.get("model"):
+                            runtime.sticky_fallback_model = str(event.get("model"))
+                        # 走前端已有的 run.model_switched 提示（timeline.ts 渲染为"X 暂时用不了，已换成 Y 继续"）。
+                        await event_queue.put(emit("run_model_switched", data={
+                            "from": _model_display_name(agent, str(event.get("from_model") or "")),
+                            "to": _model_display_name(agent, str(event.get("model") or "")),
+                            "reason": _short_failure_reason(event),
+                            "fallback_chain": True,
+                        }))
                     await record_model_attempt(event, purpose="conversation")
 
                 overflow_retry_used = False
@@ -1531,14 +1567,15 @@ class AtlasKernel:
                     steer_count_at_model_start = len(steer_messages)
                     if prewarm_task is not None and not prewarm_task.done():
                         await asyncio.shield(prewarm_task)
+                    call_model, call_fallbacks = _sticky_fallback_route(runtime, turn_model)
                     model_task = asyncio.create_task(complete_stream(
-                        agent, turn_model, messages, tools,
+                        agent, call_model, messages, tools,
                         reasoning_effort=turn_effort,
                         max_output_tokens=output_token_limit,
                         sdk_betas=sdk_betas,
                         cancel_event=model_cancel_event,
                         max_retries=model_retries,
-                        fallback_models=list(getattr(runtime, "fallback_models", []) or []),
+                        fallback_models=call_fallbacks,
                         retry_watchdog=retry_watchdog,
                         retry_watchdog_max_wait_s=watchdog_max_wait,
                         overloaded_retry_base_delay_s=overloaded_retry_base_delay,

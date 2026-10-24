@@ -15,7 +15,7 @@ export default function StorageRetentionPanel({ apiBaseUrl, onToast }: { apiBase
   }, [apiBaseUrl]);
   useEffect(() => { void refresh(); }, [refresh]);
   const clear = async (category: Category) => {
-    const warning = category.id === 'sessions' ? '这会永久删除全部会话和消息。' : '';
+    const warning = category.id === 'sessions' ? '这会永久删除所有已归档（且未置顶）的会话和消息，正在使用的会话不受影响。' : '';
     if (!category.can_clear || !window.confirm(`${warning}清理${category.label}，预计释放 ${bytesLabel(category.bytes)}？`)) return;
     try { const result = await api<{ released_bytes: number }>(apiBaseUrl, `/api/u6/storage/${category.id}`, { method: 'DELETE', json: { confirm: true } }); onToast(`已清理${category.label}，释放 ${bytesLabel(result.released_bytes)}`); await refresh(); }
     catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
@@ -26,7 +26,7 @@ export default function StorageRetentionPanel({ apiBaseUrl, onToast }: { apiBase
   };
   return <div className="grid max-w-[760px] gap-6">
     <section className="grid gap-3 rounded-xl border border-line p-4">
-      <div><h4 className="m-0 text-[13.5px] font-medium text-heading">存储占用</h4><p className="mt-1 mb-0 text-[11.5px] text-fg-3">清理前会显示预计可释放空间；清理会话数据库会删除全部会话和消息。</p></div>
+      <div><h4 className="m-0 text-[13.5px] font-medium text-heading">存储占用</h4><p className="mt-1 mb-0 text-[11.5px] text-fg-3">清理前会显示预计可释放空间；清理会话数据库只删除已归档且未置顶的会话。</p></div>
       {categories.map((item) => <div key={item.id} className="flex items-center gap-3 border-t border-line pt-2.5 text-[12px]"><span className="flex-1">{item.label}</span><span className="text-fg-3">{bytesLabel(item.bytes)}</span><button disabled={!item.can_clear || item.bytes === 0} onClick={() => void clear(item)} className="rounded-md border border-line px-2.5 py-1 text-[11px] disabled:opacity-40">清理</button></div>)}
       <button onClick={() => void refresh()} className="justify-self-start rounded-md px-2 py-1 text-[11px] text-fg-3 hover:bg-hover">刷新占用</button>
     </section>

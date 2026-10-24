@@ -96,17 +96,18 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
     tools.extend([
         {"type": "function", "function": {
             "name": "read_session",
-            "description": "读取另一个 Atlas 会话最近的消息。",
+            "description": "读取另一个 Atlas 会话最近的消息。用 conversation_id 或会话标题（title，可部分匹配）指定会话；两者都不给时列出最近的会话（标题+id）供选择。",
             "parameters": {"type": "object", "properties": {
-                "conversation_id": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 50},
-            }, "required": ["conversation_id"], "additionalProperties": False},
+                "conversation_id": {"type": "string"}, "title": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            }, "additionalProperties": False},
         }},
         {"type": "function", "function": {
             "name": "send_to_session",
-            "description": "向另一个 Atlas 会话发送消息，并立刻开始那边的一轮运行。消息会注明来源会话。",
+            "description": "向另一个 Atlas 会话发送消息，并立刻开始那边的一轮运行。消息会注明来源会话。用 conversation_id 或会话标题（title，可部分匹配）指定目标。",
             "parameters": {"type": "object", "properties": {
-                "conversation_id": {"type": "string"}, "message": {"type": "string"},
-            }, "required": ["conversation_id", "message"], "additionalProperties": False},
+                "conversation_id": {"type": "string"}, "title": {"type": "string"}, "message": {"type": "string"},
+            }, "required": ["message"], "additionalProperties": False},
         }},
     ])
     tools.append({"type": "function", "function": {

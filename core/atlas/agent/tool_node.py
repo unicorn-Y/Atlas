@@ -800,26 +800,33 @@ async def execute_tools_node(
                     )
                     result = {"content": [{"type": "text", "text": answer.text}], "is_error": False}
             elif fn_name == "read_session":
-                conversation_id = str(fn_args.get("conversation_id") or "").strip()
-                if not conversation_id or await agent._memory.get_conversation(conversation_id) is None:
-                    raise ValueError("找不到指定会话。")
-                try:
-                    limit = max(1, min(50, int(fn_args.get("limit", 10))))
-                except (TypeError, ValueError):
-                    limit = 10
-                rows = await agent._memory.get_messages_with_rowid(conversation_id)
-                messages = [{"role": str(row.get("role", "")), "content": str(row.get("content", ""))}
-                            for row in rows[-limit:]]
-                result = {"data": {"conversation_id": conversation_id, "messages": messages},
-                          "content": [{"type": "text", "text": json.dumps(messages, ensure_ascii=False)}],
-                          "is_error": False}
+                if not fn_args.get("conversation_id") and not fn_args.get("title"):
+                    recent = await agent._memory.list_conversations(limit=30)
+                    listing = [{"conversation_id": item.get("id"), "title": item.get("title"), "updated_at": item.get("updated_at")}
+                               for item in recent if item.get("id") != ctx.conversation_id]
+                    result = {"data": {"conversations": listing},
+                              "content": [{"type": "text", "text": json.dumps(listing, ensure_ascii=False)}], "is_error": False}
+                else:
+                    target = await _resolve_peer_conversation(agent, fn_args, exclude=str(ctx.conversation_id or ""))
+                    conversation_id = str(target["id"])
+                    try:
+                        limit = max(1, min(50, int(fn_args.get("limit", 10))))
+                    except (TypeError, ValueError):
+                        limit = 10
+                    # 与界面同源：会话正文在 engine 会话文件里（导入的会话也只在这里），不在 memory 的 messages 表。
+                    from atlas.config import DATA_ROOT
+                    from atlas.engine.session_sync import read_session_messages
+                    rows = await asyncio.to_thread(read_session_messages, DATA_ROOT / "engine", conversation_id, limit=limit)
+                    payload = {"conversation_id": conversation_id, "title": target.get("title"),
+                               "messages": [{"role": str(row.get("role", "")), "content": str(row.get("content", ""))} for row in rows]}
+                    result = {"data": payload,
+                              "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
+                              "is_error": False}
             elif fn_name == "send_to_session":
-                conversation_id = str(fn_args.get("conversation_id") or "").strip()
                 message = str(fn_args.get("message") or "").strip()
-                target = await agent._memory.get_conversation(conversation_id) if conversation_id else None
+                target = await _resolve_peer_conversation(agent, fn_args, exclude=str(ctx.conversation_id or ""))
+                conversation_id = str(target["id"])
                 source = await agent._memory.get_conversation(str(ctx.conversation_id or "")) if ctx.conversation_id else None
-                if target is None:
-                    raise ValueError("找不到目标会话。")
                 if not message:
                     raise ValueError("消息不能为空。")
                 from atlas import server
@@ -1669,3 +1676,26 @@ async def execute_tools_node(
         "messages": tool_messages,
         "pending_events": state["pending_events"] + events,
     }
+
+
+async def _resolve_peer_conversation(agent: Any, fn_args: dict[str, Any], *, exclude: str = "") -> dict[str, Any]:
+    """Find the target conversation for read_session/send_to_session by id, or by (partial) title."""
+    conversation_id = str(fn_args.get("conversation_id") or "").strip()
+    if conversation_id:
+        found = await agent._memory.get_conversation(conversation_id)
+        if found is None:
+            raise ValueError(f"找不到会话 {conversation_id}。不带参数调用 read_session 可列出最近的会话。")
+        return {**found, "id": found.get("id") or conversation_id}
+    title = str(fn_args.get("title") or "").strip().lower()
+    if not title:
+        raise ValueError("请提供 conversation_id 或 title。")
+    candidates = [item for item in await agent._memory.list_conversations(limit=None)
+                  if item.get("id") != exclude and title in str(item.get("title") or "").lower()]
+    exact = [item for item in candidates if str(item.get("title") or "").lower() == title]
+    picked = exact or candidates
+    if not picked:
+        raise ValueError(f"没有标题包含“{fn_args.get('title')}”的会话。不带参数调用 read_session 可列出最近的会话。")
+    if len(picked) > 1 and not exact:
+        options = "；".join(f"{item.get('title')}（{item.get('id')}）" for item in picked[:8])
+        raise ValueError(f"有多个会话标题匹配，请用 conversation_id 指定：{options}")
+    return picked[0]

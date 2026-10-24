@@ -165,7 +165,7 @@ export default function Composer(props: ComposerProps) {
   const hero = props.variant === 'hero';
   const [expert] = useExpertMode(backend.apiBaseUrl);
   const [enterToSend, setEnterToSend] = useState(readEnterToSend);
-  const [vimEnabled, setVimEnabled] = useState(() => { try { return localStorage.getItem('atlas.vim-mode') === 'true'; } catch { return false; } });
+  const [vimEnabled, setVimEnabled] = useState(() => { try { return localStorage.getItem('atlas.preference.vim-mode') === 'true'; } catch { return false; } });
   const [vimMode, setVimMode] = useState<'normal' | 'insert'>('insert');
   const [stashOpen, setStashOpen] = useState(false);
   const stashKey = `atlas.input-stash.${props.contextKey || 'home'}`;
@@ -174,7 +174,7 @@ export default function Composer(props: ComposerProps) {
   const [showShortcutHints, setShowShortcutHints] = useState(() => { try { return localStorage.getItem('atlas.shortcut-hints') !== 'false'; } catch { return true; } });
   const textRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
-    const toggle = () => { const enabled = localStorage.getItem('atlas.vim-mode') === 'true'; setVimEnabled(enabled); setVimMode(enabled ? 'normal' : 'insert'); };
+    const toggle = () => { const enabled = localStorage.getItem('atlas.preference.vim-mode') === 'true'; setVimEnabled(enabled); setVimMode(enabled ? 'normal' : 'insert'); };
     const openStash = () => { setStashes(readStash()); setStashOpen(true); };
     window.addEventListener('atlas:vim-toggle', toggle);
     window.addEventListener('atlas:open-input-stash', openStash);

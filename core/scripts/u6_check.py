@@ -97,7 +97,7 @@ async def main() -> None:
             assert "queuedRecovery" in app_source and "failedRun" in app_source
             assert '"/recordings/{recording_id}/steps"' in browser_source
 
-        assert (await u6_router.whatsnew())["source"] in {"git", "CHANGELOG.md"}
+        assert (await u6_router.whatsnew())["source"] in {"git", "git+model", "CHANGELOG.md"}
 
     # One real, low-cost suggestions request through the configured DeepSeek route.
     from atlas.models import ModelManager
@@ -105,10 +105,17 @@ async def main() -> None:
     services = AppServices(model_mgr=manager, orchestrator=SimpleNamespace(_model_router=manager.model_router))
     with patch.object(u6_router, "load_user_settings", return_value={"compression_model": "deepseek-v4.1-flash"}):
         try:
-            generated = await u6_router.generate_suggestions(services, {"goal": "准备发布说明", "response": "已完成变更并通过检查。"})
+            generated = await u6_router.generate_suggestions(services, {
+                "goal": "看看 core/atlas/api/u6_router.py 有没有明显问题",
+                "response": "读完了 u6_router.py：whatsnew 写死只认 U1~U6 提交；storage 清理会话会删除全部会话；"
+                            "suggestions 失败时直接抛 502。还没有改代码，也没有对应的测试。",
+            })
+            trivial = await u6_router.generate_suggestions(services, {"goal": "你好", "response": "你好！有什么可以帮你？"})
         except HTTPException as exc:
             raise RuntimeError(f"real suggestions request failed ({exc.status_code})") from None
     assert len(generated["suggestions"]) >= 2, "real suggestions response returned fewer than two items"
+    assert not any(item.strip("。") in u6_router._GENERIC_SUGGESTIONS for item in generated["suggestions"]), generated
+    assert len(trivial["suggestions"]) == 0, f"greeting should not produce suggestions: {trivial}"
 
     print("U6 CHECK PASS")
 

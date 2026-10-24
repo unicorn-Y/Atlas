@@ -361,7 +361,8 @@ export default function App() {
     if (!response.trim()) return;
     generatedSuggestionsRun.current = activeRun.id;
     setTurnSuggestions([]);
-    const goal = messages.find((message) => message.role === 'user')?.content ?? '';
+    // 本轮的目标是最近一条用户消息，不是整段对话的第一条。
+    const goal = [...messages].reverse().find((message) => message.role === 'user')?.content ?? '';
     void api<{ suggestions: string[] }>(store.apiBaseUrl, '/api/u6/suggestions', { method: 'POST', json: { goal, response } })
       .then((result) => setTurnSuggestions(Array.isArray(result.suggestions) ? result.suggestions.slice(0, 3) : []))
       .catch(() => setTurnSuggestions([]));
