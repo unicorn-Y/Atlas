@@ -84,12 +84,14 @@ async def get_retention() -> dict[str, Any]:
 
 @router.put("/api/u6/retention")
 async def put_retention(request: dict[str, Any]) -> dict[str, Any]:
+    global _last_retention_sweep
     days = request.get("days", 0); action = request.get("action", "archive")
     if not isinstance(days, int) or days < 0 or days > 36500 or action not in ("archive", "delete"):
         raise HTTPException(status_code=422, detail="保留期限或操作无效")
     settings = load_user_settings(); settings.update({"conversation_retention_days": days, "conversation_retention_action": action, "conversation_retention_exclude_pinned": bool(request.get("exclude_pinned", True)), "conversation_retention_exclude_projects": bool(request.get("exclude_projects", True))})
     from atlas.config import USER_SETTINGS_PATH
     USER_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True); USER_SETTINGS_PATH.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _last_retention_sweep = 0.0
     return await get_retention()
 
 

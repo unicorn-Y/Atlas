@@ -21,7 +21,7 @@ export default function StorageRetentionPanel({ apiBaseUrl, onToast }: { apiBase
     catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
   };
   const save = async () => {
-    try { const saved = await api<Retention>(apiBaseUrl, '/api/u6/retention', { method: 'PUT', json: retention }); setRetention(saved); onToast('会话保留期限已保存'); }
+    try { const saved = await api<Retention>(apiBaseUrl, '/api/u6/retention', { method: 'PUT', json: retention }); setRetention(saved); await api(apiBaseUrl, '/api/u6/retention/run'); onToast('会话保留期限已保存；符合规则的旧会话已处理'); }
     catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
   };
   return <div className="grid max-w-[760px] gap-6">

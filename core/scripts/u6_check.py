@@ -79,6 +79,17 @@ async def main() -> None:
 
         assert (await u6_router.whatsnew())["source"] in {"git", "CHANGELOG.md"}
 
+    # One real, low-cost suggestions request through the configured DeepSeek route.
+    from atlas.models import ModelManager
+    manager = ModelManager()
+    services = AppServices(model_mgr=manager, orchestrator=SimpleNamespace(_model_router=manager.model_router))
+    with patch.object(u6_router, "load_user_settings", return_value={"compression_model": "deepseek-v4.1-flash"}):
+        try:
+            generated = await u6_router.generate_suggestions(services, {"goal": "准备发布说明", "response": "已完成变更并通过检查。"})
+        except HTTPException as exc:
+            raise RuntimeError(f"real suggestions request failed ({exc.status_code})") from None
+    assert len(generated["suggestions"]) >= 2, "real suggestions response returned fewer than two items"
+
     print("U6 CHECK PASS")
 
 
