@@ -280,7 +280,9 @@ def _create_local_session(task_id: str, allow_real_profile: bool = True) -> dict
         if err:
             raise RuntimeError(err)
         if cdp_url:
-            info = _session_record("rp", _cdp._resolve_cdp_override(cdp_url), {"local": True, "real_profile": True})
+            lane = str(_bt._real_profile_cdp_cache.get("lane") or "real_profile")
+            features = {"local": True, "real_profile": lane == "real_profile", "live_chrome": lane == "live_chrome"}
+            info = _session_record("rp", _cdp._resolve_cdp_override(cdp_url), features)
             _bt.logger.info("Created real-profile local session %s for task %s", info["session_name"], task_id)
             return info
 
