@@ -30,9 +30,18 @@ export default function ProjectSourcesPanel({ projectId, workspacePath, apiBaseU
   const [error, setError] = useState('');
   const [memoryScope, setMemoryScope] = useState<'global' | 'project-only'>('global');
   const [scopeBusy, setScopeBusy] = useState(false);
+  const [projectMemories, setProjectMemories] = useState<Array<{id:string;text:string}>>([]);
+  const [globalMemories, setGlobalMemories] = useState<Array<{id:string;text:string}>>([]);
+  const [showGlobalMemories, setShowGlobalMemories] = useState(false);
+  const [memoryProjects, setMemoryProjects] = useState<Array<{project_id:string;name:string}>>([]);
+  const [memoryText, setMemoryText] = useState('');
+  const loadMemories = () => api<{memories:Array<{id:string;text:string}>}>(apiBaseUrl,`/api/projects/${encodeURIComponent(projectId)}/memories`).then(r=>setProjectMemories(r.memories)).catch(()=>setProjectMemories([]));
+  const loadGlobalMemories = () => api<{memories:Array<{id:string;text:string}>}>(apiBaseUrl,'/api/projects/memories/global').then(r=>setGlobalMemories(r.memories)).catch(()=>setGlobalMemories([]));
   const load = () => backend.getProjectSources(projectId).then((result) => { setData(result); setInstructions(result.instructions); setError(''); })
     .catch((exc) => setError(exc instanceof Error ? exc.message : String(exc)));
   useEffect(() => { setData(null); void load(); }, [projectId]);
+  useEffect(() => { void loadMemories(); void loadGlobalMemories(); }, [projectId]);
+  useEffect(() => { void api<{projects:Array<{project_id:string;name:string}>}>(apiBaseUrl,'/api/projects').then(r=>setMemoryProjects(r.projects)).catch(()=>setMemoryProjects([])); }, [apiBaseUrl]);
   useEffect(() => {
     let cancelled = false;
     void api<{ memory_scope?: 'global' | 'project-only' }>(apiBaseUrl, `/api/projects/${encodeURIComponent(projectId)}`)
@@ -80,7 +89,16 @@ export default function ProjectSourcesPanel({ projectId, workspacePath, apiBaseU
         setScopeBusy(true);
         void api(apiBaseUrl, `/api/projects/${encodeURIComponent(projectId)}`, { method: 'PUT', json: { memory_scope: next } })
           .then(() => setMemoryScope(next)).catch((exc) => setError(exc instanceof Error ? exc.message : String(exc))).finally(() => setScopeBusy(false));
-      }} />只在本项目内使用记忆</label>
+      }} />{memoryScope === 'project-only' ? '仅本项目记忆' : '项目 + 全局记忆'}</label>
+    <div className="grid gap-2 rounded-lg border border-edge p-3">
+      <h4 className="m-0 text-[12px] font-semibold">项目专属记忆</h4>
+      <p className="m-0 text-[11px] text-fg-3">Agent 在项目会话中写入的记忆默认保存在此；召回遵循上方范围设置。</p>
+      <textarea value={memoryText} onChange={event=>setMemoryText(event.target.value)} placeholder="添加一条仅本项目使用的持久记忆" className="min-h-16 rounded border border-edge bg-surface p-2 text-[12px]" />
+      <button disabled={!memoryText.trim()} onClick={()=>void api(apiBaseUrl,`/api/projects/${encodeURIComponent(projectId)}/memories`,{method:'POST',json:{text:memoryText}}).then(()=>{setMemoryText('');void loadMemories()}).catch(exc=>setError(String(exc)))} className="justify-self-start rounded border border-edge px-2 py-1 text-[11px]">保存项目记忆</button>
+      {projectMemories.map(item=><div key={item.id} className="rounded bg-sunken p-2 text-[11px]"><p className="m-0">{item.text}</p><select aria-label="移动记忆命名空间" defaultValue="" onChange={event=>{const target=event.target.value;void api(apiBaseUrl,`/api/projects/${encodeURIComponent(projectId)}/memories/${encodeURIComponent(item.id)}/move`,{method:'POST',json:{target_project_id:target||null}}).then(()=>{void loadMemories();void loadGlobalMemories()}).catch(exc=>setError(String(exc)));}} className="mt-1 rounded border border-edge bg-surface px-2 py-1"><option value="">移动到全局…</option>{memoryProjects.filter(project=>project.project_id!==projectId).map(project=><option key={project.project_id} value={project.project_id}>移动到「{project.name}」</option>)}</select></div>)}
+      <button onClick={()=>setShowGlobalMemories(v=>!v)} className="justify-self-start text-[11px] text-brand">{showGlobalMemories?'隐藏':'查看'}全局记忆（{globalMemories.length}）</button>
+      {showGlobalMemories&&globalMemories.map(item=><div key={item.id} className="rounded bg-sunken p-2 text-[11px]"><p className="m-0">{item.text}</p><button onClick={()=>void api(apiBaseUrl,`/api/projects/memories/global/${encodeURIComponent(item.id)}/move/${encodeURIComponent(projectId)}`,{method:'POST'}).then(()=>{void loadGlobalMemories();void loadMemories()})} className="mt-1 text-brand">移动到此项目</button></div>)}
+    </div>
     {error && <p role="alert" className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-[12.5px] text-danger">{error}</p>}
     <label className="grid gap-1 text-fg-2">项目指令（这个项目里的每次任务都会带上）
       <textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} rows={3} maxLength={8000}

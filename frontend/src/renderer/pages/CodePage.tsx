@@ -61,9 +61,9 @@ export default function CodePage({ apiBaseUrl, connected, onToast }: { apiBaseUr
     finally { setBusy(false); }
     await refresh();
   };
-  const remove = async (id: string) => {
+  const remove = async (id: string, memoryAction: 'delete' | 'global' | 'archive') => {
     setBusy(true);
-    try { await api(apiBaseUrl, `/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' }); onToast('已删除项目'); }
+    try { await api(apiBaseUrl, `/api/projects/${encodeURIComponent(id)}?memory_action=${memoryAction}`, { method: 'DELETE' }); onToast('已删除项目'); }
     catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
     finally { setBusy(false); }
     await refresh();
@@ -202,7 +202,7 @@ export default function CodePage({ apiBaseUrl, connected, onToast }: { apiBaseUr
         </div>}
         <div className="btns">
           <button className="btn ghost" disabled={busy} onClick={() => void changeStatus(current.project_id, current.status === 'archived' ? 'reopen' : 'close')}>{current.status === 'archived' ? '重新打开项目' : '关闭项目'}</button>
-          <button className={`btn ${confirmDelete ? 'danger' : 'ghost'}`} disabled={busy} onClick={() => { if (confirmDelete) void remove(current.project_id); else setConfirmDelete(true); }}>{confirmDelete ? '确认删除项目' : '删除项目'}</button>
+          <button className={`btn ${confirmDelete ? 'danger' : 'ghost'}`} disabled={busy} onClick={() => { if (!confirmDelete) { setConfirmDelete(true); return; } const choice=window.prompt('项目记忆如何处理？输入 delete 删除、global 并入全局、archive 保留归档。', 'archive'); if (choice==='delete'||choice==='global'||choice==='archive') void remove(current.project_id,choice); }}>{confirmDelete ? '确认删除项目…' : '删除项目'}</button>
         </div>
       </aside> : <div />}
     </div>

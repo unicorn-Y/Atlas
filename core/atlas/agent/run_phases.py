@@ -29,6 +29,7 @@ import asyncio
 import inspect
 import json
 import os
+import re
 from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
 from dataclasses import dataclass, field
@@ -518,8 +519,10 @@ async def _merge_library_recall(context: Any, message: str) -> Any:
         return context
     # Resident pages change rarely and stay in the cacheable system prompt; this turn's
     # cued memories change every message and travel with it as turn context.
+    prior = str(context.get("turn_recall") or "") if isinstance(context, dict) else ""
+    combined = "\n\n".join(part for part in (recall["relevant"], prior) if part)
     return {**context, "system_prompt_prefix": recall["system_block"],
-            "turn_recall": recall["relevant"], "library_refs": recall["refs"]}
+            "turn_recall": combined, "library_refs": recall["refs"]}
 
 
 def _schedule_library_write(agent: Any, state: _RunState, full_response: Any) -> None:
@@ -534,6 +537,29 @@ def _schedule_library_write(agent: Any, state: _RunState, full_response: Any) ->
         if isinstance(state.context, dict) and state.context.get("generate_memories") is False:
             return
         assistant_text = full_response if isinstance(full_response, str) else str(full_response or "")
+        project_id = str((state.context or {}).get("project_id") or "") if isinstance(state.context, dict) else ""
+        if project_id and getattr(agent, "_projects", None) is not None:
+            async def write_project_memories() -> None:
+                try:
+                    manager = getattr(agent, "_model_mgr", None)
+                    if manager is None or not getattr(manager, "model_router", None):
+                        return
+                    messages = [
+                        {"role": "system", "content": "从这轮项目对话中提取 0 到 3 条可长期复用的项目记忆，只返回 JSON 字符串数组。记录稳定偏好、决策、约束、已验证发现；不要记临时状态、凭据或对话复述。没有值得保存的内容返回 []。"},
+                        {"role": "user", "content": json.dumps({"user": str(state.message or "")[:5000], "assistant": assistant_text[:7000]}, ensure_ascii=False)},
+                    ]
+                    answer = await manager.model_router.complete_for(manager.current_model, "memory_library", messages, max_tokens=500, temperature=0.1)
+                    text = str(getattr(answer, "text", "") or "")
+                    match = re.search(r"\[[\s\S]*\]", text)
+                    values = json.loads(match.group(0)) if match else []
+                    for value in values[:3] if isinstance(values, list) else []:
+                        clean = str(value).strip()[:1000]
+                        if clean:
+                            await agent._projects.add_project_memory(project_id, clean)
+                except Exception as exc:
+                    log.warning("agent.project_memory_write_failed", error=str(exc), project_id=project_id)
+            asyncio.create_task(write_project_memories())
+            return
         library.schedule_turn(
             user_text=str(state.message or ""),
             assistant_text=assistant_text,
@@ -619,11 +645,19 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
             state.context = {"use_memories": metadata.get("use_memories", True),
                              "generate_memories": metadata.get("generate_memories", True)}
             project_only = False
+            project = None
             projects = getattr(agent, "_projects", None)
             if projects is not None:
                 project = await projects.find_by_conversation(request.conversation_id)
                 project_only = bool(project and project.memory_scope == "project-only")
             state.context["project_memory_scope"] = "project-only" if project_only else "global"
+            if project is not None:
+                state.context["project_id"] = project.project_id
+                if state.context["use_memories"]:
+                    project_memories = await projects.recall_project_memories(project.project_id, state.message, project_only=project.memory_scope == "project-only", limit=10)
+                    if project_memories:
+                        state.context["project_memories"] = project_memories
+                        state.context["turn_recall"] = str(state.context.get("turn_recall") or "") + "\nProject memories (private to this project):\n" + "\n".join(f"- {row['text']}" for row in project_memories)
             if state.context["use_memories"] and not project_only:
                 state.context = await _merge_library_recall(state.context, state.message)
         runtime.maintenance_context = {

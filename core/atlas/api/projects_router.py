@@ -14,7 +14,6 @@ import httpx
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
@@ -198,6 +197,7 @@ async def reopen_project(
 async def delete_project(
     services: Annotated[AppServices, Depends(get_app_services)],
     project_id: str,
+    memory_action: str = Query(..., description="delete, global, or archive project memories"),
 ) -> dict[str, str]:
     projects = services.projects
     if projects is None:
@@ -205,9 +205,49 @@ async def delete_project(
 
         projects = _atlas_server.projects
     assert projects is not None
-    if not await projects.delete_project(project_id):
+    try:
+        deleted = await projects.delete_project(project_id, memory_action)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not deleted:
         raise HTTPException(status_code=404, detail="Project not found")
     return {"status": "ok", "project_id": project_id}
+
+
+@router.get("/api/projects/{project_id}/memories")
+async def project_memories(services: Annotated[AppServices, Depends(get_app_services)], project_id: str) -> dict[str, Any]:
+    projects = _service("projects", services)
+    rows = await projects.list_project_memories(project_id)
+    if await projects.get(project_id) is None: raise HTTPException(404, "Project not found")
+    return {"memories": rows}
+
+@router.get("/api/projects/memories/global")
+async def global_project_memories(services: Annotated[AppServices, Depends(get_app_services)], q: str = "") -> dict[str, Any]:
+    projects = _service("projects", services)
+    return {"memories": await projects.search_global_memories(q)}
+
+
+@router.post("/api/projects/{project_id}/memories", status_code=201)
+async def add_project_memory(services: Annotated[AppServices, Depends(get_app_services)], project_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    projects = _service("projects", services)
+    try: return await projects.add_project_memory(project_id, str(req.get("text") or ""))
+    except KeyError as exc: raise HTTPException(404, "Project not found") from exc
+    except ValueError as exc: raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/api/projects/{project_id}/memories/{memory_id}/move")
+async def move_project_memory(services: Annotated[AppServices, Depends(get_app_services)], project_id: str, memory_id: str, req: dict[str, Any]) -> dict[str, Any]:
+    projects = _service("projects", services)
+    if not await projects.move_project_memory(memory_id, req.get("target_project_id")): raise HTTPException(404, "Memory not found")
+    return {"status": "ok", "memory_id": memory_id}
+
+@router.post("/api/projects/memories/global/{memory_id}/move/{project_id}")
+async def move_global_project_memory(services: Annotated[AppServices, Depends(get_app_services)], memory_id: str, project_id: str) -> dict[str, Any]:
+    projects = _service("projects", services)
+    try: moved = await projects.move_global_memory(memory_id,project_id)
+    except KeyError as exc: raise HTTPException(404,"Project not found") from exc
+    if not moved: raise HTTPException(404,"Memory not found")
+    return {"status":"ok","memory_id":memory_id}
 
 
 @router.post("/api/projects/{project_id}/conversations", status_code=201)

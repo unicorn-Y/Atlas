@@ -1388,6 +1388,8 @@ async def execute_tools_node(
                 else:
                     if fn_name in {"local_file", "local_edit", "local_edit_batch"}:
                         fn_args.setdefault("_atlas_workspace", workspace)
+                    if fn_name in {"local_shell", "local_exec", "local_process"} and getattr(ctx, "project_id", None):
+                        fn_args["_atlas_project_id"] = ctx.project_id
                     result = await agent._local_execution.call_tool(
                         fn_name, fn_args, run_id=ctx.run_id,
                         output_callback=report_process_output,
@@ -1430,27 +1432,41 @@ async def execute_tools_node(
 
                 result = await run_deep_research_tool(agent, fn_args, on_progress=research_progress)
             elif fn_name in {"agent_memory_read", "agent_memory_write"}:
-                from atlas.memory.library import get_library
-
-                library = get_library()
-                if library is None:
-                    raise RuntimeError("Atlas MemoryLibrary is unavailable.")
-                scope_id = str(getattr(ctx, "memory_scope_id", "") or "")
-                if fn_name == "agent_memory_read":
-                    data = await asyncio.to_thread(
-                        library.agent_memory_read, scope_id,
-                        str(fn_args.get("query") or ""),
-                        max(1, min(20, int(fn_args.get("limit", 8) or 8))),
-                    )
+                project_id = getattr(ctx, "project_id", None)
+                project_store = getattr(agent, "_projects", None)
+                project_only = False
+                if project_id and project_store is not None:
+                    project = await project_store.get(project_id)
+                    project_only = bool(project and project.memory_scope == "project-only")
+                if project_id and project_store is not None:
+                    if fn_name == "agent_memory_read":
+                        rows = await project_store.recall_project_memories(project_id, str(fn_args.get("query") or ""), project_only=project_only, limit=int(fn_args.get("limit", 8) or 8))
+                        data = {"scope": f"project:{project_id}" if project_only else f"project:{project_id}+global", "memories": rows}
+                        if not project_only:
+                            from atlas.memory.library import get_library
+                            library = get_library()
+                            if library is not None:
+                                data["global_memory_library"] = await asyncio.to_thread(library.agent_memory_read, str(getattr(ctx, "memory_scope_id", "") or ""), str(fn_args.get("query") or ""), max(1, min(20, int(fn_args.get("limit", 8) or 8))))
+                    elif str(fn_args.get("scope", "project")) == "global":
+                        from atlas.memory.library import get_library
+                        library = get_library()
+                        data = await asyncio.to_thread(library.agent_memory_write, str(getattr(ctx, "memory_scope_id", "") or ""), str(fn_args.get("text") or "")) if library else {"ok": False, "error": "MemoryLibrary unavailable"}
+                    else:
+                        data = await project_store.add_project_memory(project_id, str(fn_args.get("text") or ""))
+                    result = {"data": data, "is_error": False,
+                              "content": [{"type": "text", "text": json.dumps(data, ensure_ascii=False)}]}
                 else:
-                    data = await asyncio.to_thread(
-                        library.agent_memory_write, scope_id,
-                        str(fn_args.get("text") or ""),
-                    )
-                result = {"data": data, "is_error": False,
-                          "content": [{"type": "text", "text": json.dumps(
-                              data, ensure_ascii=False,
-                          )}]}
+                    from atlas.memory.library import get_library
+
+                    library = get_library()
+                    if library is None:
+                        raise RuntimeError("Atlas MemoryLibrary is unavailable.")
+                    scope_id = str(getattr(ctx, "memory_scope_id", "") or "")
+                    if fn_name == "agent_memory_read":
+                        data = await asyncio.to_thread(library.agent_memory_read, scope_id, str(fn_args.get("query") or ""), max(1, min(20, int(fn_args.get("limit", 8) or 8))))
+                    else:
+                        data = await asyncio.to_thread(library.agent_memory_write, scope_id, str(fn_args.get("text") or ""))
+                    result = {"data": data, "is_error": False, "content": [{"type": "text", "text": json.dumps(data, ensure_ascii=False)}]}
             elif fn_name == "session_search" and agent._memory is not None:
                 results = await agent._memory.session_search(
                     str(fn_args.get("query", "")),

@@ -118,6 +118,15 @@ class ProjectStore:
                 project_id UNINDEXED, source_id UNINDEXED, path UNINDEXED, text,
                 tokenize='unicode61'
             );
+            CREATE TABLE IF NOT EXISTS project_memories (
+                id TEXT PRIMARY KEY, project_id TEXT NOT NULL, text TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS global_project_memories (
+                id TEXT PRIMARY KEY, text TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_project_memories_scope ON project_memories(project_id, created_at);
         """)
         cursor = await self._db.execute("PRAGMA table_info(projects)")
         columns = {row["name"] for row in await cursor.fetchall()}
@@ -260,8 +269,20 @@ class ProjectStore:
     async def archive(self, project_id: str) -> Project | None:
         return await self.update_project(project_id, status="archived")
 
-    async def delete_project(self, project_id: str) -> bool:
+    async def delete_project(self, project_id: str, memory_action: str = "archive") -> bool:
         db = self._require_db()
+        if memory_action not in {"delete", "global", "archive"}:
+            raise ValueError("memory_action must be delete, global or archive")
+        if memory_action == "global":
+            cursor = await db.execute("SELECT id,text,created_at FROM project_memories WHERE project_id=?", (project_id,))
+            rows = await cursor.fetchall()
+            await db.executemany("INSERT OR REPLACE INTO global_project_memories(id,text,created_at) VALUES(?,?,?)",
+                                 [(row["id"], row["text"], row["created_at"]) for row in rows])
+            await db.execute("DELETE FROM project_memories WHERE project_id=?", (project_id,))
+        elif memory_action == "delete":
+            await db.execute("DELETE FROM project_memories WHERE project_id=?", (project_id,))
+        else:
+            await db.execute("UPDATE project_memories SET project_id=? WHERE project_id=?", (f"archived:{project_id}", project_id))
         cursor = await db.execute(
             "DELETE FROM projects WHERE project_id = ?", (project_id,),
         )
@@ -270,6 +291,72 @@ class ProjectStore:
         )
         await db.commit()
         return cursor.rowcount > 0
+
+    async def add_project_memory(self, project_id: str, text: str, memory_id: str | None = None) -> dict[str, Any]:
+        if await self.get(project_id) is None:
+            raise KeyError(project_id)
+        value = str(text).strip()
+        if not value:
+            raise ValueError("memory text must not be empty")
+        item_id = memory_id or uuid.uuid4().hex
+        db = self._require_db()
+        existing = await db.execute("SELECT id FROM project_memories WHERE project_id=? AND text=? LIMIT 1", (project_id,value))
+        prior = await existing.fetchone()
+        if prior is not None:
+            return {"id": str(prior["id"]), "project_id": project_id, "text": value}
+        await db.execute("INSERT INTO project_memories(id,project_id,text) VALUES(?,?,?)", (item_id, project_id, value))
+        await db.commit()
+        return {"id": item_id, "project_id": project_id, "text": value}
+
+    async def search_project_memories(self, project_id: str, query: str = "", limit: int = 8) -> list[dict[str, Any]]:
+        db = self._require_db()
+        words = [word for word in str(query).split() if len(word) > 1]
+        clause = " AND ".join("text LIKE ?" for _ in words)
+        params: list[Any] = [project_id, *[f"%{word}%" for word in words]]
+        where = "project_id=?" + (f" AND {clause}" if clause else "")
+        cursor = await db.execute(f"SELECT id,text,created_at FROM project_memories WHERE {where} ORDER BY created_at DESC LIMIT ?", (*params, max(1,min(int(limit),30))))
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def list_project_memories(self, project_id: str) -> list[dict[str, Any]]:
+        return await self.search_project_memories(project_id, "", 100)
+
+    async def search_global_memories(self, query: str = "", limit: int = 50) -> list[dict[str, Any]]:
+        db = self._require_db()
+        words = [word for word in str(query).split() if len(word) > 1]
+        clause = " AND ".join("text LIKE ?" for _ in words)
+        where = clause or "1=1"
+        cursor = await db.execute(f"SELECT id,text,created_at FROM global_project_memories WHERE {where} ORDER BY created_at DESC LIMIT ?", (*[f"%{word}%" for word in words], max(1,min(int(limit),100))))
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def recall_project_memories(self, project_id: str, query: str, *, project_only: bool = False, limit: int = 8) -> list[dict[str, Any]]:
+        rows = await self.search_project_memories(project_id, query, limit)
+        if not project_only:
+            rows.extend(await self.search_global_memories(query, max(1, limit - len(rows))))
+        return rows[:max(1, limit)]
+
+    async def move_global_memory(self, memory_id: str, target_project_id: str) -> bool:
+        db = self._require_db()
+        if await self.get(target_project_id) is None: raise KeyError(target_project_id)
+        cursor = await db.execute("SELECT id,text,created_at FROM global_project_memories WHERE id=?", (memory_id,))
+        row = await cursor.fetchone()
+        if row is None: return False
+        await db.execute("INSERT INTO project_memories(id,project_id,text,created_at) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id,text=excluded.text",(row["id"],target_project_id,row["text"],row["created_at"]))
+        await db.execute("DELETE FROM global_project_memories WHERE id=?",(memory_id,)); await db.commit(); return True
+
+    async def move_project_memory(self, memory_id: str, target_project_id: str | None) -> bool:
+        db = self._require_db()
+        if target_project_id is None:
+            cursor = await db.execute("SELECT id,text,created_at FROM project_memories WHERE id=?", (memory_id,))
+            row = await cursor.fetchone()
+            if row is None: return False
+            await db.execute("INSERT OR REPLACE INTO global_project_memories(id,text,created_at) VALUES(?,?,?)", (row["id"],row["text"],row["created_at"]))
+            await db.execute("DELETE FROM project_memories WHERE id=?", (memory_id,))
+        else:
+            if await self.get(target_project_id) is None: raise KeyError(target_project_id)
+            cursor = await db.execute("UPDATE project_memories SET project_id=? WHERE id=?", (target_project_id,memory_id))
+            if not cursor.rowcount: return False
+        await db.commit()
+        return True
 
     # ----- Conversation association -----
 

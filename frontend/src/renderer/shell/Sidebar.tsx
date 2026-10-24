@@ -776,8 +776,10 @@ export default function Sidebar(props: SidebarProps) {
             }).catch((error) => setFeedback('项目默认值保存失败：' + String(error)));
           }}><Folder />设置新会话默认值</MenuItem>
           <MenuItem onSelect={() => {
-            if (!window.confirm(`删除项目“${project.name}”？现有会话会保留。`)) return;
-            void api(backend.apiBaseUrl, `/api/projects/${encodeURIComponent(project.project_id)}`, { method: 'DELETE' }).then(() => setProjects((items) => items.filter((item) => item.project_id !== project.project_id)))
+            if (!window.confirm(`删除项目“${project.name}”？项目记忆将先按你的选择处理。`)) return;
+            const memoryAction=window.prompt('项目记忆如何处理？输入 delete 删除、global 并入全局、archive 保留归档。', 'archive');
+            if(memoryAction!=='delete'&&memoryAction!=='global'&&memoryAction!=='archive')return;
+            void api(backend.apiBaseUrl, `/api/projects/${encodeURIComponent(project.project_id)}?memory_action=${memoryAction}`, { method: 'DELETE' }).then(() => setProjects((items) => items.filter((item) => item.project_id !== project.project_id)))
               .catch((error) => setFeedback('项目删除失败：' + String(error)));
           }}><Trash2 />删除项目</MenuItem>
           <MenuSeparator />
