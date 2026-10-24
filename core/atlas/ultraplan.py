@@ -156,9 +156,8 @@ async def execute(job_id: str, orchestrator: Any) -> dict[str, Any]:
     job = _JOBS.get(job_id)
     if job is None:
         raise KeyError(job_id)
-    if job["status"] not in {"awaiting_approval", "failed_step"}:
-        raise ValueError("plan cannot be executed in its current state")
-    job["status"] = "executing"
+    if job["status"] != "executing":
+        raise ValueError("plan execution has not been claimed")
     plan = validate_plan(job["plan"])
     for index, step in enumerate(plan["steps"]):
         if job["steps"][index]["status"] == "completed":
@@ -194,4 +193,15 @@ def discard(job_id: str) -> dict[str, Any]:
     if job["status"] in {"researching", "planning", "executing"}:
         raise ValueError("cannot discard an active workflow")
     job["status"] = "discarded"
+    return public_job(job)
+
+
+def claim_execution(job_id: str) -> dict[str, Any]:
+    """Atomically claim one approved job before scheduling its execution task."""
+    job = _JOBS.get(job_id)
+    if job is None:
+        raise KeyError(job_id)
+    if job["status"] not in {"awaiting_approval", "failed_step"}:
+        raise ValueError("plan cannot be executed in its current state")
+    job["status"] = "executing"
     return public_job(job)

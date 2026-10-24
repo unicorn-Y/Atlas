@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
-from atlas.ultraplan import discard, execute, get, save_edit, start
+from atlas.ultraplan import claim_execution, discard, execute, get, save_edit, start
 
 router = APIRouter(prefix="/api/ultraplan", tags=["ultraplan"])
 
@@ -52,9 +52,7 @@ async def edit_workflow(job_id: str, body: dict[str, Any]) -> dict[str, Any]:
 async def approve_workflow(job_id: str, services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
     orchestrator = _orchestrator(services)
     try:
-        job = get(job_id)
-        if job["status"] not in {"awaiting_approval", "failed_step"}:
-            raise ValueError("plan is not awaiting approval")
+        job = claim_execution(job_id)
         task = asyncio.create_task(execute(job_id, orchestrator), name=f"ultraplan-execute-{job_id}")
         return {**job, "status": "executing"} if task else job
     except KeyError as exc:
