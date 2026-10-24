@@ -36,6 +36,15 @@ const desktopApi: AtlasDesktopApi = {
     ipcRenderer.on('app:session-screenshot', listener);
     return () => ipcRenderer.removeListener('app:session-screenshot', listener);
   },
+  onSessionScreenshotError: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, message: string) => callback(message);
+    ipcRenderer.on('app:session-screenshot-error', listener);
+    return () => ipcRenderer.removeListener('app:session-screenshot-error', listener);
+  },
+  retrySessionScreenshot: () => ipcRenderer.invoke('platform:retry-session-screenshot'),
+  getSystemAccessStatus: () => ipcRenderer.invoke('platform:get-system-access-status'),
+  requestSystemAccess: () => ipcRenderer.invoke('platform:request-system-access'),
+  openSystemPrivacySettings: () => ipcRenderer.invoke('platform:open-system-privacy-settings'),
   setKeepAwake: (enabled) => ipcRenderer.invoke('platform:set-keep-awake', enabled) as Promise<void>,
   setRuntimeState: (state) => ipcRenderer.send('runtime:set-state', state),
   openWorkspaceInEditor: (editor: PlatformEditorId, workspacePath: string) =>

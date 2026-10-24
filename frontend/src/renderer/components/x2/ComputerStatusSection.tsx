@@ -30,9 +30,12 @@ export default function ComputerStatusSection({ apiBaseUrl, className }: { apiBa
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [systemAccess, setSystemAccess] = useState<{ platform: string; screen: string; accessibility: string; supported: boolean } | null>(null);
+  const [retryMessage, setRetryMessage] = useState('');
   useEffect(() => {
     let stale = false;
     setLoading(true);
+    void window.atlasDesktop?.getSystemAccessStatus?.().then((value) => { if (!stale) setSystemAccess(value); }).catch(() => undefined);
     getComputerStatus(apiBaseUrl)
       .then((status) => {
         if (stale) return;
@@ -46,6 +49,10 @@ export default function ComputerStatusSection({ apiBaseUrl, className }: { apiBa
       .finally(() => { if (!stale) setLoading(false); });
     return () => { stale = true; };
   }, [apiBaseUrl, reloadKey]);
+  const requestAccess = async () => {
+    const value = await window.atlasDesktop?.requestSystemAccess?.();
+    if (value) setSystemAccess(value);
+  };
   return <section aria-label="电脑操控" className={className}>
     <div className="flex items-center gap-2">
       <h3 className="m-0 text-[15px] font-semibold text-heading">电脑操控</h3>
@@ -54,8 +61,17 @@ export default function ComputerStatusSection({ apiBaseUrl, className }: { apiBa
         className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-40">
         {loading ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />}重新探测
       </button>
+      {window.atlasDesktop?.retrySessionScreenshot && <button type="button" onClick={() => { setRetryMessage(''); void window.atlasDesktop?.retrySessionScreenshot?.().then((result) => setRetryMessage(result.started ? '已请求重试；成功后截图会添加到当前会话输入框。' : result.reason ?? '暂时无法重试。')).catch((error) => setRetryMessage(error instanceof Error ? error.message : String(error))); }} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg"><RefreshCw size={13} />重新捕获截图</button>}
     </div>
+    {retryMessage && <p className="my-1 text-[12px] text-fg-3" role="status">{retryMessage}</p>}
     <p className="m-0 mt-1 mb-3 text-[13px] text-fg-3">让 Atlas 能看屏幕、动鼠标和键盘的能力。前台窗口里的操作会先问你，鼠标一动就会暂停。</p>
+    {systemAccess?.supported && <div className="mb-3 rounded-xl bg-sunken px-3 py-2.5 text-[12.5px]" aria-label="系统权限状态">
+      <strong className="block text-fg">系统权限（macOS）</strong>
+      <span className="block text-fg-2">屏幕录制：{systemAccess.screen === 'granted' ? '已允许' : systemAccess.screen === 'denied' || systemAccess.screen === 'restricted' ? '系统拒绝' : systemAccess.screen === 'not-determined' ? '尚未决定' : systemAccess.screen}</span>
+      <span className="block text-fg-2">辅助功能：{systemAccess.accessibility === 'granted' ? '已允许' : '尚未允许'}</span>
+      {systemAccess.screen !== 'granted' || systemAccess.accessibility !== 'granted' ? <><p className="my-1 text-fg-3">首次截图需要屏幕录制；电脑操控需要辅助功能。打开系统设置 → 隐私与安全性 → 屏幕录制 / 辅助功能，勾选 Atlas 后重试。</p>
+        <div className="flex gap-3"><button type="button" className="text-brand" onClick={() => void requestAccess().catch(() => undefined)}>请求/重新检查授权</button><button type="button" className="text-brand" onClick={() => void window.atlasDesktop?.openSystemPrivacySettings?.('screen')}>屏幕录制设置</button><button type="button" className="text-brand" onClick={() => void window.atlasDesktop?.openSystemPrivacySettings?.('accessibility')}>辅助功能设置</button></div></> : <p className="my-1 text-ok">所需系统权限已就绪。</p>}
+    </div>}
     {error ? <p role="alert" className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-[12.5px] text-danger">探测失败：{error}</p>
       : ready === null ? <p className="m-0 text-[13px] text-fg-3">正在探测…</p>
       : <div aria-live="polite">

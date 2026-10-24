@@ -1229,6 +1229,7 @@ export default function App() {
     const key = `atlas.screenshot.${conversationId}`;
     try { const pending: unknown = JSON.parse(localStorage.getItem(key) ?? '[]'); localStorage.setItem(key, JSON.stringify([...(Array.isArray(pending) ? pending : []), image].slice(-4))); } catch { /* ignore local cache errors */ }
   }), []);
+  useEffect(() => window.atlasDesktop?.onSessionScreenshotError?.((message) => setToast(message)), []);
   useEffect(() => {
     if (!store.activeConversationId) return;
     const key = `atlas.screenshot.${store.activeConversationId}`;

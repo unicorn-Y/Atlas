@@ -1,5 +1,5 @@
 import './stdoutSafety.js';
-import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerSaveBlocker, screen, session, shell, Tray } from 'electron';
+import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerSaveBlocker, screen, session, shell, systemPreferences, Tray } from 'electron';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -486,6 +486,11 @@ async function captureSessionScreenshot(): Promise<void> {
   const { conversationId, lastInteractionAt } = screenshotContext;
   if (!conversationId || Date.now() - lastInteractionAt > 60_000 || !windowRef || windowRef.isDestroyed()) return;
   try {
+    const access = getSystemAccessStatus();
+    if (process.platform === 'darwin' && access.screen !== 'granted') {
+      windowRef.webContents.send('app:session-screenshot-error', access.screen === 'denied' || access.screen === 'restricted' ? '系统拒绝了屏幕录制权限。请在系统设置 → 隐私与安全性 → 屏幕录制中允许 Atlas，然后重新尝试。' : '尚未授予屏幕录制权限，请先在系统设置中允许 Atlas。');
+      return;
+    }
     const cursor = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(cursor);
     const sources = await desktopCapturer.getSources({
@@ -494,8 +499,27 @@ async function captureSessionScreenshot(): Promise<void> {
     const source = sources.find((item) => item.display_id === String(display.id)) ?? sources[0];
     if (source?.thumbnail && !source.thumbnail.isEmpty()) {
       windowRef.webContents.send('app:session-screenshot', source.thumbnail.toDataURL(), conversationId);
+    } else {
+      windowRef.webContents.send('app:session-screenshot-error', '系统没有返回可捕获的屏幕画面。请检查屏幕录制权限与显示器状态，然后在设置 → 电脑操控中点“重新捕获截图”。');
     }
-  } catch (error) { console.error('Session screenshot capture failed:', error); }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    windowRef.webContents.send('app:session-screenshot-error', /permission|denied|not allowed|屏幕录制/i.test(detail)
+      ? `系统拒绝了屏幕捕获权限：${detail}。请检查系统隐私设置后重试。`
+      : `截图捕获失败：${detail}。请重试；若持续失败，请检查显示器与 Atlas 日志。`);
+    console.error('Session screenshot capture failed:', error);
+  }
+}
+
+function getSystemAccessStatus() {
+  if (process.platform === 'darwin') {
+    let screenStatus = 'unknown';
+    let accessibility = 'unknown';
+    try { screenStatus = systemPreferences.getMediaAccessStatus('screen'); } catch { /* unavailable on older Electron */ }
+    try { accessibility = systemPreferences.isTrustedAccessibilityClient(false) ? 'granted' : 'not-determined'; } catch { /* macOS only */ }
+    return { platform: process.platform, screen: screenStatus, accessibility, supported: true };
+  }
+  return { platform: process.platform, screen: 'not-required', accessibility: 'not-required', supported: false };
 }
 
 function setScreenshotShortcut(accelerator: string | null): GlobalShortcutState {
@@ -833,6 +857,33 @@ ipcMain.handle('conversation:open-window', (event, conversationId: unknown) => {
 ipcMain.handle('platform:get-settings', (event) => {
   assertTrustedAppSender(event);
   return platformSettingsSnapshot();
+});
+ipcMain.handle('platform:get-system-access-status', (event) => {
+  assertTrustedAppSender(event);
+  return getSystemAccessStatus();
+});
+ipcMain.handle('platform:retry-session-screenshot', async (event) => {
+  assertTrustedAppSender(event);
+  const { conversationId, lastInteractionAt } = screenshotContext;
+  if (!conversationId || Date.now() - lastInteractionAt > 60_000) {
+    return { started: false, reason: '请先打开一个会话并进行一次交互，然后再试。' };
+  }
+  await captureSessionScreenshot();
+  return { started: true };
+});
+ipcMain.handle('platform:request-system-access', async (event) => {
+  assertTrustedAppSender(event);
+  if (process.platform === 'darwin') {
+    try { systemPreferences.isTrustedAccessibilityClient(true); } catch { /* OS permission APIs are version-specific */ }
+    try { await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 16, height: 16 } }); } catch { /* A denied screen permission is reported below. */ }
+  }
+  return getSystemAccessStatus();
+});
+ipcMain.handle('platform:open-system-privacy-settings', async (event, section: unknown) => {
+  assertTrustedAppSender(event);
+  if (process.platform === 'darwin') await shell.openExternal(section === 'accessibility'
+    ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
+    : 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
 });
 ipcMain.handle('platform:set-always-on-top', (event, enabled: unknown) => {
   assertTrustedAppSender(event);

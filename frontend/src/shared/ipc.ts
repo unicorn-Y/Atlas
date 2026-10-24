@@ -91,6 +91,11 @@ export interface AtlasDesktopApi {
   onVoiceHotkey?(callback: () => void): () => void;
   setScreenshotContext?(conversationId: string, lastInteractionAt: number): void;
   onSessionScreenshot?(callback: (imageDataUrl: string, conversationId: string) => void): () => void;
+  onSessionScreenshotError?(callback: (message: string) => void): () => void;
+  retrySessionScreenshot?(): Promise<{ started: boolean; reason?: string }>;
+  getSystemAccessStatus?(): Promise<{ platform: string; screen: string; accessibility: string; supported: boolean }>;
+  requestSystemAccess?(): Promise<{ platform: string; screen: string; accessibility: string; supported: boolean }>;
+  openSystemPrivacySettings?(section?: 'screen' | 'accessibility'): Promise<void>;
   setKeepAwake?(enabled: boolean): Promise<void>;
   setRuntimeState?(state: 'running' | 'waiting' | 'idle'): void;
   /** Open an existing local workspace with a fixed allowlisted IDE CLI (never through a shell). */
