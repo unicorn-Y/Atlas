@@ -11,7 +11,6 @@ scroll by ref, screenshots). Setup: ``npm start`` in a checkout or ``docker run 
 
 from __future__ import annotations
 
-import base64
 import ipaddress
 import json
 import logging
@@ -19,7 +18,8 @@ import os
 import re
 import threading
 import uuid
-from typing import Any, Callable, Dict, Optional
+from pathlib import Path
+from typing import Any, Callable, Optional
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 import requests
@@ -565,9 +565,20 @@ def _save_screenshot(content: bytes) -> str:
 
 
 def camofox_vision(question: str, annotate: bool = False, task_id: Optional[str] = None) -> str:
-    """Take a screenshot and analyze it with vision AI via Camofox."""
+    """Capture the active Camofox tab and analyze it with Atlas' configured vision model."""
+    del annotate  # Camofox returns the screenshot; it does not provide element overlays.
     def body(session):
-        return json.dumps({"success": False, "error": "Camofox vision is unavailable in this Atlas runtime."})
+        response = _get_raw(_tab_path(session, "screenshot"), params={**_user_params(session), "fullPage": "false"})
+        screenshot_path = _save_screenshot(response.content)
+        from atlas.engine_core.tools.browser_tool_vision import _analyze_screenshot_with_aux_llm
+        analysis = _analyze_screenshot_with_aux_llm(Path(screenshot_path), question)
+        try:
+            parsed = json.loads(analysis)
+            if isinstance(parsed, dict) and parsed.get("success") is False:
+                return json.dumps({**parsed, "screenshot_path": screenshot_path}, ensure_ascii=False)
+        except (TypeError, ValueError):
+            pass
+        return json.dumps({"success": True, "analysis": analysis, "screenshot_path": screenshot_path}, ensure_ascii=False)
     return _with_tab(task_id, "capture a screenshot", body)
 
 

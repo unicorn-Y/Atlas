@@ -84,8 +84,58 @@ def _native_vision_result(
 
 
 def _analyze_screenshot_with_aux_llm(screenshot_path: Path, question: str) -> str:
-    """Return an explicit capability error; this port has no auxiliary-model client."""
-    return '{"success":false,"error":"Browser screenshot vision is unavailable in this Atlas runtime."}'
+    """Analyze a captured page with the configured auxiliary vision model.
+
+    The selected conversation model is deliberately not retried for a vision
+    request: an image-capability mismatch must use the configured vision route,
+    and a missing route is returned as an actionable error.
+    """
+    import asyncio
+    import base64
+    import threading
+
+    from atlas.config import get_config
+    cfg = get_config()
+    model_id = str(cfg.get("computer_use.aux_vision_model", "") or "").strip()
+    if not model_id:
+        return ('{"success":false,"error":"当前模型不支持图片输入，且没有配置视觉模型。请在设置 → 电脑操作中配置视觉模型后重试。"}')
+    encoded = base64.b64encode(screenshot_path.read_bytes()).decode("ascii")
+    prompt = ("Analyze this browser screenshot and answer the question. Describe visible controls and page state; "
+              "do not infer or repeat passwords, authentication tokens, or other secret values.\n\nQuestion: " + question)
+    messages = [{"role": "user", "content": [
+        {"type": "text", "text": prompt},
+        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{encoded}"}},
+    ]}]
+
+    async def complete() -> str:
+        from atlas.models import ModelManager
+        manager = ModelManager()
+        result = await manager.model_router.complete_for(
+            model_id, "vision", messages, temperature=0.1, max_tokens=2048,
+        )
+        return result.text
+
+    box: list[str] = []
+    errors: list[BaseException] = []
+    def run() -> None:
+        try:
+            box.append(asyncio.run(complete()))
+        except BaseException as exc:  # hand the provider error back to the tool caller
+            errors.append(exc)
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        run()
+    else:
+        worker = threading.Thread(target=run, name="atlas-vision-model", daemon=True)
+        worker.start()
+        worker.join(timeout=150)
+        if worker.is_alive():
+            raise TimeoutError("视觉模型分析超时（150 秒）")
+    if errors:
+        raise RuntimeError(f"视觉模型 {model_id} 调用失败：{errors[0]}") from errors[0]
+    from atlas.engine_core.agent.redact import redact_sensitive_text
+    return redact_sensitive_text(box[0] if box else "视觉模型没有返回内容。")
 
 
 

@@ -557,7 +557,32 @@ def _anthropic_payload(route: RouteSpec, messages: list[dict[str, Any]], kwargs:
                             block["cache_control"] = part["cache_control"]
                         blocks.append(block)
                     elif isinstance(part, dict) and part.get("type") in {"image", "image_url"}:
-                        raise NotImplementedError("Anthropic image conversion is not supported by Atlas direct transport")
+                        # Atlas tool results use OpenAI's image_url wrapper, while some
+                        # callers already provide Anthropic's source block. Normalize
+                        # both without fetching remote URLs or exposing image bytes.
+                        source = part.get("source") if part.get("type") == "image" else None
+                        image_url = part.get("image_url") if part.get("type") == "image_url" else None
+                        if isinstance(source, dict):
+                            if source.get("type") in {"base64", "url"}:
+                                blocks.append({"type": "image", "source": dict(source)})
+                            else:
+                                raise ValueError("Unsupported Anthropic image source type")
+                        elif isinstance(image_url, dict):
+                            url = str(image_url.get("url") or "")
+                            if url.startswith("data:") and ";base64," in url:
+                                header, data = url[5:].split(",", 1)
+                                media_type = header.split(";", 1)[0]
+                                if "base64" not in header.lower():
+                                    raise ValueError("Anthropic image data URLs must be base64 encoded")
+                                blocks.append({"type": "image", "source": {
+                                    "type": "base64", "media_type": media_type, "data": data,
+                                }})
+                            elif url.startswith(("https://", "http://")):
+                                blocks.append({"type": "image", "source": {"type": "url", "url": url}})
+                            else:
+                                raise ValueError("Anthropic image_url must contain an HTTP(S) URL or base64 data URL")
+                        else:
+                            raise ValueError("Anthropic image content requires source or image_url")
                     elif isinstance(part, dict) and part.get("type") == "thinking":
                         blocks.append({key: part[key] for key in ("type", "thinking", "signature") if key in part})
             if role == "assistant":
