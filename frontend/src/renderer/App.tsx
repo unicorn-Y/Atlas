@@ -108,6 +108,7 @@ import { api, relativeTime } from './services/api';
 import { buildTimeline } from './components/timeline';
 const ComputerEdgeBar = lazy(() => import('./components/x2').then((module) => ({ default: module.ComputerEdgeBar })));
 import UpdateBanner from './components/UpdateBanner';
+import DiagnosticsFloatingOverlay from './components/DiagnosticsFloatingOverlay';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
@@ -291,12 +292,25 @@ export default function App() {
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [startupWarning, setStartupWarning] = useState('');
+  const [diagnosticUnread, setDiagnosticUnread] = useState(0);
   const [besideId, setBesideId] = useState('');
   const [rewound, setRewound] = useState<{ conversationId: string; rewindId: string; text: string } | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState(() => pref('default-workspace') ?? '');
   const [tabs, setTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
   const [closedTabs, setClosedTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('closed-tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
   const [bindings, setBindings] = useState(loadBindings);
+  useEffect(() => {
+    if (!store.connected) return;
+    let active = true;
+    const refresh = () => void api<{ unread: number }>(store.apiBaseUrl, '/api/diagnostics/alerts').then((result) => { if (active) setDiagnosticUnread(result.unread); }).catch(() => undefined);
+    refresh(); const timer = window.setInterval(refresh, 15000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [store.connected, store.apiBaseUrl]);
+  useEffect(() => {
+    const open = () => setSheet('diagnostics');
+    window.addEventListener('atlas:open-diagnostics-settings', open);
+    return () => window.removeEventListener('atlas:open-diagnostics-settings', open);
+  }, []);
   const keybindingsMtimeRef = useRef(-1);
   useEffect(() => {
     const update = () => setBindings(loadBindings());
@@ -1361,7 +1375,7 @@ export default function App() {
         .then(({ until }) => setToast(`忙碌状态已开启，至 ${until ? new Date(until * 1000).toLocaleTimeString() : '稍后'}`))
         .catch((error) => setToast(String(error)));
     } },
-    { id: 'pr', label: '/pr', hint: '关联 PR；附加 --auto 开启后台 CI 修复', takesArgument: true, run: (value: string) => {
+    { id: 'pr', label: '/pr', hint: '输入 new 打开提交并开 PR 向导；否则关联 PR', takesArgument: true, run: (value: string) => {
       if (value.trim().toLowerCase() === 'new') { window.dispatchEvent(new CustomEvent('atlas:open-pr-wizard')); return; }
       if (!activeConversation) { setToast('先打开要关联 PR 的会话'); return; }
       const pr = value.replace(/\s+--auto\b/i, '').trim();
@@ -1478,6 +1492,9 @@ export default function App() {
     } },
     { id: 'help', label: '/help', hint: '列出全部斜杠命令及用法', run: showHelp },
     { id: 'doctor', label: '/doctor', hint: '检查安装与配置并查看修复建议', run: () => setSheet('diagnostics') },
+    { id: 'warnings', label: '/warnings', hint: '查看持久告警历史', run: () => { setSheet('diagnostics'); window.setTimeout(() => window.dispatchEvent(new CustomEvent('atlas:diagnostics-tab', { detail: 'alerts' })), 0); } },
+    { id: 'status', label: '/status', hint: '查看运行状态、配置来源和后台任务', run: () => { setSheet('diagnostics'); window.setTimeout(() => window.dispatchEvent(new CustomEvent('atlas:diagnostics-tab', { detail: 'tasks' })), 0); } },
+    { id: 'debug', label: '/debug', hint: '切换实时调试浮层（Ctrl+Shift+D）', run: () => window.dispatchEvent(new CustomEvent('atlas:toggle-debug-overlay')) },
     { id: 'memories', label: '/memories', hint: '设置当前对话是否读取和生成记忆', run: () => setSheet('memories') },
     { id: 'teach', label: '/teach', hint: '录制桌面操作并生成可复用技能', run: () => setSheet('teach') },
     { id: 'config', label: '/config', hint: '打开配置面板', run: () => setSheet('mainConfig') },
@@ -1997,6 +2014,7 @@ export default function App() {
           {/* With tabs the left group already fills the bar; its empty part still drags the window. */}
           {!showTabs && <span className="flex-1" />}
           <div className="no-drag flex items-center gap-0.5">
+            <Tip label={`告警中心${diagnosticUnread ? ` · ${diagnosticUnread} 条未读` : ''}`}><button type="button" aria-label="打开告警中心" onClick={() => setSheet('diagnostics')} className="relative grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Bell size={15} />{diagnosticUnread > 0 && <span className="absolute right-0.5 top-0.5 min-w-3.5 rounded-full bg-danger px-1 text-center text-[9px] leading-3 text-white">{diagnosticUnread > 99 ? '99+' : diagnosticUnread}</span>}</button></Tip>
             {/* Read-aloud, auto read-aloud and voice call share one menu so the bar stays quiet. */}
             <Menu>
               <Tip label="语音"><MenuTrigger asChild>
@@ -2210,7 +2228,7 @@ export default function App() {
         {sheet === 'recipes' && <RecipeManagerPanel apiBaseUrl={store.apiBaseUrl} models={store.models} providers={store.providers} onLaunch={launchRecipeTemplate} />}
         {sheet === 'extensions' && <div className="grid gap-8"><ExtensionCatalogPanel apiBaseUrl={store.apiBaseUrl} /><ExtensionPackagesPanel apiBaseUrl={store.apiBaseUrl} /></div>}
         {sheet === 'transfer' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">配置导入导出</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">转移允许携带的本地偏好；密钥、地址和路径不会进入导出文件。</p><ConfigTransferPanel apiBaseUrl={store.apiBaseUrl} /></section>}
-        {sheet === 'diagnostics' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">本机诊断</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">只读检查本机 Atlas 状态；报告不会上传原始配置、日志、密钥或路径。</p><DiagnosticsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
+        {sheet === 'diagnostics' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">本机诊断</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">查看配置来源、告警历史、运行时调试和后台任务。密钥值会隐藏。</p><DiagnosticsPanel apiBaseUrl={store.apiBaseUrl} workspacePath={typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : ''} /></section>}
         {sheet === 'security' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">工作区安全</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理当前对话后续运行的权限与 Docker 隔离。工作区规则仍在首次读取时由你确认。</p>{activeConversation ? <WorkspaceSecurityPanel apiBaseUrl={store.apiBaseUrl} conversation={activeConversation} onChange={(patch) => store.setConversationSettings(activeConversation.id, patch)} /> : <div className="rounded-xl bg-sunken p-4 text-[13px] text-fg-3">先打开一个对话，再配置该对话的工作区权限和沙箱。</div>}</section>}
         {sheet === 'memories' && (activeConversation ? <ConversationMemoryPanel apiBaseUrl={store.apiBaseUrl} conversationId={activeConversation.id} /> : <p className="m-0 rounded-xl bg-sunken p-4 text-[13px] text-fg-3">先打开一个对话，再设置该对话的记忆读取与生成。</p>)}
         {sheet === 'teach' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">桌面操作教学</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">演示一次操作，校正步骤、试运行，再保存为本机技能。</p><DesktopTeachPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
@@ -2281,6 +2299,7 @@ export default function App() {
 
     {view !== 'chat' && view !== 'home' && <Suspense fallback={null}><ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} /></Suspense>}
     <Suspense fallback={null}><SettingsProposalCards apiBaseUrl={store.apiBaseUrl} onModel={(model) => void store.selectModel(model)} onToast={notify} currentModel={store.model} modelName={(id) => store.models.find((model) => model.id === id)?.name ?? id} /></Suspense>
+    <DiagnosticsFloatingOverlay apiBaseUrl={store.apiBaseUrl} />
     {toast && <div role="status" className="pop anim-pop fixed bottom-7 left-1/2 z-[80] -translate-x-1/2 rounded-xl px-4 py-2.5 text-[13.5px] text-fg">{toast}</div>}
   </TooltipProvider>;
 }

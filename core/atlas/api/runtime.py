@@ -486,6 +486,14 @@ class RuntimeManager:
 
     async def send_run(self, run: RunState, data: dict[str, Any], fallback_conn_id: str) -> None:
         """Send to the most recently attached connection for this run."""
+        event = data.get("event")
+        if event == "run.failed":
+            try:
+                from atlas.diagnostic_alerts import record_alert
+                detail = data.get("data", {}).get("detail", "任务运行失败。") if isinstance(data.get("data"), dict) else "任务运行失败。"
+                record_alert("model", "模型/任务运行失败", str(detail), target="diagnostics", dedupe_key=f"run-failed:{run.run_id}")
+            except OSError:
+                log.warning("diagnostic alert persistence failed", run_id=run.run_id)
         conn_id = next(
             (
                 conn for conn, active_run_id in reversed(self.conn_runs.items())

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import styles from '../../App.module.css';
+import DiagnosticsHub from './DiagnosticsHub';
 
 type DiagnosticCheck = {
   id: string;
@@ -35,7 +36,7 @@ function saveReport(report: DiagnosticReport) {
 
 // Behavior reference: Claude Code's /doctor and /status diagnostics are local,
 // user-inspectable status surfaces: https://code.claude.com/docs/en/commands
-export default function DiagnosticsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
+export default function DiagnosticsPanel({ apiBaseUrl, workspacePath = '' }: { apiBaseUrl: string; workspacePath?: string }) {
   const [report, setReport] = useState<DiagnosticReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +87,7 @@ export default function DiagnosticsPanel({ apiBaseUrl }: { apiBaseUrl: string })
     return check.detail;
   };
 
-  return <section className={styles.settingsCard} aria-label="诊断报告">
+  return <><section className={styles.settingsCard} aria-label="诊断报告">
     <div className={styles.settingsCardHeading}>
       <h2>本机诊断</h2>
       <button className={styles.settingsActionSecondary} type="button" disabled={loading} onClick={() => void refresh()}>
@@ -115,5 +116,5 @@ export default function DiagnosticsPanel({ apiBaseUrl }: { apiBaseUrl: string })
         <textarea readOnly rows={10} value={JSON.stringify(report, null, 2)} onFocus={(event) => event.currentTarget.select()} />
       </label>
     </div>}
-  </section>;
+  </section><DiagnosticsHub apiBaseUrl={apiBaseUrl} workspacePath={workspacePath} /> </>;
 }
