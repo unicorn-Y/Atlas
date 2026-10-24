@@ -11,43 +11,75 @@ _LISTENERS: list[Any] = []
 _THREAD: threading.Thread | None = None
 _SENSITIVE = re.compile(r"password|passwd|token|secret|credential|card\s*(number|no\.?|security)|cvv|cvc|otp|one[- ]time|verification|验证码|密码|密钥|卡号|安全码", re.I)
 
+def _foreground_hwnd() -> int:
+    import ctypes
+    return int(ctypes.windll.user32.GetForegroundWindow() or 0)
+
+
 def _window() -> dict[str, str]:
+    # pywinauto 0.6.9 的 Desktop 没有 get_active()/get_focus()（调用会抛 AttributeError 被吞成空值），
+    # 前台窗口身份直接用 Win32 API 取。
     try:
-        from pywinauto import Desktop
-        win = Desktop(backend="uia").get_active()
-        proc = ""; pid = ""
-        try:
-            pid = str(win.element_info.process_id)
-            import ctypes
-            from ctypes import wintypes
-            handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, int(pid))
-            if handle:
-                buffer = ctypes.create_unicode_buffer(1024); size = wintypes.DWORD(len(buffer))
-                if ctypes.windll.kernel32.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)):
-                    proc = Path(buffer.value).name
-                ctypes.windll.kernel32.CloseHandle(handle)
-        except Exception: pass
-        return {"title": str(win.window_text() or "")[:300], "process": proc, "pid": pid}
+        import ctypes
+        from ctypes import wintypes
+        hwnd = _foreground_hwnd()
+        if not hwnd:
+            return {"title": "", "process": "", "pid": ""}
+        length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
+        title_buffer = ctypes.create_unicode_buffer(length + 1)
+        ctypes.windll.user32.GetWindowTextW(hwnd, title_buffer, length + 1)
+        pid_value = wintypes.DWORD()
+        ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid_value))
+        proc = ""
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid_value.value)
+        if handle:
+            buffer = ctypes.create_unicode_buffer(1024); size = wintypes.DWORD(len(buffer))
+            if ctypes.windll.kernel32.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)):
+                proc = Path(buffer.value).name
+            ctypes.windll.kernel32.CloseHandle(handle)
+        return {"title": title_buffer.value[:300], "process": proc, "pid": str(pid_value.value or "")}
     except Exception: return {"title": "", "process": "", "pid": ""}
 
 def _password_focused() -> bool:
     try:
-        from pywinauto import Desktop
-        control = Desktop(backend="uia").get_focus()
-        if bool(control.element_info.control_type == "Edit" and getattr(control.element_info, "is_password", False)): return True
-        labels = " ".join([str(control.window_text()), str(control.element_info.name)])
-        return bool(_SENSITIVE.search(labels))
+        from pywinauto.uia_defines import IUIA
+        from pywinauto.uia_element_info import UIAElementInfo
+        element = IUIA().iuia.GetFocusedElement()
+        info = UIAElementInfo(element)
+        try:
+            if bool(element.CurrentIsPassword):
+                return True
+        except Exception:
+            pass
+        return bool(_SENSITIVE.search(" ".join([str(info.name or ""), str(info.automation_id or "")])))
     except Exception: return False
 
+
+_SENSITIVE_WINDOW_CACHE: dict[int, tuple[float, bool]] = {}
+
+
 def _window_has_sensitive_field() -> bool:
+    """Whether the foreground window shows a password/credential field (cached per window for 3s:
+    walking the whole UIA tree on every key press is far too slow)."""
     try:
+        hwnd = _foreground_hwnd()
+        cached = _SENSITIVE_WINDOW_CACHE.get(hwnd)
+        if cached and time.time() - cached[0] < 3:
+            return cached[1]
         from pywinauto import Desktop
-        window=Desktop(backend="uia").get_active()
+        window = Desktop(backend="uia").window(handle=hwnd).wrapper_object()
+        found = False
         for control in window.descendants():
-            info=control.element_info
-            if bool(getattr(info,"is_password",False)) or _SENSITIVE.search(str(info.name or "")):
-                return True
-        return False
+            info = control.element_info
+            try:
+                is_password = bool(info.element.CurrentIsPassword)
+            except Exception:
+                is_password = False
+            if is_password or _SENSITIVE.search(str(info.name or "")):
+                found = True
+                break
+        _SENSITIVE_WINDOW_CACHE[hwnd] = (time.time(), found)
+        return found
     except Exception: return False
 
 def _cursor_anchor() -> str:
@@ -83,6 +115,16 @@ def _anchor_matches(encoded: str, x: int, y: int) -> bool:
 def _append(action: str, **data: Any) -> None:
     with _LOCK:
         if not _SESSION or not _SESSION.get("recording"): return
+        steps = _SESSION["steps"]
+        previous = steps[-1] if steps else None
+        # 连续打字合并成一步"输入 hello atlas"，而不是每个字符一步（空格也并进去）。
+        typed = data.get("text") if action == "text" else (" " if action == "key" and data.get("key") == "Key.space" else None)
+        if (typed is not None and previous is not None and previous.get("action") == "text"
+                and previous.get("window") == data.get("window") and time.time() - float(previous.get("at", 0)) < 3
+                and len(str(previous.get("text", ""))) < 2000):
+            previous["text"] = str(previous.get("text", "")) + typed
+            previous["at"] = time.time()
+            return
         step = {"id": uuid.uuid4().hex[:10], "at": time.time(), "action": action, **data}
         _SESSION["steps"].append(step)
         _SESSION["count"] = len(_SESSION["steps"])
@@ -172,7 +214,8 @@ def correct(steps: list[dict[str, Any]]) -> dict[str, Any]:
 
 def export_skill(name: str, purpose: str = "复用已录制的桌面操作", parameters: list[str] | None = None, generated_content: str | None = None) -> dict[str, Any]:
     from atlas.skills import SKILLS_DIR
-    name = re.sub(r"[^a-z0-9-]+", "-", name.lower()).strip("-")[:60]
+    # 保留中文等 Unicode 字母数字（中文名会被 [^a-z0-9-] 清成空串、报"名称不能为空"），只替换路径不安全字符。
+    name = re.sub(r"[^\w-]+", "-", name.strip().lower(), flags=re.UNICODE).strip("-_")[:60]
     if not name: raise ValueError("技能名称不能为空。")
     state = snapshot()
     if state.get("recording") or not state.get("steps"): raise ValueError("请停止录制并保留至少一个步骤。")
@@ -197,24 +240,98 @@ def export_skill(name: str, purpose: str = "复用已录制的桌面操作", par
     (target/"anchors.json").write_text(json.dumps(state["steps"],ensure_ascii=False,indent=2),encoding="utf-8")
     return {"name":name,"path":str(target/"SKILL.md"),"steps":len(state["steps"])}
 
+def _find_window(expected: dict[str, Any]) -> int:
+    """Top-level visible window whose process name and title match the recorded target."""
+    import ctypes
+    from ctypes import wintypes
+    want_process = str(expected.get("process") or "").casefold()
+    want_title = str(expected.get("title") or "")
+    found: list[int] = []
+    callback_type = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+
+    def callback(hwnd: Any, _lparam: Any) -> bool:
+        if not ctypes.windll.user32.IsWindowVisible(hwnd):
+            return True
+        length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
+        buffer = ctypes.create_unicode_buffer(length + 1)
+        ctypes.windll.user32.GetWindowTextW(hwnd, buffer, length + 1)
+        if want_title and want_title not in buffer.value:
+            return True
+        if want_process:
+            pid = wintypes.DWORD()
+            ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid.value)
+            name = ""
+            if handle:
+                image = ctypes.create_unicode_buffer(1024); size = wintypes.DWORD(len(image))
+                if ctypes.windll.kernel32.QueryFullProcessImageNameW(handle, 0, image, ctypes.byref(size)):
+                    name = Path(image.value).name.casefold()
+                ctypes.windll.kernel32.CloseHandle(handle)
+            if name != want_process:
+                return True
+        found.append(int(hwnd))
+        return False
+
+    ctypes.windll.user32.EnumWindows(callback_type(callback), 0)
+    return found[0] if found else 0
+
+
+def _activate(hwnd: int) -> bool:
+    try:
+        from pywinauto.controls.hwndwrapper import HwndWrapper
+        HwndWrapper(hwnd).set_focus()
+    except Exception:
+        import ctypes
+        ctypes.windll.user32.SetForegroundWindow(hwnd)
+    time.sleep(.3)
+    return _foreground_hwnd() == hwnd
+
+
+def _window_matches(expected: dict[str, Any], actual: dict[str, Any]) -> bool:
+    if expected.get("process") and str(expected["process"]).casefold() != str(actual.get("process", "")).casefold():
+        return False
+    return not expected.get("title") or str(expected["title"]) in str(actual.get("title", ""))
+
+
+def _step_label(index: int, step: dict[str, Any]) -> str:
+    action = step.get("action")
+    if step.get("description"):
+        return f"第 {index} 步：{step['description']}"
+    if action == "click":
+        return f"第 {index} 步：点击 ({step.get('x')}, {step.get('y')})"
+    if action == "text":
+        return f"第 {index} 步：输入“{str(step.get('text', ''))[:30]}”"
+    if action == "key":
+        return f"第 {index} 步：按键 {step.get('key')}"
+    if action == "window":
+        return f"第 {index} 步：切换到窗口“{(step.get('window') or {}).get('title', '')}”"
+    return f"第 {index} 步：{action}"
+
+
 def replay() -> dict[str, Any]:
     state=snapshot(); results=[]
     if state.get("recording"): raise ValueError("先停止录制。")
     from pynput import mouse, keyboard
-    for step in state.get("steps",[]):
-        expected=step.get("window") or {}; actual=_window()
-        if expected.get("process") and expected.get("process").casefold()!=str(actual.get("process","")).casefold():
-            results.append({"id":step.get("id"),"ok":False,"error":"目标进程不匹配"}); continue
-        if step.get("action")=="click":
-            if expected.get("title") and expected.get("title") not in actual.get("title",""):
-                results.append({"id":step["id"],"ok":False,"error":"目标窗口标题不匹配"}); continue
-            try:
+    for index, step in enumerate(state.get("steps",[]), 1):
+        row = {"id": step.get("id"), "index": index, "label": _step_label(index, step)}
+        expected = step.get("window") or {}
+        action = step.get("action")
+        try:
+            if action == "window" or (expected and not _window_matches(expected, _window())):
+                # 先把目标窗口切到前台；找不到就失败，绝不把后续输入打进别的窗口。
+                hwnd = _find_window(expected) if expected else 0
+                if not hwnd or not _activate(hwnd):
+                    results.append({**row, "ok": False, "error": f"没找到或无法激活目标窗口“{expected.get('title', '')}”（{expected.get('process', '')}）"})
+                    if action != "window":
+                        continue
+                    continue
+                if action == "window":
+                    results.append({**row, "ok": True}); continue
+            if action == "click":
                 pointer=mouse.Controller(); pointer.position=(int(step["x"]),int(step["y"])); pointer.click(mouse.Button.left,1)
                 time.sleep(.25); matched=_anchor_matches(str(step.get("anchor") or ""),int(step["x"]),int(step["y"]))
-                results.append({"id":step["id"],"ok":matched,"anchor_checked":bool(step.get("anchor")),"error":"截图锚点不匹配" if step.get("anchor") and not matched else "截图锚点缺失" if not step.get("anchor") else ""})
-            except Exception as exc: results.append({"id":step["id"],"ok":False,"error":str(exc)})
-        elif step.get("action")=="key" and not str(step.get("key","")).startswith("[敏感"):
-            try:
+                results.append({**row,"ok":matched or not step.get("anchor"),"anchor_checked":bool(step.get("anchor")),"error":"截图锚点不匹配（点击处画面和录制时不一样）" if step.get("anchor") and not matched else ""})
+            elif action == "key" and not str(step.get("key","")).startswith("[敏感"):
                 controller=keyboard.Controller(); key=str(step["key"])
                 parts=key.split("+"); key=parts[-1]
                 modifier_names={"ctrl":"ctrl_l","shift":"shift_l","alt":"alt_l","cmd":"cmd_l"}
@@ -223,15 +340,14 @@ def replay() -> dict[str, Any]:
                 for modifier in values: controller.press(modifier)
                 controller.press(value); controller.release(value)
                 for modifier in reversed(values): controller.release(modifier)
-                time.sleep(.15); matched=_anchor_matches(str(step.get("anchor") or ""),*mouse.Controller().position)
-                results.append({"id":step["id"],"ok":matched if step.get("anchor") else True,"anchor_checked":bool(step.get("anchor")),"error":"截图锚点不匹配" if step.get("anchor") and not matched else ""})
-            except Exception as exc: results.append({"id":step["id"],"ok":False,"error":str(exc)})
-        elif step.get("action")=="text":
-            try:
-                mouse_controller=mouse.Controller(); x,y=mouse_controller.position
+                time.sleep(.15)
+                # 键盘步骤以"仍在目标窗口"为准；录制时的光标锚点只描述鼠标位置，不能用来判定按键是否生效。
+                results.append({**row,"ok":_window_matches(expected,_window()) if expected else True,"error":"" if not expected or _window_matches(expected,_window()) else "按键后目标窗口丢失"})
+            elif action == "text":
                 keyboard.Controller().type(str(step.get("text") or "")); time.sleep(.2)
-                matched=_anchor_matches(str(step.get("anchor") or ""),int(x),int(y))
-                results.append({"id":step["id"],"ok":matched if step.get("anchor") else True,"anchor_checked":bool(step.get("anchor")),"error":"截图锚点不匹配" if step.get("anchor") and not matched else ""})
-            except Exception as exc: results.append({"id":step["id"],"ok":False,"error":str(exc)})
-        else: results.append({"id":step.get("id"),"ok":True,"skipped":True,"reason":"不会自动重放敏感输入和窗口切换"})
-    return {"results":results,"ok":all(row["ok"] for row in results)}
+                results.append({**row,"ok":_window_matches(expected,_window()) if expected else True,"error":"" if not expected or _window_matches(expected,_window()) else "输入后目标窗口丢失"})
+            else:
+                results.append({**row,"ok":True,"skipped":True,"reason":"敏感输入不会自动重放，运行技能时由用户提供"})
+        except Exception as exc:
+            results.append({**row,"ok":False,"error":str(exc)})
+    return {"results":results,"ok":all(item["ok"] for item in results)}
