@@ -11,6 +11,8 @@ const elapsed = (start: string, end = new Date().toISOString()) => {
 };
 const str = (value: unknown) => typeof value === 'string' ? value : '';
 
+const RUN_STATUS_LABELS: Record<string, string> = { idle: '空闲', planning: '规划中', running: '运行中', waiting: '等待确认', paused: '已暂停', completed: '已完成', failed: '出错', cancelled: '已停止' };
+
 export default function AgentsOverview({ runs, conversations, apiBaseUrl, onOpen, onStop, roster }: {
   runs: AgentRun[]; conversations: ConversationSummary[]; apiBaseUrl: string;
   onOpen: (conversation: ConversationSummary) => void; onStop: (runId: string) => void; roster: ReactNode;
@@ -40,7 +42,7 @@ export default function AgentsOverview({ runs, conversations, apiBaseUrl, onOpen
         const usage = run ? usageSummary(run.events) : null;
         const children = run ? childRows(run.events) : [];
         return <section key={conversation.id} className="rounded-xl border border-line bg-surface p-3">
-          <div className="flex items-center gap-2"><span className={`size-2 rounded-full ${active ? 'bg-brand' : run?.status === 'failed' ? 'bg-danger' : 'bg-ok'}`} /><button type="button" onClick={() => onOpen(conversation)} className="min-w-0 flex-1 truncate text-left text-[13px] font-medium text-fg hover:underline">{conversation.title || '新对话'}</button><span className="text-[11px] text-fg-3">{run?.status ?? '最近会话'}{run && active ? ` · ${elapsed(run.startedAt)}` : ''}</span>{run && active && <button type="button" onClick={() => onStop(run.id)} className="rounded-md px-2 py-1 text-[11px] text-danger hover:bg-danger/10">中断</button>}</div>
+          <div className="flex items-center gap-2"><span className={`size-2 rounded-full ${active ? 'bg-brand' : run?.status === 'failed' ? 'bg-danger' : 'bg-ok'}`} /><button type="button" onClick={() => onOpen(conversation)} className="min-w-0 flex-1 truncate text-left text-[13px] font-medium text-fg hover:underline">{conversation.title || '新对话'}</button><span className="text-[11px] text-fg-3">{run ? (RUN_STATUS_LABELS[run.status] ?? run.status) : '最近会话'}{run && active ? ` · ${elapsed(run.startedAt)}` : ''}</span>{run && active && <button type="button" onClick={() => onStop(run.id)} className="rounded-md px-2 py-1 text-[11px] text-danger hover:bg-danger/10">中断</button>}</div>
           {usage && <p className="mb-0 mt-1 text-[11px] text-fg-3">Token：输入 {usage.input.toLocaleString()} · 输出 {usage.output.toLocaleString()}</p>}
           {children.length > 0 && <div className="mt-2 grid gap-1 border-t border-line pt-2">{children.map((child) => <div key={`${run!.id}:${child.id}`} className="flex items-center gap-2 rounded-lg bg-sunken px-2.5 py-2 text-[11.5px]">
             <span className="min-w-0 flex-1 truncate text-fg">{child.name}</span><span className="max-w-[35%] truncate text-fg-3">{child.progress}</span><span className="shrink-0 text-fg-3">{child.duration}</span>{child.tokens > 0 && <span className="shrink-0 text-fg-3">{child.tokens.toLocaleString()} tokens</span>}

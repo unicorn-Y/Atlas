@@ -358,7 +358,7 @@ async def workspace_tree(
     try:
         result = await asyncio.to_thread(
             subprocess.run, ["git", "-C", str(base), "status", "--porcelain=v1", "-z", "--untracked-files=all"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5,
         )
         status_records = result.stdout.split("\0")
         index = 0
@@ -579,7 +579,7 @@ async def _git_history(
         log_result = await asyncio.to_thread(
             subprocess.run,
             ["git", "-C", str(root), "log", "-20", "--format=%H%x09%cI", "--", relative],
-            capture_output=True, text=True, timeout=10, check=False,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10, check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return []
@@ -593,7 +593,7 @@ async def _git_history(
         size = await asyncio.to_thread(
             subprocess.run,
             ["git", "-C", str(root), "cat-file", "-s", f"{commit}:{relative}"],
-            capture_output=True, text=True, timeout=10, check=False,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10, check=False,
         )
         versions.append({
             "id": f"git:{commit}", "run_id": None, "conversation_id": None,
@@ -826,11 +826,13 @@ async def workspace_search(
     try:
         listing = await asyncio.to_thread(
             subprocess.run,
-            ["git", "-C", str(base), "ls-files", "--cached", "--others", "--exclude-standard"],
-            capture_output=True, text=True, timeout=15,
+            # Windows 默认按系统代码页解码，中文文件名会让读线程抛错、stdout 变成 None；
+            # 固定 UTF-8 并关掉 quotepath，让 git 原样输出非 ASCII 路径。
+            ["git", "-c", "core.quotepath=off", "-C", str(base), "ls-files", "--cached", "--others", "--exclude-standard"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15,
         )
-        git_listing_ok = listing.returncode == 0
-        paths = listing.stdout.splitlines() if listing.returncode == 0 else []
+        git_listing_ok = listing.returncode == 0 and listing.stdout is not None
+        paths = listing.stdout.splitlines() if git_listing_ok else []
     except (OSError, subprocess.SubprocessError):
         git_listing_ok = False
         paths = []

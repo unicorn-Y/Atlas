@@ -103,6 +103,7 @@ import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
+import { cleanSearchSnippet, rankSearchHits, searchHitRoleLabel } from './services/searchHits';
 
 type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig';
 
@@ -583,13 +584,19 @@ export default function App() {
   useEffect(() => {
     if (!store.connected) return;
     let stale = false;
-    void api<{ checks?: Array<{ id: string; label: string; status: string; detail: string }> }>(store.apiBaseUrl, '/api/diagnostics')
+    let timer: number | undefined;
+    // 启动瞬间组件还在拉起，"正在启动"类告警是暂态：每 5 秒复查，最多 60 秒，稳定后只报真正的问题。
+    const STARTING = /正在启动|仍在启动|starting/i;
+    const check = (attempt: number) => void api<{ checks?: Array<{ id: string; label: string; status: string; detail: string }> }>(store.apiBaseUrl, '/api/diagnostics')
       .then((report) => {
         if (stale) return;
-        const problems = (report.checks ?? []).filter((check) => ['warning', 'error'].includes(check.status));
-        setStartupWarning(problems.length ? problems.slice(0, 3).map((check) => `${check.label}：${check.detail}`).join('；') : '');
+        const problems = (report.checks ?? []).filter((item) => ['warning', 'error'].includes(item.status));
+        const transient = problems.some((item) => STARTING.test(item.detail));
+        if (transient && attempt < 12) { timer = window.setTimeout(() => check(attempt + 1), 5000); return; }
+        setStartupWarning(problems.length ? problems.slice(0, 3).map((item) => `${item.label}：${item.detail}`).join('；') : '');
       }).catch(() => undefined);
-    return () => { stale = true; };
+    check(0);
+    return () => { stale = true; if (timer) window.clearTimeout(timer); };
   }, [store.connected, store.apiBaseUrl]);
   const closeOnboarding = () => { setOnboardingOpen(false); setPref('onboarded', 'true'); };
 
@@ -1236,22 +1243,25 @@ export default function App() {
   const searchMessages = useCallback(async (query: string): Promise<PaletteItem[]> => {
     if (!store.connected) return [];
     // Quote the text so FTS treats it as a phrase instead of query syntax.
-    const hits = await api<Array<{ id: number | string; conversation_id: string; content: string }>>(store.apiBaseUrl, `/api/search?limit=12&q=${encodeURIComponent(`"${query.replace(/"/g, '""')}"`)}`);
-    const messageItems = hits.flatMap((hit) => {
+    const hits = await api<Array<{ id: number | string; conversation_id: string; content: string; snippet?: string; role?: string }>>(store.apiBaseUrl, `/api/search?limit=12&q=${encodeURIComponent(`"${query.replace(/"/g, '""')}"`)}`);
+    const messageItems = rankSearchHits(hits).flatMap((hit) => {
       const conversation = conversationsRef.current.find((item) => item.id === hit.conversation_id);
       if (!conversation) return [];
-      const at = hit.content.toLowerCase().indexOf(query.toLowerCase());
-      const excerpt = hit.content.slice(Math.max(0, at - 16), Math.max(0, at - 16) + 60).replace(/\s+/g, ' ');
-      return [{ id: `m-${hit.id}`, group: '消息内容', label: excerpt || conversation.title, hint: conversation.title, run: () => openConversation(conversation) }];
+      const excerpt = cleanSearchSnippet(hit, query, 60);
+      const who = searchHitRoleLabel(hit.role);
+      return [{ id: `m-${hit.id}`, group: '消息内容', label: excerpt || conversation.title, hint: who ? `${who} · ${conversation.title}` : conversation.title, run: () => openConversation(conversation) }];
     });
-    const root = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : '';
+    // 新会话草稿还没有 conversation 时，用输入框下方显示的那个工作区（草稿/默认工作区）。
+    const root = activeConversation
+      ? (typeof activeConversation.workspace === 'string' ? activeConversation.workspace : '')
+      : store.draftWorkspace ?? defaultWorkspace ?? '';
     const fileItems = root ? (await backend.searchWorkspace(root, query, 40)).filter((hit) => hit.type === 'file').map((hit) => ({
       id: `file-${hit.path}`, group: '工作区文件', label: hit.name, hint: hit.path, icon: <FileIcon />,
       run: () => { go('chat'); store.requestFileOpen(hit.path); showInspectorTab('files'); },
       runAlt: () => { go('chat'); window.dispatchEvent(new CustomEvent('atlas:add-context-file', { detail: { path: hit.path } })); },
     })) : [];
     return [...fileItems, ...messageItems];
-  }, [store.apiBaseUrl, store.connected, activeConversation?.workspace, go, showInspectorTab]);
+  }, [store.apiBaseUrl, store.connected, store.draftWorkspace, defaultWorkspace, activeConversation, go, showInspectorTab]);
   const workspacePath = activeConversation
     ? (typeof activeConversation.workspace === 'string' ? activeConversation.workspace : '')
     : store.draftWorkspace !== null ? store.draftWorkspace : defaultWorkspace ?? '';
@@ -1318,11 +1328,11 @@ export default function App() {
         </MenuItem>)}
       </MenuContent>
     </Menu>}
-    {activeConversation && <RunSetupMenu conversation={activeConversation} workspace={workspacePath}
+    {activeConversation && <Suspense fallback={null}><RunSetupMenu conversation={activeConversation} workspace={workspacePath}
       onChange={(patch) => store.setConversationSettings(activeConversation.id, patch)}
       onPickFolder={async () => window.atlasDesktop?.selectDirectory
         ? window.atlasDesktop.selectDirectory(workspacePath || undefined)
-        : window.prompt('允许访问的目录（完整路径）', '')?.trim() || null} />}
+        : window.prompt('允许访问的目录（完整路径）', '')?.trim() || null} /></Suspense>}
     {store.profiles.length > 0 && <Menu>
       <Tip label={`角色：${profileName}`}><MenuTrigger asChild>
         <button type="button" aria-label={`角色：${profileName}`} className={cn('inline-flex h-7 items-center gap-1.5 rounded-[9px] px-2 text-[12px] hover:bg-hover', store.profileId !== 'default' ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
@@ -1626,9 +1636,9 @@ export default function App() {
         <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
           <div className={cn('flex min-w-0 items-center gap-3', showTabs && 'flex-1')}>
             {showTabs
-              ? <TabStrip tabs={tabs} conversations={store.conversations} activeId={store.activeConversationId} running={runningConversations} onSelect={openConversation} onClose={closeTab} />
+              ? <Suspense fallback={null}><TabStrip tabs={tabs} conversations={store.conversations} activeId={store.activeConversationId} running={runningConversations} onSelect={openConversation} onClose={closeTab} /></Suspense>
               : pageTitle && <span className="truncate text-[13.5px] text-fg-2">{pageTitle}</span>}
-            {view === 'chat' && <ForkTree conversations={store.conversations} activeId={store.activeConversationId} onOpen={openConversation} running={runningConversations} waiting={waitingConversations} />}
+            {view === 'chat' && <Suspense fallback={null}><ForkTree conversations={store.conversations} activeId={store.activeConversationId} onOpen={openConversation} running={runningConversations} waiting={waitingConversations} /></Suspense>}
             {connection}
           </div>
           {/* With tabs the left group already fills the bar; its empty part still drags the window. */}
@@ -1705,8 +1715,7 @@ export default function App() {
               footerNote={<>{retryNote}{errorNote}</>} />
             <div className="px-8 pb-5">
               <div className="mx-auto w-[min(760px,100%)]">
-                {queueStrip}
-                {todoStrip}
+                <Suspense fallback={null}>{queueStrip}{todoStrip}</Suspense>
                 <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={<>{editBanner}{goalHeader}{runHeader}{rewindBanner}</>} />
                 <div className="mt-1 flex min-w-0 items-center gap-1 px-1 text-[11.5px] text-fg-3">
                   <div className="flex min-w-0 shrink items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div>
@@ -1867,13 +1876,13 @@ export default function App() {
       modelName={modelName}
     /></Suspense>}
 
-    {remoteOpen && <RemoteFolderDialog open onClose={() => setRemoteOpen(false)} current={workspacePath}
+    {remoteOpen && <Suspense fallback={null}><RemoteFolderDialog open onClose={() => setRemoteOpen(false)} current={workspacePath}
       onChoose={(workspace) => { void (async () => {
         const conversationId = useAtlasStore.getState().activeConversationId;
         if (conversationId) store.setWorkspace(conversationId, workspace);
         else store.setDraftWorkspace(workspace);
         setToast(`工作目录：${workspace}`);
-      })(); }} />}
+      })(); }} /></Suspense>}
     {store.initOpen && <Suspense fallback={null}><InitDialog onToast={notify} /></Suspense>}
     {onboardingOpen && <Suspense fallback={null}><OnboardingDialog open onClose={closeOnboarding} username={username}
       onUsername={(value) => { setPref('username', value); setUsername(value); }}
@@ -1884,8 +1893,8 @@ export default function App() {
         store.beginConversationDraft(defaultWorkspace || null);
         writeDraft('', text); setInput(text);
       }} /></Suspense>}
-    {recipesOpen && <RecipesDialog open onClose={() => setRecipesOpen(false)} recipes={store.recipes}
-      onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} />}
+    {recipesOpen && <Suspense fallback={null}><RecipesDialog open onClose={() => setRecipesOpen(false)} recipes={store.recipes}
+      onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} /></Suspense>}
     <Dialog open={rawText !== null} onOpenChange={(open) => { if (!open) setRawText(null); }} label={rawTextTitle} className="flex max-h-[82vh] w-[min(900px,92vw)] flex-col bg-panel p-4 shadow-xl">
       <div className="mb-3 flex items-center gap-2">
         <h2 className="m-0 text-[15px] font-semibold text-heading">{rawTextTitle}</h2>

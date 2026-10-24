@@ -17,6 +17,7 @@ import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } fr
 import { Tip } from '../ui/Tooltip';
 import { cn } from '../ui/cn';
 import { nextTheme, themeInfo, type Theme } from './themes';
+import { cleanSearchSnippet, rankSearchHits, searchHitRoleLabel } from '../services/searchHits';
 
 export type View = 'home' | 'chat' | 'groups' | 'agents' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills' | 'devices' | 'evolution' | 'workbench' | 'library';
 
@@ -153,7 +154,7 @@ export default function Sidebar(props: SidebarProps) {
   const [activityConversation, setActivityConversation] = useState<ConversationSummary | null>(null);
   const [filterText, setFilterText] = useState('');
   const [contentMatches, setContentMatches] = useState<string[] | null>(null);
-  const [contentHits, setContentHits] = useState<Array<{ id: string | number; conversation_id: string; content: string; snippet?: string; title?: string }>>([]);
+  const [contentHits, setContentHits] = useState<Array<{ id: string | number; conversation_id: string; content: string; snippet?: string; title?: string; role?: string }>>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [projectPickerQuery, setProjectPickerQuery] = useState('');
@@ -263,8 +264,8 @@ export default function Sidebar(props: SidebarProps) {
     if (!query) { setContentMatches(null); setContentHits([]); return; }
     let stale = false;
     const timer = window.setTimeout(() => {
-      void api<Array<{ id: string | number; conversation_id: string; content: string; snippet?: string; title?: string }>>(backend.apiBaseUrl, `/api/search?limit=100&q=${encodeURIComponent(query)}`)
-        .then((rows) => { if (!stale) { setContentHits(rows); setContentMatches([...new Set(rows.map((row) => row.conversation_id))]); } })
+      void api<Array<{ id: string | number; conversation_id: string; content: string; snippet?: string; title?: string; role?: string }>>(backend.apiBaseUrl, `/api/search?limit=100&q=${encodeURIComponent(query)}`)
+        .then((rows) => { if (!stale) { setContentHits(rankSearchHits(rows)); setContentMatches([...new Set(rows.map((row) => row.conversation_id))]); } })
         .catch(() => { if (!stale) { setContentMatches([]); setContentHits([]); } });
     }, 180);
     return () => { stale = true; window.clearTimeout(timer); };
@@ -857,9 +858,10 @@ export default function Sidebar(props: SidebarProps) {
       {query && contentHits.length > 0 && <div className="mb-2 max-h-36 overflow-auto rounded-lg bg-sunken p-1" aria-label="正文搜索结果">
         {contentHits.slice(0, 5).map((hit) => {
           const conversation = props.conversations.find((item) => item.id === hit.conversation_id);
-          const snippet = (hit.snippet || hit.content).replace(/\s+/g, ' ').slice(0, 90);
+          const snippet = cleanSearchSnippet(hit, query, 90);
+          const who = searchHitRoleLabel(hit.role);
           return <button key={String(hit.id)} type="button" onClick={() => conversation && props.onJumpMessage?.(hit.conversation_id, String(hit.id))} className="block w-full rounded-md px-2 py-1.5 text-left hover:bg-hover">
-            <span className="block truncate text-[11px] text-fg-3">{conversation?.title ?? hit.title ?? '对话'}</span><span className="block truncate text-[11.5px] text-fg-2">{snippet}</span>
+            <span className="block truncate text-[11px] text-fg-3">{who ? `${who} · ` : ''}{conversation?.title ?? hit.title ?? '对话'}</span><span className="block truncate text-[11.5px] text-fg-2">{snippet}</span>
           </button>;
         })}
       </div>}
