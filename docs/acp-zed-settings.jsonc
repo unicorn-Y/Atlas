@@ -1,0 +1,10 @@
+// Merge this entry into Zed's ~/.config/zed/settings.json.
+{
+  "agent_servers": {
+    "Atlas": {
+      "command": "atlas",
+      "args": ["acp", "--workspace", "${workspace_folder}"],
+      "env": {}
+    }
+  }
+}

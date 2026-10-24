@@ -237,6 +237,22 @@ def app_server_command(workspace: Path) -> None:
         raise click.ClickException(str(exc)) from exc
 
 
+@main.command("acp")
+@click.option("--workspace", type=click.Path(file_okay=False, path_type=Path), default=".",
+              show_default=True, help="Default workspace for ACP sessions")
+def acp_command(workspace: Path) -> None:
+    """Run Atlas as an Agent Client Protocol (ACP) stdio agent."""
+    from atlas.tools.app_server import serve_stdio
+
+    root = workspace.expanduser().resolve()
+    if not root.is_dir():
+        raise click.BadParameter(f"workspace is not a directory: {root}", param_hint="--workspace")
+    try:
+        asyncio.run(serve_stdio(workspace=str(root)))
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
 def _hub_control_file() -> Any:
     from pathlib import Path
 
