@@ -82,6 +82,7 @@ const SettingsProposalCards = lazy(() => import('./components/SettingsProposalCa
 const CustomCommandsPanel = lazy(() => import('./components/settings/CustomCommandsPanel'));
 const RunLimitsPanel = lazy(() => import('./components/settings/RunLimitsPanel'));
 const PlatformSettingsPanel = lazy(() => import('./components/settings/PlatformSettingsPanel'));
+const BackgroundTasksPanel = lazy(() => import('./components/settings/BackgroundTasksPanel'));
 const SettingsIntegrationsPanel = lazy(() => import('./components/settings/SettingsIntegrationsPanel'));
 const NetworkSettingsPanel = lazy(() => import('./components/settings/NetworkSettingsPanel'));
 const MainConfigPanel = lazy(() => import('./components/settings/MainConfigPanel'));
@@ -1313,6 +1314,20 @@ export default function App() {
         setToast(`已导出并复制文件路径：${path}`);
       }).catch((error) => setToast(`导出失败：${error instanceof Error ? error.message : String(error)}`));
     } },
+    { id: 'busy', label: '/busy', hint: '忙碌时段内暂缓桌面通知与手机推送；/busy off 解除', takesArgument: true, run: (value: string) => {
+      const text = value.trim().toLowerCase();
+      if (text === 'off') {
+        void api<{ busy: boolean }>(store.apiBaseUrl, '/api/busy', { method: 'POST', json: { seconds: null } })
+          .then(() => setToast('已解除忙碌状态')).catch((error) => setToast(String(error)));
+        return;
+      }
+      const match = /^(\d+)(m|min|h|hr)?$/.exec(text || '60m');
+      if (!match) { setToast('时长格式：/busy 30m、/busy 2h 或 /busy off'); return; }
+      const seconds = Number(match[1]) * (match[2]?.startsWith('h') ? 3600 : 60);
+      void api<{ until?: number }>(store.apiBaseUrl, '/api/busy', { method: 'POST', json: { seconds } })
+        .then(({ until }) => setToast(`忙碌状态已开启，至 ${until ? new Date(until * 1000).toLocaleTimeString() : '稍后'}`))
+        .catch((error) => setToast(String(error)));
+    } },
     { id: 'pr', label: '/pr', hint: '关联 PR；附加 --auto 开启后台 CI 修复', takesArgument: true, run: (value: string) => {
       if (!activeConversation) { setToast('先打开要关联 PR 的会话'); return; }
       const pr = value.replace(/\s+--auto\b/i, '').trim();
@@ -2163,7 +2178,7 @@ export default function App() {
         {sheet === 'limits' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">运行限制</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">控制新运行的主循环轮数上限，并查看当前可用的 token/费用预算边界。</p><RunLimitsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'storage' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">存储与保留</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">查看 Atlas 数据占用，并配置旧会话的保留规则。</p><StorageRetentionPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'platform' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">平台集成</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">配置桌面窗口、系统级快捷键，并在本机 VS Code 或 JetBrains IDE 打开工作区。</p><PlatformSettingsPanel workspacePath={activeConversation?.workspace} /></section>}
-        {sheet === 'integrations' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">任务与集成入口</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">使用已接通的 GitHub PR、Linear、Slack 和本机自动化功能；云端任务服务未提供。</p><div className="grid gap-8"><SettingsIntegrationsPanel onOpenCode={() => { setSheet(null); go('code'); }} onOpenChannels={() => setSheet('channels')} onOpenAutomation={() => { setSheet(null); go('auto'); }} /><LinearIntegrationPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
+        {sheet === 'integrations' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">任务与集成入口</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">使用已接通的 GitHub PR、Linear、Slack 和本机自动化功能；云端任务服务未提供。</p><div className="grid gap-8"><SettingsIntegrationsPanel onOpenCode={() => { setSheet(null); go('code'); }} onOpenChannels={() => setSheet('channels')} onOpenAutomation={() => { setSheet(null); go('auto'); }} /><LinearIntegrationPanel apiBaseUrl={store.apiBaseUrl} /><Suspense fallback={<div className="text-[12px] text-fg-3">正在加载后台任务设置…</div>}><BackgroundTasksPanel apiBaseUrl={store.apiBaseUrl} /></Suspense></div></section>}
       </div>
     </Dialog>
     </Suspense>

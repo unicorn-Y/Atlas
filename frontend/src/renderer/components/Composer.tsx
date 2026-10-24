@@ -166,12 +166,15 @@ export default function Composer(props: ComposerProps) {
   const hero = props.variant === 'hero';
   const [expert] = useExpertMode(backend.apiBaseUrl);
   const [ideConnected, setIdeConnected] = useState(false);
+  const [busyActive, setBusyActive] = useState(false);
   const [prStatus, setPrStatus] = useState<{ number?: number; title?: string; state?: string; failed?: number; conflict?: boolean; reviewDecision?: string; autoFix?: boolean } | null>(null);
   useEffect(() => {
     let live = true;
     const refresh = () => void api<{ connected: boolean }>(backend.apiBaseUrl, '/api/ide/status')
       .then((value) => { if (live) setIdeConnected(value.connected); }).catch(() => { if (live) setIdeConnected(false); });
-    refresh(); const timer = window.setInterval(refresh, 5000);
+    const refreshBusy = () => void api<{ busy: boolean }>(backend.apiBaseUrl, '/api/busy')
+      .then((value) => { if (live) setBusyActive(value.busy); }).catch(() => { if (live) setBusyActive(false); });
+    refresh(); refreshBusy(); const timer = window.setInterval(() => { refresh(); refreshBusy(); }, 5000);
     return () => { live = false; window.clearInterval(timer); };
   }, []);
   useEffect(() => {
@@ -701,6 +704,7 @@ export default function Composer(props: ComposerProps) {
           .then(() => setPrStatus((current) => current ? { ...current, autoFix: !current.autoFix } : current)).catch(() => undefined)}>
         PR #{prStatus.number ?? '?'} · {prStatus.conflict ? '有冲突' : prStatus.failed ? `${prStatus.failed} 项 CI 失败` : prStatus.state ?? '已关联'} · 自动修复{prStatus.autoFix ? '开' : '关'}
       </button>}
+      {busyActive && <span className="ml-1.5 shrink-0 text-[12px] text-fg-3" title="通知会延后汇总">忙碌中</span>}
       {hint && <span role={screenReaderMode ? undefined : 'status'} aria-live={screenReaderMode ? undefined : 'polite'}
         aria-atomic={screenReaderMode ? undefined : 'true'} className={cn('ml-1.5 min-w-0 truncate text-[12.5px]', props.listening ? 'text-brand' : 'text-fg-3')}>{hint}</span>}
       <span className="flex-1" />
