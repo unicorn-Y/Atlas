@@ -32,6 +32,9 @@ class _LazyConsole:
         return getattr(self._console, name)
 
 
+_CLI_ATTACH_MAX_BYTES = 5 * 1024 * 1024
+
+
 console = _LazyConsole()
 
 
@@ -1073,7 +1076,7 @@ def _validate_run_arguments(workspace: Path, max_turns: int | None, timeout: flo
 @click.option("--print", "-p", "prompt_text", default=None,
               help="本轮任务描述；缺省时从 stdin 读取")
 @click.option("--attach", "attachments", multiple=True, type=click.Path(path_type=Path, exists=True, dir_okay=False),
-              help="附加文件到首条消息（可重复指定；每个文件最多 10 MB）")
+              help="附加文件到首条消息（可重复指定；总大小最多 5 MiB）")
 @click.option("--workspace", default=None, help="工作目录（默认当前目录，须为绝对路径）")
 @click.option("--model", "-m", default=None, help="模型 ID（默认用配置的默认模型）")
 @click.option("--permission-mode", "permission_mode", default=None,
@@ -1107,12 +1110,14 @@ def run(prompt_text: str | None, attachments: tuple[Path, ...], workspace: str |
         sys.exit(EXIT_USAGE)
 
     attached_files: list[dict[str, str]] = []
+    attached_bytes = 0
     try:
         for path in attachments:
             resolved = path.expanduser().resolve(strict=True)
             raw = resolved.read_bytes()
-            if len(raw) > 10 * 1024 * 1024:
-                raise ValueError(f"附件超过 10 MB：{resolved.name}")
+            attached_bytes += len(raw)
+            if attached_bytes > _CLI_ATTACH_MAX_BYTES:
+                raise ValueError("附件合计超过 5 MiB（Base64 后需要通过运行协议传输）")
             attached_files.append({
                 "name": resolved.name,
                 "mime": mimetypes.guess_type(resolved.name)[0] or "application/octet-stream",
