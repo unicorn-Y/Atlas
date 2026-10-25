@@ -1047,6 +1047,13 @@ ipcMain.handle('shell:open-path', async (event, target?: unknown) => {
   const error = await shell.openPath(target);
   return error || 'opened';
 });
+ipcMain.handle('shell:open-external', async (event, target?: unknown) => {
+  if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame || typeof target !== 'string') return false;
+  if (!['chrome://extensions', 'edge://extensions', 'ms-settings:network-proxy'].includes(target)
+      && !/^https:\/\/[a-z0-9.-]+(?:\/[^\s]*)?$/i.test(target)) return false;
+  await shell.openExternal(target);
+  return true;
+});
 
 ipcMain.handle('editor:open-message', async (event, rawText?: unknown) => {
   if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame) {

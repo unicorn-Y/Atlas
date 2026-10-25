@@ -22,6 +22,7 @@ const desktopApi: AtlasDesktopApi = {
   getSkillCenterToken: () => ipcRenderer.invoke('skill-center:token') as Promise<string | undefined>,
   selectDirectory: (defaultPath) => ipcRenderer.invoke('dialog:open-directory', defaultPath) as Promise<string | null>,
   openPath: (target) => ipcRenderer.invoke('shell:open-path', target) as Promise<string>,
+  openExternal: (target) => ipcRenderer.invoke('shell:open-external', target) as Promise<boolean>,
   openMessageEditor: (text) => ipcRenderer.invoke('editor:open-message', text) as Promise<string | null>,
   getPlatformSettings: () => ipcRenderer.invoke('platform:get-settings'),
   setAlwaysOnTop: (enabled) => ipcRenderer.invoke('platform:set-always-on-top', enabled),

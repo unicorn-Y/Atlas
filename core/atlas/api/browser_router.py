@@ -108,7 +108,17 @@ class BrowserSettingsRequest(BaseModel):
 async def get_settings() -> dict[str, Any]:
     from atlas.tools.x2.browser import get_browser_settings
     from atlas.engine_core.tools.browser_extension_bridge import connection_info
-    return {**get_browser_settings(), "extension": connection_info()}
+    from pathlib import Path
+    extension = connection_info()
+    manifest_path = Path(extension["extension_path"]) / "manifest.json"
+    try:
+        import json
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        extension.update({"installed": True, "version": str(manifest.get("version", "")),
+                         "manifest_version": manifest.get("manifest_version")})
+    except (OSError, ValueError):
+        extension.update({"installed": False, "version": "", "manifest_version": None})
+    return {**get_browser_settings(), "extension": extension}
 
 
 @router.post("/settings", dependencies=[Depends(_require_trusted_origin)])

@@ -105,6 +105,8 @@ export default function BrowserSettingsSection({ apiBaseUrl, initialSettings, cl
   const [saved, setSaved] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [extension, setExtension] = useState<BrowserSettings['extension']>();
+  const [extensionBrowser, setExtensionBrowser] = useState<'chrome' | 'edge'>('chrome');
+  const [extensionCheck, setExtensionCheck] = useState('');
   const [connectionCheck, setConnectionCheck] = useState('');
   useEffect(() => {
     let stale = false;
@@ -146,7 +148,14 @@ export default function BrowserSettingsSection({ apiBaseUrl, initialSettings, cl
       .then((result) => setConnectionCheck(result.connected ? '已发现正在运行的 Chrome。保存选择后浏览器工具会连接该会话。' : (result.error || '未发现调试连接。')))
       .catch((exc) => setConnectionCheck(exc instanceof Error ? exc.message : String(exc)));
   };
-  const refreshExtension = () => getBrowserSettings(apiBaseUrl).then((body) => setExtension(body.extension)).catch((exc) => setError(exc instanceof Error ? exc.message : String(exc)));
+  const refreshExtension = () => getBrowserSettings(apiBaseUrl).then((body) => {
+    setExtension(body.extension);
+    setExtensionCheck(body.extension?.installed
+      ? `扩展包可用，版本 ${body.extension.version || '未知'}。如已安装旧版本，请在扩展管理页点击“重新加载”。`
+      : '没有找到完整扩展包；请重新构建/安装 Atlas 浏览器扩展。');
+  }).catch((exc) => { setExtensionCheck(exc instanceof Error ? exc.message : String(exc)); });
+  const disconnectExtension = () => api(apiBaseUrl, '/api/browser/extension/disconnect', { method: 'POST', json: {} })
+    .then(() => refreshExtension()).catch((exc) => setExtensionCheck(exc instanceof Error ? exc.message : String(exc)));
   return <section aria-label="浏览器" className={className}>
     <div className="flex items-center gap-2">
       <h3 className="m-0 text-[15px] font-semibold text-heading">浏览器</h3>
@@ -185,10 +194,13 @@ export default function BrowserSettingsSection({ apiBaseUrl, initialSettings, cl
       <label className="text-[12.5px] text-fg-2">同步间隔（分钟）<input aria-label="配置同步间隔" type="number" min={1} max={1440} value={settings.profile_sync_interval_minutes ?? 30} onChange={(event) => patch({ profile_sync_interval_minutes: Number(event.target.value) })} className="mt-1 h-8 w-full rounded-lg bg-sunken px-2 text-fg" /></label>
     </div>}
     {mode === 'extension' && <div className="mt-2 rounded-xl card-surface p-3 text-[12.5px] text-fg-2">
-      <p className="m-0 mb-2">1. 打开 Chrome 扩展管理页并启用“开发者模式”。<br />2. 选择“加载已解压的扩展程序”，打开下方目录。<br />3. 点击 Atlas 扩展，输入配对码，然后选择标签页并接管。</p>
+      <label className="mb-2 block">目标浏览器<select aria-label="扩展目标浏览器" value={extensionBrowser} onChange={(event) => setExtensionBrowser(event.target.value as 'chrome' | 'edge')} className="ml-2 h-8 rounded-lg bg-sunken px-2 text-fg"><option value="chrome">Chrome</option><option value="edge">Microsoft Edge</option></select></label>
+      <ol className="m-0 mb-2 list-decimal pl-5"><li>打开 {extensionBrowser === 'chrome' ? 'Chrome' : 'Edge'} 扩展管理页并启用“开发人员模式”。</li><li>选择“加载已解压的扩展程序”，选中下方 Atlas 扩展目录。</li><li>打开 Atlas 扩展，输入本机配对码，选择要接管的标签页。</li></ol>
       <p className="m-0 mb-2">扩展目录：<code className="break-all">{extension?.extension_path ?? 'browser-extension'}</code></p>
-      <p className="m-0 mb-2">本机配对码：<code className="text-[15px] font-semibold">{extension?.pairing_code ?? '加载中…'}</code>　{extension?.connected ? <span className="text-ok">已连接</span> : <span className="text-fg-3">未连接</span>}</p>
-      <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => void navigator.clipboard.writeText(extension?.extension_path ?? 'browser-extension')}>复制扩展目录</Button><Button variant="secondary" onClick={() => extension?.extension_path && void window.atlasDesktop?.openPath(extension.extension_path)}>打开扩展目录</Button><Button variant="secondary" onClick={refreshExtension}>刷新配对状态</Button></div>
+      <p className="m-0 mb-2">配对：<code className="text-[15px] font-semibold">{extension?.pairing_code ?? '加载中…'}</code>　{extension?.connected ? <span className="text-ok">已连接</span> : <span className="text-fg-3">未连接，可刷新或重新配对</span>}</p>
+      <p className="m-0 mb-2">本地扩展包：{extension?.installed ? `已找到 · v${extension.version || '未知'}` : '未找到'}。该扩展通过本机 WebSocket 配对，无需 Native Messaging Host。</p>
+      <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => void navigator.clipboard.writeText(extension?.extension_path ?? '')}>复制扩展目录</Button><Button variant="secondary" onClick={() => extension?.extension_path && void window.atlasDesktop?.openPath(extension.extension_path)}>打开扩展目录</Button><Button variant="secondary" onClick={() => void window.atlasDesktop?.openExternal?.(`${extensionBrowser}://extensions`)}>打开扩展管理页</Button><Button variant="secondary" onClick={refreshExtension}>检查安装/更新</Button>{extension?.connected && <Button variant="secondary" onClick={disconnectExtension}>断开并重新配对</Button>}</div>
+      {extensionCheck && <p role="status" className="m-0 mt-2 text-[12px] text-fg-3">{extensionCheck}</p>}
     </div>}
     <label className="mt-2 block text-[13px] text-fg-2">代理（可选）
       <input value={settings.proxy ?? ''} onChange={(event) => patch({ proxy: event.target.value })} placeholder="例如 http://127.0.0.1:7890" aria-label="代理"

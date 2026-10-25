@@ -84,7 +84,7 @@ export interface BrowserSettings {
   profile?: string;
   profile_sync_interval_minutes?: number;
   incognito?: boolean;
-  extension?: { url: string; pairing_code: string; extension_path: string; connected: boolean; controller?: string | null };
+  extension?: { url: string; pairing_code: string; extension_path: string; connected: boolean; controller?: string | null; installed?: boolean; version?: string; manifest_version?: number | null };
 }
 
 /** POST /api/browser/recordings 的返回：一次录制会话。 */

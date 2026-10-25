@@ -65,6 +65,8 @@ export interface AtlasDesktopApi {
   selectDirectory(defaultPath?: string): Promise<string | null>;
   /** Open a file with its default app; programs and scripts are only revealed in Explorer, never run. */
   openPath(path: string): Promise<'opened' | 'revealed' | string>;
+  /** Open allow-listed browser/settings URLs outside the embedded renderer. */
+  openExternal?(url: string): Promise<boolean>;
   openMessageEditor?(text: string): Promise<string | null>;
   onMaximizeChange(callback: (maximized: boolean) => void): () => void;
   /** Follow the UI theme with the window/taskbar icon ('light' | 'aurora' | 'dark'). */
