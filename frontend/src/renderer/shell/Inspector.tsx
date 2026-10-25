@@ -209,7 +209,8 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
   const context = typeof latestUsage?.context_tokens === 'number' && typeof latestUsage?.context_limit === 'number' && latestUsage.context_limit > 0
     ? `${Math.round(latestUsage.context_tokens / latestUsage.context_limit * 100)}%（${latestUsage.context_tokens} / ${latestUsage.context_limit}）` : '—';
   const breakdown = latestUsage?.context_breakdown as { categories?: Array<{ id: string; label: string; tokens: number }>; context_max?: number; context_used?: number; byte_attribution?: Record<string, unknown> } | undefined;
-  const sourceManifest = [...(run?.events ?? [])].reverse().find((event) => event.type === 'run.context.sources')?.data?.sources;
+  const sourceManifest = [...(run?.events ?? [])].filter((event) => event.type === 'run.context.sources').flatMap((event) =>
+    Array.isArray(event.data.sources) ? event.data.sources : []);
   const toolReadSources = [...(run?.events ?? [])].flatMap((event) => {
     if (event.type !== 'tool.started' && event.type !== 'tool.completed') return [];
     const data = event.data as Record<string, unknown>;
@@ -219,7 +220,7 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
     const path = args?.path ?? args?.file_path ?? args?.file ?? args?.directory;
     return typeof path === 'string' && path.trim() ? [{ kind: 'tool_read', path, loaded: true }] : [];
   });
-  const contextSources = [...(Array.isArray(sourceManifest) ? sourceManifest : []), ...toolReadSources];
+  const contextSources = [...sourceManifest, ...toolReadSources];
   const tokenLimit = typeof latestUsage?.context_limit === 'number' ? latestUsage.context_limit : 0;
   const tokenUsed = typeof latestUsage?.context_tokens === 'number' ? latestUsage.context_tokens : 0;
   const contextPercent = tokenLimit ? Math.min(100, Math.round(tokenUsed / tokenLimit * 100)) : 0;

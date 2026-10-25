@@ -135,11 +135,19 @@ class MemoryLibrary:
         self.ready()
         self.index.sync()
         resident = self._resident_block()
-        relevant, refs = self._relevant_block(message or "")
+        relevant, refs, source_paths = self._relevant_block(message or "")
+        resident_sources = []
+        for rel, title in ((ME, "关于你"), (NOW, "现状 / 进行中"), (SELF, "Atlas 自己")):
+            if f"## {title}\n" in resident:
+                resident_sources.append(rel)
+        if "## 最近在聊 / 在做\n" in resident:
+            resident_sources.append("recent-episodes (last 7 days)")
         return {
             "resident": resident,
             "relevant": relevant,
             "refs": refs,
+            "source_paths": source_paths,
+            "resident_sources": resident_sources,
             "system_block": f"{INSTRUCTION}\n\n{resident}" if resident else "",
         }
 
@@ -205,9 +213,10 @@ class MemoryLibrary:
         entries.sort(key=lambda e: e.at, reverse=True)
         return entries[:limit]
 
-    def _relevant_block(self, message: str) -> tuple[str, list[str]]:
+    def _relevant_block(self, message: str) -> tuple[str, list[str], list[str]]:
         parts: list[str] = []
         refs: list[str] = []
+        source_paths: list[str] = []
         now = _now(self.config)
         lowered = message.casefold()
         cue_pages = []
@@ -221,6 +230,7 @@ class MemoryLibrary:
             if lines:
                 alias = f"（也叫 {'、'.join(page.aliases)}）" if page.aliases else ""
                 parts.append(f"## {page.title}{alias}\n" + "\n".join(lines))
+                source_paths.append(rel)
                 refs.extend(e.ref for e in current[-MAX_CUE_LINES:] if e.ref)
         skip = set(RESIDENT_PAGES) | set(cue_pages)
         hits = [h for h in self.index.search(message, limit=MAX_SEARCH_FACTS * 2,
@@ -229,6 +239,7 @@ class MemoryLibrary:
         if hits:
             parts.append("## 可能相关\n" + "\n".join(
                 f"- {h['text']}{_label(h['src'], h['at'])}" for h in hits))
+            source_paths.extend(str(hit.get("path") or "") for hit in hits if hit.get("path"))
             refs.extend(h.get("ref") for h in hits if h.get("ref"))
         resident_ids = {e.id for e in self._recent_episodes(now, 7, 6)}
         detailed = bool(_RECALL_INTENT.search(message))
@@ -254,6 +265,7 @@ class MemoryLibrary:
                 if entry and entry.ref:
                     refs.append(entry.ref)
             parts.append("## 以前做过的相关的事\n" + "\n".join(lines))
+            source_paths.extend(str(hit.get("path") or "") for hit in episode_hits if hit.get("path"))
         if _RECALL_INTENT.search(message):
             diary = [h for h in self.index.search(message, limit=3, kinds=("diary",), now=now)
                      if h["score"] > 0.05]
@@ -261,14 +273,15 @@ class MemoryLibrary:
                 parts.append("## 以前的对话记录（原文节选）\n" + "\n".join(
                     f"- [{h['at'][:16].replace('T', ' ')}] {' '.join(h['text'].split())[:240]}" for h in diary))
                 refs.extend(h.get("ref") for h in diary if h.get("ref"))
+                source_paths.extend(str(hit.get("path") or "") for hit in diary if hit.get("path"))
         if not parts:
-            return "", []
+            return "", [], []
         detailed = bool(_RECALL_INTENT.search(message))
         refs = list(dict.fromkeys(refs))
         if detailed and refs:
             parts.append('需要细节可用 memory_search(open="<ref>") 打开原对话：' + "、".join(refs[:3]))
         block = "Atlas 记忆库里和这句话有关的记录：\n\n" + "\n\n".join(parts)
-        return block[:3000 if detailed else 1200], refs[:3] if detailed else refs
+        return block[:3000 if detailed else 1200], refs[:3] if detailed else refs, list(dict.fromkeys(source_paths))
 
     # ---------- search tool ----------
     def search(self, query: str, limit: int = 8, include_history: bool = False,

@@ -523,7 +523,9 @@ async def _merge_library_recall(context: Any, message: str) -> Any:
     prior = str(context.get("turn_recall") or "") if isinstance(context, dict) else ""
     combined = "\n\n".join(part for part in (recall["relevant"], prior) if part)
     return {**context, "system_prompt_prefix": recall["system_block"],
-            "turn_recall": combined, "library_refs": recall["refs"]}
+            "turn_recall": combined, "library_refs": recall["refs"],
+            "memory_source_paths": recall.get("source_paths", []),
+            "memory_resident_sources": recall.get("resident_sources", [])}
 
 
 def _schedule_library_write(agent: Any, state: _RunState, full_response: Any) -> None:
@@ -860,6 +862,29 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
             initial_messages[-1] = HumanMessage(
                 content=agent._multimodal_content(state.message, request.image_attachments)
             )
+    if state.runtime is not None and getattr(state.runtime, "event_queue", None) is not None:
+        sources = [
+            *[{"kind": "resident_memory", "path": str(path), "loaded": True}
+              for path in (state.context.get("memory_resident_sources") or [])],
+            *[{"kind": "memory_reference", "path": str(path), "loaded": True}
+              for path in (state.context.get("memory_source_paths") or [])],
+            *[{"kind": "memory_reference", "path": f"memory ref: {ref}", "loaded": True}
+              for ref in (state.context.get("library_refs") or [])],
+            *[{"kind": "project_memory", "path": str(row.get("id") or row.get("path") or "project memory"), "loaded": True}
+              for row in (state.context.get("project_memories") or []) if isinstance(row, dict)],
+            *[{"kind": "workspace_rule", "path": str(rule.get("path") or ""), "bytes": rule.get("bytes"), "loaded": True}
+              for rule in workspace_rules if isinstance(rule, dict)],
+            *[{"kind": "skill", "name": str(skill.get("name") or ""), "loaded": True}
+              for skill in (request.active_skill_instructions or []) if isinstance(skill, dict) and skill.get("name")],
+            *[{"kind": "system_prompt", "path": label, "loaded": True} for label in (
+                "Atlas base instructions", "User-local date and time", "Plan/tool-result guidance and active policies",
+            )],
+        ]
+        if state.context.get("use_memories") is False:
+            sources.append({"kind": "memory", "path": "Memory recall disabled by conversation settings", "loaded": False})
+        elif not state.context.get("memory_source_paths") and not state.context.get("memory_resident_sources"):
+            sources.append({"kind": "memory", "path": "Memory recall enabled; no matching memory entries injected", "loaded": False})
+        await state.runtime.event_queue.put({"type": "context_sources", "sources": sources})
     return initial_messages
 
 

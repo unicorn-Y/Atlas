@@ -3154,6 +3154,11 @@ async def _execute_run(
                 if isinstance(usage, dict):
                     await record_usage(usage)
 
+            elif etype == "context_sources":
+                await emit("run.context.sources", {
+                    "sources": event.get("sources", []),
+                })
+
             elif etype == "context.window.switched":
                 await emit("context.window.switched", event.get("data", {}))
 

@@ -1548,11 +1548,12 @@ export default function App() {
       const breakdown = usage?.context_breakdown as { byte_attribution?: Record<string, unknown> } | undefined;
       const bytes = breakdown?.byte_attribution;
       if (!bytes) { setToast('当前运行没有提供提示词归因数据；请先完成一次模型调用后再查看'); return; }
-      const source = (activeRun?.events ?? []).find((event) => event.type === 'run.context.sources')?.data?.sources;
-      const lines = Array.isArray(source) ? source.map((item) => {
+      const source = (activeRun?.events ?? []).filter((event) => event.type === 'run.context.sources').flatMap((event) =>
+        Array.isArray(event.data.sources) ? event.data.sources : []);
+      const lines = source.map((item) => {
         const row = item as Record<string, unknown>;
         return `- ${String(row.kind || 'source')}: ${String(row.path || row.name || row.id || '')}${typeof row.bytes === 'number' ? ` (${row.bytes} bytes)` : ''}`;
-      }) : [];
+      });
       setRawTextTitle('提示词大小与来源');
       setRawText([
         `系统提示：${Number(bytes.system_prompt ?? 0).toLocaleString()} bytes · 约 ${Number(bytes.system_prompt_tokens_estimated ?? 0).toLocaleString()} tokens`,
