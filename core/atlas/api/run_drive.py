@@ -1464,6 +1464,8 @@ async def _handle_run_start(
             run_project_id = str(project_row["project_id"]) if project_row else None
         except Exception:
             log.exception("run.project_scope_lookup_failed", conversation_id=conv_id)
+    if run_project_id and projects is not None:
+        await projects.attach_conversation(run_project_id, str(conv_id))
     # C6:/review 拦截——命中审查指令时把正文改写为派发提示词，并固定审查配置。
     # 放在正文（含附件）就绪之后、档案合并之前，让后续统一的 run 组装吃到强制值。
     try:
@@ -1569,7 +1571,10 @@ async def _handle_run_start(
     run.dynamic_plan_mode = effective_mode == "plan"
     run.reasoning_effort = reasoning_effort
     run.permission_mode = permission_mode
-    run.allowed_paths = [str(Path(item).expanduser().resolve()) for item in allowed_paths or []]
+    run.allowed_paths = [
+        str(item) if str(item).startswith("ssh://") else str(Path(item).expanduser().resolve())
+        for item in allowed_paths or []
+    ]
     run.read_only = permission_mode == "read_only" or profile_id in {"architect", "reviewer"}
     run.active_skills = list(effective_skills) if isinstance(effective_skills, list) else []
     run.profile_id = str(profile_id) if profile_id else None
@@ -1693,13 +1698,34 @@ async def _handle_run_start(
     project = None
     if projects is not None:
         try:
-            project = await projects.find_by_conversation(conv_id)
+            project = await projects.get(run_project_id) if run_project_id else await projects.find_by_conversation(conv_id)
             source_data = await projects.get_sources(project.project_id) if project is not None else None
         except Exception:
             log.exception("run.project_context_unavailable")
             project, source_data = None, None
         if project is not None:
             run.project_id = project.project_id
+            project_roots = [str(item) for item in getattr(project, "workspace_paths", []) if str(item)]
+            run.extra_roots = list(dict.fromkeys([*run.extra_roots, *project_roots]))
+            # A project run is scoped to its declared working directories. The
+            # primary workspace remains available, alongside any explicitly
+            # configured conversation roots.
+            remote_workspace = bool(run.workspace and str(run.workspace).startswith("ssh://"))
+            project_access_roots = ([] if remote_workspace else
+                                    [*([run.workspace] if run.workspace else []),
+                                     *[root for root in project_roots if not root.startswith("ssh://")]])
+            project_ssh_roots = [root for root in project_roots if root.startswith("ssh://")]
+            if project_access_roots:
+                run.allowed_paths = list(dict.fromkeys([
+                    *[str(Path(item).expanduser().resolve()) for item in run.allowed_paths if not str(item).startswith("ssh://")],
+                    *[str(Path(item).expanduser().resolve()) for item in project_access_roots],
+                ]))
+            if project_ssh_roots:
+                if remote_workspace:
+                    active_host, _ = ssh_workspaces.parse_workspace(str(run.workspace))
+                    project_ssh_roots = [root for root in project_ssh_roots
+                                         if ssh_workspaces.parse_workspace(root)[0] == active_host]
+                run.allowed_paths = list(dict.fromkeys([*run.allowed_paths, *project_ssh_roots]))
             instructions = (source_data or {}).get("instructions", "")
             if instructions:
                 active_skill_instructions = [*active_skill_instructions, {

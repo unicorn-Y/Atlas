@@ -120,11 +120,20 @@ def _default_web_extractor():
 def _ssh_paths_allowed(workspace: str, allowed_paths: list[str], candidates: list[str]) -> bool:
     """Check remote paths after normalizing them against their SSH workspace root."""
     try:
-        _host, remote_root = ssh_workspaces.parse_workspace(workspace)
-        permitted_roots = [
-            ssh_workspaces._remote_path(remote_root, item)
-            for item in [*allowed_paths, remote_root]
-        ]
+        host, remote_root = ssh_workspaces.parse_workspace(workspace)
+        permitted_roots = [remote_root]
+        for item in allowed_paths:
+            if str(item).startswith("ssh://"):
+                item_host, item_root = ssh_workspaces.parse_workspace(str(item))
+                if item_host == host:
+                    permitted_roots.append(item_root)
+            else:
+                try:
+                    permitted_roots.append(ssh_workspaces._remote_path(remote_root, item))
+                except ValueError:
+                    # A project may also declare local roots; an SSH executor
+                    # cannot reach them, so they must not poison its remote roots.
+                    continue
         for candidate in candidates:
             resolved = ssh_workspaces._remote_path(remote_root, candidate)
             if not any(

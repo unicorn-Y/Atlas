@@ -199,10 +199,18 @@ async def create_project(
 
         projects = _atlas_server.projects
     assert projects is not None
+    workspace_path = str(req.get("workspace_path", "") or "").strip()
+    workspace_paths = _validated_project_roots(req.get("workspace_paths", []))
+    if workspace_path and not workspace_path.startswith("ssh://"):
+        root = Path(workspace_path).expanduser()
+        if not root.is_absolute() or not root.is_dir():
+            raise HTTPException(status_code=400, detail="workspace_path must be an existing absolute directory")
+        workspace_path = str(root.resolve())
     try:
         project = await projects.create_project(
             str(req.get("name", "")),
-            workspace_path=str(req.get("workspace_path", "") or ""),
+            workspace_path=workspace_path,
+            workspace_paths=workspace_paths,
             repo_url=str(req.get("repo_url", "") or ""),
             current_goal=str(req.get("current_goal", "") or ""),
             color=str(req.get("color", "") or ""),
@@ -291,6 +299,8 @@ async def update_project(
 
         projects = _atlas_server.projects
     assert projects is not None
+    if "workspace_paths" in req:
+        req = {**req, "workspace_paths": _validated_project_roots(req.get("workspace_paths"))}
     try:
         project = await projects.update_project(project_id, **req)
     except ValueError as exc:
@@ -298,6 +308,31 @@ async def update_project(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     return project.to_dict()
+
+
+def _validated_project_roots(value: Any) -> list[str]:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise HTTPException(status_code=400, detail="workspace_paths must be a list of directory paths")
+    roots: list[str] = []
+    for raw in value:
+        raw = raw.strip()
+        if not raw:
+            continue
+        if raw.startswith("ssh://"):
+            from atlas.ssh import ssh_workspaces
+            try:
+                ssh_workspaces.parse_workspace(raw)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=f"无效的 SSH 项目目录：{exc}") from exc
+            normalized = raw.rstrip("/")
+        else:
+            path = Path(raw).expanduser()
+            if not path.is_absolute() or not path.is_dir():
+                raise HTTPException(status_code=400, detail=f"项目目录必须是已存在的绝对目录：{raw}")
+            normalized = str(path.resolve())
+        if normalized not in roots:
+            roots.append(normalized)
+    return roots
 
 
 @router.post("/api/projects/{project_id}/close")

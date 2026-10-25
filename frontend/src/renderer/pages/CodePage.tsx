@@ -5,7 +5,7 @@ import ProjectSourcesPanel from './ProjectSourcesPanel';
 import ProjectModelSettings from './ProjectModelSettings';
 import { ProjectIcon, PROJECT_ICON_OPTIONS } from './ProjectIcon';
 
-interface Project { project_id: string; name: string; workspace_path: string; repo_url: string; status: string; current_goal: string; current_state: string; color: string; icon: string; updated_at?: string }
+interface Project { project_id: string; name: string; workspace_path: string; workspace_paths: string[]; repo_url: string; status: string; current_goal: string; current_state: string; color: string; icon: string; updated_at?: string }
 interface RecallHit { conversation_title: string; snippet: string; created_at: string }
 const STATUS: Record<string, string> = { active: '进行中', paused: '已暂停', archived: '已归档', done: '已完成', completed: '已完成' };
 const statusName = (value: string) => STATUS[value] ?? value;
@@ -23,7 +23,8 @@ export default function CodePage({ apiBaseUrl, connected, onToast }: { apiBaseUr
   const [color, setColor] = useState('');
   const [icon, setIcon] = useState('folder');
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [form, setForm] = useState({ name: '', workspace_path: '', current_goal: '' });
+  const [form, setForm] = useState({ name: '', workspace_path: '', workspace_paths: [] as string[], current_goal: '' });
+  const [rootDraft, setRootDraft] = useState('');
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<RecallHit[] | null>(null);
 
@@ -46,6 +47,7 @@ export default function CodePage({ apiBaseUrl, connected, onToast }: { apiBaseUr
     setName(current?.name ?? '');
     setColor(current?.color ?? '');
     setIcon(current?.icon ?? 'folder');
+    setRootDraft((current?.workspace_paths ?? []).join('\n'));
     setEditingName(false);
   }, [projects, selected]);
 
@@ -53,8 +55,8 @@ export default function CodePage({ apiBaseUrl, connected, onToast }: { apiBaseUr
     event.preventDefault();
     setBusy(true);
     try {
-      const created = await api<Partial<Project>>(apiBaseUrl, '/api/projects', { method: 'POST', json: { name: form.name.trim(), workspace_path: form.workspace_path.trim(), current_goal: form.current_goal.trim() } });
-      setForm({ name: '', workspace_path: '', current_goal: '' });
+      const created = await api<Partial<Project>>(apiBaseUrl, '/api/projects', { method: 'POST', json: { name: form.name.trim(), workspace_path: form.workspace_path.trim(), workspace_paths: form.workspace_paths, current_goal: form.current_goal.trim() } });
+      setForm({ name: '', workspace_path: '', workspace_paths: [], current_goal: '' });
       setCreating(false);
       if (created.project_id) setSelected(created.project_id);
       onToast('已创建项目');
@@ -106,6 +108,12 @@ export default function CodePage({ apiBaseUrl, connected, onToast }: { apiBaseUr
     const picked = await window.atlasDesktop?.selectDirectory?.(importPath || undefined);
     if (picked) setImportPath(picked);
   };
+  const pickProjectRoot = async (isNew: boolean) => {
+    const picked = await window.atlasDesktop?.selectDirectory?.();
+    if (!picked) return;
+    if (isNew) setForm((current) => ({ ...current, workspace_paths: [...new Set([...current.workspace_paths, picked])] }));
+    else setRootDraft((current) => [...new Set([...current.split(/\r?\n/).map((item) => item.trim()).filter(Boolean), picked])].join('\n'));
+  };
   const recall = async (event: FormEvent) => {
     event.preventDefault();
     if (!query.trim() || !selected) return;
@@ -137,6 +145,8 @@ export default function CodePage({ apiBaseUrl, connected, onToast }: { apiBaseUr
         <label>项目名称<input required autoFocus value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="例如：Atlas 桌面端" /></label>
         <label>工作区路径<input value={form.workspace_path} onChange={(event) => setForm({ ...form, workspace_path: event.target.value })} placeholder="D:\code\my-app（可选）" /></label>
       </div>
+      <label>附加工作目录（每行一个；会继承到项目会话）<textarea rows={3} value={form.workspace_paths.join('\n')} onChange={(event) => setForm({ ...form, workspace_paths: event.target.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean) })} placeholder="可添加多个仓库目录" /></label>
+      {window.atlasDesktop?.selectDirectory && <button type="button" className="btn ghost" onClick={() => void pickProjectRoot(true)}>选择附加目录</button>}
       <label>当前目标<input value={form.current_goal} onChange={(event) => setForm({ ...form, current_goal: event.target.value })} placeholder="这一阶段要完成什么（可选）" /></label>
       <div className="foot"><button type="button" className="btn ghost" onClick={() => setCreating(false)}>取消</button><button className="btn primary" disabled={busy || !form.name.trim()}>创建项目</button></div>
     </form>}
@@ -180,6 +190,7 @@ export default function CodePage({ apiBaseUrl, connected, onToast }: { apiBaseUr
           <div><dt>目标</dt><dd>{current.current_goal || '未设定'}</dd></div>
           <div><dt>进度</dt><dd>{current.current_state || '还没有记录'}</dd></div>
           {current.workspace_path && <div><dt>工作区</dt><dd style={{ fontFamily: 'var(--f-mono)', fontSize: 13 }}>{current.workspace_path}</dd></div>}
+          {!!current.workspace_paths?.length && <div><dt>附加工作目录</dt><dd style={{ fontFamily: 'var(--f-mono)', fontSize: 13, whiteSpace: 'pre-wrap' }}>{current.workspace_paths.join('\n')}</dd></div>}
           {current.repo_url && <div><dt>仓库 origin</dt><dd style={{ fontFamily: 'var(--f-mono)', fontSize: 13, overflowWrap: 'anywhere' }}>{current.repo_url}</dd></div>}
         </dl>
         <form onSubmit={(event) => { event.preventDefault(); void update(current.project_id, { color, icon }, '已保存项目外观'); }}>
@@ -194,6 +205,12 @@ export default function CodePage({ apiBaseUrl, connected, onToast }: { apiBaseUr
           </div>
         </form>
         <ProjectModelSettings projectId={current.project_id} apiBaseUrl={apiBaseUrl} onToast={onToast} />
+        <form onSubmit={(event) => { event.preventDefault(); void update(current.project_id, { workspace_paths: rootDraft.split(/\r?\n/).map((item) => item.trim()).filter(Boolean) } as unknown as Record<string, string>, '已保存项目工作目录'); }}>
+          <h3>项目工作目录</h3>
+          <p>主工作区和附加目录会提供给该项目下的新会话，路径超出这些根目录将被拒绝。</p>
+          <textarea rows={3} aria-label="项目附加工作目录" value={rootDraft} onChange={(event) => setRootDraft(event.target.value)} placeholder="每行一个本机绝对路径或 ssh:// 地址" />
+          <div className="btns">{window.atlasDesktop?.selectDirectory && <button type="button" className="btn ghost" onClick={() => void pickProjectRoot(false)}>选择目录</button>}<button className="btn primary" disabled={busy || rootDraft === (current.workspace_paths ?? []).join('\n')}>保存工作目录</button></div>
+        </form>
         <ProjectSourcesPanel projectId={current.project_id} workspacePath={current.workspace_path} apiBaseUrl={apiBaseUrl} onToast={onToast} />
         <form onSubmit={(event) => void recall(event)} style={{ marginTop: 18 }}>
           <label className="field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="在这个项目的历史对话里找…" aria-label="项目历史搜索" /></label>

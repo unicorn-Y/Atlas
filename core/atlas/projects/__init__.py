@@ -30,6 +30,7 @@ class Project:
     project_id: str
     name: str
     workspace_path: str = ""
+    workspace_paths: list[str] = field(default_factory=list)
     repo_url: str = ""
     status: str = "active"
     color: str = ""
@@ -53,7 +54,7 @@ class Project:
 def _row_to_project(row: aiosqlite.Row) -> Project:
     record = dict(row)
     record["pinned"] = bool(record.get("pinned", False))
-    for key in ("active_task_ids", "memory_refs", "skill_refs"):
+    for key in ("active_task_ids", "memory_refs", "skill_refs", "workspace_paths"):
         try:
             record[key] = json.loads(record.get(key) or "[]")
         except (TypeError, ValueError):
@@ -77,6 +78,7 @@ class ProjectStore:
                 project_id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 workspace_path TEXT NOT NULL DEFAULT '',
+                workspace_paths TEXT NOT NULL DEFAULT '[]',
                 repo_url TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'active'
                     CHECK(status IN ('active', 'paused', 'archived')),
@@ -142,6 +144,8 @@ class ProjectStore:
             await self._db.execute("ALTER TABLE projects ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
         if "memory_scope" not in columns:
             await self._db.execute("ALTER TABLE projects ADD COLUMN memory_scope TEXT NOT NULL DEFAULT 'global'")
+        if "workspace_paths" not in columns:
+            await self._db.execute("ALTER TABLE projects ADD COLUMN workspace_paths TEXT NOT NULL DEFAULT '[]'")
         await self._db.commit()
 
     async def close(self) -> None:
@@ -165,6 +169,7 @@ class ProjectStore:
         color: str = "",
         default_model: str = "",
         default_preset_id: str = "",
+        workspace_paths: list[str] | None = None,
     ) -> Project:
         db = self._require_db()
         if not str(name).strip():
@@ -176,16 +181,17 @@ class ProjectStore:
             project_id=str(uuid.uuid4()),
             name=str(name).strip(),
             workspace_path=str(workspace_path or ""),
+            workspace_paths=list(dict.fromkeys(str(item) for item in (workspace_paths or []) if str(item))),
             repo_url=str(repo_url or ""),
             current_goal=str(current_goal or ""),
             color=str(color or ""), default_model=str(default_model or ""),
             default_preset_id=str(default_preset_id or ""),
         )
         await db.execute(
-            "INSERT INTO projects (project_id, name, workspace_path, repo_url, current_goal, color, default_model, default_preset_id)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO projects (project_id, name, workspace_path, workspace_paths, repo_url, current_goal, color, default_model, default_preset_id)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                project.project_id, project.name, project.workspace_path,
+                project.project_id, project.name, project.workspace_path, json.dumps(project.workspace_paths),
                 project.repo_url, project.current_goal, project.color,
                 project.default_model, project.default_preset_id,
             ),
@@ -225,7 +231,7 @@ class ProjectStore:
     async def update_project(self, project_id: str, **fields: Any) -> Project | None:
         db = self._require_db()
         allowed = {
-            "name", "workspace_path", "repo_url", "status", "current_goal",
+            "name", "workspace_path", "workspace_paths", "repo_url", "status", "current_goal",
             "current_state", "active_task_ids", "memory_refs", "skill_refs", "color", "icon",
             "default_model", "default_preset_id", "pinned", "memory_scope",
         }
@@ -255,6 +261,8 @@ class ProjectStore:
         for key in ("active_task_ids", "memory_refs", "skill_refs"):
             if key in updates:
                 updates[key] = json.dumps(list(updates[key] or []))
+        if "workspace_paths" in updates:
+            updates["workspace_paths"] = json.dumps(list(dict.fromkeys(str(item) for item in (updates["workspace_paths"] or []) if str(item))))
         if not updates:
             return await self.get(project_id)
         assignments = ", ".join(f"{key} = ?" for key in updates)
