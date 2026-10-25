@@ -346,6 +346,48 @@ def merge_layer_findings(results: dict[str, list[dict[str, Any]]]) -> list[dict[
     return merged
 
 
+def _merge_group(group: list[dict[str, Any]]) -> dict[str, Any]:
+    severity_rank = {"minor": 1, "major": 2, "blocker": 3}
+    primary = dict(max(group, key=lambda item: (severity_rank.get(str(item.get("severity")), 0), len(str(item.get("evidence") or "")))))
+    layers: set[str] = set()
+    lines = []
+    for item in group:
+        layers.update(item.get("review_layers") or [item.get("review_layer")])
+        if item.get("line") is not None:
+            lines.append(item["line"])
+    primary["review_layers"] = sorted(layer for layer in layers if layer)
+    if len(set(lines)) > 1:
+        primary["related_lines"] = sorted(set(lines))
+    primary["merged_count"] = len(group)
+    return primary
+
+
+async def _semantic_dedupe(manager: Any, model: str, findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Reviewers phrase the same defect differently ("空列表除以零" vs "空序列导致除零异常"), which the
+    string-similarity merge cannot catch. One cheap call groups same-defect findings; on any failure the
+    string-merged list is returned unchanged."""
+    if len(findings) < 2:
+        return findings
+    listing = "\n".join(f"{index}. {item.get('file')}:{item.get('line')} [{item.get('severity')}] {item.get('title')}"
+                         for index, item in enumerate(findings))
+    try:
+        result = await manager.model_router.complete_for(model, "repository_review_dedupe", [
+            {"role": "system", "content": "Group code review findings that describe the same underlying defect. Return only JSON."},
+            {"role": "user", "content": "下面是多个审查员对同一仓库报告的问题。把描述同一个根本缺陷的条目分到一组（同一文件、同一根因；"
+                                        "不同缺陷即使位置相近也不要合并）。只返回 JSON 数组，每个元素是一组编号，例如 [[0,3],[1],[2,4]]，"
+                                        "每个编号必须恰好出现一次。\n" + listing},
+        ], max_tokens=800, timeout=60)
+        text = str(getattr(result, "text", "")).strip()
+        start, end = text.find("["), text.rfind("]")
+        groups = json.loads(text[start:end + 1])
+        flat = [index for group in groups for index in group]
+        if sorted(flat) != list(range(len(findings))):
+            return findings
+        return [_merge_group([findings[index] for index in group]) for group in groups]
+    except Exception:
+        return findings
+
+
 async def run_repository_review(workspace: str, *, model: str | None = None) -> dict[str, Any]:
     """Run parallel read-only repository reviewers, merge findings, and attribute evidence."""
     context = collect_repository_context(workspace)
@@ -381,6 +423,7 @@ async def run_repository_review(workspace: str, *, model: str | None = None) -> 
     findings = merge_layer_findings(layer_results)
     if not layer_results:
         raise RuntimeError("所有并行审查层均失败：" + "; ".join(errors.values()))
+    findings = await _semantic_dedupe(manager, selected_model, findings)
     return {"schema_version": 1, "scope": "repository", "workspace": context["workspace"],
             "model": selected_model, "file_count": context["file_count"],
             "excluded_sensitive_file_count": context["excluded_sensitive_count"],
