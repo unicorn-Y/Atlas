@@ -661,13 +661,39 @@ async def execute_tools_node(
                             "text": text + "\n",
                         })
 
-                code_tools = []
-                if agent._local_execution:
-                    code_tools.extend(agent._local_execution.get_tools_for_llm())
-                if agent._computer_use:
-                    code_tools.extend(agent._computer_use.get_tools_for_llm())
-                if agent._mcp:
-                    code_tools.extend(agent._mcp.get_tools_for_llm())
+                code_tools = agent._model_facing_tools()
+                kernel_edit = getattr(ctx, "kernel_edit", None)
+                if kernel_edit is not None:
+                    code_tools.extend(kernel_edit.get_tools_for_llm())
+
+                async def dispatch_code_tool(
+                    name: str, arguments: dict[str, Any], code_workspace: str,
+                ) -> dict[str, Any]:
+                    nested_args = dict(arguments)
+                    if name.startswith("local_"):
+                        nested_args.setdefault("cwd", code_workspace)
+                    nested_id = f"{tc_id}:code:{uuid.uuid4().hex[:12]}"
+                    nested_state = {
+                        "messages": [AIMessage(content="", tool_calls=[{
+                            "name": name, "args": nested_args, "id": nested_id,
+                        }])],
+                        "pending_events": [], "tool_rounds": 0, "runtime": ctx,
+                    }
+                    nested_result = await agent._execute_tools_node(nested_state)
+                    result_event = next((event for event in reversed(
+                        nested_result.get("pending_events", []))
+                        if isinstance(event, dict) and event.get("type") == "tool_result"
+                        and event.get("id") == nested_id), None)
+                    if result_event is None:
+                        return {"data": {"error": "missing_tool_result"}, "is_error": True,
+                                "content": [{"type": "text", "text": "Tool returned no result."}]}
+                    return {
+                        "data": result_event.get("data"),
+                        "content": result_event.get("content", []),
+                        "is_error": bool(result_event.get("is_error")),
+                        **({"error_category": result_event["error_category"]}
+                           if result_event.get("error_category") else {}),
+                    }
 
                 result = {"data": await agent.execute_code(
                     str(fn_args.get("code", "")), run_id=ctx.run_id,
@@ -679,6 +705,7 @@ async def execute_tools_node(
                     event_callback=code_mode_event,
                     cancel_event=ctx.cancel_event,
                     dry_run=bool(fn_args.get("dry_run", False)),
+                    tool_dispatch=dispatch_code_tool,
                 )}
                 result["content"] = [{"type": "text", "text": json.dumps(
                     result["data"], ensure_ascii=False,

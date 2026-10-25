@@ -267,6 +267,7 @@ class CodeActRuntime:
         tool_allow: list[str] | None = None, tool_deny: list[str] | None = None,
         read_only: bool = False, tool_catalog: list[dict[str, Any]] | None = None,
         event_callback: Any = None, cancel_event: Any = None, dry_run: bool = False,
+        tool_dispatch: Any = None,
     ) -> dict[str, Any]:
         if not isinstance(code, str) or not code.strip():
             raise ValueError("code must be non-empty text")
@@ -317,12 +318,15 @@ class CodeActRuntime:
                     step = {"index": len(steps) + 1, "tool": name, "status": "running"}
                     steps.append(step)
                 await emit({"type": "code_mode_step", **step})
-                result = await self.bridge.call_tool(
-                    name, dict(request.get("arguments", {})),
-                    run_id=run_id, conversation_id=conversation_id,
-                    tool_allow=tool_allow, tool_deny=tool_deny, read_only=read_only,
-                    workspace=workspace,
-                )
+                if tool_dispatch is not None:
+                    result = await tool_dispatch(name, dict(request.get("arguments", {})), workspace)
+                else:
+                    result = await self.bridge.call_tool(
+                        name, dict(request.get("arguments", {})),
+                        run_id=run_id, conversation_id=conversation_id,
+                        tool_allow=tool_allow, tool_deny=tool_deny, read_only=read_only,
+                        workspace=workspace,
+                    )
                 is_error = bool(result.get("is_error")) if isinstance(result, dict) else False
                 data = result.get("data") if isinstance(result, dict) else result
                 step.update({"status": "failed" if is_error else "completed",

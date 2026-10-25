@@ -4,15 +4,16 @@
 the same Python installation as Atlas. The script receives a synchronous
 `atlas` bridge with three entry points:
 
-- `atlas.list_tools()` returns schemas for the local, computer, and MCP tools
-  connected to this run.
+- `atlas.list_tools()` returns the schemas exposed to this run, including
+  locally registered, computer, web, MCP, and kernel edit tools when available.
 - `atlas.call_tool(name, arguments)` calls an enabled Atlas runtime tool and
   returns its normal result envelope. Calls run in script order.
 - `atlas.workspace` is the disposable working directory assigned to this run.
 
 The child process starts with that directory as its current directory. Local
 tool calls that omit `cwd` use the same directory. Explicit paths and tool
-calls continue through the existing Atlas runtime configuration. The bridge
+calls continue through the existing Atlas runtime configuration and tool
+execution pipeline, including its normal run policy and event handling. The bridge
 records each call's tool name, order, status, and result type (without tool
 arguments or result values), then streams progress while the script runs. The final result also includes stdout,
 stderr, the script's `result` value, and the step log.

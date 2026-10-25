@@ -204,6 +204,38 @@ async def test_codeact_subprocess_uses_atlas_bridge_for_three_operations(tmp_pat
     }
 
 
+async def test_execute_code_dispatches_through_current_agent_tool_pipeline(tmp_path: Path) -> None:
+    local = LocalExecutionRuntime()
+    agent = AgentOrchestrator(MagicMock(), MagicMock(), local_execution=local)
+    runtime = AgentRunContext(run_id="code-mode-run", conversation_id="code-mode-test")
+    code = """\
+result = atlas.call_tool('todo_list', {'todos': [
+    {'id': 'batch-item', 'content': 'record a batch call', 'status': 'pending'}
+]})
+"""
+    state = {
+        "messages": [AIMessage(content="", tool_calls=[{
+            "name": "execute_code", "args": {"code": code}, "id": "outer-code-1",
+        }])],
+        "pending_events": [], "tool_rounds": 0, "runtime": runtime,
+    }
+    try:
+        output = await agent._execute_tools_node(state)
+        streamed = []
+        while not runtime.event_queue.empty():
+            streamed.append(runtime.event_queue.get_nowait())
+        nested = [event for event in streamed
+                  if event.get("type") == "tool_result" and event.get("name") == "todo_list"]
+        outer = [event for event in output["pending_events"]
+                 if event.get("type") == "tool_result" and event.get("name") == "execute_code"]
+        assert len(nested) == 1 and nested[0]["is_error"] is False
+        assert len(outer) == 1 and outer[0]["data"]["exit_code"] == 0
+        assert outer[0]["data"]["steps"][0]["tool"] == "todo_list"
+        assert outer[0]["data"]["steps"][0]["status"] == "completed"
+    finally:
+        await local.shutdown()
+
+
 async def test_local_file_mutation_is_checkpointed_before_write_and_restorable(
     tmp_path: Path,
 ) -> None:
