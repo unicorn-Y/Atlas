@@ -371,7 +371,6 @@ def main() -> None:
         if not SKIP_SCREENSHOTS:
             import atlas.config as atlas_config
             import atlas.models as atlas_models
-            from types import SimpleNamespace
             captured_vision: dict[str, Any] = {}
             class FakeVisionRouter:
                 async def complete_for(self, model_id: str, purpose: str, messages: list[dict[str, Any]], **_: Any) -> Any:
@@ -412,7 +411,13 @@ def main() -> None:
         if not dns_detail:
             # Some Chromium builds paint the interstitial before forwarding the
             # Network.loadingFailed event on a short-lived CDP connection.
-            body = str(evaluate(bad, "document.body.innerText") or "")
+            # The renderer may be busy while the interstitial is initializing;
+            # do not block on Runtime.evaluate here. Reattach to CDP and observe
+            # the navigation event again instead.
+            try:
+                body = str(evaluate(bad, "document.body.innerText") or "")
+            except TimeoutError:
+                body = ""
             if "ERR_NAME_NOT_RESOLVED" in body:
                 dns_detail = "net::ERR_NAME_NOT_RESOLVED"
         if not dns_detail:

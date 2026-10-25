@@ -71,7 +71,10 @@ async def dashboard_page(request: Request) -> HTMLResponse:
         html = page.read_text(encoding="utf-8", errors="replace")
         html = html.replace("<head>", '<head><base href="/dashboard/">', 1)
         return HTMLResponse(html, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
-    return HTMLResponse(_DASHBOARD_HTML, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+    html = _DASHBOARD_HTML.replace(
+        '<html lang="zh-CN">', '<html lang="zh-CN"><head><base href="/dashboard/"></head>', 1,
+    )
+    return HTMLResponse(html, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
 
 
 def _dashboard_dist_dir() -> Path:

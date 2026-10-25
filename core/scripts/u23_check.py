@@ -73,18 +73,31 @@ for line in sys.stdin:
 def check_live_app_server_model() -> None:
     if os.environ.get("U23_SKIP_LIVE_MODEL") == "1":
         return
-    env = {**os.environ, "ATLAS_ROOT": str(ROOT), "ATLAS_DATA_DIR": str(ROOT),
+    # The checked-out worktree supplies code, while the active Atlas data root
+    # supplies the model route and local credentials. Keep those roots explicit
+    # so this scenario behaves the same from a detached worktree.
+    configured_root = Path(os.environ.get("ATLAS_U23_DATA_ROOT", r"C:\engine-reg\atlas-work")).resolve()
+    env = {**os.environ, "ATLAS_ROOT": str(configured_root), "ATLAS_DATA_DIR": str(configured_root),
            "PYTHONPATH": str(ROOT / "core") + os.pathsep + os.environ.get("PYTHONPATH", "")}
+    stage = "launch"
+    diagnostic = ""
     try:
         with AppServer([sys.executable, "-m", "atlas.cli"], workspace=ROOT, env=env) as client:
+            stage = "start-session"
             session = client.new_session()
+            stage = "prompt"
             result = client.prompt(session.session_id, "只回复：U23_APP_SERVER_OK。不要调用任何工具。")
             if result.status != "completed" or "U23_APP_SERVER_OK" not in result.text:
-                raise AssertionError("live model response did not match the smoke prompt")
+                diagnostic = (
+                    f"model response mismatch: status={result.status!r}, "
+                    f"chars={len(result.text)}, marker_present={'U23_APP_SERVER_OK' in result.text}"
+                )
+                raise AssertionError("live model response mismatch")
             client.close_session(session.session_id)
     except Exception as exc:
-        # Protocol output and this report must never expose provider credentials.
-        raise RuntimeError(f"live app-server model scenario failed ({type(exc).__name__}); details withheld") from None
+        # Never include protocol payloads, response text, command lines or config values.
+        detail = diagnostic or f"error_type={type(exc).__name__}"
+        raise RuntimeError(f"live app-server model scenario failed at {stage}: {detail}") from None
 
 
 async def check_cloud_imports() -> None:
