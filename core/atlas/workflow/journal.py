@@ -8,8 +8,9 @@ import json
 import os
 import sqlite3
 import threading
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from .graph import graph_from_dict, graph_to_dict
 from .types import WorkflowGraph
@@ -240,11 +241,19 @@ class WorkflowJournal:
             "events": self.events(row[0]),
         } for row in rows]
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(str(self.path), timeout=15)
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("PRAGMA busy_timeout = 15000")
-        return connection
+        try:
+            yield connection
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
 
 def default_journal_path() -> Path:
