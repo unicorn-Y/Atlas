@@ -11,6 +11,7 @@ import ReasoningStages from './models/ReasoningStages';
 import { cn } from '../ui/cn';
 import styles from '../App.module.css';
 import ModelCatalogPreferencesPanel, { type ModelCatalogPreferences } from '../components/settings/ModelCatalogPreferencesPanel';
+import WslSessionPolicyPanel from '../components/settings/WslSessionPolicyPanel';
 
 export const STATUS_BAR_ITEMS = [
   ['model', '模型'], ['reasoning', '推理强度'], ['context', '上下文占用'], ['tokens', 'Token 用量'],
@@ -335,6 +336,7 @@ export default function SettingsPage(props: SettingsPageProps) {
     </section>
     <IntegrationPanel apiBaseUrl={props.apiBaseUrl} />
     <BrowserSettingsSection apiBaseUrl={props.apiBaseUrl} />
+    <WslSessionPolicyPanel apiBaseUrl={props.apiBaseUrl} />
     <ComputerStatusSection apiBaseUrl={props.apiBaseUrl} />
     <DependencyCheckPanel apiBaseUrl={props.apiBaseUrl} />
     {(props.error || props.busy) && <div className={props.error ? styles.settingsError : styles.settingsStatus} role={props.error ? 'alert' : 'status'}>

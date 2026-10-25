@@ -1611,6 +1611,15 @@ async def _handle_run_start(
     else:
         run.executor = str(data.get("executor", "atlas"))
         run.sandbox = data.get("sandbox")
+    from atlas.api.wsl_policy_router import apply_wsl_session_policy
+    try:
+        run.sandbox = apply_wsl_session_policy(run.sandbox)
+    except PermissionError:
+        invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+        await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
+            "category": "policy", "detail": "本机策略已禁用 WSL 会话。请在设置中重新启用，或改用原生 Atlas 运行时。",
+        }))
+        return
     if run.allowed_paths:
         local_roots = [root for root in run.extra_roots if not root.startswith("ssh://")]
         run.allowed_paths = list(dict.fromkeys([*run.allowed_paths, *local_roots]))
