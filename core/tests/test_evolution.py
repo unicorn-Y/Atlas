@@ -715,3 +715,46 @@ class TestRouter:
         assert bundle["metadata"]["curator"] == "atlas-evolution"
         listed = client.get("/api/evolution/candidates").json()["candidates"]
         assert listed[0]["status"] == "approved"
+
+    def test_curator_controls_and_installed_skill_review(self, client: TestClient, monkeypatch) -> None:
+        from types import SimpleNamespace
+
+        from atlas.api import skills_market_router
+
+        monkeypatch.setattr(skills_market_router, "get_market", lambda: SimpleNamespace(registry=SimpleNamespace(
+            list=lambda status: [
+                {"name": "review-skill", "version": "2.0.0", "updated_at": "2026-10-01T00:00:00+00:00",
+                 "provenance": {"installed_path": "skills/review-skill/2.0.0", "installed_at": "2026-10-01T00:00:00+00:00"}},
+                {"name": "review-skill", "version": "1.0.0", "updated_at": "2024-01-01T00:00:00+00:00",
+                 "provenance": {"installed_path": "skills/review-skill/1.0.0", "installed_at": "2024-01-01T00:00:00+00:00"}},
+            ]
+        )))
+        created = client.post("/api/evolution/candidates/from-recording", json={
+            "bundle": {"name": "curator-demo", "description": "review controls", "steps": ["inspect"]},
+        }).json()
+        candidate_id = created["candidate"]["id"]
+        assert created["automatic_maintenance"]["checked"] == 1
+
+        pinned = client.post(f"/api/evolution/candidates/{candidate_id}/pin", json={"pinned": True})
+        assert pinned.status_code == 200 and pinned.json()["candidate"]["pinned"] is True
+        paused = client.patch("/api/evolution/curator/settings", json={"auto_maintenance_paused": True}).json()
+        assert paused["auto_maintenance_paused"] is True
+        status = client.get("/api/evolution/curator/status").json()
+        assert status["status"] == "paused" and status["candidate_count"] == 1
+        assert {item["kind"] for item in status["installed_suggestions"]} >= {
+            "duplicate_versions", "older_version", "possibly_stale",
+        }
+
+        skipped = client.post("/api/evolution/candidates/from-recording", json={
+            "bundle": {"name": "paused-demo", "description": "pause is effective", "steps": ["review"]},
+        }).json()
+        assert skipped["automatic_maintenance"] is None
+        manual = client.post("/api/evolution/curator/maintain").json()
+        assert manual["ok"] is True and manual["counts"]["checked"] == 2
+        assert manual["last_maintenance_at"]
+        listed = client.get("/api/evolution/candidates").json()["candidates"]
+        assert next(item for item in listed if item["id"] == candidate_id)["pinned"] is True
+
+        ignored = client.post(f"/api/evolution/candidates/{candidate_id}/reject", json={"reason": "reviewed"}).json()
+        assert ignored["candidate"]["status"] == "rejected"
+        assert ignored["candidate"]["provenance"]["history"][-1]["reason"] == "reviewed"

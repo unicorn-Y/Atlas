@@ -299,6 +299,19 @@ class SkillCurator:
         self._save(record)
         return record
 
+    def pin(self, candidate_id: str, pinned: bool) -> dict[str, Any]:
+        """Pin or unpin a candidate; pinned entries are skipped by maintenance."""
+        record = self.get(candidate_id)
+        if record is None:
+            raise ValueError(f"未找到候选技能：{candidate_id}")
+        record["pinned"] = bool(pinned)
+        record["updated_at"] = _iso(_now())
+        history = list(record.get("provenance", {}).get("history", []))
+        history.append({"at": record["updated_at"], "action": "pinned" if pinned else "unpinned"})
+        record.setdefault("provenance", {})["history"] = history[-50:]
+        self._save(record)
+        return record
+
     def mark_rolled_back(self, candidate_id: str, *, now: datetime | None = None) -> dict[str, Any]:
         """Mark an approved candidate after its registered skill was rolled back."""
         record = self.get(candidate_id)
@@ -373,8 +386,10 @@ class SkillCurator:
         for record in records:  # 最早创建的当主记录，其余并入它（保留出处，不删除文件）
             key = str(record.get("name", "")).lower()
             primary = by_name.get(key)
-            if primary is None:
+            if primary is None or primary.get("pinned"):
                 by_name[key] = record
+            elif record.get("pinned"):
+                continue
             else:
                 self._merge_pair(primary, record, now, counts)
 
@@ -450,3 +465,37 @@ class SkillCurator:
 
 def get_curator() -> SkillCurator:
     return SkillCurator()
+
+
+def curator_settings_path() -> Path:
+    return candidates_dir().parent / "curator-settings.json"
+
+
+def curator_settings() -> dict[str, Any]:
+    path = curator_settings_path()
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            value = {}
+    except FileNotFoundError:
+        value = {}
+    except (OSError, ValueError):
+        log.warning("evolution.curator_settings_unreadable", path=str(path))
+        value = {}
+    return {"auto_maintenance_paused": bool(value.get("auto_maintenance_paused", False)),
+            "last_maintenance_at": str(value.get("last_maintenance_at") or "")}
+
+
+def save_curator_settings(*, paused: bool | None = None,
+                          last_maintenance_at: str | None = None) -> dict[str, Any]:
+    current = curator_settings()
+    if paused is not None:
+        current["auto_maintenance_paused"] = bool(paused)
+    if last_maintenance_at is not None:
+        current["last_maintenance_at"] = last_maintenance_at
+    path = curator_settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
+    return current

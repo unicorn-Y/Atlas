@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  GitBranch, ListChecks, LoaderCircle, RadioTower, RefreshCw, Scale, ScrollText, Sparkles, X,
+  GitBranch, ListChecks, LoaderCircle, Pause, Play, RadioTower, RefreshCw, Scale, ScrollText, Sparkles, X,
 } from 'lucide-react';
 import {
   approveCandidate, rollbackCandidate, approveDraft, addEvolutionSource, generateDrafts, listBranches, listCandidates,
+  listCuratorStatus, maintainCurator, pinCandidate, rejectCandidate, setCuratorPaused,
   listEvolutionDiffs, listEvolutionSources, listDrafts, listParityRows, removeEvolutionSource,
   runEvolutionCheck, type EvolutionBranch, type EvolutionCheckResult, type EvolutionDiff,
   type EvolutionDraft, type EvolutionSource, type EvolutionSourceKind, type ParityRow,
-  type SkillCandidate,
+  type CuratorStatus, type SkillCandidate,
 } from '../services/evolutionApi';
 import Section from '../components/evolution/Section';
 import SourceList from '../components/evolution/SourceList';
@@ -36,6 +37,10 @@ export default function EvolutionPage({ apiBaseUrl, onToast }: {
   const [branches, setBranches] = useState<EvolutionBranch[]>([]);
   const [branchNote, setBranchNote] = useState('');
   const [candidates, setCandidates] = useState<SkillCandidate[]>([]);
+  const [curatorStatus, setCuratorStatus] = useState<CuratorStatus | null>(null);
+  const [curatorLoading, setCuratorLoading] = useState(true);
+  const [curatorError, setCuratorError] = useState('');
+  const [curatorBusy, setCuratorBusy] = useState(false);
 
   const [loading, setLoading] = useState({ sources: true, diffs: true, parity: true, drafts: true, branches: true, candidates: true });
   const [errors, setErrors] = useState({ sources: '', diffs: '', parity: '', drafts: '', branches: '', candidates: '' });
@@ -113,13 +118,21 @@ export default function EvolutionPage({ apiBaseUrl, onToast }: {
     } finally { setSection('candidates', { loading: false }); }
   }, [apiBaseUrl]);
 
+  const loadCuratorStatus = useCallback(async () => {
+    setCuratorLoading(true);
+    setCuratorError('');
+    try { setCuratorStatus(await listCuratorStatus(apiBaseUrl)); }
+    catch (cause) { setCuratorError(errorText(cause, 'Curator 状态暂时读不到，请稍后重试。')); }
+    finally { setCuratorLoading(false); }
+  }, [apiBaseUrl]);
+
   useEffect(() => {
     void loadSources(); void loadDiffs(); void loadParity();
-    void loadDrafts(); void loadBranches(); void loadCandidates();
-  }, [loadSources, loadDiffs, loadParity, loadDrafts, loadBranches, loadCandidates]);
+    void loadDrafts(); void loadBranches(); void loadCandidates(); void loadCuratorStatus();
+  }, [loadSources, loadDiffs, loadParity, loadDrafts, loadBranches, loadCandidates, loadCuratorStatus]);
 
   const refreshAll = async () => {
-    await Promise.all([loadSources(), loadDiffs(), loadParity(), loadDrafts(), loadBranches(), loadCandidates()]);
+    await Promise.all([loadSources(), loadDiffs(), loadParity(), loadDrafts(), loadBranches(), loadCandidates(), loadCuratorStatus()]);
     onToast?.('自动追新数据已刷新');
   };
 
@@ -193,8 +206,48 @@ export default function EvolutionPage({ apiBaseUrl, onToast }: {
       onToast?.(errorText(cause, '批准没有成功，请稍后再试。'));
     } finally {
       setCandidateBusyId('');
-      await loadCandidates();
+      await Promise.all([loadCandidates(), loadCuratorStatus()]);
     }
+  };
+
+  const maintainSkillCandidates = async () => {
+    setCuratorBusy(true);
+    try {
+      const result = await maintainCurator(apiBaseUrl);
+      onToast?.(`${result.note} 已检查 ${result.counts.checked ?? 0} 条，合并 ${result.counts.merged ?? 0} 条，标记过期 ${result.counts.flagged_outdated ?? 0} 条、闲置 ${result.counts.flagged_stale ?? 0} 条。`);
+      await Promise.all([loadCandidates(), loadCuratorStatus()]);
+    } catch (cause) { onToast?.(errorText(cause, 'Curator 整理失败，请稍后重试。')); }
+    finally { setCuratorBusy(false); }
+  };
+
+  const toggleCuratorPause = async () => {
+    if (!curatorStatus) return;
+    setCuratorBusy(true);
+    try {
+      const paused = !curatorStatus.auto_maintenance_paused;
+      await setCuratorPaused(apiBaseUrl, paused);
+      onToast?.(paused ? '已暂停自动整理；仍可手动运行 Curator。' : '已恢复自动整理。');
+      await loadCuratorStatus();
+    } catch (cause) { onToast?.(errorText(cause, 'Curator 设置没有保存成功。')); }
+    finally { setCuratorBusy(false); }
+  };
+
+  const pinSkillCandidate = async (candidate: SkillCandidate) => {
+    setCandidateBusyId(candidate.id);
+    try {
+      await pinCandidate(apiBaseUrl, candidate.id, !candidate.pinned);
+      onToast?.(candidate.pinned ? `已取消置顶「${candidate.title}」` : `已置顶「${candidate.title}」，自动整理会跳过此候选`);
+    } catch (cause) { onToast?.(errorText(cause, '候选置顶状态没有保存成功。')); }
+    finally { setCandidateBusyId(''); await Promise.all([loadCandidates(), loadCuratorStatus()]); }
+  };
+
+  const ignoreSkillCandidate = async (candidate: SkillCandidate) => {
+    setCandidateBusyId(candidate.id);
+    try {
+      await rejectCandidate(apiBaseUrl, candidate.id, '用户在 Curator 操作台选择忽略');
+      onToast?.(`已忽略「${candidate.title}」；记录和来源仍保留。`);
+    } catch (cause) { onToast?.(errorText(cause, '忽略候选没有成功。')); }
+    finally { setCandidateBusyId(''); await Promise.all([loadCandidates(), loadCuratorStatus()]); }
   };
 
   const rollbackCandidateSkill = async (candidate: SkillCandidate) => {
@@ -274,13 +327,45 @@ export default function EvolutionPage({ apiBaseUrl, onToast }: {
         <BranchStatus branches={branches} note={branchNote} />
       </Section>
 
-      <Section icon={Sparkles} title="技能候选" count={candidates.length} open={open.candidates}
-        hint="先预览再批准" onToggle={() => setOpen((value) => ({ ...value, candidates: !value.candidates }))}
-        loading={loading.candidates} error={errors.candidates}
-        onRetry={() => void loadCandidates()} onDismissError={() => setSection('candidates', { error: '' })}>
+      <Section icon={Sparkles} title="Curator 整理台" count={curatorStatus?.candidate_count ?? candidates.length}
+        open={open.candidates} hint={curatorStatus?.automatic_changes ?? '候选自动整理；已安装技能只生成建议'}
+        onToggle={() => setOpen((value) => ({ ...value, candidates: !value.candidates }))}
+        loading={curatorLoading || loading.candidates} error={curatorError || errors.candidates}
+        onRetry={() => void Promise.all([loadCuratorStatus(), loadCandidates()])}
+        onDismissError={() => { setCuratorError(''); setSection('candidates', { error: '' }); }}>
+        <div className="mb-3 grid gap-2 rounded-xl border border-line bg-sunken/40 p-3 text-[12px] text-fg-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="m-0">自动整理：<b>{curatorStatus?.status === 'paused' ? '已暂停' : '运行中'}</b>
+              {' · '}候选 {curatorStatus?.candidate_count ?? 0}
+              {curatorStatus?.last_maintenance_at ? ` · 最近整理 ${curatorStatus.last_maintenance_at}` : ' · 尚未整理'}
+            </p>
+            <div className="flex gap-2">
+              <button type="button" className="btn ghost h-8 px-2 text-[12px]" disabled={curatorBusy || curatorLoading}
+                onClick={() => void toggleCuratorPause()}>
+                {curatorStatus?.auto_maintenance_paused ? <Play size={14} /> : <Pause size={14} />}
+                {curatorStatus?.auto_maintenance_paused ? '恢复自动整理' : '暂停自动整理'}
+              </button>
+              <button type="button" className="btn ghost h-8 px-2 text-[12px]" disabled={curatorBusy || curatorLoading}
+                onClick={() => void maintainSkillCandidates()}>
+                {curatorBusy ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />}
+                手动整理
+              </button>
+            </div>
+          </div>
+          {curatorStatus && <p className="m-0">状态计数：{Object.entries(curatorStatus.counts).map(([status, count]) => `${status} ${count}`).join(' · ') || '暂无候选'}。置顶候选会跳过自动整理。</p>}
+          {curatorStatus?.installed_audit_error && <p role="status" className="m-0 text-fg-3">{curatorStatus.installed_audit_error}</p>}
+          {curatorStatus?.installed_suggestions.length ? <div className="grid gap-1">
+            <b>已安装技能审阅建议（不会自动修改）：</b>
+            {curatorStatus.installed_suggestions.map((suggestion, index) => <p key={`${suggestion.name}:${suggestion.kind}:${suggestion.version ?? index}`} className="m-0">
+              {suggestion.name}{suggestion.version ? ` ${suggestion.version}` : suggestion.versions ? ` (${suggestion.versions.join(', ')})` : ''}：{suggestion.reason} {suggestion.action}
+            </p>)}
+          </div> : <p className="m-0">已安装技能没有重复或过期建议；审计只提示，不会自动卸载、归档或改写。</p>}
+        </div>
         <SkillCandidates candidates={candidates} busyId={candidateBusyId}
           onApprove={(candidate) => void approveCandidateSkill(candidate)}
-          onRollback={(candidate) => void rollbackCandidateSkill(candidate)} />
+          onRollback={(candidate) => void rollbackCandidateSkill(candidate)}
+          onPin={(candidate) => void pinSkillCandidate(candidate)}
+          onIgnore={(candidate) => void ignoreSkillCandidate(candidate)} />
       </Section>
     </div>
   </div></div>;

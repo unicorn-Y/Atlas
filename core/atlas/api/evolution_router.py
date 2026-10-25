@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -147,6 +148,53 @@ def _curator() -> curator_mod.SkillCurator:
     return curator_mod.SkillCurator()
 
 
+def _auto_maintain_candidates() -> dict[str, Any] | None:
+    settings = curator_mod.curator_settings()
+    if settings["auto_maintenance_paused"]:
+        return None
+    counts = _curator().maintain()
+    curator_mod.save_curator_settings(last_maintenance_at=datetime.now(UTC).isoformat(timespec="seconds"))
+    return counts
+
+
+def _installed_skill_audit() -> list[dict[str, Any]]:
+    from datetime import timedelta
+
+    from atlas.api.skills_market_router import get_market
+
+    rows = get_market().registry.list(status="active")
+    now = datetime.now(UTC)
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        if (row.get("provenance") or {}).get("installed_path"):
+            grouped.setdefault(str(row.get("name") or ""), []).append(row)
+    suggestions: list[dict[str, Any]] = []
+    for name, versions in sorted(grouped.items()):
+        ordered = sorted(versions, key=lambda row: curator_mod._version_key(str(row.get("version") or "0")), reverse=True)
+        if len(ordered) > 1:
+            suggestions.append({"kind": "duplicate_versions", "name": name, "severity": "review",
+                                "versions": [row.get("version") for row in ordered],
+                                "reason": "同一已安装技能存在多个 active 版本；请检查来源并决定保留版本。",
+                                "action": "手工审阅版本和来源；Curator 不会自动卸载或修改技能。"})
+            for row in ordered[1:]:
+                suggestions.append({"kind": "older_version", "name": name, "version": row.get("version"),
+                                    "severity": "review", "reason": f"同名技能存在较新版本 {ordered[0].get('version')}。",
+                                    "action": "检查依赖后手工移除或固定版本。"})
+        for row in ordered:
+            raw_at = row.get("updated_at") or (row.get("provenance") or {}).get("installed_at")
+            try:
+                updated_at = datetime.fromisoformat(str(raw_at).replace("Z", "+00:00"))
+                if updated_at.tzinfo is None:
+                    updated_at = updated_at.replace(tzinfo=UTC)
+            except (ValueError, TypeError):
+                continue
+            if updated_at < now - timedelta(days=365):
+                suggestions.append({"kind": "possibly_stale", "name": name, "version": row.get("version"),
+                                    "severity": "review", "reason": f"该版本已超过 365 天未更新（{raw_at}）。",
+                                    "action": "检查维护状态和用途；不会自动归档或删除。"})
+    return suggestions
+
+
 @evolution_router.get("/candidates")
 async def list_candidates() -> dict[str, Any]:
     return {"candidates": _curator().list()}
@@ -173,7 +221,9 @@ async def create_candidate(body: CandidateCreate) -> dict[str, Any]:
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    automatic = _auto_maintain_candidates()
     return {"ok": True, "candidate": record,
+            "automatic_maintenance": automatic,
             "merged": bool(record.pop("_merged", False))}
 
 
@@ -194,7 +244,9 @@ async def create_candidate_from_runs(body: RunsCandidateCreate) -> dict[str, Any
     if record is None:
         return {"created": False,
                 "reason": f"成功运行不足 {body.min_runs} 次，未生成候选技能"}
-    return {"created": True, "candidate": record, "merged": bool(record.pop("_merged", False))}
+    automatic = _auto_maintain_candidates()
+    return {"created": True, "candidate": record, "automatic_maintenance": automatic,
+            "merged": bool(record.pop("_merged", False))}
 
 
 class RecordingBundle(BaseModel):
@@ -204,7 +256,9 @@ class RecordingBundle(BaseModel):
 @evolution_router.post("/candidates/from-recording")
 async def create_candidate_from_recording(body: RecordingBundle) -> dict[str, Any]:
     record = _curator().create_candidate_from_recording(body.bundle)
-    return {"created": True, "candidate": record, "merged": bool(record.pop("_merged", False))}
+    automatic = _auto_maintain_candidates()
+    return {"created": True, "candidate": record, "automatic_maintenance": automatic,
+            "merged": bool(record.pop("_merged", False))}
 
 
 class ConversationCandidateCreate(BaseModel):
@@ -265,7 +319,8 @@ async def create_candidate_from_conversation(body: ConversationCandidateCreate) 
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"created": True, "candidate": record}
+    automatic = _auto_maintain_candidates()
+    return {"created": True, "candidate": record, "automatic_maintenance": automatic}
 
 
 @evolution_router.post("/candidates/{candidate_id}/approve")
@@ -329,7 +384,7 @@ async def rollback_candidate(candidate_id: str) -> dict[str, Any]:
         updated = curator.mark_rolled_back(candidate_id)
     except HTTPException:
         raise
-    except (OSError, RuntimeError, ValueError, sqlite3.Error) as exc:
+    except Exception as exc:  # Installed-skill diagnostics must not disable the curator controls.
         raise HTTPException(status_code=500, detail=f"回滚演化技能失败：{exc}") from exc
     return {"ok": True, "candidate": updated, "removed": result}
 
@@ -375,6 +430,14 @@ class RejectBody(BaseModel):
     reason: str = ""
 
 
+class CandidatePinBody(BaseModel):
+    pinned: bool
+
+
+class CuratorSettingsBody(BaseModel):
+    auto_maintenance_paused: bool
+
+
 @evolution_router.post("/candidates/{candidate_id}/reject")
 async def reject_candidate(candidate_id: str, body: RejectBody) -> dict[str, Any]:
     try:
@@ -384,8 +447,57 @@ async def reject_candidate(candidate_id: str, body: RejectBody) -> dict[str, Any
     return {"ok": True, "candidate": record}
 
 
+@evolution_router.post("/candidates/{candidate_id}/pin")
+async def pin_candidate(candidate_id: str, body: CandidatePinBody) -> dict[str, Any]:
+    try:
+        record = _curator().pin(candidate_id, body.pinned)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"ok": True, "candidate": record}
+
+
+@evolution_router.get("/curator/status")
+async def curator_status() -> dict[str, Any]:
+    candidates = _curator().list()
+    settings = curator_mod.curator_settings()
+    counts: dict[str, int] = {}
+    for candidate in candidates:
+        status = str(candidate.get("status") or "unknown")
+        counts[status] = counts.get(status, 0) + 1
+    try:
+        installed_suggestions = _installed_skill_audit()
+        audit_error = None
+    except (OSError, RuntimeError, ValueError, sqlite3.Error) as exc:
+        installed_suggestions = []
+        audit_error = f"已安装技能分析暂不可用：{type(exc).__name__}"
+    return {"status": "paused" if settings["auto_maintenance_paused"] else "active",
+            **settings, "counts": counts, "candidate_count": len(candidates),
+            "installed_suggestions": installed_suggestions, "installed_audit_error": audit_error,
+            "automatic_changes": "候选新建时执行安全的去重/过期标记；已安装技能仅产生建议。"}
+
+
+@evolution_router.patch("/curator/settings")
+async def update_curator_settings(body: CuratorSettingsBody) -> dict[str, Any]:
+    settings = curator_mod.save_curator_settings(paused=body.auto_maintenance_paused)
+    return {"ok": True, **settings}
+
+
+@evolution_router.post("/curator/maintain")
+async def run_curator_maintenance() -> dict[str, Any]:
+    counts = _curator().maintain()
+    settings = curator_mod.save_curator_settings(last_maintenance_at=datetime.now(UTC).isoformat(timespec="seconds"))
+    try:
+        installed_suggestions = _installed_skill_audit()
+        audit_error = None
+    except Exception as exc:  # The local candidate maintenance remains useful if marketplace state is unavailable.
+        installed_suggestions = []
+        audit_error = f"已安装技能分析暂不可用：{type(exc).__name__}"
+    return {"ok": True, "counts": counts, **settings,
+            "installed_suggestions": installed_suggestions, "installed_audit_error": audit_error,
+            "note": "仅整理候选；已安装技能没有被自动修改。"}
+
+
 @evolution_router.post("/candidates/maintain")
 async def maintain_candidates() -> dict[str, Any]:
     """整理员维护：去重合并、按版本出处标过期、按闲置标 stale（从不删除）。"""
-    counts = _curator().maintain()
-    return {"ok": True, "counts": counts}
+    return await run_curator_maintenance()

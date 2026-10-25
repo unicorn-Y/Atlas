@@ -146,13 +146,36 @@ class TestMaintain:
         assert counts["flagged_outdated"] == 0
 
     def test_pinned_never_auto_transitions(self, curator: SkillCurator) -> None:
-        record = curator.create_candidate(name="pinned", description="", origin="user_request",
-                                          now=OLD)
-        record["pinned"] = True
-        curator._save(record)
+        curator.create_candidate(name="pinned", description="", origin="user_request", now=OLD)
+        record = curator.pin("pinned", True)
+        assert record["pinned"] is True
         counts = curator.maintain(now=NOW)
         assert counts["flagged_stale"] == 0
         assert curator.get("pinned")["status"] == "candidate"
+        assert curator.pin("pinned", False)["pinned"] is False
+
+    def test_pinned_duplicate_is_not_merged_or_modified(self, curator: SkillCurator) -> None:
+        primary = curator.create_candidate(
+            name="pin-duplicate", description="保留主项", origin="user_request", now=OLD)
+        pinned = {**json.loads((curator.directory / "pin-duplicate.json").read_text(encoding="utf-8")),
+                  "id": "pin-duplicate-2", "pinned": True, "description": "置顶项"}
+        (curator.directory / "pin-duplicate-2.json").write_text(
+            json.dumps(pinned, ensure_ascii=False), encoding="utf-8")
+        counts = curator.maintain(now=NOW)
+        assert counts["merged"] == 0
+        assert curator.get(primary["id"])["status"] == "stale"
+        assert curator.get("pin-duplicate-2")["status"] == "candidate"
+        assert curator.get("pin-duplicate-2")["pinned"] is True
+
+    def test_curator_pause_settings_persist(self, tmp_path: Path, monkeypatch) -> None:
+        from atlas.evolution import skill_curator as module
+
+        path = tmp_path / "curator-settings.json"
+        monkeypatch.setattr(module, "curator_settings_path", lambda: path)
+        assert module.curator_settings()["auto_maintenance_paused"] is False
+        saved = module.save_curator_settings(paused=True, last_maintenance_at="2026-10-03T12:00:00+00:00")
+        assert saved == {"auto_maintenance_paused": True, "last_maintenance_at": "2026-10-03T12:00:00+00:00"}
+        assert module.curator_settings() == saved
 
     def test_dedupe_merges_duplicates_keeps_both_files(self, curator: SkillCurator) -> None:
         primary = curator.create_candidate(

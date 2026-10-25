@@ -50,10 +50,12 @@ const candidate: SkillCandidate = {
   id: 'weekly-report', title: '周报助手', origin: 'from_runs', preview_md: '从 3 次成功运行沉淀。',
   status: 'candidate', description: '从 3 次成功运行沉淀。', references: ['core/atlas/session.py'],
   source_runs: ['run-1'],
+  pinned: false, outdated: false, created_at: '2026-10-03T06:00:00+00:00',
+  updated_at: '2026-10-03T06:00:00+00:00', rejection_reason: '', history: [],
 };
 
 describe('Evolution page shell', () => {
-  it('renders the six sections with Chinese loading states, without touching other pages', () => {
+  it('renders the Evolution sections and curator state with Chinese loading states', () => {
     const html = renderToStaticMarkup(<EvolutionPage apiBaseUrl="http://localhost:8765" />);
     expect(html).toContain('自动追新');
     expect(html).toContain('检查上游动态');
@@ -63,7 +65,7 @@ describe('Evolution page shell', () => {
     expect(html).toContain('aria-label="对标建议（KEEP / UPGRADE / REPLACE）"');
     expect(html).toContain('aria-label="任务书草稿"');
     expect(html).toContain('aria-label="隔离分支"');
-    expect(html).toContain('aria-label="技能候选"');
+    expect(html).toContain('aria-label="Curator 整理台"');
     expect(html).toContain('正在读取…');
   });
 });
@@ -147,16 +149,18 @@ describe('Branch status', () => {
 
 describe('Skill candidates preview and approve', () => {
   it('shows origin, status and an approve action for pending candidates', () => {
-    const html = renderToStaticMarkup(<SkillCandidates candidates={[candidate]} busyId="" onApprove={() => undefined} onRollback={() => undefined} />);
+    const html = renderToStaticMarkup(<SkillCandidates candidates={[candidate]} busyId="" onApprove={() => undefined} onRollback={() => undefined} onPin={() => undefined} onIgnore={() => undefined} />);
     expect(html).toContain('周报助手');
     expect(html).toContain('运行沉淀');
     expect(html).toContain('候选');
     expect(html).toContain('aria-label="预览候选技能 周报助手"');
     expect(html).toContain('批准');
+    expect(html).toContain('置顶');
+    expect(html).toContain('忽略');
   });
 
   it('hides the approve action once a candidate is approved or merged', () => {
-    const html = renderToStaticMarkup(<SkillCandidates candidates={[{ ...candidate, status: 'approved' }]} busyId="" onApprove={() => undefined} onRollback={() => undefined} />);
+    const html = renderToStaticMarkup(<SkillCandidates candidates={[{ ...candidate, status: 'approved' }]} busyId="" onApprove={() => undefined} onRollback={() => undefined} onPin={() => undefined} onIgnore={() => undefined} />);
     expect(html).toContain('已批准');
     expect(html).not.toContain('aria-label="批准候选技能 周报助手"');
   });

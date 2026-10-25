@@ -107,6 +107,18 @@ export type SkillCandidate = {
   description: string;
   references: string[];
   source_runs: string[];
+  pinned: boolean;
+  outdated: boolean;
+  created_at: string;
+  updated_at: string;
+  rejection_reason: string;
+  history: Array<{ at?: string; action?: string; reason?: string; [key: string]: unknown }>;
+};
+export type CuratorStatus = {
+  status: 'active' | 'paused'; auto_maintenance_paused: boolean; last_maintenance_at: string;
+  counts: Record<string, number>; candidate_count: number;
+  installed_suggestions: Array<{ kind: string; name: string; version?: string; versions?: string[]; severity: string; reason: string; action: string }>;
+  installed_audit_error?: string | null; automatic_changes: string;
 };
 
 /** Minimal fetch shape so tests (and callers) can inject a stub fetcher. */
@@ -308,6 +320,10 @@ export function buildCandidatePreview(record: Record<string, unknown>): string {
 function normalizeCandidate(raw: unknown, fallbackIndex: number): SkillCandidate {
   const item = isRecord(raw) ? raw : {};
   const preview = firstStr(item, ['preview_md', 'preview']);
+  const provenance = isRecord(item.provenance) ? item.provenance : {};
+  const history = Array.isArray(provenance.history)
+    ? provenance.history.filter(isRecord).map((entry) => entry as SkillCandidate['history'][number]) : [];
+  const lastReason = [...history].reverse().find((entry) => typeof entry.reason === 'string')?.reason ?? '';
   return {
     id: str(item.id, `candidate-${fallbackIndex}`),
     title: firstStr(item, ['title', 'display_title']) || str(item.name, str(item.id, `候选技能-${fallbackIndex}`)),
@@ -317,6 +333,12 @@ function normalizeCandidate(raw: unknown, fallbackIndex: number): SkillCandidate
     description: str(item.description),
     references: strList(item.references),
     source_runs: strList(item.source_runs),
+    pinned: item.pinned === true,
+    outdated: item.outdated === true,
+    created_at: str(item.created_at),
+    updated_at: str(item.updated_at),
+    rejection_reason: str(item.rejection_reason) || str(lastReason),
+    history,
   };
 }
 
@@ -403,6 +425,39 @@ export async function approveCandidate(apiBaseUrl: string, candidateId: string, 
 
 export async function rollbackCandidate(apiBaseUrl: string, candidateId: string, fetcher: FetchLike = fetch): Promise<void> {
   await request(apiBaseUrl, `/api/evolution/candidates/${encodeURIComponent(candidateId)}/rollback`, { method: 'POST', json: {} }, fetcher);
+}
+
+export async function listCuratorStatus(apiBaseUrl: string, fetcher: FetchLike = fetch): Promise<CuratorStatus> {
+  const raw = await request<unknown>(apiBaseUrl, '/api/evolution/curator/status', undefined, fetcher);
+  const item = isRecord(raw) ? raw : {};
+  const counts: Record<string, number> = {};
+  if (isRecord(item.counts)) for (const [key, value] of Object.entries(item.counts)) if (typeof value === 'number') counts[key] = value;
+  const installed = unwrapList(raw, ['installed_suggestions']).filter(isRecord);
+  return { status: item.status === 'paused' ? 'paused' : 'active', auto_maintenance_paused: item.auto_maintenance_paused === true,
+    last_maintenance_at: str(item.last_maintenance_at), counts, candidate_count: numOrZero(item.candidate_count),
+    installed_suggestions: installed.map((row) => ({ kind: str(row.kind), name: str(row.name), ...(typeof row.version === 'string' ? { version: row.version } : {}),
+      ...(Array.isArray(row.versions) ? { versions: strList(row.versions) } : {}), severity: str(row.severity), reason: str(row.reason), action: str(row.action) })),
+    installed_audit_error: typeof item.installed_audit_error === 'string' ? item.installed_audit_error : null,
+    automatic_changes: str(item.automatic_changes) };
+}
+
+export async function maintainCurator(apiBaseUrl: string, fetcher: FetchLike = fetch): Promise<{ counts: Record<string, number>; note: string }> {
+  const raw = await request<unknown>(apiBaseUrl, '/api/evolution/curator/maintain', { method: 'POST', json: {} }, fetcher);
+  const item = isRecord(raw) ? raw : {};
+  const counts = isRecord(item.counts) ? Object.fromEntries(Object.entries(item.counts).filter(([, value]) => typeof value === 'number') as Array<[string, number]>) : {};
+  return { counts, note: str(item.note, '候选整理完成；已安装技能仅产生建议。') };
+}
+
+export async function setCuratorPaused(apiBaseUrl: string, paused: boolean, fetcher: FetchLike = fetch): Promise<void> {
+  await request(apiBaseUrl, '/api/evolution/curator/settings', { method: 'PATCH', json: { auto_maintenance_paused: paused } }, fetcher);
+}
+
+export async function pinCandidate(apiBaseUrl: string, candidateId: string, pinned: boolean, fetcher: FetchLike = fetch): Promise<void> {
+  await request(apiBaseUrl, `/api/evolution/candidates/${encodeURIComponent(candidateId)}/pin`, { method: 'POST', json: { pinned } }, fetcher);
+}
+
+export async function rejectCandidate(apiBaseUrl: string, candidateId: string, reason = '', fetcher: FetchLike = fetch): Promise<void> {
+  await request(apiBaseUrl, `/api/evolution/candidates/${encodeURIComponent(candidateId)}/reject`, { method: 'POST', json: { reason } }, fetcher);
 }
 
 // ---------------------------------------------------------------------------
