@@ -609,6 +609,10 @@ class DelegationService:
             started_at = asyncio.get_running_loop().time()
             status, summary = "failed", "子任务没有返回结果。"
             cancel_event = asyncio.Event()
+            # Make the live cancellation handle visible before `on_started` fires.
+            # Budget owners (such as /ultraplan) can then stop a foreground child
+            # that is currently inside the Atlas runner, not just background jobs.
+            record["cancel_event"] = cancel_event
             parent_cancel = (atlas_options or {}).get("cancel_event")
             parent_cancel_task = None
             try:
