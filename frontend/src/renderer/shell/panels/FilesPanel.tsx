@@ -83,9 +83,10 @@ export const ancestorPaths = (file: string): string[] => {
   return out;
 };
 
-export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, onPreview, runEvents = [], onShowChanges }: {
+export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, onPreview, runEvents = [], onShowChanges, previewOnly = false, previewPath = '', initialFilePath = '' }: {
   workspace?: string | null; onChooseWorkspace: () => void; refreshKey: string; onPreview: (url: string) => void;
   runEvents?: AgentEvent[]; onShowChanges?: () => void;
+  previewOnly?: boolean; previewPath?: string; initialFilePath?: string;
 }) {
   const [dirs, setDirs] = useState<Record<string, WorkspaceEntry[]>>({});
   const [expanded, setExpanded] = useState<string[]>([]);
@@ -108,6 +109,8 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
   const [version, setVersion] = useState<ViewedVersion | null>(null);
   const [reloads, setReloads] = useState(0);
   const [tabs, setTabs] = useState<string[]>([]);
+  const [previewHistory, setPreviewHistory] = useState<string[]>([]);
+  const [previewHistoryIndex, setPreviewHistoryIndex] = useState(-1);
   const [recentlyClosed, setRecentlyClosed] = useState<string[]>([]);
   const [showClosedTabs, setShowClosedTabs] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path: string; directory: boolean } | null>(null);
@@ -149,21 +152,45 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     expanded.forEach((path) => void load(path));
   }, [workspace, refreshKey, load]);
   useEffect(() => {
-    setExpanded([]); setSelected(''); setFile(null); setDraft(''); setEditing(false); setSaveConflict(false); setTabs([]); setRecentlyClosed([]); setShowClosedTabs(false);
+    setExpanded([]); setSelected(''); setFile(null); setDraft(''); setEditing(false); setSaveConflict(false); setTabs([]); setRecentlyClosed([]); setShowClosedTabs(false); setPreviewHistory([]); setPreviewHistoryIndex(-1);
     setFileQuery(''); setSearchResults([]); setSearchError('');
     setContextMenu(null); setLightbox(false); setPdfPage(1); setPdfZoom(100); setPdfError('');
   }, [workspace]);
   // 手动浏览选中（树节点、关闭）时重置显示方式/版本/行定位；「打开文件」请求不经过这里，
   // 否则它触发的 selected 变化会在下一个 commit 把刚设置的定位清掉。
-  const selectFile = (path: string) => {
+  const selectFile = (path: string, recordPreviewHistory = true) => {
     setSelected(path);
     if (path) {
       setTabs((current) => current.includes(path) ? current : [...current, path]);
       setRecentlyClosed((current) => current.filter((item) => item !== path));
+      if (previewOnly && recordPreviewHistory) {
+        setPreviewHistory((current) => {
+          const next = [...current.slice(0, previewHistoryIndex + 1), path];
+          setPreviewHistoryIndex(next.length - 1);
+          return next;
+        });
+      }
     }
     setFile((current) => current?.path === path ? current : null);
     setMode('preview'); setVersion(null); setHighlightLine(null); setHighlightColumn(null); setPdfPage(1); setPdfZoom(100); setPdfError(''); setLightbox(false); setError('');
   };
+  const movePreviewHistory = (direction: -1 | 1) => {
+    const nextIndex = previewHistoryIndex + direction;
+    const nextPath = previewHistory[nextIndex];
+    if (!nextPath) return;
+    setPreviewHistoryIndex(nextIndex);
+    selectFile(nextPath, false);
+  };
+  useEffect(() => {
+    const path = previewOnly ? previewPath : initialFilePath;
+    if (!path || !workspace) return;
+    selectFile(path);
+    if (!previewOnly) {
+      const parents = ancestorPaths(path);
+      setExpanded(parents);
+      parents.forEach((parent) => void load(parent));
+    }
+  }, [previewOnly, previewPath, initialFilePath, workspace]);
   const closeFileTab = (path: string) => {
     setRecentlyClosed((current) => [path, ...current.filter((item) => item !== path)].slice(0, 10));
     const index = tabs.indexOf(path);
@@ -276,7 +303,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     setTabs((current) => current.includes(openRequest.file) ? current : [...current, openRequest.file]);
     setFile((current) => current?.path === openRequest.file ? current : null);
     setVersion(null);
-    setMode('code');
+    setMode(previewOnly ? 'preview' : 'code');
     setHighlightLine(openRequest.line);
     setHighlightColumn(openRequest.column);
   }, [openRequest]);
@@ -422,26 +449,26 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
   }, [runEvents]);
 
   return <div className="flex h-full min-h-0 flex-col gap-3">
-    <div className="flex items-center gap-2">
+    {!previewOnly && <div className="flex items-center gap-2">
       <button onClick={onChooseWorkspace} title={`${workspace}（点击更换）`} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1 text-left text-[12.5px] text-fg-2 hover:bg-hover">
         <FolderOpen size={14} className="shrink-0 text-brand" /><span className="truncate">{workspace}</span>
       </button>
       <button aria-label="刷新文件" onClick={() => { void load(''); expanded.forEach((path) => void load(path)); }} className="grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><RefreshCw size={13} /></button>
-    </div>
-    <div className="flex items-center gap-2 rounded-lg border border-line bg-sunken px-2">
+    </div>}
+    {!previewOnly && <div className="flex items-center gap-2 rounded-lg border border-line bg-sunken px-2">
       <Search size={13} className="shrink-0 text-fg-3" />
       <input type="search" value={fileQuery} onChange={(event) => setFileQuery(event.target.value)} aria-label="搜索工作区文件名" placeholder="搜索文件名…"
         className="min-w-0 flex-1 bg-transparent py-1.5 text-[12px] text-fg outline-none placeholder:text-fg-3" />
       {searching && <LoaderCircle size={13} aria-label="正在搜索" className="spin shrink-0 text-fg-3" />}
       {fileQuery && <button type="button" aria-label="清除文件搜索" onClick={() => setFileQuery('')} className="grid size-6 place-items-center rounded text-fg-3 hover:bg-hover hover:text-fg"><X size={12} /></button>}
-    </div>
-    {runEvents.length > 0 && <div className="rounded-lg border border-line bg-surface">
+    </div>}
+    {!previewOnly && runEvents.length > 0 && <div className="rounded-lg border border-line bg-surface">
       <button type="button" aria-expanded={showRunFiles} onClick={() => setShowRunFiles((value) => !value)} className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-[12px] text-fg-2 hover:bg-hover"><span className="flex-1">本会话访问的文件</span><span className="text-fg-3">{runFiles.length}</span><ChevronRight size={13} className={cn('transition-transform', showRunFiles && 'rotate-90')} /></button>
       {showRunFiles && <div className="max-h-36 overflow-auto border-t border-line p-1">{runFiles.length ? runFiles.map((path) => <div key={path} className="flex items-center gap-1"><button type="button" title={path} onClick={() => selectFile(path)} className="min-w-0 flex-1 truncate rounded px-2 py-1 text-left text-[11.5px] text-fg-2 hover:bg-hover">{path}</button><button type="button" onClick={onShowChanges} className="shrink-0 rounded px-2 py-1 text-[10.5px] text-brand hover:bg-hover">查看 diff</button></div>) : <p className="m-0 px-2 py-2 text-[11px] text-fg-3">当前运行记录里没有文件访问事件。</p>}</div>}
     </div>}
     {error && <p role="alert" className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-[12.5px] text-danger">{error}</p>}
     {searchError && <p role="alert" className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-[12px] text-danger">文件搜索失败：{searchError}</p>}
-    <div className={cn('min-h-0 overflow-auto', file ? 'max-h-[42%] shrink-0' : 'flex-1')} role={fileQuery.trim() ? 'listbox' : 'tree'} aria-label={fileQuery.trim() ? '文件搜索结果' : '工作目录文件'}>
+    {!previewOnly && <div className={cn('min-h-0 overflow-auto', file ? 'max-h-[42%] shrink-0' : 'flex-1')} role={fileQuery.trim() ? 'listbox' : 'tree'} aria-label={fileQuery.trim() ? '文件搜索结果' : '工作目录文件'}>
       {fileQuery.trim() ? <>
         {searching && !searchResults.length ? <p role="status" className="py-5 text-center text-[12px] text-fg-3">正在搜索工作区…</p>
           : searchResults.length ? searchResults.map((item) => <button key={item.path} type="button" role="option" aria-selected={selected === item.path} title={item.path}
@@ -455,8 +482,8 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
         {dirs[''] ? rows('', 0) : <p className="py-6 text-center text-[13px] text-fg-3">正在读取目录…</p>}
         {dirs[''] && !dirs[''].length && <p className="py-6 text-center text-[13px] text-fg-3">这个文件夹是空的。</p>}
       </>}
-    </div>
-    {(tabs.length > 0 || recentlyClosed.length > 0) && <div className="relative flex min-h-8 items-center gap-1 border-b border-line">
+    </div>}
+    {!previewOnly && (tabs.length > 0 || recentlyClosed.length > 0) && <div className="relative flex min-h-8 items-center gap-1 border-b border-line">
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" role="tablist" aria-label="已打开文件">
         {tabs.map((path) => <div key={path} draggable onDragStart={(event) => { event.dataTransfer.setData('text/atlas-file-tab', path); event.dataTransfer.effectAllowed = 'move'; }}
           onDragOver={(event) => { if (event.dataTransfer.types.includes('text/atlas-file-tab')) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }}
@@ -489,14 +516,18 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
         </div>}
       </div>}
     </div>}
+    {previewOnly && !file && <Empty title="选择要预览的文件" body="从文件标签选择“独立预览”，文件会在这里打开；支持 Markdown、图片、PDF 和 Office 文档。" />}
     {file && <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl card-surface">
       <div className="flex items-center gap-2 px-3 py-2 text-[12px] text-fg-2 shadow-[inset_0_-1px_0_var(--line)]">
+        {previewOnly && <><button type="button" aria-label="返回上一个预览文件" title="上一个文件" disabled={previewHistoryIndex <= 0} onClick={() => movePreviewHistory(-1)} className="rounded px-1.5 py-1 text-fg-3 hover:bg-hover disabled:opacity-40"><ChevronLeft size={14} /></button><button type="button" aria-label="前进到下一个预览文件" title="下一个文件" disabled={previewHistoryIndex >= previewHistory.length - 1} onClick={() => movePreviewHistory(1)} className="rounded px-1.5 py-1 text-fg-3 hover:bg-hover disabled:opacity-40"><ChevronRight size={14} /></button></>}
         <File size={13} className="shrink-0 text-fg-3" /><code className="min-w-0 flex-1 truncate font-mono">{file.path}</code>
+        {previewOnly && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('atlas:reveal-file-in-tree', { detail: { path: file.path } }))} className="shrink-0 text-[11.5px] text-brand hover:underline">在文件树中定位</button>}
         <FileHistoryMenu workspace={workspace} path={file.path} onView={setVersion} onRestore={(item) => void restoreHistoryVersion(item.id)} onError={setError} />
         {canPreview(file.path) && <div className="flex shrink-0 rounded-md bg-sunken p-0.5" role="group" aria-label="显示方式">
           {(['preview', 'code'] as const).map((value) => <button key={value} onClick={() => setMode(value)} aria-pressed={mode === value} title={value === 'preview' ? '预览' : '源码'}
             className={cn('grid h-5 w-6 place-items-center rounded', mode === value ? 'bg-overlay text-fg shadow-sm' : 'text-fg-3 hover:text-fg')}>{value === 'preview' ? <Eye size={12} /> : <Code2 size={12} />}</button>)}
         </div>}
+        {!previewOnly && canPreview(file.path) && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('atlas:open-file-preview', { detail: { path: file.path } }))} className="shrink-0 text-[11.5px] text-brand hover:underline">独立预览</button>}
         {mode === 'code' && !version && !file.binary && !file.truncated && !workspace.startsWith('ssh://') && (editing
           ? <>
             <button type="button" disabled={!file.sha256 || saving || draft === file.content} onClick={() => void saveDraft()} className="shrink-0 rounded px-2 py-1 text-[11.5px] text-brand hover:bg-hover disabled:opacity-40">{saving ? '保存中…' : '保存'}</button>
@@ -605,7 +636,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
         </pre>
         : <pre style={{ fontSize: `${codeFontSize}px`, whiteSpace: wrapCode ? 'pre-wrap' : 'pre' }} className="m-0 min-h-0 flex-1 overflow-auto bg-code p-3 font-mono leading-[1.6] text-fg-2">{shown?.content}{shown?.truncated && '\n\n…文件太大，只显示了前 512 KB。'}</pre>}
     </div>}
-    {contextMenu && <div ref={contextMenuRef} data-file-context-menu role="menu" aria-label={`${contextMenu.path} 文件操作`}
+    {!previewOnly && contextMenu && <div ref={contextMenuRef} data-file-context-menu role="menu" aria-label={`${contextMenu.path} 文件操作`}
       onContextMenu={(event) => event.preventDefault()} style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 80 }}
       className="min-w-52 rounded-lg border border-line bg-overlay p-1 shadow-xl">
       {!contextMenu.directory && <button type="button" role="menuitem" onClick={() => { selectFile(contextMenu.path); setContextMenu(null); }}

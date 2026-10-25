@@ -1253,6 +1253,26 @@ export default function App() {
   }), [go]);
   // C6R: /review「打开文件」请求 → 切到文件面板;FilesPanel 自己消费请求并定位行。
   useEffect(() => { if (storeData.fileOpenRequest) showInspectorTab('files'); }, [storeData.fileOpenRequest]);
+  useEffect(() => {
+    const openPreview = (event: Event) => {
+      const path = (event as CustomEvent<{ path?: string }>).detail?.path;
+      if (!path) return;
+      setPreviewFile(path);
+      showInspectorTab('preview');
+    };
+    window.addEventListener('atlas:open-file-preview', openPreview);
+    return () => window.removeEventListener('atlas:open-file-preview', openPreview);
+  }, []);
+  useEffect(() => {
+    const revealInTree = (event: Event) => {
+      const path = (event as CustomEvent<{ path?: string }>).detail?.path;
+      if (!path) return;
+      setPreviewFile(path);
+      showInspectorTab('files');
+    };
+    window.addEventListener('atlas:reveal-file-in-tree', revealInTree);
+    return () => window.removeEventListener('atlas:reveal-file-in-tree', revealInTree);
+  }, []);
   const openConversation = (conversation: (typeof store.conversations)[number]) => {
     if (conversation.id !== store.activeConversationId) {
       setAttachments([]);
@@ -2502,7 +2522,7 @@ export default function App() {
             apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
             workspace={typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : null} onChooseWorkspace={() => void chooseWorkspace()}
             browserUrl={browserUrl} onBrowserUrl={setBrowserUrl} browserSuggestions={localUrls} onPick={pickElement}
-            onPreview={(url) => { setBrowserUrl(url); showInspectorTab('browser'); }} conversationId={store.activeConversationId}
+            onPreview={(url) => { setBrowserUrl(url); showInspectorTab('browser'); }} previewPath={previewFile} conversationId={store.activeConversationId}
             worktree={activeConversation?.worktree_path ? { path: String(activeConversation.worktree_path), branch: String(activeConversation.worktree_branch ?? ''), base: String(activeConversation.base_branch ?? '') } : null}
             onWorktreeChanged={() => void store.refreshConversations()}
             onAsk={(text) => store.sendMessage(text)}

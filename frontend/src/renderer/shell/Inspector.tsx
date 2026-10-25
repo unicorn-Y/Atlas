@@ -10,6 +10,7 @@ import { cn } from '../ui/cn';
 import { Empty } from './panels/Empty';
 import ChangesPanel from './panels/ChangesPanel';
 import FilesPanel from './panels/FilesPanel';
+import AgentCanvasPanel from './panels/AgentCanvasPanel';
 import SpecsPanel from './panels/SpecsPanel';
 import TerminalPanel from './panels/TerminalPanel';
 import BrowserPanel, { type PickedElement } from './panels/BrowserPanel';
@@ -22,7 +23,7 @@ import LspDiagnosticsPanel from './panels/LspDiagnosticsPanel';
 import RolloutPanel from './panels/RolloutPanel';
 import AndroidEmulatorPanel from './panels/AndroidEmulatorPanel';
 
-export type InspectorTab = 'tabs' | 'overview' | 'artifacts' | 'activity' | 'changes' | 'rollout' | 'android' | 'files' | 'specs' | 'terminal' | 'browser' | 'context' | 'processes' | 'dashboard';
+export type InspectorTab = 'tabs' | 'overview' | 'artifacts' | 'activity' | 'changes' | 'rollout' | 'android' | 'files' | 'preview' | 'canvas' | 'specs' | 'terminal' | 'browser' | 'context' | 'processes' | 'dashboard';
 
 const EMPTY_MESSAGES: ConversationMessage[] = [];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', waiting: '等你确认', paused: '已暂停', completed: '已完成', failed: '出错了', cancelled: '已停止', idle: '空闲' };
@@ -37,7 +38,7 @@ function commandForConversation(command: { id: string; text: string } | null, co
   return command;
 }
 // Diffs, file trees and a shell need room; the reading tabs keep the narrow column.
-const WIDE: InspectorTab[] = ['changes', 'rollout', 'android', 'files', 'specs', 'terminal', 'browser'];
+const WIDE: InspectorTab[] = ['changes', 'rollout', 'android', 'files', 'preview', 'canvas', 'specs', 'terminal', 'browser'];
 const WIDTH_KEY = 'atlas.preference.inspector-width';
 const readWidth = () => { try { const value = Number(localStorage.getItem(WIDTH_KEY)); return value >= 180 ? value : null; } catch { return null; } };
 const widthLimits = () => {
@@ -97,7 +98,7 @@ function useResizableWidth() {
   return { width, dragging, start, reset, resizeByKeyboard };
 }
 
-export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false, onFullScreenDiffChange, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast, workspace, onChooseWorkspace, browserUrl, onBrowserUrl, browserSuggestions, onPick, terminalCommand, onSendToAtlas, onPreview, conversationId, worktree, onWorktreeChanged, onAsk }: {
+export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false, onFullScreenDiffChange, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast, workspace, onChooseWorkspace, browserUrl, onBrowserUrl, browserSuggestions, onPick, terminalCommand, onSendToAtlas, onPreview, conversationId, worktree, onWorktreeChanged, onAsk, previewPath = '' }: {
   tab: InspectorTab;
   onTab: (tab: InspectorTab) => void;
   onClose: () => void;
@@ -127,6 +128,7 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
   worktree: { path: string; branch: string; base: string } | null;
   onWorktreeChanged: () => void;
   onAsk: (text: string) => void | Promise<void>;
+  previewPath?: string;
 }) {
   const [selected, setSelected] = useState('');
   const [raw, setRaw] = useState(false);
@@ -146,7 +148,7 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
 
   const resize = useResizableWidth();
   const tabs: Array<[InspectorTab, string]> = [
-    ['overview', '任务概览'], ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['rollout', '运行记录'], ['android', 'Android'], ['files', '文件'], ['specs', '规格'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'], ['processes', '进程'], ['dashboard', '看板'],
+    ['overview', '任务概览'], ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['rollout', '运行记录'], ['android', 'Android'], ['files', '文件'], ['preview', '预览'], ['canvas', '画布'], ['specs', '规格'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'], ['processes', '进程'], ['dashboard', '看板'],
   ];
   return <aside aria-label={fullScreenDiff ? '全屏差异查看器' : '任务面板'} style={!fullScreenDiff && resize.width ? { width: resize.width } : undefined}
     className={cn('anim-fade relative flex shrink-0 flex-col bg-canvas shadow-[inset_1px_0_0_var(--line)]', fullScreenDiff ? 'fixed inset-3 z-40 min-w-0' : 'min-w-0', !resize.dragging && 'transition-[width] duration-200', !fullScreenDiff && !resize.width && (WIDE.includes(tab) ? 'w-[min(480px,62vw)]' : 'w-[min(340px,62vw)]'))}>
@@ -201,7 +203,9 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
       {tab === 'android' && <AndroidEmulatorPanel apiBaseUrl={apiBaseUrl} workspace={worktree?.path ?? workspace} connected={connected} />}
 
       {tab === 'specs' && <SpecsPanel workspace={worktree?.path ?? workspace} onChooseWorkspace={onChooseWorkspace} refreshKey={refreshKey} onAsk={onAsk} />}
-      {tab === 'files' && <FilesPanel workspace={worktree?.path ?? workspace} onChooseWorkspace={onChooseWorkspace} refreshKey={refreshKey} onPreview={onPreview} runEvents={run?.events} onShowChanges={() => onTab('changes')} />}
+      {tab === 'files' && <FilesPanel workspace={worktree?.path ?? workspace} onChooseWorkspace={onChooseWorkspace} refreshKey={refreshKey} onPreview={onPreview} runEvents={run?.events} onShowChanges={() => onTab('changes')} initialFilePath={previewPath} />}
+      {tab === 'preview' && <FilesPanel workspace={worktree?.path ?? workspace} onChooseWorkspace={onChooseWorkspace} refreshKey={refreshKey} onPreview={onPreview} previewOnly previewPath={previewPath} />}
+      {tab === 'canvas' && <AgentCanvasPanel events={events} />}
 
       {terminalOpened && <div className={cn('h-full', tab !== 'terminal' && 'hidden')}>
         {workspace || !connected ? connected
