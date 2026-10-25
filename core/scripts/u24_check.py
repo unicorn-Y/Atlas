@@ -20,7 +20,6 @@ from atlas.channels.catalog import channels_with_registry
 from atlas.channels.contract import MessageEvent
 from atlas.channels.adapters import register_builtin_channels
 from atlas.devices import DeviceRegistry
-from atlas.devices.file_transfers import FileTransferStore
 from atlas.gateway_service import GatewayBridge, SessionMapper
 
 

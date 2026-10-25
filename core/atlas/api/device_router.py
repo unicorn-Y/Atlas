@@ -54,7 +54,6 @@ from atlas.api.dependencies import get_app_services
 from atlas.devices import SELF_DEVICE_ID, DeviceError, DeviceRegistry
 from atlas.devices.takeover import (
     AGENT,
-    HUMAN,
     RESOLUTION_DONE,
     RESOLUTION_GIVE_UP,
     HUMAN_ACTOR,
