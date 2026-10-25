@@ -12,7 +12,8 @@ export type ShortcutAction =
   | 'palette' | 'newTask' | 'settings' | 'nextTab' | 'prevTab' | 'closeTab'
   | 'toggleSidebar' | 'toggleInspector' | 'focusComposer' | 'stopRun'
   | 'sidebarSearch' | 'sidebarProjectPicker' | 'sidebarNextGroup' | 'sidebarPreviousGroup' | 'sendNow' | 'stashInput'
-  | 'focusNextPane' | 'focusPreviousPane';
+  | 'focusNextPane' | 'focusPreviousPane' | 'openDiff' | 'diffPreviousHunk' | 'diffNextHunk'
+  | 'diffCollapseHunks' | 'diffExpandHunks';
 
 export type ShortcutBindings = Record<ShortcutAction, string[]>;
 export type ShortcutBindingValue = string | readonly string[];
@@ -36,6 +37,11 @@ export const SHORTCUTS: Array<{ action: ShortcutAction; label: string; hint?: st
   { action: 'sidebarPreviousGroup', label: '切换到上一个会话组', combo: 'Ctrl+Alt+K' },
   { action: 'focusNextPane', label: '聚焦下一个分屏', combo: 'Ctrl+Alt+ArrowRight' },
   { action: 'focusPreviousPane', label: '聚焦上一个分屏', combo: 'Ctrl+Alt+ArrowLeft' },
+  { action: 'openDiff', label: '打开全屏差异查看器', combo: 'Ctrl+Alt+D' },
+  { action: 'diffPreviousHunk', label: '上一个差异块', combo: 'Ctrl+Alt+ArrowUp' },
+  { action: 'diffNextHunk', label: '下一个差异块', combo: 'Ctrl+Alt+ArrowDown' },
+  { action: 'diffCollapseHunks', label: '折叠全部差异块', combo: 'Ctrl+Alt+[' },
+  { action: 'diffExpandHunks', label: '展开全部差异块', combo: 'Ctrl+Alt+]' },
 ];
 
 const STORAGE_KEY = 'atlas.shortcuts';

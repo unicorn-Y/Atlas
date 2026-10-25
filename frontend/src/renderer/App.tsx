@@ -225,6 +225,7 @@ export default function App() {
   const [view, setView] = useState<View>('home');
   const [inspectorOpen, setInspectorOpen] = useState(() => pref('canvas') === 'true');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('artifacts');
+  const [fullScreenDiff, setFullScreenDiff] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => initialTheme());
   useEffect(() => {
     const saved = (() => { try { return localStorage.getItem('atlas.code-theme') || 'auto'; } catch { return 'auto'; } })();
@@ -1245,6 +1246,11 @@ export default function App() {
         case 'sidebarPreviousGroup': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.previous-group' } })); break;
         case 'focusNextPane': window.dispatchEvent(new CustomEvent('atlas:focus-pane', { detail: { step: 1 } })); break;
         case 'focusPreviousPane': window.dispatchEvent(new CustomEvent('atlas:focus-pane', { detail: { step: -1 } })); break;
+        case 'openDiff': if (view === 'chat') { setInspectorTab('changes'); setInspectorOpen(true); setPref('canvas', 'true'); setFullScreenDiff(true); } break;
+        case 'diffPreviousHunk': if (fullScreenDiff) window.dispatchEvent(new CustomEvent('atlas:diff-action', { detail: { action: 'previous' } })); break;
+        case 'diffNextHunk': if (fullScreenDiff) window.dispatchEvent(new CustomEvent('atlas:diff-action', { detail: { action: 'next' } })); break;
+        case 'diffCollapseHunks': if (fullScreenDiff) window.dispatchEvent(new CustomEvent('atlas:diff-action', { detail: { action: 'collapse' } })); break;
+        case 'diffExpandHunks': if (fullScreenDiff) window.dispatchEvent(new CustomEvent('atlas:diff-action', { detail: { action: 'expand' } })); break;
       }
     };
     window.addEventListener('keydown', onKey);
@@ -1578,6 +1584,7 @@ export default function App() {
     } },
     { id: 'version', label: '/version', hint: '显示 Atlas 版本', run: () => setToast(`Atlas ${__APP_VERSION__}`) },
     { id: 'diff', label: '/diff', hint: '查看本次运行的文件改动', run: () => showInspectorTab('changes') },
+    { id: 'diff-open', label: '/diff.open', hint: '打开全屏差异查看器', run: () => { showInspectorTab('changes'); setFullScreenDiff(true); } },
     { id: 'rollout', label: '/rollout', hint: '查看本次运行的完整事件归档、路径和事件清单', run: () => showInspectorTab('rollout') },
     { id: 'android', label: '/android', hint: '打开 Android 模拟器嵌入预览并选择设备', run: () => showInspectorTab('android') },
     { id: 'model', label: '/model', hint: '选择或切换模型', takesArgument: true, run: (query: string) => { const found = store.models.find((item) => item.id.toLowerCase() === query.trim().toLowerCase() || (item.name ?? '').toLowerCase() === query.trim().toLowerCase()); if (found) void store.selectModel(found.id); else setSheet('models'); } },
@@ -2318,7 +2325,7 @@ export default function App() {
             </div>
           </div>
           </PaneWorkspace></Suspense>
-          {inspectorOpen && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => toggleInspector(false)} run={activeRun} artifacts={activeArtifacts}
+          {inspectorOpen && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => { setFullScreenDiff(false); toggleInspector(false); }} fullScreenDiff={fullScreenDiff} onFullScreenDiffChange={setFullScreenDiff} run={activeRun} artifacts={activeArtifacts}
             conversationTitle={activeConversation?.title} modelName={modelName} tools={store.tools} skills={store.skills} activeSkills={store.activeSkills} capabilities={store.capabilities}
             apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
             workspace={typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : null} onChooseWorkspace={() => void chooseWorkspace()}

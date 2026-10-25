@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Download, FileText, FolderOpen, GitBranch, GitMerge, Trash2, X } from 'lucide-react';
+import { Download, FileText, FolderOpen, GitBranch, GitMerge, Minimize2, Trash2, X } from 'lucide-react';
 import type { ConversationMessage, WorktreeInfo } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
@@ -73,10 +73,12 @@ function useResizableWidth() {
   return { width, dragging, start, reset };
 }
 
-export default function Inspector({ tab, onTab, onClose, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast, workspace, onChooseWorkspace, browserUrl, onBrowserUrl, browserSuggestions, onPick, terminalCommand, onSendToAtlas, onPreview, conversationId, worktree, onWorktreeChanged, onAsk }: {
+export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false, onFullScreenDiffChange, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast, workspace, onChooseWorkspace, browserUrl, onBrowserUrl, browserSuggestions, onPick, terminalCommand, onSendToAtlas, onPreview, conversationId, worktree, onWorktreeChanged, onAsk }: {
   tab: InspectorTab;
   onTab: (tab: InspectorTab) => void;
   onClose: () => void;
+  fullScreenDiff?: boolean;
+  onFullScreenDiffChange?: (open: boolean) => void;
   run?: AgentRun;
   artifacts: Artifact[];
   conversationTitle?: string;
@@ -122,20 +124,22 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
   const tabs: Array<[InspectorTab, string]> = [
     ['overview', '任务概览'], ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['rollout', '运行记录'], ['android', 'Android'], ['files', '文件'], ['specs', '规格'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'], ['processes', '进程'], ['dashboard', '看板'],
   ];
-  return <aside aria-label="任务面板" style={resize.width ? { width: resize.width } : undefined}
-    className={cn('anim-fade relative flex shrink-0 flex-col shadow-[inset_1px_0_0_var(--line)]', !resize.dragging && 'transition-[width] duration-200', !resize.width && (WIDE.includes(tab) ? 'w-[480px]' : 'w-[340px]'))}>
-    <div role="separator" aria-orientation="vertical" aria-label="拖动调整任务面板宽度，双击恢复自动" title="拖动调整宽度，双击恢复自动"
+  return <aside aria-label={fullScreenDiff ? '全屏差异查看器' : '任务面板'} style={!fullScreenDiff && resize.width ? { width: resize.width } : undefined}
+    className={cn('anim-fade relative flex shrink-0 flex-col shadow-[inset_1px_0_0_var(--line)]', fullScreenDiff ? 'fixed inset-3 z-40 bg-canvas' : '', !resize.dragging && 'transition-[width] duration-200', !fullScreenDiff && !resize.width && (WIDE.includes(tab) ? 'w-[480px]' : 'w-[340px]'))}>
+    {!fullScreenDiff && <div role="separator" aria-orientation="vertical" aria-label="拖动调整任务面板宽度，双击恢复自动" title="拖动调整宽度，双击恢复自动"
       onPointerDown={resize.start} onDoubleClick={resize.reset}
-      className={cn('absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize after:absolute after:inset-y-0 after:left-[3px] after:w-0.5 after:rounded-full after:transition-colors hover:after:bg-brand/50', resize.dragging && 'after:bg-brand')} />
+      className={cn('absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize after:absolute after:inset-y-0 after:left-[3px] after:w-0.5 after:rounded-full after:transition-colors hover:after:bg-brand/50', resize.dragging && 'after:bg-brand')} />}
     {/* While dragging, keep the embedded browser from swallowing the pointer. */}
     {resize.dragging && <div className="fixed inset-0 z-50 cursor-col-resize" />}
-    <div className="flex items-center gap-2 pr-2 pl-4 pt-3 shadow-[inset_0_-1px_0_var(--line)]">
+    <div className={cn('flex items-center gap-2 pr-2 shadow-[inset_0_-1px_0_var(--line)]', fullScreenDiff ? 'min-h-12 px-4' : 'pl-4 pt-3')}>
+      {fullScreenDiff && <div className="flex min-w-0 flex-1 items-center gap-2"><FileText size={16} className="shrink-0 text-brand" /><strong className="truncate text-[14px] text-fg">全屏差异查看器</strong><span className="hidden text-[11.5px] text-fg-3 sm:inline">Ctrl+Alt+[ / Ctrl+Alt+] 折叠或展开 · Ctrl+Alt+↑/↓ 跳转差异块</span></div>}
       <div className="flex min-w-0 flex-1 items-center gap-3.5 overflow-x-auto [scrollbar-width:none]" role="tablist">
-      {tabs.map(([id, label]) =>
+      {!fullScreenDiff && tabs.map(([id, label]) =>
         <button key={id} role="tab" aria-selected={tab === id} onClick={() => onTab(id)}
           className={cn('shrink-0 pb-2.5 text-[13px] transition-colors', tab === id ? 'font-medium text-fg shadow-[inset_0_-2px_0_var(--brand)]' : 'text-fg-3 hover:text-fg')}>{label}</button>)}
       </div>
-      <button aria-label="收起任务面板" onClick={onClose} className="-mt-2 grid size-7 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={15} /></button>
+      {fullScreenDiff && <button type="button" aria-label="返回任务面板" title="返回任务面板" onClick={() => onFullScreenDiffChange?.(false)} className="grid size-8 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Minimize2 size={15} /></button>}
+      <button aria-label={fullScreenDiff ? '关闭差异查看器' : '收起任务面板'} onClick={onClose} className="grid size-7 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={15} /></button>
     </div>
 
     <div className="min-h-0 flex-1 overflow-auto p-5">
@@ -162,7 +166,7 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
         {raw && <ul className="mt-2 grid list-none gap-1 p-0 font-mono text-[11.5px] text-fg-3">{events.map((event) => <li key={event.id} className="truncate">{new Date(event.timestamp).toLocaleTimeString()} {event.type} {String(event.data.name ?? event.data.phase ?? event.data.status ?? '')}</li>)}</ul>}
       </> : <Empty title="还没有开始" body="发出一个任务后，Atlas 做的每一步都会记在这里。" />)}
 
-      {tab === 'changes' && <ChangesPanel runId={run?.id} runStatus={run?.status} apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} onAsk={onAsk} workspace={worktree?.path ?? workspace} />}
+      {tab === 'changes' && <ChangesPanel runId={run?.id} runStatus={run?.status} apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} onAsk={onAsk} workspace={worktree?.path ?? workspace} fullscreen={fullScreenDiff} onOpenFullscreen={() => onFullScreenDiffChange?.(true)} />}
       {tab === 'rollout' && <RolloutPanel runId={run?.id} apiBaseUrl={apiBaseUrl} conversationId={conversationId} />}
       {tab === 'android' && <AndroidEmulatorPanel apiBaseUrl={apiBaseUrl} workspace={worktree?.path ?? workspace} connected={connected} />}
 

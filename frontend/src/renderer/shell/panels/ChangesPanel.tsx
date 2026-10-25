@@ -37,8 +37,9 @@ function samePath(left: string, right: string): boolean {
 }
 
 /** What this run changed on disk, and the snapshots that can put it back. */
-export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, onToast, onAsk, workspace }: {
+export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, onToast, onAsk, workspace, fullscreen = false, onOpenFullscreen }: {
   runId?: string; runStatus?: string; apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; onAsk?: (text: string) => void | Promise<void>; workspace?: string | null;
+  fullscreen?: boolean; onOpenFullscreen?: () => void;
 }) {
   const [diffScope, setDiffScope] = useState<'run' | 'workspace'>('run');
   const [gitDiff, setGitDiff] = useState<{ tracked_diff: string; untracked: Array<{ path: string; status: string; diff: string; binary?: boolean; error?: string }>; tracked_truncated?: boolean } | null>(null);
@@ -93,6 +94,9 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
       .catch((exc) => { if (!stale) { setFiles([]); setError(exc instanceof Error ? exc.message : String(exc)); } });
     return () => { stale = true; };
   }, [runId, runStatus, connected, changesReload]);
+  useEffect(() => {
+    if (fullscreen && selectedFile) setOpen([selectedFile]);
+  }, [fullscreen, selectedFile]);
 
   // A run's earliest checkpoint containing a changed path is the version from before
   // that file was first edited. Only files with that concrete snapshot get a restore action.
@@ -218,10 +222,19 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
     }
   };
 
-  return <div className="grid gap-6">
+  const diffAction = (action: 'previous' | 'next' | 'collapse' | 'expand') => {
+    window.dispatchEvent(new CustomEvent('atlas:diff-action', { detail: { action, path: selectedFile } }));
+  };
+  return <div className={cn('grid gap-6', fullscreen && 'min-h-full content-start')}>
     <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="改动来源">
       <button role="tab" aria-selected={diffScope === 'run'} onClick={() => setDiffScope('run')} className={cn('rounded-lg px-3 py-1.5 text-[12px]', diffScope === 'run' ? 'bg-selected text-fg' : 'text-fg-3 hover:bg-hover')}>Atlas 本次改动</button>
       <button role="tab" aria-selected={diffScope === 'workspace'} onClick={() => setDiffScope('workspace')} className={cn('rounded-lg px-3 py-1.5 text-[12px]', diffScope === 'workspace' ? 'bg-selected text-fg' : 'text-fg-3 hover:bg-hover')}>工作区 Git diff（含未跟踪）</button>
+      {!fullscreen && <button type="button" onClick={onOpenFullscreen} className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] text-fg-2 hover:bg-hover"><ExternalLink size={13} />全屏 diff.open</button>}
+      {fullscreen && diffScope === 'run' && <div className="ml-auto flex flex-wrap items-center gap-1.5">
+        <button type="button" title="Ctrl+Alt+[" onClick={() => diffAction('collapse')} className="rounded-lg px-2.5 py-1.5 text-[11.5px] text-fg-2 hover:bg-hover">折叠差异块</button>
+        <button type="button" title="Ctrl+Alt+]" onClick={() => diffAction('expand')} className="rounded-lg px-2.5 py-1.5 text-[11.5px] text-fg-2 hover:bg-hover">展开差异块</button>
+        <span className="hidden text-[11px] text-fg-3 md:inline">Ctrl+Alt+↑/↓ 切换差异块</span>
+      </div>}
     </div>
     {diffScope === 'workspace' ? <section aria-label="当前工作区 Git diff" className="grid gap-3">
       {!workspace || workspace.startsWith('ssh://') ? <Empty title="没有本地工作区" body="当前工作区 diff 仅支持本机 Git 仓库。" />
@@ -294,7 +307,7 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
                   <option value="">IDE 打开…</option><option value="vscode">VS Code</option><option value="cursor">Cursor</option><option value="zed">Zed</option><option value="idea">IntelliJ IDEA</option><option value="pycharm">PyCharm</option>
                 </select>
               </div>}
-              <DiffView diff={file.diff} truncated={file.truncated} path={file.path} openPath={openPath} hunks={file.hunks}
+              <DiffView diff={file.diff} truncated={file.truncated} path={file.path} openPath={openPath} hunks={file.hunks} navigationEnabled={fullscreen && selectedFile === file.path}
                 busyHunkId={hunkBusyId} onReviewHunk={(hunk, action) => void reviewHunk(file, hunk, action)} comments={onAsk ? comments.filter((comment) => comment.path === file.path) : undefined}
                 onAdd={(comment) => setComments((current) => [...current, { ...comment, id: `${Date.now()}-${current.length}` }])} onEdit={editComment}
                 onRemove={(id) => setComments((current) => current.filter((comment) => comment.id !== id))} />
@@ -352,8 +365,9 @@ function numberLines(diff: string): DiffLine[] {
 }
 
 /** 统一 diff 渲染（含行号）；InitDialog 复用它来预览 AGENTS.md 的提案差异。 */
-export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, onReviewHunk, comments, onAdd, onEdit, onRemove }: {
+export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, onReviewHunk, comments, onAdd, onEdit, onRemove, navigationEnabled = false }: {
   diff: string; truncated?: boolean; path: string; openPath?: string; hunks?: RunChangeHunk[]; busyHunkId?: string;
+  navigationEnabled?: boolean;
   onReviewHunk?: (hunk: RunChangeHunk, action: 'accept' | 'reject') => void; comments?: LineComment[];
   onAdd: (comment: Omit<LineComment, 'id'>) => void; onEdit: (id: string, text: string) => void; onRemove: (id: string) => void;
 }) {
@@ -367,6 +381,7 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
   const searchHitRefs = useRef<Array<HTMLElement | null>>([]);
   const hunkRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [activeHunk, setActiveHunk] = useState(0);
+  const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(() => new Set());
   const hunkLineIndexes = useMemo(() => lines.flatMap((line, index) => line.kind === 'hunk' && line.text.startsWith('@@') ? [index] : []), [lines]);
   const commentButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const commentable = Boolean(comments);
@@ -405,6 +420,19 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
       return next;
     });
   };
+  useEffect(() => {
+    if (!navigationEnabled) return;
+    const onDiffAction = (event: Event) => {
+      const detail = (event as CustomEvent<{ action?: string; path?: string }>).detail;
+      if (detail?.path && detail.path !== path) return;
+      if (detail.action === 'previous') moveHunk(-1);
+      else if (detail.action === 'next') moveHunk(1);
+      else if (detail.action === 'collapse') setCollapsedHunks(new Set(hunkLineIndexes.map((_, index) => index)));
+      else if (detail.action === 'expand') setCollapsedHunks(new Set());
+    };
+    window.addEventListener('atlas:diff-action', onDiffAction);
+    return () => window.removeEventListener('atlas:diff-action', onDiffAction);
+  }, [navigationEnabled, path, hunkLineIndexes]);
   useEffect(() => {
     if (searchText && searchHits.length) searchHitRefs.current[activeSearchHit]?.scrollIntoView({ block: 'center', inline: 'nearest' });
   }, [activeSearchHit, searchHits.length, searchText]);
@@ -455,6 +483,7 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
       </>}
     </div>
     {lines.map((line, index) => {
+      if (line.hunkIndex >= 0 && collapsedHunks.has(line.hunkIndex) && !(line.kind === 'hunk' && line.text.startsWith('@@'))) return null;
       const number = line.newNo ?? line.oldNo;
       const notes = comments?.filter((comment) => comment.line === number && comment.side === (line.kind === 'del' ? 'old' : 'new') && line.kind !== 'hunk') ?? [];
       const lineHitIndexes = searchHitsByLine.get(index) ?? [];
@@ -480,6 +509,9 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
               className="grid w-4 shrink-0 place-items-center text-brand opacity-0 group-hover:opacity-100 focus:opacity-100"><MessageSquarePlus size={11} /></button>
             : <span className="w-4 shrink-0" />}
           <span className="min-w-0 flex-1 pr-3 whitespace-pre">{line.kind === 'hunk' ? line.text || ' ' : <>{line.text.slice(0, 1)}{lineHitIndexes.length ? highlighted : line.text.slice(1) || ' '}</>}</span>
+          {line.kind === 'hunk' && line.text.startsWith('@@') && <button type="button" aria-expanded={!collapsedHunks.has(line.hunkIndex)} aria-label={`${collapsedHunks.has(line.hunkIndex) ? '展开' : '折叠'}差异块 ${line.hunkIndex + 1}`}
+            onClick={() => setCollapsedHunks((current) => { const next = new Set(current); if (next.has(line.hunkIndex)) next.delete(line.hunkIndex); else next.add(line.hunkIndex); return next; })}
+            className="mr-2 shrink-0 rounded px-1.5 py-0.5 font-sans text-[10.5px] text-fg-3 hover:bg-hover">{collapsedHunks.has(line.hunkIndex) ? '展开' : '折叠'}</button>}
         </div>
         {line.kind === 'hunk' && line.text.startsWith('@@') && (() => {
           const hunk = hunks?.[line.hunkIndex];
