@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { relativeTime } from '../services/api';
-import type { AutomationInboxRun, AutomationRecord } from '../services/persistentApi';
+import type { AutomationDeleteImpact, AutomationInboxRun, AutomationRecord } from '../services/persistentApi';
 import { automationsApi } from '../services/persistentApi';
 import GoalsPanel from './GoalsPanel';
 import { describeAutomation, describeTrigger } from './automations/describe';
@@ -69,7 +69,6 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast, onOpenC
   const error = useAtlasStore((state) => state.automationsError);
   const loadAutomations = useAtlasStore((state) => state.loadAutomations);
   const createAutomation = useAtlasStore((state) => state.createAutomation);
-  const deleteAutomation = useAtlasStore((state) => state.deleteAutomation);
   const runAutomationNow = useAtlasStore((state) => state.runAutomationNow);
   const pauseAutomation = useAtlasStore((state) => state.pauseAutomation);
   const resumeAutomation = useAtlasStore((state) => state.resumeAutomation);
@@ -97,6 +96,8 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast, onOpenC
   const [templateParameters, setTemplateParameters] = useState<Record<string, string>>({});
   const [form, setForm] = useState<CreateForm>(EMPTY_FORM);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteImpact, setDeleteImpact] = useState<AutomationDeleteImpact | null>(null);
+  const [deleteConversationPolicy, setDeleteConversationPolicy] = useState<'archive' | 'keep'>('archive');
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
   const [editingId, setEditingId] = useState('');
@@ -180,6 +181,23 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast, onOpenC
     setBusy(false);
     const failure = useAtlasStore.getState().automationsError;
     onToast(failure || done);
+  };
+
+  const inspectDelete = async (id: string) => {
+    setBusy(true);
+    try { setDeleteImpact(await automationsApi.deleteImpact(apiBaseUrl, id)); setDeleteConversationPolicy('archive'); }
+    catch (cause) { onToast(`读取关联会话失败：${cause instanceof Error ? cause.message : String(cause)}`); }
+    finally { setBusy(false); }
+  };
+  const confirmDeleteAutomation = async () => {
+    if (!deleteImpact) return;
+    setBusy(true);
+    try {
+      const result = await automationsApi.remove(apiBaseUrl, deleteImpact.automation_id, deleteConversationPolicy);
+      await loadAutomations(); setSelected(''); setConfirmDelete(false); setDeleteImpact(null);
+      onToast(`已删除自动化；关联会话已归档 ${result.archived.length} 个，保留 ${result.retained.length} 个。`);
+    } catch (cause) { onToast(`删除自动化失败：${cause instanceof Error ? cause.message : String(cause)}`); }
+    finally { setBusy(false); }
   };
 
   const create = (event: FormEvent) => {
@@ -478,7 +496,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast, onOpenC
                 setEditingId(current.id); setCreating(true);
               }}>编辑</button>
               <button className={`btn ${confirmDelete ? 'danger' : 'ghost'}`} disabled={busy}
-                onClick={() => { if (!confirmDelete) { setConfirmDelete(true); return; } void act(async () => { await deleteAutomation(current.id); setSelected(''); }, '已删除自动化'); }}>
+                onClick={() => { if (!confirmDelete) { setConfirmDelete(true); return; } void inspectDelete(current.id); }}>
                 <Trash2 size={14} />{confirmDelete ? '确认删除' : '删除'}
               </button>
             </div>
@@ -488,5 +506,24 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast, onOpenC
         </aside> : <div />}
       </div>
     </>}
+    {deleteImpact && <div role="dialog" aria-modal="true" aria-label="删除自动化及关联会话" className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
+      <section className="grid max-h-[80vh] w-full max-w-2xl gap-3 overflow-auto rounded-xl card-surface p-5">
+        <h2 className="m-0 text-[16px]">删除「{deleteImpact.automation_name}」</h2>
+        <p className="m-0 text-[13px]">此自动化有 {deleteImpact.run_count} 条运行记录，关联 {deleteImpact.conversations.length} 个会话。运行记录留在收件箱中，删除计划不会删除会话或运行记录。</p>
+        <ul className="m-0 grid gap-1 p-0 text-[12.5px]">
+          {deleteImpact.conversations.map((conversation) => <li className="list-none rounded bg-sunken px-3 py-2" key={conversation.id}>
+            <strong>{conversation.title}</strong> · {conversation.status === 'available' ? (conversation.archived ? '已归档' : '可归档') : conversation.status === 'missing' ? '会话已不存在' : '会话信息暂不可读取'} · {conversation.run_count} 条运行
+            <small className="block break-all text-fg-3">{conversation.id} · 运行记录：{conversation.runs.join(', ') || '尚无已完成运行'}</small>
+          </li>)}
+          {!deleteImpact.conversations.length && <li className="list-none text-fg-3">没有找到关联会话；运行收件箱记录仍会保留。</li>}
+        </ul>
+        <fieldset className="grid gap-2 rounded-lg border border-[var(--line)] p-3 text-[12.5px]">
+          <legend>删除后的会话处理</legend>
+          <label className="flex gap-2"><input type="radio" checked={deleteConversationPolicy === 'archive'} onChange={() => setDeleteConversationPolicy('archive')} />归档所有可访问的关联会话；缺失或不可访问的会话会保留其运行记录关联。</label>
+          <label className="flex gap-2"><input type="radio" checked={deleteConversationPolicy === 'keep'} onChange={() => setDeleteConversationPolicy('keep')} />保留所有关联会话，运行记录仍保留与本自动化的关联。</label>
+        </fieldset>
+        <div className="flex justify-end gap-2"><button className="btn ghost" disabled={busy} onClick={() => { setDeleteImpact(null); setConfirmDelete(false); }}>取消</button><button className="btn danger" disabled={busy} onClick={() => void confirmDeleteAutomation()}>{busy ? '处理中…' : '确认处理会话并删除计划'}</button></div>
+      </section>
+    </div>}
   </div></div>;
 }

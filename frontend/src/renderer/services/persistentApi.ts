@@ -218,6 +218,10 @@ export interface AutomationInboxRun {
   status: string; trigger: string; summary: string; result_url: string; conversation_id: string;
   started_at: string; finished_at: string; read_at: string | null; result: unknown;
 }
+export interface AutomationDeleteImpact {
+  automation_id: string; automation_name: string; run_count: number;
+  conversations: Array<{ id: string; title: string; status: 'available' | 'missing' | 'unavailable'; archived: boolean | null; run_count: number; runs: string[]; error?: string }>;
+}
 export interface MigrationReport {
   source: string;
   imported_count: number;
@@ -233,8 +237,10 @@ export const automationsApi = {
     api<{ automation: AutomationRecord }>(base, '/api/automations', { method: 'POST', json: payload }),
   patch: (base: string, id: string, patch: Record<string, unknown>) =>
     api<{ automation: AutomationRecord }>(base, `/api/automations/${encodeURIComponent(id)}`, { method: 'PATCH', json: patch }),
-  remove: (base: string, id: string) =>
-    api<{ deleted: boolean }>(base, `/api/automations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  deleteImpact: (base: string, id: string) =>
+    api<AutomationDeleteImpact>(base, `/api/automations/${encodeURIComponent(id)}/delete-impact`),
+  remove: (base: string, id: string, conversationPolicy: 'archive' | 'keep' = 'keep') =>
+    api<{ deleted: boolean; conversation_policy: string; archived: string[]; retained: Array<{ id: string; reason: string; runs: string[] }>; run_count: number }>(base, `/api/automations/${encodeURIComponent(id)}`, { method: 'DELETE', json: { conversation_policy: conversationPolicy } }),
   runNow: (base: string, id: string) =>
     api<Record<string, unknown>>(base, `/api/automations/${encodeURIComponent(id)}/run-now`, { method: 'POST' }),
   cancel: (base: string, id: string) =>

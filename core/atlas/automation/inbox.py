@@ -140,6 +140,17 @@ def unread_count() -> int:
         return int(db.execute("SELECT count(*) FROM automation_inbox WHERE read_at IS NULL").fetchone()[0])
 
 
+def runs_for_automation(automation_id: str) -> list[dict[str, Any]]:
+    """Return durable run references used to explain automation deletion impact."""
+    with _LOCK, _connect() as db:
+        rows = db.execute(
+            "SELECT run_key,automation_name,source,status,conversation_id,started_at,finished_at "
+            "FROM automation_inbox WHERE automation_id=? ORDER BY finished_at DESC,run_key DESC",
+            (automation_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def list_runs(*, limit: int, offset: int, status: str, source: str, unread: bool) -> dict[str, Any]:
     where: list[str] = []
     values: list[Any] = []

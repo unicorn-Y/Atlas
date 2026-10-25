@@ -161,6 +161,50 @@ class ImportLegacyRequest(BaseModel):
     toml_path: str | None = Field(default=None, description="缺省 data/schedules.toml")
 
 
+class AutomationDeleteRequest(BaseModel):
+    conversation_policy: Literal["archive", "keep"]
+
+
+def _delete_impact(automation_id: str, record: dict[str, Any]) -> dict[str, Any]:
+    from atlas.automation.inbox import runs_for_automation
+
+    runs = runs_for_automation(automation_id)
+    configured_id = str((record.get("payload") or {}).get("conversation_id") or "").strip()
+    conversations: dict[str, dict[str, Any]] = {}
+    for run in runs:
+        conversation_id = str(run.get("conversation_id") or "").strip()
+        if conversation_id:
+            conversations.setdefault(conversation_id, {"id": conversation_id, "run_count": 0, "runs": []})
+            conversations[conversation_id]["run_count"] += 1
+            conversations[conversation_id]["runs"].append(run["run_key"])
+    if configured_id:
+        conversations.setdefault(configured_id, {"id": configured_id, "run_count": 0, "runs": [], "configured": True})
+    return {"automation_id": automation_id, "automation_name": str(record.get("name") or automation_id),
+            "run_count": len(runs), "conversations": list(conversations.values()),
+            "configured_conversation_id": configured_id}
+
+
+async def _conversation_details(impact: dict[str, Any], memory: Any) -> dict[str, Any]:
+    conversations = []
+    for item in impact["conversations"]:
+        row = dict(item)
+        if memory is None:
+            row.update({"status": "unavailable", "title": row["id"], "archived": None})
+        else:
+            try:
+                conversation = await memory.get_conversation(row["id"])
+                if conversation is None:
+                    row.update({"status": "missing", "title": row["id"], "archived": None})
+                else:
+                    row.update({"status": "available", "title": str(conversation.get("title") or row["id"]),
+                                "archived": bool(conversation.get("archived"))})
+            except Exception as exc:
+                row.update({"status": "unavailable", "title": row["id"], "archived": None,
+                            "error": type(exc).__name__})
+        conversations.append(row)
+    return {**impact, "conversations": conversations}
+
+
 MAX_WEBHOOK_BODY = 256 * 1024
 
 
@@ -280,14 +324,57 @@ async def patch_automation(automation_id: str, body: AutomationPatch) -> dict[st
 
 
 @automation_router.delete("/{automation_id}")
-async def delete_automation(automation_id: str) -> dict[str, Any]:
+async def delete_automation(
+    automation_id: str, request: Request, body: AutomationDeleteRequest | None = None,
+) -> dict[str, Any]:
     engine = _engine()
-    if engine.store.get(automation_id) is None:
+    record = engine.store.get(automation_id)
+    if record is None:
         raise _not_found(automation_id)
+    impact = _delete_impact(automation_id, record)
+    services = getattr(request.app.state, "services", None)
+    memory = getattr(services, "memory", None)
+    detail = await _conversation_details(impact, memory)
+    if body is None and detail["conversations"]:
+        raise HTTPException(status_code=409, detail={"message": "删除前必须确认关联会话策略", **detail})
+    policy = body.conversation_policy if body else "keep"
+    archived: list[str] = []
+    retained: list[dict[str, Any]] = []
+    failed: list[dict[str, str]] = []
+    if policy == "archive":
+        for conversation in detail["conversations"]:
+            conversation_id = conversation["id"]
+            if conversation["status"] != "available":
+                retained.append({"id": conversation_id, "reason": conversation["status"],
+                                 "runs": conversation.get("runs", [])})
+                continue
+            try:
+                await memory.update_conversation(conversation_id, archived=True)
+                archived.append(conversation_id)
+            except Exception as exc:
+                failed.append({"id": conversation_id, "reason": type(exc).__name__})
+        if failed:
+            raise HTTPException(status_code=409, detail={
+                "message": "部分关联会话未能归档；自动化和关联记录均已保留，请处理后重试或选择保留会话",
+                "archived": archived, "retained": retained, "failed": failed, **detail,
+            })
     await engine.remove(automation_id)
     deleted = engine.store.delete(automation_id)
     get_webhook_credentials().delete(automation_id)
-    return {"deleted": deleted}
+    if policy == "keep":
+        retained = [{"id": item["id"], "reason": "user_selected_keep", "runs": item.get("runs", [])}
+                    for item in detail["conversations"]]
+    return {"deleted": deleted, "conversation_policy": policy, "archived": archived,
+            "retained": retained, "run_count": detail["run_count"]}
+
+
+@automation_router.get("/{automation_id}/delete-impact")
+async def automation_delete_impact(automation_id: str, request: Request) -> dict[str, Any]:
+    record = _engine().store.get(automation_id)
+    if record is None:
+        raise _not_found(automation_id)
+    services = getattr(request.app.state, "services", None)
+    return await _conversation_details(_delete_impact(automation_id, record), getattr(services, "memory", None))
 
 
 # ---------------------------------------------------------------------------
