@@ -59,6 +59,14 @@ async def channel_status() -> dict[str, Any]:
     return get_channel_manager().status()
 
 
+@router.get("/catalog")
+async def channel_catalog() -> dict[str, Any]:
+    """Return the shared feature catalog, including platforms not yet implemented."""
+    from atlas.channels.catalog import list_channels
+
+    return {"channels": list_channels()}
+
+
 class ChannelPolicyPayload(BaseModel):
     """Runtime DM/group admission policy; fields mirror ChannelManager._admit."""
 
