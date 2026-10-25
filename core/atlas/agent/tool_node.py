@@ -612,7 +612,7 @@ async def execute_tools_node(
                 await ctx.event_queue.put({"type": "canvas.update", "data": {
                     "widget_id": widget_id, "title": title, "format": fmt,
                     "content": canvas_content, "mode": mode,
-                })
+                }})
                 result = {"data": {"widget_id": widget_id, "title": title, "format": fmt},
                           "content": [{"type": "text", "text": f"已推送共享画布“{title}”。"}],
                           "is_error": False}
