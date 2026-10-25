@@ -38,6 +38,10 @@ dependencies = [
     "pynput>=1.7.7",
     "cryptography>=41.0.0",
     "Pillow>=10.0.0",
+    # U36 local OCR: RapidOCR ships multilingual ONNX inference; model weights are
+    # fetched lazily into DATA_ROOT on the first image request.
+    "rapidocr>=3.10.0",
+    "onnxruntime>=1.23.0",
     "browser-use==0.13.11",
     "dbos==3.2.0",
     "claude-agent-sdk==0.2.165",

@@ -608,6 +608,17 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         items.push({ kind: 'notice', id: event.id, tone: state === 'failed' ? 'verify' : 'switch', text: `${server} · ${label}：${message}` });
         break;
       }
+      case 'media.ocr.progress': {
+        closeReply(); closeBlocks();
+        const state = String(data.state ?? 'downloading');
+        const detail = String(data.detail ?? '正在准备本地中英文 OCR');
+        const percentage = Math.max(0, Math.min(100, Math.round(Number(data.progress ?? 0) * 100)));
+        items.push({ kind: 'notice', id: event.id, tone: state === 'failed' ? 'verify' : 'switch',
+          text: state === 'ready' ? `本地 OCR 已就绪：${detail}`
+            : state === 'failed' ? `本地 OCR 准备失败：${detail}`
+              : `正在准备本地 OCR（${percentage}%）：${detail}` });
+        break;
+      }
       case 'run.model_switched': {
         closeReply(); closeBlocks();
         const reason = String(data.reason ?? '').trim();

@@ -1482,10 +1482,29 @@ async def _handle_run_start(
         }))
         return
     media_sources: list[dict[str, Any]] = []
-    from atlas.runtime.media_understanding import media_context_block, ocr_image_data_url
+    from atlas.runtime.media_understanding import media_context_block, ocr_image_data_url, ocr_runtime_status
+    preparation_run = RunState(run_id, str(data.get("conversation_id") or ""), str(data.get("model") or ""))
     image_context: list[str] = []
     for image_index, image in enumerate(image_attachments):
-        text, audit = await asyncio.to_thread(ocr_image_data_url, image, image_index)
+        ocr_task = asyncio.create_task(asyncio.to_thread(ocr_image_data_url, image, image_index))
+        last_progress: tuple[str, int, str] | None = None
+        while not ocr_task.done():
+            status = ocr_runtime_status()
+            progress_key = (str(status.get("state")), int(float(status.get("progress", 0)) * 100), str(status.get("detail")))
+            if status.get("state") != "not_started" and progress_key != last_progress:
+                await manager.send(conn_id, preparation_run.next_envelope("media.ocr.progress", {
+                    "state": status.get("state"), "progress": status.get("progress", 0),
+                    "detail": status.get("detail") or "正在准备本地 OCR",
+                }))
+                last_progress = progress_key
+            await asyncio.sleep(0.25)
+        text, audit = await ocr_task
+        final_ocr_status = ocr_runtime_status()
+        await manager.send(conn_id, preparation_run.next_envelope("media.ocr.progress", {
+            "state": final_ocr_status.get("state", "failed"),
+            "progress": final_ocr_status.get("progress", 0),
+            "detail": final_ocr_status.get("detail") or audit.get("status", "OCR 完成"),
+        }))
         audit["vision"] = "原图随消息传给所选模型"
         media_sources.append(audit)
         block = media_context_block(audit, text)
@@ -1627,7 +1646,9 @@ async def _handle_run_start(
     with project_scope(run_project_id, config_override=config_override,
                        ignore_project_config=ignore_project_config, session_id=str(conv_id)):
         model_id = model_id or model_mgr.current_model
-    run = RunState(run_id, conv_id, model_id)
+    run = preparation_run
+    run.conversation_id = conv_id
+    run.model_id = model_id
     try:
         from atlas.logs import append_run_event
         append_run_event(run_id, "api_timing", stage="request_received", elapsed_ms=0)

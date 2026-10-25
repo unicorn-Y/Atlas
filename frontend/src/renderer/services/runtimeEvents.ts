@@ -29,7 +29,7 @@ export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEven
     'computer.foreground_required', 'computer.foreground_resumed', 'computer.foreground_denied', 'computer.step', 'computer.frame',
     // X2 浏览器代理：交接确认与结果、面板地址同步、录制中的每一步（供 BrowserHandoffCard / BrowserRecorderPanel）。
     'browser.handoff_required', 'browser.handoff_resolved', 'browser.panel.sync', 'browser.step', 'browser.artifact',
-    'browser.vault_fill_denied', 'mcp.startup.progress', 'canvas.update', 'component.push']);
+    'browser.vault_fill_denied', 'mcp.startup.progress', 'media.ocr.progress', 'canvas.update', 'component.push']);
   known.add('process.notification');
   const base = { id: envelope.event_id, runId: envelope.run_id, sequence: envelope.sequence, timestamp: envelope.timestamp };
   // Office files and other generated documents: shown like any other artifact.
