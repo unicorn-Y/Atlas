@@ -401,6 +401,7 @@ export default function App() {
   const [messageTimestampsEnabled, setMessageTimestampsEnabled] = useState(() => pref('message-timestamps') === 'true');
   const [startupWarning, setStartupWarning] = useState('');
   const [diagnosticUnread, setDiagnosticUnread] = useState(0);
+  const [automationInboxUnread, setAutomationInboxUnread] = useState(0);
   const [peerInbox, setPeerInbox] = useState<Array<{ id: string; sender_conversation_id: string; sender_title: string; content: string; created_at: string }>>([]);
   const [besideId, setBesideId] = useState('');
   const [paneCount, setPaneCount] = useState(0);
@@ -431,6 +432,15 @@ export default function App() {
     const refresh = () => void api<{ unread: number }>(store.apiBaseUrl, '/api/diagnostics/alerts').then((result) => { if (active) setDiagnosticUnread(result.unread); }).catch(() => undefined);
     refresh(); const timer = window.setInterval(refresh, 15000);
     return () => { active = false; window.clearInterval(timer); };
+  }, [store.connected, store.apiBaseUrl]);
+  useEffect(() => {
+    if (!store.connected) { setAutomationInboxUnread(0); return; }
+    let active = true;
+    const refresh = () => void api<{ unread: number }>(store.apiBaseUrl, '/api/automations/inbox/unread-count')
+      .then((result) => { if (active) setAutomationInboxUnread(result.unread); }).catch(() => undefined);
+    refresh(); const timer = window.setInterval(refresh, 15000);
+    window.addEventListener('atlas:automation-inbox-unread-changed', refresh);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('atlas:automation-inbox-unread-changed', refresh); };
   }, [store.connected, store.apiBaseUrl]);
   useEffect(() => {
     const open = () => setSheet('diagnostics');
@@ -2655,6 +2665,7 @@ export default function App() {
         username={username} subtitle={store.connected ? modelName : store.backendStarting ? '后端启动中…' : '后端没有连接'}
         theme={theme} onToggleTheme={toggleTheme} onSettings={() => setSheet('models')}
         pinned={store.pinned} archived={store.archived} unread={store.unread}
+        automationInboxUnread={automationInboxUnread}
         subtaskUnreadCounts={Object.fromEntries(Object.entries(store.subtaskUnread).map(([id, childIds]) => [id, childIds.length]))}
         running={runningConversations} runs={store.runs} onPauseRun={(runId) => {
           const run = store.getRun(runId); if (!run) return;
@@ -2807,7 +2818,7 @@ export default function App() {
     {view === 'groups' && <GroupsView onToast={notify} />}
     {view === 'code' && <CodePage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'create' && <CreatePage onDraft={draft} onVoice={startVoice} apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} initialPrompt={createPrompt} workspace={store.draftWorkspace ?? defaultWorkspace} />}
-        {view === 'auto' && <AutomationPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
+        {view === 'auto' && <AutomationPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} onOpenConversation={(id) => { const target = useAtlasStore.getState().conversations.find((item) => item.id === id); if (target) { go('chat'); void openConversation(target); } else notify('关联会话已不存在'); }} />}
         {view === 'memory' && <MemoryPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'evolution' && <EvolutionPage apiBaseUrl={store.apiBaseUrl} onToast={notify} />}
         </Suspense>

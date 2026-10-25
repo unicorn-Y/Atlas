@@ -740,6 +740,7 @@ class AutomationEngine:
         trigger_payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """执行一个 automation 的 payload；在 DBOS step 内调用（可安全做副作用）。"""
+        run_id = uuid.uuid4().hex
         record = self._store.get(automation_id)
         started_at = _utc_now_iso()
         if record is None:
@@ -785,7 +786,8 @@ class AutomationEngine:
                     }
                 )
                 if execution.get("worktree_path"):
-                    result = {"text": result, **{key: value for key, value in execution.items() if key != "workspace"}}
+                    result = ({**result} if isinstance(result, dict) else {"text": str(result or "")})
+                    result.update({key: value for key, value in execution.items() if key != "workspace"})
                     if payload.get("cleanup_policy") == "remove_after_run":
                         self._cleanup_record_worktree(self._require_automation(automation_id))
             elif kind == "script":
@@ -803,6 +805,11 @@ class AutomationEngine:
                 self._cleanup_record_worktree(latest)
         delivery = await self._settle_delivery(record, {"status": status, "result": result})
         return {
+            "run_id": run_id,
+            "automation_id": automation_id,
+            "automation_name": str(record.get("name") or automation_id),
+            "conversation_id": str(payload.get("conversation_id") or f"automation-{automation_id}")
+                if payload.get("kind") == "agent_turn" and not _is_reminder(record) else "",
             "status": status,
             "error": error,
             "delivery": delivery,
@@ -913,6 +920,9 @@ class AutomationEngine:
         record = self._store.get(automation_id)
         if record is None:
             return
+        from atlas.automation.inbox import record_run
+
+        record_run(record, {**run, "automation_id": automation_id})
         status = run.get("status", "error")
         fields: dict[str, Any] = {
             "last_run_at": run.get("finished_at") or _utc_now_iso(),
@@ -1019,5 +1029,8 @@ def _summarize(result: Any) -> Any:
     if result is None:
         return None
     if isinstance(result, dict):
-        return {key: result[key] for key in list(result)[:10]}
+        keys = list(result)[:10]
+        if "result" in result and "result" not in keys:
+            keys[-1:] = ["result"]
+        return {key: result[key] for key in keys}
     return str(result)[:2000]

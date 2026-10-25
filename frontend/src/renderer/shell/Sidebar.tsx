@@ -136,6 +136,7 @@ interface SidebarProps {
   onSetWorkspace?: (id: string, workspace: string) => void;
   onJumpMessage?: (conversationId: string, messageId: string) => void;
   waiting?: string[];
+  automationInboxUnread?: number;
 }
 
 export default function Sidebar(props: SidebarProps) {
@@ -830,6 +831,7 @@ export default function Sidebar(props: SidebarProps) {
         return <Tip key={view} label={label} side="right">
           <button onClick={() => props.onGo(view)} aria-current={current ? 'page' : undefined} aria-label={label} className={cn('no-drag', railButton(current))}>
             <Icon size={18} strokeWidth={current ? 2 : 1.75} />
+            {view === 'auto' && Boolean(props.automationInboxUnread) && <span aria-label={`${props.automationInboxUnread} 条自动化未读结果`} className="absolute -right-1 -top-1 grid min-h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[9px] font-semibold leading-none text-white">{props.automationInboxUnread! > 99 ? '99+' : props.automationInboxUnread}</span>}
           </button>
         </Tip>;
       })}

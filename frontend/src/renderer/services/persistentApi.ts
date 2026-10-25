@@ -213,6 +213,11 @@ export interface AutomationRecord {
   paused_reason?: string | null;
 }
 export interface AutomationRun { workflow_id?: string; workflow_run_id?: string; started_at?: string; status?: string; result?: unknown; [key: string]: unknown }
+export interface AutomationInboxRun {
+  run_key: string; automation_id: string; automation_name: string; source: 'automation' | 'heartbeat' | 'script' | string;
+  status: string; trigger: string; summary: string; result_url: string; conversation_id: string;
+  started_at: string; finished_at: string; read_at: string | null; result: unknown;
+}
 export interface MigrationReport {
   source: string;
   imported_count: number;
@@ -243,6 +248,12 @@ export const automationsApi = {
     emergencyResume: (base: string) => api<{ paused: boolean; affected?: Array<{ id: string; name?: string; cancelled?: number; error?: string }>; resumed?: string[]; failures?: Array<{ id: string; error: string }> }>(base, '/api/automations/global-resume', { method: 'POST' }),
   runs: (base: string, id: string, limit = 20) =>
     api<{ runs: AutomationRun[]; limit: number }>(base, `/api/automations/${encodeURIComponent(id)}/runs?limit=${limit}`),
+  inbox: (base: string, options: { limit?: number; offset?: number; status?: string; source?: string; unread?: boolean } = {}) => {
+    const query = new URLSearchParams(Object.entries(options).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
+    return api<{ runs: AutomationInboxRun[]; total: number; unread: number; limit: number; offset: number; next_offset: number | null }>(base, `/api/automations/inbox/runs?${query}`);
+  },
+  inboxUnreadCount: (base: string) => api<{ unread: number }>(base, '/api/automations/inbox/unread-count'),
+  markInboxRead: (base: string, runIds?: string[]) => api<{ updated: number; unread: number }>(base, '/api/automations/inbox/read', { method: 'POST', json: { ...(runIds ? { run_ids: runIds } : {}) } }),
   importLegacy: (base: string) =>
     api<MigrationReport>(base, '/api/automations/import-legacy', { method: 'POST', json: {} }),
   rotateWebhookSecret: (base: string, id: string) =>

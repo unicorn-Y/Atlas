@@ -1,11 +1,11 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  CalendarClock, Copy, FileCog, Globe, HeartPulse, LoaderCircle, Pause, Play, Plus, Power,
+  CalendarClock, CheckCheck, ChevronLeft, ChevronRight, Copy, FileCog, Globe, HeartPulse, Inbox, LoaderCircle, Pause, Play, Plus, Power,
   RefreshCw, Repeat, Timer, Trash2, Upload, X,
 } from 'lucide-react';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { relativeTime } from '../services/api';
-import type { AutomationRecord } from '../services/persistentApi';
+import type { AutomationInboxRun, AutomationRecord } from '../services/persistentApi';
 import { automationsApi } from '../services/persistentApi';
 import GoalsPanel from './GoalsPanel';
 import { describeAutomation, describeTrigger } from './automations/describe';
@@ -13,7 +13,7 @@ import { AUTOMATION_TEMPLATES, AUTOMATION_TEMPLATE_CATALOG_VERSION, materializeA
 import StandingOrdersPanel from './StandingOrdersPanel';
 
 const RUN_STATUS: Record<string, string> = {
-  completed: '完成', failed: '失败', running: '运行中', cancelled: '已停止', error: '出错', queued: '排队中',
+  ok: '完成', completed: '完成', failed: '失败', error: '失败', skipped: '跳过', running: '运行中', cancelled: '已停止', queued: '排队中',
 };
 const TRIGGER_KINDS = [
   ['cron', '定时（cron）'], ['interval', '固定间隔'], ['date', '某时刻一次'], ['event', '文件变化'], ['webhook', 'Webhook'],
@@ -62,7 +62,7 @@ export function describeSchedule(task: LegacyTriggerShape): string {
  * 自动化：产品状态在 /api/automations（W4）。旧 /api/schedules 的一次性导入入口保留。
  * payload.kind=heartbeat 的条目是心跳的投影，只读（编辑心跳请去 Agent 的 Heartbeat 页）。
  */
-export default function AutomationPage({ apiBaseUrl, connected, onToast }: { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void }) {
+export default function AutomationPage({ apiBaseUrl, connected, onToast, onOpenConversation }: { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; onOpenConversation: (id: string) => void }) {
   const automations = useAtlasStore((state) => state.automations);
   const engineStarted = useAtlasStore((state) => state.automationsEngineStarted);
   const loading = useAtlasStore((state) => state.automationsLoading);
@@ -82,7 +82,14 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
   const loadAgents = useAtlasStore((state) => state.loadAgents);
   const runs = useAtlasStore((state) => state.automationRuns);
 
-  const [tab, setTab] = useState<'tasks' | 'goals' | 'standing'>('tasks');
+  const [tab, setTab] = useState<'tasks' | 'goals' | 'standing' | 'inbox'>('tasks');
+  const [inboxRuns, setInboxRuns] = useState<AutomationInboxRun[]>([]);
+  const [inboxTotal, setInboxTotal] = useState(0);
+  const [inboxUnread, setInboxUnread] = useState(0);
+  const [inboxOffset, setInboxOffset] = useState(0);
+  const [inboxStatus, setInboxStatus] = useState('all');
+  const [inboxSource, setInboxSource] = useState('all');
+  const [inboxLoading, setInboxLoading] = useState(false);
   const [selected, setSelected] = useState('');
   const [creating, setCreating] = useState(false);
   const [templateChoiceOpen, setTemplateChoiceOpen] = useState(false);
@@ -100,6 +107,30 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
   const refresh = useCallback(() => { void loadAutomations(); }, [loadAutomations]);
   useEffect(() => { refresh(); void loadAgents(); void automationsApi.emergencyStatus(apiBaseUrl).then(setEmergency).catch(() => undefined); }, [refresh, loadAgents, apiBaseUrl]);
   useEffect(() => setConfirmDelete(false), [selected]);
+  const refreshInbox = useCallback(async (offset = inboxOffset) => {
+    if (!connected) return;
+    setInboxLoading(true);
+    try {
+      const result = await automationsApi.inbox(apiBaseUrl, { limit: 25, offset, status: inboxStatus, source: inboxSource });
+      setInboxRuns(result.runs); setInboxTotal(result.total); setInboxUnread(result.unread); setInboxOffset(offset);
+      const unseen = result.runs.filter((run) => !run.read_at).map((run) => run.run_key);
+      if (unseen.length) {
+        const marked = await automationsApi.markInboxRead(apiBaseUrl, unseen);
+        setInboxUnread(marked.unread);
+        window.dispatchEvent(new Event('atlas:automation-inbox-unread-changed'));
+        setInboxRuns((runs) => runs.map((run) => unseen.includes(run.run_key) ? { ...run, read_at: new Date().toISOString() } : run));
+      }
+    } catch (error) { onToast(`读取自动化收件箱失败：${error instanceof Error ? error.message : String(error)}`); }
+    finally { setInboxLoading(false); }
+  }, [apiBaseUrl, connected, inboxOffset, inboxStatus, inboxSource, onToast]);
+  useEffect(() => { if (tab === 'inbox') void refreshInbox(0); }, [tab, inboxStatus, inboxSource, apiBaseUrl, connected]);
+  const markAllInboxRead = async () => {
+    try {
+      const result = await automationsApi.markInboxRead(apiBaseUrl);
+      setInboxUnread(result.unread); setInboxRuns((current) => current.map((run) => ({ ...run, read_at: run.read_at || new Date().toISOString() })));
+      window.dispatchEvent(new Event('atlas:automation-inbox-unread-changed'));
+    } catch (error) { onToast(`标记收件箱已读失败：${error instanceof Error ? error.message : String(error)}`); }
+  };
   useEffect(() => {
     if (selected || !automations.length) return;
     setSelected(automations[0].id);
@@ -214,7 +245,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
     </header>
 
     <div role="tablist" aria-label="自动化类型" className="mb-4 flex gap-5 shadow-[inset_0_-1px_0_var(--line)]">
-      {([['tasks', '定时与触发'], ['goals', '持续目标'], ['standing', '常驻指令']] as const).map(([id, label]) => <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+      {([['tasks', '定时与触发'], ['inbox', `运行收件箱${inboxUnread ? ` · ${inboxUnread}` : ''}`], ['goals', '持续目标'], ['standing', '常驻指令']] as const).map(([id, label]) => <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
         className={tab === id ? 'pb-2.5 text-[13.5px] font-medium text-fg shadow-[inset_0_-2px_0_var(--brand)]' : 'pb-2.5 text-[13.5px] text-fg-3 hover:text-fg'}>{label}</button>)}
     </div>
 
@@ -237,6 +268,21 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
 
     {tab === 'goals' && <GoalsPanel apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />}
     {tab === 'standing' && <StandingOrdersPanel apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />}
+    {tab === 'inbox' && <section aria-label="自动化运行结果收件箱" className="grid gap-3">
+      <div className="flex flex-wrap items-end gap-2"><div className="mr-auto"><h2 className="m-0 flex items-center gap-2 text-[15px] font-semibold"><Inbox size={17} />运行结果 <span className="text-[11px] font-normal text-fg-3">{inboxTotal} 条 · 未读 {inboxUnread}</span></h2><p className="mb-0 mt-1 text-[11.5px] text-fg-3">跨自动化、心跳与脚本，按完成时间倒序排列。</p></div>
+        <label className="grid gap-1 text-[11px] text-fg-3">状态<select className="rounded-md border border-line bg-panel px-2 py-1.5 text-fg" value={inboxStatus} onChange={(event) => setInboxStatus(event.target.value)}>{[['all','全部'],['ok','完成'],['error','失败'],['skipped','跳过'],['queued','排队'],['running','运行中'],['cancelled','已停止']].map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <label className="grid gap-1 text-[11px] text-fg-3">来源<select className="rounded-md border border-line bg-panel px-2 py-1.5 text-fg" value={inboxSource} onChange={(event) => setInboxSource(event.target.value)}>{[['all','全部'],['automation','自动化'],['heartbeat','心跳'],['script','脚本']].map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <button className="btn ghost" disabled={!inboxUnread} onClick={() => void markAllInboxRead()}><CheckCheck size={14} />全部标为已读</button><button className="btn ghost" disabled={inboxLoading} onClick={() => void refreshInbox(inboxOffset)}><RefreshCw size={14} />刷新</button>
+      </div>
+      {inboxLoading && <p role="status" className="text-[12px] text-fg-3">正在读取运行结果…</p>}
+      {!inboxLoading && !inboxRuns.length && <div className="card glass p-6 text-center text-[12.5px] text-fg-3">暂无匹配的运行记录。</div>}
+      {inboxRuns.map((run) => <article key={run.run_key} className="card glass grid gap-2 p-3.5" data-run-key={run.run_key}>
+        <header className="flex flex-wrap items-center gap-2"><b className="text-[13px] text-fg">{run.automation_name || run.automation_id}</b><span className="rounded-full bg-sunken px-2 py-0.5 text-[10.5px] text-fg-2">{run.source === 'heartbeat' ? '心跳' : run.source === 'script' ? '脚本' : '自动化'}</span><span className="text-[10.5px] text-fg-3">{RUN_STATUS[run.status] ?? run.status}</span>{!run.read_at && <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] text-brand">未读</span>}<time className="ml-auto text-[10.5px] text-fg-3">{relativeTime(run.finished_at || run.started_at)}</time></header>
+        <p className="m-0 whitespace-pre-wrap break-words text-[12.5px] leading-5 text-fg-2">{run.summary || '此运行没有文本摘要。'}</p>
+        <div className="flex flex-wrap gap-3 text-[11px]">{run.result_url && <a className="text-brand hover:underline" href={run.result_url} target="_blank" rel="noreferrer">打开结果链接</a>}{run.conversation_id && <button className="text-brand hover:underline" onClick={() => onOpenConversation(run.conversation_id)}>打开关联会话</button>}{run.trigger && <span className="text-fg-3">触发：{run.trigger}</span>}</div>
+      </article>)}
+      <div className="flex items-center justify-between"><span className="text-[11px] text-fg-3">{inboxTotal ? `${inboxOffset + 1}–${inboxOffset + inboxRuns.length} / ${inboxTotal}` : '0 条'}</span><div className="flex gap-2"><button className="btn ghost" disabled={inboxOffset <= 0 || inboxLoading} onClick={() => void refreshInbox(Math.max(0, inboxOffset - 25))}><ChevronLeft size={14} />上一页</button><button className="btn ghost" disabled={inboxOffset + inboxRuns.length >= inboxTotal || inboxLoading} onClick={() => void refreshInbox(inboxOffset + 25)}>下一页<ChevronRight size={14} /></button></div></div>
+    </section>}
     {tab === 'tasks' && <>
       {creating && !editingId && templateChoiceOpen && <section className="card glass mb-3.5 p-4" aria-label="选择自动化模板">
         <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><h2 className="m-0 text-[15px] font-semibold text-fg">先选择一个任务模板</h2><p className="mb-3 mt-1 text-[11.5px] text-fg-3">内置模板目录 v{AUTOMATION_TEMPLATE_CATALOG_VERSION} · 选择后可修改触发器、参数和任务内容；创建结果仍保存为普通自动化。</p></div><button type="button" className="btn ghost" onClick={() => { setCreating(false); setTemplateChoiceOpen(false); }}>取消</button></div>

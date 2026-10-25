@@ -10,6 +10,7 @@ run-now / cancel / runs 返回 503。
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, Literal
 
 import structlog
@@ -29,6 +30,60 @@ from atlas.automation.webhooks import get_webhook_credentials
 log = structlog.get_logger()
 
 automation_router = APIRouter(prefix="/api/automations")
+_INBOX_BACKFILL_AT = 0.0
+
+
+async def _backfill_automation_inbox() -> None:
+    global _INBOX_BACKFILL_AT
+    if time.monotonic() - _INBOX_BACKFILL_AT < 300:
+        return
+    engine = get_automation_engine()
+    if engine is None or not engine.started:
+        return
+    _INBOX_BACKFILL_AT = time.monotonic()
+    from atlas.automation.inbox import import_run
+
+    for record in engine.store.list():
+        try:
+            for run in await engine.get_runs(str(record["id"]), limit=100):
+                import_run(record, run)
+        except Exception as exc:
+            log.warning("automation.inbox_backfill_failed", automation_id=record.get("id"), error=str(exc))
+
+
+@automation_router.get("/inbox/unread-count")
+async def automation_inbox_unread_count() -> dict[str, int]:
+    await _backfill_automation_inbox()
+    from atlas.automation.inbox import unread_count
+
+    return {"unread": unread_count()}
+
+
+@automation_router.get("/inbox/runs")
+async def automation_inbox_runs(
+    limit: int = Query(default=30, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=1_000_000),
+    status: str = Query(default="all", pattern="^(all|ok|error|skipped|queued|running|cancelled)$"),
+    source: str = Query(default="all", pattern="^(all|automation|heartbeat|script)$"),
+    unread: bool = Query(default=False),
+) -> dict[str, Any]:
+    await _backfill_automation_inbox()
+    from atlas.automation.inbox import list_runs
+
+    return list_runs(limit=limit, offset=offset, status=status, source=source, unread=unread)
+
+
+@automation_router.post("/inbox/read")
+async def mark_automation_inbox_read(request: dict[str, Any]) -> dict[str, Any]:
+    raw_ids = request.get("run_ids")
+    if raw_ids is not None and (not isinstance(raw_ids, list) or any(not isinstance(item, str) for item in raw_ids)):
+        raise HTTPException(status_code=422, detail="run_ids 必须是字符串数组")
+    if isinstance(raw_ids, list) and len(raw_ids) > 1000:
+        raise HTTPException(status_code=422, detail="每次最多标记 1000 条运行记录")
+    from atlas.automation.inbox import mark_read, unread_count
+
+    updated = mark_read(raw_ids)
+    return {"updated": updated, "unread": unread_count()}
 
 
 # ---------------------------------------------------------------------------

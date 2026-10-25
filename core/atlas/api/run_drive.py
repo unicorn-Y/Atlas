@@ -584,7 +584,7 @@ async def _automation_heartbeat_tick(agent_id: str, reason: str) -> Any:
     return await _server().heartbeat_service.tick(agent_id, reason)
 
 
-async def _automation_dispatch_turn(payload: dict[str, Any]) -> str:
+async def _automation_dispatch_turn(payload: dict[str, Any]) -> dict[str, str]:
     """Automation ``payload.kind=agent_turn`` → orchestrator turn in its target conversation."""
     automation_id = str(payload.get("automation_id") or "adhoc")
     conversation_id = str(payload.get("conversation_id") or f"automation-{automation_id}")
@@ -599,12 +599,13 @@ async def _automation_dispatch_turn(payload: dict[str, Any]) -> str:
         config = agents.resolve_agent_run_config(agent_id)
         model = model or config.get("model") or None
         reasoning_effort = reasoning_effort or config.get("reasoning_effort") or None
-    return await _server()._collect_orchestrator_text(
+    text = await _server()._collect_orchestrator_text(
         str(payload.get("message") or ""), conversation_id,
         model=model,
         reasoning_effort=reasoning_effort,
         workspace=str(payload.get("workspace") or "") or None,
     )
+    return {"text": text, "conversation_id": conversation_id}
 
 
 async def _automation_deliver(record: dict[str, Any], outcome: dict[str, Any]) -> bool:
