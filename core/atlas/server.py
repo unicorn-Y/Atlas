@@ -630,6 +630,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         local_models_router.set_adapter(LocalRuntimeAdapter(cfg.get("local_runtime", {})))
         device_registry = DeviceRegistry(cfg.db_path.parent / "devices" / "devices.json")
         device_registry.register_self()
+        from atlas.devices.pairing import PairingStore
+        channel_manager.pairing_store = PairingStore(device_registry.path.parent / "device-pairing.sqlite")
         takeover_machine = TakeoverStateMachine()
         # Legacy singletons stay queryable for standalone mounts; the app's own
         # request handlers read the same instances through app.state services.

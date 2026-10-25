@@ -145,6 +145,7 @@ class ChannelManager:
         self.bindings: list[dict[str, Any]] = []
         self.agent_ids: list[str] | None = None
         self.policies: dict[str, dict[str, Any]] = {}
+        self.pairing_store: Any = None
         self._dispatcher = dispatcher
         self._control_handler: Callable[[MessageEvent], Awaitable[bool]] | None = None
         self._delivery_failure_handler: (
@@ -565,6 +566,7 @@ class ChannelManager:
             str(policy.get("dm_policy", "open")),
             event.sender_id,
             list(policy.get("dm_allowlist") or []),
+            paired_ids=(self.pairing_store.approved_dm_ids(event.channel) if self.pairing_store else None),
             allow_when_empty=bool(policy.get("allow_when_empty", False)),
         )
         return decision.allowed
@@ -582,6 +584,18 @@ class ChannelManager:
                         state = self._state(event.channel)
                         if not self._admit(event):
                             state.dropped += 1
+                            policy = self.policies.get(event.channel) or dict(DEFAULT_POLICY)
+                            if not event.is_group and policy.get("dm_policy") == "pairing" and self.pairing_store:
+                                try:
+                                    created = await asyncio.to_thread(
+                                        self.pairing_store.create_dm_request,
+                                        event.channel, event.sender_id, event.sender_id,
+                                    )
+                                    if created:
+                                        await self.send(event.channel, event.sender_id,
+                                                        "配对请求已发送给 Atlas 管理员，批准后可继续私信。")
+                                except Exception as exc:
+                                    logger.warning("无法创建 DM 配对请求 %s/%s: %s", event.channel, event.sender_id, exc)
                             self.ingress.ack(record.id)
                             logger.info("入站事件被门控拒绝 %s/%s", event.channel, event.event_id)
                             continue

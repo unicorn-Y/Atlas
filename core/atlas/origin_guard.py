@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import re
 import secrets
 from pathlib import Path
 from collections.abc import Callable, Iterable
@@ -98,6 +99,17 @@ class OriginGuard:
         fetch_site = headers.get("sec-fetch-site")
         client = scope.get("client")
         client_host = client[0] if client else None
+        method = str(scope.get("method", "")).upper()
+        path = str(scope.get("path", ""))
+        # Nearby devices do not have the Atlas API token during enrollment. These
+        # narrowly scoped routes validate a one-time code/proof or paired bearer.
+        device_pairing_protocol = scope["type"] == "http" and (
+            (method == "POST" and path == "/api/devices/pairing/claim")
+            or (method == "GET" and re.fullmatch(r"/api/devices/pairing/claim/[0-9a-f]{32}", path) is not None)
+            or (method == "GET" and re.fullmatch(r"/api/devices/node/[A-Za-z0-9][A-Za-z0-9._-]{0,63}/commands", path) is not None)
+            or (method == "POST" and re.fullmatch(r"/api/devices/node/[A-Za-z0-9][A-Za-z0-9._-]{0,63}/presence", path) is not None)
+            or (method == "POST" and re.fullmatch(r"/api/devices/node/[A-Za-z0-9][A-Za-z0-9._-]{0,63}/commands/[0-9a-f]{32}/result", path) is not None)
+        )
         public_remote_document = (
             scope["type"] == "http" and scope["method"] == "GET"
             and scope.get("path") == "/remote"
@@ -113,7 +125,7 @@ class OriginGuard:
                 )
             except ValueError:
                 loopback_dashboard_surface = False
-        if (is_preflight or public_remote_document or loopback_dashboard_surface
+        if (is_preflight or public_remote_document or loopback_dashboard_surface or device_pairing_protocol
                 or is_trusted(origin, token, self.extra_origins(), fetch_site, client_host)):
             await self.app(scope, receive, send)
             return

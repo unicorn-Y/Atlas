@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 import { Laptop, LoaderCircle, Plus, RefreshCw, Smartphone, Trash2 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAtlasStore } from '../store/useAtlasStore';
@@ -18,6 +19,9 @@ interface NodeCapabilityState {
   execution_available: false;
 }
 interface FileTransferRow { id: string; source_device: string; target_device: string; filename: string; expected_size: number; received_size: number; state: string; expected_sha256: string; expires_at: string; events: Array<{ event: string; actor_device: string; created_at: string }> }
+interface PairingChallenge { challenge_id: string; code: string; expires_at: number; qr_payload: string }
+interface PairingRequest { id: string; kind: 'device' | 'dm'; device_id: string; display_name: string; os: string; channel: string; status: string; expires: number }
+interface DeviceCommand { id: string; prompt: string; status: string; result: string; created: number }
 
 /** 设备页：设备清单（本机 = atlas-laptop，其余是 ingress）+ 控制权 + 交接卡片 + 动态。 */
 export default function DevicesPage({ onToast }: { onToast: (text: string) => void }) {
@@ -43,8 +47,33 @@ export default function DevicesPage({ onToast }: { onToast: (text: string) => vo
   const [transferFile, setTransferFile] = useState<File | null>(null);
   const [transferBusy, setTransferBusy] = useState('');
   const [transferTokens, setTransferTokens] = useState<Record<string, string>>({});
+  const [pairingChallenge, setPairingChallenge] = useState<PairingChallenge | null>(null);
+  const [pairingQr, setPairingQr] = useState('');
+  const [pairingBaseUrl, setPairingBaseUrl] = useState(apiBaseUrl);
+  const [pairingRequests, setPairingRequests] = useState<PairingRequest[]>([]);
+  const [pairingBusy, setPairingBusy] = useState('');
+  const [pairingCredentials, setPairingCredentials] = useState<Record<string, string>>({});
+  const [commandDrafts, setCommandDrafts] = useState<Record<string, string>>({});
+  const [deviceCommands, setDeviceCommands] = useState<Record<string, DeviceCommand[]>>({});
+  const [commandBusy, setCommandBusy] = useState('');
   const nodeDeviceIds = devices.filter((device) => device.kind !== 'atlas-laptop' && device.id !== selfDeviceId).map((device) => device.id).join('\n');
   useEffect(() => { void loadDevices(); }, [loadDevices]);
+  const refreshPairing = async () => {
+    try { const result = await api<{ requests: PairingRequest[] }>(apiBaseUrl, '/api/devices/pairing/requests'); setPairingRequests(result.requests); }
+    catch { /* the page keeps device management available if pairing storage is temporarily unavailable */ }
+  };
+  useEffect(() => {
+    void refreshPairing();
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refreshPairing(); }, 5000);
+    return () => window.clearInterval(timer);
+  }, [apiBaseUrl]);
+  useEffect(() => {
+    if (!pairingChallenge) { setPairingQr(''); return; }
+    let active = true;
+    void QRCode.toDataURL(pairingChallenge.qr_payload, { width: 240, margin: 2, errorCorrectionLevel: 'M' })
+      .then((url) => { if (active) setPairingQr(url); }).catch(() => { if (active) setPairingQr(''); });
+    return () => { active = false; };
+  }, [pairingChallenge]);
   useEffect(() => {
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void loadDevices(); }, 20000);
     return () => window.clearInterval(timer);
@@ -141,6 +170,60 @@ export default function DevicesPage({ onToast }: { onToast: (text: string) => vo
     } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
     setNodeBusy('');
   };
+  const createPairingChallenge = async () => {
+    setPairingBusy('challenge');
+    try {
+      const challenge = await api<PairingChallenge>(apiBaseUrl, '/api/devices/pairing/challenge', { method: 'POST', json: { ttl_seconds: 120, api_base_url: pairingBaseUrl.trim() } });
+      setPairingChallenge(challenge);
+      onToast('配对二维码已生成，2 分钟后失效');
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+    setPairingBusy('');
+  };
+  const decidePairing = async (item: PairingRequest, action: 'approve' | 'reject' | 'revoke') => {
+    setPairingBusy(item.id);
+    try {
+      await api(apiBaseUrl, `/api/devices/pairing/requests/${encodeURIComponent(item.id)}`, { method: 'POST', json: { action } });
+      if (item.kind === 'device' && action === 'approve') void loadDevices();
+      await refreshPairing();
+      onToast(action === 'approve' ? '配对请求已批准' : action === 'revoke' ? '配对授权已撤销' : '配对请求已拒绝');
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+    setPairingBusy('');
+  };
+  const rotatePairingCredential = async (id: string) => {
+    setPairingBusy(id);
+    try {
+      const result = await api<{ credential: string }>(apiBaseUrl, `/api/devices/${encodeURIComponent(id)}/credential/rotate`, { method: 'POST' });
+      setPairingCredentials((current) => ({ ...current, [id]: result.credential }));
+      onToast('新设备凭据已生成；旧凭据立即失效，凭据仅显示这一次');
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+    setPairingBusy('');
+  };
+  const revokePairingCredential = async (id: string) => {
+    setPairingBusy(id);
+    try {
+      await api(apiBaseUrl, `/api/devices/${encodeURIComponent(id)}/pairing/revoke`, { method: 'POST' });
+      setPairingCredentials((current) => { const next = { ...current }; delete next[id]; return next; });
+      onToast('设备配对凭据已撤销');
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+    setPairingBusy('');
+  };
+  const sendDeviceCommand = async (id: string) => {
+    const prompt = (commandDrafts[id] ?? '').trim();
+    if (!prompt) return;
+    setCommandBusy(id);
+    try {
+      await api(apiBaseUrl, `/api/devices/commands?device_id=${encodeURIComponent(id)}`, { method: 'POST', json: { prompt } });
+      setCommandDrafts((current) => ({ ...current, [id]: '' }));
+      onToast('指令已放入配对设备收件箱');
+      const rows = await api<{ commands: DeviceCommand[] }>(apiBaseUrl, `/api/devices/${encodeURIComponent(id)}/commands`);
+      setDeviceCommands((current) => ({ ...current, [id]: rows.commands }));
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+    setCommandBusy('');
+  };
+  const refreshDeviceCommands = async (id: string) => {
+    try { const rows = await api<{ commands: DeviceCommand[] }>(apiBaseUrl, `/api/devices/${encodeURIComponent(id)}/commands`); setDeviceCommands((current) => ({ ...current, [id]: rows.commands })); }
+    catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+  };
 
   const startFileTransfer = async () => {
     if (!transferFile || !transferTarget || !selfDeviceId) return;
@@ -215,6 +298,26 @@ export default function DevicesPage({ onToast }: { onToast: (text: string) => vo
 
     <TakeoverSection selfDeviceId={selfDeviceId} onToast={onToast} />
 
+    <section className="mt-6 rounded-xl bg-surface p-4 shadow-[inset_0_0_0_1px_var(--line)]" aria-label="设备扫码配对与私信配对请求">
+      <div className="flex flex-wrap items-center gap-2"><h2 className="m-0 text-[13.5px] font-semibold text-heading">配对设备</h2><span className="flex-1" />
+        <label className="flex min-w-[240px] flex-1 items-center gap-2 text-[11px] text-fg-3">设备可访问的 Atlas 地址<input aria-label="设备可访问的 Atlas 地址" value={pairingBaseUrl} onChange={(event) => setPairingBaseUrl(event.target.value)} placeholder="http://192.168.1.10:8765" className={cn(field, 'min-w-0')} /></label>
+        <Button size="sm" variant="secondary" disabled={pairingBusy === 'challenge'} onClick={() => void createPairingChallenge()}>{pairingBusy === 'challenge' ? '生成中…' : '生成扫码配对二维码'}</Button>
+      </div>
+      {pairingChallenge && <div className="mt-3 flex flex-wrap items-center gap-4 rounded-lg border border-line p-3">
+        {pairingQr ? <img src={pairingQr} alt="设备配对二维码" className="size-40 rounded bg-white p-1" /> : <div role="status" className="grid size-40 place-items-center bg-sunken text-[12px] text-fg-3">正在生成二维码…</div>}
+        <div className="min-w-0 flex-1 text-[12px] text-fg-2"><p>用配对设备扫描二维码，并在本机批准申请。二维码和 8 位配对码 2 分钟后失效。</p><p>配对码：<code className="select-all font-mono text-[16px]">{pairingChallenge.code}</code></p><p className="text-fg-3">过期时间：{new Date(pairingChallenge.expires_at * 1000).toLocaleTimeString()}</p><button type="button" onClick={() => setPairingChallenge(null)} className="text-brand hover:underline">关闭二维码</button></div>
+      </div>}
+      <div className="mt-3 grid gap-2">
+        {pairingRequests.map((item) => <article key={item.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2 text-[12px]">
+          <b className="text-fg">{item.kind === 'device' ? `设备：${item.display_name}` : `DM：${item.channel} / ${item.device_id}`}</b>
+          {item.os && <span className="text-fg-3">{item.os}</span>}<span className="text-fg-3">{item.status === 'approved' ? '已批准' : '等待批准'} · 失效 {new Date(item.expires * 1000).toLocaleString()}</span><span className="flex-1" />
+          {item.status === 'pending' && <><Button size="sm" variant="secondary" disabled={pairingBusy === item.id} onClick={() => void decidePairing(item, 'approve')}>批准</Button><Button size="sm" variant="ghost" disabled={pairingBusy === item.id} onClick={() => void decidePairing(item, 'reject')}>拒绝</Button></>}
+          {item.kind === 'dm' && item.status === 'approved' && <Button size="sm" variant="ghost" disabled={pairingBusy === item.id} onClick={() => void decidePairing(item, 'revoke')}>撤销批准</Button>}
+        </article>)}
+        {!pairingRequests.length && <p className="m-0 text-[11.5px] text-fg-3">当前没有待处理设备或 DM 配对请求。</p>}
+      </div>
+    </section>
+
     <section className="mt-6" aria-label="设备列表">
       <h2 className="m-0 mb-2 px-1 text-[13.5px] font-semibold text-heading">设备清单</h2>
       <div className="grid gap-2 sm:grid-cols-2">
@@ -287,6 +390,18 @@ export default function DevicesPage({ onToast }: { onToast: (text: string) => vo
                     {transferTokens[device.id] && <label className="mt-2 grid gap-1 text-[11px] text-fg-3">一次性传输令牌（请安全复制到配对设备；轮换会立即使旧令牌失效）<textarea readOnly rows={2} value={transferTokens[device.id]} onFocus={(event) => event.currentTarget.select()} className={cn(field, 'font-mono text-[11px]')} /></label>}
                   </div>
                 </>}
+            </div>}
+            {!self && device.trusted && <div className="mt-3 grid gap-2 border-t border-line pt-3" aria-label={`${device.display_name}配对凭据与指令`}>
+              <div className="flex flex-wrap items-center gap-2"><b className="text-[12.5px] font-medium text-fg">安全配对凭据</b><span className="flex-1" />
+                <Button size="sm" variant="secondary" disabled={pairingBusy === device.id} onClick={() => void rotatePairingCredential(device.id)}>轮换设备凭据</Button>
+                <Button size="sm" variant="ghost" disabled={pairingBusy === device.id} onClick={() => void revokePairingCredential(device.id)}>撤销配对</Button>
+              </div>
+              {pairingCredentials[device.id] && <label className="grid gap-1 text-[11px] text-fg-3">一次性设备凭据（复制到该设备；轮换后旧凭据立即失效）<textarea readOnly rows={2} value={pairingCredentials[device.id]} onFocus={(event) => event.currentTarget.select()} className={cn(field, 'font-mono text-[11px]')} /></label>}
+              <div className="flex flex-wrap items-end gap-2"><label className="grid min-w-[220px] flex-1 gap-1 text-[11px] text-fg-3">向设备投递指令<textarea rows={2} maxLength={8000} value={commandDrafts[device.id] ?? ''} onChange={(event) => setCommandDrafts((current) => ({ ...current, [device.id]: event.target.value }))} placeholder="需要配对设备执行的内容" className={cn(field, 'resize-y')} /></label>
+                <Button size="sm" variant="secondary" disabled={commandBusy === device.id || !(commandDrafts[device.id] ?? '').trim()} onClick={() => void sendDeviceCommand(device.id)}>发送指令</Button>
+                <Button size="sm" variant="ghost" disabled={commandBusy === device.id} onClick={() => void refreshDeviceCommands(device.id)}>刷新结果</Button>
+              </div>
+              {(deviceCommands[device.id] ?? []).map((command) => <div key={command.id} className="rounded-lg bg-sunken p-2 text-[11.5px]"><div className="flex gap-2"><b>{command.status === 'completed' ? '已完成' : command.status === 'delivered' ? '已送达' : '等待设备领取'}</b><span className="text-fg-3">{new Date(command.created * 1000).toLocaleString()}</span></div><p className="mb-1 mt-1 whitespace-pre-wrap text-fg-2">{command.prompt}</p>{command.result && <pre className="m-0 max-h-32 overflow-auto whitespace-pre-wrap border-t border-line pt-1 text-fg-3">{command.result}</pre>}</div>)}
             </div>}
           </article>;
         })}

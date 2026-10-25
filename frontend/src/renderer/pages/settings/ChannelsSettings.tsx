@@ -387,7 +387,7 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
           <div className="mt-2.5 grid gap-3 md:grid-cols-2">
             <label className="grid gap-1 text-[12.5px] text-fg-2">私聊策略
               <select value={policy.dm_policy} onChange={(event) => updatePolicy(name, { dm_policy: event.target.value as ChannelPolicy['dm_policy'] })} className={field}>
-                <option value="disabled">禁用</option><option value="open">开放（仍检查允许名单）</option><option value="allowlist">仅允许名单</option><option value="pairing">配对门控（当前仅检查允许名单）</option>
+                <option value="disabled">禁用</option><option value="open">开放（仍检查允许名单）</option><option value="allowlist">仅允许名单</option><option value="pairing">配对门控（设备页批准后允许私信）</option>
               </select>
             </label>
             <label className="grid gap-1 text-[12.5px] text-fg-2">私聊允许发送者 ID（每行一项；* 匹配所有人）

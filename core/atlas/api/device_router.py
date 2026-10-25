@@ -40,10 +40,11 @@ import asyncio
 import json
 import logging
 import re
+import secrets
 import threading
 import time
 from typing import Annotated, Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -63,6 +64,7 @@ from atlas.devices.takeover import (
     is_human_actor,
 )
 from atlas.devices.file_transfers import FileTransferStore, MAX_CHUNK_BYTES
+from atlas.devices.pairing import PairingStore
 from atlas.origin_guard import TOKEN_HEADER, is_trusted
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
@@ -77,6 +79,7 @@ _node_capability_lock = threading.RLock()
 _NODE_CAPABILITY_ID = re.compile(r"^[a-z][a-z0-9_.:-]{0,63}$")
 _transfer_stores: dict[str, FileTransferStore] = {}
 _transfer_store_lock = threading.Lock()
+_pairing_stores: dict[str, PairingStore] = {}
 
 
 def set_registry(registry: DeviceRegistry | None) -> None:
@@ -120,6 +123,16 @@ def _transfer_store(registry: DeviceRegistry) -> FileTransferStore:
         if store is None:
             store = FileTransferStore(registry.path.parent / "device-file-transfers")
             _transfer_stores[key] = store
+        return store
+
+
+def _pairing_store(registry: DeviceRegistry) -> PairingStore:
+    key = str(registry.path.resolve())
+    with _transfer_store_lock:
+        store = _pairing_stores.get(key)
+        if store is None:
+            store = PairingStore(registry.path.parent / "device-pairing.sqlite")
+            _pairing_stores[key] = store
         return store
 
 
@@ -540,6 +553,208 @@ def _takeover_error(exc: TakeoverError) -> HTTPException:
 
 
 # ---------------------------------------------------------------------------
+# Device / DM pairing and authenticated command delivery
+# ---------------------------------------------------------------------------
+class PairingChallengeRequest(BaseModel):
+    ttl_seconds: int = Field(default=120, ge=30, le=600)
+    api_base_url: str = Field(default="", max_length=300)
+
+
+class DeviceClaimRequest(BaseModel):
+    challenge_id: str = Field(min_length=1, max_length=64)
+    code: str = Field(min_length=8, max_length=8)
+    device_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+    display_name: str = Field(min_length=1, max_length=120)
+    os: str = Field(default="", max_length=120)
+
+
+class PairingDecision(BaseModel):
+    action: str
+
+
+class DeviceCommandRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=8000)
+
+
+class DeviceCommandResult(BaseModel):
+    result: str = Field(max_length=12000)
+
+
+def _bearer(request: Request) -> str:
+    authorization = request.headers.get("authorization", "")
+    return authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
+
+
+def _require_paired_device(request: Request, pairing: PairingStore, device_id: str) -> None:
+    if not pairing.verify_credential(device_id, _bearer(request)):
+        raise HTTPException(status_code=403, detail="设备配对凭据无效或已撤销")
+
+
+@router.post("/pairing/challenge", dependencies=[Depends(_require_trusted_origin)])
+async def create_pairing_challenge(
+    req: PairingChallengeRequest,
+    request: Request,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    registry = _registry_for(services)
+    api_base = req.api_base_url.strip().rstrip("/") or str(request.base_url).rstrip("/")
+    parsed = urlparse(api_base)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+        raise HTTPException(status_code=400, detail="设备可访问的 Atlas 地址必须是有效的 HTTP(S) URL")
+    store = _pairing_store(registry)
+    challenge = await asyncio.to_thread(store.create_device_challenge, req.ttl_seconds)
+    payload = {"api_base_url": api_base, **challenge}
+    return {**challenge, "qr_payload": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))}
+
+
+@router.post("/pairing/claim")
+async def claim_pairing(req: DeviceClaimRequest,
+                        services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    registry = _registry_for(services)
+    if req.device_id == SELF_DEVICE_ID:
+        raise HTTPException(status_code=409, detail="内置本机设备不能再次配对")
+    if registry.get(req.device_id, project=False):
+        raise HTTPException(status_code=409, detail="设备标识已登记，请使用其他标识")
+    store = _pairing_store(registry)
+    try:
+        return await asyncio.to_thread(store.claim_device, req.challenge_id, req.code,
+                                       req.device_id, req.display_name, req.os)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/pairing/claim/{request_id}")
+async def poll_pairing_claim(request_id: str,
+                             services: Annotated[AppServices, Depends(get_app_services)],
+                             proof: str = Query(min_length=20, max_length=100)) -> dict[str, Any]:
+    store = _pairing_store(_registry_for(services))
+    try:
+        result = await asyncio.to_thread(store.claim_status, request_id, proof)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if result.get("status") == "approved" and result.get("device_id"):
+        registry = _registry_for(services)
+        device_id = str(result["device_id"])
+        device = registry.get(device_id, project=False)
+        if device:
+            registry.set_presence(device_id, activity="paired")
+    return result
+
+
+@router.get("/pairing/requests", dependencies=[Depends(_require_trusted_origin)])
+async def list_pairing_requests(services: Annotated[AppServices, Depends(get_app_services)],
+                                kind: str = Query(default="", pattern="^(|device|dm)$")) -> dict[str, Any]:
+    store = _pairing_store(_registry_for(services))
+    return {"requests": await asyncio.to_thread(store.list_requests, kind)}
+
+
+@router.post("/pairing/requests/{request_id}", dependencies=[Depends(_require_trusted_origin)])
+async def decide_pairing_request(request_id: str, req: PairingDecision,
+                                 services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    registry = _registry_for(services)
+    store = _pairing_store(registry)
+    credential = secrets.token_urlsafe(40) if req.action == "approve" else ""
+    try:
+        result = await asyncio.to_thread(store.decide, request_id, req.action, credential)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if result["kind"] == "device" and req.action == "approve":
+        device_id = str(result["device_id"])
+        existing = registry.get(device_id, project=False)
+        if existing is None:
+            try:
+                registry.add(device_id, str(result["display_name"] or device_id), kind="ingress",
+                             os=str(result.get("os") or ""), trusted=True)
+            except DeviceError as exc:
+                store.revoke_credential(device_id)
+                raise _device_error(exc) from exc
+        else:
+            registry.update(device_id, trusted=True)
+        registry.set_presence(device_id, activity="paired")
+    return {"request": result}
+
+
+@router.post("/{device_id}/credential/rotate", dependencies=[Depends(_require_trusted_origin)])
+async def rotate_pairing_credential(device_id: str,
+                                    services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, str]:
+    registry = _registry_for(services)
+    device = registry.get(device_id, project=False)
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+    if not device.get("trusted"):
+        raise HTTPException(status_code=409, detail="设备未完成配对")
+    return {"credential": _pairing_store(registry).rotate_credential(device_id)}
+
+
+@router.post("/{device_id}/pairing/revoke", dependencies=[Depends(_require_trusted_origin)])
+async def revoke_pairing_credential(device_id: str,
+                                    services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    registry = _registry_for(services)
+    device = registry.get(device_id, project=False)
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+    _pairing_store(registry).revoke_credential(device_id)
+    await asyncio.to_thread(_transfer_store(registry).revoke_device, device_id)
+    registry.update(device_id, trusted=False)
+    registry.set_presence(device_id, activity="", last_seen=0)
+    return {"device_id": device_id, "revoked": True}
+
+
+@router.post("/commands", dependencies=[Depends(_require_trusted_origin)])
+async def create_device_command(device_id: str, req: DeviceCommandRequest,
+                                services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    registry = _registry_for(services)
+    device = registry.get(device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+    if not device.get("trusted"):
+        raise HTTPException(status_code=403, detail="设备未完成配对")
+    pairing = _pairing_store(registry)
+    if not await asyncio.to_thread(pairing.has_credential, device_id):
+        raise HTTPException(status_code=409, detail="设备没有有效的安全配对凭据")
+    return await asyncio.to_thread(pairing.create_command, device_id, req.prompt)
+
+
+@router.get("/node/{device_id}/commands")
+async def poll_device_commands(device_id: str, request: Request,
+                               services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    registry = _registry_for(services)
+    store = _pairing_store(registry)
+    _require_paired_device(request, store, device_id)
+    await asyncio.to_thread(registry.set_presence, device_id, activity="polling commands")
+    return {"commands": await asyncio.to_thread(store.pending_commands, device_id)}
+
+
+@router.post("/node/{device_id}/presence")
+async def paired_device_presence(device_id: str, request: Request,
+                                 services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    registry = _registry_for(services)
+    _require_paired_device(request, _pairing_store(registry), device_id)
+    return await asyncio.to_thread(registry.set_presence, device_id, activity="paired")
+
+
+@router.post("/node/{device_id}/commands/{command_id}/result")
+async def complete_device_command(device_id: str, command_id: str, req: DeviceCommandResult,
+                                  request: Request,
+                                  services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    store = _pairing_store(_registry_for(services))
+    _require_paired_device(request, store, device_id)
+    try:
+        return await asyncio.to_thread(store.complete_command, device_id, command_id, req.result)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{device_id}/commands", dependencies=[Depends(_require_trusted_origin)])
+async def list_device_commands(device_id: str,
+                               services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    registry = _registry_for(services)
+    return {"commands": await asyncio.to_thread(_pairing_store(registry).list_commands, device_id)}
+
+
+# ---------------------------------------------------------------------------
 # Devices CRUD
 # ---------------------------------------------------------------------------
 @router.get("")
@@ -731,6 +946,8 @@ async def patch_device(
         raise _device_error(exc) from exc
     if fields.get("trusted") is False:
         await asyncio.to_thread(_transfer_store(registry).revoke_device, device_id)
+        await asyncio.to_thread(_pairing_store(registry).revoke_credential, device_id)
+        await asyncio.to_thread(registry.set_presence, device_id, activity="", last_seen=0)
     return saved
 
 
@@ -763,6 +980,7 @@ async def delete_device(
     except DeviceError as exc:
         raise _device_error(exc) from exc
     await asyncio.to_thread(_transfer_store(registry).revoke_device, device_id)
+    await asyncio.to_thread(_pairing_store(registry).revoke_credential, device_id)
     return {"status": "ok", "device_id": device_id}
 
 
