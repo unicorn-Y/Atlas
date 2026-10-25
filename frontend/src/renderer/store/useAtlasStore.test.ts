@@ -156,7 +156,7 @@ describe('settings configuration', () => {
     const renderSettings = (subagentsEnabled: boolean) => renderToStaticMarkup(React.createElement(SettingsPage, {
       username: 'User', onSaveUsername: () => undefined, apiBaseUrl: 'http://127.0.0.1:8765', providerBaseUrl: configuration.gateway_base_url,
       connected: true, apiKeyConfigured: true, busy: false, connectionTest: null, error: null, models: configuration.models,
-      selectedModel: configuration.current, providers: [], reasoningStages: REASONING_STAGES, subagentsEnabled, subagentDefaultModel: 'gpt-4o-mini', onBack: () => undefined,
+      selectedModel: configuration.current, providers: [], reasoningStages: REASONING_STAGES, subagentsEnabled, subagentDefaultModel: 'gpt-4o-mini', subagentMaxConcurrent: 8, onBack: () => undefined,
       onSelectModel: () => undefined, onSaveSubagentSettings: async () => true, onSaveProvider: async () => true, onAddModel: async () => true,
       onTestConnection: () => undefined, onLoadProviders: () => undefined, onSaveProviderConfig: async () => true, onAddProviderKey: async () => true,
       onRemoveProviderKey: () => undefined, onUpdateModel: async () => true, onDeleteModel: async () => true, onSaveReasoningStages: () => undefined,
