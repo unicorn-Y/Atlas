@@ -117,6 +117,16 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
             "mode": {"type": "string", "enum": ["replace", "append"]},
         }, "required": ["title", "format", "content"], "additionalProperties": False},
     }})
+    tools.append({"type": "function", "function": {
+        "name": "push_component",
+        "description": "Push a compact, validated structured card into the current conversation: progress, table, metrics, or buttons. Button selection is sent back as a user message. Reuse component_id to update a card.",
+        "parameters": {"type": "object", "properties": {
+            "component_id": {"type": "string", "maxLength": 80},
+            "title": {"type": "string", "minLength": 1, "maxLength": 120},
+            "kind": {"type": "string", "enum": ["progress", "table", "metrics", "buttons"]},
+            "data": {"type": "object"},
+        }, "required": ["title", "kind", "data"], "additionalProperties": False},
+    }})
     tools.extend([
         {"type": "function", "function": {
             "name": "propose_new_session",

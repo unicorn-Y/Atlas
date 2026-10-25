@@ -97,6 +97,17 @@ describe('buildTimeline', () => {
     ]);
     expect(items).toContainEqual(expect.objectContaining({ kind: 'reply', content: 'partial output', status: '被用户打断' }));
   });
+
+  it('renders validated structured components and replaces live updates by component id', () => {
+    seq = 0;
+    const items = buildTimeline([
+      ev('component.push', { component_id: 'status', title: '部署', kind: 'progress', data: { steps: [{ label: '构建', status: 'active' }] } }),
+      ev('component.push', { component_id: 'status', title: '部署', kind: 'progress', data: { steps: [{ label: '构建', status: 'done' }] } }),
+      ev('component.push', { component_id: 'bad', title: '错误', kind: 'buttons', data: { buttons: [{ label: '无值' }] } }),
+    ]);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: 'component', component: { id: 'status', title: '部署', kind: 'progress', data: { steps: [{ status: 'done' }] } } });
+  });
 });
 
 describe('C6 runtime events', () => {

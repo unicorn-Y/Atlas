@@ -616,6 +616,12 @@ async def execute_tools_node(
                 result = {"data": {"widget_id": widget_id, "title": title, "format": fmt},
                           "content": [{"type": "text", "text": f"已推送共享画布“{title}”。"}],
                           "is_error": False}
+            elif fn_name == "push_component":
+                from atlas.tools.structured_components import queue_component_event
+
+                component = await queue_component_event(fn_args, str(ctx.run_id), ctx.event_queue)
+                result = {"data": {key: component[key] for key in ("component_id", "title", "kind")},
+                          "content": [{"type": "text", "text": f"已推送结构化卡片“{component['title']}”。"}], "is_error": False}
             elif fn_name == "create_checkpoint":
                 if ssh_checkpoint_callback and (workspace or "").startswith("ssh://"):
                     data = await ssh_checkpoint_callback("create", fn_args)

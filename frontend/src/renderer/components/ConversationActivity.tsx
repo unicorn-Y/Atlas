@@ -9,6 +9,7 @@ import ConversationMessage from './ConversationMessage';
 import ReasoningBlock from './ReasoningBlock';
 import Mark from './Mark';
 import ReviewFindingsCard from './ReviewFindingsCard';
+import StructuredComponentCard from './StructuredComponentCard';
 import ForegroundConfirmCard from './x2/ForegroundConfirmCard';
 import BrowserHandoffCard from './x2/BrowserHandoffCard';
 import { DiagnosticsList } from './diagnostics';
@@ -41,8 +42,8 @@ export interface TimelineRowContext {
 export const TimelineRow = memo(function TimelineRow({ item, context, firstInTurn, last }: { item: TimelineItem; context: TimelineRowContext; firstInTurn: boolean; last: boolean }) {
   const { events, store, username, setTab, busy, onOpenBrowser } = context;
   switch (item.kind) {
-    case 'user': return <ConversationMessage key={item.id} role="user" content={item.content} username={username} note={item.steered ? '插话' : undefined} />;
-    case 'reply': return <ConversationMessage key={item.id} role="assistant" content={item.content} username={username} continued={!firstInTurn} streaming={item.streaming}
+    case 'user': return <ConversationMessage key={item.id} role="user" content={item.content} username={username} note={item.steered ? '插话' : undefined} createdAt={item.timestamp} />;
+    case 'reply': return <ConversationMessage key={item.id} role="assistant" content={item.content} username={username} continued={!firstInTurn} streaming={item.streaming} createdAt={item.timestamp}
       status={item.status ?? (item.streaming ? '正在回复' : undefined)} working={item.streaming && busy} />;
     case 'reasoning': return <div key={item.id}>
       {firstInTurn && <TurnHeader working={last && busy} />}
@@ -89,6 +90,7 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     </div>;
     case 'lsp': return <LspNotice key={item.id} item={item} />;
     case 'review': return <ReviewFindingsCard key={item.id} item={item} store={store} />;
+    case 'component': return <StructuredComponentCard key={item.component.id} item={item.component} store={store} />;
     case 'cancelled': return <div key={item.id} className="my-4 flex items-center gap-2 text-[12.5px] text-fg-3">
       <Square size={12} />{item.reason ? `会话已结束：${item.reason}` : '你停止了这次任务'}
     </div>;

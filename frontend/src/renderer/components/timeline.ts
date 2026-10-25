@@ -1,5 +1,6 @@
 import type { CheckResults } from '@atlas/backend-adapter';
 import type { AgentEvent } from '../../types/runtime';
+import { structuredComponent, type StructuredComponentItem } from './StructuredComponentCard';
 import { isTodoEdit, parseTodoEdit } from './runInsights';
 
 /** One line for a todo edit the user handed to the Agent. */
@@ -92,6 +93,7 @@ export type TimelineItem =
   | { kind: 'lsp'; id: string; path: string; count: number; diagnostics: LspDiagnosticItem[] }
   /** /review 代码审查的结构化结论，由 ReviewFindingsCard 渲染；findings 为空即「没有发现问题」。 */
   | { kind: 'review'; id: string; scope: string; scopeLabel: string; workspace: string; mode?: 'general' | 'security' | 'cleanup-only'; findings: ReviewFinding[] }
+  | { kind: 'component'; id: string; component: StructuredComponentItem }
   | { kind: 'artifact'; id: string; name: string; summary: string }
   | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
   | { kind: 'failed'; id: string; detail: string; service?: string; reason?: string; retryAfterSeconds?: number; status?: number };
@@ -720,6 +722,15 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
           workspace: String(data.workspace ?? ''),
           findings: parseFindings(data.findings),
         });
+        break;
+      }
+      case 'component.push': {
+        closeReply(); closeBlocks();
+        const component = structuredComponent(event);
+        if (!component) break;
+        const prior = items.findIndex((item) => item.kind === 'component' && item.component.id === component.id);
+        const item = { kind: 'component' as const, id: event.id, component };
+        if (prior >= 0) items[prior] = item; else items.push(item);
         break;
       }
       case 'run.completed':

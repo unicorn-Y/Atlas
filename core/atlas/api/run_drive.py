@@ -3307,6 +3307,9 @@ async def _execute_run(
             elif etype == "canvas.update":
                 await emit("canvas.update", event.get("data", {}))
 
+            elif etype == "component.push":
+                await emit("component.push", event.get("data", {}))
+
             elif etype == "approval_required":
                 # Already emitted by the approval_callback above;
                 # no need to re-emit here.
