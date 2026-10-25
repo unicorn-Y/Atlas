@@ -125,7 +125,9 @@ export default function PaneWorkspace({ besideId, activeId, conversations, usern
       <div className="flex min-h-0 min-w-0" style={{ flex: `${1 - node.ratio} 1 0%` }}>{render(node.second)}</div>
     </div>;
   };
-  if (!layout) return <div className="flex min-h-0 min-w-0 flex-1">{children}</div>;
+  // The main conversation (with the composer) renders in the pane whose id is activeId. A new-task draft has
+  // no activeId yet, so a saved split layout would hide the composer entirely: show the main view alone.
+  if (!layout || !activeId || !ids(layout).includes(activeId)) return <div className="flex min-h-0 min-w-0 flex-1">{children}</div>;
   return <div className="flex min-h-0 min-w-0 flex-1" aria-label="多会话分屏"><div className="sr-only">焦点分屏：{byId.get(focused)?.title || '当前对话'}。拖动会话标题可重新排列，分隔条可调整大小。</div>{render(layout)}</div>;
 }
 
