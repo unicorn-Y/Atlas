@@ -20,7 +20,9 @@ import secrets
 import subprocess
 import sys
 import time
+import shutil
 from contextlib import suppress
+from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlencode
 
@@ -92,6 +94,43 @@ async def channel_catalog() -> dict[str, Any]:
     return {"channels": channels_with_registry(_manager.registry if _manager else {})}
 
 
+@router.get("/whatsapp/pairing", dependencies=[Depends(_require_trusted_origin)])
+async def whatsapp_pairing_status() -> dict[str, Any]:
+    """Expose only the current local QR and transport state to the trusted UI."""
+    manager = get_channel_manager()
+    adapter = manager.adapters.get("whatsapp")
+    status = getattr(adapter, "pairing_status", None)
+    if not callable(status):
+        return {"state": "not_running", "qr": "", "error": "请先启用 WhatsApp 渠道"}
+    return status()
+
+
+@router.post("/whatsapp/pairing/reset", dependencies=[Depends(_require_trusted_origin)])
+async def whatsapp_pairing_reset() -> dict[str, Any]:
+    """Forget the local WhatsApp Web session and restart pairing with a fresh QR."""
+    manager = get_channel_manager()
+    adapter = manager.adapters.get("whatsapp")
+    state_directory = getattr(adapter, "state_directory", None)
+    if not isinstance(state_directory, Path):
+        raise HTTPException(status_code=409, detail="WhatsApp 适配器尚未启动")
+    session = state_directory / "session"
+    if session.is_symlink():
+        raise HTTPException(status_code=409, detail="WhatsApp 会话目录不能是符号链接")
+    resolved_parent = state_directory.resolve()
+    resolved_session = session.resolve(strict=False)
+    if resolved_session.parent != resolved_parent or resolved_session.name != "session":
+        raise HTTPException(status_code=409, detail="WhatsApp 会话目录超出了本机渠道数据目录")
+    config = dict(manager.configs.get("whatsapp") or {})
+    manager.configure("whatsapp", {"enabled": False})
+    await manager._reconcile_channel("whatsapp", force=True)
+    if session.exists():
+        shutil.rmtree(session)
+    manager.configure("whatsapp", {**config, "enabled": True})
+    await manager._reconcile_channel("whatsapp", force=True)
+    await asyncio.sleep(0)
+    return {"ok": True, "state": "pairing", "message": "已解除本机设备会话，正在生成新的配对码"}
+
+
 @router.get("/dependencies/status", dependencies=[Depends(_require_trusted_origin)])
 async def channel_dependency_install_status() -> dict[str, Any]:
     """Return progress for the optional SDK installer without exposing credentials."""
@@ -100,19 +139,37 @@ async def channel_dependency_install_status() -> dict[str, Any]:
 
 @router.post("/dependencies/{channel}/install", dependencies=[Depends(_require_trusted_origin)])
 async def install_channel_dependencies(channel: str) -> dict[str, Any]:
-    """Install one catalog adapter's pinned extra packages into this Atlas Python."""
+    """Install one adapter's pinned Python or local Node bridge dependencies."""
     channel = channel.strip().lower()
     packages = _CHANNEL_INSTALL_PACKAGES.get(channel)
-    if packages is None:
+    if packages is None and channel != "whatsapp":
         raise HTTPException(status_code=404, detail="该渠道没有可安装的可选依赖")
     if _install_lock.locked():
         raise HTTPException(status_code=409, detail="另一个渠道依赖安装正在进行")
     async with _install_lock:
-        _install_state.update(status="installing", channel=channel, message="正在使用当前 Atlas Python 安装渠道依赖…")
+        _install_state.update(status="installing", channel=channel, message="正在安装渠道依赖…")
         output_lines: list[str] = []
         try:
+            command: list[str]
+            if channel == "whatsapp":
+                from atlas.tools.node_runtime import resolve_node_runtime
+
+                bridge = Path(__file__).resolve().parents[1] / "channels" / "whatsapp_bridge"
+                runtime = resolve_node_runtime()
+                node = runtime.executable
+                npm_cli = runtime.npm_script
+                if node is None:
+                    raise RuntimeError("Atlas bundled Node.js is unavailable")
+                if npm_cli is None:
+                    npm = shutil.which("npm")
+                    npm_cli = Path(npm).parent / "node_modules" / "npm" / "bin" / "npm-cli.js" if npm else None
+                if not npm_cli or not npm_cli.is_file():
+                    raise RuntimeError("npm is unavailable; install Atlas bundled Node.js runtime first")
+                command = [str(node), str(npm_cli), "ci", "--omit=dev", "--no-audit", "--no-fund", "--prefix", str(bridge)]
+            else:
+                command = [sys.executable, "-m", "pip", "install", *packages]
             process = await asyncio.create_subprocess_exec(
-                sys.executable, "-m", "pip", "install", *packages,
+                *command,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
@@ -121,7 +178,7 @@ async def install_channel_dependencies(channel: str) -> dict[str, Any]:
             while True:
                 remaining = deadline - asyncio.get_running_loop().time()
                 if remaining <= 0:
-                    raise TimeoutError("pip install 超过 15 分钟")
+                    raise TimeoutError("渠道依赖安装超过 15 分钟")
                 raw_line = await asyncio.wait_for(process.stdout.readline(), timeout=remaining)
                 if not raw_line:
                     break
@@ -139,14 +196,14 @@ async def install_channel_dependencies(channel: str) -> dict[str, Any]:
         output = "\n".join(output_lines)
         output = output[-6000:]
         if return_code != 0:
-            message = f"pip install 退出码 {return_code}\n{output}"[:6500]
+            message = f"依赖安装退出码 {return_code}\n{output}"[:6500]
             _install_state.update(status="failed", message=message)
             raise HTTPException(status_code=500, detail=message)
         if _manager is not None:
             from atlas.channels.adapters import register_builtin_channels
             register_builtin_channels(_manager.register_channel)
         _install_state.update(status="complete", message=output or "依赖安装成功")
-        return {"ok": True, "channel": channel, "python": sys.executable, "output": output[-3000:]}
+        return {"ok": True, "channel": channel, "python": sys.executable if channel != "whatsapp" else None, "output": output[-3000:]}
 
 
 class SessionLinkPayload(BaseModel):

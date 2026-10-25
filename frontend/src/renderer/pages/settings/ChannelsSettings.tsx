@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Download, LoaderCircle, Radio, RefreshCw, Save } from 'lucide-react';
+import QRCode from 'qrcode';
 import { channelsApi, type ChannelStatusRow } from '../../services/persistentApi';
 import { api } from '../../services/api';
 import { Button } from '../../ui/Button';
@@ -48,6 +49,7 @@ type ChannelPolicy = {
 type ChannelStatusWithPolicy = ChannelStatusRow & { policy?: ChannelPolicy };
 type ManualDelivery = { idempotency_key: string; channel: string; target: string; status: string; attempts: number; next_retry_at?: number | null; message: string };
 type ChannelCatalogRow = { id: string; label: string; status: string; registered: boolean; inbound: boolean; outbound: boolean; attachments: boolean; groups: boolean; mentions: boolean; dependency?: string | null; credentials: string[]; setup: string; docs: string };
+type WhatsAppPairing = { state: string; qr: string; error: string };
 type HandoffRow = { handoff_id: string; state: 'agent' | 'human' | 'paused'; source_channel: string; source_chat: string; human_channel: string; human_chat: string; updated_at: string; events: Array<{ event: string; actor: string; created_at: string }> };
 type ChannelPolicyPatch = Partial<ChannelPolicy>;
 const DEFAULT_CHANNEL_POLICY: ChannelPolicy = {
@@ -81,6 +83,8 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
   const [handoffs, setHandoffs] = useState<HandoffRow[]>([]);
   const [linkDraft, setLinkDraft] = useState({ agent_id: 'main', channel: 'telegram', account: '', peer: '', conversation_id: '' });
   const [slackOAuth, setSlackOAuth] = useState({ clientId: '', clientSecret: '', redirectUri: '', secretConfigured: false, authorizeUrl: '' });
+  const [whatsappPairing, setWhatsAppPairing] = useState<WhatsAppPairing>({ state: 'not_running', qr: '', error: '' });
+  const [whatsappQrData, setWhatsAppQrData] = useState('');
 
   useEffect(() => {
     void api<{ client_id: string; client_secret_configured: boolean; redirect_uri: string }>(apiBaseUrl, '/api/channels/slack/oauth/config')
@@ -124,11 +128,30 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
   }, [apiBaseUrl, reloadSessionLinks, reloadHandoffs]);
   useEffect(() => { void reload(); }, [reload]);
 
+  const loadWhatsAppPairing = useCallback(async () => {
+    try { setWhatsAppPairing(await api<WhatsAppPairing>(apiBaseUrl, '/api/channels/whatsapp/pairing')); }
+    catch (error) { setWhatsAppPairing({ state: 'unavailable', qr: '', error: error instanceof Error ? error.message : String(error) }); }
+  }, [apiBaseUrl]);
+  useEffect(() => {
+    if (!(enabled.whatsapp ?? false)) { setWhatsAppPairing({ state: 'not_running', qr: '', error: '' }); return; }
+    void loadWhatsAppPairing();
+    const timer = window.setInterval(() => void loadWhatsAppPairing(), 1500);
+    return () => window.clearInterval(timer);
+  }, [enabled.whatsapp, loadWhatsAppPairing]);
+  useEffect(() => {
+    let stale = false;
+    if (!whatsappPairing.qr) { setWhatsAppQrData(''); return; }
+    void QRCode.toDataURL(whatsappPairing.qr, { errorCorrectionLevel: 'M', margin: 2, width: 240 })
+      .then((data) => { if (!stale) setWhatsAppQrData(data); })
+      .catch(() => { if (!stale) setWhatsAppQrData(''); });
+    return () => { stale = true; };
+  }, [whatsappPairing.qr]);
+
   const enabledRows = rows.filter((row) => row.enabled);
 
   const installDependencies = async (channel: string) => {
     setInstallingDependency(channel);
-    setDependencyState((current) => ({ ...current, [channel]: '正在使用当前 Atlas Python 安装依赖…' }));
+    setDependencyState((current) => ({ ...current, [channel]: channel === 'whatsapp' ? '正在安装本机 Baileys Bridge…' : '正在使用当前 Atlas Python 安装依赖…' }));
     const progressTimer = window.setInterval(() => {
       void api<{ status: string; channel?: string | null; message: string }>(apiBaseUrl, '/api/channels/dependencies/status')
         .then((status) => { if (status.channel === channel && status.message) setDependencyState((current) => ({ ...current, [channel]: status.message })); })
@@ -340,6 +363,11 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
         <p className="m-0 text-[10.5px] text-fg-3">入站 {item.inbound ? '✓' : '—'} · 出站 {item.outbound ? '✓' : '—'} · 附件 {item.attachments ? '✓' : '—'} · 群组 {item.groups ? '✓' : '—'} · 提及 {item.mentions ? '✓' : '—'}{item.dependency ? ` · 依赖 ${item.dependency}` : ''}</p>
         {item.registered && item.credentials.length > 0 && <p className="mb-0 mt-1 text-[10.5px] text-fg-3">凭据字段：{item.credentials.join('、')}</p>}
         {item.status === 'dependency_missing' && <div className="mt-2 flex items-center gap-2"><Button size="sm" variant="secondary" disabled={Boolean(installingDependency)} onClick={() => void installDependencies(item.id)}>{installingDependency === item.id ? <LoaderCircle className="spin" size={13} /> : <Download size={13} />}{installingDependency === item.id ? '正在安装…' : '安装依赖'}</Button><span className="min-w-0 whitespace-pre-wrap break-words text-[10.5px] text-fg-3">{dependencyState[item.id] ?? ''}</span></div>}
+        {item.id === 'whatsapp' && item.registered && <div className="mt-3 rounded-lg border border-line bg-panel p-3">
+          <div className="flex flex-wrap items-center gap-2"><b className="text-[12px] text-fg">设备配对</b><span className="text-[11px] text-fg-3">{whatsappPairing.state === 'connected' ? '已连接' : whatsappPairing.state === 'pairing' ? '等待扫码' : whatsappPairing.state === 'not_running' ? '启用 WhatsApp 后开始' : whatsappPairing.state}</span><span className="flex-1" /><Button size="sm" variant="ghost" disabled={!enabled.whatsapp} onClick={() => void loadWhatsAppPairing()}><RefreshCw size={12} />刷新状态</Button><Button size="sm" variant="ghost" disabled={!enabled.whatsapp || busyChannel === '__whatsapp-reset'} onClick={() => { setBusyChannel('__whatsapp-reset'); void api(apiBaseUrl, '/api/channels/whatsapp/pairing/reset', { method: 'POST' }).then(async () => { await reload(); await loadWhatsAppPairing(); onToast('WhatsApp 本机会话已解除，正在生成新二维码'); }).catch((error) => onToast(`无法重新配对：${error instanceof Error ? error.message : String(error)}`)).finally(() => setBusyChannel('')); }}>解除会话并重新配对</Button></div>
+          {whatsappPairing.qr && <div className="mt-2 flex flex-wrap items-center gap-3"><div className="rounded bg-white p-2">{whatsappQrData ? <img src={whatsappQrData} alt="WhatsApp 配对二维码" width={240} height={240} /> : <span className="block p-8 text-[11px] text-black">正在生成二维码…</span>}</div><div className="max-w-sm text-[11.5px] leading-5 text-fg-3">在手机 WhatsApp 中打开 <b>已关联设备 → 关联设备</b>，扫描二维码。二维码仅用于当前本机配对，扫码后会自动消失。{whatsappPairing.error && <p className="mb-0 mt-2 text-danger">{whatsappPairing.error}</p>}</div></div>}
+          {!whatsappPairing.qr && whatsappPairing.error && <p className="mb-0 mt-2 whitespace-pre-wrap text-[11px] text-danger">{whatsappPairing.error}</p>}
+        </div>}
       </article>)}</div>
     </section>
 

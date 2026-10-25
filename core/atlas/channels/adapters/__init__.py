@@ -20,6 +20,7 @@ def register_builtin_channels(register) -> None:
         ("feishu", "atlas.channels.adapters.feishu", "FeishuAdapter"),
         ("dingtalk", "atlas.channels.adapters.dingtalk", "DingTalkAdapter"),
         ("wecom", "atlas.channels.adapters.wecom", "WeComAdapter"),
+        ("whatsapp", "atlas.channels.adapters.whatsapp", "WhatsAppAdapter"),
     )
     import importlib
 

@@ -141,6 +141,10 @@
         "to": "atlas/runtime/node"
       },
       {
+        "from": "./backend-release/runtime/whatsapp-bridge",
+        "to": "atlas/runtime/whatsapp-bridge"
+      },
+      {
         "from": "../skills",
         "to": "atlas/skills",
         "filter": [

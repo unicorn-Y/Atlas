@@ -13,6 +13,8 @@ const workRoot = path.join(frontendDir, 'backend-build', 'node-runtime');
 const archivePath = path.join(workRoot, manifest.archive);
 const extractDir = path.join(workRoot, 'extract');
 const targetDir = path.join(outputRoot, 'runtime', 'node');
+const whatsappBridgeSource = path.resolve(repoRoot, 'core', 'atlas', 'channels', 'whatsapp_bridge');
+const whatsappBridgeTarget = path.join(outputRoot, 'runtime', 'whatsapp-bridge');
 const localArchive = process.env.ATLAS_NODE_ARCHIVE?.trim();
 
 function inside(parent, child) {
@@ -29,7 +31,7 @@ function run(command, args) {
 if (process.platform !== 'win32' || process.arch !== 'x64') {
   throw new Error('The bundled Node runtime is built only on Windows x64.');
 }
-if (!inside(frontendDir, outputRoot) || !inside(frontendDir, workRoot) || !inside(frontendDir, targetDir)) {
+if (!inside(frontendDir, outputRoot) || !inside(frontendDir, workRoot) || !inside(frontendDir, targetDir) || !inside(outputRoot, whatsappBridgeTarget)) {
   throw new Error('Unsafe Node runtime build path.');
 }
 
@@ -93,4 +95,11 @@ for (const script of ['npm-cli.js', 'npx-cli.js']) {
   const checked = spawnSync(node, [cli, '--version'], { encoding: 'utf8', windowsHide: true, timeout: 30_000 });
   if (checked.status !== 0) throw new Error(`Bundled ${script} validation failed: ${checked.stderr ?? ''}`);
 }
+if (!fs.existsSync(path.join(whatsappBridgeSource, 'package-lock.json')) || !fs.existsSync(path.join(whatsappBridgeSource, 'bridge.mjs'))) {
+  throw new Error('WhatsApp bridge source or lockfile is missing.');
+}
+fs.rmSync(whatsappBridgeTarget, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+fs.cpSync(whatsappBridgeSource, whatsappBridgeTarget, { recursive: true, filter: (source) => !source.includes(`${path.sep}node_modules${path.sep}`) });
+run(node, [path.join(targetDir, 'npm', 'bin', 'npm-cli.js'), 'ci', '--omit=dev', '--no-audit', '--no-fund', '--prefix', whatsappBridgeTarget]);
 console.log(`Bundled Node ${version.stdout.trim()} and npm/npx under ${path.relative(repoRoot, targetDir)}; verified ${sourceSelection}; archive SHA-256 ${actualHash}`);
+console.log(`Bundled WhatsApp Baileys bridge under ${path.relative(repoRoot, whatsappBridgeTarget)}.`);
