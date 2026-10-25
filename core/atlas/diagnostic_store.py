@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -39,7 +40,7 @@ def _connect() -> sqlite3.Connection:
 
 def record_model_request(*, request_id: str, run_id: str, model: str, provider: str,
                          endpoint: str, params: dict[str, Any], started_at: str) -> None:
-    with _connect() as db:
+    with closing(_connect()) as db, db:
         db.execute("""INSERT OR REPLACE INTO model_request_traces
             (request_id,run_id,model,provider,endpoint,request_params,started_at,status)
             VALUES (?,?,?,?,?,?,?,'running')""",
@@ -49,7 +50,7 @@ def record_model_request(*, request_id: str, run_id: str, model: str, provider: 
 
 def finish_model_request(request_id: str, *, duration_ms: int, status: str,
                           error_category: str | None = None, error_detail: str | None = None) -> None:
-    with _connect() as db:
+    with closing(_connect()) as db, db:
         db.execute("""UPDATE model_request_traces SET duration_ms=?,status=?,error_category=?,error_detail=?
             WHERE request_id=?""",
             (max(0, duration_ms), status[:32], (error_category or "")[:80] or None,
@@ -58,7 +59,7 @@ def finish_model_request(request_id: str, *, duration_ms: int, status: str,
 
 def list_model_requests(query: str = "", limit: int = 100) -> list[dict[str, Any]]:
     needle = f"%{query.strip()[:160]}%"
-    with _connect() as db:
+    with closing(_connect()) as db, db:
         rows = db.execute("""SELECT * FROM model_request_traces
             WHERE (?='' OR request_id LIKE ? OR run_id LIKE ? OR model LIKE ? OR provider LIKE ? OR status LIKE ? OR error_detail LIKE ?)
             ORDER BY started_at DESC LIMIT ?""",
@@ -68,7 +69,7 @@ def list_model_requests(query: str = "", limit: int = 100) -> list[dict[str, Any
 
 def record_audit_event(category: str, action: str, outcome: str = "ok",
                        details: dict[str, Any] | None = None) -> None:
-    with _connect() as db:
+    with closing(_connect()) as db, db:
         db.execute("INSERT INTO maintenance_audit(created_at,category,action,outcome,details) VALUES(?,?,?,?,?)",
                    (datetime.now(timezone.utc).isoformat(), category[:80], action[:160], outcome[:32],
                     json.dumps(details or {}, ensure_ascii=False, separators=(",", ":"))[:4000]))
