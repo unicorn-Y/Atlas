@@ -1536,7 +1536,7 @@ export default function App() {
       }).then((report) => {
         const findings = report.findings.map((finding) => `[${finding.severity}] ${finding.file}:${finding.line ?? '?'} · ${finding.title}\n${finding.explanation}\n归因：${(finding.review_layers as string[] ?? []).join(', ')}\n证据：${finding.evidence ?? ''}\n建议：${finding.suggested_fix ?? ''}`).join('\n\n');
         setRawTextTitle('仓库级并行审查');
-        setRawText(`范围：${report.file_count} 个文件；上下文源文件：${report.included_file_count}；审查层：${report.review_layers.join(', ')}；去重发现：${report.findings.length}\n${report.context_truncated ? '注意：仓库上下文达到采集上限，报告标注了截断。\n' : ''}${Object.entries(report.layer_errors).map(([name, error]) => `审查层失败 ${name}：${error}`).join('\n')}\n\n${findings || '没有发现问题。'}`.trim());
+        setRawText(`范围：${report.file_count} 个文件；上下文源文件：${report.included_file_count}；审查层：${report.review_layers.join(', ')}；去重发现：${report.findings.length}\n${report.context_truncated ? '本层 reviewer 正文按上下文预算和层级相关性选择；完整文件清单仍已采集。\n' : ''}${Object.entries(report.layer_errors).map(([name, error]) => `审查层失败 ${name}：${error}`).join('\n')}\n\n${findings || '没有发现问题。'}`.trim());
       }).catch((error) => setToast(`仓库审查失败：${error instanceof Error ? error.message : String(error)}`));
     } },
     { id: 'security-review', label: '/security-review', hint: '按安全检查清单只读审查当前未提交改动，可追加 branch <名> / commit <sha>', takesArgument: true, run: (arg: string) => { void store.sendMessage(`/security-review ${arg.trim()}`.trim()); } },

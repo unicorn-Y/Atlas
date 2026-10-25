@@ -29,8 +29,10 @@ from fastapi import HTTPException, Request
 # Diff text is capped so a huge branch cannot blow the child's context; the note tells the
 # reviewer how to reach the rest with its own read-only git access.
 MAX_DIFF_LINES = 2000
-REPOSITORY_FILE_LIMIT = 1200
-REPOSITORY_BYTES_LIMIT = 2 * 1024 * 1024
+REPOSITORY_FILE_LIMIT = 5000
+REPOSITORY_BYTES_LIMIT = 25 * 1024 * 1024
+REVIEW_LAYER_CONTEXT_CHARS = 140_000
+REPOSITORY_RUNTIME_ROOTS = {".atlas", "cache", "data", "exports", "_shots", ".serena", "output", "artifacts"}
 REVIEW_LAYERS = {
     "correctness": "审查确定的逻辑错误、边界条件、异常处理、状态一致性和回归。",
     "security": "审查信任边界、认证授权、命令/路径/注入、敏感数据、依赖与拒绝服务。只报告有可达证据的问题。",
@@ -203,7 +205,7 @@ def collect_diff(workspace: str, scope: dict[str, Any]) -> dict[str, Any]:
 
 def collect_repository_context(workspace: str, *, max_files: int = REPOSITORY_FILE_LIMIT,
                                max_bytes: int = REPOSITORY_BYTES_LIMIT) -> dict[str, Any]:
-    """Collect a whole-repository file inventory and bounded UTF-8 source snapshot."""
+    """Read a whole-repository source snapshot, excluding machine-local runtime data."""
     ws = str(Path(workspace).resolve())
     if _run_git(ws, "rev-parse", "--is-inside-work-tree").stdout.strip() != "true":
         raise ValueError("仓库级审查需要一个 Git 工作区。")
@@ -213,12 +215,14 @@ def collect_repository_context(workspace: str, *, max_files: int = REPOSITORY_FI
     paths = sorted({item for item in listing.stdout.split("\0") if item})
     excluded = {".git", "node_modules", "vendor", "dist", "build", "target", ".venv", "venv", "__pycache__"}
     paths = [name for name in paths if not (set(Path(name).parts) & excluded)]
+    paths = [name for name in paths if Path(name).parts[0].lower() not in REPOSITORY_RUNTIME_ROOTS]
     source_paths = [name for name in paths if Path(name).name.lower() not in _SENSITIVE_FILE_PARTS
                     and not Path(name).name.lower().startswith(".env")
                     and Path(name).suffix.lower() not in {".pem", ".key", ".p12", ".pfx", ".keystore"}
                     and not any(part.lower() in {"secrets", "credentials", "private_keys"} for part in Path(name).parts)]
     inventory = source_paths[:max_files]
     chunks: list[str] = []
+    source_files: list[dict[str, str | int]] = []
     used_bytes = 0
     included = 0
     oversized = 0
@@ -245,13 +249,68 @@ def collect_repository_context(workspace: str, *, max_files: int = REPOSITORY_FI
         except OSError:
             continue
         chunks.append(f"\n===== {name} =====\n{text}")
+        source_files.append({"path": name, "content": text, "bytes": len(raw)})
         used_bytes += len(raw)
         included += 1
+    total_source_bytes = sum(int(item["bytes"]) for item in source_files)
     return {"workspace": ws, "files": paths, "inventory": inventory, "file_count": len(paths),
             "excluded_sensitive_count": len(paths) - len(source_paths),
             "included_count": included, "oversized_files_skipped": oversized,
             "truncated": len(source_paths) > len(inventory) or used_bytes >= max_bytes or oversized > 0,
-            "source_bytes": used_bytes, "source": "\n".join(chunks)}
+            "source_bytes": total_source_bytes, "source_chars": sum(len(str(item["content"])) for item in source_files),
+            "source": "\n".join(chunks), "source_files": source_files}
+
+
+def _layer_source_snapshot(context: dict[str, Any], layer: str,
+                           max_chars: int = REVIEW_LAYER_CONTEXT_CHARS) -> tuple[str, int, bool]:
+    """Select a balanced, layer-relevant slice while retaining the complete repository inventory."""
+    files = context.get("source_files") or []
+    code_suffixes = {".py", ".ts", ".tsx", ".js", ".jsx", ".rs", ".go", ".java", ".c", ".cpp"}
+    buckets: dict[str, list[dict[str, str | int]]] = {}
+    for item in files:
+        path = str(item.get("path") or "")
+        lowered = path.lower()
+        suffix = Path(path).suffix.lower()
+        if layer == "correctness":
+            score = 3 if suffix in code_suffixes else 0
+            score += 2 if any(part in lowered for part in ("test", "spec", "router", "service", "store")) else 0
+        elif layer == "security":
+            score = 3 if suffix in code_suffixes else 1
+            score += 4 if any(term in lowered for term in ("security", "auth", "permission", "credential", "secret", "crypto", "sandbox", "policy")) else 0
+            score += 2 if any(term in lowered for term in ("api", "router", "tools", "workspace", "browser", "channel", "gateway", "model")) else 0
+        else:
+            score = 4 if Path(path).name.lower() in {"readme.md", "pyproject.toml", "package.json", "Cargo.toml"} else 0
+            score += 2 if suffix in {".md", ".toml", ".json", ".yaml", ".yml"} else 0
+            score += 1 if Path(path).name == "__init__.py" else 0
+        item["_review_score"] = score
+        buckets.setdefault(Path(path).parts[0] if Path(path).parts else "", []).append(item)
+    for bucket in buckets.values():
+        bucket.sort(key=lambda item: (-int(item.get("_review_score") or 0), str(item.get("path") or "")))
+    selected: list[str] = []
+    used = 0
+    while buckets and used < max_chars:
+        progressed = False
+        for root in sorted(list(buckets)):
+            bucket = buckets[root]
+            item = bucket.pop(0)
+            if not bucket:
+                del buckets[root]
+            content = str(item.get("content") or "")
+            block = f"\n===== {item['path']} =====\n{content}"
+            remaining = max_chars - used
+            if len(block) > remaining:
+                if remaining > 256:
+                    selected.append(block[:remaining] + "\n[此层 reviewer 上下文预算截断]")
+                    used = max_chars
+                break
+            selected.append(block)
+            used += len(block)
+            progressed = True
+            if used >= max_chars:
+                break
+        if not progressed:
+            break
+    return "\n".join(selected), used, used < sum(len(str(item.get("content") or "")) for item in files)
 
 
 def _layer_findings(text: str, layer: str) -> list[dict[str, Any]]:
@@ -297,14 +356,15 @@ async def run_repository_review(workspace: str, *, model: str | None = None) -> 
     if not selected_model:
         raise ValueError("Atlas 尚未配置审查模型。")
     inventory = "\n".join(f"- {name}" for name in context["inventory"])
-    source = str(context["source"])
     async def review(layer: str, goal: str) -> tuple[str, list[dict[str, Any]]]:
+        layer_source, context_chars, layer_limited = _layer_source_snapshot(context, layer)
         prompt = (f"你是 Atlas 的只读仓库 reviewer，负责 {layer} 层。{goal}\n"
                   "逐点基于仓库文件证据，只报可验证缺陷。文件必须是相对路径，行号从 1 开始；不要报告偏好或臆测。"
                   "输出严格 JSON 数组，字段为 file,line,severity(blocker|major|minor),title,explanation,evidence,suggested_fix。"
                   "没有发现时输出 []。只可读取，不得建议先执行可能改写仓库的命令。\n"
-                  f"文件清单（共 {context['file_count']} 个；本次源快照 {context['included_count']} 个）：\n{inventory}\n"
-                  f"仓库源代码与配置：\n{source}")
+                  f"完整文件清单（共 {context['file_count']} 个；源快照文件 {context['included_count']} 个；"
+                  f"本层正文上下文 {context_chars} 字符；本层上下文是否受预算限制 {layer_limited}）：\n{inventory}\n"
+                  f"仓库源代码与配置（按本层优先级分层选择；逐项引用 file:line）：\n{layer_source}")
         result = await manager.model_router.complete_for(selected_model, "repository_review", [
             {"role": "system", "content": "Perform an evidence-first, read-only repository review. Return only a JSON array."},
             {"role": "user", "content": prompt},
@@ -325,8 +385,12 @@ async def run_repository_review(workspace: str, *, model: str | None = None) -> 
             "model": selected_model, "file_count": context["file_count"],
             "excluded_sensitive_file_count": context["excluded_sensitive_count"],
             "included_file_count": context["included_count"], "source_bytes": context["source_bytes"],
+            "review_layer_context_limit_chars": REVIEW_LAYER_CONTEXT_CHARS,
             "oversized_files_skipped": context["oversized_files_skipped"],
-            "context_truncated": context["truncated"], "review_layers": list(layer_results),
+            "context_truncated": context["truncated"] or context["source_chars"] > REVIEW_LAYER_CONTEXT_CHARS,
+            "repository_snapshot_truncated": context["truncated"],
+            "layer_context_budget_applied": context["source_chars"] > REVIEW_LAYER_CONTEXT_CHARS,
+            "review_layers": list(layer_results),
             "layer_errors": errors, "findings": findings}
 
 

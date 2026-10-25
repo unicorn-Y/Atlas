@@ -27,9 +27,12 @@ def check_repository_review(base: Path) -> None:
     (repo / "README.md").write_text("Review fixture\n", encoding="utf-8")
     (repo / "settings.py").write_text('api_key = "u20-secret-value-do-not-send"\n', encoding="utf-8")
     (repo / ".env").write_text("DEEPSEEK_API_KEY=local-only-not-for-context\n", encoding="utf-8")
+    (repo / "data").mkdir()
+    (repo / "data" / "local-state.json").write_text('{"token":"runtime-private"}\n', encoding="utf-8")
     context = collect_repository_context(str(repo))
     assert context["file_count"] >= 4 and "sample.py" in context["source"]
     assert ".env" not in context["inventory"] and "u20-secret-value-do-not-send" not in context["source"]
+    assert not any(item.startswith("data/") for item in context["inventory"])
     merged = merge_layer_findings({
         "correctness": [{"file": "sample.py", "line": 2, "severity": "major", "title": "Division by zero", "explanation": "No guard", "evidence": "return value / divisor", "review_layer": "correctness"}],
         "security": [{"file": "sample.py", "line": 2, "severity": "major", "title": "Division by zero risk", "explanation": "No guard", "evidence": "return value / divisor", "review_layer": "security"}],
@@ -37,7 +40,7 @@ def check_repository_review(base: Path) -> None:
     assert len(merged) == 1 and set(merged[0]["review_layers"]) == {"correctness", "security"}
     model = os.environ.get("U20_REVIEW_MODEL", "deepseek-v4.1-flash")
     report = run_repository_review_sync(str(repo), model=model)
-    assert report["review_layers"] and len(report["review_layers"]) + len(report["layer_errors"]) == 3
+    assert len(report["review_layers"]) == 3, f"parallel review layers failed: {report['layer_errors']}"
     assert report["scope"] == "repository" and isinstance(report["findings"], list)
     print(f"repository review: live {model}, {len(report['review_layers'])}/3 layers, {len(report['findings'])} findings")
     cli_report = {"scope": "repository", "file_count": 4, "review_layers": ["correctness", "security", "architecture"], "findings": [], "layer_errors": {}}
