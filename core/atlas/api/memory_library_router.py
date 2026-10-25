@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -185,6 +186,81 @@ async def timeline(before: str = "", limit: int = 50, src: str = "") -> dict[str
         ],
         "next": page[-1].at if len(entries) > size and page else None,
     }
+
+
+@router.get("/journey")
+async def journey(
+    before: str = "", limit: int = 50, kind: str = "", q: str = "",
+) -> dict[str, Any]:
+    """Unified, source-linked timeline of learned skills and formed memories."""
+    library = _lib()
+    await _run(library.ready)
+    kinds = {value.strip() for value in kind.split(",") if value.strip()}
+    before_at, separator, before_id = before.partition("|")
+    needle = q.strip().casefold()
+    rows: list[dict[str, Any]] = []
+    for rel in library.store.pages():
+        if rel.startswith(("日记/", "代理/")) or rel.startswith("."):
+            continue
+        page = library.store.read(rel)
+        for entry in page.current:
+            if not entry.at or (before and (entry.at, entry.id) >= (before_at, before_id if separator else "\uffff")):
+                continue
+            row = {
+                "id": entry.id, "kind": "episode" if rel.startswith("经历/") else "memory",
+                "at": entry.at, "title": page.title, "text": entry.text,
+                "path": rel, "ref": entry.ref, "source": entry.src,
+            }
+            if kinds and row["kind"] not in kinds:
+                continue
+            if needle and needle not in (row["title"] + " " + row["text"] + " " + rel).casefold():
+                continue
+            rows.append(row)
+
+    skill_events = library.store.root / "journey.jsonl"
+    if skill_events.is_file() and (not kinds or "skill" in kinds):
+        try:
+            for line in skill_events.read_text(encoding="utf-8", errors="replace").splitlines():
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(row, dict) or not row.get("at"):
+                    continue
+                if before and (str(row["at"]), str(row.get("id") or "")) >= (before_at, before_id if separator else "\uffff"):
+                    continue
+                if needle and needle not in (str(row.get("title") or "") + " " + str(row.get("text") or "") + " " + str(row.get("path") or "")).casefold():
+                    continue
+                rows.append(row)
+        except OSError as exc:
+            raise HTTPException(500, f"读取学习事件失败：{type(exc).__name__}") from exc
+    rows.sort(key=lambda row: (str(row.get("at") or ""), str(row.get("id") or "")), reverse=True)
+    size = max(1, min(100, limit))
+    page = rows[:size]
+    return {"items": page, "next": f"{page[-1]['at']}|{page[-1]['id']}" if len(rows) > size else None}
+
+
+@router.get("/journey/source")
+async def journey_source(id: str) -> dict[str, str]:
+    """Open the learned skill file named by a recorded journey event."""
+    from atlas.skills import SKILLS_DIR
+
+    library = _lib()
+    journal = library.store.root / "journey.jsonl"
+    if not journal.is_file():
+        raise HTTPException(404, "没有对应的学习出处")
+    try:
+        rows = [json.loads(line) for line in journal.read_text(encoding="utf-8", errors="replace").splitlines()]
+    except (OSError, ValueError) as exc:
+        raise HTTPException(500, "读取学习出处失败") from exc
+    row = next((item for item in rows if isinstance(item, dict) and item.get("id") == id), None)
+    if row is None:
+        raise HTTPException(404, "没有对应的学习出处")
+    root = (SKILLS_DIR / "learned").resolve()
+    path = Path(str(row.get("path") or "")).resolve()
+    if root not in path.parents or path.name != "SKILL.md" or not path.is_file():
+        raise HTTPException(404, "技能文件已不存在")
+    return {"path": str(path), "text": path.read_text(encoding="utf-8", errors="replace")[:12000]}
 
 
 @router.get("/projects")

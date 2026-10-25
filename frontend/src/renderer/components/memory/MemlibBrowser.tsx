@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
-import { BookOpen, CalendarDays, Check, Database, FolderKanban, GitCompare, LoaderCircle, Search, Sparkles, UserRound, X } from 'lucide-react';
+import { BookOpen, CalendarDays, Check, Database, FolderKanban, GitBranch, GitCompare, LoaderCircle, Search, Sparkles, UserRound, X } from 'lucide-react';
 import { api } from '../../services/api';
 import { LibChangesView, PeopleView, TodayView } from './LibraryPages';
 import { MOCK_MEMLIB_ENABLED, mockMemlib, mockStats, type Episode, type Entry, type MemlibItem, type OpenResult, type Project, type ProjectSummary, type Stats } from './mockMemlib';
+import MemoryJourney from './MemoryJourney';
 
-type View = 'search' | 'timeline' | 'projects' | 'people' | 'me' | 'changes';
+type View = 'search' | 'timeline' | 'journey' | 'projects' | 'people' | 'me' | 'changes';
 type Props = { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void };
 const SOURCES = [
   ['你说的', '你说的'], ['你改的', '你改的'], ['推测', '推测'], ['经历', '经历'], ['整理', '整理'], ['原对话', '原对话'],
@@ -13,6 +14,7 @@ const SOURCES = [
 const RANGES = [['today', '今天'], ['7d', '7 天'], ['30d', '30 天'], ['all', '全部'], ['custom', '自定义']] as const;
 const NAV: Array<{ id: View; title: string; icon: typeof Search }> = [
   { id: 'search', title: '搜索', icon: Search }, { id: 'timeline', title: '时间线', icon: CalendarDays },
+  { id: 'journey', title: '学习 Journey', icon: GitBranch },
   { id: 'projects', title: '项目', icon: FolderKanban }, { id: 'people', title: '人', icon: UserRound },
   { id: 'me', title: '关于你', icon: BookOpen }, { id: 'changes', title: '变动记录', icon: GitCompare },
 ];
@@ -257,7 +259,7 @@ export default function MemlibBrowser({ apiBaseUrl, connected, onToast }: Props)
     {project ? <article className="min-w-0 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4"><div className="mb-3 border-b border-[var(--line)] pb-3"><h2 className="m-0 text-lg font-semibold">{project.title}</h2><p className="mt-1 mb-0 text-xs text-fg-3">{project.path}</p></div>{(['现在状态', '定下的决定', '没做完', '来龙去脉'] as const).map((section) => <section key={section} className="mb-4"><h3 className="mb-2 text-sm font-semibold">{section}</h3>{project.sections[section]?.length ? <div className="grid gap-2">{project.sections[section].map((entry) => <div key={entry.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-t border-[var(--sunken)] pt-2 text-sm"><div>{entry.text}{entry.why && <small className="mt-1 block text-xs text-fg-3">{entry.why}</small>}<div className="mt-1 flex items-center gap-2 text-xs text-fg-3">{asDate(entry.at)}{entry.ref && <button className="text-[var(--brand)] underline" onClick={() => openDrawer(entry.ref!)}>出处</button>}</div></div><div className="flex flex-wrap items-start justify-end gap-1"><SourceTag source={entry.src} /><MemoryActions entry={entry} apiBaseUrl={apiBaseUrl} onToast={onToast} onChanged={() => setProjectRefresh((value) => value + 1)} /></div></div>)}</div> : <p className="text-sm text-fg-3">暂无</p>}</section>)}</article> : <div className="p-6 text-sm text-fg-3">选择一个项目</div>}
   </section>;
 
-  const renderContent = () => view === 'search' ? renderSearch() : view === 'timeline' ? renderTimeline() : view === 'projects' ? renderProjects() : view === 'people'
+  const renderContent = () => view === 'journey' ? <MemoryJourney apiBaseUrl={apiBaseUrl} connected={connected} onOpenRef={openDrawer} onToast={onToast} /> : view === 'search' ? renderSearch() : view === 'timeline' ? renderTimeline() : view === 'projects' ? renderProjects() : view === 'people'
     ? <PeopleView apiBaseUrl={apiBaseUrl} connected={connected || MOCK_MEMLIB_ENABLED} onToast={onToast} />
     : view === 'me' ? <TodayView apiBaseUrl={apiBaseUrl} connected={connected || MOCK_MEMLIB_ENABLED} onToast={onToast} />
       : <LibChangesView apiBaseUrl={apiBaseUrl} connected={connected || MOCK_MEMLIB_ENABLED} onToast={onToast} sourceFilter={sources} />;

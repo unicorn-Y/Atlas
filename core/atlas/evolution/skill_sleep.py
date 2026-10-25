@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import sqlite3
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,7 @@ SKILL_PATH = SKILLS_DIR / "learned" / SKILL_NAME / "SKILL.md"
 SESSION_SOURCES = ("desktop", "cli")  # user-facing chats, not cron/subagent sessions
 _FEEDBACK = ("不对", "错了", "还是不行", "没用", "重新", "不是这个", "好了", "可以了", "完美", "谢谢",
              "wrong", "still broken", "perfect", "thanks")
+_JOURNEY_LOCK = threading.Lock()
 
 
 def harvest_atlas(state_db: Path = STATE_DB, *, since_iso: str | None = None,
@@ -142,6 +144,23 @@ def run(*, dry_run: bool = False) -> dict[str, Any]:
         "baseline": report.baseline_score, "candidate": report.candidate_score,
         "staging": outcome.staging_dir, "skill": str(SKILL_PATH),
     }
+    if outcome.adopted:
+        # Keep one auditable learning event for the Memory journey view. The
+        # learned file remains the source of truth; this records its provenance.
+        event = {
+            "id": f"skill-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}",
+            "kind": "skill", "at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "title": f"学习到技能：{SKILL_NAME}",
+            "text": "技能经留出任务验证后采纳。",
+            "path": str(SKILL_PATH), "source": "SkillOpt-Sleep",
+            "ref": "",
+        }
+        journal = DATA_ROOT / "memory" / "journey.jsonl"
+        journal.parent.mkdir(parents=True, exist_ok=True)
+        with _JOURNEY_LOCK, journal.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
     log.info("skill_sleep.done", **summary)
     return summary
 
