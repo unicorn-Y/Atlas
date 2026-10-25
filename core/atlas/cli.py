@@ -148,6 +148,37 @@ def lsp_stop_command() -> None:
     console.print("语言服务已停止。")
 
 
+@main.command("review")
+@click.option("--workspace", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path.cwd())
+@click.option("--model", help="覆盖 Atlas 当前模型")
+@click.option("--ci", is_flag=True, help="CI 非交互模式；发现 blocker/major 时退出码为 1")
+@click.option("--json", "as_json", is_flag=True, help="输出机器可读 JSON")
+@click.option("--output", type=click.Path(path_type=Path), help="原子写入完整 JSON 报告")
+def review_command(workspace: Path, model: str | None, ci: bool, as_json: bool, output: Path | None) -> None:
+    """Run parallel, read-only repository review layers over the whole Git workspace."""
+    from atlas.review.engine import run_repository_review_sync
+    try:
+        report = run_repository_review_sync(str(workspace), model=model)
+    except Exception as exc:  # noqa: BLE001 — CLI should return a clear nonzero CI failure
+        raise click.ClickException(f"仓库审查失败：{type(exc).__name__}: {exc}") from exc
+    serialized = json.dumps(report, ensure_ascii=False, indent=2)
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        temporary = output.with_suffix(output.suffix + ".tmp")
+        temporary.write_text(serialized + "\n", encoding="utf-8")
+        temporary.replace(output)
+    if as_json:
+        click.echo(serialized)
+    else:
+        console.print(f"仓库审查完成：{report['file_count']} 个文件，{len(report['review_layers'])}/3 层 reviewer 完成，{len(report['findings'])} 条去重发现。")
+        for finding in report["findings"]:
+            console.print(f"[{finding['severity']}] {finding['file']}:{finding.get('line') or '?'} · {finding['title']} ({', '.join(finding['review_layers'])})")
+        for layer, error in report["layer_errors"].items():
+            console.print(f"审查层 {layer} 失败：{error}")
+    if ci and (report["layer_errors"] or any(item["severity"] in {"blocker", "major"} for item in report["findings"])):
+        raise SystemExit(1)
+
+
 @main.command()
 @click.option("--port", default=None, type=int, help="Server port (default: from config)")
 @click.option("--reload", is_flag=True, help="Enable auto-reload")

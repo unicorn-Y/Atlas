@@ -15,6 +15,7 @@ child through ``delegate_task`` and forwards the child's findings JSON to
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import os
 from pathlib import Path
@@ -23,9 +24,23 @@ import shlex
 import subprocess
 from typing import Any
 
+from fastapi import HTTPException, Request
+
 # Diff text is capped so a huge branch cannot blow the child's context; the note tells the
 # reviewer how to reach the rest with its own read-only git access.
 MAX_DIFF_LINES = 2000
+REPOSITORY_FILE_LIMIT = 1200
+REPOSITORY_BYTES_LIMIT = 2 * 1024 * 1024
+REVIEW_LAYERS = {
+    "correctness": "审查确定的逻辑错误、边界条件、异常处理、状态一致性和回归。",
+    "security": "审查信任边界、认证授权、命令/路径/注入、敏感数据、依赖与拒绝服务。只报告有可达证据的问题。",
+    "architecture": "审查跨模块契约、调用链完整性、并发/生命周期、重复实现与关键遗漏。",
+}
+_SENSITIVE_FILE_PARTS = {".env", ".env.local", ".npmrc", ".pypirc", "secrets.json", "user-settings.json", "credentials.json", "id_rsa"}
+_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?im)(\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|password|token|private[_-]?key)\b\s*(?:=|:\s*(?=['\"]))\s*)(['\"]?)([^\s,;\"']+)"
+)
+_BEARER_SECRET_RE = re.compile(r"(?im)(\bauthorization\b\s*[:=]\s*['\"]?Bearer\s+)([^\s,;\"']+)")
 
 # review_command output cap (~8000 chars) and its single-command timeout.
 COMMAND_OUTPUT_CHARS = 8000
@@ -184,6 +199,139 @@ def collect_diff(workspace: str, scope: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"未知的审查范围：{kind}")
     result["diff_text"], result["truncated"] = _truncate_lines(diff)
     return result
+
+
+def collect_repository_context(workspace: str, *, max_files: int = REPOSITORY_FILE_LIMIT,
+                               max_bytes: int = REPOSITORY_BYTES_LIMIT) -> dict[str, Any]:
+    """Collect a whole-repository file inventory and bounded UTF-8 source snapshot."""
+    ws = str(Path(workspace).resolve())
+    if _run_git(ws, "rev-parse", "--is-inside-work-tree").stdout.strip() != "true":
+        raise ValueError("仓库级审查需要一个 Git 工作区。")
+    listing = _run_git(ws, "ls-files", "-co", "--exclude-standard", "-z", timeout=60)
+    if listing.returncode:
+        raise ValueError("无法列出 Git 跟踪与未跟踪文件。")
+    paths = sorted({item for item in listing.stdout.split("\0") if item})
+    excluded = {".git", "node_modules", "vendor", "dist", "build", "target", ".venv", "venv", "__pycache__"}
+    paths = [name for name in paths if not (set(Path(name).parts) & excluded)]
+    source_paths = [name for name in paths if Path(name).name.lower() not in _SENSITIVE_FILE_PARTS
+                    and not Path(name).name.lower().startswith(".env")
+                    and Path(name).suffix.lower() not in {".pem", ".key", ".p12", ".pfx", ".keystore"}
+                    and not any(part.lower() in {"secrets", "credentials", "private_keys"} for part in Path(name).parts)]
+    inventory = source_paths[:max_files]
+    chunks: list[str] = []
+    used_bytes = 0
+    included = 0
+    oversized = 0
+    for name in inventory:
+        file_path = (Path(ws) / name).resolve()
+        try:
+            if not file_path.is_relative_to(Path(ws)) or not file_path.is_file():
+                continue
+            raw = file_path.read_bytes()
+            if b"\0" in raw[:8192]:
+                continue
+            if len(raw) > 512 * 1024:
+                oversized += 1
+                continue
+            remaining = max_bytes - used_bytes
+            if remaining <= 0:
+                break
+            was_truncated = len(raw) > remaining
+            raw = raw[:remaining]
+            text = _SECRET_ASSIGNMENT_RE.sub(r"\1\2[REDACTED]", raw.decode("utf-8", errors="replace"))
+            text = _BEARER_SECRET_RE.sub(r"\1[REDACTED]", text)
+            if was_truncated:
+                text += "\n[文件内容在仓库上下文字节上限处截断]"
+        except OSError:
+            continue
+        chunks.append(f"\n===== {name} =====\n{text}")
+        used_bytes += len(raw)
+        included += 1
+    return {"workspace": ws, "files": paths, "inventory": inventory, "file_count": len(paths),
+            "excluded_sensitive_count": len(paths) - len(source_paths),
+            "included_count": included, "oversized_files_skipped": oversized,
+            "truncated": len(source_paths) > len(inventory) or used_bytes >= max_bytes or oversized > 0,
+            "source_bytes": used_bytes, "source": "\n".join(chunks)}
+
+
+def _layer_findings(text: str, layer: str) -> list[dict[str, Any]]:
+    findings = parse_findings(text)
+    for item in findings:
+        item["review_layer"] = layer
+    return findings
+
+
+def merge_layer_findings(results: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    """Deduplicate cross-layer reports while preserving the originating reviewers."""
+    merged: list[dict[str, Any]] = []
+    for layer, findings in results.items():
+        for finding in findings:
+            file_name = str(finding.get("file") or "")
+            line = finding.get("line")
+            title = " ".join(str(finding.get("title") or "").lower().split())
+            duplicate = next((item for item in merged if item["file"] == file_name
+                              and (item.get("line") is None or line is None or abs(int(item["line"]) - int(line)) <= 3)
+                              and difflib.SequenceMatcher(None, title, " ".join(str(item["title"]).lower().split())).ratio() >= 0.62), None)
+            if duplicate:
+                duplicate["review_layers"] = sorted(set(duplicate.get("review_layers", [duplicate["review_layer"]])) | {layer})
+                severity_rank = {"minor": 1, "major": 2, "blocker": 3}
+                if severity_rank.get(str(finding.get("severity")), 0) > severity_rank.get(str(duplicate.get("severity")), 0):
+                    duplicate["severity"] = finding["severity"]
+                    duplicate["suggested_fix"] = finding.get("suggested_fix") or duplicate.get("suggested_fix")
+                if len(str(finding.get("evidence") or "")) > len(str(duplicate.get("evidence") or "")):
+                    duplicate["evidence"] = finding["evidence"]
+            else:
+                entry = dict(finding)
+                entry["review_layers"] = [layer]
+                merged.append(entry)
+    return merged
+
+
+async def run_repository_review(workspace: str, *, model: str | None = None) -> dict[str, Any]:
+    """Run parallel read-only repository reviewers, merge findings, and attribute evidence."""
+    context = collect_repository_context(workspace)
+    from atlas.models import ModelManager
+
+    manager = ModelManager()
+    selected_model = model or manager.current_model
+    if not selected_model:
+        raise ValueError("Atlas 尚未配置审查模型。")
+    inventory = "\n".join(f"- {name}" for name in context["inventory"])
+    source = str(context["source"])
+    async def review(layer: str, goal: str) -> tuple[str, list[dict[str, Any]]]:
+        prompt = (f"你是 Atlas 的只读仓库 reviewer，负责 {layer} 层。{goal}\n"
+                  "逐点基于仓库文件证据，只报可验证缺陷。文件必须是相对路径，行号从 1 开始；不要报告偏好或臆测。"
+                  "输出严格 JSON 数组，字段为 file,line,severity(blocker|major|minor),title,explanation,evidence,suggested_fix。"
+                  "没有发现时输出 []。只可读取，不得建议先执行可能改写仓库的命令。\n"
+                  f"文件清单（共 {context['file_count']} 个；本次源快照 {context['included_count']} 个）：\n{inventory}\n"
+                  f"仓库源代码与配置：\n{source}")
+        result = await manager.model_router.complete_for(selected_model, "repository_review", [
+            {"role": "system", "content": "Perform an evidence-first, read-only repository review. Return only a JSON array."},
+            {"role": "user", "content": prompt},
+        ], max_tokens=4096, timeout=180)
+        return layer, _layer_findings(result.text, layer)
+    replies = await asyncio.gather(*(review(layer, goal) for layer, goal in REVIEW_LAYERS.items()), return_exceptions=True)
+    layer_results: dict[str, list[dict[str, Any]]] = {}
+    errors: dict[str, str] = {}
+    for name, result in zip(REVIEW_LAYERS, replies):
+        if isinstance(result, BaseException):
+            errors[name] = f"{type(result).__name__}: {result}"
+        else:
+            layer_results[result[0]] = result[1]
+    findings = merge_layer_findings(layer_results)
+    if not layer_results:
+        raise RuntimeError("所有并行审查层均失败：" + "; ".join(errors.values()))
+    return {"schema_version": 1, "scope": "repository", "workspace": context["workspace"],
+            "model": selected_model, "file_count": context["file_count"],
+            "excluded_sensitive_file_count": context["excluded_sensitive_count"],
+            "included_file_count": context["included_count"], "source_bytes": context["source_bytes"],
+            "oversized_files_skipped": context["oversized_files_skipped"],
+            "context_truncated": context["truncated"], "review_layers": list(layer_results),
+            "layer_errors": errors, "findings": findings}
+
+
+def run_repository_review_sync(workspace: str, *, model: str | None = None) -> dict[str, Any]:
+    return asyncio.run(run_repository_review(workspace, model=model))
 
 
 def build_child_goal(scope_result: dict[str, Any], user_prompt: str = "") -> str:
@@ -777,7 +925,7 @@ def register_review_tools() -> None:
 
 
 def register_review_routes(app: Any) -> None:
-    """Minimal HTTP surface for this wave: the findings JSON schema."""
+    """HTTP surfaces for review schema and full repository review."""
 
     @app.get("/api/review/schema")
     def review_schema() -> dict[str, Any]:
@@ -787,3 +935,22 @@ def register_review_routes(app: Any) -> None:
             "scopes": ["working_tree", "branch", "commit"],
             "finding": FINDINGS_SCHEMA["items"],
         }
+
+    @app.post("/api/review/repository")
+    async def review_repository(request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(status_code=400, detail="请求体必须是 JSON。") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="请求体必须是 JSON 对象。")
+        workspace = str(body.get("workspace") or "").strip()
+        if not workspace or not os.path.isdir(workspace):
+            raise HTTPException(status_code=400, detail="请先选择本机 Git 工作区。")
+        model = str(body.get("model") or "").strip() or None
+        try:
+            return await asyncio.to_thread(run_repository_review_sync, workspace, model=model)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 — report provider/runtime errors as an explicit API failure
+            raise HTTPException(status_code=502, detail=f"仓库审查失败：{type(exc).__name__}: {exc}") from exc
