@@ -47,6 +47,7 @@ type ChannelPolicy = {
 };
 type ChannelStatusWithPolicy = ChannelStatusRow & { policy?: ChannelPolicy };
 type ChannelCatalogRow = { id: string; label: string; status: string; registered: boolean; inbound: boolean; outbound: boolean; attachments: boolean; groups: boolean; mentions: boolean; dependency?: string | null; credentials: string[]; setup: string; docs: string };
+type HandoffRow = { handoff_id: string; state: 'agent' | 'human' | 'paused'; source_channel: string; source_chat: string; human_channel: string; human_chat: string; updated_at: string; events: Array<{ event: string; actor: string; created_at: string }> };
 type ChannelPolicyPatch = Partial<ChannelPolicy>;
 const DEFAULT_CHANNEL_POLICY: ChannelPolicy = {
   dm_policy: 'open', dm_allowlist: ['*'], allow_when_empty: true,
@@ -71,6 +72,7 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
   const [test, setTest] = useState({ channel: '', chatId: '', text: 'Atlas 测试消息' });
   const [sessionLinks, setSessionLinks] = useState<Array<{ session_key: string; conversation_id: string; linked_by: string; created_at: string }>>([]);
   const [catalog, setCatalog] = useState<ChannelCatalogRow[]>([]);
+  const [handoffs, setHandoffs] = useState<HandoffRow[]>([]);
   const [linkDraft, setLinkDraft] = useState({ agent_id: 'main', channel: 'telegram', account: '', peer: '', conversation_id: '' });
 
   const reloadSessionLinks = useCallback(async () => {
@@ -78,6 +80,10 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
       const result = await api<{ links: typeof sessionLinks }>(apiBaseUrl, '/api/channels/session-links');
       setSessionLinks(result.links);
     } catch { setSessionLinks([]); }
+  }, [apiBaseUrl]);
+  const reloadHandoffs = useCallback(async () => {
+    try { setHandoffs((await api<{ handoffs: HandoffRow[] }>(apiBaseUrl, '/api/channels/handoffs')).handoffs); }
+    catch { setHandoffs([]); }
   }, [apiBaseUrl]);
 
   const reload = useCallback(async () => {
@@ -96,12 +102,13 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
       setDegraded('');
       setEnabled((current) => ({ ...Object.fromEntries(status.channels.map((row) => [row.name, row.enabled])), ...current }));
       await reloadSessionLinks();
+      await reloadHandoffs();
     } catch (error) {
       setRows([]); setDegraded(error instanceof Error ? error.message : String(error));
       try { setCatalog((await api<{ channels: ChannelCatalogRow[] }>(apiBaseUrl, '/api/channels/catalog')).channels); } catch { setCatalog([]); }
     }
     setLoading(false);
-  }, [apiBaseUrl, reloadSessionLinks]);
+  }, [apiBaseUrl, reloadSessionLinks, reloadHandoffs]);
   useEffect(() => { void reload(); }, [reload]);
 
   const enabledRows = rows.filter((row) => row.enabled);
@@ -211,6 +218,13 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
       onToast('渠道会话绑定已解除');
     } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
   };
+  const setHandoffState = async (id: string, state: 'agent' | 'paused') => {
+    try {
+      await api(apiBaseUrl, `/api/channels/handoffs/${encodeURIComponent(id)}`, { method: 'PUT', json: { state } });
+      await reloadHandoffs();
+      onToast(state === 'agent' ? 'bot 自动回复已恢复' : '接管已结束，bot 保持暂停');
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+  };
 
   return <div className="grid max-w-[680px] gap-5 text-[13px] text-fg-2">
     <section aria-label="Gateway 状态" className="rounded-xl bg-sunken px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
@@ -318,6 +332,12 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
       </div>
       <div className="mt-2 flex justify-end"><Button size="sm" variant="secondary" disabled={!linkDraft.peer.trim() || !linkDraft.conversation_id.trim()} onClick={() => void linkSession()}>绑定既有会话</Button></div>
       <div className="mt-2 grid gap-1">{sessionLinks.map((item) => <div key={item.session_key} className="flex items-center gap-2 rounded-lg bg-sunken px-2.5 py-2 text-[11px]"><code className="min-w-0 flex-1 truncate">{item.session_key} → {item.conversation_id}</code><Button size="sm" variant="ghost" onClick={() => void unlinkSession(item.session_key)}>解除</Button></div>)}{!sessionLinks.length && <span className="text-[11px] text-fg-3">尚无显式绑定</span>}</div>
+    </section>
+
+    <section aria-label="真人接管状态" className="rounded-xl px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
+      <div className="flex items-center gap-2"><b className="font-medium text-fg">真人接管</b><span className="flex-1" /><Button size="sm" variant="ghost" onClick={() => void reloadHandoffs()}>刷新</Button></div>
+      <p className="mb-3 mt-1 text-[12px] text-fg-3">在渠道对话中发送 <code>/takeover &lt;人工目标&gt;</code>，或 <code>/takeover &lt;渠道&gt; &lt;目标 chat id&gt;</code>。接管期间 bot 不会把新消息交给模型；人工目标用 <code>/reply 编号 内容</code> 回传，双方可用 <code>/resume 编号</code> 恢复或 <code>/end 编号</code> 结束并保持暂停。</p>
+      <div className="grid gap-2">{handoffs.map((item) => <article key={item.handoff_id} className="rounded-lg bg-sunken p-3"><div className="flex flex-wrap items-center gap-2"><code>{item.handoff_id}</code><b className="text-fg">{item.state === 'human' ? '人工接管中' : item.state === 'paused' ? '已结束 / bot 暂停' : 'bot 接管'}</b><span className="flex-1 text-[11px] text-fg-3">{item.source_channel}/{item.source_chat} ↔ {item.human_channel}/{item.human_chat}</span><Button size="sm" variant="secondary" disabled={item.state === 'agent'} onClick={() => void setHandoffState(item.handoff_id, 'agent')}>恢复 bot</Button><Button size="sm" variant="ghost" disabled={item.state === 'paused'} onClick={() => void setHandoffState(item.handoff_id, 'paused')}>结束并暂停</Button></div><p className="mb-0 mt-1 text-[10.5px] text-fg-3">操作记录：{item.events.map((event) => `${event.event} · ${event.actor} · ${new Date(event.created_at).toLocaleString()}`).join('；')}</p></article>)}{!handoffs.length && <span className="text-[11px] text-fg-3">当前没有进行中或暂停的接管</span>}</div>
     </section>
 
     <section aria-label="测试发送" className="rounded-xl px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">

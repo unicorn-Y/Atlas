@@ -14,6 +14,7 @@ The manager instance is injected at startup by the integration owner via
 from __future__ import annotations
 
 import inspect
+from contextlib import suppress
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -80,6 +81,10 @@ class SessionLinkPayload(BaseModel):
     linked_by: str = Field(default="local-user", min_length=1, max_length=120)
 
 
+class HandoffStatePayload(BaseModel):
+    state: Literal["agent", "human", "paused"]
+
+
 @router.get("/session-links", dependencies=[Depends(_require_trusted_origin)])
 async def list_session_links() -> dict[str, Any]:
     """List explicit cross-channel aliases (identity keys only)."""
@@ -127,6 +132,41 @@ async def delete_session_link(session_key: str) -> dict[str, Any]:
     if bridge is None:
         raise HTTPException(status_code=503, detail="渠道会话服务尚未启动")
     return {"ok": True, "removed": bridge.sessions.unlink(session_key)}
+
+
+@router.get("/handoffs", dependencies=[Depends(_require_trusted_origin)])
+async def list_handoffs() -> dict[str, Any]:
+    """List active human takeovers and their auditable state events."""
+    from atlas import server as atlas_server
+
+    bridge = getattr(atlas_server, "gateway_bridge", None)
+    if bridge is None:
+        raise HTTPException(status_code=503, detail="渠道会话服务尚未启动")
+    handoffs = bridge.sessions.handoffs(active_only=False)
+    for item in handoffs:
+        item["events"] = bridge.sessions.handoff_events(item["handoff_id"])
+    return {"handoffs": handoffs}
+
+
+@router.put("/handoffs/{handoff_id}", dependencies=[Depends(_require_trusted_origin)])
+async def set_handoff_state(handoff_id: str, payload: HandoffStatePayload) -> dict[str, Any]:
+    """Resume bot ownership or leave an ended handoff paused from local settings."""
+    from atlas import server as atlas_server
+
+    bridge = getattr(atlas_server, "gateway_bridge", None)
+    if bridge is None:
+        raise HTTPException(status_code=503, detail="渠道会话服务尚未启动")
+    current = bridge.sessions.get_handoff(handoff_id)
+    if current is None:
+        raise HTTPException(status_code=404, detail="接管记录不存在")
+    saved = bridge.sessions.update_handoff(handoff_id, payload.state, "local-user")
+    for channel, chat, account in ((current["source_channel"], current["source_chat"], current["source_account"]),
+                                   (current["human_channel"], current["human_chat"], current["human_account"])):
+        with suppress(Exception):
+            await bridge.manager.send(channel, chat,
+                                      "bot 自动回复已恢复。" if payload.state == "agent" else "接管已结束；bot 保持暂停。",
+                                      account=account)
+    return {"handoff": saved, "events": bridge.sessions.handoff_events(handoff_id)}
 
 
 class ChannelPolicyPayload(BaseModel):

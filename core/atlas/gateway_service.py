@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import shlex
 import sqlite3
 import threading
 import time
@@ -82,6 +83,19 @@ class SessionMapper:
                 "session_key TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, "
                 "linked_by TEXT NOT NULL, created_at TEXT NOT NULL)"
             )
+            self._db.execute(
+                "CREATE TABLE IF NOT EXISTS channel_handoffs ("
+                "handoff_id TEXT PRIMARY KEY, session_key TEXT NOT NULL, state TEXT NOT NULL, "
+                "source_channel TEXT NOT NULL, source_account TEXT NOT NULL, source_chat TEXT NOT NULL, "
+                "source_thread TEXT NOT NULL, source_sender TEXT NOT NULL, human_channel TEXT NOT NULL, "
+                "human_account TEXT NOT NULL, human_chat TEXT NOT NULL, created_at TEXT NOT NULL, "
+                "updated_at TEXT NOT NULL, updated_by TEXT NOT NULL)"
+            )
+            self._db.execute(
+                "CREATE TABLE IF NOT EXISTS channel_handoff_events ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, handoff_id TEXT NOT NULL, event TEXT NOT NULL, "
+                "actor TEXT NOT NULL, detail TEXT NOT NULL, created_at TEXT NOT NULL)"
+            )
 
     def links(self) -> list[dict[str, str]]:
         """List explicitly linked channel identities without exposing message data."""
@@ -92,6 +106,92 @@ class SessionMapper:
             ).fetchall()
         return [dict(zip(("session_key", "conversation_id", "linked_by", "created_at"), row))
                 for row in rows]
+
+    def create_handoff(self, handoff_id: str, session_key: str, event: MessageEvent,
+                       human_channel: str, human_account: str, human_chat: str) -> None:
+        now = datetime.now(UTC).isoformat()
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT INTO channel_handoffs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (handoff_id, session_key, "human", event.channel, event.account or "",
+                 event.chat_id, event.thread_id or "", event.sender_id, human_channel,
+                 human_account, human_chat, now, now, event.sender_id),
+            )
+            self._db.execute("INSERT INTO channel_handoff_events(handoff_id,event,actor,detail,created_at) VALUES(?,?,?,?,?)",
+                             (handoff_id, "takeover", event.sender_id, "human ownership started", now))
+
+    def get_handoff(self, handoff_id: str) -> dict[str, str] | None:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT handoff_id,session_key,state,source_channel,source_account,source_chat,"
+                "source_thread,source_sender,human_channel,human_account,human_chat,created_at,"
+                "updated_at,updated_by FROM channel_handoffs WHERE handoff_id=?", (handoff_id,)
+            ).fetchone()
+        return dict(zip(("handoff_id", "session_key", "state", "source_channel", "source_account",
+                         "source_chat", "source_thread", "source_sender", "human_channel",
+                         "human_account", "human_chat", "created_at", "updated_at", "updated_by"), row)) if row else None
+
+    def handoffs(self, *, active_only: bool = True) -> list[dict[str, str]]:
+        self.expire_handoffs()
+        query = "SELECT handoff_id,session_key,state,source_channel,source_account,source_chat,source_thread,source_sender,human_channel,human_account,human_chat,created_at,updated_at,updated_by FROM channel_handoffs"
+        if active_only:
+            query += " WHERE state IN ('human','paused')"
+        query += " ORDER BY updated_at DESC"
+        with self._lock:
+            rows = self._db.execute(query).fetchall()
+        keys = ("handoff_id", "session_key", "state", "source_channel", "source_account",
+                "source_chat", "source_thread", "source_sender", "human_channel",
+                "human_account", "human_chat", "created_at", "updated_at", "updated_by")
+        return [dict(zip(keys, row)) for row in rows]
+
+    def update_handoff(self, handoff_id: str, state: str, actor: str) -> dict[str, str] | None:
+        if state not in {"agent", "human", "paused"}:
+            raise ValueError("invalid handoff state")
+        with self._lock, self._db:
+            now = datetime.now(UTC).isoformat()
+            self._db.execute("UPDATE channel_handoffs SET state=?,updated_at=?,updated_by=? WHERE handoff_id=?",
+                             (state, now, actor, handoff_id))
+            self._db.execute("INSERT INTO channel_handoff_events(handoff_id,event,actor,detail,created_at) VALUES(?,?,?,?,?)",
+                             (handoff_id, state, actor, f"ownership changed to {state}", now))
+        return self.get_handoff(handoff_id)
+
+    def active_handoff_for_session(self, session_key: str) -> dict[str, str] | None:
+        self.expire_handoffs()
+        with self._lock:
+            row = self._db.execute(
+                "SELECT handoff_id FROM channel_handoffs WHERE session_key=? AND state IN ('human','paused') "
+                "ORDER BY updated_at DESC LIMIT 1", (session_key,)
+            ).fetchone()
+        return self.get_handoff(str(row[0])) if row else None
+
+    def handoff_events(self, handoff_id: str) -> list[dict[str, str]]:
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT event,actor,detail,created_at FROM channel_handoff_events "
+                "WHERE handoff_id=? ORDER BY id", (handoff_id,)
+            ).fetchall()
+        return [dict(zip(("event", "actor", "detail", "created_at"), row)) for row in rows]
+
+    def expire_handoffs(self, *, older_than_hours: int = 168) -> int:
+        with self._lock, self._db:
+            rows = self._db.execute(
+                "SELECT handoff_id,updated_by FROM channel_handoffs "
+                "WHERE state='human' AND datetime(updated_at) < datetime('now', ?)",
+                (f"-{older_than_hours} hours",),
+            ).fetchall()
+            now = datetime.now(UTC).isoformat()
+            for handoff_id, actor in rows:
+                self._db.execute("UPDATE channel_handoffs SET state='paused',updated_at=?,updated_by='system-expiry' WHERE handoff_id=?",
+                                 (now, handoff_id))
+                self._db.execute("INSERT INTO channel_handoff_events(handoff_id,event,actor,detail,created_at) VALUES(?,?,?,?,?)",
+                                 (handoff_id, "expired", actor, "handoff expired after inactivity", now))
+            retired = self._db.execute(
+                "SELECT handoff_id FROM channel_handoffs WHERE datetime(updated_at) < datetime('now','-30 days')"
+            ).fetchall()
+            for (handoff_id,) in retired:
+                self._db.execute("DELETE FROM channel_handoff_events WHERE handoff_id=?", (handoff_id,))
+                self._db.execute("DELETE FROM channel_handoffs WHERE handoff_id=?", (handoff_id,))
+        return len(rows)
 
     def get(self, key: str) -> str | None:
         with self._lock:
@@ -342,6 +442,12 @@ class GatewayBridge:
             await self._project_status(agent_id, "idle", str(exc))
 
     async def _dispatch(self, event: MessageEvent, agent_id: str | None) -> None:
+        session = self.build_session_key(event, agent_id)
+        if await self._handle_handoff_command(event, session):
+            return
+        handoff = self.sessions.active_handoff_for_session(session)
+        if handoff and handoff["state"] in {"human", "paused"}:
+            return
         content = str(event.text or "")
         def safe(value: str, limit: int = 160) -> str:
             return str(value or "").replace("\r", " ").replace("\n", " ").replace("]", "）")[:limit]
@@ -363,7 +469,6 @@ class GatewayBridge:
         if local_paths:
             content += "\n\nAttached files stored at:\n" + "\n".join(local_paths)
 
-        session = self.build_session_key(event, agent_id)
         conversation_id = await self.resolve_conversation(session, event)
         if conversation_id is None:
             await self._reply(event, "会话服务未就绪，请稍后再试。")
@@ -386,6 +491,84 @@ class GatewayBridge:
             await self._submit_and_wait(event, agent_id, conversation_id, data)
         finally:
             self._origins.pop(run_id, None)
+
+    async def _handle_handoff_command(self, event: MessageEvent, session: str) -> bool:
+        """Handle channel takeover controls before any message reaches an agent."""
+        try:
+            parts = shlex.split(event.text or "")
+        except ValueError:
+            return False
+        if not parts or not parts[0].startswith("/"):
+            return False
+        command = parts[0].lower()
+        if command == "/takeover":
+            if len(parts) not in (2, 3):
+                await self._reply(event, "用法：/takeover <人工目标> 或 /takeover <渠道> <人工目标>")
+                return True
+            human_channel, human_chat = (event.channel, parts[1]) if len(parts) == 2 else (parts[1], parts[2])
+            if human_channel not in self.manager.registry:
+                await self._reply(event, f"人工目标渠道未注册：{human_channel}")
+                return True
+            human_account = str((self.manager.configs.get(human_channel) or {}).get("account") or "")
+            handoff_id = uuid.uuid4().hex[:10]
+            notice = (f"Atlas 人工接管请求 {handoff_id}\n来自 {event.channel}/{event.chat_id}。"
+                      f"回复：/reply {handoff_id} <内容>；恢复 bot：/resume {handoff_id}；结束并保持暂停：/end {handoff_id}")
+            try:
+                await self.manager.send(human_channel, human_chat, notice, account=human_account)
+            except Exception as exc:
+                log.exception("gateway.handoff_notify_failed", channel=human_channel)
+                await self._reply(event, f"无法通知人工目标：{str(exc)[:MAX_FAILURE_CHARS]}")
+                return True
+            self.sessions.create_handoff(handoff_id, session, event, human_channel,
+                                         human_account, human_chat)
+            await self._reply(event, f"已通知 {human_channel}/{human_chat} 并暂停 bot 自动回复；接管编号 {handoff_id}。")
+            log.info("gateway.handoff_started", handoff_id=handoff_id, channel=event.channel,
+                     human_channel=human_channel)
+            return True
+        if command == "/reply" and len(parts) >= 3:
+            handoff = self.sessions.get_handoff(parts[1])
+            if not handoff or handoff["state"] != "human":
+                await self._reply(event, "接管不存在或已不处于人工接管状态。")
+                return True
+            if (event.channel, event.account or "", event.chat_id) != (
+                    handoff["human_channel"], handoff["human_account"], handoff["human_chat"]):
+                await self._reply(event, "此接管编号不属于当前人工目标。")
+                return True
+            text = " ".join(parts[2:])
+            try:
+                await self.manager.send(handoff["source_channel"], handoff["source_chat"], text,
+                                        account=handoff["source_account"], reply_to=handoff["source_thread"])
+            except Exception as exc:
+                await self._reply(event, f"人工回复投递失败：{str(exc)[:MAX_FAILURE_CHARS]}")
+            else:
+                await self._reply(event, f"已回传到原渠道（接管 {parts[1]}）。")
+                log.info("gateway.handoff_reply", handoff_id=parts[1], actor=event.sender_id)
+            return True
+        if command in {"/resume", "/end"} and len(parts) == 2:
+            handoff = self.sessions.get_handoff(parts[1])
+            if not handoff:
+                await self._reply(event, "接管编号不存在。")
+                return True
+            origin_identity = (event.channel, event.account or "", event.chat_id) == (
+                handoff["source_channel"], handoff["source_account"], handoff["source_chat"])
+            human_identity = (event.channel, event.account or "", event.chat_id) == (
+                handoff["human_channel"], handoff["human_account"], handoff["human_chat"])
+            if not (origin_identity or human_identity):
+                await self._reply(event, "只有原会话或指定人工目标可以结束接管。")
+                return True
+            new_state = "agent" if command == "/resume" else "paused"
+            self.sessions.update_handoff(parts[1], new_state, event.sender_id)
+            message = "bot 自动回复已恢复。" if new_state == "agent" else "接管已结束；bot 仍保持暂停，可用 /resume 恢复。"
+            await self._reply(event, message)
+            peer_channel = handoff["human_channel"] if origin_identity else handoff["source_channel"]
+            peer_chat = handoff["human_chat"] if origin_identity else handoff["source_chat"]
+            peer_account = handoff["human_account"] if origin_identity else handoff["source_account"]
+            with contextlib.suppress(Exception):
+                await self.manager.send(peer_channel, peer_chat, message, account=peer_account)
+            log.info("gateway.handoff_state_changed", handoff_id=parts[1], state=new_state,
+                     actor=event.sender_id)
+            return True
+        return False
 
     async def _submit_and_wait(
         self, event: MessageEvent, agent_id: str | None, conversation_id: str,
