@@ -10,6 +10,8 @@ type NetworkSettings = {
   restart_required: boolean;
   supported_transports: string[];
   unsupported_transports: string[];
+  tool_egress: Record<string, 'system_proxy' | 'model_proxy' | 'direct'>;
+  egress_tools: string[];
 };
 
 export default function NetworkSettingsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
@@ -20,12 +22,15 @@ export default function NetworkSettingsPanel({ apiBaseUrl }: { apiBaseUrl: strin
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [egress, setEgress] = useState<Record<string, 'system_proxy' | 'model_proxy' | 'direct'>>({});
+  const [probe, setProbe] = useState<Record<string, string>>({});
   const field = 'h-9 w-full rounded-[9px] bg-sunken px-3 text-[13px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)] disabled:opacity-60';
 
   const load = async () => {
     const result = await api<NetworkSettings>(apiBaseUrl, '/api/model-network-settings');
     setSettings(result);
     setCaBundlePath(result.ca_bundle_path);
+    setEgress(result.tool_egress);
   };
 
   useEffect(() => {
@@ -38,9 +43,10 @@ export default function NetworkSettingsPanel({ apiBaseUrl }: { apiBaseUrl: strin
     setError(null);
     setMessage(null);
     try {
-      const body: { proxy_url?: string; clear_proxy: boolean; ca_bundle_path: string } = {
+      const body: { proxy_url?: string; clear_proxy: boolean; ca_bundle_path: string; tool_egress: typeof egress } = {
         clear_proxy: clearProxy,
         ca_bundle_path: caBundlePath.trim(),
+        tool_egress: egress,
       };
       if (proxyUrl.trim()) body.proxy_url = proxyUrl.trim();
       const updated = await api<NetworkSettings>(apiBaseUrl, '/api/model-network-settings', {
@@ -71,6 +77,18 @@ export default function NetworkSettingsPanel({ apiBaseUrl }: { apiBaseUrl: strin
           {settings?.proxy_status === 'configured' ? `当前代理：${settings.proxy_label}。留空保持不变。` : settings?.proxy_status === 'missing' || settings?.proxy_status === 'unavailable' ? '当前代理凭据不可用；请重新填写或勾选清除。' : '支持 http:// 和 https:// 代理地址。地址及其中的凭据不会从 API 返回。'}
         </span>
       </label>
+      <div className="grid gap-3 rounded-lg border border-line p-3">
+        <b className="text-xs text-fg">逐工具出网</b>
+        {settings?.egress_tools.map((tool) => <label key={tool} className="grid grid-cols-[1fr_180px_auto] items-center gap-2 text-xs text-fg-2">
+          <span>{tool === 'model_requests' ? '模型请求' : tool === 'web_search' ? '网页搜索' : '图像/视频/语音生成'}</span>
+          <select aria-label={`${tool} 出网方式`} className="h-8 rounded border border-line bg-sunken px-2" value={egress[tool] ?? (tool === 'model_requests' && settings.proxy_configured ? 'model_proxy' : 'system_proxy')} onChange={(event) => setEgress((current) => ({ ...current, [tool]: event.target.value as 'system_proxy' | 'model_proxy' | 'direct' }))}>
+            <option value="system_proxy">系统代理</option><option value="model_proxy">Atlas 模型代理</option><option value="direct">直接连接</option>
+          </select>
+          <button type="button" className="rounded border border-line px-2 py-1" disabled={busy} onClick={() => { setProbe((current) => ({ ...current, [tool]: '探测中…' })); void api<{ ok: boolean; public_ip?: string; mode: string }>(apiBaseUrl, '/api/model-network-settings/probe', { method: 'POST', json: { tool } }).then((result) => setProbe((current) => ({ ...current, [tool]: result.ok ? `${result.mode} · ${result.public_ip}` : '探测失败' }))).catch((reason) => setProbe((current) => ({ ...current, [tool]: reason instanceof Error ? reason.message : String(reason) }))); }}>探测出口 IP</button>
+          {probe[tool] && <small className="col-span-full text-fg-3" role="status">{probe[tool]}</small>}
+        </label>)}
+        <span className="text-[11px] text-fg-3">网页搜索和媒体生成请求使用所选出网方式；网页正文读取遵循现有网页抓取器路由。出口探测只在点击时访问 ipify。</span>
+      </div>
       <label className="flex items-center gap-2 text-[12px] text-fg-2">
         <input type="checkbox" checked={clearProxy} onChange={(event) => setClearProxy(event.target.checked)} disabled={busy || Boolean(proxyUrl.trim())} />
         清除已保存的代理

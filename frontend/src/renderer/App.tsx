@@ -1516,6 +1516,16 @@ export default function App() {
       const enabled = pref('vim-mode') !== 'true'; setPref('vim-mode', String(enabled)); window.dispatchEvent(new Event('atlas:vim-toggle')); setToast(`Vim 模式已${enabled ? '开启' : '关闭'}`);
     } },
     { id: 'fallback', label: '/fallback', hint: '配置主模型失败后的备用模型顺序', run: () => setFallbackOpen(true) },
+    { id: 'fast', label: '/fast', hint: '切换快速模型服务档；不支持的路由会使用普通档并在运行记录中提示', takesArgument: true, run: (value: string) => {
+      const arg = value.trim().toLowerCase();
+      if (arg && !['on', 'off', 'status'].includes(arg)) { setToast('用法：/fast [on|off|status]'); return; }
+      void api<{ fast_enabled: boolean }>(store.apiBaseUrl, '/api/models/service-tier').then((current) => {
+        if (arg === 'status') { setToast(`快速服务档${current.fast_enabled ? '已开启' : '已关闭'}`); return; }
+        const fast_enabled = arg === 'on' ? true : arg === 'off' ? false : !current.fast_enabled;
+        return api<{ fast_enabled: boolean }>(store.apiBaseUrl, '/api/models/service-tier', { method: 'PUT', json: { fast_enabled } })
+          .then(() => setToast(`快速服务档已${fast_enabled ? '开启' : '关闭'}；服务商不支持时会自动退回普通档并显示提示`));
+      }).catch((error) => setToast(`快速服务档设置失败：${String(error)}`));
+    } },
     { id: 'suggestions', label: '/suggestions', hint: '开启或关闭每轮结束后的主动建议', takesArgument: true, run: (value: string) => {
       const arg = value.trim().toLowerCase();
       const enabled = arg === 'on' ? true : arg === 'off' ? false : !proactiveEnabled;

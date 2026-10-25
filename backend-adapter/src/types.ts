@@ -30,6 +30,8 @@ export interface ModelCapabilities {
   supports_vision?: boolean;
   supports_tools?: boolean;
   supports_reasoning?: boolean;
+  /** Provider-declared OpenAI-compatible service tiers; Atlas requests priority only when explicitly declared. */
+  service_tiers?: string[];
 }
 
 export interface ModelListResponse {

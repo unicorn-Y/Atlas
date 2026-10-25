@@ -93,6 +93,7 @@ class RouteSpec:
     # Atlas-only transport configuration; proxy credentials never appear in repr/logs.
     network_proxy_url: str | None = field(default=None, repr=False, compare=False)
     network_ca_bundle_path: str | None = field(default=None, repr=False, compare=False)
+    network_trust_env: bool | None = field(default=None, repr=False, compare=False)
 
 
 _USAGE_CALLBACK: ContextVar[Callable[[dict[str, Any]], Any] | None] = ContextVar(
@@ -201,18 +202,29 @@ class ModelRouter:
             # Local Ollama routes must not inherit provider/global credentials,
             # gateway endpoints, or the configured model proxy. Reject malformed
             # persisted entries instead of silently routing them elsewhere.
-            if (
-                provider_id != "ollama"
-                or str(selected.get("base_url") or "") != _OLLAMA_LOCAL_BASE_URL
-                or not litellm_model.startswith("ollama/")
-                or not litellm_model.removeprefix("ollama/").strip()
-            ):
-                raise ValueError("Invalid local-only Ollama model route")
-            return self._route(
-                selected, provider_id, litellm_model, _OLLAMA_LOCAL_BASE_URL,
-                None, None, "chat_completions", purpose,
-                wire_model=native_model, direct_local=True,
-            )
+            if provider_id == "ollama":
+                if (str(selected.get("base_url") or "") != _OLLAMA_LOCAL_BASE_URL
+                        or not litellm_model.startswith("ollama/")
+                        or not litellm_model.removeprefix("ollama/").strip()):
+                    raise ValueError("Invalid local-only Ollama model route")
+                return self._route(
+                    selected, provider_id, litellm_model, _OLLAMA_LOCAL_BASE_URL,
+                    None, None, "chat_completions", purpose,
+                    wire_model=native_model, direct_local=True,
+                )
+            if provider_id == "llama-cpp":
+                base_url = str(selected.get("base_url") or "")
+                parsed = urlsplit(base_url)
+                if (parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost"}
+                        or not parsed.port or not litellm_model.startswith("llama-cpp/")
+                        or not litellm_model.removeprefix("llama-cpp/").strip()):
+                    raise ValueError("Invalid local-only llama.cpp model route")
+                return self._route(
+                    selected, provider_id, litellm_model, base_url,
+                    None, None, "chat_completions", purpose,
+                    wire_model=native_model, direct_local=True,
+                )
+            raise ValueError("Invalid local-only model route")
 
         provider_cfg = self.model_manager.provider_config(provider_id)
         provider_key = self.model_manager.resolve_api_key(provider_id)
@@ -353,6 +365,7 @@ class ModelRouter:
             if isinstance(model_data.get("capabilities"), dict) else {},
             network_proxy_url=network.proxy_url,
             network_ca_bundle_path=network.ca_bundle_path,
+            network_trust_env=network.trust_env,
         )
 
     async def complete(self, route: RouteSpec, messages: list[dict[str, Any]], **kwargs: Any) -> CompletionResult:
@@ -380,6 +393,7 @@ class ModelRouter:
         network = ModelNetworkSettings(
             proxy_url=route.network_proxy_url,
             ca_bundle_path=route.network_ca_bundle_path,
+            trust_env=route.network_trust_env,
         )
         assert_transport_supported(network, provider=route.provider, api_mode=route.api_mode)
         budget = env_run_usage_budget()
@@ -432,6 +446,7 @@ class ModelRouter:
         """Return a blocking iterator of OpenAI-shaped chunks for the main run loop."""
         network = ModelNetworkSettings(
             proxy_url=route.network_proxy_url, ca_bundle_path=route.network_ca_bundle_path,
+            trust_env=route.network_trust_env,
         )
         assert_transport_supported(network, provider=route.provider, api_mode=route.api_mode)
         if kwargs.get("timeout") is None:
@@ -479,6 +494,7 @@ class ModelRouter:
         network = ModelNetworkSettings(
             proxy_url=route.network_proxy_url,
             ca_bundle_path=route.network_ca_bundle_path,
+            trust_env=route.network_trust_env,
         )
         assert_transport_supported(network, provider=route.provider, api_mode=route.api_mode)
         return {
@@ -491,6 +507,7 @@ class ModelRouter:
             "_atlas_network_transport": {
                 "proxy_url": route.network_proxy_url,
                 "ca_bundle_path": route.network_ca_bundle_path,
+                "trust_env": route.network_trust_env,
             },
         }
 
@@ -715,7 +732,7 @@ def _openai_payload(route: RouteSpec, messages: list[dict[str, Any]], kwargs: di
         ],
         "stream": bool(kwargs.get("stream", False)),
     }
-    for key in ("max_tokens", "max_completion_tokens", "temperature", "top_p", "stop", "stream_options", "tools", "tool_choice", "parallel_tool_calls"):
+    for key in ("max_tokens", "max_completion_tokens", "temperature", "top_p", "stop", "stream_options", "tools", "tool_choice", "parallel_tool_calls", "service_tier"):
         if kwargs.get(key) is not None:
             payload[key] = kwargs[key]
     payload.update(_reasoning_wire(route, kwargs.get("reasoning_config")))
@@ -788,7 +805,7 @@ def _pool_key(route: RouteSpec, network: ModelNetworkSettings) -> tuple[Any, ...
     from atlas.engine_core.agent.proxy_bypass import loopback_request_kwargs
 
     base = str(route.base_url or "")
-    return (network.enabled, network.proxy_url, network.ca_bundle_path,
+    return (network.enabled, network.proxy_url, network.ca_bundle_path, network.trust_env,
             bool(loopback_request_kwargs(base)))
 
 
@@ -804,8 +821,10 @@ def _shared_client(route: RouteSpec, network: ModelNetworkSettings) -> tuple[htt
                                                   async_mode=False)
             else:
                 from atlas.engine_core.agent.proxy_bypass import loopback_request_kwargs
-
-                client = httpx.Client(limits=limits, **loopback_request_kwargs(str(route.base_url or "")))
+                client_kwargs = loopback_request_kwargs(str(route.base_url or ""))
+                if network.trust_env is not None:
+                    client_kwargs["trust_env"] = network.trust_env
+                client = httpx.Client(limits=limits, **client_kwargs)
             _POOLS[key] = client
     return client, key
 
@@ -877,7 +896,8 @@ def prewarm(route: RouteSpec) -> None:
     if route.api_mode not in {"openai", "chat_completions", "anthropic_messages"} or not route.base_url:
         return
     network = ModelNetworkSettings(proxy_url=route.network_proxy_url,
-                                   ca_bundle_path=route.network_ca_bundle_path)
+                                   ca_bundle_path=route.network_ca_bundle_path,
+                                   trust_env=route.network_trust_env)
     key = _pool_key(route, network)
     if time.monotonic() - _POOL_LAST_USE.get(key, -1e9) < _POOL_KEEPALIVE_S - 5:
         return

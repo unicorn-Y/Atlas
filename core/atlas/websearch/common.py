@@ -117,10 +117,13 @@ def decoded_text(response: httpx.Response) -> str:
 
 
 def client(timeout: float = 30.0) -> httpx.AsyncClient:
-    """Vendor API client. ``trust_env`` keeps the user's system proxy (Clash) in the path; vendor
-    hosts are fixed public endpoints, so the SSRF guard used for arbitrary page fetches is not
-    needed here."""
-    return httpx.AsyncClient(timeout=timeout, headers={"User-Agent": USER_AGENT}, trust_env=True)
+    """Vendor API client using the user's per-tool egress route."""
+    from atlas.models.network_transport import build_tool_httpx_client
+
+    result = build_tool_httpx_client("web_search", base_url="https://api.ipify.org",
+                                     async_mode=True, timeout=httpx.Timeout(timeout))
+    result.headers.update({"User-Agent": USER_AGENT})
+    return result
 
 
 def describe(exc: BaseException) -> str:

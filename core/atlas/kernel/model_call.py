@@ -746,6 +746,8 @@ async def complete_stream(
 
     router = agent._model_router
     retry_source = str(retry_source or getattr(agent, "source", "foreground")).lower()
+    from atlas.config import load_user_settings
+    fast_requested = load_user_settings().get("fast_mode") is True
     foreground_retry_sources = {"foreground", "cli", "desktop", "web", "telegram", "discord", "slack"}
     unattended_retry = retry_source not in foreground_retry_sources
     candidates = [model_id, *(fallback_models or [])]
@@ -771,6 +773,7 @@ async def complete_stream(
     retry_budget_attempts, retry_budget_wait_s = _task_retry_budget()
     task_retry_count = 0
     task_retry_wait_s = 0.0
+    fast_downgrade_notified = False
 
     for candidate_index, candidate in enumerate(candidates):
         if candidate_index and is_cooling(candidate):
@@ -794,6 +797,15 @@ async def complete_stream(
                 continue
             raise last_error from exc
         wire_model = route.wire_model or route.model
+        route_capabilities = getattr(route, "capabilities", {})
+        service_tiers = route_capabilities.get("service_tiers", []) if isinstance(route_capabilities, dict) else []
+        fast_tier_supported = isinstance(service_tiers, list) and "priority" in service_tiers
+        if fast_requested and not fast_tier_supported and not fast_downgrade_notified:
+            fast_downgrade_notified = True
+            await _publish(on_event, {
+                "type": "service_tier_downgraded", "model": route.model_id or candidate,
+                "requested": "priority", "used": "default",
+            })
         retry_index = 0
         connection_retry_count = 0
         connection_retry_delay = 5.0
@@ -857,6 +869,8 @@ async def complete_stream(
                     kwargs["max_tokens"] = max_output_tokens
                 if reasoning_effort:
                     kwargs["reasoning_config"] = {"effort": reasoning_effort}
+                if fast_requested and fast_tier_supported:
+                    kwargs["service_tier"] = "priority"
                 stream = await asyncio.to_thread(
                     router.stream, route, wire_messages, **kwargs,
                 )
@@ -1053,6 +1067,16 @@ async def complete_stream(
                     _provider_error_detail(exc, secret=str(_get(route, "key") or "")),
                     category=category, status=status, retryable=retryable,
                 )
+                unsupported_tier_text = str(error).casefold()
+                if (kwargs.get("service_tier") == "priority" and error.status in {400, 422}
+                        and "service_tier" in unsupported_tier_text):
+                    kwargs.pop("service_tier", None)
+                    fast_tier_supported = False
+                    await _publish(on_event, {
+                        "type": "service_tier_downgraded", "model": route.model_id or candidate,
+                        "requested": "priority", "used": "default",
+                    })
+                    continue
                 last_error = error
                 host = urlsplit(str(route.base_url or "")).hostname or ""
                 error.service = host or route.provider

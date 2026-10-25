@@ -23,6 +23,23 @@ router = APIRouter()
 log = structlog.get_logger(__name__)
 
 
+@router.get("/api/models/service-tier")
+def get_model_service_tier() -> dict[str, Any]:
+    settings = load_user_settings()
+    return {"fast_enabled": settings.get("fast_mode") is True}
+
+
+@router.put("/api/models/service-tier")
+def set_model_service_tier(req: dict[str, Any]) -> dict[str, Any]:
+    value = req.get("fast_enabled")
+    if not isinstance(value, bool):
+        raise HTTPException(status_code=422, detail="fast_enabled must be a boolean")
+    settings = load_user_settings()
+    settings["fast_mode"] = value
+    save_user_settings(settings)
+    return {"fast_enabled": value}
+
+
 @router.get("/api/models/fallback")
 async def get_fallback_chain(services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
     model_mgr = _resolved_model_mgr(services)
@@ -211,7 +228,9 @@ async def generate_image(
         raise HTTPException(status_code=400, detail="尚未配置模型网关密钥")
     payload = {"model": req.model, "prompt": prompt, "n": max(1, min(req.n, 4)), "size": req.size}
     try:
-        async with httpx.AsyncClient(timeout=180) as client:
+        from atlas.models.network_transport import build_tool_httpx_client
+        client = build_tool_httpx_client("media_generation", base_url=base, async_mode=True, timeout=httpx.Timeout(180))
+        async with client:
             resp = await client.post(
                 f"{base}/images/generations",
                 headers={"Authorization": f"Bearer {key}"},

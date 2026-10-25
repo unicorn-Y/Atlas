@@ -20,7 +20,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import subprocess
+import threading
+import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -34,6 +39,7 @@ from atlas.engine.local_runtime_adapter import (
     LocalRuntimeError,
 )
 from atlas.origin_guard import TOKEN_HEADER, is_trusted
+from atlas.config import load_user_settings, save_user_settings
 
 router = APIRouter(tags=["local-models"])
 
@@ -45,6 +51,8 @@ _OLLAMA_BASE = "http://127.0.0.1:11434"
 _OLLAMA_OPENAI_BASE = f"{_OLLAMA_BASE}/v1"
 _OLLAMA_PULL_JOBS: dict[str, dict[str, Any]] = {}
 _OLLAMA_PULL_TASKS: set[asyncio.Task[None]] = set()
+_LLAMA_PROCESS: subprocess.Popen | None = None
+_LLAMA_LOCK = threading.Lock()
 
 
 def get_adapter() -> LocalRuntimeAdapter:
@@ -104,6 +112,128 @@ class OllamaPullBody(BaseModel):
 
 class OllamaActivateBody(BaseModel):
     name: str
+
+
+class LlamaConfigBody(BaseModel):
+    binary_path: str | None = None
+    model_path: str | None = None
+    port: int | None = None
+
+
+def _llama_config() -> dict[str, Any]:
+    raw = load_user_settings().get("llama_cpp") or {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _llama_status() -> dict[str, Any]:
+    cfg = _llama_config()
+    process_running = _LLAMA_PROCESS is not None and _LLAMA_PROCESS.poll() is None
+    port = int(cfg.get("port") or 8080)
+    healthy = False
+    try:
+        response = httpx.get(f"http://127.0.0.1:{port}/health", timeout=1.5,
+                             trust_env=False, follow_redirects=False)
+        healthy = response.status_code == 200
+    except httpx.HTTPError:
+        pass
+    return {"binary_path": str(cfg.get("binary_path") or ""),
+            "model_path": str(cfg.get("model_path") or ""), "port": port,
+            "running": process_running or healthy, "managed": process_running,
+            "healthy": healthy, "base_url": f"http://127.0.0.1:{port}/v1"}
+
+
+@router.get("/api/local/models/llama/status", dependencies=[Depends(_require_trusted_origin)])
+def llama_status() -> dict[str, Any]:
+    return _llama_status()
+
+
+@router.put("/api/local/models/llama/config", dependencies=[Depends(_require_trusted_origin)])
+def llama_configure(body: LlamaConfigBody) -> dict[str, Any]:
+    settings = load_user_settings()
+    cfg = _llama_config()
+    if body.binary_path is not None:
+        binary = Path(body.binary_path).expanduser()
+        if not binary.is_file():
+            raise HTTPException(status_code=422, detail="llama-server 可执行文件不存在。")
+        cfg["binary_path"] = str(binary.resolve())
+    if body.model_path is not None:
+        model = Path(body.model_path).expanduser()
+        if not model.is_file() or model.suffix.lower() != ".gguf":
+            raise HTTPException(status_code=422, detail="模型路径必须指向已存在的 GGUF 文件。")
+        cfg["model_path"] = str(model.resolve())
+    if body.port is not None:
+        if not 1 <= body.port <= 65535:
+            raise HTTPException(status_code=422, detail="端口必须在 1 到 65535 之间。")
+        cfg["port"] = body.port
+    settings["llama_cpp"] = cfg
+    save_user_settings(settings)
+    return _llama_status()
+
+
+@router.post("/api/local/models/llama/start", dependencies=[Depends(_require_trusted_origin)])
+def llama_start() -> dict[str, Any]:
+    global _LLAMA_PROCESS
+    cfg = _llama_config()
+    binary, model = Path(str(cfg.get("binary_path") or "")), Path(str(cfg.get("model_path") or ""))
+    if not binary.is_file() or not model.is_file():
+        raise HTTPException(status_code=422, detail="请先配置存在的 llama-server 程序和 GGUF 模型文件。")
+    with _LLAMA_LOCK:
+        if _LLAMA_PROCESS is not None and _LLAMA_PROCESS.poll() is None:
+            return _llama_status()
+        port = int(cfg.get("port") or 8080)
+        command = [str(binary), "--model", str(model), "--host", "127.0.0.1", "--port", str(port), "--ctx-size", "8192"]
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+        try:
+            _LLAMA_PROCESS = subprocess.Popen(command, stdin=subprocess.DEVNULL,
+                                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                              close_fds=True, creationflags=flags)
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"启动 llama-server 失败：{exc}") from exc
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        status = _llama_status()
+        if status["healthy"]:
+            return status
+        if _LLAMA_PROCESS is None or _LLAMA_PROCESS.poll() is not None:
+            break
+        time.sleep(0.2)
+    return _llama_status()
+
+
+@router.post("/api/local/models/llama/stop", dependencies=[Depends(_require_trusted_origin)])
+def llama_stop() -> dict[str, Any]:
+    global _LLAMA_PROCESS
+    with _LLAMA_LOCK:
+        process = _LLAMA_PROCESS
+        if process is not None and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=8)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=4)
+        _LLAMA_PROCESS = None
+    return _llama_status()
+
+
+@router.post("/api/local/models/llama/activate", dependencies=[Depends(_require_trusted_origin)])
+def llama_activate(services: AppServices = Depends(get_app_services)) -> dict[str, Any]:
+    status = _llama_status()
+    if not status["healthy"]:
+        raise HTTPException(status_code=409, detail="请先启动并等待 llama.cpp 服务健康。")
+    cfg = _llama_config()
+    name = Path(str(cfg.get("model_path") or "model.gguf")).stem
+    model_id = f"llama-cpp:{name}"
+    manager = _safe_model_manager(services)
+    existing = next((item for item in manager.list_models() if str(item.get("id")) == model_id), None)
+    if existing is not None:
+        if str(existing.get("base_url") or "").rstrip("/") != status["base_url"].rstrip("/"):
+            manager.update_model(model_id, {"base_url": status["base_url"]})
+        return {"id": model_id, "added": False, "name": name}
+    manager.add_model({"id": model_id, "name": name, "provider": "llama-cpp",
+                       "litellm_model": f"llama-cpp/{name}", "base_url": status["base_url"],
+                       "local_only": True, "category": "local"})
+    return {"id": model_id, "added": True, "name": name}
 
 
 def _guard(fn, *args, **kwargs):

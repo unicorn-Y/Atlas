@@ -1482,6 +1482,11 @@ class AtlasKernel:
 
                 async def on_event(event: dict[str, Any]) -> None:
                     kind = event.get("type")
+                    if kind == "service_tier_downgraded":
+                        await event_queue.put(emit("run.recovery.notice", data={
+                            "message": f"模型 {event.get('model') or ''} 未提供快速服务档，本轮改用普通服务档。",
+                        }))
+                        return
                     attempt = int(event.get("attempt") or 1)
                     delta = str(event.get("delta") or "")
                     if kind == "text_delta":

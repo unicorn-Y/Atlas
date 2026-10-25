@@ -23,6 +23,7 @@ interface OllamaPullJob {
   completed?: number | null;
   total?: number | null;
 }
+interface LlamaStatus { binary_path: string; model_path: string; port: number; running: boolean; healthy: boolean; managed: boolean; base_url: string }
 
 interface LocalModelsPanelProps {
   apiBaseUrl: string;
@@ -46,13 +47,25 @@ export default function LocalModelsPanel({ apiBaseUrl }: LocalModelsPanelProps) 
   const [registering, setRegistering] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [llama, setLlama] = useState<LlamaStatus | null>(null);
+  const [llamaBinary, setLlamaBinary] = useState('');
+  const [llamaModel, setLlamaModel] = useState('');
+  const [llamaPort, setLlamaPort] = useState('8080');
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const result = await api<{ models: OllamaModel[] }>(apiBaseUrl, '/api/local/models/ollama/tags');
-      setModels(result.models);
+      const [ollama, llamaResult] = await Promise.allSettled([
+        api<{ models: OllamaModel[] }>(apiBaseUrl, '/api/local/models/ollama/tags'),
+        api<LlamaStatus>(apiBaseUrl, '/api/local/models/llama/status'),
+      ]);
+      if (ollama.status === 'fulfilled') setModels(ollama.value.models);
+      else setError(ollama.reason instanceof Error ? ollama.reason.message : String(ollama.reason));
+      if (llamaResult.status === 'fulfilled') {
+        const llamaState = llamaResult.value;
+        setLlama(llamaState); setLlamaBinary(llamaState.binary_path); setLlamaModel(llamaState.model_path); setLlamaPort(String(llamaState.port));
+      }
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : String(exc));
     } finally {
@@ -130,7 +143,25 @@ export default function LocalModelsPanel({ apiBaseUrl }: LocalModelsPanelProps) 
 
   const pulling = starting || Boolean(job && ['pending', 'connecting', 'downloading'].includes(job.status));
 
+  const saveLlama = async () => {
+    try {
+      const state = await api<LlamaStatus>(apiBaseUrl, '/api/local/models/llama/config', { method: 'PUT', json: { binary_path: llamaBinary, model_path: llamaModel, port: Number(llamaPort) } });
+      setLlama(state); setNotice('llama.cpp 设置已保存。');
+    } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+  };
+  const llamaAction = async (action: 'start' | 'stop' | 'activate') => {
+    try {
+      if (action === 'activate') {
+        const model = await api<{ id: string; added: boolean }>(apiBaseUrl, '/api/local/models/llama/activate', { method: 'POST', json: {} });
+        setNotice(`${model.id} ${model.added ? '已加入 Atlas 模型路由' : '已在 Atlas 模型路由中'}。`); return;
+      }
+      const state = await api<LlamaStatus>(apiBaseUrl, `/api/local/models/llama/${action}`, { method: 'POST', json: {} });
+      setLlama(state); setNotice(action === 'start' ? (state.healthy ? `llama.cpp 服务已就绪：${state.base_url}` : 'llama.cpp 已启动，服务仍在加载；可稍后刷新状态。') : '已停止 Atlas 启动的 llama.cpp 服务。');
+    } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+  };
+
   return (
+    <>
     <section className="grid max-w-[760px] gap-4 rounded-xl border border-line bg-surface p-4 text-[13px] text-fg-2" aria-label="Ollama 本地模型">
       <header className="flex flex-wrap items-center gap-2">
         <Server size={15} className="text-brand" />
@@ -192,5 +223,15 @@ export default function LocalModelsPanel({ apiBaseUrl }: LocalModelsPanelProps) 
         })}
       </div>
     </section>
+    <section className="grid max-w-[760px] gap-3 rounded-xl border border-line bg-surface p-4 text-[13px] text-fg-2" aria-label="llama.cpp 服务管理">
+      <header className="flex items-center gap-2"><Server size={15} className="text-brand" /><h3 className="m-0 flex-1 text-sm font-semibold text-fg">llama.cpp 服务</h3><span role="status">{llama?.healthy ? '健康' : llama?.running ? '启动中 / 外部实例' : '已停止'}</span></header>
+      <p className="m-0 text-xs text-fg-3">使用本机已安装的 llama-server 和 GGUF 文件；Atlas 仅绑定 127.0.0.1，不下载二进制或模型。启动后可将模型注册到模型列表。</p>
+      <label className="grid gap-1 text-xs">llama-server 可执行文件路径<input className="h-9 rounded-lg border border-line bg-sunken px-3" value={llamaBinary} onChange={(event) => setLlamaBinary(event.target.value)} placeholder="llama-server.exe 的完整路径" /></label>
+      <label className="grid gap-1 text-xs">GGUF 模型路径<input className="h-9 rounded-lg border border-line bg-sunken px-3" value={llamaModel} onChange={(event) => setLlamaModel(event.target.value)} placeholder="本机模型 .gguf 完整路径" /></label>
+      <label className="grid max-w-40 gap-1 text-xs">端口<input className="h-9 rounded-lg border border-line bg-sunken px-3" type="number" min={1} max={65535} value={llamaPort} onChange={(event) => setLlamaPort(event.target.value)} /></label>
+      <div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => void saveLlama()}>保存设置</Button><Button type="button" size="sm" variant="secondary" disabled={llama?.running} onClick={() => void llamaAction('start')}>启动</Button><Button type="button" size="sm" variant="ghost" disabled={!llama?.managed} onClick={() => void llamaAction('stop')}>停止</Button><Button type="button" size="sm" variant="secondary" disabled={!llama?.healthy} onClick={() => void llamaAction('activate')}>加入 Atlas 模型列表</Button></div>
+      {llama?.running && <p className="m-0 text-xs text-fg-3">服务地址：{llama.base_url}</p>}
+    </section>
+    </>
   );
 }

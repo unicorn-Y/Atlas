@@ -14,7 +14,7 @@ export interface ModelFormValues {
   baseUrl: string;
   maxOutput: string;
   price: { input: string; output: string; cached_input: string };
-  capabilities: { context_window: string; max_output_tokens: string; supports_vision: boolean; supports_tools: boolean; supports_reasoning: boolean };
+  capabilities: { context_window: string; max_output_tokens: string; supports_vision: boolean; supports_tools: boolean; supports_reasoning: boolean; supports_priority_tier: boolean };
 }
 
 const numberOrNull = (value: string): number | undefined => {
@@ -32,6 +32,7 @@ function buildCapabilities(input: ModelFormValues['capabilities'], booleans: 'au
     ...(booleans === 'always' || input.supports_vision ? { supports_vision: input.supports_vision } : {}),
     ...(booleans === 'always' || input.supports_tools ? { supports_tools: input.supports_tools } : {}),
     ...(booleans === 'always' || input.supports_reasoning ? { supports_reasoning: input.supports_reasoning } : {}),
+    ...(input.supports_priority_tier ? { service_tiers: ['default', 'priority'] } : {}),
   };
   return Object.keys(caps).length ? caps : undefined;
 }
@@ -102,6 +103,7 @@ function initialValues(provider?: ProviderState | null, model?: ModelInfo | null
         supports_vision: Boolean(caps.supports_vision),
         supports_tools: caps.supports_tools ?? true,
         supports_reasoning: caps.supports_reasoning ?? true,
+        supports_priority_tier: Array.isArray(caps.service_tiers) && caps.service_tiers.includes('priority'),
       },
     };
   }
@@ -109,7 +111,7 @@ function initialValues(provider?: ProviderState | null, model?: ModelInfo | null
     providerBaseUrl: provider ? (provider.base_url || provider.default_base_url) : '',
     modelId: '', displayName: '', litellmModel: '', baseUrl: '', maxOutput: '',
     price: { input: '', output: '', cached_input: '' },
-    capabilities: { context_window: '', max_output_tokens: '', supports_vision: false, supports_tools: true, supports_reasoning: true },
+    capabilities: { context_window: '', max_output_tokens: '', supports_vision: false, supports_tools: true, supports_reasoning: true, supports_priority_tier: false },
   };
 }
 
@@ -191,6 +193,8 @@ export default function ModelForm({ provider, model, busy, disabled, submitLabel
           onChange={(event) => patchCaps({ supports_tools: event.target.checked })} />工具调用</label>
         <label className="flex items-center gap-2"><input type="checkbox" checked={values.capabilities.supports_reasoning} disabled={disabled || busy}
           onChange={(event) => patchCaps({ supports_reasoning: event.target.checked })} />推理（思考档位）</label>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={values.capabilities.supports_priority_tier} disabled={disabled || busy}
+          onChange={(event) => patchCaps({ supports_priority_tier: event.target.checked })} />服务商确认支持 priority 快速服务档</label>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="grid gap-1">上下文窗口（token，可不填）

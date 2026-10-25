@@ -33,6 +33,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
+from atlas.models.network_transport import build_tool_httpx_client
 
 _MAX_IMAGE_BYTES = 20 * 1024 * 1024
 _MAX_SCAN_FILES = 40
@@ -233,7 +234,7 @@ async def image_generate(args: dict[str, Any], model_mgr: Any) -> dict[str, Any]
         return _error("n must be an integer from 1 to 4")
     payload = {"model": model, "prompt": prompt, "size": size, "n": n}
     try:
-        async with httpx.AsyncClient(timeout=180) as client:
+        async with build_tool_httpx_client("media_generation", base_url="https://api.openai.com", async_mode=True, timeout=180) as client:
             response = await client.post(
                 f"{base_url.rstrip('/')}/images/generations",
                 headers={"Authorization": f"Bearer {api_key}"},
@@ -277,7 +278,7 @@ async def image_edit(args: dict[str, Any], model_mgr: Any, runtime: Any) -> dict
     if size not in {"auto", "1024x1024", "1024x1536", "1536x1024"}:
         return _error("Unsupported image size")
     try:
-        async with httpx.AsyncClient(timeout=180) as client:
+        async with build_tool_httpx_client("media_generation", base_url="https://api.openai.com", async_mode=True, timeout=180) as client:
             response = await client.post(
                 f"{base_url.rstrip('/')}/images/edits",
                 headers={"Authorization": f"Bearer {api_key}"},
@@ -349,7 +350,7 @@ async def x_search(args: dict[str, Any], model_mgr: Any) -> dict[str, Any]:
         "max_turns": max_turns,
     }
     try:
-        async with httpx.AsyncClient(timeout=180) as client:
+        async with build_tool_httpx_client("media_generation", base_url="https://api.openai.com", async_mode=True, timeout=180) as client:
             response = await client.post(
                 "https://api.x.ai/v1/responses",
                 headers={"Authorization": f"Bearer {key}"},
@@ -415,7 +416,7 @@ async def video_analyze(
         ],
     }
     try:
-        async with httpx.AsyncClient(timeout=240) as client:
+        async with build_tool_httpx_client("media_generation", base_url="https://api.openai.com", async_mode=True, timeout=240) as client:
             response = await client.post(
                 "https://generativelanguage.googleapis.com/v1beta/interactions",
                 headers={"x-goog-api-key": key},
@@ -491,7 +492,7 @@ async def video_job_start(
             except (TypeError, ValueError):
                 return _error("duration must be an integer from 2 to 10")
     try:
-        async with httpx.AsyncClient(timeout=90) as client:
+        async with build_tool_httpx_client("media_generation", base_url="https://api.openai.com", async_mode=True, timeout=90) as client:
             response = await client.post(
                 f"https://api.x.ai/v1{endpoint}",
                 headers={"Authorization": f"Bearer {key}"},
@@ -531,7 +532,7 @@ async def video_job_status(args: dict[str, Any], model_mgr: Any) -> dict[str, An
     if not re.fullmatch(r"[A-Za-z0-9_-]{8,100}", request_id):
         return _error("Invalid xAI video request_id")
     try:
-        async with httpx.AsyncClient(timeout=45) as client:
+        async with build_tool_httpx_client("media_generation", base_url="https://api.openai.com", async_mode=True, timeout=45) as client:
             response = await client.get(
                 f"https://api.x.ai/v1/videos/{request_id}",
                 headers={"Authorization": f"Bearer {key}"},
@@ -578,7 +579,7 @@ async def text_to_speech(args: dict[str, Any], model_mgr: Any, runtime: Any) -> 
         if not base_url or not key:
             return _unavailable("Gateway TTS requires an Atlas gateway or OpenAI provider credential.")
         try:
-            async with httpx.AsyncClient(timeout=180) as client:
+            async with build_tool_httpx_client("media_generation", base_url="https://api.openai.com", async_mode=True, timeout=180) as client:
                 response = await client.post(
                     f"{base_url.rstrip('/')}/audio/speech",
                     headers={"Authorization": f"Bearer {key}"},
@@ -597,7 +598,7 @@ async def text_to_speech(args: dict[str, Any], model_mgr: Any, runtime: Any) -> 
         if not re.fullmatch(r"[A-Za-z0-9_-]{4,100}", voice):
             return _error("Invalid ElevenLabs voice id")
         try:
-            async with httpx.AsyncClient(timeout=180) as client:
+            async with build_tool_httpx_client("media_generation", base_url="https://api.openai.com", async_mode=True, timeout=180) as client:
                 response = await client.post(
                     f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128",
                     headers={"xi-api-key": key},
@@ -646,7 +647,7 @@ async def music_generate(args: dict[str, Any], runtime: Any, model_mgr: Any) -> 
     if args.get("force_instrumental") is not None:
         payload["force_instrumental"] = bool(args["force_instrumental"])
     try:
-        async with httpx.AsyncClient(timeout=300) as client:
+        async with build_tool_httpx_client("media_generation", base_url="https://api.openai.com", async_mode=True, timeout=300) as client:
             response = await client.post(
                 "https://api.elevenlabs.io/v1/music?output_format=mp3_44100_128",
                 headers={"xi-api-key": key},
@@ -1110,3 +1111,4 @@ def _unavailable(message: str) -> dict[str, Any]:
         "data": {"available": False, "reason": message},
         "is_error": True,
     }
+

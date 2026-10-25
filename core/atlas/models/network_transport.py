@@ -33,6 +33,7 @@ class ModelNetworkSettingsError(ValueError):
 class ModelNetworkSettings:
     proxy_url: str | None = field(default=None, repr=False)
     ca_bundle_path: str | None = None
+    trust_env: bool | None = None
 
     @property
     def enabled(self) -> bool:
@@ -91,12 +92,15 @@ def _credential_store() -> Any:
     return KeyringCredentialStore()
 
 
-def load_model_network_settings() -> ModelNetworkSettings:
+def load_model_network_settings(tool: str = "model_requests") -> ModelNetworkSettings:
     raw = load_user_settings().get("model_network") or {}
     if not isinstance(raw, dict):
         raise ModelNetworkSettingsError("模型网络设置格式无效，请在设置中重新保存。")
     proxy_url: str | None = None
-    if raw.get("proxy_configured") is True:
+    tool_egress = raw.get("tool_egress") if isinstance(raw.get("tool_egress"), dict) else {}
+    default_mode = "model_proxy" if tool == "model_requests" and raw.get("proxy_configured") is True else "system_proxy"
+    mode = str(tool_egress.get(tool) or default_mode)
+    if mode == "model_proxy" and raw.get("proxy_configured") is True:
         try:
             proxy_url = _credential_store().get(_PROXY_CREDENTIAL_KEY)
         except Exception as exc:  # noqa: BLE001 — fail closed; never bypass configured proxy
@@ -104,16 +108,19 @@ def load_model_network_settings() -> ModelNetworkSettings:
         if not proxy_url:
             raise ModelNetworkSettingsError("模型代理凭据缺失；请在设置中重新填写或清除代理。")
         proxy_url = validate_proxy_url(proxy_url)
+    elif mode == "model_proxy":
+        raise ModelNetworkSettingsError("此工具选择了模型代理，但尚未配置模型代理地址。")
     try:
         ca_bundle_path = validate_ca_bundle_path(raw.get("ca_bundle_path"))
     except ModelNetworkSettingsError as exc:
         raise ModelNetworkSettingsError(f"已保存的 CA bundle 无效：{exc}") from exc
-    return ModelNetworkSettings(proxy_url=proxy_url, ca_bundle_path=ca_bundle_path)
+    return ModelNetworkSettings(proxy_url=proxy_url, ca_bundle_path=ca_bundle_path,
+                                trust_env=mode != "direct")
 
 
 def network_settings_fingerprint(settings: ModelNetworkSettings) -> str:
     payload = json.dumps(
-        {"proxy_url": settings.proxy_url, "ca_bundle_path": settings.ca_bundle_path},
+        {"proxy_url": settings.proxy_url, "ca_bundle_path": settings.ca_bundle_path, "trust_env": settings.trust_env},
         sort_keys=True, separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:20]
@@ -158,7 +165,8 @@ def _new_scoped_http_client(
         "verify": verify,
         "timeout": timeout or httpx.Timeout(connect=15.0, read=None, write=15.0, pool=10.0),
         "limits": httpx.Limits(max_keepalive_connections=20, max_connections=100, keepalive_expiry=20.0),
-        "trust_env": not loopback_request_kwargs(base_url).get("trust_env") is False,
+        "trust_env": (settings.trust_env if settings.trust_env is not None
+                      else not loopback_request_kwargs(base_url).get("trust_env") is False),
     }
     if settings.proxy_url:
         kwargs["proxy"] = settings.proxy_url
@@ -176,6 +184,23 @@ def build_model_httpx_client(
         base_url=base_url, settings=settings, verify=effective_verify,
         async_mode=async_mode, timeout=timeout,
     )
+
+
+def build_tool_httpx_client(
+    tool: str, *, base_url: str, async_mode: bool, timeout: Any = None,
+) -> Any:
+    """Create a client with the separately configured egress route for one tool family."""
+    settings = load_model_network_settings(tool)
+    if settings.enabled:
+        return build_model_httpx_client(settings, base_url=base_url, async_mode=async_mode,
+                                        timeout=timeout)
+    import httpx
+    from atlas.engine_core.agent.proxy_bypass import loopback_request_kwargs
+    kwargs = loopback_request_kwargs(base_url)
+    if settings.trust_env is not None:
+        kwargs["trust_env"] = settings.trust_env
+    client_type = httpx.AsyncClient if async_mode else httpx.Client
+    return client_type(timeout=timeout or 30.0, **kwargs)
 
 
 @contextmanager

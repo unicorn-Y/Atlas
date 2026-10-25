@@ -21,7 +21,7 @@ const values: ModelFormValues = {
   baseUrl: '',
   maxOutput: '8192',
   price: { input: '0.1', output: '0.2', cached_input: '0.01' },
-  capabilities: { context_window: '128000', max_output_tokens: '8192', supports_vision: false, supports_tools: true, supports_reasoning: true },
+  capabilities: { context_window: '128000', max_output_tokens: '8192', supports_vision: false, supports_tools: true, supports_reasoning: true, supports_priority_tier: false },
 };
 
 describe('model settings components', () => {
