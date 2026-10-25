@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/backend-adapter';
-import type { BackendStartupProgress } from '../shared/ipc';
+import type { BackendStartupProgress, RecentScreenshot } from '../shared/ipc';
 import type { Artifact } from '../types/artifact';
 import { latestTodos, usageSummary } from './components/runInsights';
 import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
@@ -184,6 +184,12 @@ const PROVIDER_USAGE_URL: Record<string, { label: string; url: string }> = {
 /** Shift+Tab 和 /permissions 共用的切换顺序；read_only 不在循环里，只能从菜单选。 */
 const PERMISSION_CYCLE: PermissionMode[] = ['ask_each', 'ask_writes', 'auto_file', 'plan', 'full_access'];
 const draftKey = (conversationId: string) => `atlas.draft.${conversationId || 'home'}`;
+function parseRecentScreenshotCache(value: unknown): { capturedAt: number; items: string[] } | null {
+  if (!value || typeof value !== 'object') return null;
+  const row = value as { capturedAt?: unknown; items?: unknown };
+  if (typeof row.capturedAt !== 'number' || !Array.isArray(row.items)) return null;
+  return { capturedAt: row.capturedAt, items: row.items.filter((item): item is string => typeof item === 'string') };
+}
 const readDraft = (conversationId: string) => { try { return localStorage.getItem(draftKey(conversationId)) ?? ''; } catch { return ''; } };
 const writeDraft = (conversationId: string, text: string) => {
   try { if (text) localStorage.setItem(draftKey(conversationId), text); else localStorage.removeItem(draftKey(conversationId)); } catch { /* storage unavailable */ }
@@ -924,6 +930,23 @@ export default function App() {
     addDocuments(retry.filter((file) => !imageTypes.includes(file.type)));
     addImages(retry.filter((file) => imageTypes.includes(file.type)));
   };
+  const addRecentScreenshots = (screenshots: RecentScreenshot[]) => {
+    const available = Math.max(0, 4 - attachments.length);
+    if (!available) { setToast('每条消息最多 4 张图片'); return; }
+    const selected = screenshots.slice(0, available);
+    setAttachments((items) => [...new Set([...items, ...selected.map((item) => item.dataUrl)])].slice(0, 4));
+    setToast(selected.length < screenshots.length ? `已加入 ${selected.length} 张截图；每条消息最多 4 张图片` : `已加入 ${selected.length} 张截图`);
+  };
+  const addRecentScreenshot = (screenshot: RecentScreenshot) => addRecentScreenshots([screenshot]);
+  const captureWindow = async (sourceId: string) => {
+    const conversationId = useAtlasStore.getState().activeConversationId;
+    try {
+      const screenshot = await window.atlasDesktop?.captureWindow?.(sourceId, conversationId);
+      if (!screenshot) return;
+      setRecentScreenshots((items) => [screenshot, ...items.filter((item) => item.id !== screenshot.id)].slice(0, 8));
+      addRecentScreenshot(screenshot);
+    } catch (error) { setToast(`窗口截图失败：${error instanceof Error ? error.message : String(error)}`); }
+  };
   const attachDrawing = (dataUrl: string): boolean => {
     if (attachments.length >= 4) { setToast('每条消息最多 4 张图片'); return false; }
     const bytes = Math.max(0, Math.floor((dataUrl.length - dataUrl.indexOf(',') - 1) * 3 / 4));
@@ -1277,31 +1300,39 @@ export default function App() {
     updateContext();
     return () => { document.removeEventListener('pointerdown', updateContext, true); document.removeEventListener('keydown', updateContext, true); };
   }, [store.activeConversationId]);
+  useEffect(() => { void window.atlasDesktop?.listRecentScreenshots?.().then(setRecentScreenshots).catch(() => undefined); }, []);
   useEffect(() => window.atlasDesktop?.onSessionScreenshot?.((image, conversationId) => {
+    void window.atlasDesktop?.listRecentScreenshots?.().then(setRecentScreenshots).catch(() => undefined);
     if (conversationId === useAtlasStore.getState().activeConversationId) {
       setAttachments((items) => items.length < 4 ? [...items, image] : items);
       setToast('截图已添加到当前会话输入框');
       return;
     }
     const key = `atlas.screenshot.${conversationId}`;
-    try { const pending: unknown = JSON.parse(localStorage.getItem(key) ?? '[]'); localStorage.setItem(key, JSON.stringify([...(Array.isArray(pending) ? pending : []), image].slice(-4))); } catch { /* ignore local cache errors */ }
+    try {
+      const pending = parseRecentScreenshotCache(JSON.parse(localStorage.getItem(key) ?? '{}'));
+      const recent = pending && Date.now() - pending.capturedAt < 30 * 60 * 1000 ? pending.items : [];
+      localStorage.setItem(key, JSON.stringify({ capturedAt: Date.now(), items: [...recent, image].slice(-4) }));
+    } catch { /* ignore local cache errors */ }
   }), []);
   useEffect(() => window.atlasDesktop?.onSessionScreenshotError?.((message) => setToast(message)), []);
   useEffect(() => {
     if (!store.activeConversationId) return;
     const key = `atlas.screenshot.${store.activeConversationId}`;
     try {
-      const pending: unknown = JSON.parse(localStorage.getItem(key) ?? '[]');
-      if (Array.isArray(pending) && pending.some((item) => typeof item === 'string')) {
-        setAttachments((items) => [...items, ...pending.filter((item): item is string => typeof item === 'string')].slice(0, 4));
+      const pending = parseRecentScreenshotCache(JSON.parse(localStorage.getItem(key) ?? '{}'));
+      if (pending && Date.now() - pending.capturedAt < 30 * 60 * 1000 && pending.items.length) {
+        setAttachments((items) => [...items, ...pending.items].slice(0, 4));
         localStorage.removeItem(key); setToast('最近的会话截图已放入输入框');
-      }
+      } else localStorage.removeItem(key);
     } catch { /* corrupt screenshot cache is ignored */ }
   }, [store.activeConversationId]);
   useEffect(() => () => { dictationRef.current?.stream.getTracks().forEach((track) => track.stop()); void dictationRef.current?.context.close(); window.speechSynthesis?.cancel(); }, []);
 
   const paletteItems: PaletteItem[] = [
     { id: 'new', group: '操作', label: '新任务', hint: 'Ctrl N', icon: <Plus />, run: newTask },
+    { id: 'new-window', group: '操作', label: '新建窗口', hint: 'Ctrl Shift N', icon: <Plus />, run: () => window.atlasDesktop?.openNewWindow?.() },
+    { id: 'new-session-window', group: '操作', label: '新会话并在新窗口打开', hint: 'Ctrl Alt N', icon: <Plus />, run: () => window.atlasDesktop?.openNewSessionWindow?.() },
     { id: 'voice', group: '操作', label: '开始语音通话', icon: <AudioLines />, run: startVoice },
     ...THEMES.filter((item) => item.id !== theme).map((item) => ({ id: `theme-${item.id}`, group: '外观', label: `切换到${item.label}`, hint: item.hint, icon: item.id === 'dark' ? <Moon /> : <Sun />, run: () => chooseTheme(item.id) })),
     { id: 'settings', group: '操作', label: '设置', hint: 'Ctrl ,', icon: <Settings />, run: () => setSheet('models') },

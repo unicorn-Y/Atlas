@@ -14,9 +14,11 @@ import {
   type AtlasDeepLink,
   type AtlasSettingsSection,
   type BackendStartupProgress,
+  type CaptureWindowOption,
   type GlobalShortcutState,
   type PlatformEditorId,
   type PlatformSettingsState,
+  type RecentScreenshot,
 } from '../shared/ipc.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -44,6 +46,7 @@ let globalShortcutState: GlobalShortcutState = { accelerator: null, registered: 
 let screenshotShortcutState: GlobalShortcutState = { accelerator: 'Control+Shift+X', registered: false };
 let voiceShortcutState: GlobalShortcutState = { accelerator: 'Control+Shift+V', registered: false };
 let screenshotContext: { conversationId: string; lastInteractionAt: number } = { conversationId: '', lastInteractionAt: 0 };
+const recentScreenshots: RecentScreenshot[] = [];
 let keepAwakeEnabled = false;
 let keepAwakeBlockerId: number | null = null;
 let runtimeState: 'running' | 'waiting' | 'idle' = 'idle';
@@ -1213,7 +1216,7 @@ app.whenReady().then(async () => {
   }
   // Atlas draws its own title bar; the default menu's hidden accelerators (Ctrl+W closes the
   // window, Ctrl+R reloads) would fire over the app's own shortcuts.
-  Menu.setApplicationMenu(null);
+  createApplicationMenu();
   if (app.isPackaged) {
     process.env.ATLAS_ROOT ??= path.join(process.resourcesPath, 'atlas');
     process.env.ATLAS_DATA_DIR ??= app.getPath('userData');

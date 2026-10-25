@@ -44,6 +44,9 @@ export interface GlobalShortcutState {
   error?: string;
 }
 
+export interface CaptureWindowOption { id: string; title: string; thumbnail: string }
+export interface RecentScreenshot { id: string; title: string; capturedAt: number; dataUrl: string }
+
 export interface PlatformSettingsState {
   alwaysOnTop: boolean;
   openAtLogin: boolean;

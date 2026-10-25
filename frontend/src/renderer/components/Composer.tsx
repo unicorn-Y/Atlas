@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { Accessibility, ArrowLeft, ArrowRight, ArrowUp, AtSign, ChevronDown, Code2, ExternalLink, File as FileIcon, Film, Hash, ImagePlus, Image as ImageIcon, Keyboard, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, Sparkles, RotateCcw, Save, X, type LucideIcon } from 'lucide-react';
+import { Accessibility, ArrowLeft, ArrowRight, ArrowUp, AtSign, Camera, ChevronDown, Code2, ExternalLink, File as FileIcon, Film, Hash, ImagePlus, Image as ImageIcon, Keyboard, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, Sparkles, RotateCcw, Save, Trash2, X, type LucideIcon } from 'lucide-react';
 import type { ModelInfo } from '@atlas/backend-adapter';
 import { fuzzyScore } from '../services/fuzzy';
 import { matchSlashCommands, registerSlashCommands, type SlashCommand } from '../services/slashCommands';
@@ -13,6 +13,7 @@ import DrawingPad from './DrawingPad';
 import { ExpertModeToggle, useExpertMode } from './settings/ExpertModePanel';
 import { backend } from '../store/useAtlasStore';
 import { api } from '../services/api';
+import type { CaptureWindowOption, RecentScreenshot } from '../../shared/ipc';
 
 type Intent = { label: string; icon: LucideIcon; note?: string };
 
@@ -160,12 +161,22 @@ interface ComposerProps {
   contextKey?: string;
   contextUsage?: UsageSummary['context'];
   contextFiles?: string[];
+  onListCaptureWindows?: () => Promise<CaptureWindowOption[]>;
+  onCaptureWindow?: (sourceId: string) => Promise<void>;
+  recentScreenshots?: RecentScreenshot[];
+  onPickRecentScreenshot?: (screenshot: RecentScreenshot) => void;
+  onPickRecentScreenshots?: (screenshots: RecentScreenshot[]) => void;
+  onDeleteRecentScreenshot?: (id: string) => void;
 }
 
 export default function Composer(props: ComposerProps) {
   const hero = props.variant === 'hero';
   const [expert] = useExpertMode(backend.apiBaseUrl);
   const [ideConnected, setIdeConnected] = useState(false);
+  const [captureWindows, setCaptureWindows] = useState<CaptureWindowOption[]>([]);
+  const [windowPickerOpen, setWindowPickerOpen] = useState(false);
+  const [recentPickerOpen, setRecentPickerOpen] = useState(false);
+  const [selectedRecentIds, setSelectedRecentIds] = useState<string[]>([]);
   const [busyActive, setBusyActive] = useState(false);
   const [prStatus, setPrStatus] = useState<{ number?: number; title?: string; state?: string; failed?: number; conflict?: boolean; reviewDecision?: string; autoFix?: boolean } | null>(null);
   useEffect(() => {
@@ -664,6 +675,8 @@ export default function Composer(props: ComposerProps) {
           <MenuLabel>添加到消息</MenuLabel>
           {ideConnected && <MenuItem onSelect={() => void attachIdeContext()}><Code2 size={15} />附加 VS Code 当前选区/文件</MenuItem>}
           <MenuItem onSelect={() => fileRef.current?.click()}><Paperclip size={15} />附件</MenuItem>
+          <MenuItem disabled={!props.onListCaptureWindows} onSelect={() => { void props.onListCaptureWindows?.().then((items) => { setCaptureWindows(items); setWindowPickerOpen(true); }).catch(() => setCaptureWindows([])); }}><Camera size={15} />截取活动窗口…</MenuItem>
+          <MenuItem disabled={!props.recentScreenshots?.length} onSelect={() => { setSelectedRecentIds([]); setRecentPickerOpen(true); }}><ImagePlus size={15} />最近截图…</MenuItem>
           <MenuItem disabled={!props.value.trim()} onSelect={saveStash}><Save size={15} />暂存当前输入</MenuItem>
           <MenuItem onSelect={() => { setStashes(readStash()); setStashOpen(true); }}><Save size={15} />查看输入暂存</MenuItem>
           {props.onExternalEditor && <MenuItem onSelect={props.onExternalEditor}><ExternalLink size={15} />用外部编辑器撰写</MenuItem>}
@@ -785,6 +798,18 @@ export default function Composer(props: ComposerProps) {
         <div className="flex items-center gap-2"><span className="flex-1 text-[11px] text-fg-3">{new Date(item.createdAt).toLocaleString()}</span><button type="button" className="rounded px-2 py-1 text-[11px] text-brand hover:bg-hover" onClick={() => restoreStash(item.id)}>取回</button><button type="button" aria-label="删除暂存" className="rounded p-1 text-fg-3 hover:bg-hover" onClick={() => deleteStash(item.id)}><X size={13} /></button></div>
         <pre className="m-0 mt-2 max-h-28 overflow-auto whitespace-pre-wrap text-[12px] text-fg-2">{item.text}</pre>
       </div>)}{!stashes.length && <p className="rounded-xl bg-sunken p-4 text-[12px] text-fg-3">此会话还没有暂存输入。</p>}</div>
+    </Dialog>
+    <Dialog open={windowPickerOpen} onOpenChange={setWindowPickerOpen} label="选择要截取的窗口" className="max-h-[84vh] w-[min(760px,94vw)] overflow-auto bg-panel p-5 shadow-xl">
+      <div className="flex items-center"><h2 className="m-0 flex-1 text-[16px] font-semibold text-heading">选择活动窗口</h2><button type="button" aria-label="关闭窗口选择" className="rounded p-1 text-fg-3 hover:bg-hover" onClick={() => setWindowPickerOpen(false)}><X size={16} /></button></div>
+      <p className="mt-1 text-[12px] text-fg-3">截图将添加到当前会话草稿。窗口关闭后需要重新选择。</p>
+      {captureWindows.length ? <div className="mt-4 grid grid-cols-2 gap-3">{captureWindows.map((item) => <button key={item.id} type="button" className="overflow-hidden rounded-xl border border-edge bg-sunken text-left hover:border-brand" onClick={() => { setWindowPickerOpen(false); void props.onCaptureWindow?.(item.id); }}><img src={item.thumbnail} alt="" className="aspect-video w-full object-cover" /><span className="block truncate px-3 py-2 text-[12px] text-fg">{item.title}</span></button>)}</div> : <p className="py-8 text-center text-[13px] text-fg-3">没有可截取的窗口，或系统未提供窗口画面。</p>}
+    </Dialog>
+    <Dialog open={recentPickerOpen} onOpenChange={setRecentPickerOpen} label="最近截图" className="max-h-[84vh] w-[min(760px,94vw)] overflow-auto bg-panel p-5 shadow-xl">
+      <div className="flex items-center"><h2 className="m-0 flex-1 text-[16px] font-semibold text-heading">最近截图</h2><button type="button" aria-label="关闭最近截图" className="rounded p-1 text-fg-3 hover:bg-hover" onClick={() => setRecentPickerOpen(false)}><X size={16} /></button></div>
+      <p className="mt-1 text-[12px] text-fg-3">最多保留最近 8 张，仅在本次 Atlas 运行期间存在。点击图片可加入本轮附件。</p>
+      <div className="mt-4 grid grid-cols-2 gap-3">{(props.recentScreenshots ?? []).map((item) => { const selected = selectedRecentIds.includes(item.id); return <div key={item.id} className={`overflow-hidden rounded-xl border bg-sunken ${selected ? 'border-brand' : 'border-edge'}`}><button type="button" aria-pressed={selected} className="block w-full text-left" onClick={() => setSelectedRecentIds((ids) => selected ? ids.filter((id) => id !== item.id) : [...ids, item.id])}><img src={item.dataUrl} alt={item.title} className="aspect-video w-full object-cover" /><span className="block truncate px-3 pt-2 text-[12px] text-fg">{selected ? '✓ 已选择 · ' : ''}{item.title}</span><span className="block px-3 pb-2 text-[10px] text-fg-3">{new Date(item.capturedAt).toLocaleString()}</span></button><button type="button" className="mb-2 ml-2 inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-fg-3 hover:bg-hover" onClick={() => { props.onDeleteRecentScreenshot?.(item.id); setSelectedRecentIds((ids) => ids.filter((id) => id !== item.id)); }}><Trash2 size={12} />删除缓存</button></div>; })}</div>
+      {!props.recentScreenshots?.length && <p className="py-8 text-center text-[13px] text-fg-3">还没有最近截图。</p>}
+      <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setRecentPickerOpen(false)} className="rounded-lg px-3 py-2 text-[12px] text-fg-3 hover:bg-hover">取消</button><button type="button" disabled={!selectedRecentIds.length} onClick={() => { props.onPickRecentScreenshots?.((props.recentScreenshots ?? []).filter((item) => selectedRecentIds.includes(item.id))); setRecentPickerOpen(false); }} className="rounded-lg bg-brand px-3 py-2 text-[12px] text-white disabled:opacity-50">添加所选（{selectedRecentIds.length}）</button></div>
     </Dialog>
   </form>;
 }
