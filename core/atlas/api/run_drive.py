@@ -1997,19 +1997,19 @@ async def _handle_run_start(
 
     # Standing orders are matching-turn guidance. They never create a scheduled
     # run; selection also writes a bounded audit receipt for each matched order.
-    if agent_key:
-        try:
-            from atlas.standing_orders import matching_orders
+    try:
+        from atlas.standing_orders import DEFAULT_OWNER_ID, matching_orders
 
-            matched_orders = matching_orders(agent_key, run.workspace, content)
-            if matched_orders:
-                active_skill_instructions = list(active_skill_instructions or [])
-                active_skill_instructions.extend({
-                    "name": f"standing-order:{item['id']}",
-                    "content": "常驻指令（仅在匹配的 Agent turn 中生效）：\n" + item["instruction"],
-                } for item in matched_orders)
-        except Exception:
-            log.exception("standing_orders.inject_failed", agent_id=agent_key)
+        standing_owner_id = agent_key or DEFAULT_OWNER_ID
+        matched_orders = matching_orders(standing_owner_id, run.workspace, content)
+        if matched_orders:
+            active_skill_instructions = list(active_skill_instructions or [])
+            active_skill_instructions.extend({
+                "name": f"standing-order:{item['id']}",
+                "content": "常驻指令（仅在匹配的 Agent turn 中生效）：\n" + item["instruction"],
+            } for item in matched_orders)
+    except Exception:
+        log.exception("standing_orders.inject_failed", agent_id=agent_key or "atlas")
 
     # Start the run in background so we can keep receiving messages
     execute = _server()._execute_run(

@@ -42,3 +42,15 @@ def test_standing_order_scope_owner_and_context_budget(order_files):
     assert standing_orders.matching_orders("agent-a", "c:/WORK", "hello")[0]["id"] == scoped["id"]
     with pytest.raises(ValueError):
         standing_orders.create_order({"owner_agent_id": "agent-a", "instruction": "", "scope": {"kind": "all"}})
+
+
+def test_default_atlas_owner_is_selected_for_ordinary_chat(order_files):
+    order = standing_orders.create_order({
+        "instruction": "回答末尾加【常驻】",
+        "scope": {"kind": "all"},
+        "trigger": {"keywords": ["菠萝"]},
+    })
+    assert order["owner_agent_id"] == standing_orders.DEFAULT_OWNER_ID == "atlas"
+    assert standing_orders.matching_orders("atlas", None, "告诉我菠萝怎么吃") == [order]
+    assert standing_orders.matching_orders("atlas", None, "告诉我苹果怎么吃") == []
+    assert standing_orders.recent_audit(order_id=order["id"])[0]["owner_agent_id"] == "atlas"

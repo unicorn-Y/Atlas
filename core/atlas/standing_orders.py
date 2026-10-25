@@ -20,6 +20,7 @@ _LOCK = threading.RLock()
 _MAX_ORDERS = 500
 _MAX_INJECTION = 12_000
 _MAX_INSTRUCTION = 8_000
+DEFAULT_OWNER_ID = "atlas"
 
 
 def _stamp() -> str:
@@ -56,8 +57,10 @@ def normalize(raw: dict[str, Any], *, existing: dict[str, Any] | None = None) ->
     scope = base.get("scope") if isinstance(base.get("scope"), dict) else {}
     trigger = base.get("trigger") if isinstance(base.get("trigger"), dict) else {}
     keywords = trigger.get("keywords", [])
-    if not owner or len(owner) > 128:
-        raise ValueError("owner_agent_id is required (max 128 characters)")
+    if not owner:
+        owner = DEFAULT_OWNER_ID
+    if len(owner) > 128:
+        raise ValueError("owner_agent_id must be at most 128 characters")
     if not instruction or len(instruction) > _MAX_INSTRUCTION:
         raise ValueError(f"instruction must contain 1–{_MAX_INSTRUCTION} characters")
     scope_kind = str(scope.get("kind") or "all")
