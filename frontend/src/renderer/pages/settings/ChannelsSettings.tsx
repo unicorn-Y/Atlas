@@ -80,6 +80,13 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
   const [catalog, setCatalog] = useState<ChannelCatalogRow[]>([]);
   const [handoffs, setHandoffs] = useState<HandoffRow[]>([]);
   const [linkDraft, setLinkDraft] = useState({ agent_id: 'main', channel: 'telegram', account: '', peer: '', conversation_id: '' });
+  const [slackOAuth, setSlackOAuth] = useState({ clientId: '', clientSecret: '', redirectUri: '', secretConfigured: false, authorizeUrl: '' });
+
+  useEffect(() => {
+    void api<{ client_id: string; client_secret_configured: boolean; redirect_uri: string }>(apiBaseUrl, '/api/channels/slack/oauth/config')
+      .then((value) => setSlackOAuth((current) => ({ ...current, clientId: value.client_id, redirectUri: value.redirect_uri, secretConfigured: value.client_secret_configured })))
+      .catch(() => undefined);
+  }, [apiBaseUrl]);
 
   const reloadSessionLinks = useCallback(async () => {
     try {
@@ -193,6 +200,29 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
       onToast(error instanceof Error ? error.message : String(error));
     }
     setBusyChannel('');
+  };
+
+  const saveSlackOAuthConfig = async () => {
+    setBusyChannel('__slack-oauth');
+    try {
+      const saved = await api<{ ok: boolean; client_id: string; client_secret_configured: boolean }>(apiBaseUrl, '/api/channels/slack/oauth/config', {
+        method: 'POST', json: { client_id: slackOAuth.clientId, client_secret: slackOAuth.clientSecret },
+      });
+      setSlackOAuth((current) => ({ ...current, clientId: saved.client_id, clientSecret: '', secretConfigured: saved.client_secret_configured }));
+      onToast('Slack OAuth 应用设置已保存；Client Secret 保存在系统凭据库');
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+    finally { setBusyChannel(''); }
+  };
+  const startSlackOAuth = async () => {
+    setBusyChannel('__slack-oauth');
+    try {
+      const result = await api<{ url: string; redirect_uri: string }>(apiBaseUrl, '/api/channels/slack/oauth/start', {
+        method: 'POST', json: { client_id: slackOAuth.clientId, redirect_uri: slackOAuth.redirectUri },
+      });
+      setSlackOAuth((current) => ({ ...current, authorizeUrl: result.url, redirectUri: result.redirect_uri }));
+      onToast('授权链接已生成，请打开链接并在 Slack 中批准 Atlas');
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+    finally { setBusyChannel(''); }
   };
 
   const clearCredential = async (name: string, key: string) => {
@@ -340,6 +370,15 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
           </div>)}
           {!fields.length && <p className="m-0 text-[12px] text-fg-3">这个渠道没有额外配置，直接启用即可。</p>}
         </div>
+        {name === 'slack' && <div className="mt-4 grid gap-2 rounded-lg bg-sunken p-3">
+          <b className="text-fg">Slack App 安装与授权</b>
+          <p className="m-0 text-[11.5px] text-fg-3">填写 Slack App 的 Client ID/Secret，保存后生成官方 OAuth 安装链接。请先把下方本机 Redirect URL 添加到 Slack App → OAuth & Permissions → Redirect URLs。Bot Token 会由 OAuth 安全写入渠道凭据库；Socket Mode 的 App Token（xapp-）需在上方单独配置。</p>
+          <label className="grid gap-1 text-[12px]">OAuth Client ID<input value={slackOAuth.clientId} onChange={(event) => setSlackOAuth((current) => ({ ...current, clientId: event.target.value }))} className={field} /></label>
+          <label className="grid gap-1 text-[12px]">OAuth Client Secret<small className="text-fg-3">{slackOAuth.secretConfigured ? '已保存；留空保留当前值' : '保存在系统凭据库，不会回显'}</small><input type="password" autoComplete="new-password" value={slackOAuth.clientSecret} onChange={(event) => setSlackOAuth((current) => ({ ...current, clientSecret: event.target.value }))} className={field} /></label>
+          <div className="rounded border border-line p-2"><span className="text-[11px] text-fg-3">Redirect URL（在 Slack App 中登记）</span><code className="block break-all text-[11px]">{slackOAuth.redirectUri || '读取本机回调地址…'}</code></div>
+          <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" disabled={busyChannel === '__slack-oauth' || !slackOAuth.clientId.trim()} onClick={() => void saveSlackOAuthConfig()}><Save size={13} />保存 OAuth 设置</Button><Button size="sm" disabled={busyChannel === '__slack-oauth' || !slackOAuth.clientId.trim() || !slackOAuth.secretConfigured} onClick={() => void startSlackOAuth()}>生成授权链接</Button>{slackOAuth.authorizeUrl && <a className="inline-flex items-center rounded-md bg-brand px-3 py-1.5 text-xs text-on-primary" href={slackOAuth.authorizeUrl} target="_blank" rel="noreferrer">打开 Slack 安装页 ↗</a>}</div>
+          <p className="m-0 text-[11px] text-fg-3">安装完成后回调页显示工作区、渠道启用状态和 Socket Mode 连通结果；若显示等待 App Token，请先保存 xapp- Token 后重试。</p>
+        </div>}
         <div className="mt-2.5 flex justify-end">
           <Button size="sm" variant="secondary" disabled={busyChannel === name} onClick={() => void saveChannel(name)}><Save size={13} />保存 {name}</Button>
         </div>

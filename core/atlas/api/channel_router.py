@@ -15,10 +15,14 @@ from __future__ import annotations
 
 import inspect
 import asyncio
+import ipaddress
+import secrets
 import subprocess
 import sys
+import time
 from contextlib import suppress
 from typing import Any, Literal
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -42,6 +46,12 @@ _CHANNEL_INSTALL_PACKAGES = {
 }
 _install_state: dict[str, Any] = {"status": "idle", "channel": None, "message": ""}
 _install_lock = asyncio.Lock()
+_slack_oauth_states: dict[str, dict[str, Any]] = {}
+_SLACK_BOT_SCOPES = frozenset({
+    "app_mentions:read", "channels:history", "channels:read", "chat:write",
+    "files:read", "groups:history", "groups:read", "im:history", "im:read",
+    "im:write", "mpim:history", "mpim:read", "users:read",
+})
 
 
 def set_channel_manager(manager: ChannelManager | None) -> None:
@@ -352,6 +362,138 @@ async def set_credential(payload: CredentialPayload) -> dict[str, Any]:
         "field": field_name,
         "set": bool(payload.value.strip()),
         "restarted": restarted,
+    }
+
+
+class SlackOAuthStart(BaseModel):
+    client_id: str
+    redirect_uri: str
+
+
+@router.post("/slack/oauth/start", dependencies=[Depends(_require_trusted_origin)])
+async def slack_oauth_start(payload: SlackOAuthStart) -> dict[str, str]:
+    """Create a one-use OAuth state and Slack app install link."""
+    from atlas.channels.adapters._vendor.credentials_bridge import get_channel_secret
+
+    client_id = payload.client_id.strip()
+    redirect_uri = payload.redirect_uri.strip()
+    if not client_id or len(client_id) > 200:
+        raise HTTPException(422, "请先填写 Slack OAuth Client ID")
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(redirect_uri)
+        if parsed.scheme != "http" or not parsed.hostname or parsed.path != "/api/channels/slack/oauth/callback" or parsed.query or parsed.fragment:
+            raise ValueError
+        if not ipaddress.ip_address(parsed.hostname).is_loopback and parsed.hostname != "localhost":
+            raise ValueError
+    except ValueError as exc:
+        raise HTTPException(422, "OAuth 回调地址必须是本机 /api/channels/slack/oauth/callback") from exc
+    if not get_channel_secret("slack", "oauth_client_secret"):
+        raise HTTPException(422, "请先在 Slack 设置中保存 OAuth Client Secret")
+    now = time.monotonic()
+    for key, entry in list(_slack_oauth_states.items()):
+        if entry["expires"] <= now:
+            _slack_oauth_states.pop(key, None)
+    state = secrets.token_urlsafe(32)
+    _slack_oauth_states[state] = {"client_id": client_id, "redirect_uri": redirect_uri, "expires": now + 600}
+    query = urlencode({
+        "client_id": client_id, "scope": ",".join(sorted(_SLACK_BOT_SCOPES)),
+        "redirect_uri": redirect_uri, "state": state,
+    })
+    return {"url": f"https://slack.com/oauth/v2/authorize?{query}", "redirect_uri": redirect_uri}
+
+
+class SlackOAuthConfig(BaseModel):
+    client_id: str
+    client_secret: str = ""
+
+
+@router.post("/slack/oauth/config", dependencies=[Depends(_require_trusted_origin)])
+async def slack_oauth_save_config(payload: SlackOAuthConfig) -> dict[str, Any]:
+    """Persist public app id and write-only app secret in the channel credential vault."""
+    client_id = payload.client_id.strip()
+    if not client_id or len(client_id) > 200:
+        raise HTTPException(422, "Slack OAuth Client ID 不能为空")
+    manager = get_channel_manager()
+    manager.configure("slack", {"oauth_client_id": client_id})
+    if payload.client_secret.strip():
+        try:
+            manager.credentials.set("slack", "oauth_client_secret", payload.client_secret.strip())
+        except RuntimeError as exc:
+            raise HTTPException(503, "无法把 OAuth Client Secret 保存到系统凭据库") from exc
+    from atlas.channels.adapters._vendor.credentials_bridge import get_channel_secret
+
+    return {"ok": True, "client_id": client_id,
+            "client_secret_configured": bool(get_channel_secret("slack", "oauth_client_secret"))}
+
+
+@router.get("/slack/oauth/config")
+async def slack_oauth_get_config(request: Request) -> dict[str, Any]:
+    from atlas.channels.adapters._vendor.credentials_bridge import get_channel_secret
+
+    manager = get_channel_manager()
+    host = request.url.hostname or "127.0.0.1"
+    port = request.url.port
+    authority = f"{host}:{port}" if port else host
+    return {
+        "client_id": str((manager.configs.get("slack") or {}).get("oauth_client_id") or ""),
+        "client_secret_configured": bool(get_channel_secret("slack", "oauth_client_secret")),
+        "redirect_uri": f"http://{authority}/api/channels/slack/oauth/callback",
+    }
+
+
+@router.get("/slack/oauth/callback")
+async def slack_oauth_callback(code: str = "", state: str = "", error: str = "") -> dict[str, Any]:
+    """Exchange a one-use Slack OAuth code, persist bot token, enable and check Slack."""
+    from atlas.channels.adapters._vendor.credentials_bridge import get_channel_secret
+    grant = _slack_oauth_states.pop(state, None)
+    if not state or grant is None or grant["expires"] < time.monotonic():
+        raise HTTPException(400, "Slack 授权状态无效或已过期，请重新开始安装")
+    if error:
+        raise HTTPException(400, f"Slack 安装未完成：{error[:100]}")
+    if not code:
+        raise HTTPException(400, "Slack 未返回授权码")
+    client_secret = get_channel_secret("slack", "oauth_client_secret")
+    if not client_secret:
+        raise HTTPException(422, "本机没有 Slack OAuth Client Secret")
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post("https://slack.com/api/oauth.v2.access", data={
+                "client_id": grant["client_id"], "client_secret": client_secret,
+                "code": code, "redirect_uri": grant["redirect_uri"],
+            })
+            response.raise_for_status()
+            result = response.json()
+    except Exception as exc:
+        log.warning("slack.oauth_exchange_failed", error_type=type(exc).__name__)
+        raise HTTPException(502, "Slack 授权码交换失败，请检查网络和 Redirect URL") from exc
+    if not isinstance(result, dict) or not result.get("ok"):
+        reason = str(result.get("error") or "响应无效") if isinstance(result, dict) else "响应无效"
+        raise HTTPException(502, f"Slack 授权失败：{reason[:100]}")
+    scopes = {item.strip() for item in str(result.get("scope") or "").split(",") if item.strip()}
+    missing = sorted(_SLACK_BOT_SCOPES - scopes)
+    if missing:
+        raise HTTPException(422, "Slack 授权缺少所需 scope：" + ", ".join(missing))
+    bot_token = str(result.get("access_token") or "")
+    if not bot_token.startswith("xoxb-"):
+        raise HTTPException(502, "Slack 没有返回有效的 Bot Token")
+    manager = get_channel_manager()
+    try:
+        manager.credentials.set("slack", "bot_token", bot_token)
+        manager.configure("slack", {"enabled": True})
+        await manager.restart_channel("slack")
+    except Exception as exc:
+        log.warning("slack.oauth_install_apply_failed", error_type=type(exc).__name__)
+        raise HTTPException(503, "授权成功，但本机无法保存凭据或启用 Slack 渠道") from exc
+    team = result.get("team") if isinstance(result.get("team"), dict) else {}
+    status = next((row for row in manager.status().get("channels", []) if row.get("name") == "slack"), {})
+    return {
+        "ok": True, "team": str(team.get("name") or "Slack 工作区"),
+        "enabled": bool(status.get("enabled")), "running": bool(status.get("running")),
+        "connection": "connected" if status.get("running") else str(status.get("last_error") or "等待 Socket Mode App Token（xapp-）"),
+        "app_token_configured": bool(get_channel_secret("slack", "app_token")),
     }
 
 
