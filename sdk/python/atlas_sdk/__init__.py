@@ -63,9 +63,15 @@ class Atlas:
     def run(self, prompt: str, *, cwd: str | os.PathLike[str] | None = None,
             output_schema: dict[str, Any] | None = None) -> RunResult:
         events = list(self.stream(prompt, cwd=cwd, output_schema=output_schema))
-        text = "".join(str(item.get("text", "")) for item in events if item.get("type") == "text_delta")
         session_id = next((str(item["session_id"]) for item in events if item.get("type") == "start"), "")
-        structured = json.loads(text) if output_schema is not None else None
+        # `final` carries the validated answer; text_delta also contains narration before tool calls.
+        final = next((item for item in reversed(events) if item.get("type") == "final"), None)
+        if final is not None:
+            text = str(final.get("text", ""))
+            structured = final.get("structured") if output_schema is not None else None
+        else:
+            text = "".join(str(item.get("text", "")) for item in events if item.get("type") == "text_delta")
+            structured = json.loads(text) if output_schema is not None else None
         return RunResult(session_id=session_id, text=text, events=events, structured=structured)
 
     def resume(self, session_id: str, prompt: str = "Continue.", *, cwd: str | os.PathLike[str] | None = None) -> RunResult:
