@@ -188,7 +188,6 @@ class RemoteTaskStore:
         patch_path = target / f".atlas-remote-{task_id[:12]}-{attempt_id[:8]}.patch"
         patch_path.write_text(attempt["diff"], encoding="utf-8")
         try:
-            import subprocess
             for args in (["git", "apply", "--check", str(patch_path)], ["git", "apply", str(patch_path)]):
                 result = await asyncio.create_subprocess_exec(*args, cwd=target, stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE)

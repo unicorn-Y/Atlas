@@ -11,7 +11,8 @@ CORE = ROOT / "core"
 
 SCENES = (
     ("0 channel dependency install and MCP launch diagnostics", "test_channel_dependencies.py", "test_mcp_startup_diagnostics.py"),
-    ("1 inbound audio transcription, preservation, deduplication and failures", "test_channel_audio.py"),
+    ("1 inbound audio transcription, Feishu resource download, preservation, deduplication and failures",
+     "test_channels_adapters.py", "test_channels_feishu.py", "test_channels_ingress.py", "test_channel_audio.py"),
     ("2 loopback dashboard access, status pages and CLI lifecycle", "test_dashboard.py"),
     ("3 arbitrary channel target send, idempotency and retry status", "test_channel_manual_send.py"),
     ("4 self-hosted SSH environment, task attempts, scheduling, snapshots and patch apply", "test_remote_tasks.py"),
