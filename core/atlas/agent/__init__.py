@@ -991,10 +991,18 @@ class AgentOrchestrator:
 
             from atlas.models.router import model_usage_callback
 
-            with model_usage_callback(publish_auxiliary_usage):
-                async with aclosing(execute_run(self, request, callbacks)) as events:
-                    async for event in events:
-                        yield event
+            async with aclosing(execute_run(self, request, callbacks)) as events:
+                while True:
+                    # Keep the usage callback scoped to one ``anext`` call. The
+                    # outer async generator may be closed by a cancellation task;
+                    # spanning a yield with a ContextVar token then resets that
+                    # token from a different asyncio Context during aclose.
+                    with model_usage_callback(publish_auxiliary_usage):
+                        try:
+                            event = await anext(events)
+                        except StopAsyncIteration:
+                            break
+                    yield event
 
         return scoped()
     # -- helpers -------------------------------------------------------------
