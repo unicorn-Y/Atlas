@@ -45,6 +45,7 @@ from atlas.api.run_limits_router import router as run_limits_router
 from atlas.api.network_settings_router import router as network_settings_router
 from atlas.api.hook_trust_router import router as hook_trust_router
 from atlas.api.linear_integration_router import router as linear_integration_router
+from atlas.api.cloud_documents_router import router as cloud_documents_router
 from atlas.api.mcp_resources_lazy_router import router as mcp_resources_router
 from atlas.api.model_catalog_preferences_router import router as model_catalog_preferences_router
 from atlas.api.output_style_settings_router import router as output_style_settings_router
@@ -134,6 +135,7 @@ def create_app(
         network_settings_router,
         hook_trust_router,
         linear_integration_router,
+        cloud_documents_router,
         mcp_resources_router,
         model_catalog_preferences_router,
         output_style_settings_router,
