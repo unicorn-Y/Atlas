@@ -40,18 +40,13 @@ _RUNNING_WAIT_TIMEOUT = timedelta(seconds=30)
 
 
 def _ensure_vercel_sdk() -> None:
-    """Lazy-install vercel SDK on demand. Idempotent."""
+    """Check the optional Vercel SDK before using the provider."""
     # The SDK (>=0.7) ships default-on telemetry; Hermes policy is opt-in only, so disable it
     # before the SDK is imported. setdefault: an explicit user value is never overridden.
     os.environ.setdefault("VERCEL_TELEMETRY_DISABLED", "1")
-    try:
-        from pm import ensure_import as _lazy_ensure
-    except ImportError:
-        return  # pm unavailable — vercel's own import sites decide
-    try:
-        _lazy_ensure("vercel")
-    except Exception as e:
-        raise ImportError(str(e))
+    from atlas.engine_core.tools.environments.remote_common import ensure_lazy_dep
+
+    ensure_lazy_dep("vercel")
 _WRITE_RETRY_ATTEMPTS = 3
 _RETRY_BACKOFF_STEP = timedelta(milliseconds=100)
 _MIN_SANDBOX_TIMEOUT = timedelta(minutes=5)

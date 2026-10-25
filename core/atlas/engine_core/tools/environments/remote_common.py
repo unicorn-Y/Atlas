@@ -89,11 +89,15 @@ def bash_argv(cmd_string: str, login: bool = False) -> list[str]:
 
 
 def ensure_lazy_dep(extra: str) -> None:
-    """Lazy-install an optional SDK's pm extra (idempotent). Install failures
-    surface as ``ImportError``."""
-    import pm
+    """Require a cloud SDK from its Atlas extra with a user-facing install hint."""
+    import importlib.util
 
-    try:
-        pm.ensure_import(extra)
-    except Exception as e:
-        raise ImportError(str(e))
+    extras = {"daytona": "daytona", "modal": "modal", "vercel": "vercel"}
+    extra_name = extras.get(extra, extra)
+    if importlib.util.find_spec(extra) is None:
+        raise ImportError(
+            f"The {extra_name.title()} execution provider needs its optional Atlas dependency. "
+            f"From the Atlas `core` directory, install it with "
+            f"`uv pip install -e '.[{extra_name}]'` (or the equivalent "
+            "Atlas package extra), then retry."
+        )

@@ -278,7 +278,7 @@ async def _screenshot(browser_tool: Any, session_module: Any, session_id: str,
         except (TypeError, ValueError):
             return _error(blocked, "policy_denied")
     try:
-        from hermes_constants import get_hermes_dir
+        from atlas.engine_core.hermes_constants import get_hermes_dir
 
         output_dir = Path(get_hermes_dir("cache/screenshots", "browser_screenshots"))
         output_dir.mkdir(parents=True, exist_ok=True)

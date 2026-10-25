@@ -84,23 +84,8 @@ def _agent_browser_candidate_present(path: str | None) -> bool:
 
 
 def _find_agent_browser(*, validate: bool = True) -> str:
-    """Select PM's exact binary, then an external PATH/Homebrew installation.
-
-    Termux owns its browser installation. Elsewhere PM may acquire a missing
-    CLI at execution time, subject to its lazy-install policy. Readiness checks
-    (``validate=False``) never execute or install anything. Selection is not
-    cached: a new PM fact or profile must be visible immediately.
-    """
-    try:
-        import pm
-    except ModuleNotFoundError:
-        pm = None
-
+    """Find the browser CLI on PATH, optionally using Atlas's npm installer."""
     termux = _is_termux_environment()
-    if pm is not None and not termux:
-        installed = pm.installed_package("agent-browser")
-        if installed and installed.binary is not None:
-            return str(installed.binary)
     usable = agent_browser_runnable if validate else _agent_browser_candidate_present
     for search_path in (None, _merge_browser_path("")):
         if search_path == "":
@@ -109,15 +94,7 @@ def _find_agent_browser(*, validate: bool = True) -> str:
         if candidate and usable(candidate):
             return candidate
     hint = f"agent-browser CLI not found. Install it with: {_browser_install_hint()}"
-    if validate and not termux and pm is not None:
-        try:
-            pm.ensure("agent-browser")
-        except (pm.InstallError, OSError) as exc:
-            raise FileNotFoundError(f"{hint}\n{exc}") from exc
-        installed = pm.installed_package("agent-browser")
-        if installed and installed.binary is not None:
-            return str(installed.binary)
-    if validate and not termux and pm is None:
+    if validate and not termux:
         installed_path = _autoinstall_agent_browser()
         if installed_path:
             return installed_path
@@ -160,29 +137,14 @@ def _chromium_executable() -> Optional[str]:
 
 
 def _maybe_autoinstall_chromium() -> bool:
-    """Install only PM's pinned full Chromium, never the upstream browser pair.
-
-    Docker supplies the binary. Other installs require lazy-install consent.
-    """
+    """Atlas does not bundle a browser package manager; require a detected browser."""
     _bt = _origin()
     if _bt._chromium_autoinstall_attempted:
         return _chromium_installed()
     _bt._chromium_autoinstall_attempted = True
     if _running_in_docker() or _is_termux_environment() or os.environ.get("AGENT_BROWSER_EXECUTABLE_PATH"):
         return False
-    try:
-        from pm import InstallError, ensure, lazy_installs_allowed
-    except ModuleNotFoundError:
-        return False
-    if not lazy_installs_allowed():
-        return False
-    _bt.logger.info("browser: installing PM's pinned Chromium")
-    try:
-        ensure("chromium")
-    except (InstallError, OSError) as exc:
-        _bt.logger.warning("browser: Chromium auto-install failed: %s", exc)
-        return False
-    return _chromium_installed()
+    return False
 
 
 def _running_in_docker() -> bool:

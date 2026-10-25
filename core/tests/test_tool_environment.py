@@ -64,6 +64,16 @@ def test_mcp_server_with_empty_credential_is_not_auto_started(monkeypatch):
     assert servers["git"]["enabled"] is True
 
 
+def test_missing_cloud_sandbox_sdk_returns_an_install_hint(monkeypatch):
+    import importlib.util
+
+    from atlas.engine_core.tools.environments.remote_common import ensure_lazy_dep
+
+    monkeypatch.setattr(importlib.util, "find_spec", lambda _name: None)
+    with pytest.raises(ImportError, match=r"optional Atlas dependency.*\[daytona\]"):
+        ensure_lazy_dep("daytona")
+
+
 def test_browser_tool_uses_an_installed_browser(monkeypatch, tmp_path):
     from atlas.engine import hermes_runtime
 

@@ -62,7 +62,7 @@ def cleanup_terminal_temp_cache(max_age_hours: float = TERMINAL_TEMP_MAX_IDLE_HO
     directory's subtree; the kwarg name is the ``cleanup_*_cache`` signature the gateway
     housekeeping loop calls every entry with); return count.
     Only the managed default dir is pruned — never a user-pointed ``terminal.temp_dir``."""
-    from hermes_constants_scratch import subtree_touched_since
+    from atlas.engine_core.hermes_constants_scratch import subtree_touched_since
 
     root = _default_terminal_temp_dir()
     if root is None:
@@ -500,17 +500,24 @@ def restore_managed_env(env: dict) -> dict:
 
 # --- Shell discovery ---
 def _find_bash() -> str:
-    """Resolve the shell Hermes runs commands with. Owned by pm (the store
-    is the authority on bundled bash); this is a thin wrapper over
-    pm.shell() for callers that need a bash binary."""
-    import pm.shell
-
-    bash = pm.shell.bash()
+    """Resolve Bash from PATH or a standard Git for Windows installation."""
+    bash = shutil.which("bash")
+    if not bash and _IS_WINDOWS:
+        for base in (os.environ.get("PROGRAMFILES"), os.environ.get("PROGRAMFILES(X86)")):
+            if not base:
+                continue
+            for relative in ("Git/bin/bash.exe", "Git/usr/bin/bash.exe"):
+                candidate = os.path.join(base, relative)
+                if os.path.isfile(candidate):
+                    bash = candidate
+                    break
+            if bash:
+                break
     if bash:
         return bash
     raise RuntimeError(
-        "No shell found. Hermes needs bash (Git for Windows on Windows). "
-        "Run `hermes pm install` or reinstall the bundle."
+        "No shell found. Atlas needs Bash (Git for Windows on Windows); "
+        "install Git for Windows or add Bash to PATH."
     )
 
 
@@ -588,30 +595,18 @@ _HERMES_BIN_DIR_IS_PAYLOAD = False
 
 
 def _resolve_hermes_bin_dir() -> str | None:
-    """Directory holding the ``hermes`` console-script, or None (cached). A gateway
-    launched by systemd/cron/a desktop launcher lacks the install dir on PATH and bare
-    ``hermes`` exits 127. Order: a sealed payload's own launcher dir; ``which``; absolute
-    ``sys.argv[0]`` naming a real hermes executable; ``sys.executable``'s dir if it holds
-    the shim."""
+    """Directory holding the ``atlas`` console-script, or None (cached)."""
     global _HERMES_BIN_DIR, _HERMES_BIN_DIR_IS_PAYLOAD
     if _HERMES_BIN_DIR is not _SENTINEL:
         return _HERMES_BIN_DIR  # type: ignore[return-value]
-    from pm.environments import payload_command_dir
-
-    # A payload's venv also holds a `hermes`, but on Windows its redirector names the
-    # build machine's interpreter, so PATH order must not decide which copy children get.
-    payload_dir = payload_command_dir(Path(__file__).resolve().parents[2])
-    if payload_dir is not None and payload_dir.is_dir():
-        _HERMES_BIN_DIR, _HERMES_BIN_DIR_IS_PAYLOAD = str(payload_dir), True
-        return _HERMES_BIN_DIR
-    which = shutil.which("hermes")
+    which = shutil.which("atlas") or shutil.which("atlas.exe")
     argv0 = sys.argv[0] if sys.argv else ""
     base = os.path.basename(argv0).lower()
     exe_dir = os.path.dirname(sys.executable) if sys.executable else ""
-    shim = "hermes.exe" if _IS_WINDOWS else "hermes"
+    shim = "atlas.exe" if _IS_WINDOWS else "atlas"
     if which:
         candidate = os.path.dirname(which)
-    elif (os.path.isabs(argv0) and (base == "hermes" or base.startswith("hermes."))
+    elif (os.path.isabs(argv0) and (base == "atlas" or base.startswith("atlas."))
             and os.path.isfile(argv0)):
         candidate = os.path.dirname(argv0)
     else:
@@ -633,30 +628,30 @@ def _prepend_hermes_bin_dir(existing_path: str) -> str:
 
 
 def _managed_runtime_path_entries() -> list[str]:
-    """Return existing Hermes-managed runtime dirs for the terminal subshell PATH.
+    """Return existing Atlas-managed runtime dirs for the terminal subshell PATH.
 
     The terminal tool spawns a subshell whose PATH is the agent process's PATH
     plus ``_SANE_PATH``. Neither carries the runtimes Hermes installs for
     itself, so on a machine where Hermes provisioned its own toolchain a
     command the agent runs resolves a system copy instead — or nothing at all:
 
-    - the pm store's node/npm entries — installed to satisfy the desktop and
-      browser toolchain. ``tools/browser_tool.py`` already does this for its own
-      subprocesses; the agent's shell deserves the same.
-    - ``$HERMES_HOME/bin`` — the managed ``uv``. ``install.sh`` writes it there
+    - the directories containing Node/npm found on the current PATH;
+    - ``$HERMES_HOME/bin`` — the user-managed ``uv``. The installer writes it there
       and nothing has ever put that directory on PATH, so an install whose only
       uv is the managed one looks uv-less to both the agent and the model.
 
     Resolved per call rather than cached in a module constant because
     ``get_hermes_home()`` is profile-scoped and a managed runtime can appear
-    mid-process (a lazy pm install, a first browser install).
+    mid-process (a Node or uv installation).
     """
     try:
-        import pm
         from atlas.engine_core.hermes_constants import get_hermes_home
 
-        env = pm.env_for("npm", base_env={"PATH": ""})
-        managed = [Path(d) for d in env.get("PATH", "").split(os.pathsep) if d]
+        managed = []
+        for executable in ("node", "npm", "npm.cmd"):
+            found = shutil.which(executable)
+            if found:
+                managed.append(Path(found).parent)
         candidates = [*managed, get_hermes_home() / "bin"]
         return [str(d) for d in candidates if d.is_dir()]
     except Exception:
