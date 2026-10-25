@@ -10,6 +10,7 @@
  */
 export type ShortcutAction =
   | 'palette' | 'newTask' | 'settings' | 'nextTab' | 'prevTab' | 'closeTab'
+  | 'tab1' | 'tab2' | 'tab3' | 'tab4' | 'tab5' | 'tab6' | 'tab7' | 'tab8' | 'tab9'
   | 'toggleSidebar' | 'toggleInspector' | 'focusComposer' | 'stopRun'
   | 'sidebarSearch' | 'sidebarProjectPicker' | 'sidebarNextGroup' | 'sidebarPreviousGroup' | 'sendNow' | 'stashInput'
   | 'focusNextPane' | 'focusPreviousPane' | 'openDiff' | 'diffPreviousHunk' | 'diffNextHunk'
@@ -25,6 +26,7 @@ export const SHORTCUTS: Array<{ action: ShortcutAction; label: string; hint?: st
   { action: 'nextTab', label: '下一个标签页', combo: 'Ctrl+Tab' },
   { action: 'prevTab', label: '上一个标签页', combo: 'Ctrl+Shift+Tab' },
   { action: 'closeTab', label: '关闭当前标签页', combo: 'Ctrl+W' },
+  ...Array.from({ length: 9 }, (_, index) => ({ action: `tab${index + 1}` as ShortcutAction, label: `切换到第 ${index + 1} 个标签页`, hint: '标签不足时无操作；输入框聚焦时仍生效', combo: `Ctrl+${index + 1}` })),
   { action: 'toggleSidebar', label: '收起/展开侧边栏', combo: 'Ctrl+B' },
   { action: 'toggleInspector', label: '打开/关闭任务面板', combo: 'Ctrl+.' },
   { action: 'focusComposer', label: '跳到输入框', combo: 'Ctrl+L' },

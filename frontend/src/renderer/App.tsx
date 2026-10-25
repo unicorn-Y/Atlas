@@ -1463,11 +1463,6 @@ export default function App() {
         askSelectedText();
         return;
       }
-      if (event.ctrlKey && !event.altKey && !event.shiftKey && /^[1-9]$/.test(event.key)) {
-        const target = tabs[Number(event.key) - 1];
-        if (target) { event.preventDefault(); const conversation = store.conversations.find((item) => item.id === target); if (conversation) openConversation(conversation); }
-        return;
-      }
       if (event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 't') {
         const focused = document.activeElement;
         if (inspectorTab === 'browser' && inspectorOpen && focused?.tagName.toLowerCase() === 'webview') return;
@@ -1486,6 +1481,15 @@ export default function App() {
       const action = matchShortcut(event, bindings);
       if (!action) return;
       event.preventDefault();
+      const numberedTab = /^tab([1-9])$/.exec(action);
+      if (numberedTab) {
+        const targetId = tabs[Number(numberedTab[1]) - 1];
+        if (targetId && targetId !== store.activeConversationId) {
+          const conversation = store.conversations.find((item) => item.id === targetId);
+          if (conversation) openConversation(conversation);
+        }
+        return;
+      }
       switch (action) {
         case 'palette': setPaletteOpen((value) => !value); break;
         case 'newTask': newTask(); break;
