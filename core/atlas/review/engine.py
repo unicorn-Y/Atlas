@@ -371,7 +371,8 @@ async def _semantic_dedupe(manager: Any, model: str, findings: list[dict[str, An
     listing = "\n".join(f"{index}. {item.get('file')}:{item.get('line')} [{item.get('severity')}] {item.get('title')}"
                          for index, item in enumerate(findings))
     try:
-        result = await manager.model_router.complete_for(model, "repository_review_dedupe", [
+        from atlas.models.resilient import complete_resilient
+        result = await complete_resilient(manager.model_router, model, "repository_review_dedupe", [
             {"role": "system", "content": "Group code review findings that describe the same underlying defect. Return only JSON."},
             {"role": "user", "content": "下面是多个审查员对同一仓库报告的问题。把描述同一个根本缺陷的条目分到一组（同一文件、同一根因；"
                                         "不同缺陷即使位置相近也不要合并）。只返回 JSON 数组，每个元素是一组编号，例如 [[0,3],[1],[2,4]]，"
@@ -407,7 +408,8 @@ async def run_repository_review(workspace: str, *, model: str | None = None) -> 
                   f"完整文件清单（共 {context['file_count']} 个；源快照文件 {context['included_count']} 个；"
                   f"本层正文上下文 {context_chars} 字符；本层上下文是否受预算限制 {layer_limited}）：\n{inventory}\n"
                   f"仓库源代码与配置（按本层优先级分层选择；逐项引用 file:line）：\n{layer_source}")
-        result = await manager.model_router.complete_for(selected_model, "repository_review", [
+        from atlas.models.resilient import complete_resilient
+        result = await complete_resilient(manager.model_router, selected_model, "repository_review", [
             {"role": "system", "content": "Perform an evidence-first, read-only repository review. Return only a JSON array."},
             {"role": "user", "content": prompt},
         ], max_tokens=4096, timeout=180)
