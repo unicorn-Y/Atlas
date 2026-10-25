@@ -11,7 +11,8 @@
 export type ShortcutAction =
   | 'palette' | 'newTask' | 'settings' | 'nextTab' | 'prevTab' | 'closeTab'
   | 'toggleSidebar' | 'toggleInspector' | 'focusComposer' | 'stopRun'
-  | 'sidebarSearch' | 'sidebarProjectPicker' | 'sidebarNextGroup' | 'sidebarPreviousGroup' | 'sendNow' | 'stashInput';
+  | 'sidebarSearch' | 'sidebarProjectPicker' | 'sidebarNextGroup' | 'sidebarPreviousGroup' | 'sendNow' | 'stashInput'
+  | 'focusNextPane' | 'focusPreviousPane';
 
 export type ShortcutBindings = Record<ShortcutAction, string[]>;
 export type ShortcutBindingValue = string | readonly string[];
@@ -33,6 +34,8 @@ export const SHORTCUTS: Array<{ action: ShortcutAction; label: string; hint?: st
   { action: 'sidebarProjectPicker', label: '侧栏项目选择器', combo: 'Ctrl+Alt+P' },
   { action: 'sidebarNextGroup', label: '切换到下一个会话组', combo: 'Ctrl+Alt+J' },
   { action: 'sidebarPreviousGroup', label: '切换到上一个会话组', combo: 'Ctrl+Alt+K' },
+  { action: 'focusNextPane', label: '聚焦下一个分屏', combo: 'Ctrl+Alt+ArrowRight' },
+  { action: 'focusPreviousPane', label: '聚焦上一个分屏', combo: 'Ctrl+Alt+ArrowLeft' },
 ];
 
 const STORAGE_KEY = 'atlas.shortcuts';

@@ -29,7 +29,7 @@ const ForkTree = lazy(() => import('./components/ForkTree'));
 const RunSetupMenu = lazy(() => import('./components/RunSetupMenu'));
 const TabStrip = lazy(() => import('./components/TabStrip'));
 const OnboardingDialog = lazy(() => import('./components/OnboardingDialog'));
-const SidePane = lazy(() => import('./components/SidePane'));
+import PaneWorkspace from './components/PaneWorkspace';
 const ResumePickerDialog = lazy(() => import('./components/ResumePickerDialog'));
 const FallbackModelsDialog = lazy(() => import('./components/FallbackModelsDialog'));
 import { applyFileBindings, loadBindings, matchShortcut } from './services/shortcuts';
@@ -1220,6 +1220,8 @@ export default function App() {
         case 'sidebarProjectPicker': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.project-picker' } })); break;
         case 'sidebarNextGroup': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.next-group' } })); break;
         case 'sidebarPreviousGroup': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.previous-group' } })); break;
+        case 'focusNextPane': window.dispatchEvent(new CustomEvent('atlas:focus-pane', { detail: { step: 1 } })); break;
+        case 'focusPreviousPane': window.dispatchEvent(new CustomEvent('atlas:focus-pane', { detail: { step: -1 } })); break;
       }
     };
     window.addEventListener('keydown', onKey);
@@ -2082,7 +2084,6 @@ export default function App() {
   canRewriteRef.current = canRewrite;
 
   const pageTitle = view === 'chat' ? activeConversation?.title ?? '新任务' : '';
-  const besideConversation = view === 'chat' && besideId !== store.activeConversationId ? store.conversations.find((item) => item.id === besideId) : undefined;
   const runningConversations = store.runs.filter((run) => !TERMINAL.includes(run.status)).map((run) => run.conversationId);
   const waitingConversations = [...new Set(store.runs.filter((run) => run.status === 'waiting').map((run) => run.conversationId))];
   // One open conversation reads better as a plain title; tabs appear from the second one.
@@ -2236,8 +2237,8 @@ export default function App() {
               </div>
             </div>
           </div>
-          {besideConversation && <SidePane conversation={besideConversation} username={username} onClose={() => setBesideId('')}
-            onSwitch={() => { const previous = store.activeConversationId; openConversation(besideConversation); setBesideId(previous); }} />}
+          {view === 'chat' && <PaneWorkspace besideId={besideId} activeId={store.activeConversationId} conversations={store.conversations} username={username}
+            onSwitch={(conversation) => { const previous = store.activeConversationId; void openConversation(conversation); setBesideId(previous); }} />}
           {inspectorOpen && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => toggleInspector(false)} run={activeRun} artifacts={activeArtifacts}
             conversationTitle={activeConversation?.title} modelName={modelName} tools={store.tools} skills={store.skills} activeSkills={store.activeSkills} capabilities={store.capabilities}
             apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
