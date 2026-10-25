@@ -3,16 +3,67 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
+import time
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "core"
 sys.path.insert(0, str(CORE))
 os.environ.setdefault("ATLAS_ROOT", r"C:\engine-reg\_atlasroot")
+
+_DIAGNOSTIC_SECRET = re.compile(
+    r"(?i)(api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|password|secret|token)"
+    r"(\s*[:=]\s*)([^\s,;]+)"
+)
+_BEARER = re.compile(r"(?i)\bBearer\s+[^\s,;]+")
+_KEY_SHAPES = re.compile(
+    r"\b(?:dsk-|sk-|xox[baprs]-|gh[pousr]_|github_pat_|AIza|AKIA|ASIA)[A-Za-z0-9_-]{12,}\b"
+)
+
+
+def _redact_diagnostic(value: str) -> str:
+    value = _DIAGNOSTIC_SECRET.sub(r"\1\2[REDACTED]", value)
+    value = _BEARER.sub("Bearer [REDACTED]", value)
+    value = _KEY_SHAPES.sub("[REDACTED_KEY]", value)
+    return value[-2400:]
+
+
+def _last_run_error_event(since: float) -> str:
+    """Return only the last error-shaped event, never raw event JSON or run prompts."""
+    try:
+        from atlas.logs import LOG_DIR
+
+        paths = [path for path in (LOG_DIR / "runs").rglob("*.jsonl")
+                 if path.is_file() and path.stat().st_mtime >= since - 2]
+    except OSError:
+        return "unavailable"
+    except Exception:
+        return "unavailable"
+    paths.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    for path in paths[:20]:
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in reversed(lines[-300:]):
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            event = str(record.get("event") or "")
+            if not ("error" in event.lower() or "fail" in event.lower() or "timeout" in event.lower()):
+                continue
+            summary = {key: record[key] for key in (
+                "timestamp", "event", "run_id", "tool", "tool_name", "error_type", "status_code", "error"
+            ) if key in record}
+            return _redact_diagnostic(json.dumps(summary, ensure_ascii=False, default=str))
+    return "none"
 
 
 def check_office_generation(workspace: Path) -> None:
@@ -55,22 +106,40 @@ def check_live_model_template(workspace: Path) -> None:
     )}
     target = workspace / "u22-live-template.docx"
     reasons: list[str] = []
+    diagnostics: list[str] = []
     # The live relay intermittently fails a turn (503/timeout) or the model skips the tool once;
     # allow one retry so the check measures the feature, and report only a reason category.
     for _attempt in range(2):
-        result = subprocess.run(
-            command, cwd=ROOT, env=environment, capture_output=True,
-            encoding="utf-8", errors="replace", timeout=300, check=False,
-        )
-        if result.returncode == 0 and target.is_file() and target.stat().st_size > 0:
+        started_at = time.time()
+        try:
+            result = subprocess.run(
+                command, cwd=ROOT, env=environment, capture_output=True,
+                encoding="utf-8", errors="replace", timeout=300, check=False,
+            )
+            return_code = result.returncode
+            stderr_text = result.stderr or ""
+        except subprocess.TimeoutExpired as exc:
+            return_code = "timeout"
+            raw_stderr = exc.stderr or ""
+            stderr_text = raw_stderr.decode("utf-8", errors="replace") if isinstance(raw_stderr, bytes) else str(raw_stderr)
+        except OSError as exc:
+            return_code = "spawn-error"
+            stderr_text = str(exc)
+        if return_code == 0 and target.is_file() and target.stat().st_size > 0:
             break
-        stderr = (result.stderr or "").lower()
+        stderr = stderr_text.lower()
         category = next((label for needle, label in (("503", "upstream 503"), ("429", "rate limited"), ("timeout", "timeout"),
                                                      ("timed out", "timeout"), ("401", "auth"), ("create_document", "tool error"))
-                         if needle in stderr), "model did not create the file" if result.returncode == 0 else "run failed")
-        reasons.append(f"exit {result.returncode}: {category}")
+                         if needle in stderr), "model did not create the file" if return_code == 0 else "run failed")
+        reasons.append(f"exit {return_code}: {category}")
+        diagnostics.append(
+            f"attempt={_attempt + 1} exit_code={return_code}; stderr_tail={_redact_diagnostic(stderr_text)}; "
+            f"last_run_error_event={_last_run_error_event(started_at)}"
+        )
     else:
-        # Provider error text can contain request details; do not print subprocess output.
+        # Emit narrow, redacted diagnostics: exit code, stderr tail, last run error event.
+        for diagnostic in diagnostics:
+            print("U22 live-model diagnostic: " + diagnostic, file=sys.stderr)
         raise RuntimeError("real deepseek-v4.1-flash Office scenario failed: " + "; ".join(reasons))
     print("PASS Office live-model scene: deepseek-v4.1-flash created a DOCX through create_document")
 
