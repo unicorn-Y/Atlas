@@ -33,7 +33,8 @@ logger = logging.getLogger("atlas.api.conversations")
 def _redact_handoff_secrets(value: str) -> str:
     """Remove common credential forms before transcript text is sent to a model."""
     value = re.sub(r"(?i)\bBearer\s+[^\s,;]+", "Bearer [REDACTED]", value)
-    value = re.sub(r"\bsk-[A-Za-z0-9_-]{16,}\b", "[REDACTED_API_KEY]", value)
+    value = re.sub(r"\b(?:sk|dsk)-[A-Za-z0-9_-]{16,}\b", "[REDACTED_API_KEY]", value)
+    value = re.sub(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{16,}|AIza[A-Za-z0-9_-]{30,}|(?:AKIA|ASIA)[A-Z0-9]{16})\b", "[REDACTED_API_KEY]", value)
     return re.sub(
         r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|secret|password)\b(\s*[:=]\s*)([^\s,;]+)",
         r"\1\2[REDACTED]", value,
@@ -306,8 +307,9 @@ async def create_handoff_summary(
                 git_state = "Git status:\n" + ("\n".join(status.stdout.splitlines()[:200]) or "clean")
         except (OSError, subprocess.TimeoutExpired):
             pass
-    prompt = (f"Source conversation: {conversation.get('title') or 'Untitled'} ({conversation_id})\n"
-              f"{worktree}\n{git_state}\n\nComplete transcript, oldest first:\n{transcript}")
+    prompt = (f"Source conversation: {_redact_handoff_secrets(str(conversation.get('title') or 'Untitled'))} ({conversation_id})\n"
+              f"{_redact_handoff_secrets(worktree)}\n{_redact_handoff_secrets(git_state)}"
+              f"\n\nComplete transcript, oldest first:\n{transcript}")
     if model is not None and (not isinstance(model, str) or len(model) > 256):
         raise HTTPException(status_code=400, detail="model must be a valid model id")
     selected = model or model_mgr.current_model
