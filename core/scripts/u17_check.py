@@ -117,6 +117,28 @@ async def check_lsp_surface_and_handoff() -> None:
 
     cli = CliRunner().invoke(main, ["lsp", "--help"])
     assert cli.exit_code == 0 and "status" in cli.output and "start" in cli.output and "diagnostics" in cli.output
+    status_cli = CliRunner().invoke(main, ["lsp", "status", "--workspace", str(ROOT)])
+    assert status_cli.exit_code == 0
+
+    class Loop:
+        @staticmethod
+        def run(coroutine, timeout):
+            return asyncio.run(coroutine)
+
+    class QueryService:
+        _loop = Loop()
+
+        @staticmethod
+        async def _open_and_wait_async(_path: str):
+            return []
+
+    query_service = QueryService()
+    probe_file = ROOT / "README.md"
+    with patch("atlas.tools.workspace_lsp._service_for", return_value=(query_service, object())):
+        query_cli = CliRunner().invoke(main, ["lsp", "diagnostics", str(probe_file)])
+    assert query_cli.exit_code == 0 and '"available": true' in query_cli.output
+    stop_cli = CliRunner().invoke(main, ["lsp", "stop"])
+    assert stop_cli.exit_code == 0 and "已停止" in stop_cli.output
 
     class Memory:
         async def get_conversation(self, _conversation_id: str):
