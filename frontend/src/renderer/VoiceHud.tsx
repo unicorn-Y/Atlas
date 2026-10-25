@@ -93,6 +93,7 @@ function VoiceHud() {
     return () => { offStart?.(); offStop?.(); stop(); };
   }, [stop]);
   return <main className="voice-hud" aria-label="Atlas 语音输入">
+    <div className="hud-pill">
     <div className="hud-mark"><AudioLines size={17} /><span>Atlas</span></div>
     <div className="hud-state"><b>{status === 'listening' ? '正在聆听' : status === 'preparing' ? '准备语音' : status === 'connecting' ? '正在连接' : status === 'error' ? '语音不可用' : '语音输入'}</b><span>{detail}</span></div>
     <div className="hud-wave" aria-label={`麦克风音量 ${Math.round(level * 100)}%`}>
@@ -103,6 +104,7 @@ function VoiceHud() {
     {status === 'error' && <button type="button" className="hud-retry" title="重试语音输入" onClick={() => { void start(); }}><Mic size={15} /></button>}
     <button type="button" className="hud-stop" title="停止语音输入" aria-label="停止语音输入" onClick={stop}><Square size={14} fill="currentColor" /></button>
     <span className="hud-grip" title="拖动定位" aria-hidden="true">⋮⋮</span>
+    </div>
   </main>;
 }
 
