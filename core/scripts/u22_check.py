@@ -53,14 +53,25 @@ def check_live_model_template(workspace: Path) -> None:
     environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
         part for part in (str(CORE), os.environ.get("PYTHONPATH", "")) if part
     )}
-    result = subprocess.run(
-        command, cwd=ROOT, env=environment, capture_output=True,
-        encoding="utf-8", errors="replace", timeout=240, check=False,
-    )
     target = workspace / "u22-live-template.docx"
-    if result.returncode != 0 or not target.is_file() or target.stat().st_size == 0:
+    reasons: list[str] = []
+    # The live relay intermittently fails a turn (503/timeout) or the model skips the tool once;
+    # allow one retry so the check measures the feature, and report only a reason category.
+    for _attempt in range(2):
+        result = subprocess.run(
+            command, cwd=ROOT, env=environment, capture_output=True,
+            encoding="utf-8", errors="replace", timeout=300, check=False,
+        )
+        if result.returncode == 0 and target.is_file() and target.stat().st_size > 0:
+            break
+        stderr = (result.stderr or "").lower()
+        category = next((label for needle, label in (("503", "upstream 503"), ("429", "rate limited"), ("timeout", "timeout"),
+                                                     ("timed out", "timeout"), ("401", "auth"), ("create_document", "tool error"))
+                         if needle in stderr), "model did not create the file" if result.returncode == 0 else "run failed")
+        reasons.append(f"exit {result.returncode}: {category}")
+    else:
         # Provider error text can contain request details; do not print subprocess output.
-        raise RuntimeError(f"real deepseek-v4.1-flash Office scenario failed (exit {result.returncode})")
+        raise RuntimeError("real deepseek-v4.1-flash Office scenario failed: " + "; ".join(reasons))
     print("PASS Office live-model scene: deepseek-v4.1-flash created a DOCX through create_document")
 
 
