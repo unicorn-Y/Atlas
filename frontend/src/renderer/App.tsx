@@ -1371,6 +1371,12 @@ export default function App() {
       if (!activeConversation) { newTask(); return; }
       void prepareHandoff();
     } },
+    { id: 'bg', label: '/bg', hint: '将当前运行放到后台并开始空白会话', run: () => {
+      if (!activeRun || runDone) { setToast('当前没有可转入后台的运行'); return; }
+      store.setRunBackground(activeRun.id, true);
+      newTask();
+      setToast(`「${activeConversation?.title || '当前会话'}」已在后台继续；可从侧栏打开、暂停或停止`);
+    } },
     { id: 'handoff', label: '/handoff', hint: '生成、预览并编辑完整任务交接摘要', run: () => { void prepareHandoff(); } },
     { id: 'clear', label: '/clear', hint: '开始一段新对话', run: newTask },
     ...(activeConversation ? [
@@ -1690,7 +1696,7 @@ export default function App() {
   }
   slashCommands.forEach((command) => {
     command.group ??= command.id.startsWith('skill-') ? '技能'
-      : ['new', 'clear', 'resume', 'fork', 'undo', 'redo', 'rename', 'export', 'handoff', 'preset', 'import-chatgpt'].includes(command.id) ? '会话'
+      : ['new', 'clear', 'resume', 'fork', 'undo', 'redo', 'rename', 'export', 'handoff', 'preset', 'import-chatgpt', 'bg'].includes(command.id) ? '会话'
         : ['folder', 'pwd', 'cd', 'init', 'ide', 'worktree', 'open'].includes(command.id) ? '工作区'
           : ['model', 'reasoning', 'usage', 'cost', 'advisor'].includes(command.id) ? '模型'
             : ['doctor', 'config', 'release-notes', 'about', 'help', 'version', 'insights'].includes(command.id) ? '诊断'
@@ -2173,7 +2179,12 @@ export default function App() {
         username={username} subtitle={store.connected ? modelName : store.backendStarting ? '后端启动中…' : '后端没有连接'}
         theme={theme} onToggleTheme={toggleTheme} onSettings={() => setSheet('models')}
         pinned={store.pinned} archived={store.archived} unread={store.unread}
-        running={runningConversations} queued={Object.fromEntries(Object.entries(store.queue).map(([id, items]) => [id, items.length]))}
+        running={runningConversations} runs={store.runs} onPauseRun={(runId) => {
+          const run = store.getRun(runId); if (!run) return;
+          try { backend.controlRun(runId, run.status === 'paused' ? 'run.resume' : 'run.pause'); }
+          catch (error) { setToast(`后台任务控制失败：${error instanceof Error ? error.message : String(error)}`); }
+        }} onStopRun={store.stopRun}
+        queued={Object.fromEntries(Object.entries(store.queue).map(([id, items]) => [id, items.length]))}
         waiting={waitingConversations} onSetUnread={store.setConversationUnread}
         onSetWorkspace={(id, workspace) => store.setWorkspace(id, workspace)}
         onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}

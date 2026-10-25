@@ -3,9 +3,10 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import {
   Archive, ArchiveRestore, ArrowUpDown, AppWindow, Blocks, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
   Folder, FolderOpen, GitBranch, GripVertical, Home, Info, KanbanSquare, MessageSquare, MonitorSmartphone, Moon, MoreHorizontal, PanelLeft,
-  Library, ListTodo, Pencil, Pin, PinOff, Plus, Repeat, Search, Settings, Sparkles, SquarePen, Sun, Trash2, Users, X, Wand2, type LucideIcon,
+  Library, ListTodo, Pause, Pencil, Pin, PinOff, Play, Plus, Repeat, Search, Settings, Sparkles, Square, SquarePen, Sun, Trash2, Users, X, Wand2, type LucideIcon,
 } from 'lucide-react';
 import type { ConversationSummary } from '@atlas/backend-adapter';
+import type { AgentRun } from '../../types/runtime';
 import { api } from '../services/api';
 import { backend } from '../store/useAtlasStore';
 import Mark from '../components/Mark';
@@ -118,6 +119,9 @@ function groupByDay(conversations: ConversationSummary[]): Section[] {
 interface SidebarProps {
   view: View; onGo: (view: View) => void; mini: boolean; onToggleMini: () => void;
   conversations: ConversationSummary[]; conversationsLoading: boolean;
+  runs?: AgentRun[];
+  onPauseRun?: (runId: string) => void;
+  onStopRun?: (runId: string) => void;
   activeConversationId: string; loadingConversationId: string | null;
   onOpenConversation: (conversation: ConversationSummary) => void; onNewTask: () => void; creating: boolean; onSearch: () => void;
   username: string; subtitle: string; theme: Theme; onToggleTheme: () => void; onSettings: () => void;
@@ -608,6 +612,8 @@ export default function Sidebar(props: SidebarProps) {
     const isArchived = props.archived.includes(conversation.id);
     const unread = isUnread(conversation.id);
     const running = isRunning(conversation.id);
+    const run = [...(props.runs ?? [])].reverse().find((item) => item.conversationId === conversation.id && !['completed', 'failed', 'cancelled'].includes(item.status));
+    const background = Boolean(run?.background);
     const waiting = isWaiting(conversation);
     const completed = ['completed', 'succeeded', 'success'].includes(activityStatus(conversation.id));
     const failed = ['failed', 'error'].includes(activityStatus(conversation.id));
@@ -653,6 +659,7 @@ export default function Sidebar(props: SidebarProps) {
               : labels[conversation.id] ? <i className="size-2 shrink-0 rounded-[3px]" style={{ background: LABELS.find((label) => label.id === labels[conversation.id])?.color }} aria-label={(LABELS.find((label) => label.id === labels[conversation.id])?.name || '') + '色标签'} />
                 : null}
         <span className="truncate">{displayTitle(conversation.title)}</span>
+        {background && run && !mini && <span className="shrink-0 rounded bg-brand/10 px-1.5 py-0.5 text-[10px] text-brand">后台 · {run.status === 'waiting' ? '等待你' : run.status === 'paused' ? '已暂停' : run.phase === 'verification' ? '验证' : run.phase === 'execution' ? '执行' : '规划'}</span>}
         {(conversation.worktree_path || conversation.worktree_branch) && <GitBranch size={12} className="shrink-0 text-fg-3" aria-label={'工作树' + (conversation.worktree_branch ? '：' + conversation.worktree_branch : '')} />}
         {unread && (waiting || running || completed || failed) && <i className="size-1.5 shrink-0 rounded-full bg-ok" aria-label="有新结果" />}
         {queued > 0 && <span className="shrink-0 rounded bg-brand/15 px-1 text-[10px] text-brand" title={`${queued} 条消息待发送`}>{queued}</span>}
@@ -673,6 +680,10 @@ export default function Sidebar(props: SidebarProps) {
           <MenuLabel>{conversation.title || '会话操作'}</MenuLabel>
           <MenuItem onSelect={() => setDetails(conversation)}><Info />会话信息</MenuItem>
           <MenuItem onSelect={() => setActivityConversation(conversation)}><Repeat />运行动态</MenuItem>
+          {run && <>
+            <MenuItem disabled={!props.onPauseRun} onSelect={() => props.onPauseRun?.(run.id)}>{run.status === 'paused' ? <Play /> : <Pause />}{run.status === 'paused' ? '继续后台任务' : '暂停后台任务'}</MenuItem>
+            <MenuItem disabled={!props.onStopRun} onSelect={() => props.onStopRun?.(run.id)}><Square />终止任务</MenuItem>
+          </>}
           <MenuItem disabled={!previousConversation} onSelect={() => { if (previousConversation) props.onOpenConversation(previousConversation); }}><ChevronLeft />上一个会话（更早）</MenuItem>
           <MenuItem disabled={!nextConversation} onSelect={() => { if (nextConversation) props.onOpenConversation(nextConversation); }}><ChevronRight />下一个会话（更新）</MenuItem>
           <MenuItem onSelect={() => setEditing({ id: conversation.id, title: conversation.title })}><Pencil />重命名</MenuItem>

@@ -46,7 +46,7 @@ class RunState:
         "dynamic_plan_mode", "plan_approval_callback", "plan_mode_callback", "end_conversation_reason",
         "end_conversation_callback",
         "config_override", "ignore_project_config", "ignore_workspace_rules",
-        "resume_attempts", "resume_context",
+        "resume_attempts", "resume_context", "background",
     )
 
     def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
@@ -93,6 +93,7 @@ class RunState:
         # in an endless loop.
         self.resume_attempts = 0
         self.resume_context: dict[str, Any] = {}
+        self.background = False
         self.permission_mode = "full_access"
         self.allowed_paths: list[str] = []
         self.trust_future: asyncio.Future[bool] | None = None
@@ -166,6 +167,7 @@ def _resume_context(run: "RunState") -> dict[str, Any]:
         "config_override": run.config_override,
         "ignore_project_config": run.ignore_project_config,
         "ignore_workspace_rules": run.ignore_workspace_rules,
+        "background": run.background,
     }
     return {key: value for key, value in context.items() if value not in (None, "", [], False)}
 
@@ -258,6 +260,7 @@ class RuntimeManager:
             run.resume_context = (
                 json.loads(row["resume_context"]) if row["resume_context"] else {}
             )
+            run.background = bool(run.resume_context.get("background"))
             if run.status in ("running", "paused", "waiting"):
                 # A restart is an interruption, not a verdict. Runs that were
                 # mid-flight become ``failed`` so nothing in the sidebar

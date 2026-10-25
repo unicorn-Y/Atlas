@@ -24,7 +24,7 @@ const DOCUMENT_KIND: Record<string, string> = { document: '生成了 Word 文档
 
 export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEvent | null {
   // 已知事件才会被渲染；新的 wire 事件（如 lsp.diagnostics、review.findings、X2 的 computer.* / browser.*）加入这里即可显示。
-  const known = new Set(['run.started', 'run.status', 'run.phase', 'message.delta', 'message.completed', 'tool.preparing', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'run.todos', 'rules.loaded', 'run.context.sources', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.output', 'subtask.completed', 'subtask.group_completed', 'check.results', 'rules.trust_required', 'hook.ran', 'run.model_switched', 'run.verify_nudge', 'session.title', 'process.completed', 'run.compaction.progress', 'run.recovery.notice', 'context.window.switched', 'chapter.marked', 'lsp.diagnostics', 'review.findings', 'run.completed', 'run.failed', 'run.cancelled',
+  const known = new Set(['run.started', 'run.status', 'run.phase', 'run.background', 'message.delta', 'message.completed', 'tool.preparing', 'tool.started', 'tool.output', 'tool.completed', 'approval.required', 'approval.responded', 'artifact.updated', 'run.paused', 'run.resumed', 'run.plan.updated', 'run.steered', 'run.usage', 'run.todos', 'rules.loaded', 'run.context.sources', 'input.required', 'run.plan.proposed', 'subtask.started', 'subtask.progress', 'subtask.output', 'subtask.completed', 'subtask.group_completed', 'check.results', 'rules.trust_required', 'hook.ran', 'run.model_switched', 'run.verify_nudge', 'session.title', 'process.completed', 'run.compaction.progress', 'run.recovery.notice', 'context.window.switched', 'chapter.marked', 'lsp.diagnostics', 'review.findings', 'run.completed', 'run.failed', 'run.cancelled',
     // X2 电脑操控：前台确认、恢复与每一步动作（供 ForegroundConfirmCard / ComputerEdgeBar / ComputerReplayPanel）。
     'computer.foreground_required', 'computer.foreground_resumed', 'computer.foreground_denied', 'computer.step', 'computer.frame',
     // X2 浏览器代理：交接确认与结果、面板地址同步、录制中的每一步（供 BrowserHandoffCard / BrowserRecorderPanel）。
@@ -52,6 +52,7 @@ export function applyRuntimeEvent(run: AgentRun, event: AgentEvent): AgentRun {
   const data = event.data;
   let status = run.status;
   let phase = run.phase;
+  const background = event.type === 'run.background' && typeof data.background === 'boolean' ? data.background : run.background;
   if (event.type === 'run.status' && typeof data.status === 'string' && statuses.has(data.status as AgentRunStatus)) status = data.status as AgentRunStatus;
   if (event.type === 'run.phase' && typeof data.phase === 'string' && phases.has(data.phase as AgentRunPhase)) phase = data.phase as AgentRunPhase;
   if (event.type === 'run.paused') status = 'paused';
@@ -93,5 +94,5 @@ export function applyRuntimeEvent(run: AgentRun, event: AgentEvent): AgentRun {
     events = events.slice(events.length - MAX_RUN_EVENTS);
     truncated = true;
   }
-  return { ...run, status, phase, updatedAt: event.timestamp, lastEventSequence: Math.max(run.lastEventSequence, event.sequence), events, eventsTruncated: truncated, droppedEventCount: dropped };
+  return { ...run, status, phase, background, updatedAt: event.timestamp, lastEventSequence: Math.max(run.lastEventSequence, event.sequence), events, eventsTruncated: truncated, droppedEventCount: dropped };
 }

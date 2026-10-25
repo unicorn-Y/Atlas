@@ -439,6 +439,10 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         // The backend reports loaded rules just before the run starts; show them after the request.
         if (earlyRules) { stepsBlock(earlyRules.id).steps.push(earlyRules); earlyRules = null; }
         break;
+      case 'run.background':
+        closeReply(); closeBlocks();
+        items.push({ kind: 'notice', id: event.id, tone: 'switch', text: data.background === true ? '当前运行已转入后台，将继续处理并保留审批与通知。' : '当前运行已切回前台。' });
+        break;
       case 'tool.preparing': {
         const attempt = Number(data.attempt ?? 1);
         const key = `${attempt}:${String(data.index ?? 0)}`;

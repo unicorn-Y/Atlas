@@ -139,6 +139,7 @@ interface AtlasState extends PersistentSlice {
   appendEvent: (event: AgentEvent) => void;
   getRun: (runId: string) => AgentRun | undefined;
   setActiveRun: (runId: string | null) => void;
+  setRunBackground: (runId: string, background: boolean) => void;
   removeRun: (runId: string) => void;
   approve: (eventId: string) => void;
   reject: (eventId: string) => void;
@@ -399,12 +400,25 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
 
     openConversation: async (conversation) => {
       const previousId = get().activeConversationId;
+      const previousRun = get().runs.find((item) => item.conversationId === previousId && !terminal.has(item.status));
       if (previousId && previousId !== conversation.id && get().conversations.some((item) => item.id === previousId)) {
         void backend.summarizeConversationBranch(previousId).catch(() => undefined);
       }
       const run = [...get().runs].reverse().find((item) => item.conversationId === conversation.id);
+      if (previousRun && previousRun.conversationId !== conversation.id) {
+        try { backend.controlRun(previousRun.id, 'run.background'); } catch { /* backend may already have completed the run */ }
+      }
+      if (run && !terminal.has(run.status)) {
+        try { backend.controlRun(run.id, 'run.foreground'); } catch { /* reattach below will restore the live control channel */ }
+      }
       if (!run || terminal.has(run.status)) void reattachActiveRun(conversation.id);
-      set((state) => ({ activeConversationId: conversation.id, activeRunId: run?.id ?? null, loadingMessagesConversationId: null, error: null, errorDetail: null, paused: run?.status === 'paused', unread: state.unread.filter((id) => id !== conversation.id), model: state.conversationModels[conversation.id] ?? state.model }));
+      set((state) => ({
+        runs: state.runs.map((item) => item.conversationId === conversation.id ? { ...item, background: false }
+          : item.conversationId === previousId && !terminal.has(item.status) ? { ...item, background: true } : item),
+        activeConversationId: conversation.id, activeRunId: run?.id ?? null, loadingMessagesConversationId: null,
+        error: null, errorDetail: null, paused: run?.status === 'paused', unread: state.unread.filter((id) => id !== conversation.id),
+        model: state.conversationModels[conversation.id] ?? state.model,
+      }));
       if (run && !terminal.has(run.status)) return;
       // 缓存过的会话先立刻显示上次的内容，刷新在后台进行，不再闪「正在载入」。
       if (!get().conversationMessages[conversation.id]) set({ loadingMessagesConversationId: conversation.id });
@@ -691,7 +705,10 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       const title = get().conversations.find((item) => item.id === run.conversationId)?.title ?? run.title;
       if (event.type === 'approval.required' || event.type === 'input.required' || event.type === 'run.plan.proposed' || event.type === 'rules.trust_required') {
         const heading = event.type === 'input.required' ? 'Atlas 有个问题要问你' : event.type === 'run.plan.proposed' ? 'Atlas 的计划等你确认' : event.type === 'rules.trust_required' ? '要不要信任这个目录的规则文件？' : 'Atlas 需要你确认';
-        notifyDesktop(heading, title, event.type === 'input.required' ? 'question' : 'approval', () => get().setActiveRun(run.id));
+        notifyDesktop(heading, title, event.type === 'input.required' ? 'question' : 'approval', () => {
+          const conversation = get().conversations.find((item) => item.id === run.conversationId);
+          if (conversation) void get().openConversation(conversation); else get().setActiveRun(run.id);
+        });
       }
       if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.cancelled') {
         const background = run.conversationId !== get().activeConversationId || (typeof document !== 'undefined' && !document.hasFocus());
@@ -720,7 +737,22 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     addArtifact: (artifact) => set((state) => ({ artifacts: [...state.artifacts.filter((item) => item.id !== artifact.id), artifact] })),
     setActiveRun: (runId) => {
       const run = get().runs.find((item) => item.id === runId);
-      set({ activeRunId: runId, activeConversationId: run?.conversationId ?? get().activeConversationId, paused: run?.status === 'paused' });
+      if (run && !terminal.has(run.status)) {
+        try { backend.controlRun(run.id, 'run.foreground'); } catch { /* notification can arrive after the run closed */ }
+      }
+      set((state) => ({ runs: state.runs.map((item) => item.id === runId ? { ...item, background: false }
+        : item.conversationId === state.activeConversationId && !terminal.has(item.status) ? { ...item, background: true } : item),
+      activeRunId: runId, activeConversationId: run?.conversationId ?? state.activeConversationId, paused: run?.status === 'paused' }));
+    },
+    setRunBackground: (runId, background) => {
+      const run = get().getRun(runId);
+      if (!run || terminal.has(run.status)) return;
+      try { backend.controlRun(runId, background ? 'run.background' : 'run.foreground'); }
+      catch (error) { set(errorPatch(error, '后台运行状态切换失败')); }
+      set((state) => ({
+        runs: state.runs.map((item) => item.id === runId ? { ...item, background } : item),
+        ...(background && state.activeRunId === runId ? { activeRunId: null, paused: false } : {}),
+      }));
     },
     removeRun: (runId) => set((state) => {
       const runs = state.runs.filter((run) => run.id !== runId);
@@ -1233,7 +1265,7 @@ async function reattachActiveRun(conversationId: string) {
       if (get().getRun(item.run_id)) continue;
       const conversation = get().conversations.find((entry) => entry.id === conversationId);
       const timestamp = new Date().toISOString();
-      const run: AgentRun = { id: item.run_id, conversationId, title: conversation?.title ?? '运行中的任务', status: 'running', phase: 'execution', startedAt: timestamp, updatedAt: timestamp, lastEventSequence: 0, events: [] };
+      const run: AgentRun = { id: item.run_id, conversationId, title: conversation?.title ?? '运行中的任务', status: 'running', phase: 'execution', startedAt: timestamp, updatedAt: timestamp, lastEventSequence: 0, events: [], background: get().activeConversationId !== conversationId };
       set((state) => state.activeConversationId === conversationId
         ? { runs: [...state.runs, run], activeRunId: run.id, busy: true }
         : { runs: [...state.runs, run] });

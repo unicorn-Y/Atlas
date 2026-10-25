@@ -2,7 +2,7 @@ export type AgentRunStatus = 'idle' | 'planning' | 'running' | 'waiting' | 'paus
 export type AgentRunPhase = 'planning' | 'reasoning' | 'execution' | 'verification' | 'final';
 
 export type AgentEventType =
-  | 'run.started' | 'run.status' | 'run.phase'
+  | 'run.started' | 'run.status' | 'run.phase' | 'run.background'
   | 'message.delta' | 'message.completed'
   | 'tool.preparing' | 'tool.started' | 'tool.output' | 'tool.completed' | 'approval.required' | 'approval.responded'
   | 'artifact.updated' | 'run.paused' | 'run.resumed'
@@ -40,6 +40,8 @@ export interface AgentRun {
   updatedAt: string;
   lastEventSequence: number;
   events: AgentEvent[];
+  /** True when this conversation's run is continuing without owning the chat pane. */
+  background?: boolean;
   /** 长会话有界化：events 超出上限后丢掉了最旧的事件，时间线头部会显示占位。 */
   eventsTruncated?: boolean;
   /** 已被丢弃的最旧事件条数。 */

@@ -152,6 +152,14 @@ async def ws_chat(
                     await services.runtime_mgr.persist_run(run)
                     await services.runtime_mgr.send(conn_id, env)
 
+            elif msg_type in {"run.background", "run.foreground"}:
+                run = services.runtime_mgr.runs.get(str(data.get("run_id", "")))
+                if run and run.status not in {"completed", "failed", "cancelled"}:
+                    run.background = msg_type == "run.background"
+                    env = run.next_envelope("run.background", {"background": run.background})
+                    await services.runtime_mgr.persist_run(run)
+                    await services.runtime_mgr.send(conn_id, env)
+
             elif msg_type == "approval.response":
                 event_id = str(data.get("event_id", ""))
                 requested_choice = str(data.get("choice", "deny"))

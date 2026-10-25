@@ -717,9 +717,9 @@ export class BackendAdapter {
     socket.send(JSON.stringify({ type: 'run.cancel', run_id: runId }));
   }
 
-  controlRun(runId: string, type: 'run.pause' | 'run.resume'): void {
+  controlRun(runId: string, type: 'run.pause' | 'run.resume' | 'run.background' | 'run.foreground'): void {
     if (!this.live) {
-      this.mockControls.get(runId)?.(type === 'run.pause' ? 'run.paused' : 'run.resumed');
+      if (type === 'run.pause' || type === 'run.resume') this.mockControls.get(runId)?.(type === 'run.pause' ? 'run.paused' : 'run.resumed');
       return;
     }
     if (!this.hasEventProtocol()) throw new BackendError('这个后端版本不支持暂停/继续，请升级 Atlas 后端', 'This backend does not support Agent Run controls');
