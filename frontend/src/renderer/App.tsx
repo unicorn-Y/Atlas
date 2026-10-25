@@ -37,7 +37,8 @@ const FeatureLessons = lazy(() => import('./components/FeatureLessons'));
 const ResumePickerDialog = lazy(() => import('./components/ResumePickerDialog'));
 const FallbackModelsDialog = lazy(() => import('./components/FallbackModelsDialog'));
 const IDEManagerDialog = lazy(() => import('./components/IDEManagerDialog'));
-import { applyFileBindings, loadBindings, matchShortcut } from './services/shortcuts';
+import { applyFileBindings, bindingsForAction, loadBindings, matchShortcut, SHORTCUTS, shortcutSignature } from './services/shortcuts';
+import { resolveSlashAvailability, slashCommandUsage } from './services/slashCommands';
 import type { CustomCommandInfo, PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
 import Mark, { MarkDefs } from './components/Mark';
@@ -316,6 +317,7 @@ export default function App() {
   const [resumePickerOpen, setResumePickerOpen] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [keymapOpen, setKeymapOpen] = useState(false);
+  const [whichKeyOpen, setWhichKeyOpen] = useState(false);
   const [fallbackOpen, setFallbackOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [computerReady, setComputerReady] = useState(false);
@@ -403,6 +405,9 @@ export default function App() {
   const [tabs, setTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
   const [closedTabs, setClosedTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('closed-tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
   const [bindings, setBindings] = useState(loadBindings);
+  const whichKeyItems = SHORTCUTS.flatMap((item) => bindingsForAction(bindings[item.action])
+    .filter((combo) => shortcutSignature(combo).startsWith('CTRL+ALT+'))
+    .map((combo) => ({ combo: combo.split('+').slice(-1)[0], label: item.label, action: item.action })));
   useEffect(() => {
     if (!store.connected) return;
     let active = true;
@@ -1429,6 +1434,18 @@ export default function App() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (voiceOpen || (event.target as HTMLElement | null)?.closest?.('[data-shortcut-recorder]')) return;
+      if (whichKeyOpen && event.isTrusted) {
+        event.preventDefault();
+        setWhichKeyOpen(false);
+        if (event.key === 'Escape' || ['Control', 'Meta', 'Alt', 'Shift'].includes(event.key)) return;
+        const signature = shortcutSignature(`Ctrl+Alt+${event.key}`);
+        const hasAction = SHORTCUTS.some(({ action }) => bindingsForAction(bindings[action]).some((combo) => shortcutSignature(combo) === signature));
+        if (hasAction) window.dispatchEvent(new KeyboardEvent('keydown', { key: event.key, ctrlKey: true, altKey: true, bubbles: true }));
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.altKey && event.code === 'Space') {
+        event.preventDefault(); setWhichKeyOpen(true); return;
+      }
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 't') {
         event.preventDefault(); reopenClosedTab(); return;
       }
@@ -1906,6 +1923,8 @@ export default function App() {
       else setToast('用法：/wake on 或 /wake off');
     } },
     { id: 'help', label: '/help', hint: '列出全部斜杠命令及用法', run: showHelp },
+    { id: 'commands', label: '/commands', hint: '列出当前可用的全部命令及用法', run: showHelp },
+    { id: 'redraw', label: '/redraw', hint: '刷新当前界面布局', run: () => { window.dispatchEvent(new Event('resize')); setToast('界面已刷新'); } },
     { id: 'powerup', label: '/powerup', hint: '打开可重放的 Atlas 功能课程', run: () => setFeatureLessonsOpen(true) },
     { id: 'doctor', label: '/doctor', hint: '检查安装与配置并查看修复建议', run: () => setSheet('diagnostics') },
     { id: 'warnings', label: '/warnings', hint: '查看持久告警历史', run: () => { setSheet('diagnostics'); window.setTimeout(() => window.dispatchEvent(new CustomEvent('atlas:diagnostics-tab', { detail: 'alerts' })), 0); } },
@@ -1958,19 +1977,26 @@ export default function App() {
     ...store.customCommands.map((command) => ({
       id: `command-${command.id}`, label: `/${command.name}`,
       hint: command.description || (command.argument_hint ? `参数：${command.argument_hint}` : '自定义命令'),
-      group: commandGroup(command.source), source: command.source || '自定义命令', takesArgument: Boolean(command.argument_hint),
+      group: commandGroup(command.source), source: command.source || '自定义命令', takesArgument: Boolean(command.argument_hint), argumentHint: command.argument_hint || undefined,
       run: (argument: string) => void runCustomCommand(command, argument),
     })),
   ];
+  const conversationCommands = new Set(['tag', 'rename', 'fork', 'rewind', 'side', 'btw', 'compact', 'share', 'cost', 'permissions', 'goal', 'chapter']);
+  const idleCommands = new Set(['undo', 'redo', 'fork', 'rewind', 'compact']);
+  slashCommands.forEach((command) => {
+    if (conversationCommands.has(command.id)) command.requiresConversation = true;
+    if (idleCommands.has(command.id)) command.requiresIdle = true;
+  });
   function showHelp() {
-    const categories = ['会话', '工作区', '模型', '工具', '诊断', '技能'];
     setRawTextTitle('命令帮助');
-    const commandIndex = categories.map((category) => {
-      const commands = slashCommands.filter((command) => command.group === category
-        || (category === '工作区' && command.group === '任务')
-        || (category === '模型' && command.group === '状态'));
-      return commands.length ? `## ${category}\n${commands.map((command) => `${command.label}${command.takesArgument ? ' <参数>' : ''} — ${command.hint}`).join('\n')}` : '';
-    }).filter(Boolean).join('\n\n');
+    const groups = new Map<string, SlashCommand[]>();
+    for (const command of slashCommands) {
+      const category = command.group === '任务' ? '工作区' : command.group === '状态' ? '模型' : command.group || '其他';
+      groups.set(category, [...(groups.get(category) ?? []), command]);
+    }
+    const commandIndex = [...groups].map(([category, commands]) =>
+      `## ${category}\n${commands.map((command) => { const resolved = resolveSlashAvailability(command, { hasConversation: Boolean(activeConversation), busy: store.busy }); return `${slashCommandUsage(resolved)} — ${resolved.disabledReason ? `不可用：${resolved.disabledReason}；` : ''}${resolved.hint ?? ''}`; }).join('\n')}`,
+    ).join('\n\n');
     setRawText(`${commandIndex}\n\n## 快捷键\n- Ctrl / ⌘ + K：搜索会话和命令\n- Ctrl / ⌘ + ,：打开设置\n- Enter：发送；Shift + Enter：换行\n- Esc：关闭当前弹层\n\n更多快捷键可在「设置 → 快捷键」查看和自定义。`);
   }
   slashCommands.forEach((command) => {
@@ -2184,6 +2210,7 @@ export default function App() {
     onLongPaste: (text: string) => { addDocuments([new File([text], `粘贴的文本-${new Date().toLocaleTimeString().replace(/:/g, '')}.txt`, { type: 'text/plain' })]); setToast(`粘贴内容有 ${text.length} 个字，已转成附件`); },
     models: store.models, model: store.model, onSelectModel: (id: string) => void store.selectModel(id), onManageModels: () => setSheet('models'),
     status: composerStatus, autoFocus: true, commands: slashCommands,
+    commandAvailability: { hasConversation: Boolean(activeConversation), busy: store.busy },
     contextUsage: usageSummary(activeEvents)?.context,
     contextFiles: [...new Set([
       ...(activeRun ? store.runPrompts[activeRun.id]?.refs?.files ?? [] : []),
@@ -2743,6 +2770,10 @@ export default function App() {
     {resumePickerOpen && <Suspense fallback={null}><ResumePickerDialog apiBaseUrl={store.apiBaseUrl} conversations={store.conversations} onClose={() => setResumePickerOpen(false)} onSelect={openConversation} /></Suspense>}
     {transcriptOpen && <TranscriptDialog conversationId={store.activeConversationId} messages={threadMessages} events={activeEvents} onClose={() => setTranscriptOpen(false)} />}
     {keymapOpen && <KeymapDialog onClose={() => setKeymapOpen(false)} />}
+    {whichKeyOpen && <div role="dialog" aria-label="快捷键前缀提示" className="fixed inset-x-4 bottom-5 z-[100] mx-auto max-w-2xl rounded-xl border border-line bg-panel p-3 shadow-xl">
+      <div className="mb-2 flex items-center justify-between"><b className="text-[12.5px] text-fg">Ctrl+Alt+Space · 可用快捷键</b><span className="text-[11px] text-fg-3">按提示中的键执行 · Esc 关闭</span></div>
+      <div className="flex flex-wrap gap-1.5">{whichKeyItems.map((item) => <span key={`${item.action}:${item.combo}`} className="inline-flex items-center gap-2 rounded-lg bg-sunken px-2 py-1 text-[11.5px] text-fg-2"><kbd className="font-mono text-fg">{item.combo}</kbd>{item.label}</span>)}</div>
+    </div>}
     {fallbackOpen && <Suspense fallback={null}><FallbackModelsDialog apiBaseUrl={store.apiBaseUrl} currentModel={store.model} onClose={() => setFallbackOpen(false)} onToast={notify} /></Suspense>}
 
     {voiceOpen && <Suspense fallback={null}><VoiceOverlay

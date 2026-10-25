@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Drag
 import { Accessibility, ArrowLeft, ArrowRight, ArrowUp, AtSign, Camera, ChevronDown, Code2, ExternalLink, File as FileIcon, Film, Hash, ImagePlus, Image as ImageIcon, Keyboard, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, Sparkles, RotateCcw, Save, Trash2, X, type LucideIcon } from 'lucide-react';
 import type { ModelInfo } from '@atlas/backend-adapter';
 import { fuzzyScore } from '../services/fuzzy';
-import { matchSlashCommands, registerSlashCommands, type SlashCommand } from '../services/slashCommands';
+import { matchSlashCommands, registerSlashCommands, resolveSlashAvailability, type SlashCommand } from '../services/slashCommands';
 import { cn } from '../ui/cn';
 import { ContextUsageControl } from './TokenUsage';
 import type { UsageSummary } from './runInsights';
@@ -104,6 +104,7 @@ function matchSkillSuggestions(query: string, commands: readonly SlashCommand[])
 
 /** 已发送消息的召回历史（像终端的 ↑ 一样）；全局共用一份，localStorage 持久化最近 50 条。 */
 const HISTORY_KEY = 'atlas.composer-history';
+const SLASH_HISTORY_KEY = 'atlas.slash-command-history';
 const HISTORY_LIMIT = 50;
 function readHistory(): string[] {
   try {
@@ -117,6 +118,26 @@ function appendHistory(text: string): string[] {
   const next = [...readHistory().filter((item) => item !== trimmed), trimmed].slice(-HISTORY_LIMIT);
   try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
   return next;
+}
+function readSlashHistory(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(SLASH_HISTORY_KEY) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string' && item.startsWith('/') && item.trim().length > 1).slice(-HISTORY_LIMIT) : [];
+  } catch { return []; }
+}
+function appendSlashHistory(text: string): string[] {
+  const value = text.trim();
+  if (!value.startsWith('/') || value.length < 2) return readSlashHistory();
+  const next = [...readSlashHistory().filter((item) => item !== value), value].slice(-HISTORY_LIMIT);
+  try { localStorage.setItem(SLASH_HISTORY_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+  return next;
+}
+function commandFrequency(history: readonly string[]): Record<string, number> {
+  return history.reduce<Record<string, number>>((counts, item) => {
+    const id = item.trim().split(/\s+/, 1)[0]?.slice(1).toLowerCase();
+    if (id) counts[id] = (counts[id] ?? 0) + 1;
+    return counts;
+  }, {});
 }
 
 interface ComposerProps {
@@ -146,6 +167,7 @@ interface ComposerProps {
   /** Content shown above the text area, e.g. the live run status. */
   header?: ReactNode;
   commands?: SlashCommand[];
+  commandAvailability?: { hasConversation: boolean; busy: boolean };
   /** Non-image attachments, shown as chips. */
   files?: Array<{ name: string; size: number }>;
   onRemoveFile?: (index: number) => void;
@@ -265,11 +287,14 @@ export default function Composer(props: ComposerProps) {
   const historyRef = useRef<string[]>([]);
   const historyDraftRef = useRef('');
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const slashHistoryRef = useRef<string[]>([]);
+  const slashHistoryDraftRef = useRef('');
+  const [slashHistoryIndex, setSlashHistoryIndex] = useState<number | null>(null);
   const vimOperator = useRef<'d' | 'y' | 'c' | null>(null);
   const vimAnchor = useRef(0);
   const vimRegister = useRef('');
   const vimUndo = useRef<string[]>([]);
-  useEffect(() => { historyRef.current = readHistory(); }, []);
+  useEffect(() => { historyRef.current = readHistory(); slashHistoryRef.current = readSlashHistory(); }, []);
   useEffect(() => {
     const refresh = () => setShowShortcutHints(readShortcutHints());
     window.addEventListener('atlas:shortcut-hints', refresh);
@@ -338,8 +363,9 @@ export default function Composer(props: ComposerProps) {
   const previewOpen = previewIndex !== null;
   const previewTriggerRef = useRef<HTMLButtonElement | null>(null);
   const previewCloseRef = useRef<HTMLButtonElement | null>(null);
-  const registeredCommands = useMemo(() => registerSlashCommands(props.commands ?? []), [props.commands]);
-  const commandMatches = matchCommands(props.value, registeredCommands);
+  const registeredCommands = useMemo(() => registerSlashCommands(props.commands ?? []).map((command) => resolveSlashAvailability(command, props.commandAvailability ?? { hasConversation: true, busy: false })), [props.commands, props.commandAvailability]);
+  const slashFrequency = commandFrequency(slashHistoryRef.current);
+  const commandMatches = matchSlashCommands(props.value, registeredCommands, slashFrequency);
   const parsedMention = mentionAt(props.value);
   const mention = parsedMention?.trigger === '$' || props.findMentions ? parsedMention : null;
   const skillMatches = useMemo(
@@ -418,7 +444,10 @@ export default function Composer(props: ComposerProps) {
   }, [previewIndex, props.attachments.length]);
 
   const runCommand = (command: SlashCommand) => {
+    if (command.disabledReason) return;
     const argument = props.value.replace(/^\/\S*\s?/, '');
+    slashHistoryRef.current = appendSlashHistory(`${command.label}${argument ? ` ${argument}` : ''}`);
+    setSlashHistoryIndex(null);
     props.onChange('');
     command.run(argument);
   };
@@ -576,6 +605,27 @@ export default function Composer(props: ComposerProps) {
       props.onCyclePermission();
       return;
     }
+    const slashPrefix = /^\/(\S*)(?:\s[\s\S]*)?$/.exec(props.value);
+    if (!event.nativeEvent.isComposing && slashPrefix
+      && (event.key === 'ArrowUp' || (event.key === 'ArrowDown' && slashHistoryIndex !== null))) {
+      const prefix = `/${slashPrefix[1].toLocaleLowerCase()}`;
+      const candidates = slashHistoryRef.current.filter((item) => item.toLocaleLowerCase().startsWith(prefix));
+      if (candidates.length) {
+        event.preventDefault();
+        if (slashHistoryIndex === null) slashHistoryDraftRef.current = props.value;
+        const nextIndex = slashHistoryIndex === null
+          ? candidates.length - 1
+          : event.key === 'ArrowUp'
+            ? Math.max(0, slashHistoryIndex - 1)
+            : slashHistoryIndex + 1 >= candidates.length ? null : slashHistoryIndex + 1;
+        setSlashHistoryIndex(nextIndex);
+        props.onChange(nextIndex === null ? slashHistoryDraftRef.current : candidates[nextIndex]);
+        return;
+      }
+    }
+    if (event.key === 'Escape' && slashHistoryIndex !== null) {
+      event.preventDefault(); setSlashHistoryIndex(null); props.onChange(slashHistoryDraftRef.current); return;
+    }
     if (matches.length && !event.nativeEvent.isComposing) {
       if (event.key === 'ArrowDown') { event.preventDefault(); setCursor((value) => (value + 1) % matches.length); return; }
       if (event.key === 'ArrowUp') { event.preventDefault(); setCursor((value) => (value - 1 + matches.length) % matches.length); return; }
@@ -583,7 +633,7 @@ export default function Composer(props: ComposerProps) {
         event.preventDefault();
         const item = matches[cursor];
         if ('skillName' in item) choose(item);
-        else if ('run' in item) props.onChange(`${item.label}${item.takesArgument ? ' ' : ''}`);
+        else if ('run' in item && !item.disabledReason) props.onChange(`${item.label}${item.takesArgument ? ' ' : ''}`);
         else choose(item);
         return;
       }
@@ -621,15 +671,17 @@ export default function Composer(props: ComposerProps) {
       dragging && 'shadow-[var(--shadow-raised),0_0_0_2px_var(--brand)]')}>
     {matches.length > 0 && <div id={suggestionListId} role="listbox" aria-label={mention && !commandMatches.length ? (mention.trigger === '@' ? '引用文件' : mention.trigger === '#' ? '引用对话' : '技能文本提及') : '命令'} className="pop anim-pop absolute right-0 bottom-[calc(100%+8px)] left-0 z-30 max-h-[300px] overflow-auto rounded-xl p-1.5">
       {matches.map((item, index) => <button id={`${suggestionListId}-${index}`} key={item.id} type="button" role="option"
+        disabled={'disabledReason' in item && Boolean(item.disabledReason)}
         aria-selected={index === cursor} aria-posinset={index + 1} aria-setsize={matchCount} tabIndex={screenReaderMode ? -1 : undefined}
         onMouseMove={() => setCursor(index)} onMouseDown={(event) => { event.preventDefault(); choose(item); }}
-        className={cn('flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-[13.5px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand', index === cursor && 'bg-selected')}>
+        className={cn('flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-[13.5px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-45', index === cursor && 'bg-selected')}>
         {'skillName' in item ? <span className="flex shrink-0 items-center gap-1.5 font-mono text-[13px] text-fg"><Sparkles size={13} className="text-brand" />{item.label}</span>
           : 'run' in item ? <span className="shrink-0 font-mono text-[13px] text-fg">{item.label}</span>
           : <span className="flex min-w-0 shrink-0 items-center gap-1.5 text-fg">{item.kind === 'conversation' ? <Hash size={13} className="text-fg-3" /> : <AtSign size={13} className="text-fg-3" />}<span className="max-w-[260px] truncate">{item.label}</span></span>}
         {('run' in item || 'skillName' in item) && item.source && <span className="shrink-0 rounded bg-sunken px-1.5 py-0.5 text-[10.5px] text-fg-3">{item.source}</span>}
         {('run' in item || 'skillName' in item) && item.group && <span className="shrink-0 rounded bg-sunken px-1.5 py-0.5 text-[10.5px] text-fg-3">{item.group}</span>}
-        {item.hint && <span className="min-w-0 truncate text-[12.5px] text-fg-3">{item.hint}</span>}
+        {'run' in item && item.takesArgument && <span className="shrink-0 font-mono text-[11px] text-fg-3">{`<${item.argumentHint || '参数'}>`}</span>}
+        {item.hint && <span className="min-w-0 truncate text-[12.5px] text-fg-3">{'run' in item ? item.disabledReason || item.hint : item.hint}</span>}
       </button>)}
     </div>}
     {dragging && <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-[inherit] bg-brand-soft text-[13.5px] font-medium text-fg">松开添加附件</div>}
@@ -655,7 +707,7 @@ export default function Composer(props: ComposerProps) {
       className={cn('block w-full resize-none border-0 bg-transparent p-0 text-fg outline-none placeholder:text-fg-3',
         hero ? 'min-h-[60px] text-[16px] leading-[1.65]' : 'min-h-[26px] text-[15px] leading-[1.6]')} />
     <span id={`${textareaId}-help`} className="sr-only">按 Enter 发送，Shift 加 Enter 换行；建议列表可用上下方向键选择、Tab 补全，Escape 关闭。行首 `# 内容` 或 `#记住：内容` 会在消息照常发送后打开记忆审阅；代码围栏内不触发，写 `\#` 可表示普通文本。选中文字后按 Alt 加 Shift 加 A，可将选中文字放入消息草稿。</span>
-    {showShortcutHints && <div className="mt-1 flex items-center gap-2 text-[10.5px] text-fg-3" aria-label="快捷键提示">Enter 发送 · Shift+Enter 换行 · Ctrl+P 切换模型 · Ctrl+Shift+S 暂存 · ? 或 /keymap 查看快捷键 {vimEnabled && <span role="status" aria-label={`Vim ${t(vimMode === 'normal' ? '普通模式' : vimMode === 'visual' ? '可视模式' : '插入模式', readLocale())}`} className="rounded bg-brand-soft px-1.5 py-0.5 font-mono text-brand">VIM {t(vimMode === 'normal' ? '普通模式' : vimMode === 'visual' ? '可视模式' : '插入模式', readLocale())}</span>}</div>}
+    {showShortcutHints && <div className="mt-1 flex items-center gap-2 text-[10.5px] text-fg-3" aria-label="快捷键提示">Enter 发送 · Shift+Enter 换行 · Ctrl+P 切换模型 · Ctrl+Shift+S 暂存 · Ctrl+Alt+Space 显示组合键提示 · ? 或 /keymap 查看快捷键 {vimEnabled && <span role="status" aria-label={`Vim ${t(vimMode === 'normal' ? '普通模式' : vimMode === 'visual' ? '可视模式' : '插入模式', readLocale())}`} className="rounded bg-brand-soft px-1.5 py-0.5 font-mono text-brand">VIM {t(vimMode === 'normal' ? '普通模式' : vimMode === 'visual' ? '可视模式' : '插入模式', readLocale())}</span>}</div>}
     <span id={`${textareaId}-screen-reader-help`} className={screenReaderMode ? 'sr-only' : 'hidden'}>屏幕阅读增强已开启。建议列表打开时焦点保留在消息输入框；使用上下方向键浏览，当前项和运行提示会自动播报，Enter 选择，Escape 关闭。</span>
     <span id={`${textareaId}-status`} role={screenReaderMode ? undefined : 'status'} aria-live={screenReaderMode ? undefined : 'polite'}
       aria-atomic={screenReaderMode ? undefined : 'true'} aria-hidden={screenReaderMode || undefined}
