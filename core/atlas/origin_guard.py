@@ -102,7 +102,19 @@ class OriginGuard:
             scope["type"] == "http" and scope["method"] == "GET"
             and scope.get("path") == "/remote"
         )
-        if is_preflight or public_remote_document or is_trusted(origin, token, self.extra_origins(), fetch_site, client_host):
+        loopback_dashboard_surface = False
+        if scope["type"] == "http" and client_host:
+            try:
+                loopback_dashboard_surface = (
+                    ipaddress.ip_address(client_host).is_loopback
+                    and (scope.get("path") == "/dashboard"
+                         or str(scope.get("path", "")).startswith("/dashboard/assets/")
+                         or str(scope.get("path", "")).startswith("/api/dashboard/"))
+                )
+            except ValueError:
+                loopback_dashboard_surface = False
+        if (is_preflight or public_remote_document or loopback_dashboard_surface
+                or is_trusted(origin, token, self.extra_origins(), fetch_site, client_host)):
             await self.app(scope, receive, send)
             return
         if scope["type"] == "websocket":

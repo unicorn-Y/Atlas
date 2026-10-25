@@ -55,6 +55,7 @@ from atlas.api.projects_router import router as projects_router
 from atlas.api.u6_router import router as u6_router
 from atlas.api.ultraplan_router import router as ultraplan_router
 from atlas.api.records_router import router as records_router
+from atlas.api.dashboard_router import router as dashboard_router
 from atlas.api.remote_router import router as remote_router
 from atlas.api.runtime import RuntimeManager
 from atlas.api.runtime_router import router as runtime_router
@@ -145,6 +146,7 @@ def create_app(
         u6_router,
         records_router,
         remote_router,
+        dashboard_router,
         skills_router,
         runtime_router,
         runtime_ws_router,

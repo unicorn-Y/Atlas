@@ -214,8 +214,9 @@ def review_command(workspace: Path, model: str | None, ci: bool, as_json: bool, 
 
 @main.command()
 @click.option("--port", default=None, type=int, help="Server port (default: from config)")
+@click.option("--host", default=None, help="Bind host (for example 127.0.0.1)")
 @click.option("--reload", is_flag=True, help="Enable auto-reload")
-def serve(port: int | None, reload: bool) -> None:
+def serve(port: int | None, host: str | None, reload: bool) -> None:
     """Start the Atlas backend server."""
     import uvicorn
 
@@ -223,7 +224,7 @@ def serve(port: int | None, reload: bool) -> None:
 
     cfg = get_config()
     actual_port = port or cfg.server_port
-    host = cfg.server_host
+    host = host or cfg.server_host
 
     console.print(f"[bold]Atlas[/bold] server starting on {host}:{actual_port}...")
     uvicorn.run(
@@ -232,6 +233,125 @@ def serve(port: int | None, reload: bool) -> None:
         port=actual_port,
         reload=reload,
     )
+
+
+@main.group("dashboard")
+def dashboard_group() -> None:
+    """Start, inspect, or stop the loopback-only browser console."""
+
+
+def _dashboard_control_file() -> Path:
+    from atlas.dashboard_access import control_path
+
+    return control_path()
+
+
+@dashboard_group.command("start")
+@click.option("--port", default=None, type=int, help="Dashboard API port (default: Atlas server port)")
+def dashboard_start(port: int | None) -> None:
+    """Enable the local dashboard and start a loopback backend only when needed."""
+    import httpx
+    import secrets
+    import subprocess
+    import time
+    from atlas.config import get_config
+    from atlas.dashboard_access import create_access, read_control
+
+    selected_port = port or get_config().server_port
+    control = _dashboard_control_file()
+    prior = read_control(include_expired=True)
+    owns_server = bool(prior.get("owns_server"))
+    shutdown_token = str(prior.get("shutdown_token") or "")
+    pid = int(prior.get("pid") or 0)
+    try:
+        response = _daemon_request("GET", "/api/health", selected_port, timeout=1.0)
+        if not response.is_success:
+            raise httpx.HTTPError(f"backend returned HTTP {response.status_code}")
+    except httpx.HTTPError:
+        control.parent.mkdir(parents=True, exist_ok=True)
+        log_path = control.parent.parent / "logs" / "dashboard.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        shutdown_token = secrets.token_urlsafe(32)
+        env = {**os.environ, "ATLAS_SHUTDOWN_TOKEN": shutdown_token}
+        flags = 0x00000008 | 0x00000200 if os.name == "nt" else 0
+        with log_path.open("ab") as log_file:
+            process = subprocess.Popen(
+                [sys.executable, "-m", "atlas.cli", "serve", "--port", str(selected_port), "--host", "127.0.0.1"],
+                env=env, cwd=os.getcwd(), stdin=subprocess.DEVNULL, stdout=log_file, stderr=log_file,
+                creationflags=flags, start_new_session=os.name != "nt",
+            )
+        pid, owns_server = process.pid, True
+        deadline = time.time() + 60
+        while time.time() < deadline and process.poll() is None:
+            try:
+                response = _daemon_request("GET", "/api/health", selected_port, timeout=1.0)
+                if response.is_success:
+                    break
+            except httpx.HTTPError:
+                pass
+            time.sleep(0.5)
+        else:
+            raise click.ClickException(f"Atlas dashboard backend failed to start; see {log_path}")
+
+    token, info = create_access(port=selected_port, pid=pid, owns_server=owns_server, shutdown_token=shutdown_token)
+    url = f"http://127.0.0.1:{selected_port}/dashboard#{token}"
+    console.print(f"本地控制台已启动：{url}")
+    console.print(f"PID={info['pid']} · 仅 loopback · 访问令牌有效至 {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(info['expires_at']))}")
+
+
+@dashboard_group.command("status")
+def dashboard_status() -> None:
+    """Show local dashboard and backend health without printing its token."""
+    import httpx
+    from atlas.dashboard_access import read_control
+
+    info = read_control()
+    if not info:
+        console.print("本地控制台未运行。使用 atlas dashboard start 启动。")
+        return
+    try:
+        response = _daemon_request("GET", "/api/health", int(info["port"]), timeout=2.0)
+        if not response.is_success:
+            raise httpx.HTTPError(f"HTTP {response.status_code}")
+    except (httpx.HTTPError, KeyError, ValueError, TypeError) as exc:
+        console.print(f"控制台记录存在，但 Atlas 后端不可用：{type(exc).__name__}")
+        return
+    console.print(f"本地控制台已就绪：http://127.0.0.1:{info['port']}/dashboard · PID={info['pid']} · loopback only")
+
+
+@dashboard_group.command("stop")
+def dashboard_stop() -> None:
+    """Revoke dashboard access and stop only a backend launched by this command."""
+    import json as json_module
+    import time
+    import httpx
+    from atlas.dashboard_access import control_path, revoke_access
+
+    path = control_path()
+    try:
+        info = json_module.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json_module.JSONDecodeError):
+        console.print("本地控制台未运行。")
+        revoke_access()
+        return
+    revoke_access()
+    if info.get("owns_server"):
+        port = int(info.get("port", 0))
+        token = str(info.get("shutdown_token") or "")
+        try:
+            _daemon_request("POST", "/api/runtime/shutdown", port, token=token, timeout=3.0)
+            deadline = time.time() + 30
+            while time.time() < deadline:
+                try:
+                    _daemon_request("GET", "/api/health", port, timeout=0.5)
+                except httpx.HTTPError:
+                    break
+                time.sleep(0.25)
+            else:
+                raise click.ClickException("Dashboard backend did not release its loopback port within 30 seconds")
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
+            raise click.ClickException(f"Dashboard backend stop failed: {type(exc).__name__}") from exc
+    console.print("本地控制台访问已撤销；由 dashboard 启动的后端已清理。")
 
 
 @main.group()

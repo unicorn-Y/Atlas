@@ -16,6 +16,7 @@ export default defineConfig({
       input: {
         app: resolve(import.meta.dirname, 'index.html'),
         'floating-composer': resolve(import.meta.dirname, 'floating-composer.html'),
+        dashboard: resolve(import.meta.dirname, 'dashboard.html'),
       },
     },
   },

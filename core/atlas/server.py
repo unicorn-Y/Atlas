@@ -553,6 +553,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             db_path=cfg.db_path.parent / "channels.sqlite",
             config_path=cfg.db_path.parent / "channel-configs.json",
         )
+        app.state.services.channel_manager = channel_manager
 
         async def transcribe_channel_audio(payload: bytes) -> str:
             asr = app.state.services.asr_manager

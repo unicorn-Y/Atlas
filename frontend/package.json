@@ -109,6 +109,20 @@
     ],
     "extraResources": [
       {
+        "from": "dist/dashboard.html",
+        "to": "atlas/dashboard/dashboard.html"
+      },
+      {
+        "from": "dist/assets",
+        "to": "atlas/dashboard/assets",
+        "filter": [
+          "dashboard-*",
+          "rolldown-runtime-*",
+          "jsx-runtime-*",
+          "client-*"
+        ]
+      },
+      {
         "from": "../core/atlas",
         "to": "atlas/core/atlas",
         "filter": [
