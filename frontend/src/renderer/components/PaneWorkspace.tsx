@@ -5,7 +5,7 @@ import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
 import SidePane from './SidePane';
 
 type Leaf = { kind: 'pane'; id: string };
-type Split = { kind: 'split'; axis: 'row' | 'column'; ratio: number; first: PaneNode; second: PaneNode };
+type Split = { kind: 'split'; splitId: string; axis: 'row' | 'column'; ratio: number; first: PaneNode; second: PaneNode };
 type PaneNode = Leaf | Split;
 const STORAGE = 'atlas.preference.pane-layout';
 const isLeaf = (node: PaneNode): node is Leaf => node.kind === 'pane';
@@ -19,7 +19,7 @@ function remove(node: PaneNode | null, id: string): PaneNode | null {
 }
 function splitAt(node: PaneNode, target: string, id: string, axis: Split['axis'], before: boolean): PaneNode {
   if (isLeaf(node)) return node.id === target
-    ? { kind: 'split', axis, ratio: 0.5, first: before ? { kind: 'pane', id } : node, second: before ? node : { kind: 'pane', id } }
+    ? { kind: 'split', splitId: crypto.randomUUID(), axis, ratio: 0.5, first: before ? { kind: 'pane', id } : node, second: before ? node : { kind: 'pane', id } }
     : node;
   return { ...node, first: splitAt(node.first, target, id, axis, before), second: splitAt(node.second, target, id, axis, before) };
 }
@@ -38,7 +38,7 @@ export default function PaneWorkspace({ besideId, activeId, conversations, usern
   const panes = ids(layout).filter((id) => id !== activeId && byId.has(id));
   useEffect(() => {
     if (besideId && besideId !== activeId && !ids(layout).includes(besideId)) {
-      setLayout((current) => current ? { kind: 'split', axis: 'row', ratio: 0.5, first: current, second: { kind: 'pane', id: besideId } } : { kind: 'pane', id: besideId });
+      setLayout((current) => current ? { kind: 'split', splitId: crypto.randomUUID(), axis: 'row', ratio: 0.5, first: current, second: { kind: 'pane', id: besideId } } : { kind: 'pane', id: besideId });
       setFocused(besideId);
     }
   }, [besideId, activeId]);
@@ -75,13 +75,33 @@ export default function PaneWorkspace({ besideId, activeId, conversations, usern
     if (!without) { setLayout({ kind: 'pane', id }); return; }
     setLayout(splitAt(without, target, id, axis, before)); setFocused(id);
   };
+  const addToMain = (id: string, axis: Split['axis'], before: boolean) => {
+    if (!byId.has(id) || id === activeId) return;
+    setLayout((current) => {
+      const without = remove(current, id);
+      if (!without) return { kind: 'pane', id };
+      const target = ids(without).find((candidate) => candidate !== activeId);
+      return target ? splitAt(without, target, id, axis, before) : { kind: 'pane', id };
+    });
+    setFocused(id);
+  };
+  useEffect(() => {
+    const drop = (event: Event) => {
+      const detail = (event as CustomEvent<{ id: string; axis: Split['axis']; before: boolean }>).detail;
+      if (detail) addToMain(detail.id, detail.axis, detail.before);
+    };
+    window.addEventListener('atlas:drop-pane', drop);
+    return () => window.removeEventListener('atlas:drop-pane', drop);
+  }, [activeId, byId]);
   const acceptDrop = (event: ReactDragEvent, target: string) => {
     event.preventDefault();
+    const sessionId = event.dataTransfer.getData('text/plain') || dragged;
+    if (!byId.has(sessionId)) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - rect.left) / rect.width, y = (event.clientY - rect.top) / rect.height;
     const axis: Split['axis'] = Math.min(x, 1 - x) < Math.min(y, 1 - y) ? 'row' : 'column';
     const before = axis === 'row' ? x < 0.5 : y < 0.5;
-    addAt(target, dragged, axis, before); setDragged('');
+    addAt(target, sessionId, axis, before); setDragged('');
   };
   const render = (node: PaneNode): ReactNode => {
     if (isLeaf(node)) {
@@ -100,7 +120,7 @@ export default function PaneWorkspace({ besideId, activeId, conversations, usern
         <div className="min-h-0 flex-1"><SidePane conversation={conversation} username={username} onClose={() => setLayout((current) => remove(current, node.id))} onSwitch={() => onSwitch(conversation)} /></div>
       </section>;
     }
-    return <div key={`split-${node.axis}-${node.ratio}`} className={`flex min-h-0 min-w-0 flex-1 ${node.axis === 'row' ? 'flex-row' : 'flex-col'}`}>
+    return <div key={node.splitId} className={`flex min-h-0 min-w-0 flex-1 ${node.axis === 'row' ? 'flex-row' : 'flex-col'}`}>
       <div className="flex min-h-0 min-w-0" style={{ flex: `${node.ratio} 1 0%` }}>{render(node.first)}</div>
       <div role="separator" aria-orientation={node.axis === 'row' ? 'vertical' : 'horizontal'} aria-label="调整分屏比例" onPointerDown={(event) => resize(event, node)} className={`${node.axis === 'row' ? 'w-1 cursor-col-resize' : 'h-1 cursor-row-resize'} shrink-0 bg-line hover:bg-brand`} />
       <div className="flex min-h-0 min-w-0" style={{ flex: `${1 - node.ratio} 1 0%` }}>{render(node.second)}</div>
@@ -111,7 +131,7 @@ export default function PaneWorkspace({ besideId, activeId, conversations, usern
 }
 
 function updateRatio(root: PaneNode, target: Split, ratio: number): PaneNode {
-  if (root === target) return { ...root, ratio };
+  if (!isLeaf(root) && root.splitId === target.splitId) return { ...root, ratio };
   if (isLeaf(root)) return root;
   return { ...root, first: updateRatio(root.first, target, ratio), second: updateRatio(root.second, target, ratio) };
 }

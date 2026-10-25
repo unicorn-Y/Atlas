@@ -19,6 +19,7 @@ const ConversationQueuePanel = lazy(() => import('./components/ConversationQueue
 const RecipesDialog = lazy(() => import('./components/RecipesDialog'));
 const WorkflowManagerDialog = lazy(() => import('./components/WorkflowManagerDialog'));
 const SideChat = lazy(() => import('./components/SideChat'));
+const PaneWorkspace = lazy(() => import('./components/PaneWorkspace'));
 const UltraplanPanel = lazy(() => import('./components/UltraplanPanel'));
 const RemoteFolderDialog = lazy(() => import('./components/RemoteFolderDialog'));
 const InitDialog = lazy(() => import('./components/InitDialog'));
@@ -29,7 +30,6 @@ const ForkTree = lazy(() => import('./components/ForkTree'));
 const RunSetupMenu = lazy(() => import('./components/RunSetupMenu'));
 const TabStrip = lazy(() => import('./components/TabStrip'));
 const OnboardingDialog = lazy(() => import('./components/OnboardingDialog'));
-import PaneWorkspace from './components/PaneWorkspace';
 const ResumePickerDialog = lazy(() => import('./components/ResumePickerDialog'));
 const FallbackModelsDialog = lazy(() => import('./components/FallbackModelsDialog'));
 import { applyFileBindings, loadBindings, matchShortcut } from './services/shortcuts';
@@ -2178,7 +2178,16 @@ export default function App() {
             <div className="mt-1.5 flex min-w-0 items-center gap-0.5 overflow-x-auto px-1 text-[11.5px] text-fg-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div></>} />}
 
         {view === 'chat' && <div className="flex min-h-0 flex-1">
-          <div className="relative flex min-w-0 flex-1 flex-col">
+          <div className="relative flex min-w-0 flex-1 flex-col" onDragOver={(event) => { if (event.dataTransfer.types.includes('text/plain')) event.preventDefault(); }} onDrop={(event) => {
+            const id = event.dataTransfer.getData('text/plain');
+            if (!store.conversations.some((item) => item.id === id) || id === store.activeConversationId) return;
+            event.preventDefault();
+            const rect = event.currentTarget.getBoundingClientRect();
+            const x = (event.clientX - rect.left) / rect.width, y = (event.clientY - rect.top) / rect.height;
+            const axis = Math.min(x, 1 - x) < Math.min(y, 1 - y) ? 'row' : 'column';
+            const before = axis === 'row' ? x < 0.5 : y < 0.5;
+            window.dispatchEvent(new CustomEvent('atlas:drop-pane', { detail: { id, axis, before } }));
+          }}>
             {activeRun && activeRun.conversationId === store.activeConversationId && <div className="pointer-events-none absolute top-2 left-1/2 z-20 flex -translate-x-1/2 justify-center [&>*]:pointer-events-auto">
               <ProgressCapsule run={activeRun} events={activeEvents} onShowAll={() => showInspectorTab('activity')} />
             </div>}
@@ -2227,8 +2236,8 @@ export default function App() {
               </div>
             </div>
           </div>
-          {view === 'chat' && <PaneWorkspace besideId={besideId} activeId={store.activeConversationId} conversations={store.conversations} username={username}
-            onSwitch={(conversation) => { const previous = store.activeConversationId; void openConversation(conversation); setBesideId(previous); }} />}
+          {view === 'chat' && <Suspense fallback={null}><PaneWorkspace besideId={besideId} activeId={store.activeConversationId} conversations={store.conversations} username={username}
+            onSwitch={(conversation) => { const previous = store.activeConversationId; void openConversation(conversation); setBesideId(previous); }} /></Suspense>}
           {inspectorOpen && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => toggleInspector(false)} run={activeRun} artifacts={activeArtifacts}
             conversationTitle={activeConversation?.title} modelName={modelName} tools={store.tools} skills={store.skills} activeSkills={store.activeSkills} capabilities={store.capabilities}
             apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
