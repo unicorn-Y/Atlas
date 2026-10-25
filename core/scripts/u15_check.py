@@ -46,8 +46,9 @@ def check_voice_stream_and_recovery() -> None:
             assert socket.receive_json() == {"type": "final", "text": "last words"}
             assert socket.receive_json() == {"type": "ended"}
     source = Path("frontend/src/renderer/components/VoiceOverlay.tsx").read_text(encoding="utf-8")
+    speech_source = Path("frontend/src/renderer/services/speechPlayback.ts").read_text(encoding="utf-8")
     assert "echoCancellation: true" in source and "speechFramesRef.current >= 3" in source
-    assert "window.speechSynthesis?.cancel()" in source and "onSpeechVoiceChange" in source
+    assert "window.speechSynthesis?.cancel()" in speech_source and "onSpeechVoiceChange" in source
     assert "转为文字" in source and "failureRef.current < 2" in source
     print("U15 voice: persistent ASR socket accepts consecutive utterances, end flushes; interruption, echo suppression, voice preference and recovery UI PASS")
 
