@@ -242,6 +242,11 @@ function MarkdownBody({ content, streaming }: { content: string; streaming: bool
   </div>;
 }
 
+/** Full Markdown renderer reused by compact history previews. */
+export function FormattedMessageContent({ content }: { content: string }) {
+  return <MarkdownBody content={content} streaming={false} />;
+}
+
 /**
  * One chat turn. The user speaks in the UI face inside a bubble; Atlas answers in serif, unboxed.
  * memo 化：历史消息在流式输出期间属性不变，不随每次 delta 重渲染。
