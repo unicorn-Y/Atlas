@@ -116,6 +116,10 @@ class OriginGuard:
             scope["type"] == "http" and scope["method"] == "GET"
             and scope.get("path") == "/remote"
         )
+        public_share_surface = scope["type"] == "http" and (
+            method == "GET" and re.fullmatch(r"/api/shared/[A-Za-z0-9_-]{20,128}(?:/export)?", path) is not None
+            or method == "POST" and re.fullmatch(r"/api/shared/[A-Za-z0-9_-]{20,128}/export", path) is not None
+        )
         loopback_dashboard_surface = False
         if scope["type"] == "http" and client_host:
             try:
@@ -127,7 +131,7 @@ class OriginGuard:
                 )
             except ValueError:
                 loopback_dashboard_surface = False
-        if (is_preflight or public_remote_document or loopback_dashboard_surface or device_pairing_protocol
+        if (is_preflight or public_remote_document or public_share_surface or loopback_dashboard_surface or device_pairing_protocol
                 or is_trusted(origin, token, self.extra_origins(), fetch_site, client_host)):
             await self.app(scope, receive, send)
             return

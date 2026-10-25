@@ -70,6 +70,14 @@ class ConversationUpdateRequest(BaseModel):
     generate_memories: bool | None = None
 
 
+class HostedShareRequest(BaseModel):
+    base_url: str
+    password: str = ""
+    retention_days: int = 30
+    include_tools: bool = True
+    include_thinking: bool = False
+
+
 class ConversationUiMetadataRequest(BaseModel):
     metadata: dict[str, Any]
 
@@ -443,6 +451,49 @@ async def export_conversation_share(
                 include_tools=bool(req.get("include_tools", True)),
                 include_thinking=bool(req.get("include_thinking", False)))
     return {"path": str(path), "messages": len(messages)}
+
+
+@router.post("/api/conversations/{conversation_id}/share/hosted", status_code=201)
+async def create_hosted_conversation_share(
+    services: Annotated[AppServices, Depends(get_app_services)], conversation_id: str, req: HostedShareRequest,
+) -> dict[str, Any]:
+    memory = services.memory
+    if memory is None:
+        from atlas.server import memory as _memory
+        memory = _memory
+    conversation = await memory.get_conversation(conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_messages
+    from atlas.sharing import ConversationShareStore, redact
+    raw = await asyncio.to_thread(read_session_messages, DATA_ROOT / "engine", conversation_id, limit=100000)
+    messages: list[dict[str, Any]] = []
+    for item in raw:
+        role = str(item.get("role") or "assistant")
+        content = str(item.get("content") or "")
+        metadata = item.get("metadata") or {}
+        if isinstance(metadata, str):
+            try: metadata = json.loads(metadata)
+            except json.JSONDecodeError: metadata = {}
+        if role in {"tool", "function"} and not req.include_tools:
+            continue
+        if role == "thinking" and not req.include_thinking:
+            continue
+        messages.append({"role": role, "content": redact(content), "created_at": str(item.get("created_at") or "")})
+        if req.include_thinking and isinstance(metadata, dict) and metadata.get("thinking"):
+            thinking = metadata.get("thinking")
+            if isinstance(thinking, str) and thinking.strip():
+                messages.append({"role": "thinking", "content": redact(thinking), "created_at": str(item.get("created_at") or "")})
+        if req.include_tools and isinstance(metadata, dict) and metadata.get("tool_calls"):
+            messages.append({"role": "tool", "content": redact(json.dumps(metadata["tool_calls"], ensure_ascii=False, indent=2)), "created_at": str(item.get("created_at") or "")})
+    try:
+        result = ConversationShareStore().create(conversation_id=conversation_id,
+            title=str(conversation.get("title") or "Atlas conversation"), base_url=req.base_url,
+            messages=messages, password=req.password, retention_days=req.retention_days)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return {**result, "messages": len(messages)}
 
 
 @router.post("/api/conversations/{conversation_id}/pr")

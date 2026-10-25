@@ -690,9 +690,16 @@ function assertTrustedAppSender(event: Electron.IpcMainEvent | Electron.IpcMainI
 function parseAtlasDeepLink(raw: string): AtlasDeepLink | null {
   try {
     const url = new URL(raw);
-    if (url.protocol !== 'atlas:' || url.username || url.password || url.port || url.search || url.hash) return null;
+    if (url.protocol !== 'atlas:' || url.username || url.password || url.port || url.hash) return null;
     const segments = url.pathname.split('/').filter(Boolean).map((segment) => decodeURIComponent(segment));
-    if (segments.length !== 1) return null;
+    if (url.hostname === 'share' && segments.length === 1 && /^[A-Za-z0-9_-]{20,128}$/.test(segments[0])) {
+      const source = url.searchParams.get('source') ?? '';
+      const shared = new URL(source);
+      if (url.searchParams.size !== 1 || !['http:', 'https:'].includes(shared.protocol) || shared.username || shared.password
+          || !shared.pathname.endsWith(`/api/shared/${segments[0]}`)) return null;
+      return { id: randomUUID(), type: 'share-import', token: segments[0], shareUrl: source };
+    }
+    if (segments.length !== 1 || url.search) return null;
     if (url.hostname === 'conversation' && /^[A-Za-z0-9_-]{1,128}$/.test(segments[0])) {
       return { id: randomUUID(), type: 'conversation', conversationId: segments[0] };
     }

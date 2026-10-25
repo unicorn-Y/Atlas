@@ -317,6 +317,12 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [resumePickerOpen, setResumePickerOpen] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareBaseUrl, setShareBaseUrl] = useState(() => pref('share-base-url') || '');
+  const [sharePassword, setSharePassword] = useState('');
+  const [shareRetention, setShareRetention] = useState(30);
+  const [hostedShare, setHostedShare] = useState<{ id: string; url: string; expires_at: string } | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
   const [keymapOpen, setKeymapOpen] = useState(false);
   const [whichKeyOpen, setWhichKeyOpen] = useState(false);
   const [fallbackOpen, setFallbackOpen] = useState(false);
@@ -647,6 +653,20 @@ export default function App() {
     return () => window.removeEventListener(OPEN_EXPERT_SETTINGS, open);
   }, []);
   useEffect(() => window.atlasDesktop?.onDeepLink?.((route) => {
+    if (route.type === 'share-import') {
+      const passwordInput = window.prompt('如果分享需要口令，请输入口令；公开分享直接点确定。');
+      if (passwordInput === null) return;
+      const password = passwordInput;
+      void api<{ conversation_id: string }>(storeRef.current.apiBaseUrl, '/api/shared/import', {
+        method: 'POST', json: { share_url: route.shareUrl, password },
+      }).then(async ({ conversation_id }) => {
+        await useAtlasStore.getState().refreshConversations();
+        const target = useAtlasStore.getState().conversations.find((item) => item.id === conversation_id);
+        if (target) await openConversation(target);
+        setToast('分享已导入为本地新对话');
+      }).catch((error) => setToast(`导入分享失败：${error instanceof Error ? error.message : String(error)}`));
+      return;
+    }
     if (route.type === 'settings') {
       const pane = SETTINGS_NAV.find(([candidate]) => candidate === route.section)?.[0];
       if (!pane) return;
@@ -1774,6 +1794,19 @@ export default function App() {
     } },
     { id: 'share', label: '/share', hint: '导出当前会话为离线只读 HTML；参数 tools / thinking 可包含对应内容', takesArgument: true, run: (options: string) => {
       if (!activeConversation) { setToast('先打开要分享的会话'); return; }
+      const command = options.trim();
+      if (/^host(?:ed)?\b/i.test(command)) { setShareDialogOpen(true); return; }
+      if (/^list$/i.test(command)) {
+        void api<{ shares: Array<{ id: string; title: string; expires_at: string; revoked: boolean; password_protected: boolean }> }>(store.apiBaseUrl, `/api/shares?conversation_id=${encodeURIComponent(activeConversation.id)}`).then(({ shares }) => {
+          setRawTextTitle('当前对话的分享'); setRawText(shares.length ? shares.map((item) => `${item.id} · ${item.title} · ${item.revoked ? '已撤销' : `到期 ${item.expires_at}`} · ${item.password_protected ? '口令保护' : '公开'}`).join('\n') : '当前对话没有自托管分享。');
+        }).catch((error) => setToast(`分享列表读取失败：${error instanceof Error ? error.message : String(error)}`));
+        return;
+      }
+      const revoke = /^revoke\s+([A-Za-z0-9_-]+)$/i.exec(command);
+      if (revoke) {
+        void api(store.apiBaseUrl, `/api/shares/${encodeURIComponent(revoke[1])}`, { method: 'DELETE' }).then(() => setToast('分享链接已撤销')).catch((error) => setToast(`撤销失败：${error instanceof Error ? error.message : String(error)}`));
+        return;
+      }
       void api<{ path: string }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(activeConversation.id)}/share`, {
         method: 'POST', json: { include_tools: /\btools\b/i.test(options), include_thinking: /\bthinking\b/i.test(options) },
       }).then(async ({ path }) => {
@@ -2871,6 +2904,33 @@ export default function App() {
         void window.atlasDesktop?.openPath?.(workspace).then((result) => notify(result === 'opened' || result === 'revealed' ? '已请求系统打开工作目录' : `无法打开工作目录：${result}`))
           .catch((error) => notify(`无法打开工作目录：${error instanceof Error ? error.message : String(error)}`));
       }} /></Suspense>}
+    <Dialog open={shareDialogOpen} onOpenChange={(open) => { if (!shareBusy) setShareDialogOpen(open); }} label="创建自托管会话分享" className="w-[min(620px,92vw)] bg-panel p-5 shadow-xl">
+      <h2 className="m-0 text-[16px] font-semibold text-heading">自托管会话分享</h2>
+      <p className="mt-2 mb-4 text-[12.5px] leading-relaxed text-fg-3">填写接收者可访问的 Atlas 地址或反向代理地址。公开分享任何持有链接的人都能查看；设置口令后，页面会先验证口令。分享内容是脱敏后的只读快照，保留时间到期后自动失效。</p>
+      <form className="grid gap-3" onSubmit={(event) => {
+        event.preventDefault();
+        if (!activeConversation) { setToast('先打开要分享的会话'); return; }
+        setShareBusy(true);
+        const baseUrl = shareBaseUrl.trim(); setPref('share-base-url', baseUrl);
+        void api<{ id: string; url: string; expires_at: string }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(activeConversation.id)}/share/hosted`, {
+          method: 'POST', json: { base_url: baseUrl, password: sharePassword, retention_days: shareRetention, include_tools: true, include_thinking: false },
+        }).then(async (result) => {
+          setHostedShare(result); await navigator.clipboard?.writeText(result.url).catch(() => undefined); setToast('自托管分享链接已创建并复制');
+        }).catch((error) => setToast(`创建分享失败：${error instanceof Error ? error.message : String(error)}`)).finally(() => setShareBusy(false));
+      }}>
+        <label className="grid gap-1 text-[12.5px] text-fg-2">外部可访问的 Atlas 地址
+          <input required type="url" value={shareBaseUrl} onChange={(event) => setShareBaseUrl(event.target.value)} placeholder="https://atlas.example.com" className="h-9 rounded-lg border border-line bg-sunken px-3 text-[13px] text-fg" />
+        </label>
+        <label className="grid gap-1 text-[12.5px] text-fg-2">分享口令（留空即公开）
+          <input type="password" autoComplete="new-password" value={sharePassword} onChange={(event) => setSharePassword(event.target.value)} placeholder="可选；不会明文保存" className="h-9 rounded-lg border border-line bg-sunken px-3 text-[13px] text-fg" />
+        </label>
+        <label className="grid gap-1 text-[12.5px] text-fg-2">保留时间
+          <select value={shareRetention} onChange={(event) => setShareRetention(Number(event.target.value))} className="h-9 rounded-lg border border-line bg-sunken px-3 text-[13px] text-fg"><option value={1}>1 天</option><option value={7}>7 天</option><option value={30}>30 天</option><option value={90}>90 天</option><option value={180}>180 天</option><option value={365}>365 天</option></select>
+        </label>
+        {hostedShare && <div className="rounded-lg border border-line bg-sunken p-3 text-[12px]"><p className="m-0 break-all font-mono">{hostedShare.url}</p><p className="mt-1 mb-2 text-fg-3">到期：{hostedShare.expires_at}</p><div className="flex gap-2"><Button type="button" variant="secondary" onClick={() => void navigator.clipboard.writeText(hostedShare.url).then(() => setToast('分享链接已复制'))}>复制链接</Button><Button type="button" variant="ghost" onClick={() => void api(store.apiBaseUrl, `/api/shares/${encodeURIComponent(hostedShare.id)}`, { method: 'DELETE' }).then(() => { setHostedShare(null); setToast('分享链接已撤销'); }).catch((error) => setToast(`撤销失败：${error instanceof Error ? error.message : String(error)}`))}>立即撤销</Button></div></div>}
+        <div className="mt-1 flex justify-end gap-2"><Button type="button" variant="secondary" disabled={shareBusy} onClick={() => setShareDialogOpen(false)}>关闭</Button><Button type="submit" variant="primary" disabled={shareBusy || !shareBaseUrl.trim()}>{shareBusy ? '正在创建…' : '创建并复制链接'}</Button></div>
+      </form>
+    </Dialog>
     <Dialog open={rawText !== null} onOpenChange={(open) => { if (!open) setRawText(null); }} label={rawTextTitle} className="flex max-h-[82vh] w-[min(900px,92vw)] flex-col bg-panel p-4 shadow-xl">
       <div className="mb-3 flex items-center gap-2">
         <h2 className="m-0 text-[15px] font-semibold text-heading">{rawTextTitle}</h2>

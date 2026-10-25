@@ -32,6 +32,7 @@ export type AtlasSettingsSection =
 
 export type AtlasDeepLink =
   | { id: string; type: 'conversation'; conversationId: string }
+  | { id: string; type: 'share-import'; token: string; shareUrl: string }
   | { id: string; type: 'settings'; section: AtlasSettingsSection };
 
 export type PlatformEditorId =
