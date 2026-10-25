@@ -7,6 +7,15 @@ import { WebSocketServer, WebSocket } from 'ws';
 
 type Request = { id: string; method: string; params?: Record<string, unknown> };
 const lockPath = path.join(os.homedir(), '.atlas', 'ide', 'vscode.json');
+const extensionVersion = '0.1.0';
+let bridgeServer: WebSocketServer | undefined;
+let bridgeToken = '';
+let lastHeartbeat = new Date().toISOString();
+let restartBridge: (() => Promise<void>) | undefined;
+
+function workspacePath(): string | null {
+  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? null;
+}
 
 function editorContext() {
   const editor = vscode.window.activeTextEditor;
@@ -26,6 +35,9 @@ function editorContext() {
 
 async function handle(req: Request): Promise<unknown> {
   switch (req.method) {
+    case 'status': return { version: extensionVersion, last_heartbeat: lastHeartbeat, workspace: workspacePath(), pid: process.pid };
+    case 'reconnect': await restartBridge?.(); return { connected: true, version: extensionVersion, workspace: workspacePath(), reconnected_at: new Date().toISOString() };
+    case 'configure': await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:atlas-local.atlas-ide-bridge'); return { opened: true };
     case 'context': return editorContext();
     case 'diagnostics': {
       const errors = [vscode.DiagnosticSeverity.Error, vscode.DiagnosticSeverity.Warning];
@@ -55,30 +67,46 @@ async function handle(req: Request): Promise<unknown> {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const token = crypto.randomBytes(32).toString('hex');
-  const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
-  await new Promise<void>((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('Atlas IDE bridge did not bind a TCP port');
-  server.on('connection', (socket: WebSocket, request) => {
-    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-    if (url.searchParams.get('token') !== token) { socket.close(1008, 'unauthorized'); return; }
-    socket.on('message', async raw => {
-      let req: Request;
-      try {
-        req = JSON.parse(raw.toString()) as Request;
-        const result = await handle(req);
-        socket.send(JSON.stringify({ id: req.id, result }));
-      } catch (error) {
-        socket.send(JSON.stringify({ id: '', error: error instanceof Error ? error.message : String(error) }));
-      }
+  const startBridge = async () => {
+    bridgeToken = crypto.randomBytes(32).toString('hex');
+    const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    await new Promise<void>((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Atlas IDE bridge did not bind a TCP port');
+    server.on('connection', (socket: WebSocket, request) => {
+      const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      if (url.searchParams.get('token') !== bridgeToken) { socket.close(1008, 'unauthorized'); return; }
+      socket.on('message', async raw => {
+        lastHeartbeat = new Date().toISOString();
+        let req: Request;
+        try { req = JSON.parse(raw.toString()) as Request; socket.send(JSON.stringify({ id: req.id, result: await handle(req) })); }
+        catch (error) { socket.send(JSON.stringify({ id: '', error: error instanceof Error ? error.message : String(error) })); }
+      });
     });
-  });
-  await fs.mkdir(path.dirname(lockPath), { recursive: true });
-  await fs.writeFile(lockPath, JSON.stringify({ host: '127.0.0.1', port: address.port, token, pid: process.pid }), { mode: 0o600 });
+    bridgeServer = server;
+    await fs.mkdir(path.dirname(lockPath), { recursive: true });
+    lastHeartbeat = new Date().toISOString();
+    await fs.writeFile(lockPath, JSON.stringify({ host: '127.0.0.1', port: address.port, token: bridgeToken, pid: process.pid,
+      version: extensionVersion, started_at: lastHeartbeat, last_heartbeat: lastHeartbeat, workspace: workspacePath() }), { mode: 0o600 });
+  };
+  restartBridge = async () => { bridgeServer?.close(); await startBridge(); };
+  await startBridge();
+  const heartbeat = setInterval(() => {
+    lastHeartbeat = new Date().toISOString();
+    void fs.readFile(lockPath, 'utf8').then((raw) => {
+      const lock = JSON.parse(raw) as Record<string, unknown>;
+      if (lock.pid === process.pid) return fs.writeFile(lockPath, JSON.stringify({ ...lock, last_heartbeat: lastHeartbeat }), { mode: 0o600 });
+      return undefined;
+    }).catch(() => undefined);
+  }, 15_000);
+  heartbeat.unref();
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 50);
   status.text = '$(plug) Atlas IDE'; status.tooltip = 'Atlas IDE bridge connected'; status.show();
-  context.subscriptions.push(status, { dispose: () => { server.close(); void fs.rm(lockPath, { force: true }); } });
+  const reconnect = vscode.commands.registerCommand('atlas-ide-bridge.reconnect', async () => {
+    bridgeServer?.close(); await startBridge(); status.text = '$(plug) Atlas IDE';
+    vscode.window.showInformationMessage('Atlas IDE Bridge 已重新连接。');
+  });
+  context.subscriptions.push(reconnect, status, { dispose: () => { clearInterval(heartbeat); bridgeServer?.close(); void fs.rm(lockPath, { force: true }); } });
 }
 
 export function deactivate(): void { /* VS Code disposes the extension context. */ }

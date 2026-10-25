@@ -13,6 +13,7 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "contributes": { "commands": [{ "command": "atlas-ide-bridge.reconnect", "title": "Atlas: Reconnect IDE Bridge" }] },
   "main": "./out/extension.js",
   "scripts": {
     "compile": "tsc -p . --noEmit && node -e \"require('esbuild').buildSync({entryPoints:['src/extension.ts'],bundle:true,platform:'node',format:'cjs',target:'node18',external:['vscode'],outfile:'out/extension.js'})\"",

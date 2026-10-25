@@ -38,13 +38,43 @@ router = APIRouter()
 
 @router.get("/api/ide/status")
 async def ide_status() -> dict[str, Any]:
-    """Report whether the user's local VS Code bridge lock file is present."""
+    """Report the live VS Code bridge and extension metadata."""
     from atlas.tools.ide_bridge import request
     try:
-        await request("context")
-        return {"connected": True, "name": "VS Code"}
-    except (ConnectionError, OSError, RuntimeError, TimeoutError):
-        return {"connected": False, "name": ""}
+        context = await request("status")
+        return {"connected": True, "name": "VS Code", **(context if isinstance(context, dict) else {})}
+    except (ConnectionError, OSError, RuntimeError, TimeoutError) as exc:
+        from atlas.tools.ide_bridge import discover
+        target = discover()
+        return {"connected": False, "name": "VS Code" if target else "", "error": str(exc), "lock_present": bool(target)}
+
+
+@router.post("/api/ide/reconnect")
+async def ide_reconnect() -> dict[str, Any]:
+    from atlas.tools.ide_bridge import request
+    try:
+        return await request("reconnect")
+    except (ConnectionError, OSError, RuntimeError, TimeoutError) as exc:
+        raise HTTPException(status_code=503, detail=f"无法重连 VS Code 扩展：{exc}") from exc
+
+
+@router.post("/api/ide/configure")
+async def ide_configure() -> dict[str, Any]:
+    from atlas.tools.ide_bridge import request
+    try:
+        return await request("configure")
+    except (ConnectionError, OSError, RuntimeError, TimeoutError) as exc:
+        raise HTTPException(status_code=503, detail=f"无法打开 IDE 插件设置：{exc}") from exc
+
+
+@router.post("/api/ide/diagnostics")
+async def ide_diagnostics() -> dict[str, Any]:
+    from atlas.tools.ide_bridge import request
+    try:
+        result = await request("diagnostics")
+        return {"items": result if isinstance(result, list) else [], "checked_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()}
+    except (ConnectionError, OSError, RuntimeError, TimeoutError) as exc:
+        raise HTTPException(status_code=503, detail=f"无法读取 IDE 诊断：{exc}") from exc
 
 
 @router.post("/api/ide/context")

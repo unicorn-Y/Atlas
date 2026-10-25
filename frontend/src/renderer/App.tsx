@@ -32,6 +32,7 @@ const TabStrip = lazy(() => import('./components/TabStrip'));
 const OnboardingDialog = lazy(() => import('./components/OnboardingDialog'));
 const ResumePickerDialog = lazy(() => import('./components/ResumePickerDialog'));
 const FallbackModelsDialog = lazy(() => import('./components/FallbackModelsDialog'));
+const IDEManagerDialog = lazy(() => import('./components/IDEManagerDialog'));
 import { applyFileBindings, loadBindings, matchShortcut } from './services/shortcuts';
 import type { CustomCommandInfo, PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
@@ -297,6 +298,7 @@ export default function App() {
   composerSnapshotRef.current = { text: input, attachments, files, mentions };
   const [recipesOpen, setRecipesOpen] = useState(false);
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
+  const [ideManagerOpen, setIdeManagerOpen] = useState(false);
   const [side, setSide] = useState<{ open: boolean; question?: string }>({ open: false });
   const [schedulePromptOpen, setSchedulePromptOpen] = useState(false);
   const scheduleBypass = useRef(false);
@@ -1513,14 +1515,7 @@ export default function App() {
       setPref('default-workspace', path); setDefaultWorkspace(path); setToast(`工作目录：${path}`);
     } },
     { id: 'init', label: '/init', hint: '扫描工作区，生成或更新 AGENTS.md', run: () => { if (typeof activeConversation?.workspace !== 'string' || !activeConversation.workspace) { setToast('请先选择工作目录'); return; } void store.runInit(); } },
-      { id: 'ide', label: '/ide', hint: '用系统默认程序打开当前工作目录；实际 IDE 关联由系统决定', run: () => {
-        if (typeof activeConversation?.workspace !== 'string' || !activeConversation.workspace) { setToast('请先选择本机工作目录'); return; }
-        if (activeConversation.workspace.startsWith('ssh://')) { setToast('远程目录不能从本机外部编辑器打开'); return; }
-        if (!window.atlasDesktop?.openPath) { setToast('当前运行环境没有外部文件打开能力'); return; }
-        void window.atlasDesktop.openPath(activeConversation.workspace).then((result) => {
-          setToast(result === 'opened' || result === 'revealed' ? '已请求系统打开工作目录' : `无法打开工作目录：${result}`);
-        }).catch((error) => setToast(`无法打开工作目录：${error instanceof Error ? error.message : String(error)}`));
-      } },
+      { id: 'ide', label: '/ide', hint: '查看 IDE 插件版本、心跳和工作区；重连、配置或运行诊断', run: () => setIdeManagerOpen(true) },
       { id: 'recap', label: '/recap', hint: '用当前对话生成压缩回顾（Atlas 通过 /compact 保存回顾）', run: () => {
         if (!activeConversation) { setToast('先打开一个对话再生成回顾'); return; }
         void store.compactConversation(activeConversation.id, '生成当前对话的简短回顾，保留目标、关键决策、完成进度、未解决问题和下一步。').then((text) => { if (text) setToast(`对话回顾已更新：${text}`); });
@@ -2500,6 +2495,15 @@ export default function App() {
       onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} /></Suspense>}
     {workflowManagerOpen && <Suspense fallback={null}><WorkflowManagerDialog apiBaseUrl={store.apiBaseUrl} open onClose={() => setWorkflowManagerOpen(false)}
       onRun={(goal) => { void startDynamicWorkflow(goal).catch((error) => setToast(`工作流启动失败：${error instanceof Error ? error.message : String(error)}`)); }} onToast={notify} /></Suspense>}
+    {ideManagerOpen && <Suspense fallback={null}><IDEManagerDialog open onClose={() => setIdeManagerOpen(false)} apiBaseUrl={store.apiBaseUrl} onToast={notify}
+      workspacePath={typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : ''}
+      onOpenWorkspace={() => {
+        const workspace = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : '';
+        if (!workspace) return;
+        if (workspace.startsWith('ssh://')) { notify('远程目录不能从本机外部编辑器打开'); return; }
+        void window.atlasDesktop?.openPath?.(workspace).then((result) => notify(result === 'opened' || result === 'revealed' ? '已请求系统打开工作目录' : `无法打开工作目录：${result}`))
+          .catch((error) => notify(`无法打开工作目录：${error instanceof Error ? error.message : String(error)}`));
+      }} /></Suspense>}
     <Dialog open={rawText !== null} onOpenChange={(open) => { if (!open) setRawText(null); }} label={rawTextTitle} className="flex max-h-[82vh] w-[min(900px,92vw)] flex-col bg-panel p-4 shadow-xl">
       <div className="mb-3 flex items-center gap-2">
         <h2 className="m-0 text-[15px] font-semibold text-heading">{rawTextTitle}</h2>
