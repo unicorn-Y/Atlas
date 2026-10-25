@@ -528,6 +528,7 @@ export default function App() {
     if (recentWorkspace) { setPref('default-workspace', recentWorkspace); setDefaultWorkspace(recentWorkspace); }
   }, [defaultWorkspace, store.conversations, store.conversationsLoading]);
   const activeRun = store.runs.find((run) => run.id === store.activeRunId);
+  const [skillExtracting, setSkillExtracting] = useState(false);
   useEffect(() => { if (pref('keep-awake') === 'true') void window.atlasDesktop?.setKeepAwake?.(true); }, []);
   useEffect(() => {
     const daybreakRunning = daybreakEnabled && store.runs.some((run) => !TERMINAL.includes(run.status));
@@ -2519,6 +2520,27 @@ export default function App() {
       <Button size="sm" variant="ghost" aria-label="停止当前生成或运行" onClick={() => store.stopTask()}><Square />停止</Button>
     </>}
   </div>;
+  const extractConversationSkill = async () => {
+    if (!activeRun || activeRun.status !== 'completed' || !store.activeConversationId || skillExtracting) return;
+    setSkillExtracting(true);
+    try {
+      const result = await api<{ candidate: { name: string; title?: string } }>(store.apiBaseUrl,
+        '/api/evolution/candidates/from-conversation', {
+          method: 'POST', json: { conversation_id: store.activeConversationId, run_id: activeRun.id },
+        });
+      setToast(`已提炼「${result.candidate.title || result.candidate.name}」为待审候选；可在「自动追新 → 技能候选」预览和批准`);
+    } catch (error) {
+      setToast(`提炼技能失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally { setSkillExtracting(false); }
+  };
+  const extractSkillBanner = activeRun?.conversationId === store.activeConversationId
+    && activeRun.status === 'completed' && !focusedLayout && <div className="mb-2 flex items-center gap-2 rounded-lg border border-brand/20 bg-brand-soft px-3 py-1.5 text-[11.5px] text-fg-2">
+      <Sparkles size={13} className="text-brand" /><span className="flex-1">这次成功的做法可以留成技能，先进入候选审核。</span>
+      <button type="button" className="rounded-md px-2 py-1 font-medium text-brand hover:bg-hover" disabled={skillExtracting}
+        aria-label="把当前对话提炼为技能" onClick={() => void extractConversationSkill()}>
+        {skillExtracting ? '提炼中…' : '提炼为技能'}
+      </button>
+    </div>;
   const failedRun = [...store.runs].reverse().find((run) => run.conversationId === store.activeConversationId && run.status === 'failed' && store.runPrompts[run.id]);
   const queuedRecovery = (store.queue[store.activeConversationId] ?? []).length > 0;
   const recoveryHeader = (failedRun || queuedRecovery) && <div className="mb-2 flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[12px] text-fg-2">
@@ -2778,7 +2800,7 @@ export default function App() {
                   <span className="size-1.5 animate-pulse rounded-full bg-brand" />
                   {activeRun && /^\s*\/review\b/i.test(store.runPrompts[activeRun.id]?.content ?? '') ? 'Reviewing · 正在审查' : '运行中 · 新消息可排队或转为优先任务'}
                 </div>}
-                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={focusedLayout ? null : <>{suggestionHeader}{editBanner}{goalHeader}{recoveryHeader}{runHeader}{rewindBanner}</>} />
+                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={focusedLayout ? null : <>{extractSkillBanner}{suggestionHeader}{editBanner}{goalHeader}{recoveryHeader}{runHeader}{rewindBanner}</>} />
                 <div className={cn('mt-1 flex min-w-0 items-center gap-1 px-1 text-[11.5px] text-fg-3', focusedLayout && 'hidden')}>
                   <div className="flex min-w-0 shrink items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div>
                   <span className="flex-1" />

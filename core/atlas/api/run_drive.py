@@ -84,6 +84,69 @@ async def _session_messages(conversation_id: str, limit: int = 1000) -> list[dic
     )
 
 
+async def _capture_evolution_outcome(run: RunState, event: str) -> None:
+    """Record terminal outcome; successful runs become pending skill candidates."""
+    from atlas.evolution.run_learning import record_terminal_run, transcript_excerpt
+
+    user_text = str(getattr(run, "user_input", "") or "")
+    assistant_text = ""
+    if event == "run.completed":
+        try:
+            messages = await _session_messages(run.conversation_id, limit=500)
+            transcript_user, assistant_text = transcript_excerpt(messages, run.run_id)
+            user_text = user_text or transcript_user
+            if not assistant_text:
+                assistant_text = next((str(env.get("data", {}).get("content") or "").strip()
+                                       for env in reversed(run.events)
+                                       if env.get("event") == "message.completed"
+                                       and str(env.get("data", {}).get("content") or "").strip()), "")
+        except Exception:
+            log.exception("evolution.run_transcript_read_failed", run_id=run.run_id)
+    try:
+        await asyncio.to_thread(
+            record_terminal_run, run_id=run.run_id,
+            conversation_id=run.conversation_id,
+            status=event.removeprefix("run."), project_id=getattr(run, "project_id", None),
+            agent_id=getattr(run, "agent_id", None), user_text=user_text,
+            assistant_text=assistant_text,
+        )
+    except Exception:
+        # Learning is best-effort and must never turn a finished run into failure.
+        log.exception("evolution.run_outcome_capture_failed", run_id=run.run_id,
+                      status=event.removeprefix("run."))
+
+
+async def _resolve_project_skill_scope(
+    data: dict[str, Any], manager: RuntimeManager, projects: Any, *,
+    ignore_project_config: bool,
+) -> tuple[str | None, list[str]]:
+    """Resolve explicit/project-linked Skills for one run, honoring config opt-out."""
+    project_id = str(data.get("project_id") or "").strip() or None
+    conversation_id = str(data.get("conversation_id") or "").strip()
+    if not conversation_id and data.get("resume_from"):
+        prior = manager.runs.get(str(data.get("resume_from")))
+        conversation_id = str(getattr(prior, "conversation_id", "") or "")
+    if not project_id and conversation_id and projects is not None:
+        try:
+            project = await projects.find_by_conversation(conversation_id)
+            project_id = str(getattr(project, "project_id", "") or "") or None
+        except Exception:
+            log.exception("run.project_skill_scope_lookup_failed", conversation_id=conversation_id)
+    names: list[str] = []
+    if project_id and not ignore_project_config:
+        try:
+            from atlas.project_settings import load_project_config
+
+            configured = load_project_config(project_id).get("active_skills", [])
+            if isinstance(configured, list):
+                names = list(dict.fromkeys(
+                    name.strip() for name in configured
+                    if isinstance(name, str) and name.strip()))
+        except (OSError, ValueError):
+            log.exception("run.project_skills_unavailable", project_id=project_id)
+    return project_id, names
+
+
 def _kanban_store():
     from atlas.kanban import atlas_kanban_store
 
@@ -1384,6 +1447,12 @@ async def _handle_run_start(
                 "deny": (agent_profile.get("tools") or {}).get("deny", []),
             },
         }
+    # Project-scoped skills are additive to this run's explicit/profile selection.
+    # Resolve the conversation's project before instruction loading so these Skills
+    # pass through the same lifecycle/activation gate as all other selected Skills.
+    project_scope_id, project_skills = await _resolve_project_skill_scope(
+        data, manager, projects, ignore_project_config=ignore_project_config,
+    )
     effective_skills = data.get("active_skills", (profile or {}).get("active_skills", []))
     message_skills = data.get("message_skills", [])
     if (not isinstance(message_skills, list)
@@ -1402,7 +1471,7 @@ async def _handle_run_start(
         return
     # Message-level mentions join the effective set for this run only; they are
     # never written back to the profile or conversation's global active Skills.
-    effective_skills = list(dict.fromkeys([*effective_skills, *message_skills]))
+    effective_skills = list(dict.fromkeys([*effective_skills, *project_skills, *message_skills]))
     if len(effective_skills) > 8:
         invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
         await manager.send(conn_id, invalid.next_envelope("run.failed", {
@@ -1552,7 +1621,7 @@ async def _handle_run_start(
     conv_id = data.get("conversation_id") or (
         prior_run.conversation_id if prior_run else str(uuid.uuid4())
     )
-    run_project_id = str(data.get("project_id") or "").strip() or None
+    run_project_id = str(data.get("project_id") or project_scope_id or "").strip() or None
     if run_project_id and projects is not None and await projects.get(run_project_id) is None:
         invalid_run = RunState(run_id, str(conv_id), str(model_id or ""))
         await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
@@ -1657,6 +1726,7 @@ async def _handle_run_start(
     except Exception:
         log.debug("run.timing_log_failed", run_id=run_id, stage="run_created", exc_info=True)
     run.project_id = run_project_id
+    run.agent_id = agent_key or getattr(prior_run, "agent_id", None)
     run.config_override = config_override
     run.ignore_project_config = ignore_project_config
     run.ignore_workspace_rules = ignore_workspace_rules
@@ -2733,6 +2803,8 @@ async def _execute_run(
                     data["host"] = ssh_workspaces.parse_workspace(workspace)[0]
         env = run.next_envelope(event, data)
         await manager.send_run(run, env, fallback_conn_id=conn_id)
+        if event in {"run.completed", "run.failed", "run.cancelled"}:
+            _spawn_background(_capture_evolution_outcome(run, event))
         if event in {"run.started", "run.completed", "run.failed"}:
             hooks = _server()._hook_store()
             bridge_event_alias = not kernel_owns_lifecycle_hooks()

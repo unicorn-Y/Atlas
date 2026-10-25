@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 from typing import Any
 
@@ -206,6 +207,67 @@ async def create_candidate_from_recording(body: RecordingBundle) -> dict[str, An
     return {"created": True, "candidate": record, "merged": bool(record.pop("_merged", False))}
 
 
+class ConversationCandidateCreate(BaseModel):
+    conversation_id: str
+    run_id: str | None = None
+    name: str | None = None
+
+
+@evolution_router.post("/candidates/from-conversation")
+async def create_candidate_from_conversation(body: ConversationCandidateCreate) -> dict[str, Any]:
+    """提炼当前对话最近一次成功运行，生成待审核技能候选。"""
+    from atlas import server
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_messages
+    from atlas.evolution.run_learning import transcript_excerpt
+
+    memory = getattr(server, "memory", None)
+    conversation = await memory.get_conversation(body.conversation_id) if memory else None
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="找不到这个对话。")
+    runtime = getattr(server, "runtime_mgr", None)
+    requested_run = str(body.run_id or "").strip()
+    if requested_run:
+        run = runtime.runs.get(requested_run) if runtime else None
+        if run is None or run.conversation_id != body.conversation_id:
+            raise HTTPException(status_code=404, detail="找不到这个对话中的运行记录。")
+        if run.status != "completed":
+            raise HTTPException(status_code=409, detail="只有成功完成的运行可以提炼为技能。")
+        run_id = run.run_id
+        project_id = getattr(run, "project_id", None)
+        agent_id = getattr(run, "agent_id", None)
+        fallback_user = str(getattr(run, "user_input", "") or "")
+    else:
+        candidates = [run for run in getattr(runtime, "runs", {}).values()
+                      if run.conversation_id == body.conversation_id and run.status == "completed"]
+        run = max(candidates, key=lambda item: str(item.updated_at), default=None)
+        if run is None:
+            raise HTTPException(status_code=409, detail="这个对话还没有成功完成的运行。")
+        run_id = run.run_id
+        project_id = getattr(run, "project_id", None)
+        agent_id = getattr(run, "agent_id", None)
+        fallback_user = str(getattr(run, "user_input", "") or "")
+    messages = await asyncio.to_thread(
+        read_session_messages, DATA_ROOT / "engine", body.conversation_id, limit=1000,
+    )
+    user_text, assistant_text = transcript_excerpt(messages, run_id)
+    user_text = user_text or fallback_user
+    if not assistant_text:
+        assistant_text = next((str(env.get("data", {}).get("content") or "").strip()
+                               for env in reversed(run.events)
+                               if env.get("event") == "message.completed"
+                               and str(env.get("data", {}).get("content") or "").strip()), "")
+    try:
+        record = _curator().create_candidate_from_conversation(
+            conversation_id=body.conversation_id, run_id=run_id,
+            user_text=user_text, assistant_text=assistant_text, name=body.name,
+            project_id=project_id, agent_id=agent_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"created": True, "candidate": record}
+
+
 @evolution_router.post("/candidates/{candidate_id}/approve")
 async def approve_candidate(candidate_id: str) -> dict[str, Any]:
     """批准候选 → 写入用户技能目录并登记到唯一技能注册表（origin_kind=local_evolved）。
@@ -231,6 +293,45 @@ async def approve_candidate(candidate_id: str) -> dict[str, Any]:
             "origin_kind": "local_evolved",
             "note": "技能包已写入用户技能目录，并登记到统一技能注册表"
                     "（origin_kind=local_evolved）"}
+
+
+@evolution_router.post("/candidates/{candidate_id}/rollback")
+async def rollback_candidate(candidate_id: str) -> dict[str, Any]:
+    """Uninstall the evolved skill registered by this approved candidate."""
+    curator = _curator()
+    record = curator.get(candidate_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"未找到候选技能：{candidate_id}")
+    if record.get("status") != "approved":
+        raise HTTPException(status_code=409, detail="只有已批准的候选技能可以回滚")
+    name = str(record.get("name") or "")
+    if any(item.get("id") != candidate_id and item.get("status") == "approved"
+           and item.get("name") == name for item in curator.list()):
+        raise HTTPException(status_code=409, detail="这个技能还关联其它已批准候选；先处理同名候选")
+    try:
+        from atlas.api.skills_market_router import get_market
+
+        market = get_market()
+        registry_rows = [row for row in market.registry.list() if row.get("name") == name]
+        evolved = [row for row in registry_rows
+                   if (row.get("provenance") or {}).get("origin_kind") == "local_evolved"]
+        if not evolved:
+            raise HTTPException(status_code=409, detail="统一技能库中没有找到该候选对应的演化技能")
+        from atlas.skills.lifecycle import remove_skill
+
+        latest = max(evolved, key=lambda row: str(row.get("updated_at") or ""))
+        result = remove_skill(
+            market.registry, market.user_skills_dir, name, latest["version"],
+            approval_event_id=f"evolution-rollback:{candidate_id}",
+            reason=f"回滚来源运行：{', '.join(record.get('source_runs') or [])}",
+        )
+        market._rescan()
+        updated = curator.mark_rolled_back(candidate_id)
+    except HTTPException:
+        raise
+    except (OSError, RuntimeError, ValueError, sqlite3.Error) as exc:
+        raise HTTPException(status_code=500, detail=f"回滚演化技能失败：{exc}") from exc
+    return {"ok": True, "candidate": updated, "removed": result}
 
 
 def _bump_patch(version: str) -> str:

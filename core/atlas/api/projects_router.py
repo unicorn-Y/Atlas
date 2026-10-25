@@ -150,6 +150,20 @@ async def put_project_settings(
     if project is None:
         raise HTTPException(status_code=404, detail="找不到这个项目。")
     current = load_project_config(project_id)
+    if "active_skills" in request:
+        active_skills = request["active_skills"]
+        if (not isinstance(active_skills, list) or len(active_skills) > 8
+                or any(not isinstance(name, str) or not name.strip() for name in active_skills)):
+            raise HTTPException(status_code=422,
+                                detail="项目技能必须是最多八个非空 Skill 名称")
+        active_skills = list(dict.fromkeys(name.strip() for name in active_skills))
+        skill_mgr = services.skill_mgr or getattr(_server(), "skill_mgr", None)
+        if active_skills and skill_mgr is None:
+            raise HTTPException(status_code=503, detail="Skill Manager 尚未就绪，暂时无法保存项目技能")
+        missing = [name for name in active_skills if skill_mgr.get_skill(name) is None]
+        if missing:
+            raise HTTPException(status_code=422, detail=f"找不到项目技能：{'、'.join(missing)}")
+        current["active_skills"] = active_skills
     for key in ("default_model", "gateway_base_url"):
         if key not in request:
             continue

@@ -34,7 +34,7 @@ class RunState:
         "usage", "workspace_rules", "plan_future", "plan_edits",
         "tool_allow", "tool_deny", "reasoning_effort", "reasoning_effort_applied",
         "ephemeral", "ephemeral_source", "tool_output_dir", "subtasks",
-        "read_only", "active_skills", "profile_id", "user_input",
+        "read_only", "active_skills", "profile_id", "agent_id", "user_input",
         "permission_mode", "allowed_paths", "trust_future", "trust_event_id",
         "executor", "sandbox", "extra_roots",
         "trust_roots",
@@ -87,6 +87,7 @@ class RunState:
         self.read_only = False
         self.active_skills: list[str] = []
         self.profile_id: str | None = None
+        self.agent_id: str | None = None
         self.user_input = ""
         # Auto-resume bookkeeping (restart recovery). ``resume_attempts`` is
         # persisted so a run that keeps getting interrupted is never resumed
@@ -162,6 +163,7 @@ def _resume_context(run: "RunState") -> dict[str, Any]:
         "ephemeral": run.ephemeral,
         "ephemeral_source": run.ephemeral_source,
         "profile_id": run.profile_id,
+        "agent_id": run.agent_id,
         "project_id": run.project_id,
         "reasoning_effort": run.reasoning_effort,
         "config_override": run.config_override,
@@ -281,6 +283,7 @@ class RuntimeManager:
             run.resume_context = (
                 json.loads(row["resume_context"]) if row["resume_context"] else {}
             )
+            run.agent_id = run.resume_context.get("agent_id")
             run.background = bool(run.resume_context.get("background"))
             if run.status in ("running", "paused", "waiting"):
                 # A restart is an interruption, not a verdict. Runs that were

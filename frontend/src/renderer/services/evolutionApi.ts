@@ -106,6 +106,7 @@ export type SkillCandidate = {
   status: string;
   description: string;
   references: string[];
+  source_runs: string[];
 };
 
 /** Minimal fetch shape so tests (and callers) can inject a stub fetcher. */
@@ -309,12 +310,13 @@ function normalizeCandidate(raw: unknown, fallbackIndex: number): SkillCandidate
   const preview = firstStr(item, ['preview_md', 'preview']);
   return {
     id: str(item.id, `candidate-${fallbackIndex}`),
-    title: firstStr(item, ['title']) || str(item.name, str(item.id, `候选技能-${fallbackIndex}`)),
+    title: firstStr(item, ['title', 'display_title']) || str(item.name, str(item.id, `候选技能-${fallbackIndex}`)),
     origin: str(item.origin, 'user_request'),
     preview_md: preview || buildCandidatePreview(item),
     status: str(item.status, 'candidate'),
     description: str(item.description),
     references: strList(item.references),
+    source_runs: strList(item.source_runs),
   };
 }
 
@@ -399,6 +401,10 @@ export async function approveCandidate(apiBaseUrl: string, candidateId: string, 
   await request(apiBaseUrl, `/api/evolution/candidates/${encodeURIComponent(candidateId)}/approve`, { method: 'POST', json: {} }, fetcher);
 }
 
+export async function rollbackCandidate(apiBaseUrl: string, candidateId: string, fetcher: FetchLike = fetch): Promise<void> {
+  await request(apiBaseUrl, `/api/evolution/candidates/${encodeURIComponent(candidateId)}/rollback`, { method: 'POST', json: {} }, fetcher);
+}
+
 // ---------------------------------------------------------------------------
 // 徽标文案（组件与测试共用）
 // ---------------------------------------------------------------------------
@@ -429,7 +435,7 @@ export const EVOLUTION_KIND_LABEL: Record<EvolutionSourceKind, string> = {
 /** 候选来源 → 中文（未知值原样展示）。 */
 export function candidateOriginLabel(origin: string): string {
   const known: Record<string, string> = {
-    user_request: '用户请求', from_runs: '运行沉淀', from_recording: '录制沉淀', upstream: '上游启发',
+    successful_run: '成功会话', user_request: '用户请求', from_runs: '运行沉淀', from_recording: '录制沉淀', upstream: '上游启发',
   };
   return known[origin] ?? origin;
 }

@@ -284,3 +284,63 @@ def test_approve_endpoint_degrades_when_market_unavailable(tmp_path, monkeypatch
     assert result["ok"] is True and result["saved"] is False
     assert "技能库" in result["note"]
     assert curator.get("solo")["status"] == "approved"
+
+
+def test_conversation_extraction_approval_and_rollback_route(tmp_path, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from atlas import server
+    from atlas.api import skills_market_router
+    from atlas.api.evolution_router import evolution_router
+    from atlas.api.runtime import RunState
+    from atlas.engine.session_sync import append_session_message
+
+    data_root = tmp_path / "data"
+    monkeypatch.setattr("atlas.config.DATA_ROOT", data_root)
+    monkeypatch.setattr("atlas.evolution.watcher.evolution_root", lambda: data_root / "evolution")
+    run = RunState("run-1", "conversation-1", "test")
+    run.status = "completed"
+    run.user_input = "整理本周发布记录"
+    run.project_id = "project-1"
+    run.agent_id = "agent-1"
+    run.events.append({"event": "message.completed", "data": {"content": "汇总发布项并输出 Markdown"}})
+    append_session_message(data_root / "engine", "conversation-1", "user", run.user_input,
+                           {"run_id": run.run_id})
+    append_session_message(data_root / "engine", "conversation-1", "assistant", "汇总发布项并输出 Markdown",
+                           {"run_id": run.run_id})
+
+    class Memory:
+        async def get_conversation(self, conversation_id):
+            return {"id": conversation_id, "title": "发布记录"}
+
+    monkeypatch.setattr(server, "memory", Memory())
+    monkeypatch.setattr(server, "runtime_mgr", SimpleNamespace(runs={run.run_id: run}))
+    env = _market_env(tmp_path)
+    skills_market_router.set_market_supplier(lambda: env["market"])
+    app = FastAPI()
+    app.include_router(evolution_router)
+    client = TestClient(app)
+    try:
+        extracted = client.post("/api/evolution/candidates/from-conversation", json={
+            "conversation_id": run.conversation_id, "run_id": run.run_id,
+        })
+        assert extracted.status_code == 200, extracted.text
+        candidate = extracted.json()["candidate"]
+        assert candidate["status"] == "candidate"
+        assert candidate["source_runs"] == [run.run_id]
+        assert candidate["parameters"]["project_id"] == "project-1"
+        assert candidate["parameters"]["agent_id"] == "agent-1"
+
+        approved = client.post(f"/api/evolution/candidates/{candidate['id']}/approve")
+        assert approved.status_code == 200 and approved.json()["saved"] is True
+        assert env["manager"].get_skill(candidate["name"]) is not None
+        rolled_back = client.post(f"/api/evolution/candidates/{candidate['id']}/rollback")
+        assert rolled_back.status_code == 200, rolled_back.text
+        assert rolled_back.json()["candidate"]["source_runs"] == [run.run_id]
+        assert rolled_back.json()["candidate"]["status"] == "rolled_back"
+        assert env["manager"].get_skill(candidate["name"]) is None
+    finally:
+        skills_market_router.set_market_supplier(None)

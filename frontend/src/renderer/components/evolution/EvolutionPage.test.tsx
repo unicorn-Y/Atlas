@@ -49,6 +49,7 @@ const draft: EvolutionDraft = {
 const candidate: SkillCandidate = {
   id: 'weekly-report', title: '周报助手', origin: 'from_runs', preview_md: '从 3 次成功运行沉淀。',
   status: 'candidate', description: '从 3 次成功运行沉淀。', references: ['core/atlas/session.py'],
+  source_runs: ['run-1'],
 };
 
 describe('Evolution page shell', () => {
@@ -146,7 +147,7 @@ describe('Branch status', () => {
 
 describe('Skill candidates preview and approve', () => {
   it('shows origin, status and an approve action for pending candidates', () => {
-    const html = renderToStaticMarkup(<SkillCandidates candidates={[candidate]} busyId="" onApprove={() => undefined} />);
+    const html = renderToStaticMarkup(<SkillCandidates candidates={[candidate]} busyId="" onApprove={() => undefined} onRollback={() => undefined} />);
     expect(html).toContain('周报助手');
     expect(html).toContain('运行沉淀');
     expect(html).toContain('候选');
@@ -155,7 +156,7 @@ describe('Skill candidates preview and approve', () => {
   });
 
   it('hides the approve action once a candidate is approved or merged', () => {
-    const html = renderToStaticMarkup(<SkillCandidates candidates={[{ ...candidate, status: 'approved' }]} busyId="" onApprove={() => undefined} />);
+    const html = renderToStaticMarkup(<SkillCandidates candidates={[{ ...candidate, status: 'approved' }]} busyId="" onApprove={() => undefined} onRollback={() => undefined} />);
     expect(html).toContain('已批准');
     expect(html).not.toContain('aria-label="批准候选技能 周报助手"');
   });

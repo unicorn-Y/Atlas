@@ -24,8 +24,8 @@ import structlog
 log = structlog.get_logger()
 
 #: 候选来源（a 重复成功运行 / b 用户保存 / c X2 录制包）。
-ORIGINS = ("repeated_runs", "user_request", "recording_bundle")
-STATUSES = ("candidate", "approved", "rejected", "stale", "merged")
+ORIGINS = ("successful_run", "repeated_runs", "user_request", "recording_bundle")
+STATUSES = ("candidate", "approved", "rejected", "stale", "merged", "rolled_back")
 
 #: (a) 重复成功运行的默认门槛：至少 N 次成功才生成候选。
 DEFAULT_MIN_RUNS = 3
@@ -122,13 +122,14 @@ class SkillCurator:
         source_runs: list[str] | None = None,
         run_count: int | None = None,
         source_version: str | None = None,
+        candidate_id: str | None = None,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         """创建（或合并）候选技能。同名候选合并：引用/资产取并集，运行数累加。"""
         if origin not in ORIGINS:
             raise ValueError(f"origin 只支持 {'/'.join(ORIGINS)}")
         now = now or _now()
-        candidate_id = _slug(name)
+        candidate_id = _slug(candidate_id or name)
         existing = self.get(candidate_id)
         if existing and existing.get("status") == "merged":
             existing = self.get(existing.get("merged_into") or candidate_id)
@@ -186,6 +187,48 @@ class SkillCurator:
             "updated_at": _iso(now),
             "approved_at": None,
         }
+        self._save(record)
+        return record
+
+    def create_candidate_from_conversation(
+        self, *, conversation_id: str, run_id: str, user_text: str,
+        assistant_text: str, name: str | None = None, project_id: str | None = None,
+        agent_id: str | None = None, now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Create a reviewable skill from one successful conversation turn.
+
+        Transcript excerpts are stored in the local candidate for review and
+        rollback provenance; they are never included in application logs.
+        """
+        from atlas.engine_core.agent.redact import redact_sensitive_text
+
+        goal = " ".join(redact_sensitive_text(str(user_text or ""), force=True).split())[:4000]
+        outcome = "\n".join(redact_sensitive_text(
+            str(assistant_text or ""), force=True).splitlines()).strip()[:6000]
+        if not goal or not outcome:
+            raise ValueError("当前运行缺少完整的用户目标或成功结果，无法提炼技能")
+        title = " ".join(str(name or "").split()).strip() or goal[:48].rstrip(" ，。:：")
+        skill_name = _slug(title)
+        if skill_name == "skill":
+            skill_name = f"conversation-{_slug(run_id)}"[:64].strip("-") or "conversation-skill"
+        steps = [f"处理用户目标：{goal}", "复用成功运行记录中的方法与结果：", outcome]
+        parameters: dict[str, Any] = {
+            "steps": steps,
+            "project_id": str(project_id or ""),
+            "agent_id": str(agent_id or ""),
+        }
+        record = self.create_candidate(
+            name=skill_name,
+            description="从成功会话提炼的技能草案，请审核后再加入技能库。",
+            origin="successful_run",
+            references=[f"conversation:{conversation_id}"],
+            parameters=parameters,
+            source_runs=[str(run_id)],
+            run_count=1,
+            candidate_id=f"run-{_slug(run_id)}",
+            now=now,
+        )
+        record["title"] = title
         self._save(record)
         return record
 
@@ -256,6 +299,22 @@ class SkillCurator:
         self._save(record)
         return record
 
+    def mark_rolled_back(self, candidate_id: str, *, now: datetime | None = None) -> dict[str, Any]:
+        """Mark an approved candidate after its registered skill was rolled back."""
+        record = self.get(candidate_id)
+        if record is None:
+            raise ValueError(f"未找到候选技能：{candidate_id}")
+        if record.get("status") != "approved":
+            raise ValueError("只有已批准的候选技能可以回滚")
+        now = now or _now()
+        record["status"] = "rolled_back"
+        record["updated_at"] = _iso(now)
+        history = list(record.get("provenance", {}).get("history", []))
+        history.append({"at": _iso(now), "action": "rolled_back"})
+        record.setdefault("provenance", {})["history"] = history
+        self._save(record)
+        return record
+
     @staticmethod
     def to_skill_bundle(
         record: dict[str, Any], *, now: datetime | None = None,
@@ -267,7 +326,7 @@ class SkillCurator:
             "\n".join(f"{i}. {s}" for i, s in enumerate(steps, 1)) or "（按 parameters 定义）")
         ref_lines = "\n".join(f"- {r}" for r in record.get("references", [])) or "-（无）"
         instructions = "\n".join([
-            f"# {record['name']}",
+            f"# {record.get('title') or record['name']}",
             "",
             str(record.get("description") or ""),
             "",

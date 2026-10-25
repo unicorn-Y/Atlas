@@ -124,6 +124,7 @@ interface AtlasState extends PersistentSlice {
   selectModel: (model: string) => Promise<void>;
   applySkill: (name: string) => void;
   removeSkill: (name: string) => void;
+  refreshSkills: () => Promise<void>;
   saveProviderSettings: (baseUrl: string, apiKey: string) => Promise<boolean>;
   saveSubagentSettings: (enabled: boolean, defaultModel: string, maxConcurrent?: number) => Promise<boolean>;
   saveCompressionModel: (model: string) => Promise<boolean>;
@@ -542,6 +543,10 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       storageSet(ACTIVE_SKILLS, JSON.stringify(activeSkills));
       return { activeSkills };
     }),
+    refreshSkills: async () => {
+      try { set({ skills: await backend.getSkills() }); }
+      catch (error) { fail(error, '读取技能库失败'); }
+    },
 
     saveProviderSettings: async (baseUrl, apiKey) => {
       set({ settingsBusy: true, connectionTest: null });

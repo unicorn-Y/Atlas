@@ -3,7 +3,7 @@ import {
   GitBranch, ListChecks, LoaderCircle, RadioTower, RefreshCw, Scale, ScrollText, Sparkles, X,
 } from 'lucide-react';
 import {
-  approveCandidate, approveDraft, addEvolutionSource, generateDrafts, listBranches, listCandidates,
+  approveCandidate, rollbackCandidate, approveDraft, addEvolutionSource, generateDrafts, listBranches, listCandidates,
   listEvolutionDiffs, listEvolutionSources, listDrafts, listParityRows, removeEvolutionSource,
   runEvolutionCheck, type EvolutionBranch, type EvolutionCheckResult, type EvolutionDiff,
   type EvolutionDraft, type EvolutionSource, type EvolutionSourceKind, type ParityRow,
@@ -16,6 +16,7 @@ import ParitySuggestions from '../components/evolution/ParitySuggestions';
 import DraftList from '../components/evolution/DraftList';
 import BranchStatus from '../components/evolution/BranchStatus';
 import SkillCandidates from '../components/evolution/SkillCandidates';
+import { useAtlasStore } from '../store/useAtlasStore';
 import UpstreamPanel from '../components/evolution/UpstreamPanel';
 
 const errorText = (cause: unknown, fallback: string): string =>
@@ -186,9 +187,24 @@ export default function EvolutionPage({ apiBaseUrl, onToast }: {
     setCandidateBusyId(candidate.id);
     try {
       await approveCandidate(apiBaseUrl, candidate.id);
+      await useAtlasStore.getState().refreshSkills();
       onToast?.(`已批准「${candidate.title}」，技能包会交给技能库`);
     } catch (cause) {
       onToast?.(errorText(cause, '批准没有成功，请稍后再试。'));
+    } finally {
+      setCandidateBusyId('');
+      await loadCandidates();
+    }
+  };
+
+  const rollbackCandidateSkill = async (candidate: SkillCandidate) => {
+    setCandidateBusyId(candidate.id);
+    try {
+      await rollbackCandidate(apiBaseUrl, candidate.id);
+      await useAtlasStore.getState().refreshSkills();
+      onToast?.(`已回滚「${candidate.title}」；来源运行 ${candidate.source_runs.join('、') || '未知'}`);
+    } catch (cause) {
+      onToast?.(errorText(cause, '回滚没有成功，请稍后再试。'));
     } finally {
       setCandidateBusyId('');
       await loadCandidates();
@@ -263,7 +279,8 @@ export default function EvolutionPage({ apiBaseUrl, onToast }: {
         loading={loading.candidates} error={errors.candidates}
         onRetry={() => void loadCandidates()} onDismissError={() => setSection('candidates', { error: '' })}>
         <SkillCandidates candidates={candidates} busyId={candidateBusyId}
-          onApprove={(candidate) => void approveCandidateSkill(candidate)} />
+          onApprove={(candidate) => void approveCandidateSkill(candidate)}
+          onRollback={(candidate) => void rollbackCandidateSkill(candidate)} />
       </Section>
     </div>
   </div></div>;

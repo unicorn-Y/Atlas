@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../services/api';
+import { listInstalledSkills, type InstalledSkillRecord } from '../services/skillsMarketApi';
 
 interface ProjectSettings {
-  config: { models?: { default?: string; gateway?: { base_url?: string } } };
+  config: { models?: { default?: string; gateway?: { base_url?: string } }; active_skills?: string[] };
   api_key_configured: boolean;
   credential_scope: string;
 }
@@ -12,6 +13,8 @@ export default function ProjectModelSettings({ projectId, apiBaseUrl, onToast }:
 }) {
   const [settings, setSettings] = useState<ProjectSettings | null>(null);
   const [models, setModels] = useState<Array<{ id: string; name: string }>>([]);
+  const [skills, setSkills] = useState<InstalledSkillRecord[]>([]);
+  const [activeSkills, setActiveSkills] = useState<string[]>([]);
   const [defaultModel, setDefaultModel] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -21,11 +24,14 @@ export default function ProjectModelSettings({ projectId, apiBaseUrl, onToast }:
   const load = () => Promise.all([
     api<ProjectSettings>(apiBaseUrl, `/api/projects/${encodeURIComponent(projectId)}/settings`),
     api<{ models: Array<{ id: string; name: string }> }>(apiBaseUrl, '/api/models'),
-  ]).then(([project, catalog]) => {
+    listInstalledSkills(apiBaseUrl),
+  ]).then(([project, catalog, installed]) => {
     setSettings(project);
     setDefaultModel(project.config.models?.default ?? '');
     setBaseUrl(project.config.models?.gateway?.base_url ?? '');
     setModels(catalog.models);
+    setSkills(installed);
+    setActiveSkills(project.config.active_skills ?? []);
   });
 
   useEffect(() => { void load().catch((exc) => setError(exc instanceof Error ? exc.message : String(exc))); }, [apiBaseUrl, projectId]);
@@ -34,7 +40,7 @@ export default function ProjectModelSettings({ projectId, apiBaseUrl, onToast }:
     event.preventDefault();
     setBusy(true); setError('');
     try {
-      const payload: Record<string, string> = { default_model: defaultModel, gateway_base_url: baseUrl };
+      const payload: Record<string, unknown> = { default_model: defaultModel, gateway_base_url: baseUrl, active_skills: activeSkills };
       if (apiKey.trim()) payload.api_key = apiKey.trim();
       const saved = await api<ProjectSettings>(apiBaseUrl, `/api/projects/${encodeURIComponent(projectId)}/settings`, { method: 'PUT', json: payload });
       setSettings(saved); setApiKey(''); onToast('项目模型设置已保存，密钥保存在系统凭据库中');
@@ -64,6 +70,22 @@ export default function ProjectModelSettings({ projectId, apiBaseUrl, onToast }:
     <label className="grid gap-1 text-[11px]">项目 API 密钥
       <input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="new-password" placeholder={settings?.api_key_configured ? '已设置（输入新值即可轮换）' : '仅保存到本项目'} className="h-8 rounded-lg bg-surface px-2 text-fg" />
     </label>
+    <fieldset className="grid gap-1.5 border-0 p-0" aria-label="项目加载的技能">
+      <legend className="mb-1 text-[11px] text-fg-2">这个项目默认加载的技能（最多 8 个）</legend>
+      <p className="m-0 text-[10.5px] text-fg-3">只影响本项目中新启动的会话；Agent 自己的技能仍在 Agents → Skills 中单独控制。</p>
+      {skills.map((skill) => {
+        const checked = activeSkills.includes(skill.name);
+        return <label key={skill.name} className="flex items-center gap-2 rounded-lg bg-surface px-2 py-1.5 text-[11px]">
+          <input type="checkbox" checked={checked} disabled={busy || (!checked && activeSkills.length >= 8)}
+            onChange={(event) => setActiveSkills((current) => event.target.checked
+              ? [...new Set([...current, skill.name])].slice(0, 8)
+              : current.filter((name) => name !== skill.name))} />
+          <span className="min-w-0 flex-1 truncate">{skill.name}</span>
+          {skill.origin_kind === 'local_evolved' && <span className="text-[9.5px] text-brand">会话提炼</span>}
+        </label>;
+      })}
+      {!skills.length && <span className="text-[10.5px] text-fg-3">技能库中还没有可选择的技能。</span>}
+    </fieldset>
     <div className="flex items-center justify-between">
       <small className="text-[10px] text-fg-3">{settings?.api_key_configured ? '项目密钥已配置' : '项目密钥未配置'}</small>
       <div className="flex gap-2"><button type="button" disabled={busy || !settings?.api_key_configured} onClick={() => void clearKey()} className="h-7 rounded-lg px-2 text-[11px] text-fg-3 hover:bg-hover">清除项目密钥</button><button type="submit" disabled={busy} className="h-7 rounded-lg bg-brand px-3 text-[11px] text-white">{busy ? '保存中…' : '保存项目设置'}</button></div>
