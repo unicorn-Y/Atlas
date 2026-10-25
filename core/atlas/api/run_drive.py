@@ -953,19 +953,16 @@ def _set_workspace_trusted(root: str, trust: bool) -> None:
 
 
 def _validated_file_attachments(
-    value: Any, run_id: str, content: str,
-) -> tuple[str, list[str]]:
+    value: Any, run_id: str, content: str, *, include_audit: bool = False,
+) -> tuple[str, list[str]] | tuple[str, list[str], list[dict[str, Any]]]:
     if value is None:
-        return content, []
+        return (content, [], []) if include_audit else (content, [])
     if not isinstance(value, list):
         raise ValueError("files must be an array")
     total = 0
     inlined: list[str] = []
     stored: list[str] = []
-    allowed_text = {".txt", ".md", ".csv", ".json", ".py", ".js", ".ts",
-                    ".tsx", ".jsx", ".html", ".css", ".yaml", ".yml", ".toml",
-                    ".xml", ".sql", ".sh", ".ps1", ".go", ".rs", ".java", ".c",
-                    ".h", ".cpp", ".hpp", ".rb", ".php", ".swift", ".kt"}
+    media_audit: list[dict[str, Any]] = []
     for item in value:
         if not isinstance(item, dict):
             raise ValueError("each file attachment must be an object")
@@ -983,14 +980,14 @@ def _validated_file_attachments(
         if total > 20 * 1024 * 1024:
             raise ValueError("file attachments exceed 20 MB total")
         mime = str(item.get("mime", "application/octet-stream")).lower()
-        if mime.startswith("text/") or mime in {"application/json", "text/markdown"} \
-                or Path(name).suffix.lower() in allowed_text:
-            try:
-                text = raw.decode("utf-8")
-            except UnicodeDecodeError:
-                raise ValueError(f"text attachment is not valid UTF-8: {name}") from None
-            inlined.append(f"--- Attached file: {name} ---\n{text}")
-        else:
+        from atlas.runtime.media_understanding import extract_document, media_context_block
+
+        text, audit = extract_document(name, mime, raw)
+        media_audit.append(audit)
+        extracted = media_context_block(audit, text)
+        if extracted:
+            inlined.append(extracted)
+        if audit["extractor"] != "utf-8":
             directory = Path.home() / ".atlas" / "attachments" / run_id
             directory.mkdir(parents=True, exist_ok=True)
             path = directory / name
@@ -998,8 +995,46 @@ def _validated_file_attachments(
             stored.append(str(path.resolve()))
     if inlined:
         content += "\n\n" + "\n\n".join(inlined)
-    return content, stored
+    return (content, stored, media_audit) if include_audit else (content, stored)
 
+
+async def _transcribe_audio_attachments(
+    file_paths: list[str], media_audit: list[dict[str, Any]],
+) -> tuple[str, list[dict[str, Any]]]:
+    """Transcribe uploaded audio through the existing local SenseVoice ASR service."""
+    audio_extensions = {".wav", ".mp3", ".m4a", ".aac", ".ogg", ".opus", ".flac", ".webm"}
+    audio_audits = [item for item in media_audit
+                    if Path(str(item.get("name") or "")).suffix.lower() in audio_extensions
+                    or str(item.get("mime") or "").startswith("audio/")]
+    if not audio_audits:
+        return "", []
+    from atlas import server as atlas_server
+    from atlas.asr import ASRManager
+    from atlas.runtime.media_understanding import media_context_block
+
+    app = getattr(atlas_server, "app", None)
+    services = getattr(getattr(app, "state", None), "services", None)
+    asr = getattr(services, "asr_manager", None)
+    if asr is None:
+        asr = ASRManager()
+        if services is not None:
+            services.asr_manager = asr
+    blocks: list[str] = []
+    for item in audio_audits:
+        path = next((candidate for candidate in file_paths if Path(candidate).name == item.get("name")), "")
+        if not path:
+            continue
+        try:
+            payload = await asyncio.to_thread(Path(path).read_bytes)
+            transcript = await asr.transcribe_audio_bytes_async(payload)
+            item.update({"extractor": "SenseVoice local ASR", "status": "complete" if transcript else "no_speech",
+                         "characters": len(transcript)})
+            block = media_context_block(item, transcript)
+            if block:
+                blocks.append(block)
+        except Exception as exc:
+            item.update({"extractor": "SenseVoice local ASR", "status": f"failed:{type(exc).__name__}"})
+    return "\n\n".join(blocks), audio_audits
 
 def _plan_mode_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     selected = [json.loads(json.dumps(item)) for item in tools
@@ -1445,10 +1480,33 @@ async def _handle_run_start(
             "category": "validation", "detail": str(exc),
         }))
         return
-    try:
-        content, file_paths = _server()._validated_file_attachments(
-            data.get("files"), run_id, content,
+    media_sources: list[dict[str, Any]] = []
+    from atlas.runtime.media_understanding import media_context_block, ocr_image_data_url
+    image_context: list[str] = []
+    for image_index, image in enumerate(image_attachments):
+        text, audit = await asyncio.to_thread(ocr_image_data_url, image, image_index)
+        audit["vision"] = "原图随消息传给所选模型"
+        media_sources.append(audit)
+        block = media_context_block(audit, text)
+        if block:
+            image_context.append(block)
+    if image_attachments:
+        content += (
+            f"\n\n--- Media summary: {len(image_attachments)} image attachment(s) ---\n"
+            "The original image payloads are supplied to the selected vision model. Inspect their visual content "
+            "and transcribe visible text (OCR) when relevant to the user's request. Local OCR status and any extracted "
+            "text follow as auditable media sources."
         )
+    if image_context:
+        content += "\n\n" + "\n\n".join(image_context)
+    try:
+        content, file_paths, file_media_sources = _server()._validated_file_attachments(
+            data.get("files"), run_id, content, include_audit=True,
+        )
+        media_sources.extend(file_media_sources)
+        transcript, _audio_sources = await _transcribe_audio_attachments(file_paths, file_media_sources)
+        if transcript:
+            content += "\n\n" + transcript
         if file_paths:
             content += "\n\nAttached files stored at:\n" + "\n".join(file_paths)
     except ValueError as exc:
@@ -1992,6 +2050,7 @@ async def _handle_run_start(
             *[{"kind": "user_attachment", "path": str(item.get("name") or "attachment"), "loaded": True}
               for item in data.get("attachments", []) if isinstance(item, dict)],
             *([{"kind": "image_attachment", "path": f"{len(image_attachments)} image attachment(s)", "loaded": True}] if image_attachments else []),
+            *media_sources,
             *[{"kind": "workspace_rule", "path": str(item.get("path") or ""), "bytes": item.get("bytes"), "loaded": True}
               for item in run.workspace_rules],
             *[{"kind": "referenced_conversation", "id": str(item)} for item in context_conversations],
