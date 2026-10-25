@@ -1999,15 +1999,29 @@ export default function App() {
       const enabled = pref('vim-mode') !== 'true'; setPref('vim-mode', String(enabled)); window.dispatchEvent(new Event('atlas:vim-toggle')); setToast(`${t('Vim 模式', readLocale())} ${t(enabled ? 'Vim 模式已开启' : 'Vim 模式已关闭', readLocale())}`);
     } },
     { id: 'fallback', label: '/fallback', hint: '配置主模型失败后的备用模型顺序', run: () => setFallbackOpen(true) },
-    { id: 'fast', label: '/fast', hint: '切换快速模型服务档；不支持的路由会使用普通档并在运行记录中提示', takesArgument: true, run: (value: string) => {
+    { id: 'fast', label: '/fast', hint: '为当前支持推理变体的模型切换到最低推理档；/fast off 恢复默认', takesArgument: true, run: (value: string) => {
       const arg = value.trim().toLowerCase();
       if (arg && !['on', 'off', 'status'].includes(arg)) { setToast('用法：/fast [on|off|status]'); return; }
-      void api<{ fast_enabled: boolean }>(store.apiBaseUrl, '/api/models/service-tier').then((current) => {
-        if (arg === 'status') { setToast(`快速服务档${current.fast_enabled ? '已开启' : '已关闭'}`); return; }
-        const fast_enabled = arg === 'on' ? true : arg === 'off' ? false : !current.fast_enabled;
-        return api<{ fast_enabled: boolean }>(store.apiBaseUrl, '/api/models/service-tier', { method: 'PUT', json: { fast_enabled } })
-          .then(() => setToast(`快速服务档已${fast_enabled ? '开启' : '关闭'}；服务商不支持时会自动退回普通档并显示提示`));
-      }).catch((error) => setToast(`快速服务档设置失败：${String(error)}`));
+      const model = store.models.find((item) => item.id === store.model);
+      if (!model?.supports_reasoning_effort) { setToast(`当前模型 ${store.model || '未知'} 不支持推理变体，/fast 未更改设置`); return; }
+      const supported = model.reasoning_efforts?.length ? model.reasoning_efforts : ['minimal', 'low', 'medium', 'high'];
+      const fastEffort = ['minimal', 'low'].find((effort) => supported.includes(effort)) ?? supported[0];
+      if (arg === 'status') { setToast(`模型 ${model.name ?? model.id} 的快速档：${store.reasoningEffort || '模型默认'}`); return; }
+      if (arg === 'off') { store.setReasoningEffort(''); setToast(`模型 ${model.name ?? model.id} 已恢复默认推理档`); return; }
+      store.setReasoningEffort(fastEffort as Parameters<typeof store.setReasoningEffort>[0]);
+      setToast(`模型 ${model.name ?? model.id} 已切换到快速推理档：${fastEffort}`);
+    } },
+    { id: 'thinking', label: '/thinking', hint: '为当前支持推理变体的模型切换到最高推理档；/thinking off 恢复默认', takesArgument: true, run: (value: string) => {
+      const arg = value.trim().toLowerCase();
+      if (arg && !['on', 'off', 'status'].includes(arg)) { setToast('用法：/thinking [on|off|status]'); return; }
+      const model = store.models.find((item) => item.id === store.model);
+      if (!model?.supports_reasoning_effort) { setToast(`当前模型 ${store.model || '未知'} 不支持推理变体，/thinking 未更改设置`); return; }
+      const supported = model.reasoning_efforts?.length ? model.reasoning_efforts : ['minimal', 'low', 'medium', 'high'];
+      const thinkingEffort = ['high', 'medium', 'low', 'minimal'].find((effort) => supported.includes(effort)) ?? supported[supported.length - 1];
+      if (arg === 'status') { setToast(`模型 ${model.name ?? model.id} 的推理档：${store.reasoningEffort || '模型默认'}`); return; }
+      if (arg === 'off') { store.setReasoningEffort(''); setToast(`模型 ${model.name ?? model.id} 已恢复默认推理档`); return; }
+      store.setReasoningEffort(thinkingEffort as Parameters<typeof store.setReasoningEffort>[0]);
+      setToast(`模型 ${model.name ?? model.id} 已切换到深度推理档：${thinkingEffort}`);
     } },
     { id: 'suggestions', label: '/suggestions', hint: '开启或关闭每轮结束后的主动建议', takesArgument: true, run: (value: string) => {
       const arg = value.trim().toLowerCase();

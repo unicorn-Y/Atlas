@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Check, ChevronLeft, LoaderCircle, Pencil, Pin, Radio, Search, Trash2, X } from 'lucide-react';
+import { Check, ChevronLeft, LoaderCircle, Pencil, Pin, Radio, Search, Star, Trash2, X } from 'lucide-react';
 import type { CustomModelRequest, CustomModelUpdateRequest, ModelInfo, ProviderState, ReasoningStagesConfig } from '@atlas/backend-adapter';
 import DependencyCheckPanel from './DependencyCheckPanel';
 import IntegrationPanel from './IntegrationPanel';
@@ -23,6 +23,7 @@ type ProviderFilter = 'all' | 'configured' | 'unconfigured' | 'attention';
 type ModelFilter = 'all' | 'selected' | 'provider' | 'gateway' | 'configured' | 'unconfigured';
 
 const PINNED_PROVIDERS_KEY = 'atlas.settings.providers.pinned.v1';
+const MODEL_CYCLE_KEY = 'atlas.model-cycle';
 const searchFieldClass = 'h-9 min-w-0 rounded-lg border border-line bg-surface px-3 text-[12.5px] text-fg placeholder:text-fg-3';
 const filterFieldClass = 'h-9 rounded-lg border border-line bg-surface px-2.5 text-[12.5px] text-fg';
 
@@ -30,6 +31,13 @@ function readPinnedProviders(): string[] {
   try {
     if (typeof localStorage === 'undefined') return [];
     const saved: unknown = JSON.parse(localStorage.getItem(PINNED_PROVIDERS_KEY) ?? '[]');
+    return Array.isArray(saved) ? saved.filter((item): item is string => typeof item === 'string') : [];
+  } catch { return []; }
+}
+
+function readModelCycle(): string[] {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(MODEL_CYCLE_KEY) ?? '[]');
     return Array.isArray(saved) ? saved.filter((item): item is string => typeof item === 'string') : [];
   } catch { return []; }
 }
@@ -81,6 +89,7 @@ export default function SettingsPage(props: SettingsPageProps) {
   const [modelFilter, setModelFilter] = useState<ModelFilter>('all');
   const [modelCatalogPreferences, setModelCatalogPreferences] = useState<ModelCatalogPreferences | null>(null);
   const [pinnedProviderIds, setPinnedProviderIds] = useState<string[]>(readPinnedProviders);
+  const [cycleModels, setCycleModels] = useState<string[]>(readModelCycle);
   const [editingModelId, setEditingModelId] = useState<string | null>(null);
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
   const [parallelLimit, setParallelLimit] = useState(String(props.subagentMaxConcurrent));
@@ -91,6 +100,12 @@ export default function SettingsPage(props: SettingsPageProps) {
     try { localStorage.setItem(PINNED_PROVIDERS_KEY, JSON.stringify(pinnedProviderIds)); }
     catch { /* The pin is only a local display preference. */ }
   }, [pinnedProviderIds]);
+  useEffect(() => {
+    const available = new Set(props.models.map((model) => model.id));
+    const next = cycleModels.filter((id) => available.has(id));
+    if (next.length !== cycleModels.length) setCycleModels(next);
+    try { localStorage.setItem(MODEL_CYCLE_KEY, JSON.stringify(next)); } catch { /* Local shortcut preference. */ }
+  }, [cycleModels, props.models]);
 
   const provider = props.providers.find((item) => item.id === selectedProviderId) ?? null;
   // Nothing picked yet (or the list just arrived): start on the first configured provider.
@@ -310,6 +325,7 @@ export default function SettingsPage(props: SettingsPageProps) {
       <p className="mb-3 text-[11.5px] text-fg-3">“当前默认”表示新会话使用的模型；配置状态只检查已保存的密钥或地址，实际可用性请运行连接测试。思考档位来自后端路由入口，部分服务商会在实际请求时进一步映射或降档。</p>
       <div className={styles.settingsModels}>{modelResults.map((model) => {
         const selected = model.id === props.selectedModel;
+        const inCycle = cycleModels.includes(model.id);
         const hidden = hiddenModelIds.has(model.id);
         const routeProvider = modelProvider(model);
         const availability = model.base_url?.trim() ? '已设置每模型地址'
@@ -321,6 +337,7 @@ export default function SettingsPage(props: SettingsPageProps) {
         return <div className={`${styles.settingsModelRow} ${selected ? styles.settingsModelSelected : ''}`} key={model.id}>
           <button disabled={hidden && selected} title={hidden && selected ? '当前模型已隐藏；切换模型后此项会从列表隐藏' : undefined} onClick={() => props.onSelectModel(model.id)}><span><strong>{model.name ?? model.id}</strong><small>{model.provider ? `${model.provider}，${model.id}` : model.id} · {selected ? (hidden ? '当前默认 · 已隐藏；切换后从列表隐藏 · ' : '当前默认 · ') : ''}{availability}</small>{effortHint && <small>{effortHint}</small>}</span>{selected && <Check size={17} />}</button>
           <div className="flex items-stretch gap-1.5">
+            <button type="button" className={cn(rowButton, inCycle && 'text-amber-500')} aria-label={`${inCycle ? '从收藏循环移除' : '加入收藏循环'}：${model.name ?? model.id}`} aria-pressed={inCycle} title={inCycle ? '从 Ctrl+P 收藏模型循环移除' : '加入 Ctrl+P 收藏模型循环'} onClick={() => setCycleModels((current) => current.includes(model.id) ? current.filter((id) => id !== model.id) : [...current, model.id])}><Star size={14} fill={inCycle ? 'currentColor' : 'none'} /></button>
             <button type="button" className={rowButton} aria-label={`测试 ${model.name ?? model.id} 连接`} disabled={props.busy || !props.connected} onClick={() => props.onTestConnection(model.id)} title="测试模型连接"><Radio size={14} /></button>
             <button type="button" className={rowButton} aria-label={`编辑 ${model.name ?? model.id}`} disabled={!props.connected} onClick={() => { setEditingModelId(model.id); setDeletingModelId(null); }} title="编辑模型"><Pencil size={14} /></button>
             <button type="button" className={cn(rowButton, deletingModelId === model.id && 'bg-danger-soft text-danger hover:bg-danger-soft hover:text-danger')} aria-label={`删除 ${model.name ?? model.id}`} disabled={props.busy || !props.connected} onClick={() => removeModel(model)} title="删除模型（再点一次确认）"><Trash2 size={14} /></button>
