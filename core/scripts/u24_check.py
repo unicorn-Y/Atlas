@@ -133,6 +133,29 @@ def check_device_transfer(root: Path) -> None:
     assert [event["event"] for event in listed[0]["events"]][:3] == ["requested", "accepted", "progress"]
 
     store = device_router_module._transfer_store(registry)
+    bad_hash_request = client.post("/api/devices/file-transfers", headers=source_auth, json={
+        "source_device_id": "self", "target_device_id": "phone-24", "filename": "bad-hash.bin",
+        "size": len(payload), "sha256": "0" * 64,
+    })
+    assert bad_hash_request.status_code == 200
+    bad_id = bad_hash_request.json()["transfer"]["id"]
+    assert client.post(f"/api/devices/file-transfers/{bad_id}/accept?device_id=phone-24",
+                       headers=receiver_auth).status_code == 200
+    mismatch = client.put(f"/api/devices/file-transfers/{bad_id}/chunks/0?device_id=self",
+                          headers=source_auth, content=payload)
+    assert mismatch.status_code == 409
+    assert store.get(bad_id)["state"] == "failed"
+    assert store.events(bad_id)[-1]["event"] == "integrity_failed"
+
+    cancel_request = client.post("/api/devices/file-transfers", headers=source_auth, json={
+        "source_device_id": "self", "target_device_id": "phone-24", "filename": "cancel.bin",
+        "size": 1, "sha256": hashlib.sha256(b"x").hexdigest(),
+    })
+    cancel_id = cancel_request.json()["transfer"]["id"]
+    cancelled = client.post(f"/api/devices/file-transfers/{cancel_id}/cancel?device_id=self",
+                            headers=source_auth)
+    assert cancelled.status_code == 200 and cancelled.json()["transfer"]["state"] == "cancelled"
+
     expiring = store.create("self", "phone-24", "old.bin", 1, hashlib.sha256(b"x").hexdigest())
     with store._db:
         store._db.execute("UPDATE transfers SET expires_at='2000-01-01T00:00:00+00:00' WHERE id=?",

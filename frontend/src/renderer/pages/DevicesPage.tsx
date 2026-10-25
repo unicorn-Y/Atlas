@@ -205,7 +205,7 @@ export default function DevicesPage({ onToast }: { onToast: (text: string) => vo
 
   return <div className="screen page"><div className="page-inner">
     <header className="page-head">
-      <div><h1>设备</h1><p>这台电脑是 Atlas 的身体；其他电脑和手机只作为入口把消息送进来。</p></div>
+      <div><h1>设备</h1><p>管理本机和可信配对设备；远程设备可按已批准能力接收文件传输，其他远程执行能力仍未开放。</p></div>
       <div className="btns">
         <button className="btn ghost" onClick={() => void loadDevices()} disabled={loading} aria-label="刷新设备">{loading ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />}</button>
       </div>
@@ -308,7 +308,7 @@ export default function DevicesPage({ onToast }: { onToast: (text: string) => vo
 
     <section className="mt-6 max-w-[620px]" aria-label="登记入口设备">
       <h2 className="m-0 mb-2 px-1 text-[13.5px] font-semibold text-heading">登记一台入口设备</h2>
-      <p className="m-0 mb-3 px-1 text-[12px] leading-[1.6] text-fg-3">手机或另一台电脑想远程指挥 Atlas 时，先在这里登记；它们只能发消息，不能接管这台电脑。</p>
+      <p className="m-0 mb-3 px-1 text-[12px] leading-[1.6] text-fg-3">登记设备后可单独标记为可信，并逐项审批文件传输能力；登记本身不会开放远程执行。</p>
       <form className="grid gap-2.5" onSubmit={(event) => { event.preventDefault(); void register(); }}>
         <div className="grid grid-cols-2 gap-2.5">
           <label className="grid gap-1 text-[12.5px] text-fg-2">设备 ID

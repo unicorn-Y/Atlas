@@ -184,6 +184,7 @@ class FileTransferStore:
                 raise
 
     def mark_uploaded(self, transfer_id: str, device_id: str, size: int, digest: str) -> dict[str, Any]:
+        invalid = False
         with self._lock, self._db:
             row = self._require_state(transfer_id, {"uploading"})
             if row["source_device"] != device_id:
@@ -192,17 +193,23 @@ class FileTransferStore:
                 self._db.execute("UPDATE transfers SET state='failed',received_size=?,actual_sha256=?,error='size or sha256 mismatch' WHERE id=?",
                                  (size, digest, transfer_id))
                 self._event(transfer_id, "integrity_failed", device_id, f"size={size}; sha256={digest}")
-                raise ValueError("uploaded file does not match declared size or sha256")
-            self._db.execute("UPDATE transfers SET state='ready',received_size=?,actual_sha256=? WHERE id=?",
-                             (size, digest, transfer_id))
-            self._event(transfer_id, "upload_verified", device_id, f"size={size}; sha256={digest}")
+                invalid = True
+            else:
+                self._db.execute("UPDATE transfers SET state='ready',received_size=?,actual_sha256=? WHERE id=?",
+                                 (size, digest, transfer_id))
+                self._event(transfer_id, "upload_verified", device_id, f"size={size}; sha256={digest}")
+        if invalid:
+            raise ValueError("uploaded file does not match declared size or sha256")
         return self.get(transfer_id) or {}
 
     def payload_path(self, transfer_id: str, device_id: str) -> tuple[dict[str, Any], Path]:
         row = self._require_state(transfer_id, {"ready"})
         if row["target_device"] != device_id:
             raise PermissionError("only the target device can download this transfer")
-        return row, self.root / f"{transfer_id}.part"
+        path = self.root / f"{transfer_id}.part"
+        if not path.is_file():
+            raise FileNotFoundError("verified transfer payload has already been removed")
+        return row, path
 
     def complete(self, transfer_id: str, device_id: str) -> dict[str, Any]:
         with self._lock, self._db:

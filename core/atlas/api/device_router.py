@@ -392,6 +392,8 @@ async def download_file_transfer(transfer_id: str, services: Annotated[AppServic
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=410, detail=str(exc)) from exc
 
     async def payload():
         with path.open("rb") as stream:
