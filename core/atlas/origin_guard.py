@@ -104,6 +104,8 @@ class OriginGuard:
         # Nearby devices do not have the Atlas API token during enrollment. These
         # narrowly scoped routes validate a one-time code/proof or paired bearer.
         device_pairing_protocol = scope["type"] == "http" and (
+            (method == "GET" and path == "/api/devices/pairing/enroll")
+            or
             (method == "POST" and path == "/api/devices/pairing/claim")
             or (method == "GET" and re.fullmatch(r"/api/devices/pairing/claim/[0-9a-f]{32}", path) is not None)
             or (method == "GET" and re.fullmatch(r"/api/devices/node/[A-Za-z0-9][A-Za-z0-9._-]{0,63}/commands", path) is not None)
