@@ -361,6 +361,49 @@ class TestPayload(BaseModel):
     text: str = ""
 
 
+class SendMessagePayload(BaseModel):
+    channel: str = Field(min_length=1, max_length=80)
+    target: str = Field(min_length=1, max_length=512)
+    text: str = Field(min_length=1, max_length=10000)
+
+
+@router.post("/send", dependencies=[Depends(_require_trusted_origin)])
+async def send_to_channel(payload: SendMessagePayload) -> dict[str, Any]:
+    """Queue a user-directed message through the same durable channel delivery path."""
+    manager = get_channel_manager()
+    try:
+        channel, target = manager.validate_target(payload.channel, payload.target)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="消息内容不能为空")
+    key = await manager.send(channel, target, text, metadata={"source": "manual"})
+    record = manager.delivery.get(key)
+    return {"ok": True, "idempotency_key": key, "status": record.status if record else "pending"}
+
+
+@router.get("/delivery/{key}", dependencies=[Depends(_require_trusted_origin)])
+async def channel_delivery_status(key: str) -> dict[str, Any]:
+    """Return a safe delivery outcome without exposing adapter errors or message text."""
+    if len(key) != 64 or any(char not in "0123456789abcdef" for char in key.lower()):
+        raise HTTPException(status_code=422, detail="幂等键格式无效")
+    record = get_channel_manager().delivery.get(key)
+    if record is None:
+        raise HTTPException(status_code=404, detail="没有找到对应的投递记录")
+    status_message = {
+        "pending": "消息已排队，等待投递" if record.attempts == 0 else "投递失败，已安排重试",
+        "sending": "正在投递",
+        "delivered": "已送达",
+        "dead": "投递失败，已停止重试",
+    }.get(record.status, record.status)
+    return {
+        "idempotency_key": record.idempotency_key, "channel": record.channel,
+        "target": record.chat_id, "status": record.status, "attempts": record.attempts,
+        "next_retry_at": record.next_retry_at or None, "message": status_message,
+    }
+
+
 @router.post("/test", dependencies=[Depends(_require_trusted_origin)])
 async def send_test(payload: TestPayload) -> dict[str, Any]:
     """Send a test message through the durable delivery queue."""

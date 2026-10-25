@@ -46,6 +46,7 @@ type ChannelPolicy = {
   require_mention: boolean;
 };
 type ChannelStatusWithPolicy = ChannelStatusRow & { policy?: ChannelPolicy };
+type ManualDelivery = { idempotency_key: string; channel: string; target: string; status: string; attempts: number; next_retry_at?: number | null; message: string };
 type ChannelCatalogRow = { id: string; label: string; status: string; registered: boolean; inbound: boolean; outbound: boolean; attachments: boolean; groups: boolean; mentions: boolean; dependency?: string | null; credentials: string[]; setup: string; docs: string };
 type HandoffRow = { handoff_id: string; state: 'agent' | 'human' | 'paused'; source_channel: string; source_chat: string; human_channel: string; human_chat: string; updated_at: string; events: Array<{ event: string; actor: string; created_at: string }> };
 type ChannelPolicyPatch = Partial<ChannelPolicy>;
@@ -72,6 +73,9 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
   const [dependencyState, setDependencyState] = useState<Record<string, string>>({});
   const [installingDependency, setInstallingDependency] = useState('');
   const [test, setTest] = useState({ channel: '', chatId: '', text: 'Atlas 测试消息' });
+  const [manualDraft, setManualDraft] = useState({ channel: '', target: '', text: '' });
+  const [manualDelivery, setManualDelivery] = useState<ManualDelivery | null>(null);
+  const [sendingManual, setSendingManual] = useState(false);
   const [sessionLinks, setSessionLinks] = useState<Array<{ session_key: string; conversation_id: string; linked_by: string; created_at: string }>>([]);
   const [catalog, setCatalog] = useState<ChannelCatalogRow[]>([]);
   const [handoffs, setHandoffs] = useState<HandoffRow[]>([]);
@@ -136,6 +140,18 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
     if (enabledRows.some((row) => row.name === test.channel)) return;
     setTest((current) => ({ ...current, channel: enabledRows[0]?.name ?? '' }));
   }, [rows, test.channel]);
+  useEffect(() => {
+    if (enabledRows.some((row) => row.name === manualDraft.channel)) return;
+    setManualDraft((current) => ({ ...current, channel: enabledRows[0]?.name ?? '' }));
+  }, [rows, manualDraft.channel]);
+  useEffect(() => {
+    if (!manualDelivery || ['delivered', 'dead'].includes(manualDelivery.status)) return;
+    const timer = window.setInterval(() => {
+      void api<ManualDelivery>(apiBaseUrl, `/api/channels/delivery/${encodeURIComponent(manualDelivery.idempotency_key)}`)
+        .then(setManualDelivery).catch(() => undefined);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [apiBaseUrl, manualDelivery?.idempotency_key, manualDelivery?.status]);
 
   const saveChannel = async (name: string) => {
     setBusyChannel(name);
@@ -201,6 +217,19 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
       onToast('测试消息已进投递队列');
     } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
     setBusyChannel('');
+  };
+
+  const sendManualMessage = async () => {
+    setSendingManual(true);
+    try {
+      const result = await api<{ idempotency_key: string; status: string }>(apiBaseUrl, '/api/channels/send', {
+        method: 'POST', json: manualDraft,
+      });
+      const delivery = await api<ManualDelivery>(apiBaseUrl, `/api/channels/delivery/${encodeURIComponent(result.idempotency_key)}`);
+      setManualDelivery(delivery);
+      onToast(`消息已提交：${delivery.message}`);
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+    setSendingManual(false);
   };
 
   const policyFor = (name: string) => policies[name] ?? cloneChannelPolicy();
@@ -378,6 +407,28 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
           <input value={test.text} onChange={(event) => setTest({ ...test, text: event.target.value })} className={field} />
         </label>
         <Button variant="secondary" disabled={busyChannel === '__test' || !enabledRows.length} onClick={() => void sendTest()}>发送测试</Button>
+      </div>
+    </section>
+
+    <section aria-label="主动渠道消息" className="rounded-xl px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
+      <b className="font-medium text-fg">主动发送消息</b>
+      <p className="mb-3 mt-1 text-[12px] text-fg-3">指定已启用渠道和平台目标。消息进入持久队列，页面会显示投递或重试状态。</p>
+      <div className="grid gap-2 md:grid-cols-2">
+        <label className="grid gap-1 text-[12.5px] text-fg-2">渠道
+          <select value={manualDraft.channel} onChange={(event) => setManualDraft({ ...manualDraft, channel: event.target.value })} className={field}>
+            {!enabledRows.length && <option value="">暂无已启用渠道</option>}
+            {enabledRows.map((row) => <option key={row.name} value={row.name}>{row.name}</option>)}
+          </select>
+        </label>
+        <label className="grid gap-1 text-[12.5px] text-fg-2">目标 chat id / user id
+          <input value={manualDraft.target} onChange={(event) => setManualDraft({ ...manualDraft, target: event.target.value })} className={cn(field, 'font-mono')} maxLength={512} />
+        </label>
+        <label className="grid gap-1 text-[12.5px] text-fg-2 md:col-span-2">消息内容
+          <textarea value={manualDraft.text} onChange={(event) => setManualDraft({ ...manualDraft, text: event.target.value })} className={cn(field, 'min-h-20 resize-y')} maxLength={10000} />
+        </label>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2"><Button size="sm" variant="secondary" disabled={sendingManual || !enabledRows.length || !manualDraft.target.trim() || !manualDraft.text.trim()} onClick={() => void sendManualMessage()}>{sendingManual ? <LoaderCircle className="spin" size={13} /> : null}发送消息</Button>
+        {manualDelivery && <span role="status" className="text-[11.5px] text-fg-3">{manualDelivery.message} · {manualDelivery.channel}/{manualDelivery.target} · 尝试 {manualDelivery.attempts}{manualDelivery.next_retry_at ? ` · 下次重试 ${new Date(manualDelivery.next_retry_at * 1000).toLocaleTimeString()}` : ''} · key {manualDelivery.idempotency_key.slice(0, 12)}</span>}
       </div>
     </section>
   </div>;

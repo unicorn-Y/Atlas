@@ -246,6 +246,47 @@ def _dashboard_control_file() -> Path:
     return control_path()
 
 
+@main.group("channel")
+def channel_group() -> None:
+    """Send messages through configured channel accounts."""
+
+
+@channel_group.command("send")
+@click.option("--channel", "channel_name", required=True, help="registered channel id")
+@click.option("--target", required=True, help="platform conversation/user destination")
+@click.option("--text", "message_text", required=True, help="message content")
+@click.option("--wait-seconds", default=5, type=click.IntRange(0, 300), help="wait for delivery status")
+def channel_send(channel_name: str, target: str, message_text: str, wait_seconds: int) -> None:
+    """Queue a message and report its durable delivery/retry state."""
+    import time
+    import httpx
+    from atlas.config import get_config
+
+    base = f"http://127.0.0.1:{get_config().server_port}"
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            response = client.post(f"{base}/api/channels/send", json={
+                "channel": channel_name, "target": target, "text": message_text,
+            })
+            if not response.is_success:
+                detail = response.json().get("detail", f"HTTP {response.status_code}")
+                raise click.ClickException(f"渠道消息未排队：{detail}")
+            submitted = response.json()
+            status = {"status": submitted.get("status", "pending"), "attempts": 0,
+                      "message": "消息已排队，等待投递"}
+            deadline = time.monotonic() + wait_seconds
+            while wait_seconds and time.monotonic() < deadline and status["status"] not in {"delivered", "dead"}:
+                time.sleep(min(0.5, max(0.0, deadline - time.monotonic())))
+                result = client.get(f"{base}/api/channels/delivery/{submitted['idempotency_key']}")
+                if result.is_success:
+                    status = result.json()
+            console.print(f"{channel_name} → {target}: {status.get('message', status['status'])}; "
+                          f"status={status['status']} attempts={status.get('attempts', 0)} "
+                          f"idempotency_key={submitted['idempotency_key']}")
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"无法连接 Atlas 渠道网关：{type(exc).__name__}；请先启动 Atlas。") from exc
+
+
 @dashboard_group.command("start")
 @click.option("--port", default=None, type=int, help="Dashboard API port (default: Atlas server port)")
 def dashboard_start(port: int | None) -> None:

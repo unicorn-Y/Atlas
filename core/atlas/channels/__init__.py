@@ -179,6 +179,22 @@ class ChannelManager:
         self.registry[str(name)] = factory
         self.states.setdefault(str(name), ChannelState(str(name)))
 
+    def validate_target(self, channel: str, target: str) -> tuple[str, str]:
+        """Validate one manual destination against the registered channel config."""
+        name = str(channel or "").strip().lower()
+        destination = str(target or "").strip()
+        if name not in self.registry:
+            raise ValueError(f"渠道未注册：{name or '(empty)'}")
+        if not (self.configs.get(name) or {}).get("enabled"):
+            raise ValueError(f"渠道未启用：{name}")
+        if not destination:
+            raise ValueError("发送目标不能为空")
+        if len(destination) > 512:
+            raise ValueError("发送目标不能超过 512 个字符")
+        if any(ord(char) < 32 or ord(char) == 127 for char in destination):
+            raise ValueError("发送目标不能包含控制字符")
+        return name, destination
+
     def configure(
         self, name: str, config: dict[str, Any], *, persist: bool = True
     ) -> dict[str, Any]:
