@@ -6528,6 +6528,8 @@ export const messages: Record<string, string> = {
   ,"打开托管服务条款": "Open hosting service terms"
   ,"我已查看上述条款，并确认将当前站点版本复制到配置的托管目录。": "I have reviewed these terms and confirm that the current site version will be copied to the configured hosting directory."
   ,"确认并发布": "Confirm and publish"
+  ,"正在加载最近消息…": "Loading recent messages…"
+  ,"预览读取失败：": "Could not load preview: "
   ,"当前对话还没有可精修的回答": "There is no answer in this conversation to refine yet"
   ,"改写内容已生成，请预览后选择替换或追加。": "The rewrite is ready. Preview it and choose whether to replace or append."
   ,"正在精修上一条回答…": "Refining the previous answer…"
