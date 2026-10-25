@@ -94,7 +94,8 @@ async def check_lsp_surface_and_handoff() -> None:
     from click.testing import CliRunner
     from atlas.cli import main
 
-    assert "[REDACTED]" in _redact_handoff_secrets("api_key=sk-test-value password:abc Bearer token")
+    redacted = _redact_handoff_secrets("api_key=sk-test-value password:abc Bearer token ghp_123456789012345678901234567890")
+    assert "[REDACTED]" in redacted and "ghp_123456789012345678901234567890" not in redacted
     with tempfile.TemporaryDirectory(prefix="atlas-u17-lsp-") as directory:
         root = Path(directory)
         source = root / "example.py"
