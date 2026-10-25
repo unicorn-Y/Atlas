@@ -818,6 +818,35 @@ def config_migrate(rollback: bool) -> None:
         raise click.ClickException("配置迁移未完成；原文件已保留，请修复系统凭据库后重试。")
 
 
+@main.command("notify")
+@click.option("--mode", "mode", type=click.Choice(["bell", "osc9", "off"]), default=None,
+              help="Set the default terminal notification mode")
+@click.option("--command-arg", "command_args", multiple=True,
+              help="Append one argv entry to the external notify command; repeat to add arguments")
+@click.option("--clear-command", is_flag=True, help="Remove the saved external notify command")
+def notify_command(mode: str | None, command_args: tuple[str, ...], clear_command: bool) -> None:
+    """Configure content-free completion notifications for `atlas exec`."""
+    from atlas.config import load_user_settings, save_user_settings
+    from atlas.cli_notifications import notification_config
+
+    settings = load_user_settings()
+    current_mode, current_command = notification_config(settings)
+    if mode is not None:
+        settings["cli_notify_mode"] = mode
+    if clear_command:
+        settings["cli_notify_command"] = []
+    elif command_args:
+        settings["cli_notify_command"] = list(command_args)
+    if mode is not None or clear_command or command_args:
+        try:
+            save_user_settings(settings)
+        except OSError as exc:
+            raise click.ClickException(f"Could not save CLI notification settings: {exc}") from exc
+        current_mode, current_command = notification_config(settings)
+    command_state = f"configured ({len(current_command)} argv entries)" if current_command else "not configured"
+    console.print(f"CLI notification mode: {current_mode}; external command: {command_state}.")
+
+
 @main.command("exec")
 @click.argument("prompt", required=False)
 @click.option("--model", "-m", default=None, help="Model to use")
@@ -828,6 +857,8 @@ def config_migrate(rollback: bool) -> None:
 @click.option("--conversation-id", "--resume", default=None, help="Resume an existing Atlas conversation")
 @click.option("--output-format", type=click.Choice(["text", "jsonl"]), default="text",
               show_default=True, help="Stream plain text or one JSON object per event")
+@click.option("--notify-mode", type=click.Choice(["bell", "osc9", "off"]), default=None,
+              help="Override the saved completion notification mode for this run")
 @click.option("--json", "json_output", is_flag=True, help="Alias for --output-format jsonl")
 @click.option("--output-schema", type=click.Path(dir_okay=False, path_type=Path), default=None,
               help="Require the final response to match this JSON Schema file")
@@ -842,7 +873,7 @@ def config_migrate(rollback: bool) -> None:
 @click.option("--ignore-workspace-rules", is_flag=True, help="Skip AGENTS.md / CLAUDE.md workspace instructions for this run")
 def exec_command(
     prompt: str | None, model: str | None, images: tuple[Path, ...], workspace: Path,
-    conversation_id: str | None, output_format: str, json_output: bool,
+    conversation_id: str | None, output_format: str, notify_mode: str | None, json_output: bool,
     output_schema: Path | None, output_last_message: Path | None, approve_writes: bool,
     project_id: str | None, config_override: Path | None, ignore_project_config: bool,
     ignore_workspace_rules: bool,
@@ -852,6 +883,7 @@ def exec_command(
         output_format = "jsonl"
     from atlas.agent import AgentOrchestrator
     from atlas.config import DATA_ROOT
+    from atlas.cli_notifications import emit_cli_notification, notification_config
     from atlas.memory import MemoryStore
     from atlas.models import ModelManager
     from atlas.project_context import project_scoped_events, validate_config_override
@@ -902,7 +934,7 @@ def exec_command(
         except (OSError, json.JSONDecodeError) as exc:
             raise click.BadParameter(f"cannot read JSON Schema: {exc}", param_hint="--output-schema") from exc
 
-    async def _run_once() -> bool:
+    async def _run_once() -> str:
         model_mgr = ModelManager()
         if model:
             model_mgr.select(model)
@@ -921,6 +953,7 @@ def exec_command(
                 return "allow" if approve_writes else "deny"
 
             failed = False
+            cancelled = False
             if output_format == "jsonl":
                 _write_line({"type": "start", "session_id": conv_id}, sys.stdout)
                 input_event: dict[str, Any] = {"type": "input", "session_id": conv_id, "text": user_prompt}
@@ -969,8 +1002,12 @@ def exec_command(
                     elif kind == "error":
                         failed = True
                         print(str(event.get("detail", "Agent run failed")), file=sys.stderr)
+                    elif kind in {"cancelled", "run.cancelled"}:
+                        cancelled = True
                 final_text = "".join(parts)
                 if failed:
+                    break
+                if cancelled:
                     break
                 if schema is None:
                     break
@@ -994,21 +1031,36 @@ def exec_command(
                 if schema is not None and not failed:
                     final_event["structured"] = structured_output
                 _write_line(final_event, sys.stdout)
-                _write_line({"type": "end", "session_id": conv_id, "status": "failed" if failed else "completed"}, sys.stdout)
+                _write_line({"type": "end", "session_id": conv_id,
+                             "status": "failed" if failed else "cancelled" if cancelled else "completed"}, sys.stdout)
             elif final_text:
                 print()
             if _daybreak_enabled():
-                _daybreak_terminal_notice("遇到错误" if failed else "已完成")
-            return failed
+                _daybreak_terminal_notice("遇到错误" if failed else "已取消" if cancelled else "已完成")
+            return "failed" if failed else "cancelled" if cancelled else "completed"
         finally:
             await memory.close()
 
+    saved_mode, notify_argv = notification_config()
+    effective_notify_mode = notify_mode or saved_mode
     try:
-        failed = asyncio.run(_run_once())
+        completion_status = asyncio.run(_run_once())
+    except KeyboardInterrupt:
+        if output_format == "jsonl":
+            _write_line({"type": "end", "session_id": conversation_id, "status": "cancelled"}, sys.stdout)
+        emit_cli_notification("cancelled", mode=effective_notify_mode, command=notify_argv)
+        sys.exit(130)
     except (OSError, RuntimeError, ValueError) as exc:
+        if output_format == "jsonl":
+            _write_line({"type": "error", "code": "run_failed", "message": str(exc)}, sys.stdout)
+            _write_line({"type": "end", "session_id": conversation_id, "status": "failed"}, sys.stdout)
+        emit_cli_notification("failed", mode=effective_notify_mode, command=notify_argv)
         raise click.ClickException(str(exc)) from exc
-    if failed:
+    emit_cli_notification(completion_status, mode=effective_notify_mode, command=notify_argv)
+    if completion_status == "failed":
         sys.exit(EXIT_RUN_FAILED)
+    if completion_status == "cancelled":
+        sys.exit(130)
 
 
 @main.command("app-server")
