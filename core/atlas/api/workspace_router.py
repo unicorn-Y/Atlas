@@ -1822,6 +1822,69 @@ async def get_run_changes(
     return result
 
 
+@router.get("/api/workspace/git-diff")
+async def get_workspace_git_diff(workspace: str = Query(..., min_length=1)) -> dict[str, Any]:
+    """Read the current local git worktree diff, including untracked text files."""
+    root = Path(workspace).expanduser().resolve()
+    if not root.is_dir():
+        raise HTTPException(status_code=404, detail="工作区目录不存在")
+    def git(*args: str) -> subprocess.CompletedProcess[str]:
+        try:
+            result = subprocess.run(["git", "-C", str(root), *args], capture_output=True,
+                                    text=True, encoding="utf-8", errors="replace", timeout=20)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise HTTPException(status_code=503, detail=f"无法读取工作区 Git 状态：{exc}") from exc
+        if result.returncode:
+            raise HTTPException(status_code=400, detail=result.stderr.strip() or "工作区不是可用的 Git 仓库")
+        return result
+    status = git("status", "--porcelain=v1", "-z", "--untracked-files=all").stdout
+    tracked = git("diff", "HEAD", "--no-ext-diff", "--binary").stdout
+    rows: list[dict[str, Any]] = []
+    names = [item for item in status.split("\0") if item]
+    for item in names:
+        code, relative = item[:2], item[3:]
+        if " -> " in relative: relative = relative.rsplit(" -> ", 1)[1]
+        if "?" not in code: continue
+        target = (root / relative).resolve()
+        if root not in target.parents or not target.is_file(): continue
+        try:
+            content = target.read_bytes()
+        except OSError as exc:
+            rows.append({"path": relative, "status": "untracked", "error": str(exc), "diff": ""})
+            continue
+        if b"\0" in content:
+            rows.append({"path": relative, "status": "untracked", "binary": True,
+                         "diff": f"Binary file {relative} ({len(content)} bytes)"})
+            continue
+        text = content.decode("utf-8", errors="replace")
+        patch = "".join(__import__("difflib").unified_diff([], text.splitlines(keepends=True),
+                    fromfile="/dev/null", tofile=f"b/{relative}"))
+        rows.append({"path": relative, "status": "untracked", "diff": patch[:200_000],
+                     "truncated": len(patch) > 200_000})
+    return {"workspace": str(root), "source": "git-worktree", "tracked_diff": tracked[:1_000_000],
+            "tracked_truncated": len(tracked) > 1_000_000, "untracked": rows}
+
+
+@router.get("/api/runs/{run_id}/rollout")
+async def get_run_rollout(run_id: str) -> dict[str, Any]:
+    """Expose the redacted JSONL diagnostic event archive for a run."""
+    import re
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", run_id):
+        raise HTTPException(status_code=400, detail="无效的运行 ID")
+    from atlas.logs import LOG_DIR
+    matches = list((LOG_DIR / "runs").glob(f"*/{run_id}.jsonl"))
+    if not matches:
+        return {"run_id": run_id, "exists": False, "path": None, "events": [], "error": "归档文件不存在"}
+    path = max(matches, key=lambda value: value.stat().st_mtime)
+    try:
+        raw = path.read_text(encoding="utf-8")
+        events = [json.loads(line) for line in raw.splitlines() if line.strip()]
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"无法读取运行归档：{exc}") from exc
+    return {"run_id": run_id, "exists": True, "path": str(path), "events": events,
+            "event_count": len(events), "size_bytes": path.stat().st_size}
+
+
 @router.post("/api/runs/{run_id}/changes/hunks/review")
 async def review_run_hunk(
     services: Annotated[AppServices, Depends(get_app_services)],

@@ -40,6 +40,19 @@ function samePath(left: string, right: string): boolean {
 export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, onToast, onAsk, workspace }: {
   runId?: string; runStatus?: string; apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; onAsk?: (text: string) => void | Promise<void>; workspace?: string | null;
 }) {
+  const [diffScope, setDiffScope] = useState<'run' | 'workspace'>('run');
+  const [gitDiff, setGitDiff] = useState<{ tracked_diff: string; untracked: Array<{ path: string; status: string; diff: string; binary?: boolean; error?: string }>; tracked_truncated?: boolean } | null>(null);
+  const [gitDiffError, setGitDiffError] = useState('');
+  const [gitDiffReload, setGitDiffReload] = useState(0);
+  useEffect(() => {
+    if (diffScope !== 'workspace' || !workspace || workspace.startsWith('ssh://') || !connected) return;
+    let stale = false;
+    setGitDiff(null); setGitDiffError('');
+    const query = new URLSearchParams({ workspace });
+    api<typeof gitDiff>(apiBaseUrl, `/api/workspace/git-diff?${query}`).then((result) => { if (!stale) setGitDiff(result); })
+      .catch((exc) => { if (!stale) setGitDiffError(exc instanceof Error ? exc.message : String(exc)); });
+    return () => { stale = true; };
+  }, [diffScope, workspace, connected, apiBaseUrl, gitDiffReload]);
   const [comments, setComments] = useState<LineComment[]>([]);
   const [sendingComments, setSendingComments] = useState(false);
   const [commentSendError, setCommentSendError] = useState('');
@@ -206,6 +219,23 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
   };
 
   return <div className="grid gap-6">
+    <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="改动来源">
+      <button role="tab" aria-selected={diffScope === 'run'} onClick={() => setDiffScope('run')} className={cn('rounded-lg px-3 py-1.5 text-[12px]', diffScope === 'run' ? 'bg-selected text-fg' : 'text-fg-3 hover:bg-hover')}>Atlas 本次改动</button>
+      <button role="tab" aria-selected={diffScope === 'workspace'} onClick={() => setDiffScope('workspace')} className={cn('rounded-lg px-3 py-1.5 text-[12px]', diffScope === 'workspace' ? 'bg-selected text-fg' : 'text-fg-3 hover:bg-hover')}>工作区 Git diff（含未跟踪）</button>
+    </div>
+    {diffScope === 'workspace' ? <section aria-label="当前工作区 Git diff" className="grid gap-3">
+      {!workspace || workspace.startsWith('ssh://') ? <Empty title="没有本地工作区" body="当前工作区 diff 仅支持本机 Git 仓库。" />
+        : !connected ? <Empty title="后端未连接" body="连接 Atlas 后端后可读取工作区 Git 状态。" />
+          : gitDiffError ? <div role="alert" className="rounded-xl bg-danger-soft p-3 text-[12.5px] text-danger">读取 Git diff 失败：{gitDiffError}<button type="button" onClick={() => setGitDiffReload((value) => value + 1)} className="ml-2 underline">重试</button></div>
+            : !gitDiff ? <p className="py-6 text-center text-[13px] text-fg-3">正在读取 Git 工作区状态…</p>
+              : <>
+                <p className="m-0 text-[12px] text-fg-3">来源：当前 Git 工作树（HEAD、暂存区和未跟踪文件），与上方 Atlas 运行快照改动分开展示。</p>
+                {gitDiff.tracked_diff && <details open className="overflow-hidden rounded-xl card-surface"><summary className="cursor-pointer px-3 py-2 text-[12.5px] text-fg-2">已跟踪文件 diff</summary><pre className="m-0 max-h-[65vh] overflow-auto border-t border-line p-3 font-mono text-[11px] leading-[1.55] text-fg-2">{gitDiff.tracked_diff}</pre></details>}
+                {gitDiff.tracked_truncated && <p role="status" className="m-0 text-[12px] text-fg-3">已跟踪 diff 超过 1 MB，当前内容已截断。</p>}
+                {gitDiff.untracked.map((file) => <details key={file.path} open className="overflow-hidden rounded-xl card-surface"><summary className="cursor-pointer px-3 py-2 text-[12.5px] text-fg-2">未跟踪 · <code>{file.path}</code></summary>{file.error ? <p role="alert" className="m-0 border-t border-line p-3 text-[12px] text-danger">无法读取文件：{file.error}</p> : <pre className="m-0 max-h-[55vh] overflow-auto border-t border-line p-3 font-mono text-[11px] leading-[1.55] text-fg-2">{file.diff || (file.binary ? '二进制未跟踪文件；不展示原始内容。' : '空文件')}</pre>}</details>)}
+                {!gitDiff.tracked_diff && !gitDiff.untracked.length && <Empty title="工作区干净" body="Git 没有发现已跟踪改动或未跟踪文件。" />}
+              </>}
+    </section> : <>
     <section onKeyDown={(event) => {
       if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.nativeEvent.isComposing || (event.nativeEvent as KeyboardEvent).keyCode === 229) return;
       const target = event.target;
@@ -293,6 +323,7 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
       </div>}
     </section>
     <Checkpoints apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} runId={runId} workspace={workspace} refreshKey={`${runId}:${runStatus}`} />
+    </>}
   </div>;
 }
 

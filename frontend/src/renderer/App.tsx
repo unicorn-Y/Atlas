@@ -1569,6 +1569,7 @@ export default function App() {
     } },
     { id: 'version', label: '/version', hint: '显示 Atlas 版本', run: () => setToast(`Atlas ${__APP_VERSION__}`) },
     { id: 'diff', label: '/diff', hint: '查看本次运行的文件改动', run: () => showInspectorTab('changes') },
+    { id: 'rollout', label: '/rollout', hint: '查看本次运行的完整事件归档、路径和事件清单', run: () => showInspectorTab('rollout') },
     { id: 'model', label: '/model', hint: '选择或切换模型', takesArgument: true, run: (query: string) => { const found = store.models.find((item) => item.id.toLowerCase() === query.trim().toLowerCase() || (item.name ?? '').toLowerCase() === query.trim().toLowerCase()); if (found) void store.selectModel(found.id); else setSheet('models'); } },
     { id: 'editor', label: '/editor', hint: '用系统默认编辑器撰写长消息', run: () => {
       const open = window.atlasDesktop?.openMessageEditor;
