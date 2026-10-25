@@ -15,6 +15,8 @@ import {
   loadMcpStartupProgress,
   removeMcpServer,
   restartMcpServer,
+  reconnectFailedMcpServers,
+  type McpReconnectReport,
   type McpServerRequest,
   type McpServerRow,
   type McpTransport,
@@ -102,6 +104,7 @@ export default function McpServersPanel({ apiBaseUrl }: { apiBaseUrl: string }) 
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [confirmRemove, setConfirmRemove] = useState('');
+  const [reconnectReport, setReconnectReport] = useState<McpReconnectReport | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -121,7 +124,7 @@ export default function McpServersPanel({ apiBaseUrl }: { apiBaseUrl: string }) 
       void Promise.all([loadMcpServers(apiBaseUrl), loadMcpStartupProgress(apiBaseUrl)]).then(([loaded, progress]) => {
         setServers(loaded); setStartupProgress(progress.slice(-24).reverse());
       }).catch(() => undefined);
-    }, busy.startsWith('restart:') || busy === 'add' ? 450 : 1200);
+    }, busy.startsWith('restart:') || busy.startsWith('reconnect') || busy === 'add' ? 450 : 1200);
     return () => window.clearInterval(timer);
   }, [apiBaseUrl, busy]);
 
@@ -155,6 +158,19 @@ export default function McpServersPanel({ apiBaseUrl }: { apiBaseUrl: string }) 
     finally { setBusy(''); }
   };
 
+  const reconnectFailed = async () => {
+    setBusy('reconnect-all'); setError(''); setNotice(''); setReconnectReport(null);
+    try {
+      const result = await reconnectFailedMcpServers(apiBaseUrl);
+      setReconnectReport(result);
+      setNotice(result.selected
+        ? `批量重连完成：成功 ${result.succeeded} 个，失败 ${result.failed} 个（并发上限 ${result.concurrency_limit}）。`
+        : '没有失败、重连中或待授权的已启用 MCP 服务。');
+      await refresh();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(''); }
+  };
+
   const remove = async (name: string) => {
     if (confirmRemove !== name) { setConfirmRemove(name); return; }
     setBusy(`remove:${name}`);
@@ -176,10 +192,18 @@ export default function McpServersPanel({ apiBaseUrl }: { apiBaseUrl: string }) 
       <Button variant="secondary" size="sm" disabled={loading || Boolean(busy)} onClick={() => void refresh()}>
         {loading ? <LoaderCircle className="spin" /> : <RefreshCw />}刷新
       </Button>
+      <Button variant="secondary" size="sm" disabled={Boolean(busy) || !servers.some((server) => server.enabled && ['failed', 'error', 'reconnecting', 'auth-needed', 'auth_needed', 'authorization_required', 'needs_authorization'].includes(server.state))} onClick={() => void reconnectFailed()}>
+        {busy === 'reconnect-all' ? <LoaderCircle className="spin" /> : <RotateCw />}重连全部失败服务
+      </Button>
     </div>
 
     {error && <p className={styles.settingsError} role="alert">{error}</p>}
     {notice && <p className={styles.settingsStatus} role="status">{notice}</p>}
+    {busy === 'reconnect-all' && <p role="status" aria-live="polite" className={styles.settingsStatus}>正在按最多 3 个并发连接重试问题服务；启动进度会在下方更新。</p>}
+    {reconnectReport && <section aria-label="批量重连结果" className="grid gap-1 rounded-lg bg-sunken p-3 text-[12px]">
+      <strong>逐服务器结果：成功 {reconnectReport.succeeded} · 失败 {reconnectReport.failed} · 共 {reconnectReport.selected}</strong>
+      {reconnectReport.results.map((result) => <div key={result.name} role={result.ok ? 'status' : 'alert'}>{result.ok ? '已连接' : '失败'} · {result.name} · {result.state} · {result.tool_count} 个工具{result.reason ? ` · ${result.reason}` : ''}</div>)}
+    </section>}
     <p className="m-0 text-[12px] leading-[1.6] text-fg-3">
       当前 API 支持添加、重启和移除已连接的服务；配置读取、编辑和启停接口尚未提供。失败或停用的服务可在依赖检查中查看状态。
     </p>

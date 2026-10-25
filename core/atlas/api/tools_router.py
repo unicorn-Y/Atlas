@@ -577,3 +577,46 @@ async def restart_mcp_server(
         "tool_count": len(tools),
         "tools": [t.qualified_name for t in tools],
     }
+
+
+@router.post("/api/mcp/servers/reconnect-failed")
+async def reconnect_failed_mcp_servers(
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    """Reconnect every configured MCP server requiring attention, with bounded concurrency."""
+    mcp_client = services.mcp_client
+    if mcp_client is None:
+        from atlas import server as _atlas_server
+
+        mcp_client = _atlas_server.mcp_client
+    if mcp_client is None:
+        raise HTTPException(status_code=503, detail="MCP client unavailable")
+    runtime = mcp_client.get_runtime_status()
+    states = {"failed", "error", "reconnecting", "auth-needed", "auth_needed",
+              "authorization_required", "needs_authorization"}
+    selected = [row for row in runtime.get("servers", [])
+                if row.get("enabled", True) and str(row.get("state", "")).casefold() in states]
+    semaphore = asyncio.Semaphore(3)
+
+    async def reconnect(row: dict[str, Any]) -> dict[str, Any]:
+        name = str(row.get("name") or "")
+        async with semaphore:
+            try:
+                await mcp_client.restart_server(name)
+                tools = mcp_client.get_server_tools(name)
+                status = next((item for item in mcp_client.get_runtime_status().get("servers", [])
+                               if item.get("name") == name), {})
+                return {"name": name, "ok": bool(status.get("connected")),
+                        "state": status.get("state", "unknown"), "tool_count": len(tools),
+                        "reason": status.get("blocking_reason") or (None if status.get("connected") else "Server did not reach connected state")}
+            except Exception as exc:  # MCP transports may raise transport-specific exception groups
+                status = next((item for item in mcp_client.get_runtime_status().get("servers", [])
+                               if item.get("name") == name), {})
+                return {"name": name, "ok": False, "state": status.get("state", "failed"),
+                        "tool_count": len(mcp_client.get_server_tools(name)),
+                        "reason": status.get("blocking_reason") or f"重连失败（{type(exc).__name__}）"}
+
+    results = await asyncio.gather(*(reconnect(row) for row in selected))
+    return {"selected": len(selected), "succeeded": sum(bool(row["ok"]) for row in results),
+            "failed": sum(not row["ok"] for row in results), "results": results,
+            "concurrency_limit": 3}

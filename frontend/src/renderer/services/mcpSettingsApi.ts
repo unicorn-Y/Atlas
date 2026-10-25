@@ -47,6 +47,10 @@ export interface McpStartupProgress {
   transport: string;
   timestamp: string;
 }
+export interface McpReconnectReport {
+  selected: number; succeeded: number; failed: number; concurrency_limit: number;
+  results: Array<{ name: string; ok: boolean; state: string; tool_count: number; reason: string | null }>;
+}
 
 interface McpServerListResponse {
   servers?: McpServerToolListItem[];
@@ -113,6 +117,10 @@ export function addMcpServer(baseUrl: string, config: McpServerRequest): Promise
 
 export function restartMcpServer(baseUrl: string, name: string): Promise<McpServerToolListItem> {
   return request(baseUrl, `/api/mcp/servers/${encodeURIComponent(name)}/restart`, { method: 'POST' });
+}
+
+export function reconnectFailedMcpServers(baseUrl: string): Promise<McpReconnectReport> {
+  return request(baseUrl, '/api/mcp/servers/reconnect-failed', { method: 'POST', body: '{}' });
 }
 
 export function removeMcpServer(baseUrl: string, name: string): Promise<{ status: string }> {
