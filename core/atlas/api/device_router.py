@@ -43,9 +43,11 @@ import re
 import threading
 import time
 from typing import Annotated, Any
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+from starlette.responses import StreamingResponse
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
@@ -61,6 +63,7 @@ from atlas.devices.takeover import (
     TakeoverStateMachine,
     is_human_actor,
 )
+from atlas.devices.file_transfers import FileTransferStore, MAX_CHUNK_BYTES
 from atlas.origin_guard import TOKEN_HEADER, is_trusted
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
@@ -73,6 +76,8 @@ _registry: DeviceRegistry | None = None
 _takeover: TakeoverStateMachine | None = None
 _node_capability_lock = threading.RLock()
 _NODE_CAPABILITY_ID = re.compile(r"^[a-z][a-z0-9_.:-]{0,63}$")
+_transfer_stores: dict[str, FileTransferStore] = {}
+_transfer_store_lock = threading.Lock()
 
 
 def set_registry(registry: DeviceRegistry | None) -> None:
@@ -107,6 +112,42 @@ def _registry_for(services: AppServices) -> DeviceRegistry:
     if registry is None:
         raise RuntimeError("FastAPI app is missing its device registry")
     return registry
+
+
+def _transfer_store(registry: DeviceRegistry) -> FileTransferStore:
+    key = str(registry.path.resolve())
+    with _transfer_store_lock:
+        store = _transfer_stores.get(key)
+        if store is None:
+            store = FileTransferStore(registry.path.parent / "device-file-transfers")
+            _transfer_stores[key] = store
+        return store
+
+
+def _require_transfer_access(request: Request, store: FileTransferStore, device_id: str) -> None:
+    """Accept the local trusted UI or the one-time bearer bound to this device."""
+    if is_trusted(request.headers.get("origin"), request.headers.get(TOKEN_HEADER),
+                  fetch_site=request.headers.get("sec-fetch-site"),
+                  client_host=request.client.host if request.client else None):
+        return
+    authorization = request.headers.get("authorization", "")
+    token = authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
+    if not store.verify_credential(device_id, token):
+        raise HTTPException(status_code=403, detail="设备传输凭据无效")
+
+
+def _require_transfer_capability(registry: DeviceRegistry, device_id: str, capability: str) -> dict[str, Any]:
+    device = registry.get(device_id, project=False)
+    if device is None:
+        raise HTTPException(status_code=404, detail="设备不存在")
+    if not device.get("trusted"):
+        raise HTTPException(status_code=403, detail="设备尚未标记为可信配对设备")
+    if device_id == SELF_DEVICE_ID:
+        return device
+    state = _node_capability_snapshot(registry, device_id)
+    if capability not in state["approved"]:
+        raise HTTPException(status_code=403, detail=f"设备尚未批准能力：{capability}")
+    return device
 
 
 def _takeover_for(services: AppServices) -> TakeoverStateMachine:
@@ -235,6 +276,159 @@ def _save_node_capability_entry(
 
 class NodeCapabilityDeclaration(BaseModel):
     capabilities: list[str] = Field(default_factory=list, max_length=64)
+
+
+class FileTransferRequest(BaseModel):
+    source_device_id: str = Field(min_length=1, max_length=64)
+    target_device_id: str = Field(min_length=1, max_length=64)
+    filename: str = Field(min_length=1, max_length=512)
+    size: int = Field(gt=0, le=100 * 1024 * 1024)
+    sha256: str = Field(min_length=64, max_length=64)
+
+
+@router.post("/{device_id}/file-transfer-credential", dependencies=[Depends(_require_trusted_origin)])
+async def issue_file_transfer_credential(device_id: str,
+                                         services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    """Rotate a paired device's transfer bearer; plaintext is returned only once."""
+    registry = _registry_for(services)
+    device = _require_node_device(registry, device_id, mutable=False)
+    if not device.get("trusted"):
+        raise HTTPException(status_code=403, detail="先将配对设备标记为可信")
+    token = await asyncio.to_thread(_transfer_store(registry).issue_credential, device_id)
+    logger.info("device.file_transfer_credential_rotated", device_id=device_id)
+    return {"device_id": device_id, "token": token, "stored_as": "sha256"}
+
+
+@router.get("/file-transfers")
+async def list_file_transfers(services: Annotated[AppServices, Depends(get_app_services)],
+                              request: Request,
+                              device_id: str = Query(min_length=1, max_length=64)) -> dict[str, Any]:
+    registry = _registry_for(services)
+    store = _transfer_store(registry)
+    _require_transfer_access(request, store, device_id)
+    device = registry.get(device_id, project=False)
+    if device is None or not device.get("trusted"):
+        raise HTTPException(status_code=403, detail="仅可信配对设备可查看传输")
+    if device_id != SELF_DEVICE_ID:
+        state = _node_capability_snapshot(registry, device_id)
+        if not ({"files.receive", "files.send"} & set(state["approved"])):
+            raise HTTPException(status_code=403, detail="设备尚未批准文件传输能力")
+    rows = await asyncio.to_thread(store.list, device_id)
+    for row in rows:
+        row["events"] = await asyncio.to_thread(store.events, row["id"])
+    return {"transfers": rows}
+
+
+@router.post("/file-transfers")
+async def create_file_transfer(req: FileTransferRequest,
+                               request: Request,
+                               services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
+    registry = _registry_for(services)
+    store = _transfer_store(registry)
+    _require_transfer_access(request, store, req.source_device_id)
+    _require_transfer_capability(registry, req.source_device_id, "files.send")
+    _require_transfer_capability(registry, req.target_device_id, "files.receive")
+    try:
+        row = await asyncio.to_thread(store.create, req.source_device_id, req.target_device_id,
+                                      req.filename, req.size, req.sha256)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"transfer": row}
+
+
+@router.post("/file-transfers/{transfer_id}/accept")
+async def accept_file_transfer(transfer_id: str, request: Request,
+                               services: Annotated[AppServices, Depends(get_app_services)],
+                               device_id: str = Query(min_length=1, max_length=64)) -> dict[str, Any]:
+    registry = _registry_for(services)
+    store = _transfer_store(registry)
+    _require_transfer_access(request, store, device_id)
+    _require_transfer_capability(registry, device_id, "files.receive")
+    try:
+        row = await asyncio.to_thread(store.accept, transfer_id, device_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=409 if isinstance(exc, ValueError) else 403, detail=str(exc)) from exc
+    return {"transfer": row}
+
+
+@router.put("/file-transfers/{transfer_id}/chunks/{offset}")
+async def upload_file_chunk(transfer_id: str, offset: int, request: Request,
+                            services: Annotated[AppServices, Depends(get_app_services)],
+                            device_id: str = Query(min_length=1, max_length=64)) -> dict[str, Any]:
+    if offset < 0:
+        raise HTTPException(status_code=422, detail="offset cannot be negative")
+    data = await request.body()
+    if len(data) > MAX_CHUNK_BYTES:
+        raise HTTPException(status_code=413, detail=f"chunk exceeds {MAX_CHUNK_BYTES} bytes")
+    registry = _registry_for(services)
+    store = _transfer_store(registry)
+    _require_transfer_access(request, store, device_id)
+    _require_transfer_capability(registry, device_id, "files.send")
+    try:
+        row = await asyncio.to_thread(store.append_chunk, transfer_id, device_id, offset, data)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"transfer": row, "progress": row["received_size"] / row["expected_size"]}
+
+
+@router.get("/file-transfers/{transfer_id}/download")
+async def download_file_transfer(transfer_id: str, services: Annotated[AppServices, Depends(get_app_services)],
+                                request: Request,
+                                device_id: str = Query(min_length=1, max_length=64)):
+    registry = _registry_for(services)
+    store = _transfer_store(registry)
+    _require_transfer_access(request, store, device_id)
+    _require_transfer_capability(registry, device_id, "files.receive")
+    try:
+        row, path = await asyncio.to_thread(store.payload_path, transfer_id, device_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    async def payload():
+        with path.open("rb") as stream:
+            while data := await asyncio.to_thread(stream.read, 64 * 1024):
+                yield data
+        await asyncio.to_thread(store.complete, transfer_id, device_id)
+
+    headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(row['filename'])}",
+               "X-Content-SHA256": row["actual_sha256"]}
+    return StreamingResponse(payload(), media_type="application/octet-stream",
+                             headers=headers, background=None)
+
+
+@router.post("/file-transfers/{transfer_id}/cancel")
+async def cancel_file_transfer(transfer_id: str, services: Annotated[AppServices, Depends(get_app_services)],
+                               request: Request,
+                               device_id: str = Query(min_length=1, max_length=64)) -> dict[str, Any]:
+    registry = _registry_for(services)
+    store = _transfer_store(registry)
+    _require_transfer_access(request, store, device_id)
+    device = registry.get(device_id, project=False)
+    if device is None or not device.get("trusted"):
+        raise HTTPException(status_code=403, detail="仅可信配对设备可取消传输")
+    if device_id != SELF_DEVICE_ID:
+        capabilities = set(_node_capability_snapshot(registry, device_id)["approved"])
+        if not capabilities.intersection({"files.receive", "files.send"}):
+            raise HTTPException(status_code=403, detail="设备尚未批准文件传输能力")
+    try:
+        row = await asyncio.to_thread(store.cancel, transfer_id, device_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"transfer": row}
 
 
 @router.get("/{device_id}/node-capabilities")
@@ -529,9 +723,12 @@ async def patch_device(
     registry = _registry_for(services)
     fields = {k: v for k, v in req.model_dump().items() if v is not None}
     try:
-        return await asyncio.to_thread(registry.update, device_id, **fields)
+        saved = await asyncio.to_thread(registry.update, device_id, **fields)
     except DeviceError as exc:
         raise _device_error(exc) from exc
+    if fields.get("trusted") is False:
+        await asyncio.to_thread(_transfer_store(registry).revoke_device, device_id)
+    return saved
 
 
 class PresenceBeat(BaseModel):
@@ -562,6 +759,7 @@ async def delete_device(
         await asyncio.to_thread(registry.remove, device_id)
     except DeviceError as exc:
         raise _device_error(exc) from exc
+    await asyncio.to_thread(_transfer_store(registry).revoke_device, device_id)
     return {"status": "ok", "device_id": device_id}
 
 
