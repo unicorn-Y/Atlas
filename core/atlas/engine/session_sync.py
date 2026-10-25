@@ -188,8 +188,8 @@ def read_session_model_messages(home: str | Path, conversation_id: str) -> list[
                 message[key] = metadata[key]
     model_history = [
         message for message in model_history
-        if message.get("display_kind") not in {"structured_component", "agent_canvas"}
-        and (message.get("display_metadata") or {}).get("display_kind") not in {"structured_component", "agent_canvas"}
+        if message.get("display_kind") not in {"structured_component", "agent_canvas", "subtask_activity"}
+        and (message.get("display_metadata") or {}).get("display_kind") not in {"structured_component", "agent_canvas", "subtask_activity"}
     ]
     from atlas.kernel.repair import normalize_tool_results
 

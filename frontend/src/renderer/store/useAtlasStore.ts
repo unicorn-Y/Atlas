@@ -91,6 +91,8 @@ interface AtlasState extends PersistentSlice {
   /** Answers given to Agent questions, by input event id. */
   answers: Record<string, string>;
   unread: string[];
+  /** Per-conversation child task IDs with unread activity; one ID counts once. */
+  subtaskUnread: Record<string, string[]>;
   pinned: string[];
   archived: string[];
   runPrompts: Record<string, Outgoing>;
@@ -247,6 +249,15 @@ const storageGet = (key: string) => { try { return localStorage.getItem(key); } 
 const storageSet = (key: string, value: string | null) => {
   try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch { /* storage unavailable */ }
 };
+const SUBTASK_UNREAD_KEY = 'atlas.subtask-unread';
+const readSubtaskUnread = (): Record<string, string[]> => {
+  try {
+    const parsed: unknown = JSON.parse(storageGet(SUBTASK_UNREAD_KEY) ?? '{}');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).flatMap(([key, value]) =>
+      Array.isArray(value) ? [[key, value.filter((id): id is string => typeof id === 'string')]] : []));
+  } catch { return {}; }
+};
 const readList = (key: string): string[] => {
   try {
     const value: unknown = JSON.parse(storageGet(key) ?? '[]');
@@ -286,9 +297,10 @@ async function withRetry<T>(load: () => Promise<T>): Promise<T> {
 }
 
 /** Native desktop notification, only when Atlas is not what the user is looking at. */
-function notifyDesktop(title: string, body: string, kind: NotificationKind, onClick: () => void) {
+function notifyDesktop(title: string, body: string, kind: NotificationKind, onClick: () => void, backgroundCompletion = false) {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-  if (!shouldNotify(kind)) return;
+  const focused = backgroundCompletion ? false : typeof document !== 'undefined' && document.hasFocus();
+  if (!shouldNotify(kind, new Date(), focused)) return;
   const notification = new Notification(title, { body, silent: notificationIsSilent() });
   notification.onclick = () => { window.focus(); onClick(); notification.close(); };
 }
@@ -327,7 +339,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     model: '', models: [], providers: [], reasoningStages: { enabled: false, planning: 'high', execution: 'medium', verification: 'high' }, tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, draftWorkspace: storageGet(DRAFT_WORKSPACE), conversationMessages: {}, messagesHasEarlier: {}, loadingEarlierConversationId: null, activeConversationId: '', conversationModels: (() => { try { const v = JSON.parse(storageGet(CONVERSATION_MODELS) ?? '{}'); return v && typeof v === 'object' ? v as Record<string, string> : {}; } catch { return {}; } })(),
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
     queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: readFollowUpMode(), nextRunMode: 'act', pendingRunOverrides: null, answers: {},
-    unread: [], pinned: [], archived: [], runPrompts: {},
+    unread: [], subtaskUnread: readSubtaskUnread(), pinned: [], archived: [], runPrompts: {},
     profiles: [], recipes: [], customCommands: [], profileId: storageGet(PROFILE) ?? 'default',
     reasoningEffort: (['minimal', 'low', 'medium', 'high'].includes(storageGet(REASONING) ?? '') ? storageGet(REASONING) : '') as ReasoningEffort | '',
     worktreeRequests: {},
@@ -418,6 +430,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
           : item.conversationId === previousId && !terminal.has(item.status) ? { ...item, background: true } : item),
         activeConversationId: conversation.id, activeRunId: run?.id ?? null, loadingMessagesConversationId: null,
         error: null, errorDetail: null, paused: run?.status === 'paused', unread: state.unread.filter((id) => id !== conversation.id),
+        subtaskUnread: (() => { const { [conversation.id]: _read, ...rest } = state.subtaskUnread; storageSet(SUBTASK_UNREAD_KEY, JSON.stringify(rest)); return rest; })(),
         model: state.conversationModels[conversation.id] ?? state.model,
       }));
       if (run && !terminal.has(run.status)) return;
@@ -704,6 +717,28 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         patchConversation(run.conversationId, { title: event.data.title });
       }
       const title = get().conversations.find((item) => item.id === run.conversationId)?.title ?? run.title;
+      const childId = typeof event.data.subtask_id === 'string' ? event.data.subtask_id : '';
+      const background = run.background || run.conversationId !== get().activeConversationId
+        || (typeof document !== 'undefined' && !document.hasFocus());
+      if (childId && background && ['subtask.started', 'subtask.progress', 'subtask.output', 'subtask.completed', 'subtask.group_completed', 'subtask.background_completed'].includes(event.type)) {
+        set((state) => {
+          const ids = state.subtaskUnread[run.conversationId] ?? [];
+          if (ids.includes(childId)) return {};
+          const subtaskUnread = { ...state.subtaskUnread, [run.conversationId]: [...ids, childId] };
+          storageSet(SUBTASK_UNREAD_KEY, JSON.stringify(subtaskUnread));
+          return { subtaskUnread };
+        });
+      }
+      if (event.type === 'subtask.background_completed' && childId && background) {
+        const summary = typeof event.data.summary === 'string' ? event.data.summary : '后台子任务已完成。';
+        const childTitle = typeof event.data.title === 'string' ? event.data.title : childId;
+        notifyDesktop(`Atlas 子任务完成：${childTitle}`, `${title} · ${summary}`.slice(0, 240), 'completion', () => {
+          const conversation = get().conversations.find((item) => item.id === run.conversationId);
+          if (conversation) void get().openConversation(conversation).then(() => {
+            setTimeout(() => window.dispatchEvent(new CustomEvent('atlas:open-subtask', { detail: { subtaskId: childId } })), 80);
+          });
+        }, true);
+      }
       if (event.type === 'approval.required' || event.type === 'input.required' || event.type === 'run.plan.proposed' || event.type === 'rules.trust_required') {
         const heading = event.type === 'input.required' ? 'Atlas 有个问题要问你' : event.type === 'run.plan.proposed' ? 'Atlas 的计划等你确认' : event.type === 'rules.trust_required' ? '要不要信任这个目录的规则文件？' : 'Atlas 需要你确认';
         notifyDesktop(heading, title, event.type === 'input.required' ? 'question' : 'approval', () => {
@@ -922,11 +957,13 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         set((state) => {
           const { [id]: _messages, ...conversationMessages } = state.conversationMessages;
           const { [id]: _queue, ...queue } = state.queue;
+          const { [id]: _subtaskUnread, ...subtaskUnread } = state.subtaskUnread;
+          storageSet(SUBTASK_UNREAD_KEY, JSON.stringify(subtaskUnread));
           const conversations = state.conversations.filter((item) => item.id !== id);
           const wasActive = state.activeConversationId === id;
           return {
             conversations, ...flags(conversations), conversationMessages, queue,
-            unread: state.unread.filter((item) => item !== id),
+            unread: state.unread.filter((item) => item !== id), subtaskUnread,
             activeConversationId: wasActive ? '' : state.activeConversationId, activeRunId: wasActive ? null : state.activeRunId,
           };
         });

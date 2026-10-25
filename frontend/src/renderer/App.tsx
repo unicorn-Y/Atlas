@@ -556,7 +556,7 @@ export default function App() {
     ? String(activeEvents.find((event) => event.type === 'run.started')?.data.content ?? '') : '';
   const runTurnIndex = runPrompt ? messages.map((message) => message.role === 'user' ? message.content : null).lastIndexOf(runPrompt) : -1;
   // History also keeps tool messages so stored tool calls show their results in the step track.
-  const threadMessages = (store.conversationMessages[store.activeConversationId] ?? []).filter((message) => message.role === 'user' || message.role === 'assistant' || message.role === 'tool' || (message.role === 'system' && ['structured_component', 'agent_canvas'].includes(String((message.metadata as Record<string, unknown> | undefined)?.display_kind))));
+  const threadMessages = (store.conversationMessages[store.activeConversationId] ?? []).filter((message) => message.role === 'user' || message.role === 'assistant' || message.role === 'tool' || (message.role === 'system' && ['structured_component', 'agent_canvas', 'subtask_activity'].includes(String((message.metadata as Record<string, unknown> | undefined)?.display_kind))));
   const componentSelections = Object.fromEntries(threadMessages.flatMap((message) => {
     if (message.role !== 'user') return [];
     const match = /^结构化卡片 \[([^\]]+)\]「[^」]*」选择：([^\n]+)/.exec(message.content);
@@ -2629,6 +2629,7 @@ export default function App() {
         username={username} subtitle={store.connected ? modelName : store.backendStarting ? '后端启动中…' : '后端没有连接'}
         theme={theme} onToggleTheme={toggleTheme} onSettings={() => setSheet('models')}
         pinned={store.pinned} archived={store.archived} unread={store.unread}
+        subtaskUnreadCounts={Object.fromEntries(Object.entries(store.subtaskUnread).map(([id, childIds]) => [id, childIds.length]))}
         running={runningConversations} runs={store.runs} onPauseRun={(runId) => {
           const run = store.getRun(runId); if (!run) return;
           try { backend.controlRun(runId, run.status === 'paused' ? 'run.resume' : 'run.pause'); }

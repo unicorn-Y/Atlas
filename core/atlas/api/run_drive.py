@@ -2587,6 +2587,23 @@ async def _execute_run(
 
     async def emit(event: str, data: dict[str, Any]) -> None:
         """Emit an event envelope to the client."""
+        if event in {"subtask.started", "subtask.progress", "subtask.output", "subtask.completed",
+                     "subtask.group_completed", "subtask.background_completed"}:
+            try:
+                from atlas.config import DATA_ROOT
+                from atlas.engine.session_sync import append_session_message
+
+                await asyncio.to_thread(
+                    append_session_message, DATA_ROOT / "engine", run.conversation_id,
+                    "system", "", {
+                        "display_kind": "subtask_activity",
+                        "activity": {"event": event, **data},
+                        "run_id": run.run_id, "sequence": run.sequence + 1,
+                    },
+                )
+            except Exception:
+                log.exception("subtask_activity.persist_failed", event=event,
+                              subtask_id=data.get("subtask_id"), run_id=run.run_id)
         if event == "run.started":
             record_api_timing("run_started_emitted")
         elif event in {"run.completed", "run.failed", "run.cancelled"}:
@@ -3088,7 +3105,8 @@ async def _execute_run(
                             {"kind": "subtask.background_completed", "subtask_id": subtask_id},
                         )
                 await emit("subtask.background_completed", {
-                    "subtask_id": subtask_id, "summary": summary,
+                    "subtask_id": subtask_id, "title": str(persisted.get("goal") or subtask_id),
+                    "summary": summary,
                 })
 
         async def subtask_group_completed(payload: dict[str, Any]) -> None:
@@ -3106,7 +3124,9 @@ async def _execute_run(
                              "subtask_id": payload.get("subtask_id", "")},
                         )
                 await emit("subtask.background_completed", {
-                    "subtask_id": payload.get("subtask_id", ""), "summary": summary,
+                    "subtask_id": payload.get("subtask_id", ""),
+                    "title": payload.get("title") or payload.get("goal") or "Worker 组",
+                    "summary": summary,
                 })
 
         checkpoint_failure_reported = False

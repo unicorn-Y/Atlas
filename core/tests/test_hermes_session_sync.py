@@ -5,6 +5,7 @@ import json
 import os
 
 from atlas.engine.session_sync import (
+    append_session_message,
     append_branch_summary,
     atlas_turn_ordinal,
     capture_session,
@@ -15,6 +16,8 @@ from atlas.engine.session_sync import (
     list_branch_tree,
     restore_session,
     rewind_user_turn,
+    read_session_all_messages,
+    read_session_model_messages,
 )
 
 
@@ -125,6 +128,26 @@ def test_branch_summary_is_mirrored_to_hermes_parent_session(tmp_path):
     append_branch_summary(home, "source", "child", "a1", "branch note")
     messages = _history(home, "source")
     assert messages[-1]["content"] == "branch note"
+
+
+def test_subtask_activity_is_saved_for_ui_and_hidden_from_model_context(tmp_path, monkeypatch):
+    home = tmp_path / "engine"
+    home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    from hermes_state import SessionDB
+
+    with SessionDB(db_path=home / "state.db") as db:
+        db.ensure_session("parent", "api_server", cwd=str(home))
+        db.append_message("parent", "user", "delegate the work")
+    append_session_message(home, "parent", "system", "", {
+        "display_kind": "subtask_activity",
+        "activity": {"event": "subtask.completed", "subtask_id": "child-1", "summary": "done"},
+    })
+
+    activity = read_session_all_messages(home, "parent")[-1]
+    assert activity["metadata"]["display_kind"] == "subtask_activity"
+    assert activity["metadata"]["activity"]["subtask_id"] == "child-1"
+    assert all(item.get("display_kind") != "subtask_activity" for item in read_session_model_messages(home, "parent"))
 
 
 # ----- H2.1 step 2: direct SessionDB write path (no Atlas state in the loop) -----

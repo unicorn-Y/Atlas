@@ -46,6 +46,11 @@ describe('new wire events are known', () => {
       timestamp: '2026-10-02T00:00:00Z', event: 'review.findings',
       data: { scope: 'working_tree', findings: [] },
     })?.type).toBe('review.findings');
+    expect(normalizeRuntimeEvent({
+      type: 'agent_event', event_id: 'run-1:13', run_id: 'run-1', sequence: 13,
+      timestamp: '2026-10-02T00:00:00Z', event: 'subtask.background_completed',
+      data: { subtask_id: 'child-1', summary: 'done' },
+    })?.type).toBe('subtask.background_completed');
   });
 
   it('keeps live structured component pushes in the run event stream', () => {

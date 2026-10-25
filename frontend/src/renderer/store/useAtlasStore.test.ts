@@ -233,6 +233,14 @@ describe('follow-up queue', () => {
     expect(state.queue['c-done'].map((item) => item.content)).toEqual(['second follow-up']);
     expect(state.runs.filter((run) => run.conversationId === 'c-done')).toHaveLength(2);
   });
+
+  it('counts unread updates once per background subtask, across progress and completion events', () => {
+    useAtlasStore.setState({ activeConversationId: 'other', runs: [{ ...running('r-child', 'c-parent'), background: true }], subtaskUnread: {} });
+    useAtlasStore.getState().appendEvent({ id: 'e-child-start', runId: 'r-child', sequence: 2, type: 'subtask.started', timestamp: new Date().toISOString(), data: { subtask_id: 'child-1' } });
+    useAtlasStore.getState().appendEvent({ id: 'e-child-progress', runId: 'r-child', sequence: 3, type: 'subtask.progress', timestamp: new Date().toISOString(), data: { subtask_id: 'child-1', text: 'halfway' } });
+    useAtlasStore.getState().appendEvent({ id: 'e-child-done', runId: 'r-child', sequence: 4, type: 'subtask.completed', timestamp: new Date().toISOString(), data: { subtask_id: 'child-1', status: 'completed' } });
+    expect(useAtlasStore.getState().subtaskUnread['c-parent']).toEqual(['child-1']);
+  });
 });
 
 describe('steering a running run', () => {

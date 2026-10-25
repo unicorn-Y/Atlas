@@ -125,7 +125,7 @@ interface SidebarProps {
   activeConversationId: string; loadingConversationId: string | null;
   onOpenConversation: (conversation: ConversationSummary) => void; onNewTask: () => void; creating: boolean; onSearch: () => void;
   username: string; subtitle: string; theme: Theme; onToggleTheme: () => void; onSettings: () => void;
-  pinned: string[]; archived: string[]; unread: string[]; running: string[];
+  pinned: string[]; archived: string[]; unread: string[]; running: string[]; subtaskUnreadCounts?: Record<string, number>;
   queued?: Record<string, number>;
   onRename: (id: string, title: string) => void; onDelete: (id: string) => void;
   onTogglePinned: (id: string) => void; onToggleArchived: (id: string) => void;
@@ -611,6 +611,7 @@ export default function Sidebar(props: SidebarProps) {
     const isPinned = props.pinned.includes(conversation.id);
     const isArchived = props.archived.includes(conversation.id);
     const unread = isUnread(conversation.id);
+    const subtaskUnreadCount = props.subtaskUnreadCounts?.[conversation.id] ?? 0;
     const running = isRunning(conversation.id);
     const run = [...(props.runs ?? [])].reverse().find((item) => item.conversationId === conversation.id && !['completed', 'failed', 'cancelled'].includes(item.status));
     const background = Boolean(run?.background);
@@ -662,6 +663,7 @@ export default function Sidebar(props: SidebarProps) {
         {background && run && !mini && <span className="shrink-0 rounded bg-brand/10 px-1.5 py-0.5 text-[10px] text-brand">后台 · {run.status === 'waiting' ? '等待你' : run.status === 'paused' ? '已暂停' : run.phase === 'verification' ? '验证' : run.phase === 'execution' ? '执行' : '规划'}</span>}
         {(conversation.worktree_path || conversation.worktree_branch) && <GitBranch size={12} className="shrink-0 text-fg-3" aria-label={'工作树' + (conversation.worktree_branch ? '：' + conversation.worktree_branch : '')} />}
         {unread && (waiting || running || completed || failed) && <i className="size-1.5 shrink-0 rounded-full bg-ok" aria-label="有新结果" />}
+        {subtaskUnreadCount > 0 && <span className="shrink-0 rounded bg-brand/15 px-1.5 text-[10px] font-medium text-brand" aria-label={`${subtaskUnreadCount} 条子任务未读更新`}>{subtaskUnreadCount} 条更新</span>}
         {queued > 0 && <span className="shrink-0 rounded bg-brand/15 px-1 text-[10px] text-brand" title={`${queued} 条消息待发送`}>{queued}</span>}
       </button>
       <Menu open={menuOpenKey === key} onOpenChange={(open) => {

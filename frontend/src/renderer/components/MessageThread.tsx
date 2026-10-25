@@ -30,6 +30,7 @@ type ThreadRow =
   | { kind: 'load-earlier'; id: string }
   | { kind: 'truncated'; id: string; count: number }
   | { kind: 'history'; id: string; message: ConversationMessageData; continued?: boolean }
+  | { kind: 'subtask'; id: string; activity: Record<string, unknown> }
   | { kind: 'empty'; id: string }
   | { kind: 'timeline'; id: string; item: TimelineItem; firstInTurn: boolean; last: boolean };
 
@@ -255,6 +256,16 @@ export default function MessageThread({ history, componentSelections = {}, usern
       const createdAt = message.created_at ?? '';
       const startedAt = previousAt;
       previousAt = createdAt || previousAt;
+      if (message.role === 'system' && metadata.display_kind === 'subtask_activity') {
+        flushSteps();
+        const activity = metadata.activity;
+        if (activity && typeof activity === 'object' && !Array.isArray(activity)) {
+          const id = `subtask-${message.id}`;
+          rows.push({ kind: 'subtask', id, activity: activity as Record<string, unknown> });
+          historyHeaded = true;
+        }
+        continue;
+      }
       if (message.role === 'system' && metadata.display_kind === 'structured_component') {
         flushSteps();
         const componentData = metadata.component;
@@ -519,6 +530,7 @@ export default function MessageThread({ history, componentSelections = {}, usern
         const metadata = row.message.metadata && typeof row.message.metadata === 'object' ? row.message.metadata as Record<string, unknown> : {};
         const memoryCitations = Array.isArray(metadata.memory_citations) ? metadata.memory_citations.filter((ref): ref is string => typeof ref === 'string') : [];
         return <ConversationMessage id={String(row.message.id)} role={row.message.role === 'user' ? 'user' : 'assistant'} content={row.message.content} username={username} continued={row.continued} actions={historyActions(row.message)} memoryCitations={memoryCitations} createdAt={row.message.created_at} />;
+      case 'subtask': return <SubtaskActivityCard activity={row.activity} />;
       case 'empty':
         return emptyState;
       case 'timeline':
@@ -527,6 +539,24 @@ export default function MessageThread({ history, componentSelections = {}, usern
         return null;
     }
   }, [context, conversationId, emptyState, historyActions, loadEarlier, loadingEarlier, username]);
+
+  useEffect(() => {
+    const onOpenSubtask = (event: Event) => {
+      const subtaskId = (event as CustomEvent<{ subtaskId?: string }>).detail?.subtaskId;
+      if (!subtaskId) return;
+      let attempts = 0;
+      const locate = () => {
+        const target = document.querySelector<HTMLElement>(`[data-subtask-card="${CSS.escape(subtaskId)}"]`);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target.focus({ preventScroll: true });
+        } else if (attempts++ < 30) requestAnimationFrame(locate);
+      };
+      locate();
+    };
+    window.addEventListener('atlas:open-subtask', onOpenSubtask);
+    return () => window.removeEventListener('atlas:open-subtask', onOpenSubtask);
+  }, [conversationId]);
 
   const renderDisplayRow = useCallback((displayRow: ThreadDisplayRow) => {
     if (displayRow.kind === 'row') return renderRow(displayRow.row);
@@ -614,4 +644,19 @@ export default function MessageThread({ history, componentSelections = {}, usern
       {!focusMode && footerNote}
     </div>
   </div>;
+}
+
+function SubtaskActivityCard({ activity }: { activity: Record<string, unknown> }) {
+  const subtaskId = typeof activity.subtask_id === 'string' ? activity.subtask_id : '';
+  const event = typeof activity.event === 'string' ? activity.event : '';
+  const status = event === 'subtask.started' ? '已开始'
+    : event === 'subtask.completed' || event === 'subtask.background_completed' || event === 'subtask.group_completed' ? '已完成'
+      : '有进展';
+  const title = String(activity.title ?? activity.goal ?? `子任务 ${subtaskId.slice(0, 8)}`);
+  const detail = String(activity.summary ?? activity.text ?? '');
+  if (!subtaskId) return null;
+  return <article data-subtask-card={subtaskId} tabIndex={-1} className="my-3 rounded-xl border border-line bg-sunken px-3.5 py-3 outline-none focus-visible:ring-2 focus-visible:ring-brand">
+    <div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-fg">子任务：{title}</span><span className="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-[10.5px] text-brand">{status}</span></div>
+    {detail && <p className="mb-0 mt-1.5 whitespace-pre-wrap break-words text-[12px] leading-5 text-fg-2">{detail}</p>}
+  </article>;
 }
