@@ -1940,6 +1940,26 @@ async def _handle_run_start(
                 "files": [{"path": item["path"], "bytes": item["bytes"]}
                           for item in run.workspace_rules],
             }))
+    await manager.send(conn_id, run.next_envelope("run.context.sources", {
+        "sources": [
+            *[{"kind": "context_file", "path": str(path), "loaded": True} for path in context_files],
+            *[{"kind": "user_file", "path": str(item.get("name") or item.get("path") or "attachment"), "loaded": True}
+              for item in data.get("files", []) if isinstance(item, dict)],
+            *[{"kind": "user_attachment", "path": str(item.get("name") or "attachment"), "loaded": True}
+              for item in data.get("attachments", []) if isinstance(item, dict)],
+            *([{"kind": "image_attachment", "path": f"{len(image_attachments)} image attachment(s)", "loaded": True}] if image_attachments else []),
+            *[{"kind": "workspace_rule", "path": str(item.get("path") or ""), "bytes": item.get("bytes"), "loaded": True}
+              for item in run.workspace_rules],
+            *[{"kind": "referenced_conversation", "id": str(item)} for item in context_conversations],
+            *[{"kind": "skill", "name": str(item.get("name") or "")}
+              for item in active_skill_instructions if isinstance(item, dict) and item.get("name")],
+            {"kind": "workspace", "path": str(run.workspace or "No workspace"), "loaded": bool(run.workspace)},
+            {"kind": "system_prompt", "path": "Atlas runtime prompt and conversation policy", "loaded": "runtime-generated"},
+            {"kind": "memory", "path": "Retrieved memory (conditional on conversation memory settings)", "loaded": "runtime-dependent"},
+            {"kind": "tool_schema", "path": "Registered tools for this run", "loaded": "runtime-dependent"},
+            {"kind": "tool_reads", "path": "Files read by tools appear as tool.started/tool.completed events", "loaded": True},
+        ],
+    }))
     manager.runs[run_id] = run
     manager.conn_runs[conn_id] = run_id
     await manager.persist_run(run)

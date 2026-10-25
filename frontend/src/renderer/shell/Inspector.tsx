@@ -24,6 +24,7 @@ export type InspectorTab = 'overview' | 'artifacts' | 'activity' | 'changes' | '
 
 const EMPTY_MESSAGES: ConversationMessage[] = [];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', waiting: '等你确认', paused: '已暂停', completed: '已完成', failed: '出错了', cancelled: '已停止', idle: '空闲' };
+const CONTEXT_COLORS: Record<string, string> = { system_prompt: '#C8964A', tool_definitions: '#5B8DEF', rules: '#3FA37A', skills: '#A77BD6', mcp: '#E07A5F', subagent_definitions: '#4FB3BF', memory: '#D4A373', conversation: '#7C8CA3', tool_results: '#DB6B9A', files: '#89A84E' };
 const terminalCommandOwners = new Map<string, string>();
 function commandForConversation(command: { id: string; text: string } | null, conversationId: string) {
   if (!command || !conversationId) return command;
@@ -207,7 +208,21 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
   const latestUsage = [...(run?.events ?? [])].reverse().find((event) => event.type === 'run.usage')?.data;
   const context = typeof latestUsage?.context_tokens === 'number' && typeof latestUsage?.context_limit === 'number' && latestUsage.context_limit > 0
     ? `${Math.round(latestUsage.context_tokens / latestUsage.context_limit * 100)}%（${latestUsage.context_tokens} / ${latestUsage.context_limit}）` : '—';
-  const breakdown = latestUsage?.context_breakdown as { categories?: Array<{ id: string; label: string; tokens: number }>; context_max?: number; context_used?: number } | undefined;
+  const breakdown = latestUsage?.context_breakdown as { categories?: Array<{ id: string; label: string; tokens: number }>; context_max?: number; context_used?: number; byte_attribution?: Record<string, unknown> } | undefined;
+  const sourceManifest = [...(run?.events ?? [])].reverse().find((event) => event.type === 'run.context.sources')?.data?.sources;
+  const toolReadSources = [...(run?.events ?? [])].flatMap((event) => {
+    if (event.type !== 'tool.started' && event.type !== 'tool.completed') return [];
+    const data = event.data as Record<string, unknown>;
+    const name = String(data.name ?? '').toLowerCase();
+    if (!/(read|file|grep|glob|search)/.test(name)) return [];
+    const args = (data.arguments ?? data.input) as Record<string, unknown> | undefined;
+    const path = args?.path ?? args?.file_path ?? args?.file ?? args?.directory;
+    return typeof path === 'string' && path.trim() ? [{ kind: 'tool_read', path, loaded: true }] : [];
+  });
+  const contextSources = [...(Array.isArray(sourceManifest) ? sourceManifest : []), ...toolReadSources];
+  const tokenLimit = typeof latestUsage?.context_limit === 'number' ? latestUsage.context_limit : 0;
+  const tokenUsed = typeof latestUsage?.context_tokens === 'number' ? latestUsage.context_tokens : 0;
+  const contextPercent = tokenLimit ? Math.min(100, Math.round(tokenUsed / tokenLimit * 100)) : 0;
   const [gitRefresh, setGitRefresh] = useState(0);
   const refreshGit = () => { setGitRefresh((current) => current + 1); onWorktreeChanged(); };
   const gitRefreshKey = `${run?.id}:${run?.status}:${worktree?.branch}:${gitRefresh}`;
@@ -220,6 +235,11 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
     </dl>
     {breakdown?.categories && <section>
       <h3 className="m-0 mb-2 text-[12.5px] font-semibold text-fg-2">上下文构成</h3>
+      <div className="mb-2 flex h-3 overflow-hidden rounded-full bg-sunken" role="img" aria-label={`上下文使用 ${contextPercent}%`}>
+        {breakdown.categories.map((item) => <i key={item.id} title={`${item.label} ${item.tokens.toLocaleString()} tokens`}
+          className="block h-full" style={{ width: `${tokenLimit ? Math.min(100, item.tokens / tokenLimit * 100) : 0}%`, background: CONTEXT_COLORS[item.id] ?? 'var(--brand)' }} />)}
+      </div>
+      <p className="m-0 mb-2 text-[11.5px] text-fg-3">已用 {contextPercent}% · 剩余 {Math.max(0, tokenLimit - tokenUsed).toLocaleString()} tokens · 达到 80% 时提示使用 /compact</p>
       <div className="grid gap-1.5">
         {breakdown.categories.map((item) => <div key={item.id} className="flex justify-between gap-3 text-[12.5px]">
           <span className="text-fg-3">{item.label}</span><span className="tabular-nums text-fg-2">{item.tokens.toLocaleString()} tokens</span>
@@ -228,6 +248,21 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
           <span className="text-fg-3">剩余额度</span><span className="tabular-nums text-fg-2">{Math.max(0, breakdown.context_max - (breakdown.context_used ?? 0)).toLocaleString()} tokens</span>
         </div>}
       </div>
+    </section>}
+    {contextSources.length > 0 && <section>
+      <h3 className="m-0 mb-2 text-[12.5px] font-semibold text-fg-2">本轮提示词来源</h3>
+      <ul className="m-0 grid max-h-48 gap-1 overflow-auto pl-4 text-[12px] text-fg-3">
+        {contextSources.map((item, index) => {
+          const source = item as Record<string, unknown>;
+          return <li key={`${String(source.kind)}-${String(source.path ?? source.id ?? index)}`} className="break-all">
+            <b className="font-medium text-fg-2">{String(source.kind || 'source')}</b> · {String(source.path || source.name || source.id || '')}
+            {typeof source.bytes === 'number' ? ` · ${source.bytes.toLocaleString()} bytes` : ''}
+          </li>;
+        })}
+      </ul>
+      {breakdown?.byte_attribution && <p className="m-0 mt-2 border-t border-line pt-2 text-[11.5px] text-fg-3">
+        系统提示 {Number(breakdown.byte_attribution.system_prompt ?? 0).toLocaleString()} bytes / 约 {Number(breakdown.byte_attribution.system_prompt_tokens_estimated ?? 0).toLocaleString()} tokens；工具 schema {Number(breakdown.byte_attribution.tool_schema ?? 0).toLocaleString()} bytes / 约 {Number(breakdown.byte_attribution.tool_schema_tokens_estimated ?? 0).toLocaleString()} tokens。
+      </p>}
     </section>}
     <section>
       <h3 className="m-0 mb-2 text-[12.5px] font-semibold text-fg-2">工作目录</h3>

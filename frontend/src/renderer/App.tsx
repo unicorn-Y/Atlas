@@ -1359,14 +1359,9 @@ export default function App() {
     } catch (error) { setToast(`创建交接会话失败：${error instanceof Error ? error.message : String(error)}`); }
   };
   const slashCommands: SlashCommand[] = [
-    { id: 'new', label: '/new', hint: '总结当前上下文并在新对话继续', run: () => {
+    { id: 'new', label: '/new', hint: '生成完整上下文交接并在干净的新对话继续', run: () => {
       if (!activeConversation) { newTask(); return; }
-      const recent = messages.filter((item) => (item.role === 'user' || item.role === 'assistant') && item.content.trim()).slice(-8);
-      const handoff = [`原对话：${activeConversation.title || '未命名任务'}`,
-        '最近的上下文（按时间顺序，原话截断以控制长度）：',
-        ...recent.map((item) => `${item.role === 'user' ? '用户' : 'Atlas'}：${item.content.replace(/\s+/g, ' ').slice(0, item.role === 'user' ? 360 : 520)}`),
-        '请先据此承接原任务，再处理我接下来提出的新问题。'].join('\n');
-      newTask(); setInput(`交接摘要：\n${handoff}\n\n我的新问题：`);
+      void prepareHandoff();
     } },
     { id: 'handoff', label: '/handoff', hint: '生成、预览并编辑完整任务交接摘要', run: () => { void prepareHandoff(); } },
     { id: 'clear', label: '/clear', hint: '开始一段新对话', run: newTask },
@@ -1533,7 +1528,25 @@ export default function App() {
     { id: 'voice', label: '/voice', hint: '开始语音通话', run: startVoice },
     { id: 'auto', label: '/auto', hint: '打开自动化', run: () => go('auto') },
     { id: 'memory', label: '/memory', hint: '打开记忆', run: () => go('memory') },
-    { id: 'context', label: '/context', hint: '查看上下文用量明细', run: () => showInspectorTab('context') },
+    { id: 'context', label: '/context', hint: '查看彩色上下文网格、类别明细和注入来源', run: () => showInspectorTab('context') },
+    { id: 'prompt-size', label: '/prompt-size', hint: '查看系统提示与工具 schema 的字节和估算 Token 归因', run: () => {
+      const usage = [...(activeRun?.events ?? [])].reverse().find((event) => event.type === 'run.usage')?.data;
+      const breakdown = usage?.context_breakdown as { byte_attribution?: Record<string, unknown> } | undefined;
+      const bytes = breakdown?.byte_attribution;
+      if (!bytes) { setToast('当前运行没有提供提示词归因数据；请先完成一次模型调用后再查看'); return; }
+      const source = (activeRun?.events ?? []).find((event) => event.type === 'run.context.sources')?.data?.sources;
+      const lines = Array.isArray(source) ? source.map((item) => {
+        const row = item as Record<string, unknown>;
+        return `- ${String(row.kind || 'source')}: ${String(row.path || row.name || row.id || '')}${typeof row.bytes === 'number' ? ` (${row.bytes} bytes)` : ''}`;
+      }) : [];
+      setRawTextTitle('提示词大小与来源');
+      setRawText([
+        `系统提示：${Number(bytes.system_prompt ?? 0).toLocaleString()} bytes · 约 ${Number(bytes.system_prompt_tokens_estimated ?? 0).toLocaleString()} tokens`,
+        `工具 schema：${Number(bytes.tool_schema ?? 0).toLocaleString()} bytes · 约 ${Number(bytes.tool_schema_tokens_estimated ?? 0).toLocaleString()} tokens`,
+        '字节数按本轮发送的 UTF-8 序列化内容计算；Token 数是 Atlas 估算值。',
+        '', '本轮可追溯来源：', ...(lines.length ? lines : ['- 运行事件中没有额外来源清单']),
+      ].join('\n'));
+    } },
     { id: 'keymap', label: '/keymap', hint: '显示分组快捷键一览', run: () => setKeymapOpen(true) },
     { id: 'chapter', label: '/chapter', hint: '在当前对话末尾添加章节目录项', takesArgument: true, run: (title: string) => {
       const value = title.trim(); if (!value) { setToast('用法：/chapter 章节名称'); return; }
@@ -1611,7 +1624,26 @@ export default function App() {
     { id: 'whatsnew', label: '/whatsnew', hint: '查看仓库提交中的新功能亮点', run: () => { void api<{ source: string; highlights: Array<string | { date?: string; title?: string }> }>(store.apiBaseUrl, '/api/u6/whatsnew').then((result) => { setRawTextTitle('有什么新功能'); setRawText(result.highlights.map((item) => typeof item === 'string' ? item : `${item.date || ''} ${item.title || ''}`.trim()).filter(Boolean).join('\n') || '仓库里还没有可显示的更新亮点。'); }).catch((error) => setToast(`读取更新说明失败：${error instanceof Error ? error.message : String(error)}`)); } },
     { id: 'release-notes', label: '/release-notes', hint: '查看完整更新说明（按版本索引）', run: () => { void api<{ changelog?: string; highlights: Array<string | { date?: string; title?: string }> }>(store.apiBaseUrl, '/api/u6/whatsnew').then((result) => { setRawTextTitle('更新说明'); setRawText(result.changelog || result.highlights.map((item) => typeof item === 'string' ? item : `${item.date || ''} ${item.title || ''}`.trim()).filter(Boolean).join('\n')); }); } },
     { id: 'about', label: '/about', hint: '查看 Atlas 版本与更新说明', run: () => { void api<{ source?: string; changelog?: string; highlights: Array<string | { date?: string; title?: string }> }>(store.apiBaseUrl, '/api/u6/whatsnew').then((result) => { setRawTextTitle('关于 Atlas'); setRawText(`Atlas ${__APP_VERSION__}\n更新来源：${result.source || '未知'}\n\n${result.changelog || result.highlights.map((item) => typeof item === 'string' ? item : `${item.date || ''} ${item.title || ''}`.trim()).filter(Boolean).join('\n')}`); }); } },
-    { id: 'status', label: '/status', hint: '显示版本、模型、API 连通性和工具状态', run: () => setToast(`Atlas ${__APP_VERSION__} · ${modelName} · ${store.connected ? 'API 已连接' : 'API 未连接'} · 工具 ${store.tools.length} 个可用 · 推理 ${store.reasoningEffort || '默认'} · ${PERMISSION[permission].label}`) },
+    { id: 'status', label: '/status', hint: '显示模型、推理、权限、上下文、Token 与限额状态卡', run: () => {
+      const usage = [...(activeRun?.events ?? [])].reverse().find((event) => event.type === 'run.usage')?.data;
+      const inputTokens = typeof usage?.input_tokens === 'number' ? usage.input_tokens : null;
+      const outputTokens = typeof usage?.output_tokens === 'number' ? usage.output_tokens : null;
+      const cachedTokens = typeof usage?.cached_input_tokens === 'number' ? usage.cached_input_tokens : typeof usage?.cached_tokens === 'number' ? usage.cached_tokens : null;
+      const reasoningTokens = typeof usage?.reasoning_tokens === 'number' ? usage.reasoning_tokens : null;
+      const limit = typeof usage?.context_limit === 'number' ? usage.context_limit : null;
+      const used = typeof usage?.context_tokens === 'number' ? usage.context_tokens : null;
+      const reset = typeof usage?.rate_limit_reset_at === 'string' ? usage.rate_limit_reset_at : null;
+      setRawTextTitle('Atlas 运行状态');
+      setRawText([
+        `版本：Atlas ${__APP_VERSION__}`, `模型：${modelName}`, `推理强度：${store.reasoningEffort || '默认'}`,
+        `权限：${PERMISSION[permission].label}`, `连接：${store.connected ? 'API 已连接' : 'API 未连接'}`,
+        `工具：${store.tools.length} 个可用`, `运行：${activeRun ? `${activeRun.status} · ${activeRun.id}` : '空闲'}`,
+        `上下文：${used !== null && limit ? `${Math.round(used / limit * 100)}% 已用 / ${Math.max(0, 100 - Math.round(used / limit * 100))}% 剩余 · ${Math.max(0, limit - used).toLocaleString()} tokens 剩余` : '未知（本轮尚无提供方上下文用量）'}`,
+        `Token：input ${inputTokens ?? '未知'} · output ${outputTokens ?? '未知'} · cache ${cachedTokens ?? '未知'} · reasoning ${reasoningTokens ?? '未知'}`,
+        `限额重置：${reset ?? '未知（提供方未返回重置数据）'}`,
+        used !== null && limit && used / limit >= 0.8 ? '阈值动作：上下文达到 80%，建议使用 /compact 压缩。' : '阈值动作：达到 80% 时提示压缩。',
+      ].join('\n'));
+    } },
     { id: 'permissions', label: '/permissions', hint: '切换当前对话权限模式', run: () => { if (!activeConversation) { setToast('先打开一个对话再切换权限'); return; } setToast(`权限模式：${PERMISSION[cyclePermission()].label}`); } },
     { id: 'agents', label: '/agents', hint: '打开 Agents 页：常驻 Agent 花名册与详情', run: () => go('agents') },
     { id: 'ps', label: '/ps', hint: '查看后台进程和最近输出', run: () => showInspectorTab('processes') },
@@ -2230,7 +2262,7 @@ export default function App() {
                   <span className="flex-1" />
                 <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-1" aria-label="运行状态">
                   {statusBar.model && <span className="max-w-36 truncate" title={modelName}>{modelName}</span>}{statusBar.reasoning && <span>推理 {store.reasoningEffort ? EFFORT_LABEL[store.reasoningEffort] : '默认'}</span>}
-                  {statusBar.context && contextUse !== null && <span>上下文 {contextUse}%</span>}
+                  {statusBar.context && contextUse !== null && <Tip label={contextUse >= 80 ? '上下文达到 80% 预警阈值，可用 /compact 压缩' : '上下文占用比例'}><span className={contextUse >= 80 ? 'text-danger' : ''}>上下文 {contextUse}% 已用 · {100 - contextUse}% 剩余</span></Tip>}
                   {statusBar.tokens && typeof latestUsage?.input_tokens === 'number' && <span>用量 {Number(latestUsage.input_tokens) + Number(latestUsage.output_tokens ?? 0)} tokens</span>}
                   {statusBar.cost && typeof latestUsage?.cost_usd === 'number' && <span>${Number(latestUsage.cost_usd).toFixed(4)}</span>}
                   {statusBar.git && (activeConversation?.worktree_branch || gitBranch) && <span className="max-w-32 truncate"><GitBranch size={10} className="mr-1 inline" />{String(activeConversation?.worktree_branch || gitBranch)}</span>}

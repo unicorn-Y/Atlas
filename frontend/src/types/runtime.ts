@@ -7,7 +7,7 @@ export type AgentEventType =
   | 'tool.preparing' | 'tool.started' | 'tool.output' | 'tool.completed' | 'approval.required' | 'approval.responded'
   | 'artifact.updated' | 'run.paused' | 'run.resumed'
   | 'run.plan.updated'
-  | 'run.steered' | 'run.usage' | 'run.todos' | 'rules.loaded' | 'input.required' | 'run.plan.proposed'
+  | 'run.steered' | 'run.usage' | 'run.todos' | 'rules.loaded' | 'run.context.sources' | 'input.required' | 'run.plan.proposed'
   | 'subtask.started' | 'subtask.progress' | 'subtask.output' | 'subtask.completed' | 'subtask.group_completed'
   | 'subtask.steered' | 'subtask.steer_rejected'
   | 'check.results'

@@ -22,6 +22,19 @@ function Row({ color, label, value, note }: { color: string; label: string; valu
   </div>;
 }
 
+function ContextGrid({ categories, used, limit }: { categories: Array<{ id: string; label: string; tokens: number }>; used: number; limit: number }) {
+  const colors = categories.map((item) => CATEGORY_COLOR[item.id] ?? 'var(--fg-3)');
+  const cells = Array.from({ length: 100 }, (_, cell) => {
+    const token = (cell + 0.5) * limit / 100;
+    let total = 0;
+    const index = categories.findIndex((item) => { total += item.tokens; return token <= total; });
+    return cell < Math.min(100, Math.ceil(Math.max(0, used) / limit * 100)) && index >= 0 ? colors[index] : 'var(--bg-sunken)';
+  });
+  return <div className="grid grid-cols-[repeat(20,minmax(0,1fr))] gap-[2px]" role="img" aria-label="上下文 token 类别网格">
+    {cells.map((color, index) => <i key={index} className="aspect-square rounded-[2px]" style={{ background: color }} />)}
+  </div>;
+}
+
 function Sparkline({ values }: { values: number[] }) {
   if (values.length < 2) return null;
   const max = Math.max(...values, 1);
@@ -89,7 +102,9 @@ export function UsageBreakdown({ usage, title = '本次用量' }: { usage: Usage
           : <i className={cn('block h-full', effectivePercent >= 80 ? 'bg-danger' : 'bg-brand')} style={{ width: `${effectivePercent}%` }} />}
         <i className="absolute inset-y-0 right-0 z-[1] w-[2px] bg-fg" title={`自动压缩线 ${formatTokens(effectiveLimit)}`} />
       </div>
+      {categoryTotal > 0 && <ContextGrid categories={context.categories} used={context.used} limit={effectiveLimit} />}
       <p className="m-0 text-[11px] text-fg-3">按自动压缩窗口 {formatTokens(effectiveLimit)} 计算；竖线为压缩线。</p>
+      <p className="m-0 text-[11px] text-fg-3">剩余 {formatTokens(Math.max(0, effectiveLimit - context.used))} tokens；达到 80% 时建议使用 /compact。</p>
       {categoryTotal > 0 && <div className="grid grid-cols-2 gap-x-4 gap-y-1">
         {context.categories.map((item) => <Row key={item.id} color={CATEGORY_COLOR[item.id] ?? 'var(--fg-3)'} label={item.label} value={formatTokens(item.tokens)} />)}
       </div>}
@@ -151,7 +166,7 @@ export function ContextUsageControl({ context, files = [] }: {
 }) {
   if (!context || context.limit <= 0) return null;
   const percent = Math.max(0, Math.min(100, context.percent));
-  const tone = percent >= 85 ? 'text-danger' : percent >= 70 ? 'text-brand' : 'text-fg-3';
+  const tone = percent >= 80 ? 'text-danger' : percent >= 70 ? 'text-brand' : 'text-fg-3';
   return <InsightPopover width={360} side="top" trigger={
     <button type="button" aria-label={`上下文占用 ${percent}%，查看明细`} title="查看当前上下文占用和文件"
       className={`inline-flex h-7 shrink-0 items-center gap-1 rounded-lg px-2 text-[11.5px] tabular-nums hover:bg-hover ${tone}`}>
@@ -175,6 +190,8 @@ export function ContextUsageControl({ context, files = [] }: {
           style={{ width: `${Math.min(100, item.tokens / context.limit * 100)}%`, background: CATEGORY_COLOR[item.id] ?? 'var(--fg-3)' }} />)
           : <i className={`block h-full ${percent >= 85 ? 'bg-danger' : 'bg-brand'}`} style={{ width: `${percent}%` }} />}
       </div>
+      {context.categories.length > 0 && <ContextGrid categories={context.categories} used={context.used} limit={context.limit} />}
+      <p className="m-0 text-[11px] text-fg-3">剩余 {formatTokens(Math.max(0, context.limit - context.used))} tokens；达到 80% 时建议使用 /compact。</p>
       {context.categories.length > 0 && <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
         {context.categories.map((item) => <Row key={item.id} color={CATEGORY_COLOR[item.id] ?? 'var(--fg-3)'} label={item.label} value={formatTokens(item.tokens)} />)}
       </div>}
@@ -183,7 +200,7 @@ export function ContextUsageControl({ context, files = [] }: {
         {files.length ? <ul className="mt-1.5 mb-0 max-h-32 list-disc overflow-auto pl-4 text-fg-3">{files.map((file) => <li key={file} className="break-all">{file}</li>)}</ul>
           : <p className="mt-1.5 mb-0 text-fg-3">本轮没有显式加入文件。</p>}
       </div>
-      {percent >= 85 && <p className="m-0 text-danger">接近上下文阈值，可用 /compact 压缩对话。</p>}
+      {percent >= 80 && <p className="m-0 text-danger">达到上下文预警阈值，可用 /compact 压缩对话。</p>}
     </div>
   </InsightPopover>;
 }

@@ -349,6 +349,13 @@ def _context_breakdown(messages: list[dict[str, Any]], tools: list[dict[str, Any
             parts["conversation"].append(message)
     estimates = {key: estimate_tokens(value) for key, value in parts.items()}
     estimates["tool_definitions"] = estimate_tokens(tools)
+    byte_attribution = {
+        "system_prompt": len(json.dumps(parts["system_prompt"], ensure_ascii=False, default=str).encode("utf-8")),
+        "tool_schema": len(json.dumps(tools, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")),
+        "system_prompt_tokens_estimated": estimates["system_prompt"],
+        "tool_schema_tokens_estimated": estimates["tool_definitions"],
+        "estimated": True,
+    }
     estimate_total = sum(estimates.values())
     if used_tokens <= 0 or estimate_total <= 0 or context_limit <= 0:
         return {}
@@ -367,7 +374,7 @@ def _context_breakdown(messages: list[dict[str, Any]], tools: list[dict[str, Any
     return {
         "categories": categories, "context_used": used_tokens,
         "context_max": context_limit, "context_source": "provider_usage_plus_estimate",
-        "context_estimated": True,
+        "context_estimated": True, "byte_attribution": byte_attribution,
     }
 
 
