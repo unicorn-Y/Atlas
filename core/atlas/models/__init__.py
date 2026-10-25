@@ -640,7 +640,11 @@ class ModelManager:
                 continue
             if secret:
                 return str(secret)
-        return None
+        # CI and one-shot CLI jobs can inject provider credentials through the
+        # provider's conventional environment variable. The secret remains in
+        # process memory and is never logged or copied into prompts/settings.
+        env_key = f"{pid.upper().replace('-', '_')}_API_KEY"
+        return os.environ.get(env_key) or None
 
     def credential_pool(self, provider_id: str) -> Any | None:
         """B2 的 AtlasCredentialPool；该服务商 keys<2 或未配置时返回 None。

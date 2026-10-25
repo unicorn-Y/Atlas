@@ -1660,5 +1660,38 @@ def remote_stop(port: int | None) -> None:
         raise click.ClickException("无法连接 Atlas 远程入口") from exc
     console.print(f"Remote access stopped; revoked {response.json().get('revoked', 0)} session(s).")
 
+
+@main.group("github")
+def github_group() -> None:
+    """Preview and install GitHub repository integrations."""
+
+
+@github_group.command("install-workflow")
+@click.option("--workspace", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path.cwd())
+@click.option("--template", "template_name", type=click.Choice(["atlas-review", "python-checks"]), required=True)
+@click.option("--overwrite", is_flag=True, help="确认后替换已有目标文件")
+@click.option("--yes", is_flag=True, help="非交互安装；仍会打印完整预览")
+def github_install_workflow(workspace: Path, template_name: str, overwrite: bool, yes: bool) -> None:
+    """Show the selected workflow and required GitHub permissions before installation."""
+    from atlas.github_workflows import install_workflow, workflow_preview
+    try:
+        preview = workflow_preview(workspace, template_name)
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"模板：{preview['label']}\n目标：{preview['destination']}\n所需 GitHub Actions 权限：{preview['permissions']}\n所需 Secrets：{preview['secret']}")
+    if preview["exists"]:
+        click.echo("目标文件已存在，安装会替换整个文件。当前文件预览：\n" + str(preview["existing_content"]))
+        if not overwrite:
+            raise click.ClickException("目标文件已存在；检查现有内容后显式使用 --overwrite。")
+    click.echo("\n即将写入的 workflow：\n" + str(preview["content"]))
+    if not yes and not click.confirm("确认安装这个 workflow？", default=False):
+        click.echo("已取消，未写入文件。")
+        return
+    try:
+        path = install_workflow(workspace, template_name, overwrite=overwrite)
+    except (OSError, ValueError, FileExistsError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"已安装：{path}\nGitHub 端还需在仓库 Settings → Secrets and variables → Actions 配置上方列出的 secret（如有）。")
+
 if __name__ == "__main__":
     cli_main()
