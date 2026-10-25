@@ -3004,6 +3004,16 @@ async def _execute_run(
                 "subtask_id": subtask_id, "status": "running", "progress": "子 Agent 已启动。",
                 "cancel_event": cancel_event, **(group_data or {}),
             }
+            await manager.save_subtask({
+                "parent_run_id": run.run_id, "subtask_id": subtask_id,
+                "status": "running", "goal": goal, "backend": backend,
+                "workspace": run.workspace or "", "model": run.model,
+                "recovery_point": {
+                    "conversation_id": run.conversation_id,
+                    "workspace": run.workspace or "", "goal": goal,
+                    "backend": backend, "model": run.model,
+                },
+            })
             await emit("subtask.started", {
                 "subtask_id": subtask_id, "goal": goal, "backend": backend,
                 "parent_run_id": run.run_id, **(group_data or {}),
@@ -3027,6 +3037,17 @@ async def _execute_run(
             entry = run.subtasks.get(subtask_id)
             if entry:
                 entry.update({"status": status, "progress": summary, "result": summary})
+            persisted = await manager.get_subtask(run.run_id, subtask_id) or {}
+            await manager.save_subtask({
+                **persisted,
+                "parent_run_id": run.run_id, "subtask_id": subtask_id,
+                "status": status, "goal": persisted.get("goal", ""),
+                "backend": persisted.get("backend", "atlas"),
+                "workspace": persisted.get("workspace", run.workspace or ""),
+                "model": persisted.get("model", run.model),
+                "session_id": str((group_data or {}).get("session_id") or ""),
+                "recovery_point": persisted.get("recovery_point") or {},
+            })
             await emit("subtask.completed", {
                 "subtask_id": subtask_id, "status": status,
                 "summary": summary, "duration_ms": duration_ms,

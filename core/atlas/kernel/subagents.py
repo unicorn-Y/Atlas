@@ -35,7 +35,7 @@ class SubagentManager:
     Install ``delegation.atlas_runner = manager.run`` after saving that original
     bound method in this manager. DelegationService remains the lifecycle owner:
     its cancellation, steering and worktree policy continue to apply. The bound
-    runner creates/deletes the independent canonical child conversation and fires
+    runner owns the independent canonical child conversation and fires
     SubagentStart/SubagentStop (including stop-hook continuations) itself.
     """
 

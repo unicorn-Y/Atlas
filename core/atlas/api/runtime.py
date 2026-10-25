@@ -241,6 +241,27 @@ class RuntimeManager:
             CREATE INDEX IF NOT EXISTS runtime_activity_recent
             ON runtime_activity(timestamp DESC)
         """)
+        await self._db.execute("""
+            CREATE TABLE IF NOT EXISTS runtime_subtasks (
+                parent_run_id TEXT NOT NULL,
+                subtask_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                goal TEXT NOT NULL,
+                backend TEXT NOT NULL,
+                workspace TEXT NOT NULL,
+                model TEXT NOT NULL,
+                session_id TEXT NOT NULL DEFAULT '',
+                recovery_point TEXT NOT NULL DEFAULT '{}',
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (parent_run_id, subtask_id)
+            )
+        """)
+        # Workers cannot survive a process restart. Keep their transcripts and
+        # expose an interrupted worker as closed so an operator can resume it.
+        await self._db.execute(
+            "UPDATE runtime_subtasks SET status='closed', updated_at=? WHERE status IN ('running', 'closing')",
+            (datetime.now(UTC).isoformat(),),
+        )
         await self._db.commit()
         async with self._db.execute("SELECT * FROM runtime_runs") as cursor:
             rows = await cursor.fetchall()
@@ -477,6 +498,61 @@ class RuntimeManager:
                 "waiting_for": row["waiting_for"] if row["status"] == "waiting" else None,
             }
         return {"items": list(by_conversation.values()), "events": events}
+
+    async def save_subtask(self, record: dict[str, Any]) -> None:
+        """Persist the native child identity and minimal restart recovery point."""
+        if self._db is None:
+            return
+        recovery = record.get("recovery_point") or {}
+        async with self._persist_lock:
+            await self._db.execute("""
+                INSERT INTO runtime_subtasks
+                (parent_run_id, subtask_id, status, goal, backend, workspace, model,
+                 session_id, recovery_point, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(parent_run_id, subtask_id) DO UPDATE SET
+                    status=excluded.status, goal=excluded.goal, backend=excluded.backend,
+                    workspace=excluded.workspace, model=excluded.model,
+                    session_id=CASE WHEN excluded.session_id='' THEN runtime_subtasks.session_id ELSE excluded.session_id END,
+                    recovery_point=CASE WHEN excluded.recovery_point='{}' THEN runtime_subtasks.recovery_point ELSE excluded.recovery_point END,
+                    updated_at=excluded.updated_at
+            """, (
+                str(record.get("parent_run_id") or ""), str(record.get("subtask_id") or ""),
+                str(record.get("status") or "running"), str(record.get("goal") or ""),
+                str(record.get("backend") or "atlas"), str(record.get("workspace") or ""),
+                str(record.get("model") or ""), str(record.get("session_id") or ""),
+                json.dumps(recovery, ensure_ascii=False), datetime.now(UTC).isoformat(),
+            ))
+            await self._db.commit()
+
+    async def get_subtask(self, parent_run_id: str, subtask_id: str) -> dict[str, Any] | None:
+        if self._db is None:
+            return None
+        async with self._persist_lock:
+            async with self._db.execute(
+                "SELECT * FROM runtime_subtasks WHERE parent_run_id=? AND subtask_id=?",
+                (parent_run_id, subtask_id),
+            ) as cursor:
+                row = await cursor.fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        item["recovery_point"] = json.loads(item["recovery_point"] or "{}")
+        return item
+
+    async def list_subtasks(self, parent_run_id: str) -> list[dict[str, Any]]:
+        if self._db is None:
+            return []
+        async with self._persist_lock:
+            async with self._db.execute(
+                "SELECT * FROM runtime_subtasks WHERE parent_run_id=? ORDER BY updated_at DESC",
+                (parent_run_id,),
+            ) as cursor:
+                rows = await cursor.fetchall()
+        items = [dict(row) for row in rows]
+        for item in items:
+            item["recovery_point"] = json.loads(item["recovery_point"] or "{}")
+        return items
 
     async def connect(self, ws: WebSocket, conn_id: str) -> None:
         await ws.accept()

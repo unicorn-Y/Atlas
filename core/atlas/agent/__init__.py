@@ -628,8 +628,9 @@ class AgentOrchestrator:
         Steering queue behavior follows Hermes Agent delegation_context.py
         (330d9d6df9c7bffe125ba0ae64a0abc488a7d2c3, MIT), adapted to Atlas events.
         """
-        conversation_id = await self._memory.create_conversation("Atlas 子任务")
         options = dict(atlas_options)
+        resume_session_id = str(options.pop("resume_session_id", "") or "")
+        conversation_id = resume_session_id or await self._memory.create_conversation("Atlas 子任务")
         cancel_event = options.get("cancel_event") or asyncio.Event()
         usage: list[dict[str, Any]] = []
         outputs: list[str] = []
@@ -750,18 +751,14 @@ class AgentOrchestrator:
                     )
                     continue
                 break
-            return {"status": status, "result": "".join(outputs) or "子任务没有给出结果。", "evidence": usage}
+            return {
+                "status": status, "result": "".join(outputs) or "子任务没有给出结果。",
+                "evidence": usage, "session_id": conversation_id,
+            }
         finally:
             await run_user_hook(options.get("user_hook_callback"), "SessionEnd", {
                 "conversation_id": conversation_id, "reason": status,
             })
-            try:
-                from atlas.config import DATA_ROOT
-                from atlas.engine.session_sync import delete_session
-
-                await asyncio.to_thread(delete_session, DATA_ROOT / "engine", conversation_id)
-            finally:
-                await self._memory.delete_conversation(conversation_id)
 
     async def _summarize_parallel_results(self, results: list[dict[str, Any]]) -> str:
         result = await self._model_router.complete_for(
