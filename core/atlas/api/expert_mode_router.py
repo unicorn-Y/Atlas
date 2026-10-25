@@ -13,6 +13,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from atlas import expert_mode
+from atlas.workflow import WorkflowJournal
+from atlas.workflow.graph import graph_to_dict
 
 router = APIRouter()
 
@@ -35,6 +37,10 @@ class InstallBody(BaseModel):
 
 class SyncBody(BaseModel):
     prefer: Literal["local", "remote"] | None = None
+
+
+class WorkflowLifecycleBody(BaseModel):
+    conversation_id: str
 
 
 async def _changed() -> dict[str, Any]:
@@ -113,3 +119,26 @@ async def sync_pack(body: SyncBody) -> dict[str, Any]:
 @router.post("/api/expert-mode/open")
 async def open_folder(kind: str = "", name: str = "") -> dict[str, str]:
     return {"path": _guard(lambda: expert_mode.open_folder(kind, name))}
+
+
+@router.post("/api/expert-mode/workflow/{action}")
+async def expert_workflow_lifecycle(action: Literal["status", "resume", "stop"], body: WorkflowLifecycleBody) -> dict[str, Any]:
+    """Control the current conversation's durable workflow; ExpertMode config is independent."""
+    conversation_id = body.conversation_id.strip()
+    if not conversation_id:
+        raise HTTPException(status_code=422, detail="conversation_id is required")
+    journal = WorkflowJournal()
+    current = await asyncio.to_thread(journal.current_for_conversation, conversation_id, kind="expert")
+    if current is None:
+        raise HTTPException(status_code=404, detail="当前对话没有持久工作流")
+    workflow_id = str(current["workflow_id"])
+    status = str(current["status"])
+    if action == "status":
+        graph = await asyncio.to_thread(journal.load_graph, workflow_id)
+        return {**current, "graph": graph_to_dict(graph)}
+    if action == "stop":
+        await asyncio.to_thread(journal.request_cancel, workflow_id)
+        return {**current, "status": "stop_requested" if status == "running" else "cancelled"}
+    if status != "paused":
+        raise HTTPException(status_code=409, detail=f"只能恢复已暂停的工作流（当前状态：{status}）")
+    return {**current, "resume_workflow_id": workflow_id}

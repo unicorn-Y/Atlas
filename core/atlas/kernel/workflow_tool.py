@@ -123,6 +123,13 @@ async def execute_workflow_tool(
     else:
         workflow_id = resume_id
 
+    conversation_id = str(getattr(runtime, "conversation_id", "") or "")
+
+    async def on_workflow_event(event: dict[str, Any]) -> None:
+        if conversation_id and event.get("type") in {"workflow_started", "workflow_resumed"}:
+            journal.bind_context(workflow_id, conversation_id, kind="expert")
+        await _workflow_event(runtime, event)
+
     resume_existing = bool(resume_id)
     while True:
         runner = KernelWorkflowSubagentRunner(agent, runtime, workflow_id)
@@ -131,7 +138,7 @@ async def execute_workflow_tool(
                 workflow_id,
                 runner,
                 max_parallel=max_parallel,
-                on_event=lambda event: _workflow_event(runtime, event),
+                on_event=on_workflow_event,
                 planner=call_planner,
                 journal=journal,
             )
@@ -139,7 +146,7 @@ async def execute_workflow_tool(
                 graph,
                 runner,
                 max_parallel=max_parallel,
-                on_event=lambda event: _workflow_event(runtime, event),
+                on_event=on_workflow_event,
                 planner=call_planner,
                 journal=journal,
             )

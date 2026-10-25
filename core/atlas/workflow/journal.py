@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
     graph_json TEXT NOT NULL,
     status TEXT NOT NULL,
     pause_requested INTEGER NOT NULL DEFAULT 0,
+    cancel_requested INTEGER NOT NULL DEFAULT 0,
     sequence INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -32,6 +33,11 @@ CREATE TABLE IF NOT EXISTS workflow_events (
     timestamp TEXT NOT NULL,
     event_json TEXT NOT NULL,
     PRIMARY KEY (workflow_id, sequence)
+);
+CREATE TABLE IF NOT EXISTS workflow_context (
+    workflow_id TEXT PRIMARY KEY REFERENCES workflow_runs(workflow_id) ON DELETE CASCADE,
+    conversation_id TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'workflow'
 );
 CREATE INDEX IF NOT EXISTS workflow_events_by_type
     ON workflow_events(workflow_id, timestamp);
@@ -48,6 +54,29 @@ class WorkflowJournal:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.executescript(_SCHEMA)
+            columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(workflow_runs)")}
+            if "cancel_requested" not in columns:
+                connection.execute("ALTER TABLE workflow_runs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0")
+
+    def bind_context(self, workflow_id: str, conversation_id: str, *, kind: str = "workflow") -> None:
+        """Associate a durable run with its owning conversation for lifecycle commands."""
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "INSERT INTO workflow_context(workflow_id, conversation_id, kind) VALUES(?,?,?) "
+                "ON CONFLICT(workflow_id) DO UPDATE SET conversation_id=excluded.conversation_id, kind=excluded.kind",
+                (workflow_id, conversation_id, kind),
+            )
+
+    def current_for_conversation(self, conversation_id: str, *, kind: str | None = None) -> dict[str, Any] | None:
+        query = "SELECT r.workflow_id,r.status,c.kind FROM workflow_runs r JOIN workflow_context c ON c.workflow_id=r.workflow_id WHERE c.conversation_id=?"
+        args: list[Any] = [conversation_id]
+        if kind:
+            query += " AND c.kind=?"
+            args.append(kind)
+        query += " ORDER BY r.updated_at DESC LIMIT 1"
+        with self._connect() as connection:
+            row = connection.execute(query, args).fetchone()
+        return {"workflow_id": row[0], "status": row[1], "kind": row[2]} if row else None
 
     def ensure_graph(self, graph: WorkflowGraph, *, resume: bool = False) -> tuple[WorkflowGraph, str, bool, bool]:
         """Create a run once or load its persisted graph for deterministic resume."""
@@ -101,6 +130,35 @@ class WorkflowJournal:
         if row is None:
             raise KeyError(f"Unknown workflow id: {workflow_id}")
         return bool(row[0])
+
+    def cancel_requested(self, workflow_id: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute("SELECT cancel_requested FROM workflow_runs WHERE workflow_id = ?", (workflow_id,)).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown workflow id: {workflow_id}")
+        return bool(row[0])
+
+    def request_cancel(self, workflow_id: str) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute("SELECT status,graph_json,sequence FROM workflow_runs WHERE workflow_id=?", (workflow_id,)).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown workflow id: {workflow_id}")
+            if row[0] not in {"running", "paused"}:
+                return
+            now = _utc_now()
+            if row[0] == "paused":
+                graph = json.loads(row[1])
+                for node in graph.get("nodes", []):
+                    if node.get("status") in {"pending", "active"}:
+                        node["status"] = "cancelled"
+                graph_json = json.dumps(graph, ensure_ascii=False, separators=(",", ":"))
+                sequence = int(row[2]) + 1
+                event = {"workflow_id": workflow_id, "timestamp": now, "type": "workflow_cancelled", "message": "Workflow stopped by user."}
+                connection.execute("INSERT INTO workflow_events(workflow_id,sequence,timestamp,event_json) VALUES(?,?,?,?)", (workflow_id, sequence, now, json.dumps(event, separators=(",", ":"))))
+                connection.execute("UPDATE workflow_runs SET graph_json=?,status='cancelled',cancel_requested=1,sequence=?,updated_at=? WHERE workflow_id=?", (graph_json, sequence, now, workflow_id))
+            else:
+                connection.execute("UPDATE workflow_runs SET cancel_requested=1,updated_at=? WHERE workflow_id=?", (now, workflow_id))
 
     def request_pause(self, workflow_id: str) -> None:
         """Persist a cooperative pause request; the scheduler drains active nodes."""

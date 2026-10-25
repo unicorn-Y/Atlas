@@ -1840,6 +1840,20 @@ export default function App() {
     { id: 'simplify', label: '/simplify', hint: '只审查可保持行为不变的简化与清理项', takesArgument: true, run: (arg: string) => { void store.sendMessage(`/simplify ${arg.trim()}`.trim()); } },
     { id: 'recipe', label: '/recipe', hint: '打开配方，带参数复跑保存过的任务', run: () => setRecipesOpen(true) },
     { id: 'workflow', label: '/workflow', hint: '规划并启动动态子 Agent DAG：/workflow <目标>', takesArgument: true, run: (goal: string) => { void startDynamicWorkflow(goal).catch((error) => setToast(`工作流启动失败：${error instanceof Error ? error.message : String(error)}`)); } },
+    { id: 'expert', label: '/expert', hint: '管理当前对话的持久工作流：status / resume / stop；与专家模式配置开关独立', takesArgument: true, run: (value: string) => {
+      const action = value.trim().toLowerCase() || 'status';
+      if (!['status', 'resume', 'stop'].includes(action)) { setToast('用法：/expert status、/expert resume 或 /expert stop'); return; }
+      if (!activeConversation) { setToast('请先打开含有工作流的对话'); return; }
+      void api<{ status: string; workflow_id: string; resume_workflow_id?: string; graph?: { nodes?: Array<{ id: string; title?: string; status: string }> } }>(store.apiBaseUrl, `/api/expert-mode/workflow/${action}`, {
+        method: 'POST', json: { conversation_id: activeConversation.id },
+      }).then((result) => {
+        if (action === 'status') {
+          const nodes = result.graph?.nodes ?? [];
+          setToast(`工作流 ${result.workflow_id}：${result.status}${nodes.length ? `；${nodes.filter((node) => node.status === 'completed').length}/${nodes.length} 个节点完成` : ''}`);
+        } else if (action === 'stop') setToast(`已请求停止工作流 ${result.workflow_id}`);
+        else void store.sendMessage(`请立即使用已注册的 workflow 工具恢复持久工作流，resume_workflow_id=${result.resume_workflow_id}。不要重新规划或新建工作流。`);
+      }).catch((error) => setToast(`专家工作流操作失败：${error instanceof Error ? error.message : String(error)}`));
+    } },
     { id: 'dwf', label: '/dwf', hint: '查看工作流运行、节点输出、错误、产物并管理已保存定义', run: () => setWorkflowManagerOpen(true) },
     ...(activeConversation ? [{ id: 'btw', label: '/btw', hint: '旁问：不打断正在做的事，也不存进对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) }] : []),
     { id: 'open', label: '/open', hint: '在浏览器面板打开网址，如 /open localhost:5173', takesArgument: true, run: (target: string) => { if (target.trim()) setBrowserUrl(/^\w+:/.test(target.trim()) ? target.trim() : `http://${target.trim()}`); showInspectorTab('browser'); } },

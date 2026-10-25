@@ -98,6 +98,18 @@ async def _run_workflow_impl(
     threshold_reached = False
 
     while True:
+        if journal.cancel_requested(current.workflow_id or ""):
+            for task in active.values():
+                if not task.done():
+                    task.cancel()
+            if active:
+                await asyncio.gather(*active.values(), return_exceptions=True)
+            active.clear()
+            for node in current.nodes:
+                if node.status == "active":
+                    node.status = "cancelled"
+            await emit_event(journal, current, on_event, "workflow_cancelled", message="Workflow stopped by user.", status="cancelled")
+            return WorkflowResult(current.workflow_id or "", "cancelled", current)
         pause_now = journal.pause_requested(current.workflow_id or "")
         if pause_now or threshold_reached:
             if active:
