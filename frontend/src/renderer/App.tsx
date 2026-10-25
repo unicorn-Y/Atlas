@@ -1325,18 +1325,8 @@ export default function App() {
     if (!activeConversation || handoffBusy) return;
     setHandoffBusy(true);
     try {
-      const history = await backend.getMessages(activeConversation.id, { limit: 1000 });
-      const transcript = history.filter((item) => item.role === 'user' || item.role === 'assistant')
-        .map((item) => `${item.role === 'user' ? 'USER' : 'ASSISTANT'}:\n${item.content}`).join('\n\n');
-      const gitState = activeConversation.worktree_path
-        ? `分支：${activeConversation.worktree_branch || '未知'}；worktree：${activeConversation.worktree_path}；base：${activeConversation.base_branch || '未知'}`
-        : `工作区：${String(activeConversation.workspace || '未设置')}`;
-      const source = `会话标题：${activeConversation.title || '未命名任务'}\n会话 ID：${activeConversation.id}\n${gitState}\n\n完整会话记录：\n${transcript}`;
       setHandoffSource(activeConversation.id);
-      const result = await api<{ text: string }>(store.apiBaseUrl, '/api/chat/prompt-enhance', { method: 'POST', json: {
-        text: `请把下面的完整对话整理为可直接交给新会话的结构化任务交接摘要。保留具体目标、已完成工作、关键决策及理由、约束/用户要求、涉及文件与分支/worktree状态、验证结果、未解决问题和下一步待办。不要虚构状态；未知项标记未知。只输出摘要正文，不添加寒暄。\n\n${source}`,
-        model: store.model || undefined,
-      } });
+      const result = await api<{ text: string }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(activeConversation.id)}/handoff-summary${store.model ? `?model=${encodeURIComponent(store.model)}` : ''}`, { method: 'POST' });
       setHandoffDraft(result.text);
     } catch (error) {
       setToast(`生成交接摘要失败：${error instanceof Error ? error.message : String(error)}`);
