@@ -389,7 +389,7 @@ const ConversationMessage = memo(function ConversationMessage({ id, role, conten
   if (role === 'user') {
     return <div ref={messageRootRef} className="group my-5 flex flex-col items-end gap-1" data-message-id={id} data-message-role="user" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
       {note && <span className="text-[11.5px] text-fg-3">{note}</span>}
-      <div data-message-content className="max-w-[80%] whitespace-pre-wrap rounded-[18px] bg-[var(--user-bubble)] px-4 py-2 text-[14px] leading-[1.65] text-fg" title={username}>{content}</div>
+      <div data-message-content data-no-i18n className="max-w-[80%] whitespace-pre-wrap rounded-[18px] bg-[var(--user-bubble)] px-4 py-2 text-[14px] leading-[1.65]" style={{ color: 'var(--user-bubble-fg)' }} title={username}>{content}</div>
       {selectionActionTooltip}
       {(content || actions) && <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         {content && <ClipboardAction text={content} />}{actions}

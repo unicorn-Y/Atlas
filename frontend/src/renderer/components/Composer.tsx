@@ -13,6 +13,8 @@ import DrawingPad from './DrawingPad';
 import { ExpertModeToggle, useExpertMode } from './settings/ExpertModePanel';
 import { backend } from '../store/useAtlasStore';
 import { api } from '../services/api';
+import { readLocale, t } from '../services/i18n';
+import { applyVimOperator, lineBounds, moveVimCursor } from '../services/vimEditor';
 import type { CaptureWindowOption, RecentScreenshot } from '../../shared/ipc';
 
 type Intent = { label: string; icon: LucideIcon; note?: string };
@@ -211,7 +213,7 @@ export default function Composer(props: ComposerProps) {
   };
   const [enterToSend, setEnterToSend] = useState(readEnterToSend);
   const [vimEnabled, setVimEnabled] = useState(() => { try { return localStorage.getItem('atlas.preference.vim-mode') === 'true'; } catch { return false; } });
-  const [vimMode, setVimMode] = useState<'normal' | 'insert'>('insert');
+  const [vimMode, setVimMode] = useState<'normal' | 'insert' | 'visual'>(() => { try { return localStorage.getItem('atlas.preference.vim-mode') === 'true' ? 'normal' : 'insert'; } catch { return 'insert'; } });
   const [stashOpen, setStashOpen] = useState(false);
   const stashKey = `atlas.input-stash.${props.contextKey || 'home'}`;
   const readStash = () => { try { const value: unknown = JSON.parse(localStorage.getItem(stashKey) ?? '[]'); return Array.isArray(value) ? value.filter((item): item is { id: string; text: string; createdAt: string } => Boolean(item && typeof item.id === 'string' && typeof item.text === 'string')) : []; } catch { return []; } };
@@ -219,7 +221,7 @@ export default function Composer(props: ComposerProps) {
   const [showShortcutHints, setShowShortcutHints] = useState(() => { try { return localStorage.getItem('atlas.shortcut-hints') !== 'false'; } catch { return true; } });
   const textRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
-    const toggle = () => { const enabled = localStorage.getItem('atlas.preference.vim-mode') === 'true'; setVimEnabled(enabled); setVimMode(enabled ? 'normal' : 'insert'); };
+    const toggle = () => { const enabled = localStorage.getItem('atlas.preference.vim-mode') === 'true'; setVimEnabled(enabled); setVimMode(enabled ? 'normal' : 'insert'); vimOperator.current = null; };
     const openStash = () => { setStashes(readStash()); setStashOpen(true); };
     window.addEventListener('atlas:vim-toggle', toggle);
     window.addEventListener('atlas:open-input-stash', openStash);
@@ -257,7 +259,10 @@ export default function Composer(props: ComposerProps) {
   const historyRef = useRef<string[]>([]);
   const historyDraftRef = useRef('');
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
-  const vimPendingDelete = useRef(false);
+  const vimOperator = useRef<'d' | 'y' | 'c' | null>(null);
+  const vimAnchor = useRef(0);
+  const vimRegister = useRef('');
+  const vimUndo = useRef<string[]>([]);
   useEffect(() => { historyRef.current = readHistory(); }, []);
   useEffect(() => {
     const refresh = () => setShowShortcutHints(readShortcutHints());
@@ -491,50 +496,71 @@ export default function Composer(props: ComposerProps) {
       const textarea = event.currentTarget;
       const value = props.value;
       const position = textarea.selectionStart;
-      const select = (next: number) => { window.requestAnimationFrame(() => textarea.setSelectionRange(Math.max(0, Math.min(value.length, next)), Math.max(0, Math.min(value.length, next)))); };
-      if (vimMode === 'insert' && event.key === 'Escape') { event.preventDefault(); setVimMode('normal'); vimPendingDelete.current = false; return; }
-      if (vimMode === 'normal') {
-        if (event.key === 'i' || event.key === 'a' || event.key === 'o') {
-          event.preventDefault();
-          if (event.key === 'a') select(position + 1);
-          if (event.key === 'o') {
-            const lineEnd = value.indexOf('\n', position); const insertAt = lineEnd < 0 ? value.length : lineEnd;
-            props.onChange(value.slice(0, insertAt) + '\n' + value.slice(insertAt)); select(insertAt + 1);
-          }
-          setVimMode('insert'); return;
-        }
-        if (event.key === 'Escape') { event.preventDefault(); vimPendingDelete.current = false; return; }
+      const select = (start: number, end = start) => window.requestAnimationFrame(() => {
+        const limit = textarea.value.length;
+        textarea.setSelectionRange(Math.max(0, Math.min(limit, start)), Math.max(0, Math.min(limit, end)));
+      });
+      const edit = (next: string, caret: number) => { vimUndo.current.push(value); if (vimUndo.current.length > 100) vimUndo.current.shift(); props.onChange(next); select(caret); };
+      const { start: lineStart, end: lineEnd } = lineBounds(value, position);
+      const move = (key: string) => moveVimCursor(value, position, key);
+      if (event.key === 'Escape') {
+        event.preventDefault(); setVimMode('normal'); vimOperator.current = null; select(position); return;
+      }
+      if (vimMode !== 'insert') {
+        if (event.ctrlKey || event.metaKey || event.altKey) return;
+        if (event.key === 'Enter' || event.key === 'Tab' || event.key === 'ArrowUp' || event.key === 'ArrowDown') return;
         event.preventDefault();
-        if (event.key === 'd') {
-          if (vimPendingDelete.current) {
-            const start = value.lastIndexOf('\n', Math.max(0, position - 1)) + 1;
-            const end = value.indexOf('\n', position);
-            props.onChange(value.slice(0, start) + value.slice(end < 0 ? value.length : end + 1)); select(start);
-            vimPendingDelete.current = false;
-          } else vimPendingDelete.current = true;
+        if (vimMode === 'normal' && (event.key === 'i' || event.key === 'a' || event.key === 'A' || event.key === 'I' || event.key === 'o' || event.key === 'O')) {
+          let at = position;
+          if (event.key === 'a') at = Math.min(value.length, position + 1);
+          if (event.key === 'A') at = lineEnd;
+          if (event.key === 'I') at = lineStart;
+          if (event.key === 'o' || event.key === 'O') {
+            const insertion = event.key === 'o' ? (lineEnd < value.length ? lineEnd + 1 : value.length) : lineStart;
+            const prefix = event.key === 'o' && insertion === value.length && value.length ? '\n' : '';
+            const next = value.slice(0, insertion) + prefix + '\n' + value.slice(insertion);
+            edit(next, insertion + prefix.length); at = insertion + prefix.length;
+          }
+          setVimMode('insert'); select(at); return;
+        }
+        if (vimMode === 'normal' && event.key === 'v') { vimAnchor.current = position; setVimMode('visual'); select(position, Math.min(value.length, position + 1)); return; }
+        if (vimMode === 'visual' && event.key === 'v') { setVimMode('normal'); select(position); return; }
+        if (vimMode === 'visual' && ['d', 'x', 'y', 'c'].includes(event.key)) {
+          const start = Math.min(textarea.selectionStart, textarea.selectionEnd); const end = Math.max(textarea.selectionStart, textarea.selectionEnd);
+          vimRegister.current = value.slice(start, end);
+          if (event.key === 'y') { setVimMode('normal'); select(start); return; }
+          edit(value.slice(0, start) + value.slice(end), start); setVimMode(event.key === 'c' ? 'insert' : 'normal'); return;
+        }
+        if (event.key === 'd' || event.key === 'y' || event.key === 'c') {
+          if (vimOperator.current === event.key) {
+            const result = applyVimOperator(value, position, event.key, event.key);
+            if (result) {
+              vimRegister.current = result.register;
+              if (event.key !== 'y') edit(result.value, result.caret); else select(result.caret);
+              if (result.enterInsert) setVimMode('insert');
+            }
+            vimOperator.current = null; return;
+          }
+          vimOperator.current = event.key; return;
+        }
+        if (vimOperator.current) {
+          const operator = vimOperator.current; vimOperator.current = null;
+          const result = applyVimOperator(value, position, operator, event.key);
+          if (!result) return;
+          vimRegister.current = result.register;
+          if (operator === 'y') select(result.caret);
+          else { edit(result.value, result.caret); if (result.enterInsert) setVimMode('insert'); }
           return;
         }
-        vimPendingDelete.current = false;
-        if (event.key === 'x' && position < value.length) { props.onChange(value.slice(0, position) + value.slice(position + 1)); select(position); return; }
-        if (event.key === '0') { select(value.lastIndexOf('\n', Math.max(0, position - 1)) + 1); return; }
-        if (event.key === '$') { const end = value.indexOf('\n', position); select(end < 0 ? value.length : end); return; }
-        if (event.key === 'w' || event.key === 'b') {
-          const next = event.key === 'w' ? (value.slice(position).search(/\s/) < 0 ? value.length : position + value.slice(position).search(/\s/) + 1) : Math.max(0, value.slice(0, position).trimEnd().search(/\s+\S*$/));
-          select(next); return;
+        if (event.key === 'x' && position < value.length) { vimRegister.current = value[position]; edit(value.slice(0, position) + value.slice(position + 1), position); return; }
+        if (event.key === 'p' || event.key === 'P') {
+          if (vimRegister.current) { const at = event.key === 'p' ? Math.min(value.length, position + 1) : position; edit(value.slice(0, at) + vimRegister.current + value.slice(at), at + vimRegister.current.length); }
+          return;
         }
-        if (['h', 'j', 'k', 'l'].includes(event.key)) {
-          const start = value.lastIndexOf('\n', Math.max(0, position - 1)) + 1;
-          const endIndex = value.indexOf('\n', position); const end = endIndex < 0 ? value.length : endIndex;
-          const column = position - start;
-          let next = position;
-          if (event.key === 'h') next = Math.max(start, position - 1);
-          if (event.key === 'l') next = Math.min(end, position + 1);
-          if (event.key === 'j' || event.key === 'k') {
-            const targetStart = event.key === 'j' ? end + (end < value.length ? 1 : 0) : Math.max(0, start - 1 - (start > 0 ? 1 : 0));
-            const targetEndIndex = value.indexOf('\n', targetStart); const targetEnd = targetEndIndex < 0 ? value.length : targetEndIndex;
-            next = Math.min(targetStart + column, targetEnd);
-          }
-          select(next); return;
+        if (event.key === 'u' && vimUndo.current.length) { const previous = vimUndo.current.pop()!; props.onChange(previous); select(Math.min(position, previous.length)); return; }
+        if (event.key === 'Escape') { setVimMode('normal'); vimOperator.current = null; select(position); return; }
+        if (['h', 'j', 'k', 'l', '0', '$', 'w', 'b', 'e', 'Home', 'End'].includes(event.key)) {
+          const next = move(event.key); if (vimMode === 'visual') select(vimAnchor.current, Math.max(next, Math.min(value.length, next + (next >= vimAnchor.current ? 1 : 0)))); else select(next); return;
         }
         return;
       }
@@ -623,7 +649,7 @@ export default function Composer(props: ComposerProps) {
       className={cn('block w-full resize-none border-0 bg-transparent p-0 text-fg outline-none placeholder:text-fg-3',
         hero ? 'min-h-[60px] text-[16px] leading-[1.65]' : 'min-h-[26px] text-[15px] leading-[1.6]')} />
     <span id={`${textareaId}-help`} className="sr-only">按 Enter 发送，Shift 加 Enter 换行；建议列表可用上下方向键选择、Tab 补全，Escape 关闭。选中文字后按 Alt 加 Shift 加 A，可将选中文字放入消息草稿。</span>
-    {showShortcutHints && <div className="mt-1 flex items-center gap-2 text-[10.5px] text-fg-3" aria-label="快捷键提示">Enter 发送 · Shift+Enter 换行 · Ctrl+P 切换模型 · Ctrl+Shift+S 暂存 · ? 或 /keymap 查看快捷键 {vimEnabled && <span className="rounded bg-brand-soft px-1.5 py-0.5 font-mono text-brand">VIM {vimMode.toUpperCase()}</span>}</div>}
+    {showShortcutHints && <div className="mt-1 flex items-center gap-2 text-[10.5px] text-fg-3" aria-label="快捷键提示">Enter 发送 · Shift+Enter 换行 · Ctrl+P 切换模型 · Ctrl+Shift+S 暂存 · ? 或 /keymap 查看快捷键 {vimEnabled && <span role="status" aria-label={`Vim ${t(vimMode === 'normal' ? '普通模式' : vimMode === 'visual' ? '可视模式' : '插入模式', readLocale())}`} className="rounded bg-brand-soft px-1.5 py-0.5 font-mono text-brand">VIM {t(vimMode === 'normal' ? '普通模式' : vimMode === 'visual' ? '可视模式' : '插入模式', readLocale())}</span>}</div>}
     <span id={`${textareaId}-screen-reader-help`} className={screenReaderMode ? 'sr-only' : 'hidden'}>屏幕阅读增强已开启。建议列表打开时焦点保留在消息输入框；使用上下方向键浏览，当前项和运行提示会自动播报，Enter 选择，Escape 关闭。</span>
     <span id={`${textareaId}-status`} role={screenReaderMode ? undefined : 'status'} aria-live={screenReaderMode ? undefined : 'polite'}
       aria-atomic={screenReaderMode ? undefined : 'true'} aria-hidden={screenReaderMode || undefined}

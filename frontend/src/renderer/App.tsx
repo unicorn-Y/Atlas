@@ -109,6 +109,7 @@ import HomeView, { type Suggestion } from './shell/HomeView';
 import type { InspectorTab } from './shell/Inspector';
 import type { PickedElement } from './shell/panels/BrowserPanel';
 import { THEMES, applyStoredTheme, clearCustomTheme, initialTheme, nextTheme, themeInfo, type Theme } from './shell/themes';
+import { observeLocalizedCopy, readLocale, saveLocale, t } from './services/i18n';
 import { api, relativeTime } from './services/api';
 import { buildTimeline } from './components/timeline';
 const ComputerEdgeBar = lazy(() => import('./components/x2').then((module) => ({ default: module.ComputerEdgeBar })));
@@ -122,7 +123,7 @@ import { cleanSearchSnippet, rankSearchHits, searchHitRoleLabel } from './servic
 import ComputerLivePreview from './components/x2/ComputerLivePreview';
 const ScreenRecorderDialog = lazy(() => import('./components/ScreenRecorderDialog'));
 
-type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage' | 'memories' | 'teach' | 'secrets';
+type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage' | 'memories' | 'teach' | 'secrets';
 
 const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['models', '模型与服务', SlidersHorizontal, 'provider 模型 model API key 密钥 reasoning 推理 连接'],
@@ -135,7 +136,7 @@ const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['channels', 'Gateway 与渠道账号', Radio, 'gateway channel 渠道 账号'],
   ['localModels', '本地模型', Cpu, 'local 本地模型'],
   ['advanced', '高级', Settings, 'compression 压缩 高级'],
-  ['u4', '会话与顾问', UserCog, '顾问 advisor 会话预设 preset ChatGPT 导入 手机推送 语言字号字体'],
+  ['u4', '会话与顾问', UserCog, '顾问 advisor 会话预设 preset ChatGPT 导入 手机推送'],
   ['usage', '用量', Gauge, 'usage token cost 费用 预算 个人资料 profile'],
   ['limits', '运行限制', Gauge, 'run limits max turns 轮数 token budget cost limit 费用上限'],
   ['profiles', '角色', UserCog, 'profile 角色 agent'],
@@ -149,7 +150,6 @@ const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['plugins', '插件与导入', Puzzle, 'plugin import 插件 导入 Claude Codex'],
   ['skills', 'Skills', BookMarked, 'skill 技能 安全发现'],
   ['mcp', 'MCP 服务', Server, 'mcp server tool 服务'],
-  ['notifications', '通知', Bell, 'notification sound 通知 声音'],
   ['recipes', '配方', BookMarked, 'recipe template 参数化 配方'],
   ['extensions', '扩展目录与来源', Puzzle, 'extension package registry catalog 扩展 包 目录 来源'],
   ['transfer', '配置导入导出', Download, 'settings config export import backup 配置 导入 导出 备份'],
@@ -236,13 +236,25 @@ export default function App() {
   const [fullScreenDiff, setFullScreenDiff] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => initialTheme());
   useEffect(() => {
+    saveLocale(readLocale());
+    const root = document.getElementById('root');
+    if (!root) return;
+    let stop = observeLocalizedCopy(root, readLocale());
+    const onLocaleChange = (event: Event) => {
+      stop();
+      const locale = (event as CustomEvent<'zh-CN' | 'en-US'>).detail;
+      stop = observeLocalizedCopy(root, locale);
+    };
+    window.addEventListener('atlas:locale-change', onLocaleChange);
+    return () => { stop(); window.removeEventListener('atlas:locale-change', onLocaleChange); };
+  }, []);
+  useEffect(() => {
     const saved = (() => { try { return localStorage.getItem('atlas.code-theme') || 'auto'; } catch { return 'auto'; } })();
     document.documentElement.dataset.codeTheme = saved === 'auto' ? (theme === 'dark' ? 'dark-vivid' : 'light-soft') : saved;
   }, [theme]);
   useEffect(() => {
-    if (pref('theme-mode') !== 'system') return;
     const query = window.matchMedia('(prefers-color-scheme: dark)');
-    const update = () => setTheme(query.matches ? 'dark' : 'light');
+    const update = () => { if (pref('theme-mode') === 'system') setTheme(query.matches ? 'dark' : 'light'); };
     query.addEventListener('change', update);
     return () => query.removeEventListener('change', update);
   }, []);
@@ -1096,7 +1108,7 @@ export default function App() {
     if (!enabled) { speechBufferRef.current = ''; cancelRoutedSpeech(); }
     setToast(enabled ? '新回复会自动朗读' : '已关闭自动朗读');
   };
-  const chooseTheme = (next: Theme) => { clearCustomTheme(); setTheme(next); setPref('appearance', next); };
+  const chooseTheme = (next: Theme) => { clearCustomTheme(); setTheme(next); setPref('appearance', next); setPref('theme-mode', 'manual'); };
   const toggleTheme = () => { const next = nextTheme(theme); chooseTheme(next); setToast(`已切换到${themeInfo(next).label}`); };
   const toggleMini = () => setSideMini((current) => { setPref('sidebar-mini', String(!current)); return !current; });
   const toggleInspector = (open?: boolean) => setInspectorOpen((current) => { const next = open ?? !current; setPref('canvas', String(next)); return next; });
@@ -1637,7 +1649,7 @@ export default function App() {
       void open(input).then((text) => { if (text !== null) { setInput(text); writeDraft(store.activeConversationId, text); } }).catch((error) => setToast(`编辑器打开失败：${error instanceof Error ? error.message : String(error)}`));
     } },
     { id: 'vim', label: '/vim', hint: '切换输入框 Vim 模式', run: () => {
-      const enabled = pref('vim-mode') !== 'true'; setPref('vim-mode', String(enabled)); window.dispatchEvent(new Event('atlas:vim-toggle')); setToast(`Vim 模式已${enabled ? '开启' : '关闭'}`);
+      const enabled = pref('vim-mode') !== 'true'; setPref('vim-mode', String(enabled)); window.dispatchEvent(new Event('atlas:vim-toggle')); setToast(`${t('Vim 模式', readLocale())} ${t(enabled ? 'Vim 模式已开启' : 'Vim 模式已关闭', readLocale())}`);
     } },
     { id: 'fallback', label: '/fallback', hint: '配置主模型失败后的备用模型顺序', run: () => setFallbackOpen(true) },
     { id: 'fast', label: '/fast', hint: '切换快速模型服务档；不支持的路由会使用普通档并在运行记录中提示', takesArgument: true, run: (value: string) => {
@@ -2404,7 +2416,7 @@ export default function App() {
     <Dialog open={Boolean(sheet)} onOpenChange={(open) => { if (!open) setSheet(null); }} label="设置"
       className="grid h-[min(720px,calc(100vh-48px))] w-[min(980px,calc(100vw-32px))] grid-cols-[210px_minmax(0,1fr)]">
       <nav aria-label="设置分类" className="overflow-y-auto bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
-        <h2 className="m-0 px-2.5 pb-3 text-[18px] font-semibold text-heading">设置</h2>
+        <h2 className="m-0 px-2.5 pb-3 text-[18px] font-semibold text-heading">{t('设置', readLocale())}</h2>
         <label className="mx-1 mb-3 flex h-9 items-center gap-2 rounded-lg bg-surface px-2.5 shadow-[inset_0_0_0_1px_var(--line)] focus-within:shadow-[inset_0_0_0_1px_var(--brand)]">
           <Search size={14} className="shrink-0 text-fg-3" />
           <input aria-label="搜索设置" value={settingsQuery} onChange={(event) => setSettingsQuery(event.target.value)} placeholder="搜索设置项…" className="min-w-0 flex-1 bg-transparent text-[12px] text-fg outline-none placeholder:text-fg-3" />
@@ -2413,7 +2425,7 @@ export default function App() {
         {SETTINGS_NAV.filter(([, label, , terms]) => `${label} ${terms}`.toLowerCase().includes(settingsQuery.trim().toLowerCase())).map(([pane, label, Icon]) =>
           <button key={pane} aria-current={sheet === pane} onClick={() => { setSheet(pane); setSettingsQuery(''); }}
             className={cn('flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] transition-colors', sheet === pane ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
-            <Icon size={16} className={sheet === pane ? 'text-brand' : undefined} />{label}
+            <Icon size={16} className={sheet === pane ? 'text-brand' : undefined} />{t(label, readLocale())}
           </button>)}
         {SETTINGS_NAV.every(([, label, , terms]) => !`${label} ${terms}`.toLowerCase().includes(settingsQuery.trim().toLowerCase())) && <p className="px-2.5 py-2 text-[11px] text-fg-3">没有匹配的设置。</p>}
         <button onClick={() => { setSheet(null); setOnboardingOpen(true); }} className="mt-3 flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13px] text-fg-3 hover:bg-hover hover:text-fg">
@@ -2442,11 +2454,12 @@ export default function App() {
         {sheet === 'appearance' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">外观与语音</h3>
           <p className="mt-1 mb-5 text-[13px] text-fg-3">只影响这台电脑。</p>
-          <AppearanceNotificationsPanel theme={theme} onThemeChange={chooseTheme} username={username} onSaveUsername={saveUsername} onToast={notify} section="appearance"
+          <AppearanceNotificationsPanel theme={theme} onThemeChange={chooseTheme} username={username} onSaveUsername={saveUsername} onToast={notify} section="all"
             speechVoice={speechVoice} speechVoices={speechVoices} speechRate={speechRate}
             onSpeechVoiceChange={(value) => { setSpeechVoice(value); setPref('speech-voice', value); }}
             onSpeechRateChange={(value) => { setSpeechRate(value); setPref('speech-rate', String(value)); }}
             onSpeechPreview={() => { cancelRoutedSpeech(); speakText('你好，我是 Atlas。当前音色和语速可以在这里试听。'); }} />
+          <div className="mt-7"><NotificationsPanel apiBaseUrl={store.apiBaseUrl} /></div>
           <div className="set-list">
             <div className="set-row"><div>置顶任务摘要<small>在长对话顶部显示首条目标和最近进度</small></div><button className="switch" role="switch" aria-label="置顶任务摘要" aria-checked={summaryEnabled} onClick={() => { const next = !summaryEnabled; setSummaryEnabled(next); setPref('pinned-summary', String(next)); }} /></div>
             <div className="set-row"><div>收起侧边栏<small>只显示图标，给内容更多空间</small></div><button className="switch" role="switch" aria-label="收起侧边栏" aria-checked={sideMini} onClick={toggleMini} /></div>
@@ -2457,7 +2470,7 @@ export default function App() {
           {wakeEnabled && <p className="mt-2 text-[11.5px] text-fg-3">{wakeTranscript ? `本地识别：${wakeTranscript}` : '已开启本地监听；需先在语音识别配置中下载本地模型。'}</p>}
           <div className="mt-5"><AudioDevicesPanel onToast={notify} /></div>
         </section>}
-        {sheet === 'u4' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">会话与顾问</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">顾问模型、会话预设、历史导入、手机推送、字体与语言。</p><U4SettingsPanel apiBaseUrl={store.apiBaseUrl} models={store.models} currentModel={store.model} theme={theme} onThemeChange={chooseTheme} onToast={notify} onImported={() => void store.refreshConversations()} onApplyPreset={(preset) => {
+        {sheet === 'u4' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">会话与顾问</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">顾问模型、会话预设、历史导入和手机推送。</p><U4SettingsPanel apiBaseUrl={store.apiBaseUrl} models={store.models} currentModel={store.model} onToast={notify} onImported={() => void store.refreshConversations()} onApplyPreset={(preset) => {
           store.beginConversationDraft(preset.workspace || null);
           if (preset.model) void store.selectModel(preset.model);
           if (preset.reasoning_effort) store.setReasoningEffort(preset.reasoning_effort as Parameters<typeof store.setReasoningEffort>[0]);
@@ -2486,7 +2499,6 @@ export default function App() {
         {sheet === 'network' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">模型网络</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">为支持的模型连接配置本机代理与自定义 CA 证书。</p><NetworkSettingsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'shortcuts' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">快捷键</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">改成你顺手的组合键，也同步到数据目录的 keybindings.json。</p><ShortcutsPanel apiBaseUrl={store.apiBaseUrl} models={store.models} /></section>}
         {sheet === 'hooks' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Hooks</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">在任务开始、用工具前后、完成或失败时运行你自己的命令。</p><HooksPanel /></section>}
-        {sheet === 'notifications' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">通知</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">任务完成、需要确认时怎么提醒你。</p><div className="grid gap-6"><AppearanceNotificationsPanel theme={theme} onThemeChange={chooseTheme} username={username} onSaveUsername={saveUsername} onToast={notify} section="notifications" /><NotificationsPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
         {sheet === 'mcp' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">MCP 服务</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理 Atlas 已支持的 MCP 服务，并浏览服务显式提供的资源。</p><div className="grid gap-8"><McpServersPanel apiBaseUrl={store.apiBaseUrl} /><McpResourcesPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
         {sheet === 'skills' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Skills</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">搜索、安装和审阅技能；外部技能会先进入安全复核。</p><SkillsMarketPage apiBaseUrl={store.apiBaseUrl} onToast={notify} onTryInConversation={(name) => { store.applySkill(name); go('chat'); setSheet(null); }} /></section>}
         {sheet === 'recipes' && <RecipeManagerPanel apiBaseUrl={store.apiBaseUrl} models={store.models} providers={store.providers} onLaunch={launchRecipeTemplate} />}

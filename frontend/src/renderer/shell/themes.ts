@@ -12,7 +12,7 @@ export const themeInfo = (id: Theme) => THEMES.find((theme) => theme.id === id)!
 export const nextTheme = (id: Theme): Theme => THEMES[(THEMES.findIndex((theme) => theme.id === id) + 1) % THEMES.length].id;
 
 export interface CustomTheme {
-  version: 1;
+  version: 2;
   name: string;
   base: Theme;
   colors: {
@@ -21,16 +21,18 @@ export interface CustomTheme {
     accent: string;
     surface: string;
     codeBackground: string;
+    promptBackground: string;
+    promptForeground: string;
   };
 }
 
 const CUSTOM_THEME_KEY = 'atlas.preference.custom-theme';
 const APPEARANCE_KEY = 'atlas.preference.appearance';
-const COLOR_KEYS = ['background', 'foreground', 'accent', 'surface', 'codeBackground'] as const;
+const COLOR_KEYS = ['background', 'foreground', 'accent', 'surface', 'codeBackground', 'promptBackground', 'promptForeground'] as const;
 const DEFAULT_COLORS: Record<Theme, CustomTheme['colors']> = {
-  light: { background: '#F4F3F0', foreground: '#1A1A19', accent: '#A8762E', surface: '#FFFFFF', codeBackground: '#F6F6F4' },
-  aurora: { background: '#F1F0F8', foreground: '#1C1D30', accent: '#5B6CF0', surface: '#FBFAFE', codeBackground: '#F1F0F8' },
-  dark: { background: '#0D0D0C', foreground: '#ECECEA', accent: '#D9AF69', surface: '#171716', codeBackground: '#121211' },
+  light: { background: '#F4F3F0', foreground: '#1A1A19', accent: '#A8762E', surface: '#FFFFFF', codeBackground: '#F6F6F4', promptBackground: '#E8E5DF', promptForeground: '#1A1A19' },
+  aurora: { background: '#F1F0F8', foreground: '#1C1D30', accent: '#5B6CF0', surface: '#FBFAFE', codeBackground: '#F1F0F8', promptBackground: '#E6E3F5', promptForeground: '#1C1D30' },
+  dark: { background: '#0D0D0C', foreground: '#ECECEA', accent: '#D9AF69', surface: '#171716', codeBackground: '#121211', promptBackground: '#242422', promptForeground: '#ECECEA' },
 };
 
 const isSafeColor = (value: unknown): value is string => typeof value === 'string' && /^#[\da-f]{6}(?:[\da-f]{2})?$/i.test(value);
@@ -39,19 +41,34 @@ const storageSet = (key: string, value: string) => { try { localStorage.setItem(
 
 /** Make a local theme draft based on one of Atlas's built-in palettes. */
 export function createCustomTheme(base: Theme, name = '我的主题'): CustomTheme {
-  return { version: 1, name, base, colors: { ...DEFAULT_COLORS[base] } };
+  return { version: 2, name, base, colors: { ...DEFAULT_COLORS[base] } };
 }
 
 /** Validate the import format before persisting or applying any CSS values. */
 export function parseCustomTheme(value: unknown): CustomTheme {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('主题文件必须是 JSON 对象');
-  const input = value as Partial<CustomTheme> & { colors?: Partial<CustomTheme['colors']> };
-  if (input.version !== 1) throw new Error('不支持这个主题版本');
+  const input = value as { version?: number; name?: unknown; base?: unknown; colors?: Partial<CustomTheme['colors']> & { promptBackground?: unknown; promptForeground?: unknown } };
+  if (input.version !== 1 && input.version !== 2) throw new Error('不支持这个主题版本（支持 1 和 2）');
   if (!isTheme(input.base)) throw new Error('主题底色必须是 light、aurora 或 dark');
   const colors = input.colors;
-  if (!colors || !COLOR_KEYS.every((key) => isSafeColor(colors[key]))) throw new Error('background、foreground、accent、surface 和 codeBackground 都必须是 6 位或 8 位十六进制颜色');
+  if (!colors || !COLOR_KEYS.slice(0, 5).every((key) => isSafeColor(colors[key]))) throw new Error('background、foreground、accent、surface 和 codeBackground 都必须是 6 位或 8 位十六进制颜色');
+  const defaults = DEFAULT_COLORS[input.base];
+  const promptBackground = colors.promptBackground ?? defaults.promptBackground;
+  const promptForeground = colors.promptForeground ?? defaults.promptForeground;
+  if (!isSafeColor(promptBackground) || !isSafeColor(promptForeground)) throw new Error('promptBackground 和 promptForeground 必须是 6 位或 8 位十六进制颜色');
   const name = typeof input.name === 'string' ? input.name.trim().slice(0, 48) : '';
-  return { version: 1, name: name || '导入的主题', base: input.base, colors: Object.fromEntries(COLOR_KEYS.map((key) => [key, colors[key]])) as CustomTheme['colors'] };
+  return { version: 2, name: name || '导入的主题', base: input.base, colors: { ...(Object.fromEntries(COLOR_KEYS.slice(0, 5).map((key) => [key, colors[key]])) as Omit<CustomTheme['colors'], 'promptBackground' | 'promptForeground'>), promptBackground, promptForeground } };
+}
+
+export function parseThemeDirectoryFiles(files: Array<{ name: string; text: string }>): { themes: CustomTheme[]; rejected: string[] } {
+  const themes: CustomTheme[] = [];
+  const rejected: string[] = [];
+  for (const file of files) {
+    if (!file.name.toLowerCase().endsWith('.json')) continue;
+    try { themes.push(parseCustomTheme(JSON.parse(file.text) as unknown)); }
+    catch { rejected.push(file.name); }
+  }
+  return { themes, rejected };
 }
 
 export function readCustomTheme(): CustomTheme | null {
@@ -85,7 +102,7 @@ function contrastColor(hex: string): string {
 
 const CUSTOM_PROPERTIES = [
   '--bg', '--desk', '--sheet-bg', '--sheet-solid', '--card-bg', '--code-bg', '--fg', '--fg-2', '--fg-3', '--heading',
-  '--brand', '--brand-soft', '--primary-bg', '--on-primary', '--selected', '--hover', '--line', '--line-strong', '--avatar-bg', '--avatar-fg',
+  '--brand', '--brand-soft', '--primary-bg', '--on-primary', '--selected', '--hover', '--line', '--line-strong', '--avatar-bg', '--avatar-fg', '--user-bubble', '--user-bubble-fg',
 ];
 
 /** Apply only validated colors over an existing Atlas base palette. */
@@ -94,7 +111,7 @@ export function applyCustomTheme(value: unknown): Theme {
   if (typeof document === 'undefined') return theme.base;
   const root = document.documentElement;
   root.dataset.theme = theme.base;
-  const { background, foreground, accent, surface, codeBackground } = theme.colors;
+  const { background, foreground, accent, surface, codeBackground, promptBackground, promptForeground } = theme.colors;
   const muted = `color-mix(in srgb, ${foreground} 70%, ${background})`;
   const faint = `color-mix(in srgb, ${foreground} 48%, ${background})`;
   const softAccent = `color-mix(in srgb, ${accent} 14%, transparent)`;
@@ -118,6 +135,8 @@ export function applyCustomTheme(value: unknown): Theme {
   root.style.setProperty('--line-strong', `color-mix(in srgb, ${foreground} 18%, transparent)`);
   root.style.setProperty('--avatar-bg', accent);
   root.style.setProperty('--avatar-fg', contrastColor(accent));
+  root.style.setProperty('--user-bubble', promptBackground);
+  root.style.setProperty('--user-bubble-fg', promptForeground);
   return theme.base;
 }
 

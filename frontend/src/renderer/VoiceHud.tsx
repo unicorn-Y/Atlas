@@ -2,9 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AudioLines, Mic, Square } from 'lucide-react';
 import { getSelectedInputStream } from './services/audioDevices';
+import { initialHudState, reduceHudMessage, type HudStatus } from './services/voiceHudProtocol';
 import './voice-hud.css';
-
-type HudStatus = 'idle' | 'connecting' | 'preparing' | 'listening' | 'error';
 
 function VoiceHud() {
   const [status, setStatus] = useState<HudStatus>('idle');
@@ -12,6 +11,7 @@ function VoiceHud() {
   const [transcript, setTranscript] = useState('');
   const [level, setLevel] = useState(0);
   const finalTranscriptRef = useRef('');
+  const hudStateRef = useRef(initialHudState());
   const sessionRef = useRef<{ socket: WebSocket; stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode; silent: GainNode } | null>(null);
   const startRef = useRef<() => void>(() => undefined);
   const stop = useCallback(() => {
@@ -22,10 +22,12 @@ function VoiceHud() {
       session.processor.disconnect(); session.silent.disconnect(); session.stream.getTracks().forEach((track) => track.stop()); void session.context.close();
     }
     setLevel(0); setStatus('idle'); setDetail('快捷键开始语音输入');
+    hudStateRef.current = initialHudState(); finalTranscriptRef.current = '';
   }, []);
   const start = useCallback(async () => {
     if (sessionRef.current) return;
     setStatus('connecting'); setDetail('正在连接本地语音识别…'); setTranscript(''); finalTranscriptRef.current = '';
+    hudStateRef.current = { ...initialHudState(), status: 'connecting', detail: '正在连接本地语音识别…' };
     let stream: MediaStream | null = null;
     let context: AudioContext | null = null;
     try {
@@ -43,15 +45,11 @@ function VoiceHud() {
       socket.onmessage = (event) => {
         try {
           const message = JSON.parse(String(event.data)) as { type?: string; text?: string; detail?: string; progress?: number };
-          if (message.type === 'preparing') { setStatus('preparing'); setDetail(message.detail || '正在准备本地语音模型…'); }
-          else if (message.type === 'progress') { setStatus('preparing'); setDetail(`正在准备语音模型 ${Math.round((message.progress ?? 0) * 100)}%`); }
-          else if (message.type === 'ready') { setStatus('listening'); setDetail('正在聆听'); }
-          else if (message.type === 'partial') setTranscript(`${finalTranscriptRef.current}${finalTranscriptRef.current ? ' ' : ''}${message.text || ''}`);
-          else if (message.type === 'final' && message.text?.trim()) {
-            finalTranscriptRef.current = `${finalTranscriptRef.current}${finalTranscriptRef.current ? ' ' : ''}${message.text.trim()}`.slice(-600);
-            setTranscript(finalTranscriptRef.current);
-          }
-          else if (message.type === 'error') { setStatus('error'); setDetail(message.detail || '语音识别失败'); stop(); setStatus('error'); setDetail(message.detail || '语音识别失败'); }
+          const next = reduceHudMessage(hudStateRef.current, message);
+          hudStateRef.current = next;
+          finalTranscriptRef.current = next.committedTranscript;
+          setStatus(next.status); setDetail(next.detail); setTranscript(next.transcript);
+          if (message.type === 'error') stop(), setStatus('error'), setDetail(message.detail || '语音识别失败');
         } catch { /* ignore malformed ASR response */ }
       };
       socket.onerror = () => { stop(); setStatus('error'); setDetail('本地语音识别连接失败'); };

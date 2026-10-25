@@ -51,6 +51,7 @@ code, pre, kbd, samp { font-family: var(--atlas-mono-font, ui-monospace, SFMono-
   --danger-soft: rgba(194,67,47,.1);
   --code-bg: #F6F6F4;
   --user-bubble: rgba(26,26,24,.055);
+  --user-bubble-fg: #1A1A19;
   --orb-opacity: .1;
   --orb-filter: grayscale(1) contrast(1.1);
   --mark-1: #F0D08F; --mark-2: #C8964A; --mark-3: #8A5E22; --core-1: #F6DFA8; --core-2: #9C6B27;
@@ -97,6 +98,7 @@ code, pre, kbd, samp { font-family: var(--atlas-mono-font, ui-monospace, SFMono-
   --danger-soft: rgba(210,83,75,.1);
   --code-bg: rgba(255,255,255,.7);
   --user-bubble: rgba(91,108,240,.08);
+  --user-bubble-fg: #1C1D30;
   --orb-opacity: .3;
   --orb-filter: none;
   --mark-1: #D9DEFF; --mark-2: #8E9BFA; --mark-3: #5A5FD6; --core-1: #F1E6FF; --core-2: #7C82F0;
@@ -143,6 +145,7 @@ code, pre, kbd, samp { font-family: var(--atlas-mono-font, ui-monospace, SFMono-
   --danger-soft: rgba(232,128,106,.13);
   --code-bg: #121211;
   --user-bubble: rgba(255,255,255,.07);
+  --user-bubble-fg: #ECECEA;
   --orb-opacity: .35;
   --orb-filter: none;
   --avatar-bg: linear-gradient(145deg, #E3C17F, #9E6E2A); --avatar-fg: #1A1206;

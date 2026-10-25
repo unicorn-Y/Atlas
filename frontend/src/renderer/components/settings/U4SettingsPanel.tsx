@@ -1,23 +1,23 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { api } from '../../services/api';
-import type { Theme } from '../../shell/themes';
+import { readLocale } from '../../services/i18n';
 
 interface Preset { id: string; label: string; workspace?: string; model?: string; reasoning_effort?: string; env?: Record<string, string>; skills?: string[] }
 interface Props {
-  apiBaseUrl: string; models: Array<{ id: string; name?: string }>; currentModel: string; theme: Theme;
-  onThemeChange: (theme: Theme) => void; onApplyPreset: (preset: Preset) => void; onToast: (text: string) => void; onImported: () => void;
+  apiBaseUrl: string; models: Array<{ id: string; name?: string }>; currentModel: string;
+  onApplyPreset: (preset: Preset) => void; onToast: (text: string) => void; onImported: () => void;
 }
 const channels = ['telegram', 'discord', 'slack', 'feishu', 'wecom'];
 const settingKey = 'atlas.preference.u4-appearance';
 
-export default function U4SettingsPanel({ apiBaseUrl, models, currentModel, theme, onThemeChange, onApplyPreset, onToast, onImported }: Props) {
+export default function U4SettingsPanel({ apiBaseUrl, models, currentModel, onApplyPreset, onToast, onImported }: Props) {
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [presets, setPresets] = useState<Preset[]>([]);
   const [preset, setPreset] = useState<Preset>({ id: '', label: '', workspace: '', model: currentModel, reasoning_effort: '', env: {}, skills: [] });
   const [envText, setEnvText] = useState('{}');
   const [skillText, setSkillText] = useState('');
   const [push, setPush] = useState({ enabled: false, channel: 'telegram', chat_id: '', events: { completion: true, approval: true, failure: true } });
-  const [appearance, setAppearance] = useState(() => {
+  const [appearance] = useState(() => {
     try { return JSON.parse(localStorage.getItem(settingKey) ?? '{}') as { fontSize?: number; monoFont?: string; fontFamily?: string; language?: string; system?: boolean }; }
     catch { return {}; }
   });
@@ -36,24 +36,9 @@ export default function U4SettingsPanel({ apiBaseUrl, models, currentModel, them
     root.style.setProperty('--atlas-font-size', `${appearance.fontSize ?? 16}px`);
     root.style.setProperty('--atlas-mono-font', appearance.monoFont?.trim() ? `${appearance.monoFont}, Consolas, monospace` : 'Consolas, monospace');
     root.style.setProperty('--atlas-font', appearance.fontFamily?.trim() || 'inherit');
-    root.lang = appearance.language === 'en' ? 'en' : 'zh-CN';
+    root.lang = readLocale();
     document.body.dataset.language = root.lang;
   }, [appearance]);
-  useEffect(() => {
-    if (!appearance.system) return;
-    const query = matchMedia('(prefers-color-scheme: dark)');
-    const update = () => onThemeChange(query.matches ? 'dark' : 'light');
-    query.addEventListener('change', update); update();
-    return () => query.removeEventListener('change', update);
-  }, [appearance.system, onThemeChange]);
-  const saveAppearance = (patch: Record<string, unknown>) => {
-    const next = { ...appearance, ...patch };
-    setAppearance(next); localStorage.setItem(settingKey, JSON.stringify(next));
-    if (patch.system === true) {
-      const update = () => onThemeChange(matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-      update();
-    } else if (patch.system === false) localStorage.setItem('atlas.preference.theme-mode', 'manual');
-  };
   const saveAdvisor = async (value: string) => {
     const next = { ...settings, advisor_model: value };
     try { const saved = await api<Record<string, any>>(apiBaseUrl, '/api/u4/settings', { method: 'PUT', json: { advisor_model: value } }); setSettings({ ...next, ...saved }); onToast(value ? '顾问模型已保存' : '已清除顾问模型'); }
@@ -112,21 +97,6 @@ export default function U4SettingsPanel({ apiBaseUrl, models, currentModel, them
       <div className="mt-2 flex flex-wrap gap-2"><select aria-label="推送渠道" value={push.channel} onChange={(event) => setPush({ ...push, channel: event.target.value })} className="h-9 rounded-lg border border-line bg-surface px-2 text-fg">{channels.map((name) => <option key={name}>{name}</option>)}</select><input aria-label="推送 chat ID" value={push.chat_id} onChange={(event) => setPush({ ...push, chat_id: event.target.value })} placeholder="渠道 chat ID" className="h-9 min-w-[220px] flex-1 rounded-lg border border-line bg-surface px-2.5 text-fg" /></div>
       <div className="mt-3 flex flex-wrap gap-4">{([["completion","任务完成"],["approval","需要确认"],["failure","出错"]] as const).map(([key, label]) => <label key={key} className="flex items-center gap-1.5"><input type="checkbox" checked={push.events[key]} onChange={(event) => setPush({ ...push, events: { ...push.events, [key]: event.target.checked } })} />{label}</label>)}</div>
       <button onClick={() => void savePush()} className="mt-3 h-8 rounded-lg bg-brand px-3 text-[12px] text-on-primary">保存手机推送</button>
-    </section>
-    <section className="rounded-xl card-surface p-4">
-      <h4 className="m-0 text-[14px] font-medium text-heading">外观与语言</h4>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <label>主题<select value={appearance.system ? 'system' : theme} onChange={(event) => {
-          const system = event.target.value === 'system'; saveAppearance({ system });
-          localStorage.setItem('atlas.preference.theme-mode', system ? 'system' : 'manual');
-          if (!system) onThemeChange(event.target.value as Theme);
-        }} className="mt-1 block h-9 w-full rounded-lg border border-line bg-surface px-2 text-fg"><option value="system">跟随系统</option><option value="light">明亮</option><option value="dark">暗色</option><option value="aurora">晨光</option></select></label>
-        <label>界面字号<select value={appearance.fontSize ?? 16} onChange={(event) => saveAppearance({ fontSize: Number(event.target.value) })} className="mt-1 block h-9 w-full rounded-lg border border-line bg-surface px-2 text-fg">{[14,15,16,17,18].map((size) => <option key={size} value={size}>{size}px</option>)}</select></label>
-        <label>等宽字体<input value={appearance.monoFont ?? ''} onChange={(event) => saveAppearance({ monoFont: event.target.value })} placeholder="Consolas" className="mt-1 block h-9 w-full rounded-lg border border-line bg-surface px-2.5 text-fg" /></label>
-        <label>界面字体<input value={appearance.fontFamily ?? ''} onChange={(event) => saveAppearance({ fontFamily: event.target.value })} placeholder="系统默认" className="mt-1 block h-9 w-full rounded-lg border border-line bg-surface px-2.5 text-fg" /></label>
-        <label>界面语言<select value={appearance.language ?? 'zh'} onChange={(event) => saveAppearance({ language: event.target.value })} className="mt-1 block h-9 w-full rounded-lg border border-line bg-surface px-2 text-fg"><option value="zh">简体中文</option><option value="en">English</option></select></label>
-      </div>
-      {appearance.language === 'en' && <p className="mb-0 mt-2 text-[11px] text-fg-3">English locale is saved and applied to supported views; some Atlas legacy copy remains Chinese.</p>}
     </section>
   </div>;
 }

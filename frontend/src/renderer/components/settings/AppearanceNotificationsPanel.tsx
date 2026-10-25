@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Bell, Check, Moon, Palette, RotateCcw, Volume2 } from 'lucide-react';
-import { THEMES, activateCustomTheme, applyCustomTheme, applyStoredTheme, clearCustomTheme, createCustomTheme, parseCustomTheme, readCustomTheme, type CustomTheme, type Theme } from '../../shell/themes';
+import { THEMES, activateCustomTheme, applyCustomTheme, applyStoredTheme, clearCustomTheme, createCustomTheme, parseCustomTheme, parseThemeDirectoryFiles, readCustomTheme, type CustomTheme, type Theme } from '../../shell/themes';
 import { readNotificationPreferences, saveNotificationPreferences, type NotificationKind, type NotificationPreferences } from '../../services/notificationsSettings';
 import { cn } from '../../ui/cn';
+import { readLocale, saveLocale, t } from '../../services/i18n';
 
 export interface AppearanceNotificationsPanelProps {
   theme: Theme;
@@ -24,7 +25,7 @@ const CATEGORY_LABELS: Array<[NotificationKind, string, string]> = [
 ];
 
 const COLOR_LABELS: Array<[keyof CustomTheme['colors'], string]> = [
-  ['background', '背景'], ['foreground', '文字'], ['accent', '强调色'], ['surface', '面板'], ['codeBackground', '代码区'],
+  ['background', '背景'], ['foreground', '文字'], ['accent', '强调色'], ['surface', '面板'], ['codeBackground', '代码区'], ['promptBackground', 'Session prompt 背景'], ['promptForeground', 'Session prompt 文字'],
 ];
 
 export default function AppearanceNotificationsPanel({ theme, onThemeChange, onToast, section = 'appearance', speechVoice = '', speechVoices = [], speechRate = 1, onSpeechVoiceChange, onSpeechRateChange, onSpeechPreview }: AppearanceNotificationsPanelProps) {
@@ -35,7 +36,16 @@ export default function AppearanceNotificationsPanel({ theme, onThemeChange, onT
   const [previewActive, setPreviewActive] = useState(false);
   const [themeError, setThemeError] = useState<string | null>(null);
   const [themeMessage, setThemeMessage] = useState<string | null>(null);
+  const [directoryThemes, setDirectoryThemes] = useState<CustomTheme[]>([]);
+  const [directorySelection, setDirectorySelection] = useState(0);
   const [notifications, setNotifications] = useState<NotificationPreferences>(readNotificationPreferences);
+  const [locale, setLocale] = useState(readLocale);
+  const [vimEnabled, setVimEnabled] = useState(() => { try { return localStorage.getItem('atlas.preference.vim-mode') === 'true'; } catch { return false; } });
+  const [typography, setTypography] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('atlas.preference.u4-appearance') ?? '{}') as { fontSize?: number; monoFont?: string; fontFamily?: string }; }
+    catch { return {}; }
+  });
+  const tx = (source: string) => t(source, locale);
   const [permission, setPermission] = useState(() => typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
   const [codeTheme, setCodeTheme] = useState(() => { try { return localStorage.getItem('atlas.code-theme') || 'auto'; } catch { return 'auto'; } });
   const previewState = useRef({ previewActive, customActive, theme });
@@ -54,6 +64,12 @@ export default function AppearanceNotificationsPanel({ theme, onThemeChange, onT
     document.documentElement.dataset.codeTheme = resolved;
     try { localStorage.setItem('atlas.code-theme', codeTheme); } catch { /* storage unavailable */ }
   }, [codeTheme, theme]);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--atlas-font-size', `${typography.fontSize ?? 16}px`);
+    root.style.setProperty('--atlas-mono-font', typography.monoFont?.trim() ? `${typography.monoFont}, Consolas, monospace` : 'Consolas, monospace');
+    root.style.setProperty('--atlas-font', typography.fontFamily?.trim() || 'inherit');
+  }, []);
   useEffect(() => () => {
     const current = previewState.current;
     if (current.previewActive && !current.customActive) applyStoredTheme(current.theme);
@@ -66,6 +82,17 @@ export default function AppearanceNotificationsPanel({ theme, onThemeChange, onT
       saveNotificationPreferences(next);
       return next;
     });
+  };
+  const updateTypography = (patch: Partial<typeof typography>) => {
+    const next = { ...typography, ...patch }; setTypography(next);
+    try { localStorage.setItem('atlas.preference.u4-appearance', JSON.stringify({ ...JSON.parse(localStorage.getItem('atlas.preference.u4-appearance') ?? '{}'), ...next })); } catch { /* local-only preference */ }
+    const root = document.documentElement;
+    root.style.setProperty('--atlas-font-size', `${next.fontSize ?? 16}px`);
+    root.style.setProperty('--atlas-mono-font', next.monoFont?.trim() ? `${next.monoFont}, Consolas, monospace` : 'Consolas, monospace');
+    root.style.setProperty('--atlas-font', next.fontFamily?.trim() || 'inherit');
+  };
+  const changeLocale = (value: 'zh-CN' | 'en-US') => {
+    setLocale(value); saveLocale(value);
   };
   const setNotificationLevel = (level: NotificationPreferences['level']) => {
     updateNotifications({ level, enabled: level !== 'off',
@@ -100,6 +127,22 @@ export default function AppearanceNotificationsPanel({ theme, onThemeChange, onT
       setThemeMessage(`已验证：${parsed.name}`);
     } catch (error) {
       setThemeError(error instanceof Error ? error.message : '无法读取这个主题文件');
+      setThemeMessage(null);
+    }
+  };
+
+  const scanThemeDirectory = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []).filter((file) => file.name.toLowerCase().endsWith('.json'));
+    event.target.value = '';
+    const parsed = parseThemeDirectoryFiles(await Promise.all(files.map(async (file) => ({ name: file.webkitRelativePath || file.name, text: await file.text() }))));
+    const scanned = parsed.themes;
+    setDirectoryThemes(scanned);
+    setDirectorySelection(0);
+    if (scanned.length) {
+      setCustom(scanned[0]); applyCustomTheme(scanned[0]); setPreviewActive(true); setThemeError(null);
+      setThemeMessage(`扫描到 ${scanned.length} 个主题；当前预览「${scanned[0].name}」${parsed.rejected.length ? `，${parsed.rejected.length} 个 JSON 未通过校验` : ''}`);
+    } else {
+      setThemeError(files.length ? `未发现有效主题 JSON：${parsed.rejected.slice(0, 3).join('、')}` : '所选目录中没有 JSON 主题文件');
       setThemeMessage(null);
     }
   };
@@ -160,8 +203,37 @@ export default function AppearanceNotificationsPanel({ theme, onThemeChange, onT
   return <div className="grid max-w-[760px] gap-7 text-[13px] text-fg-2">
     {(section === 'appearance' || section === 'all') && <section aria-labelledby="appearance-title" className="grid gap-4">
       <div>
-        <h3 id="appearance-title" className="m-0 flex items-center gap-2 text-[16px] font-semibold text-heading"><Palette size={17} /> 外观</h3>
-        <p className="mt-1 mb-0 text-[12.5px] text-fg-3">只保存在这台设备的本地偏好里。</p>
+        <h3 id="appearance-title" className="m-0 flex items-center gap-2 text-[16px] font-semibold text-heading"><Palette size={17} /> {tx('外观与语音')}</h3>
+        <p className="mt-1 mb-0 text-[12.5px] text-fg-3">{tx('只保存在这台设备的本地偏好里。')}</p>
+      </div>
+
+      <div className="rounded-xl card-surface px-4">
+        <SettingRow label={tx('界面语言')} hint={locale === 'en-US' ? 'UI language; preference is stored locally.' : '切换 Atlas 界面语言；仅影响这台设备。'}><select aria-label={tx('界面语言')} value={locale} onChange={(event) => changeLocale(event.target.value as 'zh-CN' | 'en-US')} className="h-8 rounded-lg border border-line bg-surface px-2 text-[12px] text-fg"><option value="zh-CN">简体中文</option><option value="en-US">English</option></select></SettingRow>
+        <SettingRow label={tx('界面字号')} hint={locale === 'en-US' ? 'Scale the interface text.' : '调整应用界面文字大小。'}><select aria-label={tx('界面字号')} value={typography.fontSize ?? 16} onChange={(event) => updateTypography({ fontSize: Number(event.target.value) })} className="h-8 rounded-lg border border-line bg-surface px-2 text-[12px] text-fg">{[14, 15, 16, 17, 18].map((size) => <option key={size} value={size}>{size}px</option>)}</select></SettingRow>
+        <SettingRow label={tx('界面字体')} hint={locale === 'en-US' ? 'Blank uses the system default.' : '留空时使用系统默认字体。'}><input aria-label={tx('界面字体')} value={typography.fontFamily ?? ''} onChange={(event) => updateTypography({ fontFamily: event.target.value })} placeholder={tx('系统默认')} className="h-8 max-w-[230px] rounded-lg border border-line bg-surface px-2 text-[12px] text-fg" /></SettingRow>
+        <SettingRow label={tx('等宽字体')} hint={locale === 'en-US' ? 'Used for code and terminal text.' : '用于代码和终端文字。'}><input aria-label={tx('等宽字体')} value={typography.monoFont ?? ''} onChange={(event) => updateTypography({ monoFont: event.target.value })} placeholder="Consolas" className="h-8 max-w-[230px] rounded-lg border border-line bg-surface px-2 text-[12px] text-fg" /></SettingRow>
+      </div>
+
+      <div className="rounded-xl card-surface px-4">
+        <SettingRow label={tx('Vim 模式')} hint={locale === 'en-US' ? 'Use Normal, Insert and Visual modes in the message editor.' : '在消息输入框启用普通、插入和可视模式。'}><input type="checkbox" aria-label={tx('Vim 模式')} checked={vimEnabled} onChange={(event) => {
+          const enabled = event.target.checked; setVimEnabled(enabled);
+          try { localStorage.setItem('atlas.preference.vim-mode', String(enabled)); } catch { /* local preference */ }
+          window.dispatchEvent(new Event('atlas:vim-toggle'));
+        }} /></SettingRow>
+        {vimEnabled && <p className="mb-3 mt-0 text-[11.5px] leading-5 text-fg-3">{locale === 'en-US' ? 'NORMAL: h/j/k/l, w/b/e, 0/$; i/a/A/I/o/O enters INSERT; v selects; d/y/c with a motion or doubled (dd/yy/cc); x deletes, p/P pastes, u undoes. Enter still sends.' : '普通模式：h/j/k/l 移动，w/b/e 按词移动，0/$ 到行首尾；i/a/A/I/o/O 进入插入模式；v 选择；d/y/c 配合移动或连按两次（dd/yy/cc）；x 删除，p/P 粘贴，u 撤销。Enter 仍发送消息。'}</p>}
+      </div>
+
+      <div className="rounded-xl card-surface px-4">
+        <SettingRow label={tx('主题')} hint={locale === 'en-US' ? 'System mode follows Windows; other modes stay locked until changed.' : '跟随系统会同步 Windows 明暗；选择其他主题后会锁定当前主题。'}><select aria-label={tx('主题')} value={readThemeMode() === 'system' ? 'system' : theme} onChange={(event) => {
+          const value = event.target.value;
+          if (value === 'system') {
+            try { localStorage.setItem('atlas.preference.theme-mode', 'system'); } catch { /* local preference */ }
+            const query = matchMedia('(prefers-color-scheme: dark)'); onThemeChange(query.matches ? 'dark' : 'light');
+          } else {
+            try { localStorage.setItem('atlas.preference.theme-mode', 'manual'); } catch { /* local preference */ }
+            setCustomActive(false); setPreviewActive(false); onThemeChange(value as Theme); applyStoredTheme(value as Theme); setCustom(createCustomTheme(value as Theme));
+          }
+        }} className="h-8 rounded-lg border border-line bg-surface px-2 text-[12px] text-fg"><option value="system">{tx('跟随系统')}</option><option value="light">{tx('明亮')}</option><option value="dark">{tx('暗色')}</option><option value="aurora">{tx('晨光')}</option></select></SettingRow>
       </div>
 
       <div className="rounded-xl card-surface px-4">
@@ -194,11 +266,22 @@ export default function AppearanceNotificationsPanel({ theme, onThemeChange, onT
           <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-2.5 text-[12px] text-fg-2 hover:bg-hover">
             <input type="file" accept="application/json,.json" className="sr-only" onChange={(event) => void importTheme(event)} />导入 JSON
           </label>
+          <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-2.5 text-[12px] text-fg-2 hover:bg-hover">
+            <input type="file" multiple className="sr-only" {...({ webkitdirectory: '', directory: '' } as Record<string, string>)} onChange={(event) => void scanThemeDirectory(event)} />扫描主题目录
+          </label>
         </div>
+        {directoryThemes.length > 0 && <label className="mt-3 block max-w-[380px] text-[12px] text-fg-3">目录主题预览<select aria-label="目录主题预览" value={directorySelection} onChange={(event) => {
+          const index = Number(event.target.value); const next = directoryThemes[index]; if (!next) return;
+          setDirectorySelection(index);
+          setCustom(next); applyCustomTheme(next); setPreviewActive(true); setThemeError(null); setThemeMessage(`正在预览目录主题「${next.name}」；应用并保存后生效`);
+        }} className="mt-1 block h-9 w-full rounded-lg border border-line bg-surface px-2 text-fg">{directoryThemes.map((item, index) => <option key={`${item.name}-${index}`} value={index}>{item.name}</option>)}</select></label>}
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="text-[12px] text-fg-3">主题名称<input value={custom.name} maxLength={48} onChange={(event) => setCustom((current) => ({ ...current, name: event.target.value }))} className="mt-1 block h-9 w-full rounded-lg border border-line bg-surface px-2.5 text-[13px] text-fg" /></label>
           <label className="text-[12px] text-fg-3">基础配色<select value={custom.base} onChange={(event) => changeBase(event.target.value as Theme)} className="mt-1 block h-9 w-full rounded-lg border border-line bg-surface px-2.5 text-[13px] text-fg">{THEMES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
           {COLOR_LABELS.map(([key, label]) => <label key={key} className="flex h-10 items-center justify-between rounded-lg border border-line px-2.5 text-[12px] text-fg-2">{label}<span className="flex items-center gap-2"><code className="font-mono text-[11px] text-fg-3">{custom.colors[key]}</code><input aria-label={`主题颜色：${label}`} type="color" value={custom.colors[key].slice(0, 7)} onChange={(event) => setColor(key, event.target.value)} className="size-6 cursor-pointer rounded border-0 bg-transparent p-0" /></span></label>)}
+        </div>
+        <div aria-label="Session prompt 颜色预览" className="mt-3 max-w-[520px] rounded-xl px-4 py-3 text-[13px]" style={{ backgroundColor: custom.colors.promptBackground, color: custom.colors.promptForeground }}>
+          <small className="mb-1 block opacity-65">Session prompt preview</small>这是会话 prompt 气泡文字的颜色预览。
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button onClick={preview} className="h-8 rounded-lg border border-line px-3 text-[12px] text-fg-2 hover:bg-hover">预览</button>
@@ -246,6 +329,11 @@ function currentActiveBase(custom: CustomTheme, theme: Theme): CustomTheme {
 
 function permissionLabel(value: string): string {
   return value === 'granted' ? '已允许' : value === 'denied' ? '已拒绝' : value === 'unsupported' ? '此环境不支持' : '尚未允许';
+}
+
+function readThemeMode(): string {
+  try { return localStorage.getItem('atlas.preference.theme-mode') === 'system' ? 'system' : 'manual'; }
+  catch { return 'manual'; }
 }
 
 function SettingRow({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
