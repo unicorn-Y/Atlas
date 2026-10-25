@@ -122,7 +122,7 @@ def _read_rows(profile: PasswordProfile) -> list[sqlite3.Row]:
         db = sqlite3.connect(f"file:{copy.as_posix()}?mode=ro", uri=True)
         db.row_factory = sqlite3.Row
         try:
-            return list(db.execute("SELECT rowid, origin_url, username_value, password_value FROM logins WHERE blacklisted_by_user = 0"))
+            return list(db.execute("SELECT rowid AS rowid, origin_url, username_value, password_value FROM logins WHERE blacklisted_by_user = 0"))
         finally:
             db.close()
 
