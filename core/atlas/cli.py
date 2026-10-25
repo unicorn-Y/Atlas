@@ -99,10 +99,19 @@ def lsp_group() -> None:
 @click.option("--workspace", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path.cwd())
 def lsp_status_command(workspace: Path) -> None:
     """List configured language servers and their installation status."""
-    from atlas.lsp.servers import SERVERS, ServerContext
+    from atlas.config import get_config
+    from atlas.lsp.servers import SERVERS, ServerContext, custom_servers
     root = str(workspace.resolve())
-    ctx = ServerContext(workspace_root=root)
-    for server in SERVERS:
+    configured = get_config().get("lsp.servers", {})
+    configured = configured if isinstance(configured, dict) else {}
+    overrides = {name: item["command"] for name, item in configured.items()
+                 if isinstance(item, dict) and isinstance(item.get("command"), list) and item["command"]}
+    disabled = {name for name, item in configured.items() if isinstance(item, dict) and item.get("disabled")}
+    ctx = ServerContext(workspace_root=root, binary_overrides=overrides)
+    for server in [*custom_servers(configured), *SERVERS]:
+        if server.server_id in disabled:
+            console.print(f"已停用  {server.server_id}  {', '.join(server.extensions)}")
+            continue
         try:
             ready = server.build_spawn(root, ctx) is not None
         except (OSError, RuntimeError, ValueError):
