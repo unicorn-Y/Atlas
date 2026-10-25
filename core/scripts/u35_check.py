@@ -67,9 +67,25 @@ async def main_async() -> None:
         archive.writestr("word/document.xml", "<w:document xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'><w:body><w:p><w:r><w:t>office body</w:t></w:r></w:p></w:body></w:document>")
     docx_text, docx_audit = extract_document("brief.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", docx_payload.getvalue())
     check("office body" in docx_text and docx_audit["extractor"] == "docx-xml", "DOCX extraction failed")
-    png = base64.b64encode(b"not-real-png").decode("ascii")
-    _, image_audit = ocr_image_data_url(f"data:image/png;base64,{png}", 0)
-    check(image_audit.get("extractor") == "tesseract" and image_audit.get("sha256"), "image OCR audit missing")
+    from PIL import Image, ImageDraw, ImageFont
+
+    image = Image.new("RGB", (1500, 420), "white")
+    draw = ImageDraw.Draw(image)
+    fonts = [Path("C:/Windows/Fonts/msyh.ttc"), Path("C:/Windows/Fonts/simhei.ttf")]
+    font_path = next((path for path in fonts if path.is_file()), None)
+    check(font_path is not None, "Windows Chinese OCR test font is unavailable")
+    font = ImageFont.truetype(str(font_path), 64)
+    draw.text((36, 45), "Atlas OCR Check 4729", fill="black", font=font)
+    draw.text((36, 210), "本地文字识别验证 5831", fill="black", font=font)
+    png_bytes = io.BytesIO()
+    image.save(png_bytes, format="PNG")
+    png = base64.b64encode(png_bytes.getvalue()).decode("ascii")
+    ocr_text, image_audit = ocr_image_data_url(f"data:image/png;base64,{png}", 0)
+    check(image_audit.get("extractor") == "rapidocr-onnxruntime"
+          and image_audit.get("status") == "complete" and image_audit.get("sha256")
+          and image_audit.get("characters", 0) > 0 and "4729" in ocr_text
+          and "5831" in ocr_text and "文" in ocr_text,
+          f"real multilingual image OCR/audit failed: {image_audit}")
     print("U35 scenario PASS: 3 media extraction and source audit", flush=True)
 
     print("U35 scenario: 4 model-backed quick-write preview redacts credentials", flush=True)
