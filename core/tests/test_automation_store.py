@@ -77,6 +77,16 @@ def test_source_binding_survives_automation_store_roundtrip(tmp_path: Path) -> N
     assert store.get(saved["id"])["source_binding"] == source_binding
 
 
+def test_model_and_reasoning_effort_survive_roundtrip(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    record = _cron_record()
+    record["payload"].update({"model": "deepseek-chat", "reasoning_effort": "high"})
+    saved = store.put(record)
+    assert saved["payload"]["model"] == "deepseek-chat"
+    assert saved["payload"]["reasoning_effort"] == "high"
+    assert store.get(saved["id"])["payload"]["reasoning_effort"] == "high"
+
+
 def test_generated_id_and_defaults(tmp_path: Path) -> None:
     store = _store(tmp_path)
     saved = store.put({"name": "无名"})
@@ -109,6 +119,8 @@ def test_file_is_human_readable_toml(tmp_path: Path) -> None:
         ({"trigger": {"kind": "turnstile"}}, "trigger.kind"),
         ({"payload": {"kind": "shell"}}, "payload.kind"),
         ({"payload": {"kind": "heartbeat", "agent_id": ""}}, "heartbeat"),
+        ({"payload": {"reasoning_effort": "turbo"}}, "reasoning_effort"),
+        ({"payload": {"model": "x" * 501}}, "payload.model"),
         ({"payload": {"kind": "script", "script": ""}}, "script"),
         ({"payload": {"kind": "script", "script": "echo hi", "timeout_seconds": 0}}, "timeout_seconds"),
         ({"delivery": {"mode": "fax"}}, "delivery.mode"),

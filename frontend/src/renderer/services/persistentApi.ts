@@ -182,6 +182,7 @@ export interface AutomationPayload {
   message?: string;
   agent_id?: string;
   model?: string;
+  reasoning_effort?: '' | 'off' | 'minimal' | 'low' | 'medium' | 'high';
   skills?: string[];
   script?: string;
   timeout_seconds?: number;

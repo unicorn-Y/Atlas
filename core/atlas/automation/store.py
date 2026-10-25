@@ -37,6 +37,7 @@ PAYLOAD_KINDS = ("agent_turn", "heartbeat", "script")
 DELIVERY_MODES = ("none", "channel")
 MISSED_RUN_POLICIES = ("catchup", "skip")
 WAKE_MODES = ("", "now", "next-heartbeat")
+REASONING_EFFORTS = ("", "off", "minimal", "low", "medium", "high")
 LAST_STATUSES = ("ok", "error", "skipped")
 ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,100}")
 
@@ -107,6 +108,7 @@ def normalize_payload(raw: dict[str, Any] | None) -> dict[str, Any]:
         "message": _text(raw.get("message")),
         "agent_id": _text(raw.get("agent_id")),
         "model": _text(raw.get("model")),
+        "reasoning_effort": _text(raw.get("reasoning_effort")),
         "skills": [str(item) for item in skills],
         "script": _text(raw.get("script")),
         "timeout_seconds": _number(raw.get("timeout_seconds"), DEFAULT_SCRIPT_TIMEOUT),
@@ -232,6 +234,13 @@ def validate_record(record: dict[str, Any]) -> None:
     if payload_kind not in PAYLOAD_KINDS:
         raise AutomationValidationError(
             f"payload.kind 必须是 {'|'.join(PAYLOAD_KINDS)} 之一，得到 {payload_kind!r}"
+        )
+    model = _text(payload.get("model"))
+    if len(model) > 500 or any(ord(char) < 32 for char in model):
+        raise AutomationValidationError("payload.model 必须是有效的模型 ID（最多 500 字符）")
+    if _text(payload.get("reasoning_effort")) not in REASONING_EFFORTS:
+        raise AutomationValidationError(
+            f"payload.reasoning_effort 必须是 {'|'.join(REASONING_EFFORTS).strip('|')} 之一"
         )
     if payload_kind == "heartbeat" and not _text(
         payload.get("agent_id")

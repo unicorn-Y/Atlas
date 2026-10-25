@@ -112,6 +112,16 @@ def test_create_validate_get_patch_delete(env: Any) -> None:
     bad2["payload"]["kind"] = "shell"
     assert client.post("/api/automations", json=bad2).status_code == 422
 
+    bad_effort = _script_body("router-bad-effort")
+    bad_effort["payload"] = {"kind": "agent_turn", "message": "run", "reasoning_effort": "turbo"}
+    assert client.post("/api/automations", json=bad_effort).status_code == 422
+
+    model_body = _script_body("router-model")
+    model_body["payload"] = {"kind": "agent_turn", "message": "run", "model": "deepseek-v4.1-flash", "reasoning_effort": "high"}
+    model_resp = client.post("/api/automations", json=model_body)
+    assert model_resp.status_code == 200
+    assert model_resp.json()["automation"]["payload"]["reasoning_effort"] == "high"
+
     # 正常创建（含 DBOS schedule 同步）
     resp = client.post("/api/automations", json=_script_body("router-crud"))
     assert resp.status_code == 200

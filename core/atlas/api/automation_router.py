@@ -52,6 +52,7 @@ class PayloadSpec(BaseModel):
     message: str = ""
     agent_id: str = ""
     model: str = ""
+    reasoning_effort: Literal["", "off", "minimal", "low", "medium", "high"] = ""
     skills: list[str] = Field(default_factory=list)
     script: str = ""
     timeout_seconds: float = 60.0

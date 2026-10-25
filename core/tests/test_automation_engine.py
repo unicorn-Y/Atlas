@@ -248,7 +248,7 @@ async def test_agent_turn_payload_goes_to_injected_dispatch(env: Any) -> None:
         env,
         automation_id,
         owner_agent_id="owner-a",
-        payload={"kind": "agent_turn", "message": "做一件事", "model": "gpt-x"},
+        payload={"kind": "agent_turn", "message": "做一件事", "model": "gpt-x", "reasoning_effort": "high"},
     )
     env.hooks.reset()
     receipt = await env.engine.run_now(automation_id, wait=RUN_WAIT)
@@ -259,6 +259,8 @@ async def test_agent_turn_payload_goes_to_injected_dispatch(env: Any) -> None:
     assert call["automation_id"] == automation_id
     assert call["message"] == "做一件事"
     assert call["agent_id"] == "owner-a"  # payload.agent_id 为空时回退 owner
+    assert call["model"] == "gpt-x"
+    assert call["reasoning_effort"] == "high"
     assert call["trigger"] == "manual"
     env.store.delete(automation_id)
 

@@ -23,11 +23,12 @@ interface CreateForm {
   name: string; owner: string; kind: 'cron' | 'interval' | 'date' | 'event' | 'webhook';
   cron: string; everyHours: string; at: string; path: string; glob: string;
   message: string; agent: string; script: string; deliver: 'none' | 'channel'; channel: string; target: string; catchup: boolean;
+  model: string; reasoningEffort: string;
   executionMode: 'local' | 'worktree'; baseDirectory: string; cleanupPolicy: 'keep' | 'remove_after_run';
 }
 const EMPTY_FORM: CreateForm = {
   name: '', owner: '', kind: 'cron', cron: '0 9 * * *', everyHours: '4', at: '', path: '', glob: '',
-  message: '', agent: '', script: '', deliver: 'none', channel: 'telegram', target: '', catchup: false,
+  message: '', agent: '', model: '', reasoningEffort: '', script: '', deliver: 'none', channel: 'telegram', target: '', catchup: false,
   executionMode: 'local', baseDirectory: '', cleanupPolicy: 'keep',
 };
 
@@ -76,6 +77,8 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
   const importLegacyAutomations = useAtlasStore((state) => state.importLegacyAutomations);
   const migrationReport = useAtlasStore((state) => state.migrationReport);
   const agents = useAtlasStore((state) => state.agents);
+  const models = useAtlasStore((state) => state.models) as Array<{ id: string; name?: string; supports_reasoning_effort?: boolean; reasoning_efforts?: string[] }>;
+  const defaultModel = useAtlasStore((state) => state.model);
   const loadAgents = useAtlasStore((state) => state.loadAgents);
   const runs = useAtlasStore((state) => state.automationRuns);
 
@@ -109,6 +112,11 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
   }, [current?.id, current?.last_run_at, engineStarted, loadAutomationRuns]);
 
   const agentsById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
+  const executingAgentId = form.agent || form.owner;
+  const effectiveModelId = form.model || (executingAgentId ? agentsById.get(executingAgentId)?.model ?? '' : defaultModel);
+  const selectedModel = models.find((model) => model.id === effectiveModelId);
+  const supportedEfforts = selectedModel?.supports_reasoning_effort
+    ? (selectedModel.reasoning_efforts?.length ? selectedModel.reasoning_efforts : ['minimal', 'low', 'medium', 'high']) : [];
   const editable = (item: AutomationRecord) => item.payload?.kind !== 'heartbeat';
   const selectedTemplate = AUTOMATION_TEMPLATES.find((item) => item.id === selectedTemplateId);
   const chooseTemplate = (templateId: string) => {
@@ -160,6 +168,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
       payload: form.script.trim()
         ? { kind: 'script', script: form.script, timeout_seconds: 120 }
         : { kind: 'agent_turn', message: form.message.trim(), agent_id: form.agent || form.owner,
+          model: form.model, reasoning_effort: form.reasoningEffort,
           execution_mode: form.executionMode, base_directory: form.baseDirectory.trim(), cleanup_policy: form.cleanupPolicy },
       delivery: form.deliver === 'channel' ? { mode: 'channel', channel: form.channel, target: form.target.trim() } : { mode: 'none' },
       policy: { missed_run: form.catchup ? 'catchup' : 'skip' },
@@ -296,6 +305,20 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
               {agents.filter((agent) => agent.kind === 'persistent').map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
             </select>
           </label>
+          <label>使用模型
+            <select aria-label="自动化模型" value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value, reasoningEffort: '' })}>
+              <option value="">默认（跟随执行 Agent / Atlas）</option>
+              {models.map((model) => <option key={model.id} value={model.id}>{model.name || model.id}</option>)}
+            </select>
+          </label>
+          <label>推理强度
+            <select aria-label="自动化推理强度" value={form.reasoningEffort} disabled={!supportedEfforts.length}
+              onChange={(event) => setForm({ ...form, reasoningEffort: event.target.value })}>
+              <option value="">默认（跟随执行 Agent / Atlas）</option>
+              {supportedEfforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}
+            </select>
+            <small>{selectedModel ? (supportedEfforts.length ? `当前模型支持：${supportedEfforts.join(' / ')}` : '所选模型未声明支持推理强度') : '选择执行 Agent 或模型后显示其支持的推理强度'}</small>
+          </label>
           <label>或者只跑脚本（填了就不走模型）<input value={form.script} onChange={(event) => setForm({ ...form, script: event.target.value })} placeholder="python scripts/report.py" /></label>
         </div>
         <div className="two">
@@ -350,6 +373,10 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
           <dl>
             <div><dt>做什么</dt><dd>{describeAutomation(current)}</dd></div>
             <div><dt>归属</dt><dd>{current.owner_agent_id ? agentsById.get(current.owner_agent_id)?.name ?? current.owner_agent_id : '系统'}</dd></div>
+            {current.payload.kind === 'agent_turn' && <>
+              <div><dt>模型策略</dt><dd>{current.payload.model ? `指定：${models.find((item) => item.id === current.payload.model)?.name ?? current.payload.model}` : `默认：${agentsById.get(current.payload.agent_id || current.owner_agent_id || '')?.name ?? 'Atlas 当前配置'}`}</dd></div>
+              <div><dt>推理强度策略</dt><dd>{current.payload.reasoning_effort ? `指定：${current.payload.reasoning_effort}` : `默认：${agentsById.get(current.payload.agent_id || current.owner_agent_id || '')?.reasoning_effort ?? '执行 Agent / Atlas 当前配置'}`}</dd></div>
+            </>}
             <div><dt>下次运行</dt><dd>{current.enabled && !current.paused_reason && current.next_run_at ? `${new Date(current.next_run_at).toLocaleString()}（${relativeTime(current.next_run_at)}）` : '未排期'}</dd></div>
             <div><dt>上次运行</dt><dd>{current.last_run_at ? `${new Date(current.last_run_at).toLocaleString()}（${relativeTime(current.last_run_at)}）` : '还没运行过'}</dd></div>
             {current.payload.execution_mode === 'worktree' && current.payload.worktree_path && <div><dt>最近工作树</dt><dd className="break-all">{current.payload.worktree_branch} · {current.payload.worktree_path}</dd></div>}
@@ -399,6 +426,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
                   cron: current.trigger.cron_expr ?? EMPTY_FORM.cron, everyHours: String((current.trigger.every_seconds ?? 3600) / 3600),
                   at: current.trigger.at ?? '', path: current.trigger.event_path ?? '', glob: current.trigger.event_glob ?? '',
                   message: payload.message ?? '', agent: payload.agent_id ?? '', script: payload.script ?? '',
+                  model: payload.model ?? '', reasoningEffort: payload.reasoning_effort ?? '',
                   executionMode: payload.execution_mode ?? 'local', baseDirectory: payload.base_directory ?? '',
                   cleanupPolicy: payload.cleanup_policy ?? 'keep' });
                 setEditingId(current.id); setCreating(true);

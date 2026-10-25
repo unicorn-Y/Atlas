@@ -529,6 +529,7 @@ async def _deliver_agent_notification(text: str, target: str) -> None:
 async def _collect_orchestrator_text(
     message: str, conversation_id: str, *,
     model: str | None = None,
+    reasoning_effort: str | None = None,
     workspace: str | None = None,
     active_skill_instructions: list[dict[str, str]] | None = None,
 ) -> str:
@@ -545,6 +546,7 @@ async def _collect_orchestrator_text(
         message=message,
         conversation_id=conversation_id,
         model=model,
+        reasoning_effort=reasoning_effort,
         approval_callback=deny_unapproved,
         source_run_id=uuid.uuid4().hex,
         active_skill_instructions=active_skill_instructions,
@@ -586,9 +588,21 @@ async def _automation_dispatch_turn(payload: dict[str, Any]) -> str:
     """Automation ``payload.kind=agent_turn`` → orchestrator turn in its target conversation."""
     automation_id = str(payload.get("automation_id") or "adhoc")
     conversation_id = str(payload.get("conversation_id") or f"automation-{automation_id}")
+    agent_id = str(payload.get("agent_id") or "").strip()
+    model = str(payload.get("model") or "").strip() or None
+    reasoning_effort = str(payload.get("reasoning_effort") or "").strip() or None
+    app = getattr(_server(), "app", None)
+    services = getattr(getattr(app, "state", None), "services", None)
+    agents = getattr(services, "persistent_agents", None)
+    if agent_id and agents is not None:
+        # Explicit automation choices win; otherwise honor the selected Agent profile.
+        config = agents.resolve_agent_run_config(agent_id)
+        model = model or config.get("model") or None
+        reasoning_effort = reasoning_effort or config.get("reasoning_effort") or None
     return await _server()._collect_orchestrator_text(
         str(payload.get("message") or ""), conversation_id,
-        model=str(payload.get("model") or "") or None,
+        model=model,
+        reasoning_effort=reasoning_effort,
         workspace=str(payload.get("workspace") or "") or None,
     )
 
