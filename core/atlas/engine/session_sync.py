@@ -186,6 +186,11 @@ def read_session_model_messages(home: str | Path, conversation_id: str) -> list[
                     "tool_snapshot"):
             if key in metadata and key not in message:
                 message[key] = metadata[key]
+    model_history = [
+        message for message in model_history
+        if message.get("display_kind") not in {"structured_component", "agent_canvas"}
+        and (message.get("display_metadata") or {}).get("display_kind") not in {"structured_component", "agent_canvas"}
+    ]
     from atlas.kernel.repair import normalize_tool_results
 
     # Corrupt orphan/duplicate receipts are excluded from the model projection;

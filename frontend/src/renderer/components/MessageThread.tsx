@@ -7,6 +7,7 @@ import { TimelineRow } from './ConversationActivity';
 import ConversationMessage from './ConversationMessage';
 import Mark from './Mark';
 import { attachHistoryResult, buildTimeline, historyStep, todoEditNotice, type Step, type TimelineItem } from './timeline';
+import { structuredComponent } from './StructuredComponentCard';
 import { isTodoEdit } from './runInsights';
 import { Button } from '../ui/Button';
 import { loadBindings, matchShortcut } from '../services/shortcuts';
@@ -141,6 +142,7 @@ function searchTextForRow(row: ThreadRow): string {
 export interface MessageThreadProps {
   /** 历史消息（已按分叉备注排好序、去掉当前运行那一轮）。 */
   history: ConversationMessageData[];
+  componentSelections?: Record<string, string>;
   username: string;
   /** 允许改写历史（运行已结束）时，历史消息的悬浮操作按钮。 */
   historyActions: (message: ConversationMessageData) => ReactNode;
@@ -156,7 +158,7 @@ export interface MessageThreadProps {
   onOpenBrowser?: (url: string) => void;
 }
 
-export default function MessageThread({ history, username, historyActions, emptyState, footerNote, threadRef, setTab, onOpenBrowser }: MessageThreadProps) {
+export default function MessageThread({ history, componentSelections = {}, username, historyActions, emptyState, footerNote, threadRef, setTab, onOpenBrowser }: MessageThreadProps) {
   // 窄选择器：只有当前会话的运行事件/正文变化才重渲染这里，别的会话流式输出不打扰。
   const conversationId = useAtlasStore((state) => state.activeConversationId);
   const events = useAtlasStore((state) => state.runs.find((run) => run.id === state.activeRunId)?.events ?? EMPTY_EVENTS);
@@ -219,6 +221,13 @@ export default function MessageThread({ history, username, historyActions, empty
     let historyHeaded = false;
     let pending: Step[] = [];
     const stepsById = new Map<string, Step>();
+    const componentRows = new Map<string, number>();
+    const selectedComponents = new Map<string, string>(Object.entries(componentSelections));
+    for (const message of history) {
+      if (message.role !== 'user') continue;
+      const match = /^结构化卡片 \[([^\]]+)\]「[^」]*」选择：([^\n]+)/.exec(message.content);
+      if (match) selectedComponents.set(match[1], match[2]);
+    }
     const flushSteps = () => {
       if (!pending.length) return;
       const id = `hs-${pending[0].id}`;
@@ -234,6 +243,26 @@ export default function MessageThread({ history, username, historyActions, empty
       const createdAt = message.created_at ?? '';
       const startedAt = previousAt;
       previousAt = createdAt || previousAt;
+      if (message.role === 'system' && metadata.display_kind === 'structured_component') {
+        flushSteps();
+        const componentData = metadata.component;
+        if (!componentData || typeof componentData !== 'object' || Array.isArray(componentData)) continue;
+        const event: AgentEvent = { id: message.id, runId: String(metadata.run_id ?? ''), sequence: Number(metadata.sequence ?? 0), type: 'component.push', timestamp: createdAt, data: componentData as Record<string, unknown> };
+        const component = structuredComponent(event);
+        if (!component) continue;
+        component.selectedLabel = selectedComponents.get(component.id);
+        const item: TimelineItem = { kind: 'component', id: message.id, component };
+        const prior = componentRows.get(component.id);
+        if (prior === undefined) {
+          componentRows.set(component.id, rows.length);
+          rows.push({ kind: 'timeline', id: `hc-${component.id}`, item, firstInTurn: !historyHeaded, last: false });
+        } else {
+          rows[prior] = { kind: 'timeline', id: `hc-${component.id}`, item, firstInTurn: false, last: false };
+        }
+        historyHeaded = true;
+        continue;
+      }
+      if (message.role === 'system' && metadata.display_kind === 'agent_canvas') continue;
       if (message.role === 'tool') {
         const step = stepsById.get(String(metadata.tool_call_id ?? ''));
         if (step) attachHistoryResult(step, message.content, metadata, createdAt);
@@ -272,14 +301,17 @@ export default function MessageThread({ history, username, historyActions, empty
     // Each Atlas turn shows its header once; later steps and replies in the same turn hang beneath it.
     let headed = false;
     for (let index = 0; index < timelineItems.length; index++) {
-      const item = timelineItems[index];
+      const original = timelineItems[index];
+      const item: TimelineItem = original.kind === 'component' && selectedComponents.has(original.component.id)
+        ? { ...original, component: { ...original.component, selectedLabel: selectedComponents.get(original.component.id) } }
+        : original;
       if (item.kind === 'user') headed = false;
       const firstInTurn = item.kind !== 'user' && !headed;
       if (item.kind !== 'user') headed = true;
       rows.push({ kind: 'timeline', id: `t-${item.id}`, item, firstInTurn, last: index === timelineItems.length - 1 });
     }
     return rows;
-  }, [history, loading, timelineItems, hasEarlier, truncatedCount]);
+  }, [history, componentSelections, loading, timelineItems, hasEarlier, truncatedCount]);
 
   const hasReasoning = rows.some((row) => row.kind === 'timeline' && row.item.kind === 'reasoning' && row.item.text.trim().length > 0);
 

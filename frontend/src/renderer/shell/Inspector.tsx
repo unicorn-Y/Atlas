@@ -98,13 +98,14 @@ function useResizableWidth() {
   return { width, dragging, start, reset, resizeByKeyboard };
 }
 
-export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false, onFullScreenDiffChange, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast, workspace, onChooseWorkspace, browserUrl, onBrowserUrl, browserSuggestions, onPick, terminalCommand, onSendToAtlas, onPreview, conversationId, worktree, onWorktreeChanged, onAsk, previewPath = '' }: {
+export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false, onFullScreenDiffChange, run, canvasEvents, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast, workspace, onChooseWorkspace, browserUrl, onBrowserUrl, browserSuggestions, onPick, terminalCommand, onSendToAtlas, onPreview, conversationId, worktree, onWorktreeChanged, onAsk, previewPath = '' }: {
   tab: InspectorTab;
   onTab: (tab: InspectorTab) => void;
   onClose: () => void;
   fullScreenDiff?: boolean;
   onFullScreenDiffChange?: (open: boolean) => void;
   run?: AgentRun;
+  canvasEvents: AgentEvent[];
   artifacts: Artifact[];
   conversationTitle?: string;
   modelName: string;
@@ -205,7 +206,7 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
       {tab === 'specs' && <SpecsPanel workspace={worktree?.path ?? workspace} onChooseWorkspace={onChooseWorkspace} refreshKey={refreshKey} onAsk={onAsk} />}
       {tab === 'files' && <FilesPanel workspace={worktree?.path ?? workspace} onChooseWorkspace={onChooseWorkspace} refreshKey={refreshKey} onPreview={onPreview} runEvents={run?.events} onShowChanges={() => onTab('changes')} initialFilePath={previewPath} />}
       {tab === 'preview' && <FilesPanel workspace={worktree?.path ?? workspace} onChooseWorkspace={onChooseWorkspace} refreshKey={refreshKey} onPreview={onPreview} previewOnly previewPath={previewPath} />}
-      {tab === 'canvas' && <AgentCanvasPanel events={events} />}
+      {tab === 'canvas' && <AgentCanvasPanel events={canvasEvents} />}
 
       {terminalOpened && <div className={cn('h-full', tab !== 'terminal' && 'hidden')}>
         {workspace || !connected ? connected

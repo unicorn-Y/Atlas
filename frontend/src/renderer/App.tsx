@@ -8,6 +8,7 @@ import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/backend-adapter';
 import type { BackendStartupProgress, RecentScreenshot } from '../shared/ipc';
 import type { Artifact } from '../types/artifact';
+import type { AgentEvent } from '../types/runtime';
 import { latestTodos, usageSummary } from './components/runInsights';
 import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
 import KeymapDialog from './components/KeymapDialog';
@@ -492,12 +493,6 @@ export default function App() {
     ...(ultraplanArtifact && ultraplanArtifact.name === `高级计划：${activeConversation?.title ?? ''}` ? [ultraplanArtifact] : [])];
   const activeEvents = activeRun?.events ?? [];
   const lastCanvasEventRef = useRef('');
-  useEffect(() => {
-    const latest = [...activeEvents].reverse().find((event) => event.type === 'canvas.update');
-    if (!latest || latest.id === lastCanvasEventRef.current || activeRun?.conversationId !== store.activeConversationId) return;
-    lastCanvasEventRef.current = latest.id;
-    showInspectorTab('canvas');
-  }, [activeEvents, activeRun?.conversationId, store.activeConversationId]);
   const runDone = Boolean(activeRun && TERMINAL.includes(activeRun.status));
   const currentPlan = [...activeEvents].reverse().find((event) => event.type === 'run.plan.updated')?.data.plan as { subtasks?: unknown[] } | undefined;
   const planSteps = Array.isArray(currentPlan?.subtasks) ? currentPlan.subtasks.filter((step): step is { status?: string } => Boolean(step) && typeof step === 'object') : [];
@@ -522,7 +517,24 @@ export default function App() {
     ? String(activeEvents.find((event) => event.type === 'run.started')?.data.content ?? '') : '';
   const runTurnIndex = runPrompt ? messages.map((message) => message.role === 'user' ? message.content : null).lastIndexOf(runPrompt) : -1;
   // History also keeps tool messages so stored tool calls show their results in the step track.
-  const threadMessages = (store.conversationMessages[store.activeConversationId] ?? []).filter((message) => message.role === 'user' || message.role === 'assistant' || message.role === 'tool');
+  const threadMessages = (store.conversationMessages[store.activeConversationId] ?? []).filter((message) => message.role === 'user' || message.role === 'assistant' || message.role === 'tool' || (message.role === 'system' && ['structured_component', 'agent_canvas'].includes(String((message.metadata as Record<string, unknown> | undefined)?.display_kind))));
+  const componentSelections = Object.fromEntries(threadMessages.flatMap((message) => {
+    if (message.role !== 'user') return [];
+    const match = /^结构化卡片 \[([^\]]+)\]「[^」]*」选择：([^\n]+)/.exec(message.content);
+    return match ? [[match[1], match[2]]] : [];
+  }));
+  const canvasHistoryEvents: AgentEvent[] = threadMessages.flatMap((message) => {
+    const metadata = message.metadata as Record<string, unknown> | undefined;
+    if (message.role !== 'system' || metadata?.display_kind !== 'agent_canvas' || !metadata.canvas || typeof metadata.canvas !== 'object' || Array.isArray(metadata.canvas)) return [];
+    return [{ id: message.id, runId: String(metadata.run_id ?? ''), sequence: Number(metadata.sequence ?? 0), type: 'canvas.update', timestamp: message.created_at ?? '', data: metadata.canvas as Record<string, unknown> }];
+  });
+  const canvasEvents = activeEvents.some((event) => event.type === 'canvas.update') ? activeEvents : canvasHistoryEvents;
+  useEffect(() => {
+    const latest = [...canvasEvents].reverse().find((event) => event.type === 'canvas.update');
+    if (!latest || latest.id === lastCanvasEventRef.current || !store.activeConversationId) return;
+    lastCanvasEventRef.current = latest.id;
+    showInspectorTab('canvas');
+  }, [canvasEvents, store.activeConversationId]);
   const runTurnStart = runTurnIndex >= 0 && runTurnIndex >= messages.length - 3 ? threadMessages.indexOf(messages[runTurnIndex]) : -1;
   const history = runTurnStart >= 0 ? threadMessages.slice(0, runTurnStart) : threadMessages;
   const historyWithBranchNotes = [...history];
@@ -2544,7 +2556,7 @@ export default function App() {
               truncatedCount={activeRun?.eventsTruncated ? (activeRun.droppedEventCount ?? 0) : 0}
               loading={loadingMessages} />
             {store.activeConversationId && <ChaptersNav conversationId={store.activeConversationId} threadRef={threadRef} history={historyWithBranchNotes} events={activeEvents} />}
-            <MessageThread history={historyWithBranchNotes} username={username} historyActions={historyActions} threadRef={threadRef} setTab={showInspectorTab}
+            <MessageThread history={historyWithBranchNotes} componentSelections={componentSelections} username={username} historyActions={historyActions} threadRef={threadRef} setTab={showInspectorTab}
               onOpenBrowser={(url) => { setBrowserUrl(url); showInspectorTab('browser'); }}
               emptyState={!messages.length && !activeEvents.length && !loadingMessages ? <div className="pt-[16vh] text-center">
                 <Mark className="mx-auto mb-4 size-11" />
@@ -2577,7 +2589,7 @@ export default function App() {
             </div>
           </div>
           </PaneWorkspace></Suspense>
-          {inspectorOpen && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => { setFullScreenDiff(false); toggleInspector(false); }} fullScreenDiff={fullScreenDiff} onFullScreenDiffChange={setFullScreenDiff} run={activeRun} artifacts={activeArtifacts}
+          {inspectorOpen && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => { setFullScreenDiff(false); toggleInspector(false); }} fullScreenDiff={fullScreenDiff} onFullScreenDiffChange={setFullScreenDiff} run={activeRun} canvasEvents={canvasEvents} artifacts={activeArtifacts}
             conversationTitle={activeConversation?.title} modelName={modelName} tools={store.tools} skills={store.skills} activeSkills={store.activeSkills} capabilities={store.capabilities}
             apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
             workspace={typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : null} onChooseWorkspace={() => void chooseWorkspace()}

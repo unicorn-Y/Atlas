@@ -2548,6 +2548,20 @@ async def _execute_run(
             record_api_timing("run_started_emitted")
         elif event in {"run.completed", "run.failed", "run.cancelled"}:
             record_api_timing("terminal_event", terminal=event)
+        if event in {"component.push", "canvas.update"}:
+            # Runtime events live in memory only. Keep interactive components and
+            # shared-canvas updates in the canonical transcript for reopen/reload.
+            try:
+                from atlas.config import DATA_ROOT
+                from atlas.engine.session_sync import append_session_message
+                await asyncio.to_thread(
+                    append_session_message, DATA_ROOT / "engine", run.conversation_id,
+                    "system", "", {"display_kind": "structured_component" if event == "component.push" else "agent_canvas",
+                                   "component" if event == "component.push" else "canvas": data,
+                                   "run_id": run.run_id, "sequence": run.sequence + 1},
+                )
+            except Exception:
+                log.exception("runtime_widget.persist_failed", event=event, run_id=run.run_id)
         event_kind = {"run.completed": "completion", "run.failed": "failure", "approval.required": "approval"}.get(event)
         if event_kind:
             try:
