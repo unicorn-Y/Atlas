@@ -50,6 +50,7 @@ async function connect() {
         sender_name: message.pushName || '',
         is_group: message.key.remoteJid.endsWith('@g.us'),
         is_mention: Boolean(wrapped.extendedTextMessage?.contextInfo?.mentionedJid?.includes(socket.user?.id?.split(':')[0] + '@s.whatsapp.net')),
+        mentioned_jid: wrapped.extendedTextMessage?.contextInfo?.mentionedJid || [],
         reply_to_event_id: String(wrapped.extendedTextMessage?.contextInfo?.stanzaId || ''),
         text,
         timestamp: Number(message.messageTimestamp || Date.now() / 1000),

@@ -86,12 +86,17 @@ def normalize_inbound(value: dict[str, Any], *, account: str, media_directory: P
         timestamp = float(value.get("timestamp") or 0)
     except (TypeError, ValueError):
         timestamp = 0.0
+    mentioned_jid = value.get("mentioned_jid") or value.get("mentionedJid") or []
+    if isinstance(mentioned_jid, str):
+        mentioned_jid = [mentioned_jid]
+    mentions = [str(item).split("@")[0].split(":")[0] for item in mentioned_jid if item]
     raw = {"is_mention": bool(value.get("is_mention")), "reply_to_event_id": str(value.get("reply_to_event_id") or "")}
     return MessageEvent(
         channel="whatsapp", account=account, event_id=event_id, chat_id=chat_id,
         sender_id=sender_id, kind=kind, text=str(value.get("text") or ""),
         sender_name=str(value.get("sender_name") or "")[:256],
         is_group=bool(value.get("is_group")), is_mention=bool(value.get("is_mention")),
+        mentions=list(dict.fromkeys(mentions)),
         reply_to_event_id=str(value.get("reply_to_event_id") or ""),
         attachments=attachments, ts=timestamp, raw=raw,
         **causality_fields(raw, "whatsapp", event_id),

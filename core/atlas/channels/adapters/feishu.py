@@ -357,6 +357,13 @@ class FeishuAdapter(ChannelAdapter):
             sender_name="",
             is_group=chat_type == "group",
             is_mention=is_mention,
+            mentions=list(dict.fromkeys(
+                value for mention in mentions for value in (
+                    str((mention.get("id") or {}).get("user_id") or ""),
+                    str((mention.get("id") or {}).get("open_id") or ""),
+                    str(mention.get("name") or "").lstrip("@"),
+                ) if value
+            )),
             reply_to_event_id=root_id,
             attachments=attachments,
             ts=ts,

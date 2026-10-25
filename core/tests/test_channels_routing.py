@@ -15,6 +15,7 @@ def make_event(
     thread_id: str = "",
     reply_to: str = "",
     mentions: list[str] | None = None,
+    text: str = "",
 ) -> MessageEvent:
     return MessageEvent(
         channel=channel,
@@ -26,6 +27,7 @@ def make_event(
         thread_id=thread_id,
         reply_to_event_id=reply_to,
         mentions=mentions or [],
+        text=text,
     )
 
 
@@ -156,6 +158,16 @@ def test_group_mention_routes_to_named_agent_before_group_default():
     assert resolve_route(bindings, event) == "reviewer"
     # Unknown names fall through to ordinary group policy exactly once.
     assert resolve_route(bindings, make_event("42", account="work", is_group=True, mentions=["missing"])) == "general"
+
+
+def test_wecom_rendered_text_at_name_routes_to_agent():
+    bindings = [
+        {"agent_id": "general", "channel": "wecom", "account": "*", "peer_kind": "group"},
+        {"agent_id": "reviewer", "channel": "wecom", "account": "*", "mention_names": ["代码助手"]},
+    ]
+    event = make_event("wr_group", channel="wecom", account="main", is_group=True,
+                       text="@代码助手 请检查")
+    assert resolve_route(bindings, event) == "reviewer"
 
 
 def test_group_mention_respects_binding_scope_and_ignores_direct_messages():

@@ -15,6 +15,7 @@ import pytest
 from atlas.channels import AdapterAuthError
 from atlas.channels.adapters.email import EmailAdapter, parse_mail
 from atlas.channels.adapters.telegram import TelegramAdapter, file_download_url
+from atlas.channels.adapters.whatsapp import normalize_inbound as normalize_whatsapp_inbound
 from atlas.channels.adapters.webhook import (
     SIGNATURE_HEADER,
     WebhookAdapter,
@@ -310,6 +311,16 @@ def test_parse_inbound_normalizes_and_validates():
         parse_inbound({"event_id": "x"})
     unknown = parse_inbound({"event_id": "e", "chat_id": "c", "kind": "hologram"})
     assert unknown.kind is MessageType.UNKNOWN
+
+
+def test_whatsapp_context_info_mentioned_jid_is_normalized(tmp_path):
+    event = normalize_whatsapp_inbound({
+        "event_id": "wamid-1", "chat_id": "120363000@g.us", "sender_id": "user@s.whatsapp.net",
+        "is_group": True, "text": "@Atlas please review", "is_mention": True,
+        "mentioned_jid": ["15551234567@s.whatsapp.net"],
+    }, account="main", media_directory=tmp_path)
+    assert event.is_group and event.is_mention
+    assert event.mentions == ["15551234567"]
 
 
 @pytest.mark.asyncio

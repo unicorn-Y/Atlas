@@ -147,6 +147,7 @@ def _payload(**fields) -> dict[str, Any]:
         "session_webhook": "https://oapi.dingtalk.com/robot/send?session=abc",
         "session_webhook_expired_time": 9999999999999,
         "isInAtList": False, "text": {"content": "hi bot"}, "message_type": "text",
+        "atUsers": ["agent_dingtalk_id"],
     }
     base.update(fields)
     return base
@@ -213,6 +214,7 @@ async def test_inbound_text_group_mention_and_session_webhook(dingtalk_stubs):
         "cid0001cid0001", "sender1", "Zhang")
     assert event.text == "hi bot"
     assert event.is_group is True and event.is_mention is True
+    assert event.mentions == ["agent_dingtalk_id"]
     assert event.kind is MessageType.TEXT
     # session webhook cached for later replies (hermes parity)
     assert adapter._session_webhooks[event.chat_id][0].startswith("https://oapi.dingtalk.com/")

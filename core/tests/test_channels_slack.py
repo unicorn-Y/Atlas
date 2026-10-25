@@ -225,6 +225,7 @@ async def test_inbound_app_mention_strips_bot_tag(slack_stubs):
     event = collector.events[0]
     assert event.is_mention is True and event.text == "deploy now"
     assert event.is_group is True
+    assert event.mentions == ["UBOT"]
 
 
 async def test_inbound_bot_and_non_message_events_dropped_but_acked(slack_stubs):

@@ -53,6 +53,26 @@ RECONNECT_CIRCUIT_BREAKER_TRIPS = 5  # identical errors escaping start() before 
 RECONNECT_CIRCUIT_BREAKER_DELAY = 300  # seconds between attempts while tripped (hermes parity)
 _SESSION_WEBHOOKS_MAX = 500
 _DEDUP_MAX = 1000
+
+
+def _dingtalk_mentions(message: Any) -> list[str]:
+    """Normalize Stream Mode callback ``atUsers`` into stable user identifiers."""
+    values = getattr(message, "at_users", None) or getattr(message, "atUsers", None) or []
+    if isinstance(values, dict):
+        values = list(values.values())
+    if not isinstance(values, (list, tuple)):
+        return []
+    result: list[str] = []
+    for value in values:
+        if isinstance(value, str):
+            item = value
+        elif isinstance(value, dict):
+            item = str(value.get("dingtalkId") or value.get("staffId") or value.get("userId") or "")
+        else:
+            item = str(getattr(value, "dingtalk_id", "") or getattr(value, "staff_id", "") or getattr(value, "user_id", "") or "")
+        if item:
+            result.append(item.lstrip("@"))
+    return list(dict.fromkeys(result))
 _DINGTALK_WEBHOOK_RE = re.compile(r"^https://(?:api|oapi)\.dingtalk\.com/")
 _NUMBERED_RE = re.compile(r"^\d+\.\s")
 
@@ -225,6 +245,9 @@ class DingTalkAdapter(ChannelAdapter):
                 chatbot_msg.session_webhook = webhook
             if payload.get("isInAtList") and not getattr(chatbot_msg, "is_in_at_list", False):
                 chatbot_msg.is_in_at_list = True
+            at_users = payload.get("atUsers") or payload.get("at_users")
+            if at_users and not getattr(chatbot_msg, "at_users", None):
+                chatbot_msg.at_users = at_users
             await self._on_message(chatbot_msg)
         except Exception:
             logger.exception("[dingtalk] error preparing incoming message")
@@ -279,6 +302,7 @@ class DingTalkAdapter(ChannelAdapter):
             sender_name=sender_nick,
             is_group=is_group,
             is_mention=bool(getattr(message, "is_in_at_list", False)),
+            mentions=_dingtalk_mentions(message),
             attachments=attachments,
             ts=ts,
             raw={"message_id": msg_id, "robot_code": str(getattr(message, "robot_code", "") or "")},

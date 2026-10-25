@@ -20,6 +20,7 @@ Binding shape (dict, tolerant of the ``agentId``/``match`` OpenClaw spelling)::
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from atlas.channels.contract import MessageEvent
@@ -142,6 +143,20 @@ def resolve_binding(
             peer_matches = not _has_peer_scope(match) or _match_peer_id(match, event) or _match_parent_peer(match, event)
             if aliases & mentioned and _match_account(match, event) and _match_peer_kind(match, event) and peer_matches:
                 return binding
+    if event.is_group:
+        # Some callback protocols (notably WeCom XML events) expose only the
+        # rendered text. Resolve @display-name against configured aliases.
+        text_mentions = {value.casefold() for value in re.findall(r"@([^\s,，:：@]{1,80})", event.text or "")}
+        if text_mentions:
+            for binding, match in usable:
+                names = match.get("mention_names") or binding.get("mention_names") or []
+                if isinstance(names, str):
+                    names = [names]
+                names = [*names, match.get("display_name"), match.get("username"), binding.get("display_name"), binding.get("username")]
+                aliases = {str(value).lstrip("@").casefold() for value in names if value}
+                peer_matches = not _has_peer_scope(match) or _match_peer_id(match, event) or _match_parent_peer(match, event)
+                if aliases & text_mentions and _match_account(match, event) and _match_peer_kind(match, event) and peer_matches:
+                    return binding
 
     def scoped(predicate) -> dict[str, Any] | None:
         def check(match: dict[str, Any]) -> bool:
@@ -171,7 +186,10 @@ def resolve_binding(
 
     # 4. account-level binding (no peer constraints at all)
     def match_account_level(match: dict[str, Any], event: MessageEvent) -> bool:
-        return not _has_peer_scope(match)
+        # A binding that exists only to name this agent in external group
+        # mentions must not capture every unmentioned group message.
+        named_group_member = event.is_group and bool(match.get("mention_names"))
+        return not _has_peer_scope(match) and not named_group_member
 
     agent = scoped(match_account_level) if usable else None
     if agent:
@@ -181,6 +199,8 @@ def resolve_binding(
     for binding, match in usable:
         agent = _binding_agent(binding)
         if not agent:
+            continue
+        if event.is_group and match.get("mention_names"):
             continue
         account = str(match.get("account", match.get("accountId", "")) or "")
         if not _has_peer_scope(match) and account == "*":

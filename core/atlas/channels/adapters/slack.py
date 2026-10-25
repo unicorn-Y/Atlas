@@ -183,6 +183,7 @@ class SlackAdapter(ChannelAdapter):
         ts = str(event.get("ts") or "")
         text = str(event.get("text") or "")
         is_mention = False
+        mentions = [match[0] for match in _MENTION_RE.findall(text)]
         if etype == "app_mention":
             is_mention = True
             text = _MENTION_RE.sub("", text).strip()
@@ -224,6 +225,7 @@ class SlackAdapter(ChannelAdapter):
             sender_is_bot=bool(event.get("bot_id") or event.get("bot_profile")),
             is_group=is_group,
             is_mention=is_mention,
+            mentions=list(dict.fromkeys(mentions)),
             reply_to_event_id=thread_ts if thread_ts and thread_ts != ts else "",
             attachments=attachments,
             ts=ts_value,

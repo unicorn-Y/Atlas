@@ -307,6 +307,7 @@ async def test_inbound_text_with_mention_resolution(lark_stubs):
     assert (event.chat_id, event.sender_id) == ("oc_chat1", "ou_1")
     assert event.text == "@Atlas Bot ship it"
     assert event.is_group is True and event.is_mention is True
+    assert event.mentions == ["ou_bot", "Atlas Bot"]
     assert event.ts == pytest.approx(1770000000.0)
 
 

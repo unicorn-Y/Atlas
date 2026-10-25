@@ -219,6 +219,16 @@ async def test_handle_callback_dispatches_decrypted_event():
     assert len(collector.events) == 1
 
 
+async def test_handle_callback_normalizes_group_at_text():
+    app = _make_app()
+    adapter, collector = _adapter([app])
+    body, signature = _envelope(app, _plaintext_xml(user="wr_group_1", content="@代码助手 review", msg_id="1002"))
+    assert await adapter.handle_callback(_callback_query(signature), body) == (200, "success")
+    event = collector.events[0]
+    assert event.is_group is True and event.is_mention is True
+    assert event.mentions == ["代码助手"]
+
+
 async def test_handle_callback_rejects_bad_signature():
     app = _make_app()
     adapter, _ = _adapter([app])

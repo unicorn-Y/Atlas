@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from typing import Any
 from xml.etree import ElementTree as ET
@@ -290,6 +291,8 @@ class WeComAdapter(ChatSendQueueMixin, ChannelAdapter):
         if not content:
             return None
         msg_id = find("MsgId") or f"{user_id}:{find('CreateTime') or '0'}"
+        is_group = user_id.startswith("wr")
+        text_mentions = list(dict.fromkeys(re.findall(r"@([^\s,，:：@]{1,80})", content)))
         return MessageEvent(
             channel=self.name,
             account=self.account_id(),
@@ -299,7 +302,9 @@ class WeComAdapter(ChatSendQueueMixin, ChannelAdapter):
             kind=MessageType.TEXT,
             text=content,
             sender_name=user_id,
-            is_group=False,
+            is_group=is_group,
+            is_mention=bool(text_mentions),
+            mentions=text_mentions,
             ts=float(find("CreateTime") or 0) or time.time(),
             raw={"xml": xml_text, "app": str(app.get("name") or "default")},
         )
