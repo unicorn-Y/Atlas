@@ -303,6 +303,9 @@ export default function App() {
   const [diagnosticUnread, setDiagnosticUnread] = useState(0);
   const [peerInbox, setPeerInbox] = useState<Array<{ id: string; sender_conversation_id: string; sender_title: string; content: string; created_at: string }>>([]);
   const [besideId, setBesideId] = useState('');
+  const [handoffDraft, setHandoffDraft] = useState('');
+  const [handoffSource, setHandoffSource] = useState('');
+  const [handoffBusy, setHandoffBusy] = useState(false);
   const [rewound, setRewound] = useState<{ conversationId: string; rewindId: string; text: string } | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState(() => pref('default-workspace') ?? '');
   const [tabs, setTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
@@ -1316,6 +1319,42 @@ export default function App() {
     }
     await store.sendMessage(`请使用 Atlas 的 workflow 工具执行以下目标。先由主 Agent 规划为有依赖关系的子任务 DAG，再并行运行可并行的子 Agent，并等待完成后汇总结果、错误和产物。\n\n目标：${target}`);
   };
+  const prepareHandoff = async () => {
+    if (!activeConversation || handoffBusy) return;
+    setHandoffBusy(true);
+    try {
+      const history = await backend.getMessages(activeConversation.id, { limit: 1000 });
+      const transcript = history.filter((item) => item.role === 'user' || item.role === 'assistant')
+        .map((item) => `${item.role === 'user' ? 'USER' : 'ASSISTANT'}:\n${item.content}`).join('\n\n');
+      const gitState = activeConversation.worktree_path
+        ? `分支：${activeConversation.worktree_branch || '未知'}；worktree：${activeConversation.worktree_path}；base：${activeConversation.base_branch || '未知'}`
+        : `工作区：${String(activeConversation.workspace || '未设置')}`;
+      const source = `会话标题：${activeConversation.title || '未命名任务'}\n会话 ID：${activeConversation.id}\n${gitState}\n\n完整会话记录：\n${transcript}`;
+      setHandoffSource(activeConversation.id);
+      const result = await api<{ text: string }>(store.apiBaseUrl, '/api/chat/prompt-enhance', { method: 'POST', json: {
+        text: `请把下面的完整对话整理为可直接交给新会话的结构化任务交接摘要。保留具体目标、已完成工作、关键决策及理由、约束/用户要求、涉及文件与分支/worktree状态、验证结果、未解决问题和下一步待办。不要虚构状态；未知项标记未知。只输出摘要正文，不添加寒暄。\n\n${source}`,
+        model: store.model || undefined,
+      } });
+      setHandoffDraft(result.text);
+    } catch (error) {
+      setToast(`生成交接摘要失败：${error instanceof Error ? error.message : String(error)}`);
+      setHandoffDraft(`## 原会话\n${activeConversation.title || '未命名任务'} (${activeConversation.id})\n\n## 工作区与分支\n${activeConversation.worktree_path ? `${activeConversation.worktree_branch || '未知'} · ${activeConversation.worktree_path} · base ${activeConversation.base_branch || '未知'}` : String(activeConversation.workspace || '未设置')}\n\n## 完整记录\n${messages.filter((item) => item.role === 'user' || item.role === 'assistant').map((item) => `### ${item.role === 'user' ? '用户' : 'Atlas'}\n${item.content}`).join('\n\n')}`);
+    } finally { setHandoffBusy(false); }
+  };
+  const createHandoffConversation = async () => {
+    if (!handoffSource) return;
+    try {
+      const created = await api<{ id: string }>(store.apiBaseUrl, '/api/conversations', { method: 'POST', json: {
+        title: `交接：${activeConversation?.title || '任务'}`,
+        parent_conversation_id: handoffSource,
+      } });
+      await store.refreshConversations();
+      const target = useAtlasStore.getState().conversations.find((item) => item.id === created.id);
+      if (target) await openConversation(target);
+      setInput(`请承接以下完整任务摘要，先检查待办并继续执行：\n\n${handoffDraft}\n\n我的新问题：`);
+      setHandoffDraft(''); setHandoffSource('');
+    } catch (error) { setToast(`创建交接会话失败：${error instanceof Error ? error.message : String(error)}`); }
+  };
   const slashCommands: SlashCommand[] = [
     { id: 'new', label: '/new', hint: '总结当前上下文并在新对话继续', run: () => {
       if (!activeConversation) { newTask(); return; }
@@ -1326,14 +1365,7 @@ export default function App() {
         '请先据此承接原任务，再处理我接下来提出的新问题。'].join('\n');
       newTask(); setInput(`交接摘要：\n${handoff}\n\n我的新问题：`);
     } },
-    { id: 'handoff', label: '/handoff', hint: '将当前任务摘要交接到新会话', run: () => {
-      if (!activeConversation) { newTask(); return; }
-      const recent = messages.filter((item) => (item.role === 'user' || item.role === 'assistant') && item.content.trim()).slice(-12);
-      const handoff = [`原对话：${activeConversation.title || '未命名任务'}`, '任务交接摘要（保留目标、决策、进度和待办）：',
-        ...recent.map((item) => `${item.role === 'user' ? '用户' : 'Atlas'}：${item.content.replace(/\s+/g, ' ').slice(0, item.role === 'user' ? 420 : 640)}`),
-        '请先确认当前进度和下一步，再处理我接下来提出的新问题。'].join('\n');
-      newTask(); setInput(`请承接以下任务：\n\n${handoff}\n\n我的新问题：`);
-    } },
+    { id: 'handoff', label: '/handoff', hint: '生成、预览并编辑完整任务交接摘要', run: () => { void prepareHandoff(); } },
     { id: 'clear', label: '/clear', hint: '开始一段新对话', run: newTask },
     ...(activeConversation ? [
       { id: 'tag', label: '/tag', hint: '给当前会话加颜色标签，可在侧栏按标签搜索', takesArgument: true, run: (value: string) => {
@@ -2394,6 +2426,12 @@ export default function App() {
         <button type="button" aria-label="关闭原始文本" onClick={() => setRawText(null)} className="grid size-8 place-items-center rounded-lg hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"><X size={16} /></button>
       </div>
       <pre className="m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-sunken p-3 font-mono text-[12px] leading-relaxed text-fg" tabIndex={0}>{rawText}</pre>
+    </Dialog>
+    <Dialog open={Boolean(handoffDraft) || handoffBusy} onOpenChange={(open) => { if (!open && !handoffBusy) { setHandoffDraft(''); setHandoffSource(''); } }} label="预览任务交接摘要" className="flex max-h-[88vh] w-[min(900px,92vw)] flex-col bg-panel p-5 shadow-xl">
+      <div className="flex items-center gap-2"><h2 className="m-0 text-[16px] font-semibold text-heading">交接摘要</h2><span className="flex-1" /><button type="button" onClick={() => { setHandoffDraft(''); setHandoffSource(''); }} className="rounded-lg px-3 py-1.5 text-[12px] text-fg-2 hover:bg-hover">取消</button></div>
+      <p className="my-2 text-[12px] text-fg-3">摘要由完整会话记录生成，可编辑。新会话会保存原会话引用，摘要会放入新会话输入框供你继续编辑后发送。</p>
+      {handoffBusy ? <p role="status" className="m-0 py-8 text-center text-[13px] text-fg-3">正在整理目标、决策、约束、文件状态和待办…</p> : <textarea aria-label="交接摘要预览与编辑" autoFocus value={handoffDraft} onChange={(event) => setHandoffDraft(event.target.value)} className="min-h-0 flex-1 resize-y rounded-xl border border-line bg-sunken p-3 font-mono text-[12px] leading-relaxed text-fg outline-none focus:border-brand" />}
+      {!handoffBusy && <div className="mt-3 flex justify-end gap-2"><Button variant="secondary" onClick={() => { setHandoffDraft(''); setHandoffSource(''); }}>取消</Button><Button variant="primary" disabled={!handoffDraft.trim()} onClick={() => void createHandoffConversation()}>创建关联的新会话</Button></div>}
     </Dialog>
     {activeConversation && <Suspense fallback={null}><SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} /></Suspense>}
     <Dialog open={schedulePromptOpen} onOpenChange={setSchedulePromptOpen} label="安排插话" className="w-[min(480px,92vw)] bg-panel p-5 shadow-xl">
