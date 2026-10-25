@@ -262,6 +262,11 @@ interface MarketplacePluginEntry {
 }
 
 interface ReloadReport { loaded?: string[]; skipped?: Array<{ name?: string; reason?: string }>; errors?: Record<string, string> }
+interface PluginValidation {
+  valid: boolean; source: string; plugin?: { name?: string; version?: string; commands?: string[]; mcp_servers?: string[] } | null;
+  diagnostics: Array<{ severity: 'error' | 'warning'; code: string; message: string; path?: string }>;
+  summary: { errors: number; warnings: number }; policy?: { status: string; message?: string };
+}
 
 /** One line of plain Chinese about what a plugin reload did. */
 const reportText = (report: ReloadReport | undefined) => {
@@ -296,6 +301,7 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [marketPluginQuery, setMarketPluginQuery] = useState('');
   const [confirmRemove, setConfirmRemove] = useState('');
   const [browsing, setBrowsing] = useState<{ name: string; entries: MarketplacePluginEntry[] } | null>(null);
+  const [pluginValidation, setPluginValidation] = useState<{ result: PluginValidation; action: 'install' | 'enable'; pluginName?: string } | null>(null);
 
   const authorText = (author: Plugin['author']): string => {
     if (typeof author === 'string') return author;
@@ -368,6 +374,26 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
     }
   };
   const post = (path: string, body?: unknown, done?: string | ((body: Record<string, unknown>) => string)) => act(`${apiBaseUrl}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }, done);
+  const validatePluginSource = async (target: string, action: 'install' | 'enable', pluginName?: string) => {
+    setBusy(true); setError(null); setPluginValidation(null);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/plugins/validate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: target }) });
+      const result = await response.json() as PluginValidation;
+      if (!response.ok) throw new Error(typeof (result as unknown as { detail?: unknown }).detail === 'string' ? String((result as unknown as { detail: string }).detail) : `校验失败（HTTP ${response.status}）`);
+      setPluginValidation({ result, action, pluginName });
+    } catch (cause) { setError(`插件校验请求失败：${cause instanceof Error ? cause.message : String(cause)}`); }
+    finally { setBusy(false); }
+  };
+  const installValidatedPlugin = async () => {
+    if (!pluginValidation?.result.valid || pluginValidation.action !== 'install') return;
+    const done = await act(`${apiBaseUrl}/api/plugins/install`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: source.trim(), ref: sourceRef.trim() || undefined }) }, `已安装 ${pluginValidation.result.plugin?.name ?? source}`);
+    if (done) { setSource(''); setSourceRef(''); setPluginValidation(null); }
+  };
+  const enableValidatedPlugin = async () => {
+    if (!pluginValidation?.result.valid || pluginValidation.action !== 'enable' || !pluginValidation.pluginName) return;
+    const name = pluginValidation.pluginName;
+    if (await post(`/api/plugins/${encodeURIComponent(name)}/enabled`, { enabled: true }, `已启用 ${name}`)) setPluginValidation(null);
+  };
 
   const browse = async (name: string) => {
     setBusy(true);
@@ -424,8 +450,7 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
     <form className={styles.settingsForm} onSubmit={async (event) => {
       event.preventDefault();
       if (!source.trim()) return;
-      const installed = await post('/api/plugins/install', { source: source.trim(), ref: sourceRef.trim() || undefined });
-      if (installed) { setSource(''); setSourceRef(''); }
+      await validatePluginSource(source.trim(), 'install');
     }}>
       <label>从哪里安装
         <input aria-label="插件来源" placeholder="本地目录路径、git 地址，或 用户名/仓库" value={source} onChange={(e) => setSource(e.target.value)} />
@@ -434,8 +459,21 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
         <input aria-label="插件分支或标签" placeholder="默认使用仓库默认分支" value={sourceRef} onChange={(e) => setSourceRef(e.target.value)} />
       </label>
       <p style={{ margin: 0, fontSize: 12.5 }}>支持 Claude Code 的 .claude-plugin/plugin.json、根目录 plugin.json 插件包、git 地址或「用户名/仓库」。Codex 专属 .codex-plugin/plugin.json 回退清单尚不支持；填 marketplace 仓库会注册为插件市场。</p>
-      <button className={styles.settingsAction} disabled={busy || !source.trim()}>安装</button>
+      <button className={styles.settingsAction} disabled={busy || !source.trim()}>{busy ? '正在校验…' : '校验清单'}</button>
     </form>
+    {pluginValidation && <section aria-label="插件清单校验报告" className="rounded-lg border border-[var(--line)] p-3">
+      <strong>{pluginValidation.result.valid ? '校验通过' : '校验未通过'} · {pluginValidation.result.plugin?.name ?? pluginValidation.result.source}</strong>
+      <p style={{ margin: '4px 0', fontSize: 12.5 }}>错误 {pluginValidation.result.summary.errors} 项 · 警告 {pluginValidation.result.summary.warnings} 项</p>
+      {pluginValidation.result.diagnostics.length > 0 && <ul style={{ margin: '6px 0', paddingLeft: 20, fontSize: 12.5 }}>
+        {pluginValidation.result.diagnostics.map((item, index) => <li key={`${item.code}:${index}`} role={item.severity === 'error' ? 'alert' : 'status'}><b>{item.severity === 'error' ? '错误' : '建议'} · {item.code}</b>：{item.message}{item.path ? ` (${item.path})` : ''}</li>)}
+      </ul>}
+      {pluginValidation.result.policy?.message && <p style={{ margin: '4px 0', fontSize: 12, color: 'var(--fg-3)' }}>{pluginValidation.result.policy.message}</p>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        {pluginValidation.result.valid && pluginValidation.action === 'install' && <button className={styles.settingsAction} disabled={busy} onClick={() => void installValidatedPlugin()}>校验通过，继续安装</button>}
+        {pluginValidation.result.valid && pluginValidation.action === 'enable' && <button className={styles.settingsAction} disabled={busy} onClick={() => void enableValidatedPlugin()}>校验通过，确认启用</button>}
+        <button className={styles.quietButton} onClick={() => setPluginValidation(null)}>关闭报告</button>
+      </div>
+    </section>}
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end', margin: '10px 0' }}>
       <label style={{ flex: '1 1 220px' }}>搜索插件
         <input aria-label="搜索已安装插件" placeholder="名称、说明、作者、来源或组件" value={pluginQuery} onChange={(e) => setPluginQuery(e.target.value)} />
@@ -461,7 +499,9 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
               {plugin.description && <div><small>{plugin.description}</small></div>}
               <div><small>技能 {plugin.skills?.length ?? 0} · 命令 {plugin.commands?.length ?? 0} · Agent {plugin.agents?.length ?? 0} · Hook {plugin.hooks ?? 0} · MCP {plugin.mcp_servers?.length ?? 0}</small></div>
             </span>
-            <button className={styles.quietButton} onClick={() => void post(`/api/plugins/${encodeURIComponent(plugin.name)}/enabled`, { enabled: !plugin.enabled })} disabled={busy}>
+            <button className={styles.quietButton} onClick={() => plugin.enabled
+              ? void post(`/api/plugins/${encodeURIComponent(plugin.name)}/enabled`, { enabled: false })
+              : void validatePluginSource(plugin.path ?? '', 'enable', plugin.name)} disabled={busy}>
               {plugin.enabled ? '停用' : '启用'}
             </button>
             <button className={styles.quietButton} onClick={() => void post(`/api/plugins/${encodeURIComponent(plugin.name)}/update`)} disabled={busy}>更新</button>

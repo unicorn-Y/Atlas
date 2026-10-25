@@ -8,6 +8,7 @@ import re
 import shutil
 import stat
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -167,6 +168,210 @@ class PluginRuntime:
                 "update_available": bool(source.get("update_available", False)) if isinstance(source, dict) else False,
             }
         return list(plugins.values())
+
+    def validate(self, source: str | Path) -> dict[str, Any]:
+        """Validate a plugin manifest and explain path, contribution and name conflicts."""
+        diagnostics: list[dict[str, str]] = []
+
+        def add(severity: str, code: str, message: str, path: str = "") -> None:
+            diagnostics.append({"severity": severity, "code": code, "message": message, "path": path})
+
+        source_path = Path(source).expanduser()
+        root = self._plugin_root(source_path)
+        if root is None:
+            add("error", "plugin_root_missing", "没有找到 plugin.json 或插件组件目录；请检查来源路径。", str(source_path))
+            return {"valid": False, "source": str(source_path), "plugin": None, "diagnostics": diagnostics,
+                    "summary": {"errors": 1, "warnings": 0}, "policy": {"status": "not_configured", "diagnostics": []}}
+
+        manifest_path, manifest = _manifest(root)
+        if manifest_path is None:
+            add("warning", "manifest_missing", "未找到 plugin.json；Atlas 会按默认目录发现组件。可添加 plugin.json 声明版本和组件。", str(root))
+            manifest = {"name": root.name, "version": "0.0.0"}
+        else:
+            try:
+                parsed = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                add("error", "manifest_parse", f"清单无法解析：{type(exc).__name__}。请修正 JSON 格式。", str(manifest_path))
+                parsed = None
+            if not isinstance(parsed, dict):
+                if parsed is not None:
+                    add("error", "manifest_type", "清单顶层必须是 JSON 对象。", str(manifest_path))
+                manifest = {}
+            else:
+                manifest = parsed
+
+        raw_name = manifest.get("name")
+        try:
+            name = _plugin_name(raw_name or root.name)
+        except ValueError as exc:
+            name = str(raw_name or root.name)
+            add("error", "invalid_name", f"{exc}；名称需使用小写字母、数字和连字符。", "name")
+        version = manifest.get("version", "0.0.0")
+        if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version):
+            add("error", "invalid_version", "version 必须是 MAJOR.MINOR.PATCH 版本字符串。", "version")
+
+        allowed = {"name", "version", "description", "displayName", "author", "homepage", "repository",
+                   "license", "keywords", "metadata", "defaultEnabled", "skills", "commands", "agents",
+                   "hooks", "mcpServers", "outputStyles", "lspServers"}
+        for key in sorted(set(manifest) - allowed):
+            add("warning", "unknown_field", f"字段 {key} 不在 Atlas 支持清单中，会被忽略。", key)
+        for key in ("description", "displayName", "homepage", "repository", "license"):
+            if key in manifest and not isinstance(manifest[key], str):
+                add("error", "invalid_field_type", f"{key} 必须是文本。", key)
+        for key in ("skills", "agents", "commands"):
+            value = manifest.get(key)
+            if value is not None and not isinstance(value, (str, list, dict)):
+                add("error", "invalid_component_declaration", f"{key} 必须是路径、路径数组或命令映射。", key)
+            if isinstance(value, list) and any(not isinstance(item, str) for item in value):
+                add("error", "invalid_component_declaration", f"{key} 数组成员必须是路径文本。", key)
+
+        for field in ("skills", "agents", "commands"):
+            value = manifest.get(field)
+            refs = ([*value.keys()] if field == "commands" and isinstance(value, dict) else _path_values(value))
+            if field == "commands" and isinstance(value, dict):
+                refs = [spec.get("source") for spec in value.values() if isinstance(spec, dict) and spec.get("source")]
+            for ref in refs:
+                if not isinstance(ref, (str, Path)):
+                    continue
+                try:
+                    target = _inside(root, ref)
+                    if not target.exists():
+                        add("error", "component_path_missing", f"声明的 {field} 路径不存在：{ref}。", field)
+                except (OSError, ValueError):
+                    add("error", "component_path_escape", f"声明的 {field} 路径无效或越出插件目录：{ref}。", field)
+        mcp_declared = manifest.get("mcpServers")
+        mcp_refs = mcp_declared if isinstance(mcp_declared, list) else [mcp_declared]
+        for ref in mcp_refs:
+            if isinstance(ref, str):
+                try:
+                    target = _inside(root, ref)
+                    if not target.is_file():
+                        add("error", "mcp_path_missing", f"MCP 配置文件不存在：{ref}。", "mcpServers")
+                except (OSError, ValueError):
+                    add("error", "mcp_path_escape", f"MCP 配置路径无效或越出插件目录：{ref}。", "mcpServers")
+
+        command_names: list[str] = []
+        try:
+            command_names = [item["name"] for item in self._commands(root, manifest)]
+            duplicates = sorted({item for item in command_names if command_names.count(item) > 1})
+            for command in duplicates:
+                add("error", "duplicate_command", f"插件内部命令 {command} 重复定义。", "commands")
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            add("error", "commands_invalid", f"命令定义无法读取：{type(exc).__name__}。", "commands")
+        for plugin in self.discover():
+            if plugin["name"] == name:
+                continue
+            conflicts = sorted(set(command_names) & set(plugin.get("commands", [])))
+            for command in conflicts:
+                add("error", "command_conflict", f"命令 /{command} 与插件 {plugin['name']} 冲突；请重命名其中一个命令。", "commands")
+
+        mcp_names: list[str] = []
+        try:
+            mcp_names = sorted(self._mcp_configs(root, manifest))
+            own_mcp = manifest.get("mcpServers")
+            if isinstance(own_mcp, dict) and "mcpServers" not in own_mcp:
+                own_mcp = own_mcp.get("mcpServers", own_mcp)
+            if isinstance(own_mcp, dict):
+                for server_name, spec in own_mcp.items():
+                    if not isinstance(spec, dict):
+                        add("error", "mcp_definition_invalid", f"MCP 服务 {server_name} 必须是对象。", "mcpServers")
+            for plugin in self.discover():
+                if plugin["name"] == name:
+                    continue
+                for server_name in sorted(set(mcp_names) & set(plugin.get("mcp_servers", []))):
+                    add("error", "mcp_name_conflict", f"MCP 服务名 {server_name} 与插件 {plugin['name']} 冲突；请重命名服务。", "mcpServers")
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            add("error", "mcp_invalid", f"MCP 服务声明无法读取：{type(exc).__name__}。", "mcpServers")
+
+        try:
+            from atlas.runtime.hooks import CLAUDE_HOOK_EVENTS
+            for hook_path in [root / "hooks" / "hooks.json"]:
+                if not hook_path.is_file():
+                    continue
+                try:
+                    hook_data = json.loads(hook_path.read_text(encoding="utf-8"))
+                except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                    add("error", "hook_parse", f"Hook 文件无法解析：{type(exc).__name__}。", str(hook_path.relative_to(root)))
+                    continue
+                events = hook_data.get("hooks", hook_data) if isinstance(hook_data, dict) else {}
+                if isinstance(events, dict):
+                    for event in events:
+                        if event not in CLAUDE_HOOK_EVENTS:
+                            add("error", "hook_event_unknown", f"Hook 事件 {event} 未被 Atlas 支持；请使用支持的 Claude Hook 事件名。", "hooks")
+                legacy = hook_data.get("hooks") if isinstance(hook_data, dict) else None
+                if isinstance(legacy, list):
+                    from atlas.agent.enrichment import HOOK_POINTS
+                    for hook in legacy:
+                        point = hook.get("point") if isinstance(hook, dict) else None
+                        if point and point not in HOOK_POINTS:
+                            add("error", "hook_event_unknown", f"Atlas Hook 事件 {point} 未被支持；请使用有效 hook point。", "hooks")
+            declared_hooks = manifest.get("hooks")
+            hook_values = declared_hooks if isinstance(declared_hooks, list) else [declared_hooks]
+            for value in hook_values:
+                if isinstance(value, str):
+                    try:
+                        hook_path = _inside(root, value)
+                        if not hook_path.is_file():
+                            add("error", "hook_path_missing", f"Hook 配置文件不存在：{value}。", "hooks")
+                    except (OSError, ValueError):
+                        add("error", "hook_path_escape", f"Hook 配置路径无效或越出插件目录：{value}。", "hooks")
+                elif isinstance(value, dict):
+                    events = value.get("hooks", value)
+                    if isinstance(events, dict):
+                        for event in events:
+                            if event not in CLAUDE_HOOK_EVENTS:
+                                add("error", "hook_event_unknown", f"Hook 事件 {event} 未被 Atlas 支持。", "hooks")
+        except ImportError:
+            add("warning", "hook_validator_unavailable", "Hook 事件校验器不可用。", "hooks")
+
+        errors = sum(item["severity"] == "error" for item in diagnostics)
+        warnings = sum(item["severity"] == "warning" for item in diagnostics)
+        return {"valid": errors == 0, "source": str(root), "plugin": {"name": name, "version": version,
+                "commands": sorted(set(command_names)), "mcp_servers": mcp_names}, "diagnostics": diagnostics,
+                "summary": {"errors": errors, "warnings": warnings},
+                "policy": {"status": "not_configured", "diagnostics": [],
+                           "message": "组织策略适配器尚未配置；当前无组织策略跳过项。"}}
+
+    def validate_source(self, source: str | Path, *, ref: str | None = None, subdir: str | None = None) -> dict[str, Any]:
+        """Validate local sources directly and inspect Git sources in a temporary checkout."""
+        path = Path(source).expanduser()
+        if path.exists():
+            return self.validate(path)
+        url = str(source)
+        if not url.startswith(("https://", "http://", "ssh://", "git@")):
+            if "/" in url and ":" not in url:
+                url = self._github_url(url)
+            else:
+                return self.validate(path)
+        with tempfile.TemporaryDirectory(prefix="atlas-plugin-validate-") as directory:
+            checkout = Path(directory) / "source"
+            try:
+                self._git_clone(url, checkout, ref)
+            except subprocess.CalledProcessError as exc:
+                return {"valid": False, "source": url, "plugin": None,
+                        "diagnostics": [{"severity": "error", "code": "source_unavailable",
+                                         "message": f"无法读取插件来源：{(exc.stderr or exc.stdout or 'git clone failed')[:500]}", "path": "source"}],
+                        "summary": {"errors": 1, "warnings": 0},
+                        "policy": {"status": "not_configured", "diagnostics": [],
+                                   "message": "组织策略适配器尚未配置；当前无组织策略跳过项。"}}
+            selected = checkout / subdir if subdir else checkout
+            root = self._plugin_root(selected)
+            result = self.validate(root or checkout)
+            return {**result, "source": url}
+
+    def validate_marketplace_plugin(self, marketplace: str, plugin_name: str) -> dict[str, Any]:
+        record = self._state.get("marketplaces", {}).get(marketplace)
+        if not isinstance(record, dict):
+            raise KeyError(marketplace)
+        entry = next((item for item in self.list_marketplace_plugins(marketplace) if item.get("name") == plugin_name), None)
+        if entry is None:
+            raise KeyError(plugin_name)
+        local, url, ref, subdir = self._resolve_plugin_source(record, entry)
+        if local is not None:
+            return self.validate(local)
+        if url is None:
+            raise ValueError("unsupported plugin source")
+        return self.validate_source(url, ref=ref, subdir=subdir)
 
     @staticmethod
     def _component_paths(

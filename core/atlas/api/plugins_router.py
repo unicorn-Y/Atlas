@@ -8,8 +8,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
 
 import asyncio
 import subprocess
@@ -48,6 +47,22 @@ async def list_plugins(
     return {"plugins": plugin_runtime.discover()}
 
 
+@router.post("/api/plugins/validate")
+async def validate_plugin_manifest(
+    services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any],
+) -> dict[str, Any]:
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    source = str(req.get("source") or req.get("path") or "").strip()
+    if not source:
+        raise HTTPException(status_code=422, detail="source is required")
+    try:
+        return await asyncio.to_thread(plugin_runtime.validate, source)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"插件清单校验失败：{exc}") from exc
+
+
 @router.post("/api/plugins/install-local")
 async def install_local_plugin(
     services: Annotated[AppServices, Depends(get_app_services)],
@@ -61,6 +76,9 @@ async def install_local_plugin(
     if not source:
         raise HTTPException(status_code=400, detail="path is required")
     try:
+        validation = await asyncio.to_thread(plugin_runtime.validate_source, source)
+        if not validation["valid"]:
+            raise HTTPException(status_code=422, detail={"message": "插件清单校验未通过", "validation": validation})
         result = plugin_runtime.install_local(source)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -77,6 +95,11 @@ async def install_plugin(
     if plugin_runtime is None:
         raise HTTPException(status_code=503, detail="插件服务尚未就绪")
     try:
+        validation = await asyncio.to_thread(
+            plugin_runtime.validate_source, str(req.get("source", "")), ref=req.get("ref"),
+        )
+        if not validation["valid"]:
+            raise HTTPException(status_code=422, detail={"message": "插件清单校验未通过", "validation": validation})
         result = await asyncio.to_thread(
             plugin_runtime.install, str(req.get("source", "")),
             name=req.get("name"), ref=req.get("ref"),
@@ -183,6 +206,9 @@ async def install_marketplace_plugin(
     if plugin_runtime is None:
         raise HTTPException(status_code=503, detail="插件服务尚未就绪")
     try:
+        validation = await asyncio.to_thread(plugin_runtime.validate_marketplace_plugin, name, str(req.get("plugin", "")))
+        if not validation["valid"]:
+            raise HTTPException(status_code=422, detail={"message": "插件清单校验未通过", "validation": validation})
         result = await asyncio.to_thread(
             plugin_runtime.install_marketplace_plugin, name, str(req.get("plugin", "")),
         )
@@ -204,9 +230,15 @@ async def set_plugin_enabled(
         raise HTTPException(status_code=503, detail="Plugin runtime unavailable")
     if not any(item["name"] == name for item in plugin_runtime.discover()):
         raise HTTPException(status_code=404, detail="插件不存在")
-    plugin_runtime.set_enabled(name, bool(req.get("enabled", True)))
+    enabled = bool(req.get("enabled", True))
+    if enabled:
+        plugin = next(item for item in plugin_runtime.discover() if item["name"] == name)
+        validation = await asyncio.to_thread(plugin_runtime.validate, str(plugin["path"]))
+        if not validation["valid"]:
+            raise HTTPException(status_code=409, detail={"message": "插件清单校验未通过，已保持停用", "validation": validation})
+    plugin_runtime.set_enabled(name, enabled)
     report = await _server()._reload_extensions()
-    return {"name": name, "enabled": bool(req.get("enabled", True)), "report": report}
+    return {"name": name, "enabled": enabled, "report": report}
 
 
 _EXTERNAL_IMPORT_SOURCES = {"claude", "codex"}
