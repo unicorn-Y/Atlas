@@ -3057,6 +3057,24 @@ class AtlasKernel:
             for block in event.get("content", [])
         )
         data = event.get("data") if isinstance(event.get("data"), dict) else {}
+        # Reading source files should bring the current, version-fresh LSP verdict into the
+        # same model turn. This is deliberately bounded and carries a relative file/line citation.
+        if name in {"read_file", "read", "local_file"} and not event.get("is_error"):
+            workspace = str(getattr(runtime, "workspace", "") or "")
+            path = arguments.get("path") or arguments.get("file_path")
+            if workspace and path and not workspace.startswith("ssh://"):
+                try:
+                    from atlas.tools.workspace_lsp import query_lsp
+                    verdict = await asyncio.to_thread(query_lsp, workspace, operation="diagnostics", path=str(path))
+                    diagnostics = verdict.get("diagnostics", []) if verdict.get("available") else []
+                    if diagnostics:
+                        citation = str(verdict.get("path") or path)
+                        lines = [f"[LSP 当前诊断 · {citation} · {len(diagnostics)} 条，最多附 8 条]"]
+                        for item in diagnostics[:8]:
+                            lines.append(f"- {item.get('severity', 'unknown')} {citation}:{item.get('line', '?')}:{item.get('column', '?')} {item.get('code') or ''} {item.get('message', '')}".strip())
+                        content = f"{content}\n\n" + "\n".join(lines)
+                except (OSError, RuntimeError, ValueError, TimeoutError):
+                    pass  # LSP absence/timeout never prevents source reading.
         return {
             "content": content, "is_error": bool(event.get("is_error")),
             "data": data,
