@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import importlib.util
 from pathlib import Path
 import subprocess
 import sys
@@ -33,10 +34,12 @@ def run(title: str, command: list[str], cwd: Path = ROOT) -> None:
 
 
 def pytest(*files: str, croniter: bool = False) -> list[str]:
-    command = ["uv", "run", "--project", "core"]
-    if croniter:
-        command += ["--with", "croniter"]
-    return command + ["pytest", "-q", *(str(CORE / "tests" / item) for item in files)]
+    # Run pytest with this checker's interpreter. A nested ``uv run pytest`` may
+    # create a fresh project environment in a worktree where the pytest entry
+    # point is not installed, even though the parent interpreter has pytest.
+    if croniter and importlib.util.find_spec("croniter") is None:
+        raise RuntimeError("croniter is required; invoke this checker with an interpreter that includes croniter")
+    return [sys.executable, "-m", "pytest", "-q", *(str(CORE / "tests" / item) for item in files)]
 
 
 def vitest(files: str) -> list[str]:
@@ -94,7 +97,7 @@ def main() -> int:
 
     # Item 5: CLI image parsing, validation, JSONL events and multimodal dispatch fake.
     run("5 CLI image input and multimodal dispatch",
-        ["uv", "run", "--project", "core", "pytest", "-q",
+        [sys.executable, "-m", "pytest", "-q",
          str(CORE / "tests/test_cli_headless.py"), "-k", "exec_"])
 
     # Item 6: dangerous suggestion filtering and home carousel/fill rendering.
