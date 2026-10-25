@@ -47,6 +47,21 @@ from atlas.runtime.hooks import run_user_hook
 log = structlog.get_logger()
 
 _EVENT_STREAM_DONE = object()
+
+_MEMORY_CITATION_MARKER = re.compile(r"\s*<!--\s*atlas-memory-citations:\s*([^<>\r\n]{1,2000})\s*-->\s*$")
+
+
+def _extract_memory_citations(text: str, allowed_refs: list[str]) -> tuple[str, list[str]]:
+    """Accept only explicit end markers for refs injected into this run's recall."""
+    match = _MEMORY_CITATION_MARKER.search(text)
+    if not match:
+        return text, []
+    allowed = set(allowed_refs)
+    cited = list(dict.fromkeys(
+        ref.strip() for ref in match.group(1).split(",")
+        if ref.strip() in allowed
+    ))
+    return _MEMORY_CITATION_MARKER.sub("", text).rstrip(), cited
 _CANCEL_REQUESTED = object()
 
 _TASK_COMPLETION_GUIDANCE = (
@@ -743,6 +758,15 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
         initial_messages.append(SystemMessage(content=state.context["system_prompt_prefix"]))
     if isinstance(state.context, dict) and state.context.get("turn_recall"):
         initial_messages.append(SystemMessage(content=state.context["turn_recall"]))
+    memory_refs = list(dict.fromkeys(str(ref) for ref in (state.context.get("library_refs") or []) if ref)) if isinstance(state.context, dict) else []
+    if memory_refs:
+        initial_messages.append(SystemMessage(content=(
+            "记忆来源引用规则：记忆块内列出的来源 ref 是可引用的原始出处。只有当本次回答实际采用某条记忆的信息时，"
+            "才在完整回答最后追加一个 HTML 注释，格式严格为 <!-- atlas-memory-citations: ref1,ref2 -->。"
+            "只列真正采用且确实出现在本次记忆上下文中的 ref；被检索到但未用于回答的记忆不要引用。"
+            "没有采用任何记忆时不要输出该注释。不要在正文中展示这个标记。\n可用 ref："
+            + ",".join(memory_refs)
+        )))
     if request.mode == "plan" and not stable_system_prefix:
         initial_messages.append(SystemMessage(content=(
             "You are in read-only Plan mode. Inspect as needed, then return a concrete "
@@ -1184,6 +1208,12 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
         if isinstance(msg, AIMessage) and not msg.tool_calls:
             full_response = msg.content
             break
+    streamed_response = full_response
+    full_response, cited_refs = _extract_memory_citations(
+        full_response,
+        list(dict.fromkeys(str(ref) for ref in (state.context.get("library_refs") or []) if ref))
+        if isinstance(state.context, dict) else [],
+    )
 
     if (not request.worker and not runtime.verify_nudge_sent
             and runtime.changed_paths and not runtime.verification_passed
@@ -1249,6 +1279,16 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
             latest_session_message_id, DATA_ROOT / "engine", request.conversation_id,
             role="assistant",
         )
+        if msg_id and (cited_refs or streamed_response != full_response):
+            from atlas.engine.session_sync import update_session_assistant_message
+
+            updated = await asyncio.to_thread(
+                update_session_assistant_message, DATA_ROOT / "engine", request.conversation_id,
+                msg_id, content=full_response,
+                metadata_patch={"memory_citations": cited_refs},
+            )
+            if not updated:
+                log.warning("agent.memory_citations_persist_failed", message_id=msg_id)
     except Exception as e:
         log.warning(
             "agent.assistant_message_save_failed", error=str(e), exc_info=True,

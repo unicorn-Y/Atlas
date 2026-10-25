@@ -347,6 +347,17 @@ def latest_session_message(
     return None
 
 
+def update_session_assistant_message(
+    home: str | Path, conversation_id: str, message_id: str, *,
+    content: str, metadata_patch: dict[str, Any],
+) -> bool:
+    """Attach presentation metadata to a persisted assistant message without changing model history."""
+    with _open_db(home) as db:
+        return bool(db.update_message_content_and_metadata(
+            conversation_id, message_id, content=content, metadata_patch=metadata_patch,
+        ))
+
+
 def session_message_evidence(
     home: str | Path, conversation_id: str | None, message_id: str,
 ) -> dict[str, Any] | None:

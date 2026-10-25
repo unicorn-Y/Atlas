@@ -471,7 +471,9 @@ export default function MessageThread({ history, username, historyActions, empty
         if (row.message.role === 'user' && isTodoEdit(row.message.content)) return <div className="my-3 flex items-center gap-2 text-[12.5px] text-fg-2">
           <ListChecks size={13} className="shrink-0 text-brand" /><span>{todoEditNotice(row.message.content)}</span>
         </div>;
-        return <ConversationMessage id={String(row.message.id)} role={row.message.role === 'user' ? 'user' : 'assistant'} content={row.message.content} username={username} continued={row.continued} actions={historyActions(row.message)} />;
+        const metadata = row.message.metadata && typeof row.message.metadata === 'object' ? row.message.metadata as Record<string, unknown> : {};
+        const memoryCitations = Array.isArray(metadata.memory_citations) ? metadata.memory_citations.filter((ref): ref is string => typeof ref === 'string') : [];
+        return <ConversationMessage id={String(row.message.id)} role={row.message.role === 'user' ? 'user' : 'assistant'} content={row.message.content} username={username} continued={row.continued} actions={historyActions(row.message)} memoryCitations={memoryCitations} />;
       case 'empty':
         return emptyState;
       case 'timeline':

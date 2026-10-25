@@ -226,7 +226,8 @@ class MemoryLibrary:
         for rel in cue_pages[:MAX_CUE_PAGES]:
             page = self.store.read(rel)
             current = [e for e in page.current if not is_expired(e, now)]
-            lines = [f"- {e.text}{_label(e.src, e.at)}" for e in current[-MAX_CUE_LINES:]]
+            lines = [f"- {e.text}{_label(e.src, e.at)}" + (f" [ref:{e.ref}]" if e.ref else "")
+                     for e in current[-MAX_CUE_LINES:]]
             if lines:
                 alias = f"（也叫 {'、'.join(page.aliases)}）" if page.aliases else ""
                 parts.append(f"## {page.title}{alias}\n" + "\n".join(lines))
@@ -238,7 +239,8 @@ class MemoryLibrary:
                 if h["score"] >= SEARCH_MIN_SCORE][:MAX_SEARCH_FACTS]
         if hits:
             parts.append("## 可能相关\n" + "\n".join(
-                f"- {h['text']}{_label(h['src'], h['at'])}" for h in hits))
+                f"- {h['text']}{_label(h['src'], h['at'])}"
+                + (f" [ref:{h['ref']}]" if h.get("ref") else "") for h in hits))
             source_paths.extend(str(hit.get("path") or "") for hit in hits if hit.get("path"))
             refs.extend(h.get("ref") for h in hits if h.get("ref"))
         resident_ids = {e.id for e in self._recent_episodes(now, 7, 6)}
@@ -251,6 +253,8 @@ class MemoryLibrary:
                 source_page = self.store.read(str(hit.get("path") or ""))
                 entry = next((item for item in source_page.current if item.id == hit["id"]), None)
                 line = f"- [{hit['at'][:10]}] {hit['text']} → {entry.outcome if entry else ''}"
+                if entry and entry.ref:
+                    line += f" [ref:{entry.ref}]"
                 if detailed and entry:
                     details = []
                     for label, values in (("决定", entry.decisions), ("文件", entry.files),
@@ -271,7 +275,8 @@ class MemoryLibrary:
                      if h["score"] > 0.05]
             if diary:
                 parts.append("## 以前的对话记录（原文节选）\n" + "\n".join(
-                    f"- [{h['at'][:16].replace('T', ' ')}] {' '.join(h['text'].split())[:240]}" for h in diary))
+                    f"- [{h['at'][:16].replace('T', ' ')}] {' '.join(h['text'].split())[:240]}"
+                    + (f" [ref:{h['ref']}]" if h.get("ref") else "") for h in diary))
                 refs.extend(h.get("ref") for h in diary if h.get("ref"))
                 source_paths.extend(str(hit.get("path") or "") for hit in diary if hit.get("path"))
         if not parts:

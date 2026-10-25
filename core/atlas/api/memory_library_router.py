@@ -146,6 +146,22 @@ async def search(
     return {"total": len(filtered), "items": items}
 
 
+@router.get("/citation")
+async def citation(ref: str = Query(..., min_length=1, max_length=200)) -> dict[str, Any]:
+    """Resolve an explicitly cited source ref to its current memory record."""
+    library = _lib()
+    await _run(library.ready)
+    for rel in library.store.pages():
+        for entry in library.store.read(rel).current:
+            if entry.ref == ref:
+                return {
+                    "ref": ref, "path": rel, "title": Path(rel).stem,
+                    "text": entry.text, "src": entry.src, "at": entry.at,
+                    "session": entry.session,
+                }
+    raise HTTPException(404, "这条记忆出处已不可用，可能已被修改或删除。")
+
+
 @router.get("/timeline")
 async def timeline(before: str = "", limit: int = 50, src: str = "") -> dict[str, Any]:
     library = _lib()

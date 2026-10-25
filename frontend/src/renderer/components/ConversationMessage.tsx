@@ -13,6 +13,7 @@ import ClipboardAction from './message-actions/ClipboardAction';
 import CodeBlock, { AccessibleContextMenu, CsvMarkdownTable, type ContextAction } from './message-actions/CodeBlock';
 import ImagePreview from './message-actions/ImagePreview';
 import { useAtlasStore } from '../store/useAtlasStore';
+import { api } from '../services/api';
 
 type CodeElementProps = { className?: string; children?: ReactNode; 'data-code-language'?: string };
 
@@ -245,7 +246,7 @@ function MarkdownBody({ content, streaming }: { content: string; streaming: bool
  * One chat turn. The user speaks in the UI face inside a bubble; Atlas answers in serif, unboxed.
  * memo 化：历史消息在流式输出期间属性不变，不随每次 delta 重渲染。
  */
-const ConversationMessage = memo(function ConversationMessage({ id, role, content, username, status, working = false, continued = false, note, actions, streaming = false }: {
+const ConversationMessage = memo(function ConversationMessage({ id, role, content, username, status, working = false, continued = false, note, actions, streaming = false, memoryCitations = [] }: {
   id?: string;
   role: 'user' | 'assistant'; content: string; username: string; status?: string; working?: boolean;
   /** Small label above a user bubble, e.g. that it was folded into a running task. */
@@ -256,6 +257,7 @@ const ConversationMessage = memo(function ConversationMessage({ id, role, conten
   continued?: boolean;
   /** 仍在生成中：Streamdown 流式模式（补全未闭合语法），落定后切 static。 */
   streaming?: boolean;
+  memoryCitations?: string[];
 }) {
   const [markdownSource, setMarkdownSource] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items?: ContextAction[] } | null>(null);
@@ -263,6 +265,33 @@ const ConversationMessage = memo(function ConversationMessage({ id, role, conten
   const contextTriggerRef = useRef<HTMLButtonElement>(null);
   const messageRootRef = useRef<HTMLDivElement>(null);
   const pendingSelectionRangeRef = useRef<Range | null>(null);
+  const [citationOpen, setCitationOpen] = useState(false);
+  const [citationDetails, setCitationDetails] = useState<Record<string, { path: string; text: string; ref: string }>>({});
+  const [citationError, setCitationError] = useState('');
+  const apiBaseUrl = useAtlasStore((state) => state.apiBaseUrl);
+  const loadCitations = async () => {
+    if (citationOpen) { setCitationOpen(false); return; }
+    setCitationOpen(true); setCitationError('');
+    try {
+      const rows = await Promise.all(memoryCitations.map(async (ref) => {
+        const row = await api<{ ref: string; path: string; text: string }>(apiBaseUrl, `/api/memlib/citation?ref=${encodeURIComponent(ref)}`);
+        return [ref, { ref, path: row.path, text: row.text }] as const;
+      }));
+      setCitationDetails(Object.fromEntries(rows));
+    } catch (reason) { setCitationError(reason instanceof Error ? reason.message : String(reason)); }
+  };
+  const citationControl = role === 'assistant' && !streaming && memoryCitations.length > 0 && <div className="mt-2">
+    <button type="button" aria-expanded={citationOpen} onClick={() => void loadCitations()} className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-fg-3 hover:bg-hover">记忆来源 · {memoryCitations.length}</button>
+    {citationOpen && <div className="mt-2 grid gap-2 rounded-lg border border-line bg-panel p-3 text-xs">
+      {citationError && <p role="alert" className="m-0 text-danger">来源读取失败：{citationError}</p>}
+      {memoryCitations.map((ref) => { const source = citationDetails[ref]; return <article key={ref} className="border-b border-line pb-2 last:border-0 last:pb-0">
+        {source ? <><b>{source.path}</b><p className="my-1 whitespace-pre-wrap text-fg-2">{source.text}</p><button type="button" className="text-brand underline" onClick={async () => {
+          try { const original = await api<{ messages?: Array<{ role?: string; text?: string; at?: string }> }>(apiBaseUrl, `/api/memlib/open?ref=${encodeURIComponent(ref)}&window=3`); const excerpt = (original.messages ?? []).map((message) => `${message.role ?? '消息'}：${message.text ?? ''}`).join('\n'); setCitationDetails((current) => ({ ...current, [ref]: { ...source, text: `${source.text}\n\n原对话出处：\n${excerpt || '原始对话片段暂不可用。'}` } })); }
+          catch (reason) { setCitationError(reason instanceof Error ? reason.message : String(reason)); }
+        }}>展开原对话出处</button></> : <span className="text-fg-3">正在读取来源 {ref}…</span>}
+      </article>; })}
+    </div>}
+  </div>;
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
   const showSelectionTooltip = (event: MouseEvent<HTMLElement>) => {
     if (event.target instanceof Element && event.target.closest('button, input, textarea, [role="menu"]')) return;
@@ -374,6 +403,7 @@ const ConversationMessage = memo(function ConversationMessage({ id, role, conten
   if (role === 'assistant' && continued) {
     return <div ref={messageRootRef} className="group my-3" data-message-id={id} data-message-role="assistant" onContextMenu={openContextMenu} onMouseUp={showSelectionTooltip}>
       {assistantContent}
+      {citationControl}
       {selectionActionTooltip}
       {content && <div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         {assistantActions}
@@ -410,6 +440,7 @@ const ConversationMessage = memo(function ConversationMessage({ id, role, conten
         {status && <span>{status}</span>}
       </div>}
       {assistantContent}
+      {citationControl}
       {selectionActionTooltip}
       {(content || actions) && <div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         {assistantActions}{actions}

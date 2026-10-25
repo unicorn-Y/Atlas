@@ -539,6 +539,29 @@ class SessionMessagesMixin:
             return True
         return self._execute_write(_do)
 
+    def update_message_content_and_metadata(self, session_id: str, message_uid: str, *,
+                                            content: str, metadata_patch: dict[str, Any]) -> bool:
+        """Update presentation metadata and sanitized display text on one active message UID."""
+        if not session_id or not message_uid or not isinstance(metadata_patch, dict):
+            return False
+        def _do(conn):
+            row = conn.execute(
+                "SELECT id, display_metadata FROM messages WHERE session_id = ? "
+                "AND (message_uid = ? OR CAST(id AS TEXT) = ?) AND role = 'assistant' "
+                "AND active = 1 ORDER BY id DESC LIMIT 1",
+                (session_id, message_uid, message_uid),
+            ).fetchone()
+            if row is None:
+                return False
+            metadata = self._decode_display_metadata(row[1]) or {}
+            metadata.update(metadata_patch)
+            conn.execute(
+                "UPDATE messages SET content = ?, display_metadata = ? WHERE id = ?",
+                (self._encode_content(content), self._encode_display_metadata(metadata), row[0]),
+            )
+            return True
+        return self._execute_write(_do)
+
     def _reaction_list(self, meta: Optional[dict[str, Any]]) -> list[dict[str, Any]]:
         """Well-formed (dict) reactions stored under ``REACTIONS_METADATA_KEY``."""
         reactions = (meta or {}).get(self.REACTIONS_METADATA_KEY)
