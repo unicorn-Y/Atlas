@@ -20,6 +20,7 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [syncConflicts, setSyncConflicts] = useState<string[]>([]);
   const [prWizard, setPrWizard] = useState(false);
   const [prDraft, setPrDraft] = useState({ message: '', title: '', body: '', branch: '' });
 
@@ -154,7 +155,7 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
 
   const syncBase = async (strategy: 'merge' | 'rebase') => {
     if (!conversationId || busy) return;
-    setBusy('sync'); setError(''); setNotice('');
+    setBusy('sync'); setError(''); setNotice(''); setSyncConflicts([]);
     try {
       const result = await api<{ base: string; commit: string }>(apiBaseUrl,
         `/api/conversations/${encodeURIComponent(conversationId)}/worktree/sync`,
@@ -162,6 +163,10 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
       setNotice(`已同步 ${result.base}（${result.commit}）`); await load(); onChanged?.();
     } catch (exc) {
       const detail = exc instanceof Error ? exc.message : String(exc);
+      try {
+        const payload = JSON.parse(detail.slice(detail.indexOf('：') + 1)) as { conflicts?: unknown };
+        if (Array.isArray(payload.conflicts)) setSyncConflicts(payload.conflicts.filter((item): item is string => typeof item === 'string'));
+      } catch { /* plain Git error */ }
       setError(`${detail}。若发生冲突，请在工作区解决冲突后继续，或中止同步。`);
     } finally { setBusy(''); }
   };
@@ -170,7 +175,7 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
     setBusy(actionName); setError(''); setNotice('');
     try {
       await api(apiBaseUrl, `/api/conversations/${encodeURIComponent(conversationId)}/worktree/sync/${actionName}`, { method: 'POST' });
-      setNotice(actionName === 'continue' ? '同步已继续完成' : '同步已中止'); await load(); onChanged?.();
+      setNotice(actionName === 'continue' ? '同步已继续完成' : '同步已中止'); setSyncConflicts([]); await load(); onChanged?.();
     } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
     finally { setBusy(''); }
   };
@@ -188,6 +193,7 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
     </div>
 
     {error && <div role="alert" className="rounded-lg bg-danger-soft px-2.5 py-2 text-[11.5px] text-danger"><strong className="block font-semibold">Git 操作失败</strong><span className="block break-words">{error}</span></div>}
+    {!!syncConflicts.length && <div role="status" className="rounded-lg border border-danger/25 bg-danger-soft px-2.5 py-2 text-[11px] text-danger"><strong>冲突文件 · {syncConflicts.length}</strong><ul className="mb-0 mt-1 grid gap-0.5 pl-4">{syncConflicts.map((path) => <li key={path} className="break-all">{path}</li>)}</ul></div>}
     {notice && <p role="status" className="m-0 rounded-lg bg-sunken px-2.5 py-1.5 text-[11.5px] text-fg-2">{notice}</p>}
     {!workspace && loading && <p className="m-0 text-[11.5px] text-fg-3">正在读取工作区…</p>}
     {!workspace && !loading && !error && <p className="m-0 text-[11.5px] text-fg-3">没有可用的 Git 工作区。</p>}

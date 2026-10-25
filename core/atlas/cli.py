@@ -124,6 +124,13 @@ def lsp_diagnostics_command(path: Path) -> None:
         raise click.ClickException(str(result.get("reason", "LSP diagnostics unavailable")))
 
 
+@lsp_group.command("start")
+@click.argument("path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+def lsp_start_command(path: Path) -> None:
+    """Start the configured server for PATH and wait for its first fresh diagnostic result."""
+    lsp_diagnostics_command(path)
+
+
 @lsp_group.command("stop")
 def lsp_stop_command() -> None:
     """Stop all local language-server processes owned by this Atlas process."""
