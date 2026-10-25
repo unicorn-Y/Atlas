@@ -1174,6 +1174,40 @@ ipcMain.handle('shell:open-external', async (event, target?: unknown) => {
   return true;
 });
 
+ipcMain.handle('speech:synthesize', (event, rawText: unknown, rawVoice: unknown, rawRate: unknown) => {
+  assertTrustedAppSender(event);
+  if (process.platform !== 'win32') throw new Error('可路由的本机语音输出目前只支持 Windows System.Speech。');
+  if (typeof rawText !== 'string' || !rawText.trim() || rawText.length > 6000
+      || typeof rawVoice !== 'string' || rawVoice.length > 256
+      || typeof rawRate !== 'number' || !Number.isFinite(rawRate) || rawRate < 0.5 || rawRate > 2) {
+    throw new Error('语音文本、音色或语速参数无效。');
+  }
+  const temporaryWave = path.join(app.getPath('temp'), `atlas-speech-${randomUUID()}.wav`);
+  const payload = Buffer.from(JSON.stringify({ text: rawText, voice: rawVoice, rate: rawRate, outputPath: temporaryWave }), 'utf8').toString('base64');
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    'Add-Type -AssemblyName System.Speech',
+    `$data = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${payload}')) | ConvertFrom-Json`,
+    "$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer",
+    'try {',
+    '  if ($data.voice) { if (-not ($synth.GetInstalledVoices() | Where-Object { $_.VoiceInfo.Name -eq $data.voice })) { throw \'Selected system voice is unavailable\' }; $synth.SelectVoice($data.voice) }',
+    '  $synth.Rate = [Math]::Max(-10, [Math]::Min(10, [int][Math]::Round(($data.rate - 1) * 10)))',
+    '  $synth.SetOutputToWaveFile([string]$data.outputPath)',
+    '  $synth.Speak([string]$data.text)',
+    '  [Convert]::ToBase64String([IO.File]::ReadAllBytes([string]$data.outputPath))',
+    '} finally { $synth.Dispose(); Remove-Item -LiteralPath ([string]$data.outputPath) -Force -ErrorAction SilentlyContinue }',
+  ].join('\n');
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  const result = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
+    windowsHide: true, encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024,
+  });
+  if (result.error || result.status !== 0 || !result.stdout?.trim()) {
+    rmSync(temporaryWave, { force: true });
+    throw new Error(`Windows 语音合成失败：${result.error?.message ?? (result.stderr || `PowerShell exit ${result.status}`).trim().slice(-500)}`);
+  }
+  return result.stdout.trim();
+});
+
 ipcMain.handle('editor:open-message', async (event, rawText?: unknown) => {
   if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame) {
     throw new Error('External editor can only be opened from the Atlas main window');

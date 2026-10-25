@@ -12,6 +12,8 @@ import { latestTodos, usageSummary } from './components/runInsights';
 import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
 import KeymapDialog from './components/KeymapDialog';
 import { resolveMessageSkillReferences } from './components/skillMentions';
+import { cancelRoutedSpeech, speakRouted } from './services/speechPlayback';
+import { getSelectedInputStream } from './services/audioDevices';
 const MessageThread = lazy(() => import('./components/MessageThread'));
 const TodoPanel = lazy(() => import('./components/TodoPanel'));
 const ProgressCapsule = lazy(() => import('./components/ProgressCapsule'));
@@ -407,10 +409,7 @@ export default function App() {
     return () => window.speechSynthesis.removeEventListener('voiceschanged', refresh);
   }, []);
   const speakText = (text: string) => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = speechRate;
-    utterance.voice = speechVoices.find((voice) => voice.name === speechVoice) ?? null;
-    window.speechSynthesis.speak(utterance);
+    void speakRouted(text, { voice: speechVoice, rate: speechRate, onError: setToast });
   };
 
   const activeConversation = store.conversations.find((item) => item.id === store.activeConversationId);
@@ -680,7 +679,7 @@ export default function App() {
         speechBufferRef.current = '';
       } else if (['run.failed', 'run.cancelled'].includes(event.type)) {
         speechBufferRef.current = '';
-        window.speechSynthesis.cancel();
+        cancelRoutedSpeech();
       }
     }
   }, [activeEvents, activeRun, voiceOutput, voiceOpen, speechRate, speechVoice, speechVoices]);
@@ -763,7 +762,7 @@ export default function App() {
 
   const startVoice = async () => {
     if (!navigator.mediaDevices?.getUserMedia) { setToast('当前设备没有麦克风访问能力'); return; }
-    window.speechSynthesis?.cancel();
+    cancelRoutedSpeech();
     setVoiceOpen(true);
   };
 
@@ -981,8 +980,9 @@ export default function App() {
     if (!navigator.mediaDevices?.getUserMedia) { setToast('当前环境无法访问麦克风'); return; }
     try {
       setToast('正在连接本地语音识别；首次使用会自动下载模型并显示进度');
-      const inputDevice = localStorage.getItem('atlas.audio.input-device') || '';
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { ...(inputDevice ? { deviceId: { exact: inputDevice } } : {}), channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+      const selectedInput = await getSelectedInputStream({ channelCount: 1, echoCancellation: true, noiseSuppression: true });
+      const stream = selectedInput.stream;
+      if (selectedInput.usedFallback) setToast('所选麦克风已断开，已回落到系统默认输入设备。');
       const context = new AudioContext();
       const source = context.createMediaStreamSource(stream);
       const processor = context.createScriptProcessor(4096, 1, 1);
@@ -994,7 +994,7 @@ export default function App() {
       const render = (partial = '') => setInput(`${session.prefix}${session.prefix ? ' ' : ''}${session.finalText}${partial}`);
       socket.onmessage = (event) => {
         try {
-          const message = JSON.parse(String(event.data)) as { type?: string; text?: string; detail?: string };
+        const message = JSON.parse(String(event.data)) as { type?: string; text?: string; detail?: string; progress?: number };
           if (message.type === 'final' && message.text) { session.finalText += `${session.finalText ? ' ' : ''}${message.text}`; render(); }
           else if (message.type === 'partial') render(message.text || '');
           else if (message.type === 'preparing') setToast(message.detail || '正在准备本地语音模型…');
@@ -1051,8 +1051,9 @@ export default function App() {
       starting = true;
       try {
         if (!active) return;
-        const device = localStorage.getItem('atlas.audio.input-device') || '';
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: { ...(device ? { deviceId: { exact: device } } : {}), channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+        const selectedInput = await getSelectedInputStream({ channelCount: 1, echoCancellation: true, noiseSuppression: true });
+        const stream = selectedInput.stream;
+        if (selectedInput.usedFallback) setToast('所选麦克风已断开，唤醒监听已回落到系统默认输入设备。');
         const context = new AudioContext(); const source = context.createMediaStreamSource(stream); const processor = context.createScriptProcessor(4096, 1, 1);
         const url = new URL('/ws/asr', store.apiBaseUrl); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
         const socket = new WebSocket(url); const session = { socket, stream, context, processor }; wakeSessionRef.current = session;
@@ -1085,14 +1086,14 @@ export default function App() {
   const readLastReply = () => {
     const lastReply = [...messages].reverse().find((message) => message.role === 'assistant')?.content || (runDone ? reply : '');
     if (!lastReply || !('speechSynthesis' in window)) { setToast('还没有可以朗读的回复'); return; }
-    window.speechSynthesis.cancel();
+    cancelRoutedSpeech();
     speakText(lastReply);
   };
   const toggleVoiceOutput = () => {
     const enabled = !voiceOutput;
     setVoiceOutput(enabled);
     setPref('voice-output', String(enabled));
-    if (!enabled) { speechBufferRef.current = ''; window.speechSynthesis?.cancel(); }
+    if (!enabled) { speechBufferRef.current = ''; cancelRoutedSpeech(); }
     setToast(enabled ? '新回复会自动朗读' : '已关闭自动朗读');
   };
   const chooseTheme = (next: Theme) => { clearCustomTheme(); setTheme(next); setPref('appearance', next); };
@@ -1330,7 +1331,7 @@ export default function App() {
       } else localStorage.removeItem(key);
     } catch { /* corrupt screenshot cache is ignored */ }
   }, [store.activeConversationId]);
-  useEffect(() => () => { dictationRef.current?.stream.getTracks().forEach((track) => track.stop()); void dictationRef.current?.context.close(); window.speechSynthesis?.cancel(); }, []);
+  useEffect(() => () => { dictationRef.current?.stream.getTracks().forEach((track) => track.stop()); void dictationRef.current?.context.close(); cancelRoutedSpeech(); }, []);
 
   const paletteItems: PaletteItem[] = [
     { id: 'new', group: '操作', label: '新任务', hint: 'Ctrl N', icon: <Plus />, run: newTask },
@@ -2279,7 +2280,7 @@ export default function App() {
                 <div className="grid gap-1.5 border-t border-line px-2.5 py-2 text-[11.5px] text-fg-3" onPointerDown={(event) => event.stopPropagation()}>
                   <label className="flex items-center justify-between gap-3">音色<select aria-label="朗读音色" value={speechVoice} onChange={(event) => { setSpeechVoice(event.target.value); setPref('speech-voice', event.target.value); }} className="max-w-[170px] rounded-md border border-line bg-surface px-1.5 py-1 text-fg">{speechVoices.filter((voice) => voice.lang.toLowerCase().startsWith('zh')).map((voice) => <option key={voice.name} value={voice.name}>{voice.name}</option>)}</select></label>
                   <label className="flex items-center justify-between gap-3">语速<select aria-label="朗读语速" value={speechRate} onChange={(event) => { const rate = Number(event.target.value); setSpeechRate(rate); setPref('speech-rate', String(rate)); }} className="rounded-md border border-line bg-surface px-1.5 py-1 text-fg">{[0.8, 1, 1.2, 1.5].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}</select></label>
-                  <button type="button" onClick={() => { window.speechSynthesis.cancel(); speakText('你好，我是 Atlas。当前音色和语速可以在这里试听。'); }} className="justify-self-end rounded-md px-2 py-1 text-[11.5px] text-fg-2 hover:bg-hover">试听</button>
+                  <button type="button" onClick={() => { cancelRoutedSpeech(); speakText('你好，我是 Atlas。当前音色和语速可以在这里试听。'); }} className="justify-self-end rounded-md px-2 py-1 text-[11.5px] text-fg-2 hover:bg-hover">试听</button>
                 </div>
               </MenuContent>
             </Menu>
@@ -2445,7 +2446,7 @@ export default function App() {
             speechVoice={speechVoice} speechVoices={speechVoices} speechRate={speechRate}
             onSpeechVoiceChange={(value) => { setSpeechVoice(value); setPref('speech-voice', value); }}
             onSpeechRateChange={(value) => { setSpeechRate(value); setPref('speech-rate', String(value)); }}
-            onSpeechPreview={() => { window.speechSynthesis.cancel(); speakText('你好，我是 Atlas。当前音色和语速可以在这里试听。'); }} />
+            onSpeechPreview={() => { cancelRoutedSpeech(); speakText('你好，我是 Atlas。当前音色和语速可以在这里试听。'); }} />
           <div className="set-list">
             <div className="set-row"><div>置顶任务摘要<small>在长对话顶部显示首条目标和最近进度</small></div><button className="switch" role="switch" aria-label="置顶任务摘要" aria-checked={summaryEnabled} onClick={() => { const next = !summaryEnabled; setSummaryEnabled(next); setPref('pinned-summary', String(next)); }} /></div>
             <div className="set-row"><div>收起侧边栏<small>只显示图标，给内容更多空间</small></div><button className="switch" role="switch" aria-label="收起侧边栏" aria-checked={sideMini} onClick={toggleMini} /></div>

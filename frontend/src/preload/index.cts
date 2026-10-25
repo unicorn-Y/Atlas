@@ -23,6 +23,7 @@ const desktopApi: AtlasDesktopApi = {
   selectDirectory: (defaultPath) => ipcRenderer.invoke('dialog:open-directory', defaultPath) as Promise<string | null>,
   openPath: (target) => ipcRenderer.invoke('shell:open-path', target) as Promise<string>,
   openExternal: (target) => ipcRenderer.invoke('shell:open-external', target) as Promise<boolean>,
+  synthesizeSpeech: (text, voice, rate) => ipcRenderer.invoke('speech:synthesize', text, voice, rate) as Promise<string>,
   openMessageEditor: (text) => ipcRenderer.invoke('editor:open-message', text) as Promise<string | null>,
   saveScreenRecording: (dataBase64, fileName) => ipcRenderer.invoke('screen-recording:save', dataBase64, fileName) as Promise<string | null>,
   deleteScreenRecording: (filePath) => ipcRenderer.invoke('screen-recording:delete', filePath) as Promise<boolean>,

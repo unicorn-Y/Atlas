@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Captions, MessageSquareText, MicOff, PhoneOff, Hand, RotateCcw } from 'lucide-react';
+import { cancelRoutedSpeech, speakRouted } from '../services/speechPlayback';
+import { getSelectedInputStream } from '../services/audioDevices';
 
 type Phase = 'listening' | 'thinking' | 'speaking' | 'paused' | 'unavailable';
 
@@ -40,6 +42,7 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
   const [seconds, setSeconds] = useState(0);
   const orbRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<{ socket: WebSocket; stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode; silent: GainNode } | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const levelRef = useRef(0);
   const phaseRef = useRef<Phase>('listening');
   const mutedRef = useRef(false);
@@ -60,11 +63,18 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
     void (async () => {
       try {
         setProblem('首次使用会自动下载本地语音模型，请保持 Atlas 在线。');
-        const inputDevice = localStorage.getItem('atlas.audio.input-device') || '';
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: { ...(inputDevice ? { deviceId: { exact: inputDevice } } : {}), channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        let usedFallback = false;
+        let stream: MediaStream;
+        try {
+          const input = await getSelectedInputStream({ channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true });
+          stream = input.stream; usedFallback = input.usedFallback;
+        } catch (cause) {
+          throw cause;
+        }
         const context = new AudioContext();
         const source = context.createMediaStreamSource(stream);
         const processor = context.createScriptProcessor(4096, 1, 1);
+        const analyser = context.createAnalyser(); analyser.fftSize = 256; source.connect(analyser); analyserRef.current = analyser;
         const silent = context.createGain(); silent.gain.value = 0;
         const socketUrl = new URL('/ws/asr', apiBaseUrl); socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:';
         const socket = new WebSocket(socketUrl);
@@ -81,7 +91,7 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
             if (message.type === 'final' && message.text?.trim() && !utteranceAcceptedRef.current && (phaseRef.current === 'listening' || phaseRef.current === 'speaking')) {
               utteranceAcceptedRef.current = true;
               setHeard(message.text.trim());
-              if (phaseRef.current === 'speaking') window.speechSynthesis?.cancel();
+              if (phaseRef.current === 'speaking') { cancelRoutedSpeech(); pendingRef.current = 0; }
               pendingRef.current = 0;
               staleRunRef.current = trackedRunRef.current ?? runIdRef.current; trackedRunRef.current = null;
               setSaid(''); setPhase('thinking'); onSendRef.current(message.text.trim());
@@ -124,7 +134,7 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
           const voiced = Math.sqrt(power / input.length) > 0.018;
           speechFramesRef.current = voiced ? speechFramesRef.current + 1 : 0;
           if (speechFramesRef.current >= 3 && phaseRef.current === 'speaking') {
-            window.speechSynthesis?.cancel(); pendingRef.current = 0; utteranceAcceptedRef.current = false;
+            cancelRoutedSpeech(); pendingRef.current = 0; utteranceAcceptedRef.current = false;
             staleRunRef.current = trackedRunRef.current ?? runIdRef.current; trackedRunRef.current = null;
             setSaid(''); setPhase('listening');
           } else if (speechFramesRef.current >= 3 && phaseRef.current === 'listening') utteranceAcceptedRef.current = false;
@@ -134,7 +144,7 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
           socket.send(pcm.buffer);
         };
         source.connect(processor); processor.connect(silent); silent.connect(context.destination);
-        setProblem(''); setPhase('listening');
+        setProblem(usedFallback ? '所选麦克风已断开，已回落到系统默认输入设备。' : ''); setPhase('listening');
       } catch (cause) {
         const session = recognitionRef.current; recognitionRef.current = null;
         session?.processor.disconnect(); session?.silent.disconnect(); session?.stream.getTracks().forEach((track) => track.stop()); void session?.context.close();
@@ -153,18 +163,13 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
   onSendRef.current = onSend;
 
   const speak = useCallback((text: string) => {
-    if (!('speechSynthesis' in window) || !text.trim()) return;
-    const utterance = new SpeechSynthesisUtterance(text.trim());
-    utterance.lang = 'zh-CN';
-    utterance.voice = window.speechSynthesis.getVoices().find((voice) => voice.name === speechVoice) ?? null;
+    if (!text.trim()) return;
     pendingRef.current += 1;
     const finish = () => {
       pendingRef.current = Math.max(0, pendingRef.current - 1);
       if (pendingRef.current === 0 && doneRef.current && phaseRef.current === 'speaking') setPhase('listening');
     };
-    utterance.onend = finish;
-    utterance.onerror = finish;
-    window.speechSynthesis.speak(utterance);
+    void speakRouted(text.trim(), { lang: 'zh-CN', voice: speechVoice, onError: setProblem }).finally(finish);
   }, [listen, speechVoice]);
 
   // Stream the assistant reply into speech sentence by sentence.
@@ -193,19 +198,10 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
     listen();
     const timer = window.setInterval(() => setSeconds((value) => value + 1), 1000);
     let frame = 0;
-    let stream: MediaStream | null = null;
-    let context: AudioContext | null = null;
-    let analyser: AnalyserNode | null = null;
     const samples = new Uint8Array(256);
-    navigator.mediaDevices?.getUserMedia({ audio: true }).then((media) => {
-      stream = media;
-      context = new AudioContext();
-      analyser = context.createAnalyser();
-      analyser.fftSize = 256;
-      context.createMediaStreamSource(media).connect(analyser);
-    }).catch(() => { /* orb falls back to synthetic motion */ });
     const tick = (time: number) => {
       let target = 0;
+      const analyser = analyserRef.current;
       if (phaseRef.current === 'listening' && analyser && !mutedRef.current) {
         analyser.getByteTimeDomainData(samples);
         let sum = 0;
@@ -230,9 +226,8 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
       const recognition = recognitionRef.current;
       recognitionRef.current = null;
       if (recognition) { try { recognition.socket.send(JSON.stringify({ type: 'end' })); } catch { /* socket closed */ } recognition.processor.disconnect(); recognition.silent.disconnect(); recognition.stream.getTracks().forEach((track) => track.stop()); void recognition.context.close(); }
-      window.speechSynthesis?.cancel();
-      stream?.getTracks().forEach((track) => track.stop());
-      void (context as AudioContext | null)?.close();
+      cancelRoutedSpeech();
+      analyserRef.current = null;
     };
   }, []);
 
@@ -253,7 +248,7 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
     staleRunRef.current = trackedRunRef.current ?? runIdRef.current;
     trackedRunRef.current = null;
     utteranceAcceptedRef.current = false;
-    window.speechSynthesis?.cancel();
+    cancelRoutedSpeech();
     setHeard('');
     setSaid(''); setPhase('listening');
     listen();

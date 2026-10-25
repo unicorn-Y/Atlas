@@ -16,9 +16,17 @@ export default function AudioDevicesPanel({ onToast }: { onToast: (message: stri
       const next = await navigator.mediaDevices.enumerateDevices();
       const audio = next.filter((item) => item.kind === 'audioinput' || item.kind === 'audiooutput').map((item) => ({ deviceId: item.deviceId, label: item.label || (item.kind === 'audioinput' ? '未命名麦克风' : '未命名扬声器'), kind: item.kind as Device['kind'] }));
       setDevices(audio); setError(audio.some((item) => item.kind === 'audioinput') ? '' : '没有检测到麦克风。');
+      const inputPresent = !input || audio.some((item) => item.kind === 'audioinput' && item.deviceId === input);
+      const outputPresent = !output || audio.some((item) => item.kind === 'audiooutput' && item.deviceId === output);
+      if (!inputPresent) { setInput(''); localStorage.removeItem(INPUT_KEY); onToast('所选麦克风已断开，已回落到系统默认输入设备。'); }
+      if (!outputPresent) { setOutput(''); localStorage.removeItem(OUTPUT_KEY); onToast('所选扬声器已断开，已回落到系统默认输出设备。'); }
     } catch (cause) { setError(cause instanceof Error ? cause.message : '无法读取音频设备。'); }
   };
-  useEffect(() => { void refresh(); navigator.mediaDevices?.addEventListener?.('devicechange', refresh); return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refresh); }, []);
+  useEffect(() => {
+    const outputFallback = () => { setOutput(''); onToast('所选扬声器不可用，已回落到系统默认输出设备。'); };
+    void refresh(); navigator.mediaDevices?.addEventListener?.('devicechange', refresh); window.addEventListener('atlas-audio-output-fallback', outputFallback);
+    return () => { navigator.mediaDevices?.removeEventListener?.('devicechange', refresh); window.removeEventListener('atlas-audio-output-fallback', outputFallback); };
+  }, [input, output]);
   const testInput = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: input ? { deviceId: { exact: input } } : true });
@@ -32,11 +40,12 @@ export default function AudioDevicesPanel({ onToast }: { onToast: (message: stri
     try {
       const context = new AudioContext();
       const routable = context as AudioContext & { setSinkId?: (id: string) => Promise<void> };
+      if (output && !routable.setSinkId) { await context.close(); onToast('当前 Chromium 不支持指定输出设备，测试音未播放。请切换为系统默认输出。'); return; }
       if (output && routable.setSinkId) await routable.setSinkId(output);
       const oscillator = context.createOscillator(); const gain = context.createGain();
       oscillator.frequency.value = 660; gain.gain.value = 0.12; oscillator.connect(gain); gain.connect(context.destination);
       oscillator.start(); oscillator.stop(context.currentTime + 0.25); oscillator.onended = () => { void context.close(); };
-      onToast(output && !routable.setSinkId ? '当前运行环境不支持指定输出设备，已使用系统默认扬声器测试。' : '已向所选输出设备播放测试音。');
+      onToast(output ? '已向所选输出设备播放测试音。' : '已向系统默认输出播放测试音。');
     } catch (cause) { onToast(`扬声器测试失败：${cause instanceof Error ? cause.message : String(cause)}`); }
   };
   return <section className="grid max-w-[760px] gap-3 rounded-xl border border-line p-4">

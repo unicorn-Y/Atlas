@@ -70,6 +70,8 @@ export interface AtlasDesktopApi {
   openPath(path: string): Promise<'opened' | 'revealed' | string>;
   /** Open allow-listed browser/settings URLs outside the embedded renderer. */
   openExternal?(url: string): Promise<boolean>;
+  /** Produce local WAV bytes using the installed Windows SAPI voice for routable playback. */
+  synthesizeSpeech?(text: string, voice: string, rate: number): Promise<string>;
   openMessageEditor?(text: string): Promise<string | null>;
   saveScreenRecording?(dataBase64: string, fileName: string): Promise<string | null>;
   deleteScreenRecording?(path: string): Promise<boolean>;
