@@ -128,17 +128,17 @@ type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hook
 type MemoryMarkerDraft = { text: string; path: string; session?: string; ref?: string };
 
 const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
-  ['models', '模型与服务', SlidersHorizontal, 'provider 模型 model API key 密钥 reasoning 推理 连接'],
+  ['models', '模型与服务', SlidersHorizontal, 'provider 模型 model 默认模型 主模型备用链 fallback API key 密钥 reasoning 推理 连接 base URL endpoint 服务商提供商 API 地址 用户名 顾问子代理模型 subagent status bar 状态栏'],
   ['secrets', '密钥库', Lock, 'secrets 密钥 keyring credential handle token'],
   ['teach', '桌面教学', Monitor, 'teach 录制 桌面 操作 教学 技能 skill'],
   ['mainConfig', '主体配置', FileCog, 'atlas.toml config 配置 文件 user-settings 界面设置 当前生效 备份 恢复 编辑'],
   ['expert', '专家模式', Zap, 'expert 专家 模式 切换 覆盖 overlay 额外配置 附加说明 提示词 技能 插件 工具 MCP 同步 仓库 安装 卸载'],
   ['network', '模型网络', Server, 'proxy 代理 CA certificate certificate authority 网络 HTTPS TLS'],
-  ['security', '工作区安全', ShieldCheck, 'workspace trust 信任 sandbox 沙箱 network permission 权限 rules AGENTS CLAUDE'],
-  ['channels', 'Gateway 与渠道账号', Radio, 'gateway channel 渠道 账号'],
+  ['security', '工作区安全', ShieldCheck, 'workspace trust 信任 sandbox 沙箱 network permission 权限 rules AGENTS CLAUDE 执行权限 文件写入 网络访问 命令 Docker 容器 隔离会话 当前会话模型 凭据'],
+  ['channels', 'Gateway 与渠道账号', Radio, 'gateway channel 渠道 账号 bot token access policy dm group pairing allowlist 发送者 策略 配对 私聊 群聊 允许名单'],
   ['localModels', '本地模型', Cpu, 'local 本地模型'],
   ['advanced', '高级', Settings, 'compression 压缩 高级'],
-  ['u4', '会话与顾问', UserCog, '顾问 advisor 会话预设 preset ChatGPT 导入 手机推送'],
+  ['u4', '会话与顾问', UserCog, '顾问 advisor 顾问模型 默认顾问模型 会话预设 preset 预设 工作目录 模型 推理强度 技能 环境变量 ChatGPT 导入 历史 手机推送 mobile push channel chat id completion approval failure'],
   ['usage', '用量', Gauge, 'usage token cost 费用 预算 个人资料 profile'],
   ['limits', '运行限制', Gauge, 'run limits max turns 轮数 token budget cost limit 费用上限'],
   ['profiles', '角色', UserCog, 'profile 角色 agent'],
@@ -146,9 +146,9 @@ const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['commands', '自定义命令', BookMarked, 'slash command 命令 prompt 参数'],
   ['tools', '脚本工具', Wrench, 'script tool 工具'],
   ['telegram', '手机远程', Smartphone, 'telegram remote 手机 远程'],
-  ['devices', '设备', Monitor, 'device remote pairing 设备 配对'],
-  ['shortcuts', '快捷键', Keyboard, 'shortcut keybinding 快捷键 按键'],
-  ['appearance', '外观与语音', Sun, 'appearance theme font voice 外观 主题 字体 语音'],
+  ['devices', '设备', Monitor, 'device remote pairing 设备 配对 二维码 扫码 注册 可信 在线 凭据 token 轮换 撤销 DM 私信 审批 指令 结果'],
+  ['shortcuts', '快捷键', Keyboard, 'shortcut keybinding 快捷键 按键 全局快捷键 语音快捷键 截图 按住说话'],
+  ['appearance', '外观、字号、语音与通知', Sun, 'appearance theme font font size typography notification desktop toast quiet hours sound voice language UI language interface size font family monospace Vim theme color dark light system screenshot notifications sound focus mode quiet hours quiet start quiet end notification permission pinned summary sidebar read aloud voice rate microphone wake word auto send 外观 主题 字体 字号 界面语言 界面字号 界面字体 等宽字体 Vim 配色 深色 浅色 跟随系统 通知 桌面通知 系统提示音 专注模式 静默时段 静默开始时间 静默结束时间 权限 置顶任务摘要 侧边栏 自动朗读 语速 麦克风 唤醒词 自动发送'],
   ['plugins', '插件与导入', Puzzle, 'plugin import 插件 导入 Claude Codex'],
   ['skills', 'Skills', BookMarked, 'skill 技能 安全发现'],
   ['mcp', 'MCP 服务', Server, 'mcp server tool 服务'],
@@ -272,6 +272,44 @@ export default function App() {
   }, []);
   const [sheet, setSheet] = useState<SheetPane | null>(null);
   const [settingsQuery, setSettingsQuery] = useState('');
+  const [settingControlMatches, setSettingControlMatches] = useState<Array<{ id: string; label: string; pane: SheetPane }>>([]);
+  const settingsContentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const query = settingsQuery.trim().toLocaleLowerCase();
+    if (!query || !sheet) { setSettingControlMatches([]); return; }
+    setSettingControlMatches([]);
+    let timer = 0;
+    const scan = () => {
+      const root = settingsContentRef.current;
+      if (!root) return;
+      const controls = Array.from(root.querySelectorAll<HTMLElement>('input:not([type="hidden"]), select, textarea, button, [role="switch"], [role="checkbox"]'));
+      const matches: Array<{ id: string; label: string; pane: SheetPane }> = [];
+      controls.forEach((control, index) => {
+        const row = control.closest<HTMLElement>('[data-setting-row]');
+        const label = (control.getAttribute('aria-label') || row?.dataset.settingLabel || control.closest('label')?.textContent || control.getAttribute('placeholder') || control.getAttribute('title') || control.textContent || control.getAttribute('name') || control.id || '').replace(/\s+/g, ' ').trim();
+        const terms = `${label} ${row?.dataset.settingTerms ?? ''} ${control.getAttribute('data-search-terms') ?? ''}`.toLocaleLowerCase();
+        if (!label || !terms.includes(query)) return;
+        const id = `${sheet}-${index}`;
+        control.dataset.settingSearchId = id;
+        control.dataset.settingSearchLabel = label;
+        matches.push({ id, label: label.slice(0, 140), pane: sheet });
+      });
+      setSettingControlMatches(matches.slice(0, 20));
+      const target = matches.length ? root.querySelector<HTMLElement>(`[data-setting-search-id="${CSS.escape(matches[0].id)}"]`) : null;
+      if (target) {
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        const prior = target.style.boxShadow;
+        target.style.boxShadow = '0 0 0 3px var(--brand), 0 0 0 6px color-mix(in srgb, var(--brand) 20%, transparent)';
+        window.setTimeout(() => { if (target.style.boxShadow.includes('var(--brand)')) target.style.boxShadow = prior; }, 1400);
+      }
+    };
+    const scheduleScan = () => { window.clearTimeout(timer); timer = window.setTimeout(scan, 120); };
+    const root = settingsContentRef.current;
+    const observer = root ? new MutationObserver(scheduleScan) : null;
+    observer?.observe(root!, { childList: true, characterData: true, subtree: true });
+    scheduleScan();
+    return () => { window.clearTimeout(timer); observer?.disconnect(); };
+  }, [sheet, settingsQuery]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [resumePickerOpen, setResumePickerOpen] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
@@ -2555,7 +2593,7 @@ export default function App() {
     </div>
 
     <Suspense fallback={<div aria-label="正在加载设置" className="fixed inset-0 z-50 grid place-items-center bg-black/20 text-[12px] text-fg-3" aria-busy="true">正在加载设置…</div>}>
-    <Dialog open={Boolean(sheet)} onOpenChange={(open) => { if (!open) setSheet(null); }} label="设置"
+    <Dialog open={Boolean(sheet)} onOpenChange={(open) => { if (!open) { setSheet(null); setSettingsQuery(''); } }} label="设置"
       className="grid h-[min(720px,calc(100vh-48px))] w-[min(980px,calc(100vw-32px))] grid-cols-[210px_minmax(0,1fr)]">
       <nav aria-label="设置分类" className="overflow-y-auto bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
         <h2 className="m-0 px-2.5 pb-3 text-[18px] font-semibold text-heading">{t('设置', readLocale())}</h2>
@@ -2564,17 +2602,25 @@ export default function App() {
           <input aria-label="搜索设置" value={settingsQuery} onChange={(event) => setSettingsQuery(event.target.value)} placeholder="搜索设置项…" className="min-w-0 flex-1 bg-transparent text-[12px] text-fg outline-none placeholder:text-fg-3" />
           {settingsQuery && <button type="button" aria-label="清除设置搜索" onClick={() => setSettingsQuery('')} className="text-[11px] text-fg-3 hover:text-fg">清除</button>}
         </label>
-        {SETTINGS_NAV.filter(([, label, , terms]) => `${label} ${terms}`.toLowerCase().includes(settingsQuery.trim().toLowerCase())).map(([pane, label, Icon]) =>
-          <button key={pane} aria-current={sheet === pane} onClick={() => { setSheet(pane); setSettingsQuery(''); }}
+        {SETTINGS_NAV.filter(([, label, , terms]) => `${label} ${terms}`.toLocaleLowerCase().includes(settingsQuery.trim().toLocaleLowerCase())).map(([pane, label, Icon]) =>
+          <button key={pane} aria-current={sheet === pane} onClick={() => setSheet(pane)}
             className={cn('flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] transition-colors', sheet === pane ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
             <Icon size={16} className={sheet === pane ? 'text-brand' : undefined} />{t(label, readLocale())}
           </button>)}
-        {SETTINGS_NAV.every(([, label, , terms]) => !`${label} ${terms}`.toLowerCase().includes(settingsQuery.trim().toLowerCase())) && <p className="px-2.5 py-2 text-[11px] text-fg-3">没有匹配的设置。</p>}
+        {settingControlMatches.length > 0 && <div className="mt-2 border-t border-line pt-2" aria-label="匹配的设置控件"><p className="px-2.5 pb-1 text-[10.5px] text-fg-3">当前分类中的设置项</p>{settingControlMatches.map((match) => <button key={match.id} type="button" onClick={() => {
+          setSheet(match.pane);
+          window.setTimeout(() => {
+            const target = settingsContentRef.current?.querySelector<HTMLElement>(`[data-setting-search-id="${CSS.escape(match.id)}"]`);
+            target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            if (target) { const prior = target.style.boxShadow; target.style.boxShadow = '0 0 0 3px var(--brand)'; window.setTimeout(() => { if (target.style.boxShadow.includes('var(--brand)')) target.style.boxShadow = prior; }, 1400); }
+          }, 140);
+        }} className="block w-full truncate rounded-md px-2.5 py-1.5 text-left text-[11.5px] text-fg-2 hover:bg-hover">{t(match.label, readLocale())}</button>)}</div>}
+        {settingsQuery.trim() && !settingControlMatches.length && SETTINGS_NAV.every(([, label, , terms]) => !`${label} ${terms}`.toLocaleLowerCase().includes(settingsQuery.trim().toLocaleLowerCase())) && <p className="px-2.5 py-2 text-[11px] text-fg-3">没有匹配的设置。</p>}
         <button onClick={() => { setSheet(null); setOnboardingOpen(true); }} className="mt-3 flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13px] text-fg-3 hover:bg-hover hover:text-fg">
           <Sparkles size={16} />开始向导</button>
       </nav>
-      <div className="relative min-h-0 overflow-auto px-8 pt-7 pb-8">
-        <button aria-label="关闭设置" onClick={() => setSheet(null)} className="absolute top-4 right-4 grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={17} /></button>
+      <div ref={settingsContentRef} className="relative min-h-0 overflow-auto px-8 pt-7 pb-8">
+        <button aria-label="关闭设置" onClick={() => { setSheet(null); setSettingsQuery(''); }} className="absolute top-4 right-4 grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={17} /></button>
         {sheet === 'models' && <><div className="mb-4 flex items-center justify-between rounded-xl border border-edge bg-sunken px-3 py-2"><span className="text-[12px] text-fg-2">主模型失败后，按备用链顺序继续本轮</span><Button size="sm" variant="secondary" onClick={() => setFallbackOpen(true)}>备用模型链</Button></div><SettingsPage username={username} onSaveUsername={saveUsername} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} errorDetail={store.errorDetail} models={store.models} selectedModel={store.model} subagentsEnabled={store.subagentsEnabled} subagentDefaultModel={store.subagentDefaultModel} onSaveSubagentSettings={(enabled, model) => store.saveSubagentSettings(enabled, model)} providers={store.providers} reasoningStages={store.reasoningStages} onBack={() => setSheet(null)} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} statusBar={statusBar} onStatusBarChange={updateStatusBar} onLoadProviders={store.loadProviders} onSaveProviderConfig={store.saveProviderConfig} onAddProviderKey={(providerId, secret, label) => store.addProviderKey(providerId, secret, label)} onRemoveProviderKey={(providerId, keyId) => void store.removeProviderKey(providerId, keyId)} onUpdateModel={(modelId, patch) => store.updateCustomModel(modelId, patch)} onDeleteModel={(modelId) => store.deleteCustomModel(modelId)} onSaveReasoningStages={(config) => store.saveReasoningStages(config)} /></>}
         {sheet === 'advanced' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">高级设置</h3>

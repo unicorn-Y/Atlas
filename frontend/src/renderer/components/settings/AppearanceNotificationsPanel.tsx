@@ -337,7 +337,7 @@ function readThemeMode(): string {
 }
 
 function SettingRow({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
-  return <div className="flex min-h-[58px] items-center justify-between gap-4 border-b border-line py-2.5 last:border-0">
+  return <div data-setting-row data-setting-label={label} data-setting-terms={hint} className="flex min-h-[58px] items-center justify-between gap-4 border-b border-line py-2.5 last:border-0">
     <div><div className="text-[12.5px] text-fg">{label}</div><small className="mt-0.5 block text-[11.5px] text-fg-3">{hint}</small></div>
     {children}
   </div>;

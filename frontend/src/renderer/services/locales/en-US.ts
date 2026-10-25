@@ -40,6 +40,7 @@ export const messages: Record<string, string> = {
   "快捷键": "Keyboard shortcuts",
   "shortcut keybinding 快捷键 按键": "shortcut keybinding shortcuts keys",
   "外观与语音": "Appearance & voice",
+  "外观、字号、语音与通知": "Appearance, text size, voice, and notifications",
   "appearance theme font voice 外观 主题 字体 语音": "appearance theme font voice appearance theme font voice",
   "插件与导入": "Plugins & import",
   "plugin import 插件 导入 Claude Codex": "plugin import plugins import Claude Codex",
