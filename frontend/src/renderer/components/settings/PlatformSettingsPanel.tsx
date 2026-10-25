@@ -156,6 +156,7 @@ export default function PlatformSettingsPanel({ workspacePath }: PlatformSetting
 
     <section className="grid gap-3 rounded-xl border border-line p-4">
       <div><h4 className="m-0 flex items-center gap-2 text-[13.5px] font-medium text-heading"><Keyboard size={16} />全局语音快捷键</h4><p className="mt-1 mb-0 text-[12px] text-fg-3">在屏幕右上角显示/隐藏独立语音 HUD；隐藏时自动停止录音。默认 Ctrl+Shift+V。</p></div>
+      <p className="mb-2 mt-1 text-[11.5px] text-fg-3">触发与输入框麦克风共用听写状态：开始识别或停止当前听写，不会另开麦克风。</p>
       <div className="flex flex-wrap gap-2"><input aria-label="全局语音快捷键" value={voiceAccelerator} maxLength={80} disabled={!available || busy} onChange={(event) => setVoiceAccelerator(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void saveVoiceShortcut(voiceAccelerator); }} placeholder="Control+Shift+V" className="h-9 min-w-[250px] flex-1 rounded-lg border border-line bg-surface px-2.5 font-mono text-[12px] text-fg" />
         <button disabled={!available || busy || !voiceAccelerator.trim()} onClick={() => void saveVoiceShortcut(voiceAccelerator)} className="h-9 rounded-lg bg-brand px-3 text-[12px] font-medium text-on-primary disabled:opacity-50">注册</button>
         <button disabled={!available || busy || !settings.voiceShortcut.accelerator} onClick={() => void saveVoiceShortcut(null)} className="h-9 rounded-lg border border-line px-3 text-[12px] text-fg-2 hover:bg-hover disabled:opacity-50">清除</button></div>

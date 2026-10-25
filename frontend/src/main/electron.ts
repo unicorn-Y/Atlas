@@ -518,10 +518,25 @@ function tryRegisterVoiceShortcut(accelerator: string | null): GlobalShortcutSta
   if (invalid) return { accelerator, registered: false, error: invalid };
   try {
     const registered = globalShortcut.register(accelerator, () => {
-      toggleVoiceHud();
+      triggerVoiceShortcut();
     });
     return registered ? { accelerator, registered: true } : { accelerator, registered: false, error: '系统未能注册语音快捷键，可能已被其他应用占用。' };
   } catch { return { accelerator, registered: false, error: '系统未能注册语音快捷键。' }; }
+}
+
+function triggerVoiceShortcut(): void {
+  let win = windowRef;
+  if (!win || win.isDestroyed()) {
+    createWindow();
+    win = windowRef;
+  }
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  const send = () => { if (!win?.isDestroyed()) win.webContents.send('app:voice-hotkey'); };
+  if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send);
+  else send();
 }
 
 function toggleVoiceHud(): void {

@@ -386,6 +386,9 @@ export default function App() {
     return () => { active = false; window.clearInterval(timer); };
   }, [store.connected, store.apiBaseUrl]);
   const [listening, setListening] = useState(false);
+  const [dictationStarting, setDictationStarting] = useState(false);
+  const [speechAutoSend, setSpeechAutoSend] = useState(() => pref('speech-auto-send') === 'true');
+  const [speechInputMode, setSpeechInputMode] = useState<'toggle' | 'hold'>(() => pref('speech-input-mode') === 'hold' ? 'hold' : 'toggle');
   const [voiceOutput, setVoiceOutput] = useState(() => pref('voice-output') === 'true');
   const [speechRate, setSpeechRate] = useState(() => Number(pref('speech-rate') || 1));
   const [speechVoice, setSpeechVoice] = useState(() => pref('speech-voice') || '');
@@ -408,7 +411,9 @@ export default function App() {
     setPref('statusbar', JSON.stringify(next));
     return next;
   });
-  const dictationRef = useRef<{ socket: WebSocket; stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode; prefix: string; finalText: string } | null>(null);
+  const dictationRef = useRef<{ socket: WebSocket; stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode; prefix: string; finalText: string; stopResolver?: () => void } | null>(null);
+  const dictationStartingRef = useRef(false);
+  const dictationStoppingRef = useRef(false);
   const spokenSequenceRef = useRef(0);
   const spokenRunRef = useRef('');
   const speechBufferRef = useRef('');
@@ -772,20 +777,33 @@ export default function App() {
   }, [store.connected, store.apiBaseUrl]);
   const closeOnboarding = () => { setOnboardingOpen(false); setPref('onboarded', 'true'); };
 
+  const stopWakeCapture = () => {
+    const session = wakeSessionRef.current;
+    wakeSessionRef.current = null;
+    if (!session) return;
+    session.processor.disconnect(); session.stream.getTracks().forEach((track) => track.stop());
+    void session.context.close();
+    try { if (session.socket.readyState === WebSocket.OPEN) session.socket.send(JSON.stringify({ type: 'end' })); session.socket.close(); } catch { /* socket already closed */ }
+  };
   const startVoice = async () => {
+    if (voiceOpen) { setVoiceOpen(false); return; }
+    if (dictationStartingRef.current) { setToast('语音识别正在连接，请稍等后再切换模式'); return; }
+    stopWakeCapture();
+    if (dictationRef.current) await stopSpeechInput();
     if (!navigator.mediaDevices?.getUserMedia) { setToast('当前设备没有麦克风访问能力'); return; }
     cancelRoutedSpeech();
     setVoiceOpen(true);
   };
 
-  const submit = async (fromHome: boolean, immediate = false) => {
-    if (!input.trim() && !attachments.length && !files.length && !mentions.length) return;
+  const submit = async (fromHome: boolean, immediate = false, inputOverride?: string) => {
+    const submittedInput = inputOverride ?? input;
+    if (!submittedInput.trim() && !attachments.length && !files.length && !mentions.length) return;
     if (!fromHome && activeRun && !runDone && !immediate && !scheduleBypass.current) {
       setSchedulePromptOpen(true);
       return;
     }
     scheduleBypass.current = false;
-    let text = input;
+    let text = submittedInput;
     const images = attachments;
     const documents = files.map(({ name, mime, data_base64 }) => ({ name, mime, data_base64 }));
     const elementRefs = mentions.filter((item) => item.kind === 'element');
@@ -981,19 +999,48 @@ export default function App() {
     setDefaultWorkspace(picked);
     setToast(`工作目录：${picked}`);
   };
-  const toggleSpeechInput = async () => {
-    if (dictationRef.current) {
-      const session = dictationRef.current;
-      dictationRef.current = null;
-      try { session.socket.send(JSON.stringify({ type: 'end' })); } catch { /* socket already closed */ }
-      session.processor.disconnect(); session.stream.getTracks().forEach((track) => track.stop());
-      void session.context.close(); setListening(false); return;
+  const stopSpeechInput = async (send = speechAutoSend) => {
+    const session = dictationRef.current;
+    if (!session) { setListening(false); return; }
+    dictationStoppingRef.current = true;
+    dictationRef.current = null;
+    session.processor.disconnect(); session.stream.getTracks().forEach((track) => track.stop());
+    setListening(false);
+    try {
+      if (session.socket.readyState === WebSocket.OPEN) {
+        await new Promise<void>((resolve) => {
+          const timeout = window.setTimeout(resolve, 1200);
+          session.stopResolver = () => { window.clearTimeout(timeout); resolve(); };
+          session.socket.send(JSON.stringify({ type: 'end' }));
+        });
+      }
+    } catch { /* socket already closed */ }
+    session.stopResolver = undefined;
+    try { session.socket.close(); } catch { /* already closed */ }
+    void session.context.close();
+    dictationStoppingRef.current = false;
+    const transcript = session.finalText.trim();
+    if (send && transcript) {
+      const content = `${session.prefix}${session.prefix ? ' ' : ''}${transcript}`.trim();
+      setInput(content);
+      await submit(false, true, content);
+      setToast('语音转写已自动发送');
     }
+  };
+  const toggleSpeechInput = async (startOnly = false) => {
+    if (voiceOpen) { setVoiceOpen(false); setToast('已结束语音通话；再次操作可开始听写'); return; }
+    if (dictationStoppingRef.current) return;
+    if (listening || dictationRef.current) { if (!startOnly) void stopSpeechInput(); return; }
+    if (dictationStartingRef.current) return;
     if (!navigator.mediaDevices?.getUserMedia) { setToast('当前环境无法访问麦克风'); return; }
+    stopWakeCapture();
+    dictationStartingRef.current = true;
+    setDictationStarting(true);
     try {
       setToast('正在连接本地语音识别；首次使用会自动下载模型并显示进度');
       const selectedInput = await getSelectedInputStream({ channelCount: 1, echoCancellation: true, noiseSuppression: true });
       const stream = selectedInput.stream;
+      if (voiceOpen) { stream.getTracks().forEach((track) => track.stop()); return; }
       if (selectedInput.usedFallback) setToast('所选麦克风已断开，已回落到系统默认输入设备。');
       const context = new AudioContext();
       const source = context.createMediaStreamSource(stream);
@@ -1001,13 +1048,14 @@ export default function App() {
       const socketUrl = new URL('/ws/asr', store.apiBaseUrl);
       socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:';
       const socket = new WebSocket(socketUrl);
-      const session = { socket, stream, context, processor, prefix: input.trim(), finalText: '' };
+      const session: { socket: WebSocket; stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode; prefix: string; finalText: string; stopResolver?: () => void } = { socket, stream, context, processor, prefix: input.trim(), finalText: '' };
       dictationRef.current = session;
       const render = (partial = '') => setInput(`${session.prefix}${session.prefix ? ' ' : ''}${session.finalText}${partial}`);
       socket.onmessage = (event) => {
         try {
         const message = JSON.parse(String(event.data)) as { type?: string; text?: string; detail?: string; progress?: number };
           if (message.type === 'final' && message.text) { session.finalText += `${session.finalText ? ' ' : ''}${message.text}`; render(); }
+          else if (message.type === 'ended') session.stopResolver?.();
           else if (message.type === 'partial') render(message.text || '');
           else if (message.type === 'preparing') setToast(message.detail || '正在准备本地语音模型…');
           else if (message.type === 'progress') setToast(`正在下载语音模型… ${Math.round(Number(message.progress || 0) * 100)}%`);
@@ -1033,22 +1081,26 @@ export default function App() {
         socket.send(pcm.buffer);
       };
       source.connect(processor); processor.connect(context.destination);
-      setListening(true); setToast('正在使用本地语音识别；再次点击麦克风结束');
+      setListening(true); setToast('正在使用本地语音识别；再次点击麦克风或按全局快捷键结束');
     } catch (error) {
       dictationRef.current?.stream.getTracks().forEach((track) => track.stop());
       dictationRef.current = null; setListening(false);
       setToast(`语音听写启动失败：${error instanceof Error ? error.message : String(error)}`);
-    }
+    } finally { dictationStartingRef.current = false; setDictationStarting(false); }
   };
+  const toggleSpeechInputRef = useRef(toggleSpeechInput);
+  toggleSpeechInputRef.current = toggleSpeechInput;
+  useEffect(() => { setPref('speech-auto-send', String(speechAutoSend)); }, [speechAutoSend]);
+  useEffect(() => { setPref('speech-input-mode', speechInputMode); }, [speechInputMode]);
   useEffect(() => {
     setPref('wake-enabled', String(wakeEnabled));
   }, [wakeEnabled]);
-  useEffect(() => window.atlasDesktop?.onVoiceHotkey?.(() => setVoiceOpen(true)), []);
+  useEffect(() => window.atlasDesktop?.onVoiceHotkey?.(() => { void toggleSpeechInputRef.current(); }), []);
   useEffect(() => {
     setPref('wake-word', wakeWord);
   }, [wakeWord]);
   useEffect(() => {
-    if (!wakeEnabled || voiceOpen || !store.connected || !navigator.mediaDevices?.getUserMedia) return;
+    if (!wakeEnabled || voiceOpen || listening || dictationStarting || !store.connected || !navigator.mediaDevices?.getUserMedia) return;
     let active = true;
     let starting = false;
     const stop = () => {
@@ -1094,7 +1146,7 @@ export default function App() {
     };
     void begin();
     return () => { active = false; stop(); };
-  }, [wakeEnabled, wakeWord, voiceOpen, store.connected, store.apiBaseUrl]);
+  }, [wakeEnabled, wakeWord, voiceOpen, listening, dictationStarting, store.connected, store.apiBaseUrl]);
   const readLastReply = () => {
     const lastReply = [...messages].reverse().find((message) => message.role === 'assistant')?.content || (runDone ? reply : '');
     if (!lastReply || !('speechSynthesis' in window)) { setToast('还没有可以朗读的回复'); return; }
@@ -1608,7 +1660,7 @@ export default function App() {
     ...(activeConversation ? [{ id: 'btw', label: '/btw', hint: '旁问：不打断正在做的事，也不存进对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) }] : []),
     { id: 'open', label: '/open', hint: '在浏览器面板打开网址，如 /open localhost:5173', takesArgument: true, run: (target: string) => { if (target.trim()) setBrowserUrl(/^\w+:/.test(target.trim()) ? target.trim() : `http://${target.trim()}`); showInspectorTab('browser'); } },
     ...(activeConversation ? [{ id: 'compact', label: '/compact', hint: '压缩上下文，可附说明让摘要优先保留相关事项', takesArgument: true, run: (note: string) => void store.compactConversation(activeConversation.id, note).then((text) => { if (text) setToast(text); }) }] : []),
-    { id: 'voice', label: '/voice', hint: '开始语音通话', run: startVoice },
+    { id: 'voice', label: '/voice', hint: '切换语音通话；再次执行可结束', run: startVoice },
       { id: 'record-screen', label: '/record-screen', hint: '录制屏幕视频，预览、保存、删除或作为消息附件发送给 Agent', run: () => setScreenRecorderOpen(true) },
     { id: 'auto', label: '/auto', hint: '打开自动化', run: () => go('auto') },
     { id: 'memory', label: '/memory', hint: '打开记忆', run: () => go('memory') },
@@ -1960,7 +2012,8 @@ export default function App() {
     </Tip>
   </>;
   const composerBase = {
-    value: input, onChange: setInput, attachments, onPickImages: addFiles, onPickFolders: addFolderReferences, listening, onToggleMic: toggleSpeechInput,
+    value: input, onChange: setInput, attachments, onPickImages: addFiles, onPickFolders: addFolderReferences, listening, onToggleMic: () => { void toggleSpeechInput(); },
+    speechInputMode, onStartMic: () => { void toggleSpeechInput(true); }, onStopMic: () => { void stopSpeechInput(); },
     attachmentProgress, failedAttachmentCount: failedAttachmentReads.length, onRetryFailedAttachments: retryFailedAttachments,
     onEnhancePrompt: enhancePrompt, onAttachDrawing: attachDrawing, contextKey: store.activeConversationId,
     onExternalEditor: () => {
@@ -2464,6 +2517,8 @@ export default function App() {
             <div className="set-row"><div>置顶任务摘要<small>在长对话顶部显示首条目标和最近进度</small></div><button className="switch" role="switch" aria-label="置顶任务摘要" aria-checked={summaryEnabled} onClick={() => { const next = !summaryEnabled; setSummaryEnabled(next); setPref('pinned-summary', String(next)); }} /></div>
             <div className="set-row"><div>收起侧边栏<small>只显示图标，给内容更多空间</small></div><button className="switch" role="switch" aria-label="收起侧边栏" aria-checked={sideMini} onClick={toggleMini} /></div>
             <div className="set-row"><div>自动朗读新回复<small>用本机语音逐句读出 Atlas 的回答</small></div><button className="switch" role="switch" aria-label="自动朗读新回复" aria-checked={voiceOutput} onClick={toggleVoiceOutput} /></div>
+            <div className="set-row"><div>按住说话<small>按住输入框麦克风录音，松开后结束识别；关闭时点击切换录音</small></div><button className="switch" role="switch" aria-label="按住说话模式" aria-checked={speechInputMode === 'hold'} onClick={() => setSpeechInputMode((mode) => mode === 'hold' ? 'toggle' : 'hold')} /></div>
+            <div className="set-row"><div>转写后自动发送<small>关闭时只填入草稿，默认关闭</small></div><button className="switch" role="switch" aria-label="转写后自动发送" aria-checked={speechAutoSend} onClick={() => setSpeechAutoSend((value) => !value)} /></div>
             <div className="set-row"><div>本地唤醒词<small>后台监听只发送音频到 Atlas 本机识别服务</small></div><button className="switch" role="switch" aria-label="本地唤醒词" aria-checked={wakeEnabled} onClick={() => setWakeEnabled((value) => !value)} /></div>
           </div>
           <label className="mt-3 grid max-w-[760px] gap-1 text-[12px] text-fg-2">唤醒词<input value={wakeWord} onChange={(event) => setWakeWord(event.target.value)} placeholder="你好 Atlas" className="h-9 rounded-lg border border-line bg-surface px-2.5 text-[12px]" /></label>

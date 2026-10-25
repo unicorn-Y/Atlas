@@ -128,6 +128,9 @@ interface ComposerProps {
   onPickFolders?: (folders: Array<{ name: string; path: string; count: number }>) => void;
   listening: boolean;
   onToggleMic: () => void;
+  speechInputMode?: 'toggle' | 'hold';
+  onStartMic?: () => void;
+  onStopMic?: () => void;
   models: ModelInfo[];
   model: string;
   onSelectModel: (id: string) => void;
@@ -212,6 +215,7 @@ export default function Composer(props: ComposerProps) {
     } catch { setIdeConnected(false); }
   };
   const [enterToSend, setEnterToSend] = useState(readEnterToSend);
+  const heldMicPointer = useRef(false);
   const [vimEnabled, setVimEnabled] = useState(() => { try { return localStorage.getItem('atlas.preference.vim-mode') === 'true'; } catch { return false; } });
   const [vimMode, setVimMode] = useState<'normal' | 'insert' | 'visual'>(() => { try { return localStorage.getItem('atlas.preference.vim-mode') === 'true' ? 'normal' : 'insert'; } catch { return 'insert'; } });
   const [stashOpen, setStashOpen] = useState(false);
@@ -766,8 +770,12 @@ export default function Composer(props: ComposerProps) {
       </Menu>
 
       {props.onAttachDrawing && <DrawingPad key={props.contextKey} onAttach={props.onAttachDrawing} />}
-      <Tip label={props.listening ? '停止语音输入' : '语音输入'}>
-        <button type="button" aria-label={props.listening ? '停止语音输入' : '开始语音输入'} aria-pressed={props.listening} onClick={props.onToggleMic}
+      <Tip label={props.speechInputMode === 'hold' ? '按住说话，松开结束识别' : props.listening ? '停止语音输入' : '语音输入'}>
+        <button type="button" aria-label={props.speechInputMode === 'hold' ? '按住说话' : props.listening ? '停止语音输入' : '开始语音输入'} aria-pressed={props.listening}
+          onClick={props.speechInputMode === 'hold' ? undefined : props.onToggleMic}
+          onPointerDown={props.speechInputMode === 'hold' ? (event) => { event.preventDefault(); heldMicPointer.current = true; event.currentTarget.setPointerCapture(event.pointerId); props.onStartMic?.(); } : undefined}
+          onPointerUp={props.speechInputMode === 'hold' ? () => { if (heldMicPointer.current) { heldMicPointer.current = false; props.onStopMic?.(); } } : undefined}
+          onPointerCancel={props.speechInputMode === 'hold' ? () => { if (heldMicPointer.current) { heldMicPointer.current = false; props.onStopMic?.(); } } : undefined}
           className={cn('grid size-8 shrink-0 place-items-center rounded-full transition-colors',
             props.listening ? 'bg-brand text-on-primary' : 'text-fg-2 hover:bg-hover hover:text-fg')}>
           <Mic size={17} />
