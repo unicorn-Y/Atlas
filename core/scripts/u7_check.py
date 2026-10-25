@@ -153,6 +153,10 @@ def navigate_and_wait_network_failure(ws_url: str, url: str) -> str:
                 if message.get("method") == "Network.loadingFailed":
                     failed.append(str((message.get("params") or {}).get("errorText") or ""))
                 if message.get("id") == command_id:
+                    if method == "Page.navigate":
+                        error_text = str((message.get("result") or {}).get("errorText") or "")
+                        if error_text:
+                            failed.append(error_text)
                     return
         send_and_wait(1, "Network.enable")
         send_and_wait(2, "Page.enable")
@@ -403,13 +407,17 @@ def main() -> None:
         dns_browser, dns_port, _ = launch_chrome(scratch / "dns-failure-profile")
         launched.append(dns_browser)
         bad = new_target(dns_port, "about:blank")
-        dns_detail = navigate_and_wait_network_failure(bad["webSocketDebuggerUrl"], "http://atlas-u7-nonexistent.invalid")
+        dns_url = "http://atlas-u7-nonexistent.invalid"
+        dns_detail = navigate_and_wait_network_failure(bad["webSocketDebuggerUrl"], dns_url)
         if not dns_detail:
             # Some Chromium builds paint the interstitial before forwarding the
             # Network.loadingFailed event on a short-lived CDP connection.
             body = str(evaluate(bad, "document.body.innerText") or "")
             if "ERR_NAME_NOT_RESOLVED" in body:
                 dns_detail = "net::ERR_NAME_NOT_RESOLVED"
+        if not dns_detail:
+            # A few builds lose the first failing event while opening the network error page.
+            dns_detail = navigate_and_wait_network_failure(bad["webSocketDebuggerUrl"], dns_url)
         from atlas.engine_core.tools.browser_tool import _explain_navigation_error
         error_text = _explain_navigation_error(dns_detail or "net::ERR_NAME_NOT_RESOLVED")
         check(bool(dns_detail) and (dns_detail in error_text or "DNS" in error_text),
