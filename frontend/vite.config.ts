@@ -15,6 +15,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         app: resolve(import.meta.dirname, 'index.html'),
+        'voice-hud': resolve(import.meta.dirname, 'voice-hud.html'),
         'floating-composer': resolve(import.meta.dirname, 'floating-composer.html'),
         dashboard: resolve(import.meta.dirname, 'dashboard.html'),
       },

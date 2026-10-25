@@ -38,6 +38,7 @@ function themeIcon(theme: string): Electron.NativeImage | undefined {
 }
 let windowRef: BrowserWindow | null = null;
 let floatingComposerWindow: BrowserWindow | null = null;
+let voiceHudWindow: BrowserWindow | null = null;
 const conversationWindows = new Map<string, BrowserWindow>();
 type WindowBounds = { x: number; y: number; width: number; height: number };
 type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null; screenshotShortcut: string | null; voiceShortcut: string | null; openAtLogin: boolean; windowBounds?: WindowBounds };
@@ -489,12 +490,41 @@ function tryRegisterVoiceShortcut(accelerator: string | null): GlobalShortcutSta
   if (invalid) return { accelerator, registered: false, error: invalid };
   try {
     const registered = globalShortcut.register(accelerator, () => {
-      if (!windowRef || windowRef.isDestroyed()) return;
-      if (windowRef.isMinimized()) windowRef.restore();
-      windowRef.show(); windowRef.focus(); windowRef.webContents.send('app:voice-hotkey');
+      toggleVoiceHud();
     });
     return registered ? { accelerator, registered: true } : { accelerator, registered: false, error: '系统未能注册语音快捷键，可能已被其他应用占用。' };
   } catch { return { accelerator, registered: false, error: '系统未能注册语音快捷键。' }; }
+}
+
+function toggleVoiceHud(): void {
+  if (voiceHudWindow && !voiceHudWindow.isDestroyed() && voiceHudWindow.isVisible()) {
+    voiceHudWindow.webContents.send('voice-hud:stop');
+    voiceHudWindow.hide();
+    return;
+  }
+  if (!voiceHudWindow || voiceHudWindow.isDestroyed()) {
+    const { workArea } = screen.getPrimaryDisplay();
+    voiceHudWindow = new BrowserWindow({
+      x: Math.max(workArea.x, workArea.x + workArea.width - 484), y: workArea.y + 24,
+      width: 460, height: 80, show: false, frame: false, transparent: true,
+      resizable: false, movable: true, focusable: false, skipTaskbar: true,
+      alwaysOnTop: true, hasShadow: false,
+      webPreferences: { preload: path.join(here, '../preload/index.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+    });
+    voiceHudWindow.setAlwaysOnTop(true, 'floating');
+    voiceHudWindow.on('closed', () => { voiceHudWindow = null; });
+    const devUrl = process.env.VITE_DEV_SERVER_URL;
+    if (devUrl) void voiceHudWindow.loadURL(new URL('/voice-hud.html', devUrl).href);
+    else void voiceHudWindow.loadFile(path.join(here, '../../dist/voice-hud.html'));
+  }
+  const win = voiceHudWindow;
+  if (win.webContents.isLoading()) win.webContents.once('did-finish-load', () => { if (!win.isDestroyed()) { win.showInactive(); win.webContents.send('voice-hud:start'); } });
+  else { win.showInactive(); win.webContents.send('voice-hud:start'); }
+}
+
+function disposeVoiceHud(): void {
+  if (voiceHudWindow && !voiceHudWindow.isDestroyed()) voiceHudWindow.destroy();
+  voiceHudWindow = null;
 }
 
 function tryRegisterScreenshotShortcut(accelerator: string | null): GlobalShortcutState {
@@ -881,9 +911,12 @@ function createWindow() {
     win.webContents.send(BACKEND_STARTUP_CHANNEL, lastProgress);
   });
   windowRef.on('close', (event) => {
-    if (!explicitQuit) { event.preventDefault(); windowRef?.hide(); }
+    if (!explicitQuit) { event.preventDefault(); disposeVoiceHud(); windowRef?.hide(); }
   });
-  windowRef.on('closed', () => { windowRef = null; });
+  windowRef.on('closed', () => {
+    windowRef = null;
+    disposeVoiceHud();
+  });
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();

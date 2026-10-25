@@ -98,6 +98,8 @@ export interface AtlasDesktopApi {
   setScreenshotShortcut?(accelerator: string | null): Promise<GlobalShortcutState>;
   setVoiceShortcut?(accelerator: string | null): Promise<GlobalShortcutState>;
   onVoiceHotkey?(callback: () => void): () => void;
+  onVoiceHudStart?(callback: () => void): () => void;
+  onVoiceHudStop?(callback: () => void): () => void;
   setScreenshotContext?(conversationId: string, lastInteractionAt: number): void;
   onSessionScreenshot?(callback: (imageDataUrl: string, conversationId: string) => void): () => void;
   onSessionScreenshotError?(callback: (message: string) => void): () => void;

@@ -1,0 +1,19 @@
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+body { font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif; color: #f6f2ea; }
+.voice-hud { width: 100%; height: 100%; display: flex; align-items: center; gap: 11px; padding: 10px 12px; border: 1px solid rgba(238, 210, 164, .3); border-radius: 18px; background: rgba(24, 27, 37, .96); box-shadow: 0 12px 38px rgba(0, 0, 0, .35); -webkit-app-region: drag; }
+.hud-mark { display: flex; align-items: center; gap: 5px; color: #e6ba78; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+.hud-state { width: 121px; min-width: 121px; display: grid; gap: 3px; }
+.hud-state b { font-size: 11px; }
+.hud-state span { max-width: 125px; overflow: hidden; color: #a9adba; font-size: 9px; white-space: nowrap; text-overflow: ellipsis; }
+.hud-wave { display: flex; width: 57px; height: 29px; align-items: center; justify-content: center; gap: 2px; }
+.hud-wave i { width: 3px; min-height: 4px; border-radius: 4px; background: linear-gradient(#f3d29d, #bd8745); transition: height 80ms linear; }
+.hud-text { flex: 1; min-width: 0; max-height: 34px; overflow: hidden; color: #e5e6eb; font-size: 10px; line-height: 1.55; }
+.hud-spacer { width: 8px; height: 32px; flex: 0 0 8px; }
+.voice-hud button { width: 28px; height: 28px; display: inline-grid; place-items: center; border: 1px solid rgba(255,255,255,.13); border-radius: 50%; color: #e8eaf0; background: rgba(255,255,255,.07); cursor: pointer; -webkit-app-region: no-drag; }
+.voice-hud button:hover { background: rgba(255,255,255,.16); }
+.voice-hud .hud-stop { color: #ffd3ca; border-color: rgba(255,150,130,.42); }
+.voice-hud .hud-retry { color: #e6ba78; }
+.hud-grip { color: #777c8a; font-size: 12px; letter-spacing: -4px; transform: rotate(90deg); cursor: move; -webkit-app-region: drag; }
+.hud-mark, .hud-state, .hud-wave, .hud-text, .hud-spacer { pointer-events: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
