@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import sys
 from typing import Any
@@ -25,43 +26,71 @@ def create_server(
     computer_runtime = computer or ComputerUseRuntime()
     server = MCPServer(name="Atlas capabilities", version="0.1.0")
 
-    def local_tool(name: str, description: str) -> Any:
-        async def call_local(arguments: dict[str, Any]) -> str:
-            result = await local_runtime.call_tool(name, arguments)
+    @server.resource(
+        "atlas://capabilities",
+        name="Atlas capability catalog",
+        title="Atlas MCP capability catalog",
+        description="Describes the local tools and execution identity exposed by this Atlas MCP process.",
+        mime_type="application/json",
+    )
+    async def capability_catalog() -> str:
+        return json.dumps({
+            "server": "Atlas capabilities",
+            "version": "0.1.0",
+            "transport": "stdio",
+            "authentication": "The MCP client launches and owns this local process; operating-system user identity is the authentication boundary.",
+            "execution_identity": "The current Atlas user, with the same local execution behavior as Atlas itself.",
+            "tools": [definition["function"]["name"] for definition in LOCAL_TOOLS]
+                + [definition["function"]["name"] for definition in computer_runtime.get_tools_for_llm()]
+                + ["coding_ast_grep", "coding_repo_map"],
+            "resources": ["atlas://capabilities"],
+        }, ensure_ascii=False)
+
+    def register_runtime_tool(runtime: Any, definition: dict[str, Any]) -> None:
+        function = definition["function"]
+        name = function["name"]
+        description = function["description"]
+        schema = function.get("parameters", {"type": "object", "properties": {}})
+        properties = schema.get("properties", {})
+        required = set(schema.get("required", []))
+
+        async def call_runtime(**arguments: Any) -> str:
+            result = await runtime.call_tool(name, arguments)
             return json.dumps(result, ensure_ascii=False, default=str)
 
-        server.tool(name=name, description=description)(call_local)
+        call_runtime.__name__ = f"call_{name}"
+        call_runtime.__signature__ = inspect.Signature([
+            inspect.Parameter(key, inspect.Parameter.KEYWORD_ONLY,
+                              default=inspect.Parameter.empty if key in required else None,
+                              annotation=Any)
+            for key in properties
+        ])
+        server.tool(name=name, description=description)(call_runtime)
+        # The MCP SDK infers only shallow schemas from Python signatures. Keep Atlas's
+        # complete nested JSON schema (items, enums, bounds and required fields).
+        registered = server._tool_manager.get_tool(name)
+        if registered is not None:
+            registered.parameters = schema
 
     for definition in LOCAL_TOOLS:
-        name = definition["function"]["name"]
-        description = definition["function"]["description"]
-        local_tool(name, description)
-
-    def computer_tool(name: str, description: str) -> Any:
-        async def call_computer(arguments: dict[str, Any]) -> str:
-            result = await computer_runtime.call_tool(name, arguments)
-            return json.dumps(result, ensure_ascii=False, default=str)
-
-        server.tool(name=name, description=description)(call_computer)
+        register_runtime_tool(local_runtime, definition)
 
     for definition in computer_runtime.get_tools_for_llm():
-        name = definition["function"]["name"]
-        description = definition["function"]["description"]
-        computer_tool(name, description)
+        register_runtime_tool(computer_runtime, definition)
 
-    async def structured_search(arguments: dict[str, Any]) -> str:
+    async def structured_search(arguments: list[str], cwd: str = ".") -> str:
         result = await asyncio.to_thread(
             ast_grep_run,
-            list(arguments.get("arguments", [])),
-            cwd=str(arguments.get("cwd", ".")),
+            arguments,
+            cwd=cwd,
         )
         return json.dumps(result, ensure_ascii=False)
 
-    async def repository_map(arguments: dict[str, Any]) -> str:
+    async def repository_map(path: str, budget: int = 1024) -> str:
         result = await asyncio.to_thread(
             repo_map,
-            str(arguments["path"]),
-            int(arguments.get("budget", 1024)),
+            path,
+            budget,
         )
         return json.dumps(result, ensure_ascii=False)
 

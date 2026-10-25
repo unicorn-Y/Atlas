@@ -95,6 +95,19 @@ def lsp_group() -> None:
     """Manage local language servers and inspect project diagnostics."""
 
 
+@main.group("mcp")
+def mcp_group() -> None:
+    """Expose Atlas capabilities to MCP clients."""
+
+
+@mcp_group.command("serve")
+def mcp_serve_command() -> None:
+    """Run the Atlas MCP server over stdio for a local MCP client."""
+    from atlas.tools.agent_bridge import main as serve_mcp
+
+    serve_mcp()
+
+
 @lsp_group.command("status")
 @click.option("--workspace", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path.cwd())
 def lsp_status_command(workspace: Path) -> None:
