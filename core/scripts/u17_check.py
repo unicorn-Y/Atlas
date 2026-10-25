@@ -123,15 +123,19 @@ async def check_lsp_surface_and_handoff() -> None:
             return {"id": "source-1", "title": "Synthetic task", "workspace": "C:/synthetic",
                     "worktree_path": "C:/synthetic-wt", "worktree_branch": "feature", "base_branch": "main"}
 
+    from atlas.models import ModelManager
+    real_router = ModelManager().model_router
+
     class Router:
         async def resolve(self, model: str, _purpose: str):
-            return {"model": model}
+            return await real_router.resolve(model, "prompt_enhance")
 
-        async def complete(self, _route, messages, **_kwargs):
+        async def complete(self, route, messages, **kwargs):
             prompt = messages[1]["content"]
             assert "first requirement" in prompt and "last decision" in prompt
+            assert "Git status:" in prompt and "Branch: feature" in prompt
             assert "sk-live-secret-value" not in prompt and "[REDACTED]" in prompt
-            return SimpleNamespace(text="## Goal\nComplete the synthetic task.\n\n## Next\nVerify the change.")
+            return await real_router.complete(route, messages=messages, **kwargs)
 
     manager = SimpleNamespace(model_router=Router(), current_model="deepseek-v4.1-flash")
     services = SimpleNamespace(memory=Memory(), model_mgr=manager)
@@ -141,7 +145,7 @@ async def check_lsp_surface_and_handoff() -> None:
                 {"id": "m2", "role": "assistant", "content": "last decision: use merge"}]
     with patch("atlas.engine.session_sync.read_session_messages", side_effect=fake_read):
         summary = await create_handoff_summary(services, "source-1")
-    assert summary["model"] == "deepseek-v4.1-flash" and "Complete the synthetic task" in summary["text"]
+    assert summary["model"] == "deepseek-v4.1-flash" and len(summary["text"]) > 40
 
 
 def check_pane_and_source_contracts() -> None:
