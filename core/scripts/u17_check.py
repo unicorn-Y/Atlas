@@ -135,8 +135,8 @@ async def check_lsp_surface_and_handoff() -> None:
     query_service = QueryService()
     probe_file = ROOT / "README.md"
     with patch("atlas.tools.workspace_lsp._service_for", return_value=(query_service, object())):
-        query_cli = CliRunner().invoke(main, ["lsp", "diagnostics", str(probe_file)])
-    assert query_cli.exit_code == 0 and '"available": true' in query_cli.output
+        query_cli = await asyncio.to_thread(CliRunner().invoke, main, ["lsp", "diagnostics", str(probe_file)])
+    assert query_cli.exit_code == 0 and '"available": true' in query_cli.output, query_cli.output
     stop_cli = CliRunner().invoke(main, ["lsp", "stop"])
     assert stop_cli.exit_code == 0 and "已停止" in stop_cli.output
 
