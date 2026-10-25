@@ -866,10 +866,22 @@ export default function Sidebar(props: SidebarProps) {
       <Tip label="搜索和命令 Ctrl K"><button onClick={props.onSearch} aria-label="搜索和命令" className="no-drag grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Search size={15} /></button></Tip>
       <Tip label="收起任务栏"><button aria-label="收起侧边栏" onClick={props.onToggleMini} className="no-drag grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><PanelLeft size={15} /></button></Tip>
     </div>
-    <button onClick={props.onNewTask} disabled={props.creating} aria-label="新建对话"
-      className="mt-1.5 flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] text-fg hover:bg-hover disabled:opacity-60">
-      <SquarePen size={16} className="text-fg-2" /><span>新任务</span><Kbd className="ml-auto">Ctrl N</Kbd>
-    </button>
+    <div className="mt-1.5 flex h-8 items-center gap-1">
+      <button onClick={props.onNewTask} disabled={props.creating} aria-label="新建对话"
+        className="flex h-8 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] text-fg hover:bg-hover disabled:opacity-60">
+        <SquarePen size={16} className="text-fg-2" /><span>新任务</span><Kbd className="ml-auto">Ctrl N</Kbd>
+      </button>
+      <Menu>
+        <MenuTrigger asChild><button type="button" aria-label="新窗口和新会话选项" title="新窗口和新会话选项" className="grid size-7 shrink-0 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><MoreHorizontal size={15} /></button></MenuTrigger>
+        <MenuContent align="end" className="min-w-[225px]">
+          <MenuLabel>新建</MenuLabel>
+          <MenuItem onSelect={() => window.atlasDesktop?.openNewWindow?.()}><AppWindow />新建窗口</MenuItem>
+          <MenuItem onSelect={() => window.atlasDesktop?.openNewSessionWindow?.()}><SquarePen />新会话并在新窗口打开</MenuItem>
+          <MenuSeparator />
+          <p className="m-0 max-w-[250px] px-2.5 py-1.5 text-[10.5px] leading-relaxed text-fg-3">关闭独立窗口只关闭该窗口；关闭主窗口会收起到系统托盘。会话仍保存在历史记录中。</p>
+        </MenuContent>
+      </Menu>
+    </div>
     <button onClick={() => setTriageOpen(true)} aria-label="跨会话收件箱与工作板" className="mt-1 flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[12.5px] text-fg-2 hover:bg-hover"><ListTodo size={15} className="text-brand"/><span>分诊与工作板</span></button>
     <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="历史会话">
       <div className="mb-1.5 flex items-center gap-1 px-1">

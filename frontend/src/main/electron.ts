@@ -400,9 +400,9 @@ function showFloatingComposer(): void {
   }
 }
 
-function openConversationWindow(conversationId: string): void {
-  if (!/^[A-Za-z0-9_-]{1,128}$/.test(conversationId)) throw new Error('无效的会话 ID。');
-  const existing = conversationWindows.get(conversationId);
+function openConversationWindow(conversationId?: string, newSession = false): void {
+  if (conversationId && !/^[A-Za-z0-9_-]{1,128}$/.test(conversationId)) throw new Error('无效的会话 ID。');
+  const existing = conversationId ? conversationWindows.get(conversationId) : undefined;
   if (existing && !existing.isDestroyed()) {
     if (existing.isMinimized()) existing.restore();
     existing.show(); existing.focus();
@@ -417,7 +417,7 @@ function openConversationWindow(conversationId: string): void {
       contextIsolation: true, nodeIntegration: false, sandbox: true, webviewTag: true,
     },
   });
-  conversationWindows.set(conversationId, win);
+  if (conversationId) conversationWindows.set(conversationId, win);
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
@@ -428,11 +428,36 @@ function openConversationWindow(conversationId: string): void {
     if (!isApp) { event.preventDefault(); if (/^https?:/i.test(url)) void shell.openExternal(url); }
   });
   if (devUrl) {
-    const target = new URL(devUrl); target.searchParams.set('conversationId', conversationId);
+    const target = new URL(devUrl);
+    if (conversationId) target.searchParams.set('conversationId', conversationId);
+    else if (newSession) target.searchParams.set('newSession', '1');
     void win.loadURL(target.href);
-  } else void win.loadFile(path.join(here, '../../dist/index.html'), { query: { conversationId } });
+  } else void win.loadFile(path.join(here, '../../dist/index.html'), { query: conversationId ? { conversationId } : newSession ? { newSession: '1' } : {} });
   win.once('ready-to-show', () => { win.show(); win.focus(); });
-  win.on('closed', () => { if (conversationWindows.get(conversationId) === win) conversationWindows.delete(conversationId); });
+  win.on('closed', () => { if (conversationId && conversationWindows.get(conversationId) === win) conversationWindows.delete(conversationId); });
+}
+
+function createApplicationMenu(): void {
+  const mac = process.platform === 'darwin';
+  const menu = Menu.buildFromTemplate([
+    ...(mac ? [{ label: app.name, submenu: [{ role: 'about' as const }, { type: 'separator' as const }, { role: 'quit' as const }] }] : []),
+    { label: '文件', submenu: [
+      { label: '新建窗口', accelerator: 'CommandOrControl+Shift+N', click: () => openConversationWindow() },
+      { label: '新会话并在新窗口打开', accelerator: 'CommandOrControl+Alt+N', click: () => openConversationWindow(undefined, true) },
+      { type: 'separator' }, { label: '关闭当前窗口', click: () => BrowserWindow.getFocusedWindow()?.close() },
+    ] },
+    { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
+    { label: '视图', submenu: [{ label: '刷新窗口', click: () => BrowserWindow.getFocusedWindow()?.webContents.reload() }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'togglefullscreen' }] },
+    { label: '帮助', submenu: [{ label: '窗口关闭行为', click: () => {
+      const options: Electron.MessageBoxOptions = {
+        type: 'info', title: 'Atlas 窗口行为',
+        message: '关闭独立窗口只关闭该窗口；会话仍保存在历史记录中。关闭主窗口会收起到系统托盘，退出 Atlas 请使用托盘菜单中的“退出”。',
+      };
+      const focused = BrowserWindow.getFocusedWindow();
+      void (focused ? dialog.showMessageBox(focused, options) : dialog.showMessageBox(options));
+    } }] },
+  ]);
+  Menu.setApplicationMenu(menu);
 }
 
 function tryRegisterGlobalShortcut(accelerator: string | null): GlobalShortcutState {
@@ -484,11 +509,12 @@ function tryRegisterScreenshotShortcut(accelerator: string | null): GlobalShortc
 
 async function captureSessionScreenshot(): Promise<void> {
   const { conversationId, lastInteractionAt } = screenshotContext;
-  if (!conversationId || Date.now() - lastInteractionAt > 60_000 || !windowRef || windowRef.isDestroyed()) return;
+  const targetWindow = windowForConversation(conversationId);
+  if (!conversationId || Date.now() - lastInteractionAt > 60_000 || !targetWindow || targetWindow.isDestroyed()) return;
   try {
     const access = getSystemAccessStatus();
     if (process.platform === 'darwin' && access.screen !== 'granted') {
-      windowRef.webContents.send('app:session-screenshot-error', access.screen === 'denied' || access.screen === 'restricted' ? '系统拒绝了屏幕录制权限。请在系统设置 → 隐私与安全性 → 屏幕录制中允许 Atlas，然后重新尝试。' : '尚未授予屏幕录制权限，请先在系统设置中允许 Atlas。');
+      targetWindow.webContents.send('app:session-screenshot-error', access.screen === 'denied' || access.screen === 'restricted' ? '系统拒绝了屏幕录制权限。请在系统设置 → 隐私与安全性 → 屏幕录制中允许 Atlas，然后重新尝试。' : '尚未授予屏幕录制权限，请先在系统设置中允许 Atlas。');
       return;
     }
     const cursor = screen.getCursorScreenPoint();
@@ -498,17 +524,44 @@ async function captureSessionScreenshot(): Promise<void> {
     });
     const source = sources.find((item) => item.display_id === String(display.id)) ?? sources[0];
     if (source?.thumbnail && !source.thumbnail.isEmpty()) {
-      windowRef.webContents.send('app:session-screenshot', source.thumbnail.toDataURL(), conversationId);
+      deliverScreenshot(screenshotDataUrl(source.thumbnail), source.name || '屏幕截图', conversationId);
     } else {
-      windowRef.webContents.send('app:session-screenshot-error', '系统没有返回可捕获的屏幕画面。请检查屏幕录制权限与显示器状态，然后在设置 → 电脑操控中点“重新捕获截图”。');
+      targetWindow.webContents.send('app:session-screenshot-error', '系统没有返回可捕获的屏幕画面。请检查屏幕录制权限与显示器状态，然后在设置 → 电脑操控中点“重新捕获截图”。');
     }
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    windowRef.webContents.send('app:session-screenshot-error', /permission|denied|not allowed|屏幕录制/i.test(detail)
+    targetWindow.webContents.send('app:session-screenshot-error', /permission|denied|not allowed|屏幕录制/i.test(detail)
       ? `系统拒绝了屏幕捕获权限：${detail}。请检查系统隐私设置后重试。`
       : `截图捕获失败：${detail}。请重试；若持续失败，请检查显示器与 Atlas 日志。`);
     console.error('Session screenshot capture failed:', error);
   }
+}
+
+function deliverScreenshot(dataUrl: string, title: string, conversationId: string): RecentScreenshot {
+  pruneRecentScreenshots();
+  const screenshot: RecentScreenshot = { id: randomUUID(), title: title.slice(0, 160), capturedAt: Date.now(), dataUrl };
+  recentScreenshots.unshift(screenshot);
+  recentScreenshots.splice(8);
+  const target = windowForConversation(conversationId);
+  if (target && !target.isDestroyed()) target.webContents.send('app:session-screenshot', dataUrl, conversationId);
+  return screenshot;
+}
+
+function screenshotDataUrl(image: Electron.NativeImage): string {
+  const resized = image.resize({ width: 1600, height: 1000, quality: 'good' });
+  return `data:image/jpeg;base64,${resized.toJPEG(82).toString('base64')}`;
+}
+
+function windowForConversation(conversationId: string): BrowserWindow | null {
+  return BrowserWindow.getAllWindows().find((item) => !item.isDestroyed() && item.webContents.getURL().includes(encodeURIComponent(conversationId))) ?? windowRef;
+}
+
+function pruneRecentScreenshots(): void {
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  for (let index = recentScreenshots.length - 1; index >= 0; index -= 1) {
+    if (recentScreenshots[index].capturedAt < cutoff) recentScreenshots.splice(index, 1);
+  }
+  recentScreenshots.splice(8);
 }
 
 function getSystemAccessStatus() {
@@ -855,10 +908,43 @@ ipcMain.handle('deep-link:subscribe', (event) => {
 ipcMain.on('deep-link:unsubscribe', (event) => {
   if (deepLinkSubscriber === event.sender) deepLinkSubscriber = null;
 });
-ipcMain.handle('conversation:open-window', (event, conversationId: unknown) => {
+ipcMain.handle('conversation:open-window', (event, conversationId?: unknown, newSession?: unknown) => {
   assertTrustedAppSender(event);
-  if (typeof conversationId !== 'string') throw new Error('无效的会话 ID。');
-  openConversationWindow(conversationId);
+  if (conversationId !== undefined && typeof conversationId !== 'string') throw new Error('无效的会话 ID。');
+  openConversationWindow(conversationId as string | undefined, newSession === true);
+});
+ipcMain.handle('screenshot:list-windows', async (event): Promise<CaptureWindowOption[]> => {
+  assertTrustedAppSender(event);
+  const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 360, height: 220 }, fetchWindowIcons: true });
+  return sources.filter((source) => source.name.trim() && !source.thumbnail.isEmpty()).map((source) => ({
+    id: source.id, title: source.name.slice(0, 160), thumbnail: source.thumbnail.toDataURL(),
+  }));
+});
+ipcMain.handle('screenshot:capture-window', async (event, sourceId: unknown, conversationId: unknown): Promise<RecentScreenshot> => {
+  assertTrustedAppSender(event);
+  if (typeof sourceId !== 'string' || sourceId.length > 512 || typeof conversationId !== 'string' || (conversationId && !/^[A-Za-z0-9_-]{1,128}$/.test(conversationId))) {
+    throw new Error('请选择有效的窗口和目标会话。');
+  }
+  const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 1920, height: 1200 } });
+  const source = sources.find((item) => item.id === sourceId);
+  if (!source || source.thumbnail.isEmpty()) throw new Error('所选窗口已关闭或系统未返回截图。');
+  const dataUrl = screenshotDataUrl(source.thumbnail);
+  pruneRecentScreenshots();
+  const screenshot: RecentScreenshot = { id: randomUUID(), title: source.name.slice(0, 160), capturedAt: Date.now(), dataUrl };
+  recentScreenshots.unshift(screenshot); recentScreenshots.splice(8);
+  return screenshot;
+});
+ipcMain.handle('screenshot:list-recent', (event) => {
+  assertTrustedAppSender(event);
+  pruneRecentScreenshots();
+  return recentScreenshots.map((item) => ({ ...item }));
+});
+ipcMain.handle('screenshot:delete-recent', (event, id: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof id === 'string') {
+    const index = recentScreenshots.findIndex((item) => item.id === id);
+    if (index >= 0) recentScreenshots.splice(index, 1);
+  }
 });
 ipcMain.handle('platform:get-settings', (event) => {
   assertTrustedAppSender(event);

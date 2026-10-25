@@ -108,6 +108,12 @@ export interface AtlasDesktopApi {
   showFloatingComposer?(): void;
   /** Open the selected conversation in a separate synchronized desktop window. */
   openConversationWindow?(conversationId: string): void;
+  openNewWindow?(): void;
+  openNewSessionWindow?(): void;
+  listCaptureWindows?(): Promise<CaptureWindowOption[]>;
+  captureWindow?(sourceId: string, conversationId: string): Promise<RecentScreenshot>;
+  listRecentScreenshots?(): Promise<RecentScreenshot[]>;
+  deleteRecentScreenshot?(id: string): Promise<void>;
   hideFloatingComposer?(): void;
   submitFloatingComposer?(text: string): void;
   onFloatingComposerSubmit?(callback: (text: string) => void): () => void;

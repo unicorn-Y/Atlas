@@ -54,6 +54,12 @@ const desktopApi: AtlasDesktopApi = {
     ipcRenderer.invoke('platform:open-workspace-in-editor', editor, workspacePath),
   showFloatingComposer: () => ipcRenderer.invoke('floating-composer:show'),
   openConversationWindow: (conversationId: string) => ipcRenderer.invoke('conversation:open-window', conversationId),
+  openNewWindow: () => ipcRenderer.invoke('conversation:open-window'),
+  openNewSessionWindow: () => ipcRenderer.invoke('conversation:open-window', undefined, true),
+  listCaptureWindows: () => ipcRenderer.invoke('screenshot:list-windows'),
+  captureWindow: (sourceId: string, conversationId: string) => ipcRenderer.invoke('screenshot:capture-window', sourceId, conversationId),
+  listRecentScreenshots: () => ipcRenderer.invoke('screenshot:list-recent'),
+  deleteRecentScreenshot: (id: string) => ipcRenderer.invoke('screenshot:delete-recent', id),
   hideFloatingComposer: () => ipcRenderer.send('floating-composer:hide'),
   submitFloatingComposer: (text: string) => ipcRenderer.send('floating-composer:submit', text),
   onFloatingComposerSubmit: (callback: (text: string) => void) => {

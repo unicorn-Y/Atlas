@@ -273,6 +273,7 @@ export default function App() {
   const [createPrompt, setCreatePrompt] = useState('');
   const [toast, setToast] = useState('');
   const [attachments, setAttachments] = useState<string[]>([]);
+  const [recentScreenshots, setRecentScreenshots] = useState<RecentScreenshot[]>([]);
   const [files, setFiles] = useState<Array<RunFile & { size: number }>>([]);
   const [screenRecorderOpen, setScreenRecorderOpen] = useState(false);
   const [attachmentProgress, setAttachmentProgress] = useState('');
@@ -1112,7 +1113,14 @@ export default function App() {
     void store.openConversation(conversation);
   };
   const conversationWindowId = useMemo(() => new URLSearchParams(window.location.search).get('conversationId'), []);
+  const newSessionWindow = useMemo(() => new URLSearchParams(window.location.search).get('newSession') === '1', []);
   const conversationWindowOpened = useRef(false);
+  useEffect(() => {
+    if (!newSessionWindow || conversationWindowOpened.current || !store.connected || store.conversationsLoading) return;
+    conversationWindowOpened.current = true;
+    go('chat');
+    store.beginConversationDraft(store.draftWorkspace || null);
+  }, [newSessionWindow, store.connected, store.conversationsLoading, store.draftWorkspace]);
   useEffect(() => {
     if (!conversationWindowId || conversationWindowOpened.current || !store.connected || store.conversationsLoading) return;
     const target = store.conversations.find((item) => item.id === conversationWindowId);
@@ -1914,6 +1922,9 @@ export default function App() {
       void open(input).then((text) => { if (text !== null) { setInput(text); writeDraft(store.activeConversationId, text); } }).catch((error) => setToast(`编辑器打开失败：${error instanceof Error ? error.message : String(error)}`));
     },
     onRemoveAttachment: (index: number) => setAttachments((items) => items.filter((_, position) => position !== index)),
+    onListCaptureWindows: () => window.atlasDesktop?.listCaptureWindows?.() ?? Promise.resolve([]),
+    onCaptureWindow: captureWindow, recentScreenshots, onPickRecentScreenshot: addRecentScreenshot, onPickRecentScreenshots: addRecentScreenshots,
+    onDeleteRecentScreenshot: (id: string) => { void window.atlasDesktop?.deleteRecentScreenshot?.(id).then(() => setRecentScreenshots((items) => items.filter((item) => item.id !== id))); },
     files, onRemoveFile: (index: number) => setFiles((items) => items.filter((_, position) => position !== index)),
     findMentions, mentions, onAddMention: (item: MentionItem) => { if (item.id) setMentions((current) => [...current, item]); },
     onRemoveMention: (item: MentionItem) => setMentions((current) => current.filter((entry) => !(entry.kind === item.kind && entry.id === item.id))),
