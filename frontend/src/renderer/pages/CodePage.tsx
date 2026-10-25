@@ -145,7 +145,7 @@ export default function CodePage({ apiBaseUrl, connected, onToast }: { apiBaseUr
         <label>项目名称<input required autoFocus value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="例如：Atlas 桌面端" /></label>
         <label>工作区路径<input value={form.workspace_path} onChange={(event) => setForm({ ...form, workspace_path: event.target.value })} placeholder="D:\code\my-app（可选）" /></label>
       </div>
-      <label>附加工作目录（每行一个；会继承到项目会话）<textarea rows={3} value={form.workspace_paths.join('\n')} onChange={(event) => setForm({ ...form, workspace_paths: event.target.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean) })} placeholder="可添加多个仓库目录" /></label>
+      <label>附加工作目录（每行一个；会继承到项目会话）<textarea rows={3} value={form.workspace_paths.join('\n')} onChange={(event) => setForm({ ...form, workspace_paths: event.target.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean) })} placeholder="可添加多个仓库目录" /><small>本机项目可挂载多个本机目录；SSH 项目可挂载同一主机的多个 SSH 目录。SSH 会话使用单一远端主机，不能同时访问本机目录或另一台主机。</small></label>
       {window.atlasDesktop?.selectDirectory && <button type="button" className="btn ghost" onClick={() => void pickProjectRoot(true)}>选择附加目录</button>}
       <label>当前目标<input value={form.current_goal} onChange={(event) => setForm({ ...form, current_goal: event.target.value })} placeholder="这一阶段要完成什么（可选）" /></label>
       <div className="foot"><button type="button" className="btn ghost" onClick={() => setCreating(false)}>取消</button><button className="btn primary" disabled={busy || !form.name.trim()}>创建项目</button></div>
@@ -209,6 +209,7 @@ export default function CodePage({ apiBaseUrl, connected, onToast }: { apiBaseUr
           <h3>项目工作目录</h3>
           <p>主工作区和附加目录会提供给该项目下的新会话，路径超出这些根目录将被拒绝。</p>
           <textarea rows={3} aria-label="项目附加工作目录" value={rootDraft} onChange={(event) => setRootDraft(event.target.value)} placeholder="每行一个本机绝对路径或 ssh:// 地址" />
+          <small>本机项目可挂载多个本机目录；SSH 项目可挂载同一主机的多个 SSH 目录。SSH 会话使用单一远端主机，不能同时访问本机目录或另一台主机。</small>
           <div className="btns">{window.atlasDesktop?.selectDirectory && <button type="button" className="btn ghost" onClick={() => void pickProjectRoot(false)}>选择目录</button>}<button className="btn primary" disabled={busy || rootDraft === (current.workspace_paths ?? []).join('\n')}>保存工作目录</button></div>
         </form>
         <ProjectSourcesPanel projectId={current.project_id} workspacePath={current.workspace_path} apiBaseUrl={apiBaseUrl} onToast={onToast} />
