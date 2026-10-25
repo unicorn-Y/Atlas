@@ -591,6 +591,31 @@ async def execute_tools_node(
                 result = {"data": value, "content": [{
                     "type": "text", "text": json.dumps(value, ensure_ascii=False),
                 }], "is_error": False}
+            elif fn_name == "canvas_update":
+                title = str(fn_args.get("title") or "").strip()[:120]
+                widget_id = str(fn_args.get("widget_id") or "").strip()[:80] or f"run-{ctx.run_id}"
+                fmt = str(fn_args.get("format") or "")
+                mode = str(fn_args.get("mode") or "replace")
+                canvas_content = str(fn_args.get("content") or "")
+                if not title or fmt not in {"mermaid", "html", "table"} or mode not in {"replace", "append"}:
+                    raise ValueError("canvas_update requires a title, supported format, and replace/append mode.")
+                if not canvas_content or len(canvas_content) > 100000:
+                    raise ValueError("Canvas content must contain 1–100000 characters.")
+                if fmt == "table":
+                    parsed = json.loads(canvas_content)
+                    if not isinstance(parsed, dict) or not isinstance(parsed.get("columns"), list) or not isinstance(parsed.get("rows"), list):
+                        raise ValueError("Table canvas content must be JSON with columns and rows arrays.")
+                    if len(parsed["columns"]) > 40 or len(parsed["rows"]) > 500:
+                        raise ValueError("Canvas tables are limited to 40 columns and 500 rows.")
+                if ctx.event_queue is None:
+                    raise RuntimeError("The current run cannot deliver shared canvas events.")
+                await ctx.event_queue.put({"type": "canvas.update", "data": {
+                    "widget_id": widget_id, "title": title, "format": fmt,
+                    "content": canvas_content, "mode": mode,
+                })
+                result = {"data": {"widget_id": widget_id, "title": title, "format": fmt},
+                          "content": [{"type": "text", "text": f"已推送共享画布“{title}”。"}],
+                          "is_error": False}
             elif fn_name == "create_checkpoint":
                 if ssh_checkpoint_callback and (workspace or "").startswith("ssh://"):
                     data = await ssh_checkpoint_callback("create", fn_args)

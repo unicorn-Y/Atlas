@@ -235,6 +235,7 @@ export default function App() {
   const [view, setView] = useState<View>('home');
   const [inspectorOpen, setInspectorOpen] = useState(() => pref('canvas') === 'true');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('artifacts');
+  const [previewFile, setPreviewFile] = useState('');
   const [fullScreenDiff, setFullScreenDiff] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => initialTheme());
   useEffect(() => {
@@ -449,6 +450,13 @@ export default function App() {
   const activeArtifacts = [...store.artifacts.filter((artifact) => artifact.runId === store.activeRunId),
     ...(ultraplanArtifact && ultraplanArtifact.name === `高级计划：${activeConversation?.title ?? ''}` ? [ultraplanArtifact] : [])];
   const activeEvents = activeRun?.events ?? [];
+  const lastCanvasEventRef = useRef('');
+  useEffect(() => {
+    const latest = [...activeEvents].reverse().find((event) => event.type === 'canvas.update');
+    if (!latest || latest.id === lastCanvasEventRef.current || activeRun?.conversationId !== store.activeConversationId) return;
+    lastCanvasEventRef.current = latest.id;
+    showInspectorTab('canvas');
+  }, [activeEvents, activeRun?.conversationId, store.activeConversationId]);
   const runDone = Boolean(activeRun && TERMINAL.includes(activeRun.status));
   const currentPlan = [...activeEvents].reverse().find((event) => event.type === 'run.plan.updated')?.data.plan as { subtasks?: unknown[] } | undefined;
   const planSteps = Array.isArray(currentPlan?.subtasks) ? currentPlan.subtasks.filter((step): step is { status?: string } => Boolean(step) && typeof step === 'object') : [];

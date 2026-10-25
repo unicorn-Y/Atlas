@@ -106,6 +106,17 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
             "merge": {"type": "boolean"},
         }, "required": [], "additionalProperties": False},
     }})
+    tools.append({"type": "function", "function": {
+        "name": "canvas_update",
+        "description": "Push or update a live shared canvas in Atlas's task panel. Use mermaid for diagrams, html for a self-contained script-free view, or table with JSON {columns,rows}. Reuse widget_id to update the same canvas; mode append adds a streamed content segment.",
+        "parameters": {"type": "object", "properties": {
+            "widget_id": {"type": "string", "maxLength": 80},
+            "title": {"type": "string", "minLength": 1, "maxLength": 120},
+            "format": {"type": "string", "enum": ["mermaid", "html", "table"]},
+            "content": {"type": "string", "minLength": 1, "maxLength": 100000},
+            "mode": {"type": "string", "enum": ["replace", "append"]},
+        }, "required": ["title", "format", "content"], "additionalProperties": False},
+    }})
     tools.extend([
         {"type": "function", "function": {
             "name": "propose_new_session",
