@@ -12,7 +12,7 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 
 async def _wait_with_cancel(future: asyncio.Future[Any], cancel: asyncio.Event) -> Any:
@@ -51,7 +51,8 @@ def _claim_stdio_channel() -> tuple[Any, Any]:
     return rpc_in, rpc_out
 
 
-async def serve_stdio(*, workspace: str | None = None) -> None:
+async def serve_stdio(*, workspace: str | None = None,
+                      protocol: Literal["app-server", "acp"] = "app-server") -> None:
     """Serve newline-delimited JSON-RPC requests and streamed run notifications."""
     rpc_in, rpc_out = _claim_stdio_channel()
     from atlas.agent import AgentOrchestrator
@@ -237,7 +238,7 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
                 else:
                     await response(request_id, result={
                         "session_id": session_id, "text": "".join(text_parts),
-                        "status": "failed" if failure_detail else "completed",
+                        "status": "cancelled" if cancel.is_set() else "failed" if failure_detail else "completed",
                     })
             except Exception as exc:  # keep the JSON-RPC process alive across run failures
                 await response(request_id, error={"code": -32010, "message": f"{type(exc).__name__}: {exc}"})
@@ -258,6 +259,17 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
                 method = str(request.get("method") or "")
                 params = request.get("params") if isinstance(request.get("params"), dict) else {}
                 request_id = request.get("id")
+                acp_wire = method == "session/new" or (
+                    method in {"session/prompt", "session/cancel", "session/close"}
+                    and "sessionId" in params
+                )
+                if method in {"session/start", "session/new", "session/prompt", "session/cancel", "session/close"}:
+                    if (protocol == "acp") != acp_wire:
+                        await response(request_id, error={
+                            "code": -32601,
+                            "message": f"{method} payload does not belong to the {protocol} protocol; ACP and Atlas app-server have separate method/field contracts.",
+                        })
+                        continue
                 if not method and request_id is not None:
                     future = pending_client_requests.get(str(request_id))
                     if future is not None and not future.done():
@@ -269,18 +281,23 @@ async def serve_stdio(*, workspace: str | None = None) -> None:
                 if method == "initialize":
                     if params.get("protocolVersion", 1) != 1:
                         await response(request_id, error={
-                            "code": -32002, "message": "Atlas supports ACP protocol version 1 only.",
+                            "code": -32002, "message": "Atlas supports protocol version 1 only.",
                         })
                         continue
                     session_fs["__initialize__"] = capabilities_from_initialize(params)
-                    await response(request_id, result={
-                        "protocolVersion": 1,
-                        "agentInfo": {"name": "Atlas", "version": "0.1.0"},
-                        "agentCapabilities": {
-                            "loadSession": False,
-                            "sessionCapabilities": {"close": {}},
-                        },
-                    })
+                    if protocol == "acp":
+                        await response(request_id, result={
+                            "protocolVersion": 1,
+                            "agentInfo": {"name": "Atlas", "version": "0.1.0"},
+                            "agentCapabilities": {"loadSession": False, "sessionCapabilities": {"close": {}}},
+                        })
+                    else:
+                        await response(request_id, result={
+                            "protocolVersion": 1,
+                            "serverInfo": {"name": "Atlas", "version": "0.1.0"},
+                            "capabilities": {"tools": True, "sessions": True, "streaming": True,
+                                             "approvals": True, "inputRequests": True},
+                        })
                 elif method == "tools/list":
                     tools = orchestrator._model_facing_tools()
                     existing = {

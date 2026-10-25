@@ -697,7 +697,7 @@ def app_server_command(workspace: Path) -> None:
     if not root.is_dir():
         raise click.BadParameter(f"workspace is not a directory: {root}", param_hint="--workspace")
     try:
-        asyncio.run(serve_stdio(workspace=str(root)))
+        asyncio.run(serve_stdio(workspace=str(root), protocol="app-server"))
     except (OSError, RuntimeError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -713,7 +713,7 @@ def acp_command(workspace: Path) -> None:
     if not root.is_dir():
         raise click.BadParameter(f"workspace is not a directory: {root}", param_hint="--workspace")
     try:
-        asyncio.run(serve_stdio(workspace=str(root)))
+        asyncio.run(serve_stdio(workspace=str(root), protocol="acp"))
     except (OSError, RuntimeError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
 

@@ -16,3 +16,5 @@ print(result.structured)
 `Atlas.resume(session_id, prompt)` to continue that conversation.
 
 See [`examples/run.py`](examples/run.py) and [`examples/stream.py`](examples/stream.py).
+
+For long-lived JSON-RPC sessions driven by a desktop client, use [`AppServer`](../../docs/app-server-protocol.md) and see [`examples/app_server.py`](examples/app_server.py). The app-server contract, versioning, events, errors, and its boundary with ACP are documented in the protocol guide.
