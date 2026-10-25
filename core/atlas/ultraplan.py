@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import re
 import uuid
@@ -97,6 +98,29 @@ def _parse_plan(text: str) -> dict[str, Any]:
     return validate_plan(json.loads(raw))
 
 
+# Read-only research children had no budget: on a ~10-40 s/turn relay a trivial goal took ~14 minutes.
+# At the soft limit the child is told to conclude from what it has; at the hard limit it is stopped and
+# the plan is synthesised from the evidence the other children returned.
+RESEARCH_SOFT_LIMIT_S = float(os.environ.get("ATLAS_ULTRAPLAN_RESEARCH_SOFT_S", "240"))
+RESEARCH_HARD_LIMIT_S = float(os.environ.get("ATLAS_ULTRAPLAN_RESEARCH_HARD_S", "420"))
+
+
+async def _enforce_research_budget(orchestrator: Any, job: dict[str, Any], subtask_id: str) -> None:
+    delegation = getattr(orchestrator, "_delegation", None)
+    if delegation is None:
+        return
+    await asyncio.sleep(RESEARCH_SOFT_LIMIT_S)
+    if delegation.steer_subtask(subtask_id, "调研时间已到：不要再调用工具，立即根据已经掌握的证据给出结论（路径、行号、风险、验证方法）。"):
+        row = next((item for item in job["progress"] if item.get("id") == subtask_id), None)
+        if row is not None and row.get("status") == "running":
+            row["detail"] = f"已到 {int(RESEARCH_SOFT_LIMIT_S)} 秒调研预算，正在收尾……"
+    await asyncio.sleep(max(0.0, RESEARCH_HARD_LIMIT_S - RESEARCH_SOFT_LIMIT_S))
+    if delegation.cancel_subtask(subtask_id):
+        row = next((item for item in job["progress"] if item.get("id") == subtask_id), None)
+        if row is not None:
+            row.update({"status": "cancelled", "detail": f"超过 {int(RESEARCH_HARD_LIMIT_S)} 秒调研上限已停止，用其余调研结果出计划。"})
+
+
 async def start(orchestrator: Any, *, goal: str, workspace: str, model: str,
                 conversation_id: str) -> dict[str, Any]:
     if not goal.strip() or not Path(workspace).is_dir():
@@ -131,6 +155,9 @@ async def _research_and_plan(orchestrator: Any, job: dict[str, Any], model: str)
         async def on_started(sid: str, title: str, backend: str, metadata: Any = None) -> None:
             job["progress"].append({"id": sid, "title": title, "status": "running",
                                     "detail": f"并行调研 Agent 已启动（{backend}）"})
+            budget_tasks.append(asyncio.create_task(_enforce_research_budget(orchestrator, job, sid),
+                                                    name=f"ultraplan-budget-{sid}"))
+        budget_tasks: list[asyncio.Task[None]] = []
         results = await orchestrator._delegation.delegate_parallel(
             [
                 {"title": "代码结构与相关文件", "goal": f"只读调研目标：{job['goal']}。定位代码结构、关键文件与调用链，提供路径和行号证据。禁止修改文件。", "agent": "general", "agent_model": model, "agent_permission": "read_only", "agent_tools": ["read_file", "local_file", "search_files", "glob", "grep", "coding.repo_map"]},
@@ -141,6 +168,8 @@ async def _research_and_plan(orchestrator: Any, job: dict[str, Any], model: str)
             atlas_options={"model": model, "workspace": job["workspace"], "permission_mode": "read_only",
                            "tool_allow": ["read_file", "local_file", "search_files", "glob", "grep", "coding.repo_map"]},
         )
+        for task in budget_tasks:
+            task.cancel()
         job["evidence"] = json.dumps(results, ensure_ascii=False, default=str)
         job["model"] = model
         await _synthesize(orchestrator, job, model)
