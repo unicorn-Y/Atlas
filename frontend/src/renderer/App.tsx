@@ -32,6 +32,7 @@ const ForkTree = lazy(() => import('./components/ForkTree'));
 const RunSetupMenu = lazy(() => import('./components/RunSetupMenu'));
 const TabStrip = lazy(() => import('./components/TabStrip'));
 const OnboardingDialog = lazy(() => import('./components/OnboardingDialog'));
+const FeatureLessons = lazy(() => import('./components/FeatureLessons'));
 const ResumePickerDialog = lazy(() => import('./components/ResumePickerDialog'));
 const FallbackModelsDialog = lazy(() => import('./components/FallbackModelsDialog'));
 const IDEManagerDialog = lazy(() => import('./components/IDEManagerDialog'));
@@ -376,6 +377,8 @@ export default function App() {
   const [processCount, setProcessCount] = useState<number | null>(null);
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [featureLessonsOpen, setFeatureLessonsOpen] = useState(false);
+  const [messageTimestampsEnabled, setMessageTimestampsEnabled] = useState(() => pref('message-timestamps') === 'true');
   const [startupWarning, setStartupWarning] = useState('');
   const [diagnosticUnread, setDiagnosticUnread] = useState(0);
   const [peerInbox, setPeerInbox] = useState<Array<{ id: string; sender_conversation_id: string; sender_title: string; content: string; created_at: string }>>([]);
@@ -1881,6 +1884,7 @@ export default function App() {
       else setToast('用法：/wake on 或 /wake off');
     } },
     { id: 'help', label: '/help', hint: '列出全部斜杠命令及用法', run: showHelp },
+    { id: 'powerup', label: '/powerup', hint: '打开可重放的 Atlas 功能课程', run: () => setFeatureLessonsOpen(true) },
     { id: 'doctor', label: '/doctor', hint: '检查安装与配置并查看修复建议', run: () => setSheet('diagnostics') },
     { id: 'warnings', label: '/warnings', hint: '查看持久告警历史', run: () => { setSheet('diagnostics'); window.setTimeout(() => window.dispatchEvent(new CustomEvent('atlas:diagnostics-tab', { detail: 'alerts' })), 0); } },
     { id: 'tasks', label: '/tasks', hint: '任务管理器：查看运行状态、配置来源和后台任务，可逐个结束', run: () => { setSheet('diagnostics'); window.setTimeout(() => window.dispatchEvent(new CustomEvent('atlas:diagnostics-tab', { detail: 'tasks' })), 0); } },
@@ -2618,6 +2622,8 @@ export default function App() {
         {settingsQuery.trim() && !settingControlMatches.length && SETTINGS_NAV.every(([, label, , terms]) => !`${label} ${terms}`.toLocaleLowerCase().includes(settingsQuery.trim().toLocaleLowerCase())) && <p className="px-2.5 py-2 text-[11px] text-fg-3">没有匹配的设置。</p>}
         <button onClick={() => { setSheet(null); setOnboardingOpen(true); }} className="mt-3 flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13px] text-fg-3 hover:bg-hover hover:text-fg">
           <Sparkles size={16} />开始向导</button>
+        <button onClick={() => { setSheet(null); setFeatureLessonsOpen(true); }} className="flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13px] text-fg-3 hover:bg-hover hover:text-fg">
+          <Sparkles size={16} />交互式功能课程</button>
       </nav>
       <div ref={settingsContentRef} className="relative min-h-0 overflow-auto px-8 pt-7 pb-8">
         <button aria-label="关闭设置" onClick={() => { setSheet(null); setSettingsQuery(''); }} className="absolute top-4 right-4 grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={17} /></button>
@@ -2746,6 +2752,7 @@ export default function App() {
         store.beginConversationDraft(defaultWorkspace || null);
         writeDraft('', text); setInput(text);
       }} /></Suspense>}
+    <Suspense fallback={null}>{featureLessonsOpen && <FeatureLessons open onClose={() => setFeatureLessonsOpen(false)} />}</Suspense>
     {recipesOpen && <Suspense fallback={null}><RecipesDialog open onClose={() => setRecipesOpen(false)} recipes={store.recipes}
       onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} /></Suspense>}
     {workflowManagerOpen && <Suspense fallback={null}><WorkflowManagerDialog apiBaseUrl={store.apiBaseUrl} open onClose={() => setWorkflowManagerOpen(false)}
