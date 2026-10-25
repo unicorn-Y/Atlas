@@ -303,9 +303,20 @@ export default function App() {
   const [diagnosticUnread, setDiagnosticUnread] = useState(0);
   const [peerInbox, setPeerInbox] = useState<Array<{ id: string; sender_conversation_id: string; sender_title: string; content: string; created_at: string }>>([]);
   const [besideId, setBesideId] = useState('');
+  const [paneCount, setPaneCount] = useState(0);
+  const [mainPaneFocused, setMainPaneFocused] = useState(true);
   const [handoffDraft, setHandoffDraft] = useState('');
   const [handoffSource, setHandoffSource] = useState('');
   const [handoffBusy, setHandoffBusy] = useState(false);
+  useEffect(() => {
+    const panes = (event: Event) => setPaneCount(Number((event as CustomEvent<{ count: number }>).detail?.count ?? 0));
+    const focusMain = () => setMainPaneFocused(true);
+    const focusSide = () => setMainPaneFocused(false);
+    window.addEventListener('atlas:panes-change', panes);
+    window.addEventListener('atlas:focus-main-pane', focusMain);
+    window.addEventListener('atlas:focus-side-pane', focusSide);
+    return () => { window.removeEventListener('atlas:panes-change', panes); window.removeEventListener('atlas:focus-main-pane', focusMain); window.removeEventListener('atlas:focus-side-pane', focusSide); };
+  }, []);
   const [rewound, setRewound] = useState<{ conversationId: string; rewindId: string; text: string } | null>(null);
   const [defaultWorkspace, setDefaultWorkspace] = useState(() => pref('default-workspace') ?? '');
   const [tabs, setTabs] = useState<string[]>(() => { try { const saved = JSON.parse(pref('tabs') ?? '[]'); return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []; } catch { return []; } });
@@ -2178,7 +2189,7 @@ export default function App() {
             <div className="mt-1.5 flex min-w-0 items-center gap-0.5 overflow-x-auto px-1 text-[11.5px] text-fg-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div></>} />}
 
         {view === 'chat' && <div className="flex min-h-0 flex-1">
-          <div className="relative flex min-w-0 flex-1 flex-col" onDragOver={(event) => { if (event.dataTransfer.types.includes('text/plain')) event.preventDefault(); }} onDrop={(event) => {
+          <div className={`relative flex min-w-0 flex-1 flex-col ${paneCount > 0 && mainPaneFocused ? 'ring-1 ring-inset ring-brand/60' : ''}`} onPointerDown={() => setMainPaneFocused(true)} onDragOver={(event) => { if (event.dataTransfer.types.includes('text/plain')) event.preventDefault(); }} onDrop={(event) => {
             const id = event.dataTransfer.getData('text/plain');
             if (!store.conversations.some((item) => item.id === id) || id === store.activeConversationId) return;
             event.preventDefault();

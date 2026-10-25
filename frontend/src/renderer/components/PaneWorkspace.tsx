@@ -36,6 +36,7 @@ export default function PaneWorkspace({ besideId, activeId, conversations, usern
   const [dragged, setDragged] = useState('');
   const byId = useMemo(() => new Map(conversations.map((item) => [item.id, item])), [conversations]);
   const panes = ids(layout).filter((id) => id !== activeId && byId.has(id));
+  useEffect(() => { window.dispatchEvent(new CustomEvent('atlas:panes-change', { detail: { count: panes.length } })); }, [panes.join('|')]);
   useEffect(() => {
     if (besideId && besideId !== activeId && !ids(layout).includes(besideId)) {
       setLayout((current) => current ? { kind: 'split', splitId: crypto.randomUUID(), axis: 'row', ratio: 0.5, first: current, second: { kind: 'pane', id: besideId } } : { kind: 'pane', id: besideId });
@@ -49,8 +50,12 @@ export default function PaneWorkspace({ besideId, activeId, conversations, usern
   useEffect(() => {
     const focus = (event: Event) => {
       const step = Number((event as CustomEvent<{ step?: number }>).detail?.step ?? 1);
-      const current = ids(layout).filter((id) => id !== activeId && byId.has(id));
-      if (current.length) setFocused(current[(Math.max(0, current.indexOf(focused)) + step + current.length) % current.length]);
+      const current = [activeId, ...ids(layout).filter((id) => id !== activeId && byId.has(id))].filter(Boolean);
+      if (current.length) {
+        const next = current[(Math.max(0, current.indexOf(focused)) + step + current.length) % current.length];
+        if (next === activeId) { setFocused(activeId); document.querySelector<HTMLTextAreaElement>('textarea[aria-label="消息内容"]')?.focus(); window.dispatchEvent(new Event('atlas:focus-main-pane')); }
+        else { setFocused(next); document.querySelector<HTMLElement>(`[data-pane-id="${CSS.escape(next)}"]`)?.focus(); window.dispatchEvent(new Event('atlas:focus-side-pane')); }
+      }
     };
     window.addEventListener('atlas:focus-pane', focus);
     return () => window.removeEventListener('atlas:focus-pane', focus);
@@ -107,7 +112,7 @@ export default function PaneWorkspace({ besideId, activeId, conversations, usern
     if (isLeaf(node)) {
       const conversation = byId.get(node.id);
       if (!conversation || node.id === activeId) return null;
-      return <section key={node.id} onClick={() => setFocused(node.id)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => acceptDrop(event, node.id)}
+      return <section key={node.id} tabIndex={0} data-pane-id={node.id} onClick={() => { setFocused(node.id); window.dispatchEvent(new Event('atlas:focus-side-pane')); }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => acceptDrop(event, node.id)}
         className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${focused === node.id ? 'ring-1 ring-inset ring-brand/60' : ''}`}
         onDragStart={(event) => { setDragged(node.id); event.dataTransfer.setData('text/plain', node.id); event.dataTransfer.effectAllowed = 'move'; }} draggable>
         <div className="no-drag flex h-7 shrink-0 items-center justify-end gap-1 border-b border-line px-1.5">
