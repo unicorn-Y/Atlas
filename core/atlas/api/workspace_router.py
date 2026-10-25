@@ -123,7 +123,7 @@ async def enhance_chat_prompt(
 ) -> dict[str, str]:
     raw = bytearray()
     async for chunk in request.stream():
-        if len(raw) + len(chunk) > 32 * 1024:
+        if len(raw) + len(chunk) > 128 * 1024:
             raise HTTPException(status_code=413, detail="Prompt is too large to enhance")
         raw.extend(chunk)
     try:
@@ -134,8 +134,14 @@ async def enhance_chat_prompt(
         raise HTTPException(status_code=400, detail="Request body must be an object")
     text = payload.get("text")
     model_id = payload.get("model")
+    mode = payload.get("mode", "prompt")
+    context = payload.get("context", "")
     if not isinstance(text, str) or not text.strip() or len(text) > 24_000:
         raise HTTPException(status_code=400, detail="text must contain 1 to 24000 characters")
+    if mode not in {"prompt", "answer"}:
+        raise HTTPException(status_code=400, detail="mode must be prompt or answer")
+    if not isinstance(context, str) or len(context) > 24_000:
+        raise HTTPException(status_code=400, detail="context must be at most 24000 characters")
     if model_id is not None and (not isinstance(model_id, str) or len(model_id) > 256):
         raise HTTPException(status_code=400, detail="model must be a valid model id")
     model_mgr = services.model_mgr
@@ -152,12 +158,20 @@ async def enhance_chat_prompt(
             route,
             messages=[
                 {"role": "system", "content": (
+                    "Refine the user's previous assistant answer for clarity, structure, and readability. Preserve its "
+                    "meaning, language, named entities, evidence, uncertainty, and scope. Do not add facts, claims, "
+                    "requirements, or assumptions. The preceding user request is context only; do not answer it again. "
+                    "Return only the refined answer."
+                    if mode == "answer" else
                     "Rewrite the user's draft into a clearer, more actionable prompt. Preserve the user's intent, "
                     "language, named entities, constraints, and scope. Do not add facts, requirements, or assumptions. "
                     "Do not answer or execute the prompt. Return only the rewritten prompt; if no improvement is needed, "
                     "return the original text."
                 )},
-                {"role": "user", "content": text.strip()},
+                {"role": "user", "content": (
+                    (f"Previous user request (context):\n{context.strip()}\n\nLast Atlas answer to refine:\n{text.strip()}")
+                    if mode == "answer" and context.strip() else text.strip()
+                )},
             ],
             max_tokens=min(16_384, max(1_024, len(text) * 2)),
             temperature=0.2,
@@ -176,7 +190,7 @@ async def enhance_chat_prompt(
     enhanced = str(getattr(result, "text", "") or "").strip()
     if not enhanced:
         raise HTTPException(status_code=502, detail="The selected model returned no rewritten prompt")
-    return {"text": enhanced, "model": selected}
+    return {"text": enhanced, "model": selected, "mode": mode}
 
 
 def _dashboard_store_path(conversation_id: str) -> Path:

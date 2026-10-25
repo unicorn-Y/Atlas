@@ -64,6 +64,57 @@ readline.createInterface({input:process.stdin,crlfDelay:Infinity}).on('line', li
         print("U31 item 1: local JSONL bridge QR state, inbound text/media normalization and outbound delivery PASS")
 
 
+async def check_prompt_enhancement_modes() -> None:
+    """Exercise both prompt rewrite and previous-answer refinement through the API endpoint."""
+    import json
+    from types import SimpleNamespace
+
+    from starlette.requests import Request
+    from atlas.api.workspace_router import enhance_chat_prompt
+
+    calls = []
+
+    class Router:
+        async def resolve(self, model, purpose):
+            assert model == "fixture-model" and purpose == "prompt_enhance"
+            return "fixture-route"
+
+        async def complete(self, route, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(text="改写后的内容", raw={"choices": [{"finish_reason": "stop"}]})
+
+    services = SimpleNamespace(model_mgr=SimpleNamespace(
+        model_router=Router(), current_model="fixture-model"))
+
+    async def invoke(payload):
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        sent = False
+
+        async def receive():
+            nonlocal sent
+            if sent:
+                return {"type": "http.request", "body": b"", "more_body": False}
+            sent = True
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        request = Request({"type": "http", "method": "POST", "path": "/api/chat/prompt-enhance", "headers": []}, receive)
+        return await enhance_chat_prompt(services, request)
+
+    prompt = await invoke({"text": "整理 bug", "mode": "prompt"})
+    assert prompt == {"text": "改写后的内容", "model": "fixture-model", "mode": "prompt"}
+    prompt_messages = calls[-1]["messages"]
+    assert "Rewrite the user's draft" in prompt_messages[0]["content"]
+    assert prompt_messages[1]["content"] == "整理 bug"
+
+    answer = await invoke({"text": "修复已完成", "context": "请修复 bug", "mode": "answer"})
+    assert answer == {"text": "改写后的内容", "model": "fixture-model", "mode": "answer"}
+    answer_messages = calls[-1]["messages"]
+    assert "previous assistant answer" in answer_messages[0]["content"]
+    assert "请修复 bug" in answer_messages[1]["content"] and "修复已完成" in answer_messages[1]["content"]
+    assert "do not answer it again" in answer_messages[0]["content"]
+    print("U31 item 2: prompt and previous-answer API rewrite modes PASS")
+
+
 def require(path: str, *needles: str) -> None:
     content = (ROOT / path).read_text(encoding="utf-8")
     missing = [needle for needle in needles if needle not in content]
@@ -72,7 +123,10 @@ def require(path: str, *needles: str) -> None:
 
 
 async def main() -> None:
+    await check_prompt_enhancement_modes()
     await check_whatsapp_bridge()
+    require("frontend/src/renderer/components/Composer.tsx", "预览改写内容", "替换输入框草稿", "追加到输入框草稿", "精修上一条回答")
+    require("frontend/src/renderer/App.tsx", "mode: 'answer'", "mode: 'prompt'")
     require("core/atlas/channels/adapters/__init__.py", '("whatsapp", "atlas.channels.adapters.whatsapp", "WhatsAppAdapter")')
     require("core/atlas/channels/catalog.py", '"id": "whatsapp"', 'Baileys 6.7.24', '二维码')
     require("core/atlas/api/channel_router.py", '"/whatsapp/pairing"', '"/whatsapp/pairing/reset"')

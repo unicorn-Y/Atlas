@@ -48,6 +48,10 @@ export function mentionAt(value: string): { trigger: '@' | '#' | '$'; query: str
 const LONG_PASTE = 4000;
 const SCREEN_READER_MODE_KEY = 'atlas.composer.screen-reader-mode';
 const ENTER_TO_SEND_KEY = 'atlas.preference.enter-to-send';
+export function applyRewrittenDraft(current: string, rewritten: string, append: boolean): string {
+  const content = rewritten.trim();
+  return append && current.trim() ? `${current.trim()}\n\n${content}` : content;
+}
 function readScreenReaderMode(): boolean {
   try { return localStorage.getItem(SCREEN_READER_MODE_KEY) === 'true'; } catch { return false; }
 }
@@ -186,6 +190,7 @@ interface ComposerProps {
   /** Extra toolbar controls next to the attach button (working directory, plan mode). */
   tools?: ReactNode;
   onEnhancePrompt?: (text: string) => Promise<string>;
+  onRefineLastAnswer?: () => Promise<string>;
   onAttachDrawing?: (dataUrl: string) => boolean;
   contextKey?: string;
   contextUsage?: UsageSummary['context'];
@@ -334,6 +339,7 @@ export default function Composer(props: ComposerProps) {
   const suggestionWasOpenRef = useRef(false);
   const [enhancing, setEnhancing] = useState(false);
   const [enhanceStatus, setEnhanceStatus] = useState('');
+  const [rewritePreview, setRewritePreview] = useState<{ mode: 'prompt' | 'answer'; base: string; text: string } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [found, setFound] = useState<MentionItem[]>([]);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -497,14 +503,43 @@ export default function Composer(props: ComposerProps) {
         return;
       }
       if (!rewritten.trim()) throw new Error('没有收到改写内容');
-      props.onChange(rewritten.trim());
-      setEnhanceStatus('提示词已改写，可继续编辑后发送。');
-      requestAnimationFrame(() => textRef.current?.focus());
+      setRewritePreview({ mode: 'prompt', base: original, text: rewritten.trim() });
+      setEnhanceStatus('改写内容已生成，请预览后选择替换或追加。');
     } catch (error) {
       setEnhanceStatus(`改写失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setEnhancing(false);
     }
+  };
+  const refineLastAnswer = async () => {
+    if (!props.onRefineLastAnswer || enhancing) return;
+    const original = props.value;
+    setEnhancing(true);
+    setEnhanceStatus('正在精修上一条回答…');
+    try {
+      const rewritten = await props.onRefineLastAnswer();
+      if (valueRef.current !== original) {
+        setEnhanceStatus('草稿在精修期间有变化，已保留当前内容；需要时请再次精修。');
+        return;
+      }
+      if (!rewritten.trim()) throw new Error('没有收到精修内容');
+      setRewritePreview({ mode: 'answer', base: original, text: rewritten.trim() });
+      setEnhanceStatus('精修内容已生成，请预览后选择替换或追加。');
+    } catch (error) {
+      setEnhanceStatus(`精修失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally { setEnhancing(false); }
+  };
+  const applyRewrite = (append: boolean) => {
+    if (!rewritePreview) return;
+    if (valueRef.current !== rewritePreview.base) {
+      setEnhanceStatus('草稿已变化，未覆盖当前内容；请重新生成预览。');
+      setRewritePreview(null);
+      return;
+    }
+    props.onChange(applyRewrittenDraft(valueRef.current, rewritePreview.text, append));
+    setRewritePreview(null);
+    setEnhanceStatus(append ? '已将改写内容追加到草稿。' : '已用改写内容替换草稿。');
+    requestAnimationFrame(() => textRef.current?.focus());
   };
   const toggleScreenReaderMode = () => {
     const next = !screenReaderMode;
@@ -766,6 +801,7 @@ export default function Composer(props: ComposerProps) {
           {props.onExternalEditor && <MenuItem onSelect={props.onExternalEditor}><ExternalLink size={15} />用外部编辑器撰写</MenuItem>}
           <MenuItem onSelect={() => props.onChange(`${props.value}${props.value && !props.value.endsWith(' ') ? ' ' : ''}/goal `)}><Sparkles size={15} />目标命令</MenuItem>
           {props.onEnhancePrompt && <MenuItem disabled={!props.value.trim() || enhancing} onSelect={() => void enhancePrompt()}><Sparkles size={15} />{enhancing ? '正在增强提示词…' : '增强提示词'}</MenuItem>}
+          {props.onRefineLastAnswer && <MenuItem disabled={enhancing} onSelect={() => void refineLastAnswer()}><Sparkles size={15} />{enhancing ? '正在精修…' : '精修上一条回答'}</MenuItem>}
           <MenuSeparator />
           <MenuItem checked={enterToSend} onSelect={() => setEnterToSend((current) => { const next = !current; try { localStorage.setItem(ENTER_TO_SEND_KEY, String(next)); } catch { /* storage unavailable */ } return next; })}>Enter 发送</MenuItem>
           <MenuItem checked={screenReaderMode} onSelect={toggleScreenReaderMode}><Accessibility size={15} />屏幕阅读增强</MenuItem>
@@ -862,6 +898,14 @@ export default function Composer(props: ComposerProps) {
         <button type="button" onClick={() => setShellConfirmation(null)} className="rounded-lg px-3 py-2 text-[13px] text-fg-2 hover:bg-hover">取消</button>
         <button type="button" onClick={() => { setShellConfirmation(null); submit(undefined, true); }} className="rounded-lg bg-brand px-3 py-2 text-[13px] font-medium text-white hover:brightness-110">运行命令</button>
       </div>
+    </Dialog>
+    <Dialog open={rewritePreview !== null} onOpenChange={(open) => { if (!open) setRewritePreview(null); }} label="预览改写内容"
+      className="max-h-[84vh] w-[min(720px,94vw)] overflow-auto bg-panel p-5 shadow-xl">
+      <div className="flex items-center gap-2"><h2 className="m-0 flex-1 text-[16px] font-semibold text-heading">{rewritePreview?.mode === 'answer' ? '精修上一条回答' : '增强提示词'}</h2><button type="button" aria-label="关闭改写预览" className="rounded p-1 text-fg-3 hover:bg-hover" onClick={() => setRewritePreview(null)}><X size={16} /></button></div>
+      <p className="mb-2 mt-1 text-[12px] text-fg-3">检查改写结果；你可以先编辑，再决定放入草稿的方式。</p>
+      <textarea aria-label="改写预览" value={rewritePreview?.text ?? ''} onChange={(event) => setRewritePreview((current) => current ? { ...current, text: event.target.value } : current)}
+        className="min-h-56 w-full resize-y rounded-xl border border-line bg-sunken p-3 text-[13px] leading-6 text-fg outline-none focus:border-brand" />
+      <div className="mt-3 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => setRewritePreview(null)} className="rounded-lg px-3 py-2 text-[12px] text-fg-2 hover:bg-hover">取消</button><button type="button" onClick={() => applyRewrite(false)} className="rounded-lg border border-line px-3 py-2 text-[12px] text-fg-2 hover:bg-hover">替换输入框草稿</button><button type="button" onClick={() => applyRewrite(true)} className="rounded-lg bg-brand px-3 py-2 text-[12px] text-white">追加到输入框草稿</button></div>
     </Dialog>
     <Dialog open={shortcutHelpOpen} onOpenChange={onShortcutHelpOpenChange} label="快捷键帮助"
       className="max-h-[82vh] w-[min(560px,92vw)] overflow-auto bg-panel p-4 shadow-xl">

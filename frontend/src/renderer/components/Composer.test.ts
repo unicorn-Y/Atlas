@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { matchCommands, mentionAt, type SlashCommand } from './Composer';
+import { applyRewrittenDraft, matchCommands, mentionAt, type SlashCommand } from './Composer';
 
 const commands: SlashCommand[] = [
   { id: 'new', label: '/new', run: vi.fn() },
@@ -32,5 +32,13 @@ describe('mentionAt', () => {
     expect(mentionAt('mail me@example.com')).toBeNull();
     expect(mentionAt('@file done ')).toBeNull();
     expect(mentionAt('issue#12')).toBeNull();
+  });
+});
+
+describe('applyRewrittenDraft', () => {
+  it('replaces the draft with an edited preview or appends it without losing the draft', () => {
+    expect(applyRewrittenDraft('old draft', '  rewritten prompt  ', false)).toBe('rewritten prompt');
+    expect(applyRewrittenDraft('old draft', '  refined answer  ', true)).toBe('old draft\n\nrefined answer');
+    expect(applyRewrittenDraft('', ' rewritten ', true)).toBe('rewritten');
   });
 });

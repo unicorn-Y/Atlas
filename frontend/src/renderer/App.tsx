@@ -1612,7 +1612,18 @@ export default function App() {
   const enhancePrompt = async (text: string) => {
     const result = await api<{ text: string; model?: string }>(store.apiBaseUrl, '/api/chat/prompt-enhance', {
       method: 'POST',
-      json: { text, model: store.model || undefined },
+      json: { text, mode: 'prompt', model: store.model || undefined },
+    });
+    return result.text;
+  };
+  const refineLastAnswer = async () => {
+    const answerIndex = messages.map((message) => message.role).lastIndexOf('assistant');
+    if (answerIndex < 0) throw new Error('当前对话还没有可精修的回答');
+    const answer = messages[answerIndex].content;
+    const context = [...messages.slice(0, answerIndex)].reverse().find((message) => message.role === 'user')?.content ?? '';
+    const result = await api<{ text: string; model?: string }>(store.apiBaseUrl, '/api/chat/prompt-enhance', {
+      method: 'POST',
+      json: { text: answer, context, mode: 'answer', model: store.model || undefined },
     });
     return result.text;
   };
@@ -2198,7 +2209,8 @@ export default function App() {
     value: input, onChange: setInput, attachments, onPickImages: addFiles, onPickFolders: addFolderReferences, listening, onToggleMic: () => { void toggleSpeechInput(); },
     speechInputMode, onStartMic: () => { void toggleSpeechInput(true); }, onStopMic: () => { void stopSpeechInput(); },
     attachmentProgress, failedAttachmentCount: failedAttachmentReads.length, onRetryFailedAttachments: retryFailedAttachments,
-    onEnhancePrompt: enhancePrompt, onAttachDrawing: attachDrawing, contextKey: store.activeConversationId,
+    onEnhancePrompt: enhancePrompt, onRefineLastAnswer: messages.some((message) => message.role === 'assistant') ? refineLastAnswer : undefined,
+    onAttachDrawing: attachDrawing, contextKey: store.activeConversationId,
     onExternalEditor: () => {
       const open = window.atlasDesktop?.openMessageEditor;
       if (!open) { setToast('外部编辑器只在桌面版可用'); return; }
