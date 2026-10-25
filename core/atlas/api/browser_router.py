@@ -295,6 +295,7 @@ def _vault_entry(meta: Any) -> dict[str, Any]:
         "url": str(meta.get("origin") or ""),
         "created_at": str(meta.get("created_at") or ""),
         "kind": str(meta.get("kind") or "login"),
+        "login_method": meta.get("login_method") if isinstance(meta.get("login_method"), dict) else None,
     }
 
 
@@ -311,6 +312,8 @@ async def add_vault_entry(req: VaultNewEntry) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="label 不能为空")
     if not req.password:
         raise HTTPException(status_code=422, detail="password 不能为空")
+    if not (req.url or "").strip():
+        raise HTTPException(status_code=422, detail="网站 origin 不能为空，例如 https://example.com")
     store = await asyncio.to_thread(_vault_store)
     try:
         meta = await asyncio.to_thread(
@@ -323,6 +326,8 @@ async def add_vault_entry(req: VaultNewEntry) -> dict[str, Any]:
                 "password": req.password,
             },
             (req.url or "").strip() or None,
+            login_method={"fields": {"identifier": "username", "password": "current-password"},
+                          "confirm_before_fill": True, "source": "Atlas 设置"},
         )
     except Exception as exc:  # noqa: BLE001 - vault errors carry no secret values
         raise HTTPException(status_code=400, detail=f"凭据保存失败：{exc}") from exc
@@ -340,6 +345,75 @@ async def delete_vault_entry(item_id: str) -> dict[str, Any]:
 
 class VaultRotateRequest(BaseModel):
     password: str
+
+
+@router.get("/vault/import-candidates", dependencies=[Depends(_require_trusted_origin)])
+async def list_browser_password_candidates(browser: str = "chrome") -> dict[str, Any]:
+    """List metadata from a local Chromium password manager; never return passwords."""
+    from atlas.engine_core.agent.browser_password_import import list_candidates, list_profiles
+    try:
+        profiles = await asyncio.to_thread(list_profiles, browser)
+        candidates = await asyncio.to_thread(list_candidates, browser)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"browser": browser, "profiles": [{"id": p.id, "label": p.label} for p in profiles],
+            "candidates": candidates}
+
+
+class VaultImportRequest(BaseModel):
+    browser: str = "chrome"
+    selected_ids: list[str]
+    overwrite_confirmed: bool = False
+    import_token: str | None = None
+
+
+@router.post("/vault/import", dependencies=[Depends(_require_trusted_origin)])
+async def import_browser_passwords(req: VaultImportRequest) -> dict[str, Any]:
+    """Import only explicitly selected browser rows into the encrypted local vault."""
+    if len(req.selected_ids) > 500 or any(len(item) > 64 for item in req.selected_ids):
+        raise HTTPException(status_code=422, detail="选择的条目数量或标识无效")
+    from atlas.engine_core.agent.browser_password_import import import_selected
+    store = await asyncio.to_thread(_vault_store)
+    existing: dict[str, str] = {}
+    for meta in await asyncio.to_thread(store.list_items):
+        data = meta.to_dict() if hasattr(meta, "to_dict") else meta
+        if data.get("kind") == "login" and data.get("origin"):
+            existing[f"{data['origin']}\0{data.get('identifier') or ''}"] = str(data.get("id") or "")
+    try:
+        result = await asyncio.to_thread(import_selected, req.browser, req.selected_ids, store,
+                                         existing_origins=existing,
+                                         overwrite_confirmed=req.overwrite_confirmed)
+    except (OSError, RuntimeError, ValueError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return result
+
+
+class VaultCsvPreviewRequest(BaseModel):
+    source: str = "Chrome / Edge CSV"
+    csv_text: str
+
+
+@router.post("/vault/import-preview", dependencies=[Depends(_require_trusted_origin)])
+async def preview_browser_password_csv(req: VaultCsvPreviewRequest) -> dict[str, Any]:
+    """Keep an explicitly chosen password export in process memory for 15 minutes."""
+    from atlas.engine_core.agent.browser_password_csv import preview_csv
+    try:
+        return await asyncio.to_thread(preview_csv, req.source, req.csv_text)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/vault/import-selected", dependencies=[Depends(_require_trusted_origin)])
+async def import_selected_browser_passwords(req: VaultImportRequest) -> dict[str, Any]:
+    if not req.import_token:
+        raise HTTPException(status_code=422, detail="缺少导入预览标识")
+    from atlas.engine_core.agent.browser_password_csv import import_selected
+    store = await asyncio.to_thread(_vault_store)
+    try:
+        return await asyncio.to_thread(import_selected, req.import_token, req.selected_ids, store,
+                                       overwrite_confirmed=req.overwrite_confirmed)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.put("/vault/{item_id}/password", dependencies=[Depends(_require_trusted_origin)])

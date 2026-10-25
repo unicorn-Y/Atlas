@@ -36,6 +36,7 @@ dependencies = [
     "cua-driver==0.34.1",
     "pywinauto==0.6.9",
     "pynput>=1.7.7",
+    "cryptography>=41.0.0",
     "Pillow>=10.0.0",
     "browser-use==0.13.11",
     "dbos==3.2.0",

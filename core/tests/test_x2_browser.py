@@ -86,7 +86,10 @@ class FakeVaultStore:
     def __init__(self) -> None:
         self.items: list[dict[str, Any]] = []
 
-    def add_item(self, kind: str, label: str, secret: dict[str, Any], origin: str | None = None):
+    def add_item(
+        self, kind: str, label: str, secret: dict[str, Any], origin: str | None = None,
+        *, login_method: dict[str, Any] | None = None,
+    ):
         meta = {
             "id": f"vault_{len(self.items) + 1}",
             "kind": kind,
@@ -95,6 +98,7 @@ class FakeVaultStore:
             "created_at": "2026-10-03T00:00:00",
             "identifier": secret.get("identifier"),
             "identifier_type": secret.get("identifier_type"),
+            "login_method": login_method,
         }
         self.items.append({**meta, "secret": dict(secret)})  # secret kept server-side only
         return _Meta(meta)
@@ -216,7 +220,11 @@ def test_mode_config_requests_correct_backend(
 
 def test_apply_browser_settings_roundtrip_and_validation() -> None:
     saved = x2browser.apply_browser_settings(mode="copied-profile")
-    assert saved == {"mode": "copied-profile", "cdp_url": "", "proxy": ""}
+    assert saved == {
+        "mode": "copied-profile", "cdp_url": "", "proxy": "",
+        "profile_browser": "chrome", "profile": "Default",
+        "profile_sync_interval_minutes": 30, "incognito": False,
+    }
     # cdp without a URL is refused (Chinese validation error).
     with pytest.raises(ValueError, match="cdp_url"):
         x2browser.apply_browser_settings(mode="cdp")
@@ -305,6 +313,7 @@ async def test_vault_list_never_leaks_secrets() -> None:
         "items": [{
             "handle": "vault_card1", "kind": "payment", "label": "工资卡",
             "origin": "https://pay.example.com",
+            "identifier": "private-user@example.com",
             "password": "s3cret!", "card_number": "4111111111111111", "cvc": "123",
         }],
     }
@@ -316,7 +325,7 @@ async def test_vault_list_never_leaks_secrets() -> None:
 
     assert not result["is_error"]
     blob = json.dumps(result, ensure_ascii=False)
-    for needle in ("s3cret!", "4111111111111111", '"cvc"'):
+    for needle in ("s3cret!", "4111111111111111", '"cvc"', "private-user@example.com", '"identifier"'):
         assert needle not in blob
     item = result["data"]["items"][0]
     assert item["handle"] == "vault_card1" and item["kind"] == "payment"  # metadata survives
@@ -366,15 +375,27 @@ async def test_vault_fill_without_confirmation_channel_is_refused() -> None:
     assert result["is_error"] and "确认" in result["data"]["error"]
 
 
-async def test_vault_fill_login_goes_straight_to_backend() -> None:
-    rt = runtime_with(FakeBrowser())  # default vault_list payload: kind=login
+async def test_vault_fill_login_requires_origin_match_and_confirmation() -> None:
+    backend = FakeBrowser()
+    rt = runtime_with(backend)
     ctx = make_context([])
     async with installed_ctx(ctx):
+        await rt.call_tool("browser_navigate", {"url": "https://evil.example/login"})
         result = await rt.call_tool("browser_vault_fill", {"handle": "vault_login1"})
-    assert not result["is_error"]
-    # Logins need no confirmation: list + fill, nothing else.
-    assert [(c, p.get("handle")) for c, p in rt.acquire_backend().calls] == [  # type: ignore[union-attr]
-        ("vault_list", None), ("vault_fill", "vault_login1")]
+    assert result["is_error"] and "origin" in result["data"]["error"]
+    assert [action for action, _ in backend.calls] == ["navigate", "vault_list"]
+
+    prompts: list[str] = []
+
+    async def allow(prompt: str, options: list[str]) -> str:
+        prompts.append(prompt)
+        return "allow"
+
+    async with installed_ctx(make_context([], wait_input=allow)):
+        await rt.call_tool("browser_navigate", {"url": "https://example.com/login"})
+        result = await rt.call_tool("browser_vault_fill", {"handle": "vault_login1"})
+    assert not result["is_error"] and prompts and "https://example.com" in prompts[0]
+    assert backend.calls[-1][0] == "vault_fill"
 
 
 # ---------------------------------------------------------------------------
@@ -424,7 +445,7 @@ def test_hermes_backend_import_error_message() -> None:
         real = importlib.import_module
 
         def fake(name: str, *a: Any, **kw: Any):
-            if name == "tools.browser_tool":
+            if name == "atlas.engine_core.tools.browser_tool":
                 raise ImportError("boom")
             return real(name, *a, **kw)
 

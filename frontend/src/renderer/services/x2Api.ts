@@ -109,6 +109,17 @@ export interface VaultEntry {
   username?: string;
   url?: string;
   created_at?: string;
+  kind?: string;
+  login_method?: { fields?: Record<string, string>; confirm_before_fill?: boolean; source?: string } | null;
+}
+
+export interface BrowserPasswordCandidate {
+  id: string;
+  source_id: string;
+  source: string;
+  origin: string;
+  username: string;
+  label: string;
 }
 
 /** POST /api/browser/vault 的新增请求：密码只在提交时出现一次。 */
@@ -144,6 +155,15 @@ export const deleteVaultEntry = (apiBaseUrl: string, id: string) =>
 
 export const rotateVaultPassword = (apiBaseUrl: string, id: string, password: string) =>
   api<{ updated: boolean }>(apiBaseUrl, `/api/browser/vault/${encodeURIComponent(id)}/password`, { method: 'PUT', json: { password } });
+
+export const listBrowserPasswordCandidates = (apiBaseUrl: string, browser: 'chrome' | 'edge') =>
+  api<{ profiles: Array<{ id: string; label: string }>; candidates: BrowserPasswordCandidate[] }>(apiBaseUrl, `/api/browser/vault/import-candidates?browser=${browser}`);
+export const importBrowserPasswords = (apiBaseUrl: string, browser: 'chrome' | 'edge', selected_ids: string[], overwrite_confirmed: boolean) =>
+  api<{ imported: string[]; skipped: string[] }>(apiBaseUrl, '/api/browser/vault/import', { method: 'POST', json: { browser, selected_ids, overwrite_confirmed } });
+export const previewBrowserPasswordCsv = (apiBaseUrl: string, source: string, csv_text: string) =>
+  api<{ import_token: string; candidates: BrowserPasswordCandidate[] }>(apiBaseUrl, '/api/browser/vault/import-preview', { method: 'POST', json: { source, csv_text } });
+export const importSelectedBrowserPasswordCsv = (apiBaseUrl: string, import_token: string, selected_ids: string[], overwrite_confirmed: boolean) =>
+  api<{ imported: string[]; skipped: string[] }>(apiBaseUrl, '/api/browser/vault/import-selected', { method: 'POST', json: { import_token, selected_ids, overwrite_confirmed } });
 
 /** 后端可能返回裸数组或 { entries: [...] }，两种都接。 */
 export const normalizeEntries = (value: VaultEntry[] | { entries?: VaultEntry[] } | undefined): VaultEntry[] =>

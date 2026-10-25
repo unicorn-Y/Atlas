@@ -616,6 +616,20 @@ class X2BrowserRuntime:
     ) -> dict[str, Any]:
         payload = await self.call_backend(action, args)
         result = _normalize_payload(payload)
+        if action == "vault_list" and isinstance(result.get("data"), dict):
+            items = result["data"].get("items")
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict):
+                        for key in ("username", "identifier", "identifier_type", "email", "phone"):
+                            item.pop(key, None)
+                # `_normalize_payload` already made a safe textual rendering, but
+                # the metadata-only filtering above is stricter than generic secret
+                # scrubbing. Rebuild it so identifiers cannot survive in tool text.
+                result["content"] = [{
+                    "type": "text",
+                    "text": json.dumps(result["data"], ensure_ascii=False, default=str),
+                }]
         await self._after_action(ctx, name, action, args, result, replayed=replayed)
         return result
 
@@ -688,6 +702,28 @@ class X2BrowserRuntime:
         item = self._find_vault_item(listing, handle)
         if item is None:
             return _error(f"没有句柄为 {handle!r} 的凭据，请先调用 browser_vault_list。")
+        if str(item.get("kind") or "login") == "login":
+            from atlas.engine_core.agent.vault_store import normalize_origin
+
+            expected_origin = str(item.get("origin") or "")
+            current_url = str(self.last_url or "")
+            try:
+                matches = bool(expected_origin and current_url and normalize_origin(expected_origin) == normalize_origin(current_url))
+            except Exception:
+                matches = False
+            if not matches:
+                return _error("保险箱凭据只允许用于保存的精确网站 origin；当前页面不匹配，已取消填充。")
+            method = item.get("login_method") if isinstance(item.get("login_method"), dict) else {}
+            if bool(method.get("confirm_before_fill", True)):
+                if ctx.wait_input is None:
+                    return _error("该网站凭据要求填入前确认，但当前会话没有确认通道，已取消。")
+                choice = await ctx.wait_input(
+                    f"是否允许在 {expected_origin} 填入网站凭据「{item.get('label') or handle}」？密码不会进入对话。",
+                    ["allow", "deny"],
+                )
+                if str(choice).strip().lower() not in {"allow", "yes", "true"}:
+                    await ctx.emit_event("browser.vault_fill_denied", {"handle": handle, "origin": expected_origin})
+                    return _error("用户未确认网站凭据填入，已取消。")
         if str(item.get("kind") or "") == "payment":
             label = str(item.get("label") or handle)
             origin = str(item.get("origin") or self.last_url or "当前页面")

@@ -2,7 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Check, CircleAlert, KeyRound, LoaderCircle, Trash2 } from 'lucide-react';
 import {
   addVaultEntry, deleteVaultEntry, getBrowserSettings, listVaultEntries, normalizeEntries, rotateVaultPassword, saveBrowserSettings,
-  type BrowserControlMode, type BrowserSettings, type VaultEntry, type VaultNewEntry,
+  importBrowserPasswords, listBrowserPasswordCandidates,
+  previewBrowserPasswordCsv, importSelectedBrowserPasswordCsv,
+  type BrowserControlMode, type BrowserPasswordCandidate, type BrowserSettings, type VaultEntry, type VaultNewEntry,
 } from '../../services/x2Api';
 import { cn } from '../../ui/cn';
 import { Button } from '../../ui/Button';
@@ -56,6 +58,7 @@ export function VaultManager({ entries, busy, onAdd, onDelete, onRotate, classNa
             <span className="text-fg">{entry.label}</span>
             {entry.username && <span className="ml-2 text-[12px] text-fg-3">{entry.username}</span>}
             {entry.url && <small className="block truncate font-mono text-[11.5px] text-fg-3" title={entry.url}>{entry.url}</small>}
+            {entry.login_method?.source && <small className="block text-[11.5px] text-fg-3">来源：{entry.login_method.source} · 填入前确认</small>}
           </span>
           <button type="button" aria-label={`删除凭据 ${entry.label}`} disabled={busy}
             onClick={() => { if (armedId === entry.id) { setArmedId(''); onDelete(entry.id); } else setArmedId(entry.id); }}
@@ -81,7 +84,7 @@ export function VaultManager({ entries, busy, onAdd, onDelete, onRotate, classNa
       <div className="flex flex-wrap gap-2">
         <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="密码" aria-label="密码" autoComplete="new-password" required
           className="h-8 min-w-40 flex-1 rounded-[9px] bg-sunken px-3 text-[13px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />
-        <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="网址（可选）" aria-label="网址" autoComplete="off"
+        <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="网站 Origin，例如 https://example.com" aria-label="网站 Origin" autoComplete="off" required
           className="h-8 min-w-40 flex-1 rounded-[9px] bg-sunken px-3 text-[13px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]" />
         <Button type="submit" variant="secondary" disabled={adding || busy || !label.trim() || !password}>
           {adding ? <LoaderCircle size={14} className="spin" /> : <Check size={14} />}添加
@@ -108,6 +111,13 @@ export default function BrowserSettingsSection({ apiBaseUrl, initialSettings, cl
   const [extensionBrowser, setExtensionBrowser] = useState<'chrome' | 'edge'>('chrome');
   const [extensionCheck, setExtensionCheck] = useState('');
   const [connectionCheck, setConnectionCheck] = useState('');
+  const [importBrowser, setImportBrowser] = useState<'chrome' | 'edge'>('chrome');
+  const [candidates, setCandidates] = useState<BrowserPasswordCandidate[]>([]);
+  const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
+  const [overwriteConfirmed, setOverwriteConfirmed] = useState(false);
+  const [importMessage, setImportMessage] = useState('');
+  const [importBusy, setImportBusy] = useState(false);
+  const [csvImportToken, setCsvImportToken] = useState('');
   useEffect(() => {
     let stale = false;
     // 设置读取失败不阻塞：保留默认值，只在保险箱列表上给出中文错误。
@@ -141,6 +151,27 @@ export default function BrowserSettingsSection({ apiBaseUrl, initialSettings, cl
   };
   const rotate = (id: string, password: string) => rotateVaultPassword(apiBaseUrl, id, password)
     .then(() => true).catch((exc) => { setError(exc instanceof Error ? exc.message : String(exc)); return false; });
+  const findBrowserPasswords = async () => {
+    setImportBusy(true); setError(''); setImportMessage(''); setCsvImportToken(''); setCandidates([]); setSelectedCandidates([]);
+    try {
+      const result = await listBrowserPasswordCandidates(apiBaseUrl, importBrowser);
+      setCandidates(result.candidates); setSelectedCandidates([]);
+      setImportMessage(`发现 ${result.candidates.length} 条可导入记录；密码仅在你选择导入后写入本机保险箱。`);
+    } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setImportBusy(false); }
+  };
+  const importSelectedPasswords = async () => {
+    if (!selectedCandidates.length || importBusy) return;
+    setImportBusy(true); setError('');
+    try {
+      const result = csvImportToken
+        ? await importSelectedBrowserPasswordCsv(apiBaseUrl, csvImportToken, selectedCandidates, overwriteConfirmed)
+        : await importBrowserPasswords(apiBaseUrl, importBrowser, selectedCandidates, overwriteConfirmed);
+      setImportMessage(`已导入 ${result.imported.length} 条；跳过 ${result.skipped.length} 条（重复、空密码或浏览器加密方式不支持）。`);
+      setSelectedCandidates([]); setCsvImportToken(''); setReloadKey((value) => value + 1);
+    } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setImportBusy(false); }
+  };
   const mode = settings.mode ?? 'standalone';
   const checkConnection = () => {
     setConnectionCheck('正在检测 Chrome…');
@@ -212,6 +243,36 @@ export default function BrowserSettingsSection({ apiBaseUrl, initialSettings, cl
       {error && <span role="alert" className="flex items-center gap-1 text-[12.5px] text-danger"><CircleAlert size={13} />{error}</span>}
     </div>
     <div className="mt-4 border-t border-line pt-3">
+      <div className="mb-3 rounded-xl card-surface p-3">
+        <p className="m-0 mb-2 text-[13px] font-medium text-fg">从本机密码管理器导入</p>
+        <p className="m-0 mb-2 text-[12px] text-fg-3">逐条选择要导入的登录信息。CSV 预览会在本机内存暂存密码 15 分钟；只有你选中的条目会写入加密保险箱。密码不会进入前端条目列表、日志或模型上下文。</p>
+        <div className="flex flex-wrap gap-2">
+          <select aria-label="密码来源浏览器" value={importBrowser} onChange={(event) => { setImportBrowser(event.target.value as 'chrome' | 'edge'); setCsvImportToken(''); setCandidates([]); setSelectedCandidates([]); }} className="h-8 rounded-lg bg-sunken px-2 text-[12px] text-fg"><option value="chrome">Google Chrome</option><option value="edge">Microsoft Edge</option></select>
+          <Button variant="secondary" disabled={importBusy} onClick={() => void findBrowserPasswords()}>{importBusy ? <LoaderCircle size={14} className="spin" /> : <KeyRound size={14} />}读取可用条目</Button>
+          <Button variant="primary" disabled={importBusy || !selectedCandidates.length} onClick={() => void importSelectedPasswords()}>导入所选（{selectedCandidates.length}）</Button>
+        </div>
+        <label className="mt-2 block text-[12px] text-fg-3">新版 Chrome/Edge 使用应用绑定加密时，请从浏览器密码管理器导出 CSV 后在此选择；文件内容只在本机导入会话内暂存，15 分钟后过期。
+          <input aria-label="选择 Chrome 或 Edge 密码导出 CSV" type="file" accept=".csv,text/csv" className="mt-1 block max-w-full text-[12px] text-fg-2" disabled={importBusy} onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            if (!file) return;
+            setImportBusy(true); setError(''); setImportMessage('正在读取 CSV 条目…'); setCsvImportToken(''); setCandidates([]); setSelectedCandidates([]);
+            void file.text().then(async (csvText) => {
+              const preview = await previewBrowserPasswordCsv(apiBaseUrl, file.name, csvText);
+              setCsvImportToken(preview.import_token); setCandidates(preview.candidates); setSelectedCandidates([]);
+              setImportMessage(`从 ${file.name} 发现 ${preview.candidates.length} 条可选记录。`);
+            }).catch((exc) => setError(exc instanceof Error ? exc.message : String(exc))).finally(() => setImportBusy(false));
+            event.currentTarget.value = '';
+          }} />
+        </label>
+        <label className="mt-2 flex items-start gap-2 text-[12px] text-fg-2"><input type="checkbox" checked={overwriteConfirmed} onChange={(event) => setOverwriteConfirmed(event.target.checked)} /><span>确认覆盖保险箱中相同网站和用户名的密码</span></label>
+        {importMessage && <p role="status" className="m-0 mt-2 text-[12px] text-fg-3">{importMessage}</p>}
+        {candidates.length > 0 && <ul className="m-0 mt-2 max-h-56 list-none space-y-1 overflow-auto p-0">
+          {candidates.map((item) => <li key={item.id} className="flex items-start gap-2 rounded-lg bg-sunken px-2.5 py-2 text-[12px]">
+            <input aria-label={`选择 ${item.origin} ${item.username}`} type="checkbox" checked={selectedCandidates.includes(item.id)} onChange={(event) => setSelectedCandidates((ids) => event.target.checked ? [...ids, item.id] : ids.filter((id) => id !== item.id))} />
+            <span className="min-w-0"><strong className="block break-all text-fg">{item.origin}</strong><span className="text-fg-3">{item.username || '无用户名'} · 来源：{item.source}</span></span>
+          </li>)}
+        </ul>}
+      </div>
       <VaultManager entries={entries ?? []} busy={busy} onAdd={add} onDelete={remove} onRotate={rotate} />
     </div>
   </section>;

@@ -25,9 +25,9 @@ import threading
 import uuid
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
-from datetime import datetime, timezone, UTC
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from urllib.parse import urlsplit
 
 from atlas.engine_core.hermes_constants import get_hermes_home
@@ -195,6 +195,7 @@ class VaultItemMeta:
     # ``origin`` is the first/primary one). Fill matching stays exact-origin against
     # this list — no wildcard or subdomain inference is ever derived from it.
     allowed_origins: tuple = ()
+    login_method: Optional[dict[str, Any]] = None
 
     def to_dict(self) -> dict[str, Any]:
         out = {
@@ -211,6 +212,8 @@ class VaultItemMeta:
             out["has_otp"] = True
         if len(self.allowed_origins) > 1:
             out["allowed_origins"] = list(self.allowed_origins)
+        if self.login_method:
+            out["login_method"] = dict(self.login_method)
         return out
 
 
@@ -331,6 +334,8 @@ class VaultStore:
         label: str,
         secret: dict[str, Any],
         origin: Optional[str] = None,
+        *,
+        login_method: Optional[dict[str, Any]] = None,
     ) -> VaultItemMeta:
         """Add an item. ``secret`` is the sensitive payload (encrypted at rest).
 
@@ -377,6 +382,19 @@ class VaultStore:
                 norm_origin = normalize_origin(origin)
 
         item_id = f"vault_{uuid.uuid4().hex[:12]}"
+        method = None
+        if kind == "login":
+            login_method = login_method or {"fields": {"identifier": "username", "password": "current-password"},
+                                           "confirm_before_fill": True}
+            fields = login_method.get("fields", {})
+            allowed_fields = {key: str(value)[:80] for key, value in fields.items()
+                              if key in {"identifier", "password"} and isinstance(value, str)}
+            method = {
+                "fields": allowed_fields,
+                "confirm_before_fill": bool(login_method.get("confirm_before_fill", True)),
+            }
+            if isinstance(login_method.get("source"), str):
+                method["source"] = login_method["source"][:120]
         record = {
             "id": item_id,
             "kind": kind,
@@ -385,6 +403,7 @@ class VaultStore:
             "created_at": datetime.now(UTC).isoformat(),
             "identifier_type": identifier_type,
             "identifier": identifier,
+            "login_method": method,
             "secret": dict(secret),
         }
         with self._locked():
@@ -463,6 +482,7 @@ class VaultStore:
             identifier_type=rec.get("identifier_type") if identifier else None,
             identifier=identifier or None,
             has_otp=bool((rec.get("secret") or {}).get("otp_secret")),
+            login_method=(dict(rec.get("login_method")) if isinstance(rec.get("login_method"), dict) else None),
         )
 
 
