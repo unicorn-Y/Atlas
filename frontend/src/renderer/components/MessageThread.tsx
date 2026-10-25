@@ -44,6 +44,7 @@ function timelineClass(item: TimelineItem): ThreadClassId {
     case 'approval': case 'question': case 'trust': case 'foreground': case 'handoff': return 'approvals';
     case 'plan': return 'plans';
     case 'checks': case 'review': case 'lsp': return 'checks';
+    case 'component': return 'messages';
     case 'artifact': case 'done': return 'files';
     case 'cancelled': case 'notice': case 'failed': return 'status';
   }
@@ -473,7 +474,7 @@ export default function MessageThread({ history, username, historyActions, empty
         </div>;
         const metadata = row.message.metadata && typeof row.message.metadata === 'object' ? row.message.metadata as Record<string, unknown> : {};
         const memoryCitations = Array.isArray(metadata.memory_citations) ? metadata.memory_citations.filter((ref): ref is string => typeof ref === 'string') : [];
-        return <ConversationMessage id={String(row.message.id)} role={row.message.role === 'user' ? 'user' : 'assistant'} content={row.message.content} username={username} continued={row.continued} actions={historyActions(row.message)} memoryCitations={memoryCitations} />;
+        return <ConversationMessage id={String(row.message.id)} role={row.message.role === 'user' ? 'user' : 'assistant'} content={row.message.content} username={username} continued={row.continued} actions={historyActions(row.message)} memoryCitations={memoryCitations} createdAt={row.message.created_at} />;
       case 'empty':
         return emptyState;
       case 'timeline':

@@ -43,4 +43,17 @@ describe('ConversationMessage', () => {
     expect(render()).toBe(render());
     expect(render()).toContain('<h1>标题</h1>');
   });
+
+  it('shows stored message timestamps only when the local preference is enabled', () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (key: string) => key === 'atlas.preference.message-timestamps' ? 'true' : null } });
+    try {
+      const html = renderToStaticMarkup(<ConversationMessage role="user" content="历史提问" username="User" createdAt="2026-10-25T14:30:00.000Z" />);
+      expect(html).toContain('<time dateTime="2026-10-25T14:30:00.000Z"');
+      expect(html).toContain('历史提问');
+    } finally {
+      if (original) Object.defineProperty(globalThis, 'localStorage', original);
+      else delete (globalThis as { localStorage?: Storage }).localStorage;
+    }
+  });
 });

@@ -2656,6 +2656,7 @@ export default function App() {
           <div className="mt-7"><NotificationsPanel apiBaseUrl={store.apiBaseUrl} /></div>
           <div className="set-list">
             <div className="set-row"><div>置顶任务摘要<small>在长对话顶部显示首条目标和最近进度</small></div><button className="switch" role="switch" aria-label="置顶任务摘要" aria-checked={summaryEnabled} onClick={() => { const next = !summaryEnabled; setSummaryEnabled(next); setPref('pinned-summary', String(next)); }} /></div>
+            <div className="set-row"><div>显示消息时间戳<small>在对话中的每条消息旁显示本地时间</small></div><button className="switch" role="switch" aria-label="显示消息时间戳" aria-checked={messageTimestampsEnabled} onClick={() => { const next = !messageTimestampsEnabled; setMessageTimestampsEnabled(next); setPref('message-timestamps', String(next)); window.dispatchEvent(new Event('atlas:message-timestamps-changed')); }} /></div>
             <div className="set-row"><div>收起侧边栏<small>只显示图标，给内容更多空间</small></div><button className="switch" role="switch" aria-label="收起侧边栏" aria-checked={sideMini} onClick={toggleMini} /></div>
             <div className="set-row"><div>自动朗读新回复<small>用本机语音逐句读出 Atlas 的回答</small></div><button className="switch" role="switch" aria-label="自动朗读新回复" aria-checked={voiceOutput} onClick={toggleVoiceOutput} /></div>
             <div className="set-row"><div>按住说话<small>按住输入框麦克风录音，松开后结束识别；关闭时点击切换录音</small></div><button className="switch" role="switch" aria-label="按住说话模式" aria-checked={speechInputMode === 'hold'} onClick={() => setSpeechInputMode((mode) => mode === 'hold' ? 'toggle' : 'hold')} /></div>

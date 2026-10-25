@@ -71,8 +71,8 @@ export interface ReviewFinding {
 }
 
 export type TimelineItem =
-  | { kind: 'user'; id: string; content: string; steered?: boolean }
-  | { kind: 'reply'; id: string; content: string; streaming: boolean; status?: string }
+  | { kind: 'user'; id: string; content: string; steered?: boolean; timestamp?: string }
+  | { kind: 'reply'; id: string; content: string; streaming: boolean; status?: string; timestamp?: string }
   /** Text explicitly delivered by the runtime as run.status with status=reasoning. */
   | { kind: 'reasoning'; id: string; text: string; eventCount: number; truncated: boolean; source: 'run.status' | 'history'; startedAt?: string; endedAt?: string }
   | { kind: 'steps'; id: string; steps: Step[] }
@@ -379,7 +379,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
   const items: TimelineItem[] = [];
   const byExecution = new Map<string, Step>();
   let track: { kind: 'steps'; id: string; steps: Step[] } | null = null;
-  let reply: { kind: 'reply'; id: string; content: string; streaming: boolean; status?: string } | null = null;
+  let reply: { kind: 'reply'; id: string; content: string; streaming: boolean; status?: string; timestamp?: string } | null = null;
   let runStartedAt: string | undefined;
   let earlyRules: Step | null = null;
   // Text Atlas streamed before a tool call. The final message.completed repeats it, so it is trimmed off there.
@@ -434,7 +434,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         if (typeof data.content === 'string' && data.content) {
           // The trust question is asked before the run starts; once the request shows up, put it back under it.
           const early = items.length && items[items.length - 1].kind === 'trust' ? items.pop() : undefined;
-          items.push(isTodoEdit(data.content) ? { kind: 'notice', id: event.id, tone: 'todo', text: todoEditNotice(data.content) } : { kind: 'user', id: event.id, content: data.content });
+          items.push(isTodoEdit(data.content) ? { kind: 'notice', id: event.id, tone: 'todo', text: todoEditNotice(data.content) } : { kind: 'user', id: event.id, content: data.content, timestamp: event.timestamp });
           if (early) items.push(early);
         }
         closeBlocks(); reply = null; spoken = '';
@@ -541,14 +541,14 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         items.push({ kind: 'handoff', id: event.id, event });
         break;
       case 'message.delta':
-        if (!reply) { reply = { kind: 'reply', id: event.id, content: '', streaming: true }; items.push(reply); closeBlocks(); }
+        if (!reply) { reply = { kind: 'reply', id: event.id, content: '', streaming: true, timestamp: event.timestamp }; items.push(reply); closeBlocks(); }
         reply.content += String(data.content ?? '');
         break;
       case 'message.completed': {
         const full = String(data.content ?? reply?.content ?? '');
         const body = spoken && full.startsWith(spoken) ? full.slice(spoken.length).trimStart() : full;
         if (reply) { reply.content = body; reply.streaming = false; }
-        else if (body.trim()) items.push({ kind: 'reply', id: event.id, content: body, streaming: false });
+        else if (body.trim()) items.push({ kind: 'reply', id: event.id, content: body, streaming: false, timestamp: event.timestamp });
         reply = null; closeBlocks();
         break;
       }
