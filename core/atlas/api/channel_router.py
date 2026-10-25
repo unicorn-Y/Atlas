@@ -14,6 +14,9 @@ The manager instance is injected at startup by the integration owner via
 from __future__ import annotations
 
 import inspect
+import asyncio
+import subprocess
+import sys
 from contextlib import suppress
 from typing import Any, Literal
 
@@ -32,6 +35,13 @@ _SECRET_FIELDS = {
     "secret", "password", "bot_token", "app_token", "app_secret", "client_secret",
     "corp_secret", "webhook_secret", "encoding_aes_key", "token",
 }
+_CHANNEL_INSTALL_PACKAGES = {
+    "slack": ("slack-sdk>=3.33.0", "slack-bolt>=1.18.0", "aiohttp>=3.9.0", "cryptography>=41.0.0"),
+    "feishu": ("lark-oapi>=1.3.0", "cryptography>=41.0.0"),
+    "dingtalk": ("dingtalk-stream>=0.24.0", "aiohttp>=3.9.0", "cryptography>=41.0.0", "defusedxml>=0.7.0"),
+}
+_install_state: dict[str, Any] = {"status": "idle", "channel": None, "message": ""}
+_install_lock = asyncio.Lock()
 
 
 def set_channel_manager(manager: ChannelManager | None) -> None:
@@ -70,6 +80,63 @@ async def channel_catalog() -> dict[str, Any]:
     from atlas.channels.catalog import channels_with_registry
 
     return {"channels": channels_with_registry(_manager.registry if _manager else {})}
+
+
+@router.get("/dependencies/status", dependencies=[Depends(_require_trusted_origin)])
+async def channel_dependency_install_status() -> dict[str, Any]:
+    """Return progress for the optional SDK installer without exposing credentials."""
+    return dict(_install_state)
+
+
+@router.post("/dependencies/{channel}/install", dependencies=[Depends(_require_trusted_origin)])
+async def install_channel_dependencies(channel: str) -> dict[str, Any]:
+    """Install one catalog adapter's pinned extra packages into this Atlas Python."""
+    channel = channel.strip().lower()
+    packages = _CHANNEL_INSTALL_PACKAGES.get(channel)
+    if packages is None:
+        raise HTTPException(status_code=404, detail="该渠道没有可安装的可选依赖")
+    if _install_lock.locked():
+        raise HTTPException(status_code=409, detail="另一个渠道依赖安装正在进行")
+    async with _install_lock:
+        _install_state.update(status="installing", channel=channel, message="正在使用当前 Atlas Python 安装渠道依赖…")
+        output_lines: list[str] = []
+        try:
+            process = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "pip", "install", *packages,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            assert process.stdout is not None
+            deadline = asyncio.get_running_loop().time() + 900
+            while True:
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    raise TimeoutError("pip install 超过 15 分钟")
+                raw_line = await asyncio.wait_for(process.stdout.readline(), timeout=remaining)
+                if not raw_line:
+                    break
+                output_lines.append(raw_line.decode("utf-8", errors="replace").rstrip())
+                del output_lines[:-40]
+                _install_state.update(message="\n".join(output_lines)[-6000:])
+            return_code = await asyncio.wait_for(process.wait(), timeout=max(0.1, deadline - asyncio.get_running_loop().time()))
+        except (OSError, TimeoutError, asyncio.TimeoutError) as exc:
+            if "process" in locals() and process.returncode is None:
+                process.kill()
+                await process.wait()
+            message = f"依赖安装失败：{type(exc).__name__}: {str(exc)[:400]}"
+            _install_state.update(status="failed", message=message)
+            raise HTTPException(status_code=500, detail=message) from exc
+        output = "\n".join(output_lines)
+        output = output[-6000:]
+        if return_code != 0:
+            message = f"pip install 退出码 {return_code}\n{output}"[:6500]
+            _install_state.update(status="failed", message=message)
+            raise HTTPException(status_code=500, detail=message)
+        if _manager is not None:
+            from atlas.channels.adapters import register_builtin_channels
+            register_builtin_channels(_manager.register_channel)
+        _install_state.update(status="complete", message=output or "依赖安装成功")
+        return {"ok": True, "channel": channel, "python": sys.executable, "output": output[-3000:]}
 
 
 class SessionLinkPayload(BaseModel):

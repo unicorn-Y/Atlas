@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { LoaderCircle, Radio, RefreshCw, Save } from 'lucide-react';
+import { Download, LoaderCircle, Radio, RefreshCw, Save } from 'lucide-react';
 import { channelsApi, type ChannelStatusRow } from '../../services/persistentApi';
 import { api } from '../../services/api';
 import { Button } from '../../ui/Button';
@@ -69,6 +69,8 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
   const [policies, setPolicies] = useState<Record<string, ChannelPolicy>>({});
   const [values, setValues] = useState<Record<string, Record<string, string>>>({});
   const [busyChannel, setBusyChannel] = useState('');
+  const [dependencyState, setDependencyState] = useState<Record<string, string>>({});
+  const [installingDependency, setInstallingDependency] = useState('');
   const [test, setTest] = useState({ channel: '', chatId: '', text: 'Atlas 测试消息' });
   const [sessionLinks, setSessionLinks] = useState<Array<{ session_key: string; conversation_id: string; linked_by: string; created_at: string }>>([]);
   const [catalog, setCatalog] = useState<ChannelCatalogRow[]>([]);
@@ -112,6 +114,24 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
   useEffect(() => { void reload(); }, [reload]);
 
   const enabledRows = rows.filter((row) => row.enabled);
+
+  const installDependencies = async (channel: string) => {
+    setInstallingDependency(channel);
+    setDependencyState((current) => ({ ...current, [channel]: '正在使用当前 Atlas Python 安装依赖…' }));
+    const progressTimer = window.setInterval(() => {
+      void api<{ status: string; message: string }>(apiBaseUrl, '/api/channels/dependencies/status')
+        .then((status) => { if (status.channel === channel && status.message) setDependencyState((current) => ({ ...current, [channel]: status.message })); })
+        .catch(() => undefined);
+    }, 700);
+    try {
+      const result = await api<{ ok: boolean; output: string }>(apiBaseUrl, `/api/channels/dependencies/${encodeURIComponent(channel)}/install`, { method: 'POST' });
+      await reload();
+      setDependencyState((current) => ({ ...current, [channel]: result.output || '安装成功，适配器已重新注册。' }));
+      onToast(`${channel} 依赖安装完成，目录状态已刷新`);
+    } catch (error) {
+      setDependencyState((current) => ({ ...current, [channel]: error instanceof Error ? error.message : String(error) }));
+    } finally { window.clearInterval(progressTimer); setInstallingDependency(''); }
+  };
   useEffect(() => {
     if (enabledRows.some((row) => row.name === test.channel)) return;
     setTest((current) => ({ ...current, channel: enabledRows[0]?.name ?? '' }));
@@ -260,6 +280,7 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
         <p className="mb-1 mt-1.5 text-[11.5px] text-fg-3">{item.setup}</p>
         <p className="m-0 text-[10.5px] text-fg-3">入站 {item.inbound ? '✓' : '—'} · 出站 {item.outbound ? '✓' : '—'} · 附件 {item.attachments ? '✓' : '—'} · 群组 {item.groups ? '✓' : '—'} · 提及 {item.mentions ? '✓' : '—'}{item.dependency ? ` · 依赖 ${item.dependency}` : ''}</p>
         {item.registered && item.credentials.length > 0 && <p className="mb-0 mt-1 text-[10.5px] text-fg-3">凭据字段：{item.credentials.join('、')}</p>}
+        {item.status === 'dependency_missing' && <div className="mt-2 flex items-center gap-2"><Button size="sm" variant="secondary" disabled={Boolean(installingDependency)} onClick={() => void installDependencies(item.id)}>{installingDependency === item.id ? <LoaderCircle className="spin" size={13} /> : <Download size={13} />}{installingDependency === item.id ? '正在安装…' : '安装依赖'}</Button><span className="min-w-0 whitespace-pre-wrap break-words text-[10.5px] text-fg-3">{dependencyState[item.id] ?? ''}</span></div>}
       </article>)}</div>
     </section>
 

@@ -10,6 +10,7 @@ import asyncio
 import base64
 import os
 import re
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass, field
@@ -617,7 +618,9 @@ class MCPClient:
                 log.warning("mcp.stop_error", server=cfg.name, error=str(cleanup_exc))
             raise
         except Exception as exc:
-            diagnostic = _stdio_startup_diagnostic(handle._stderr_log)
+            diagnostic = _stdio_startup_diagnostic(handle._stderr_log, cfg)
+            if not diagnostic and cfg.transport == "stdio":
+                diagnostic = f"启动命令 {cfg.command!r} 失败：{_failure_reason(exc)}"
             try:
                 await self._stop_handle(handle)
             except Exception as cleanup_exc:
@@ -1219,7 +1222,7 @@ class _MCPStartupError(RuntimeError):
     """A safe diagnostic derived from the child process rather than its raw stderr."""
 
 
-def _stdio_startup_diagnostic(stderr_log: Any) -> str | None:
+def _stdio_startup_diagnostic(stderr_log: Any, config: MCPServerConfig | None = None) -> str | None:
     if stderr_log is None:
         return None
     try:
@@ -1228,12 +1231,47 @@ def _stdio_startup_diagnostic(stderr_log: Any) -> str | None:
         tail = stderr_log.read(8192).decode("utf-8", errors="replace")
     except (OSError, ValueError):
         return None
-    if "ERR_TLS_CERT_ALTNAME_INVALID" in tail:
-        return (
-            "MCP dependency download failed: TLS certificate hostname mismatch "
-            "(ERR_TLS_CERT_ALTNAME_INVALID). Check the package registry or proxy certificate."
-        )
-    return None
+    if not tail.strip():
+        return None
+    # Stderr often contains the actionable npx/npm failure, but may echo configured
+    # environment credentials. Redact those values before showing a bounded summary.
+    if config is not None:
+        for value in config.env.values():
+            if value and len(str(value)) >= 4:
+                tail = tail.replace(str(value), "[redacted]")
+    lines = []
+    for line in tail.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if re.search(r"(?i)(password|secret|api[_ -]?key|access[_ -]?token|bot[_ -]?token)", line):
+            line = re.sub(r"(?i)(password|secret|api[_ -]?key|access[_ -]?token|bot[_ -]?token)\s*[:=]?\s*\S+", r"\1=[redacted]", line)
+        line = re.sub(r"\bsk-[A-Za-z0-9_-]{6,}\b", "[redacted-key]", line)
+        lines.append(line)
+    summary = "\n".join(lines[-8:])[-1800:]
+    if "ERR_TLS_CERT_ALTNAME_INVALID" in summary:
+        summary = "TLS certificate hostname mismatch / 证书主机名不匹配 (ERR_TLS_CERT_ALTNAME_INVALID)。\n" + summary
+    command = ""
+    if config is not None and config.transport == "stdio":
+        args = list(config.args)
+        safe_args: list[str] = []
+        redact_next = False
+        for arg in args:
+            if redact_next:
+                safe_args.append("[redacted]")
+                redact_next = False
+                continue
+            if arg.lower() in {"--token", "--api-key", "--password", "--secret", "-p"}:
+                safe_args.append(arg)
+                redact_next = True
+            elif Path(arg).is_absolute():
+                safe_args.append("[local path]")
+            elif any(mark in arg.lower() for mark in ("token=", "api_key=", "password=", "secret=")):
+                safe_args.append("[redacted]")
+            else:
+                safe_args.append(arg)
+        command = "启动命令：" + " ".join([config.command, *safe_args]) + "\n"
+    return f"{command}MCP server failed during launch or initialization; stderr 摘要：\n{summary}"
 
 
 def _resolve_stdio_command(command: str, args: list[str]) -> tuple[str, list[str]]:

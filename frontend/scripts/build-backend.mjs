@@ -38,7 +38,7 @@ process.env.LITELLM_LOCAL_MODEL_COST_MAP ??= 'true';
 
 if (!fs.existsSync(venvPython)) run('py', ['-3', '-m', 'venv', path.join(repoRoot, 'core', '.venv')]);
 if (process.env.ATLAS_BUILD_SKIP_INSTALL !== '1') {
-  run(venvPython, ['-m', 'pip', 'install', '-e', 'core[release]']);
+  run(venvPython, ['-m', 'pip', 'install', '-e', 'core[release,channels]']);
 }
 const hermesSourceRoot = resolveHermesSourceRoot();
 
