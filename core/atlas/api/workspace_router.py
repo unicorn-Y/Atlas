@@ -1967,7 +1967,7 @@ async def lsp_workspace_diagnostics(workspace: str = Query(..., min_length=1)) -
                 files.append({"path": relative, "count": len(diagnostics), "diagnostics": [
                     {"line": d.get("range", {}).get("start", {}).get("line", 0) + 1,
                      "column": d.get("range", {}).get("start", {}).get("character", 0) + 1,
-                     "severity": d.get("severity", 3), "code": d.get("code"),
+                     "severity": {1: "error", 2: "warning", 3: "information", 4: "hint"}.get(d.get("severity", 3), "information"), "code": d.get("code"),
                      "message": d.get("message", "")}
                     for d in diagnostics[:100]
                 ]})

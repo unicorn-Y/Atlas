@@ -4,7 +4,7 @@ import { useAtlasStore } from '../../store/useAtlasStore';
 import { api } from '../../services/api';
 import { DiagnosticsList, SeverityDots } from '../../components/diagnostics';
 
-type Item = { line: number; column: number; severity: number; code?: string | number; message: string };
+type Item = { line: number; column: number; severity: 'error' | 'warning' | 'information' | 'hint'; code?: string; message: string };
 type FileRow = { path: string; count: number; diagnostics: Item[] };
 type Result = { available: boolean; count: number; files: FileRow[] };
 
