@@ -71,6 +71,7 @@ from atlas.api.runtime_ws_router import router as runtime_ws_router
 from atlas.api.scheduling_router import router as scheduling_router
 from atlas.api.skills_market_router import router as skills_market_router
 from atlas.api.memory_library_router import router as memory_library_router
+from atlas.api.scenario_bundles_router import router as scenario_bundles_router
 from atlas.api.workspace_router import router as workspace_router
 from atlas.api.workbench_router import router as workbench_router
 from atlas.api.library_router import router as library_router
@@ -185,5 +186,6 @@ def create_app(
     ):
         app.include_router(router)
     app.include_router(memory_library_router)
+    app.include_router(scenario_bundles_router)
     app.include_router(standing_orders_router)
     return app

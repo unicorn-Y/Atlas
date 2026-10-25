@@ -138,6 +138,73 @@ def memory_bench_command(
         raise click.ClickException(f"记忆召回评测失败：{exc}") from exc
 
 
+@main.group("bundle")
+def scenario_bundle_group() -> None:
+    """Create and switch named skill and memory scenario bundles."""
+
+
+@scenario_bundle_group.command("list")
+def scenario_bundle_list() -> None:
+    from atlas.skills.scenario_bundles import ScenarioBundleStore
+
+    try:
+        click.echo(json.dumps(ScenarioBundleStore().list(), ensure_ascii=False, indent=2))
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+@scenario_bundle_group.command("save")
+@click.argument("manifest", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+def scenario_bundle_save(manifest: Path) -> None:
+    from atlas.skills.scenario_bundles import ScenarioBundleStore
+
+    try:
+        content = json.loads(manifest.read_text(encoding="utf-8"))
+        click.echo(json.dumps(ScenarioBundleStore().save(content), ensure_ascii=False, indent=2))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise click.ClickException(f"场景包保存失败：{exc}") from exc
+
+
+@scenario_bundle_group.command("load")
+@click.argument("name")
+def scenario_bundle_load(name: str) -> None:
+    from atlas.skills import SkillManager
+    from atlas.skills.scenario_bundles import ScenarioBundleStore
+
+    try:
+        skills_dir = Path(os.environ.get("ATLAS_SKILLS_DIR", str(Path.home() / ".atlas" / "skills")))
+        names = {item.name for item in SkillManager(skills_dir).list_skills()}
+        result = ScenarioBundleStore().load(name, names)
+        click.echo(json.dumps(result, ensure_ascii=False, indent=2))
+        if not result["loaded"]:
+            raise click.ClickException("场景包包含冲突；请安装列出的技能后重试")
+    except (OSError, ValueError, KeyError, RuntimeError) as exc:
+        raise click.ClickException(f"场景包加载失败：{exc}") from exc
+
+
+@scenario_bundle_group.command("unload")
+def scenario_bundle_unload() -> None:
+    from atlas.skills.scenario_bundles import ScenarioBundleStore
+
+    try:
+        click.echo(json.dumps(ScenarioBundleStore().unload(), ensure_ascii=False, indent=2))
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(f"场景包卸载失败：{exc}") from exc
+
+
+@scenario_bundle_group.command("delete")
+@click.argument("name")
+def scenario_bundle_delete(name: str) -> None:
+    from atlas.skills.scenario_bundles import ScenarioBundleStore
+
+    try:
+        click.echo(json.dumps(ScenarioBundleStore().delete(name), ensure_ascii=False, indent=2))
+    except KeyError as exc:
+        raise click.ClickException(f"场景包不存在：{name}") from exc
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(f"场景包删除失败：{exc}") from exc
+
+
 @main.group("security")
 def security_group() -> None:
     """Audit local dependency locks and security-sensitive configuration."""

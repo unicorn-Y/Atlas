@@ -2836,6 +2836,7 @@ export default function App() {
     {view === 'devices' && <DevicesPage onToast={notify} />}
     {view === 'workbench' && <WorkbenchPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
     {(view === 'skills' || view === 'library') && <LibraryPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
+      onApplySkills={(names) => names.forEach((name) => store.applySkill(name))} onRemoveSkills={(names) => names.forEach((name) => store.removeSkill(name))}
       market={<SkillsMarketPage apiBaseUrl={store.apiBaseUrl} onToast={notify} onTryInConversation={(name) => { store.applySkill(name); go('chat'); }} />} />}
     {view === 'groups' && <GroupsView onToast={notify} />}
     {view === 'code' && <CodePage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
