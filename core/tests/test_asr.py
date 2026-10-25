@@ -73,7 +73,13 @@ def test_asr_websocket_prepares_model_on_first_use(monkeypatch) -> None:
     monkeypatch.setattr(server.app.state.services, "asr_manager", MockASR())
     with TestClient(app, client=("127.0.0.1", 50000)).websocket_connect("/ws/asr") as websocket:
         assert websocket.receive_json()["type"] == "preparing"
-        assert websocket.receive_json()["type"] == "ready"
+        updates = []
+        while True:
+            message = websocket.receive_json()
+            updates.append(message["type"])
+            if message["type"] == "ready":
+                break
+        assert set(updates) <= {"progress", "ready"}
         websocket.send_json({"type": "end"})
         assert websocket.receive_json() == {"type": "ended"}
 
