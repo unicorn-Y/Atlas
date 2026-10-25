@@ -1041,6 +1041,29 @@ ipcMain.handle('dialog:open-directory', async (event, defaultPath?: unknown) => 
 // Anything Windows would execute on double-click. Opening these from the renderer would let a
 // compromised page run programs, so they are shown in Explorer instead.
 const RUNNABLE = /\.(exe|com|bat|cmd|ps1|psm1|vbs|vbe|js|jse|wsf|wsh|msi|msp|scr|lnk|url|hta|cpl|jar|reg|appref-ms)$/i;
+const savedScreenRecordings = new Set<string>();
+ipcMain.handle('screen-recording:save', async (event, dataBase64: unknown, fileName: unknown) => {
+  if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame || typeof dataBase64 !== 'string' || typeof fileName !== 'string') throw new Error('屏幕录制只能从 Atlas 主窗口保存');
+  if (dataBase64.length > 14 * 1024 * 1024 || !/^[A-Za-z0-9+/]*={0,2}$/.test(dataBase64)) throw new Error('录制视频数据格式无效或超过 10 MiB');
+  const bytes = Buffer.from(dataBase64, 'base64');
+  if (!bytes.length || bytes.length > 10 * 1024 * 1024) throw new Error('录制视频不得超过 10 MiB');
+  const folder = path.join(app.getPath('videos'), 'Atlas'); mkdirSync(folder, { recursive: true });
+  const safeName = path.basename(fileName).replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/\.webm$/i, '') + '.webm';
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  const result = owner
+    ? await dialog.showSaveDialog(owner, { title: '保存屏幕录制', defaultPath: path.join(folder, safeName), filters: [{ name: 'WebM 视频', extensions: ['webm'] }] })
+    : await dialog.showSaveDialog({ title: '保存屏幕录制', defaultPath: path.join(folder, safeName), filters: [{ name: 'WebM 视频', extensions: ['webm'] }] });
+  if (result.canceled || !result.filePath) return null;
+  writeFileSync(result.filePath, bytes, { flag: 'w' });
+  const savedPath = path.resolve(result.filePath); savedScreenRecordings.add(savedPath);
+  return savedPath;
+});
+ipcMain.handle('screen-recording:delete', (event, target: unknown) => {
+  if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame || typeof target !== 'string') return false;
+  const savedPath = path.resolve(target);
+  if (!savedScreenRecordings.has(savedPath)) return false;
+  rmSync(savedPath, { force: true }); savedScreenRecordings.delete(savedPath); return true;
+});
 ipcMain.handle('shell:open-path', async (event, target?: unknown) => {
   if (event.sender !== windowRef?.webContents || typeof target !== 'string' || !path.isAbsolute(target)) return 'invalid path';
   if (RUNNABLE.test(target)) { shell.showItemInFolder(target); return 'revealed'; }

@@ -117,6 +117,7 @@ import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 import { cleanSearchSnippet, rankSearchHits, searchHitRoleLabel } from './services/searchHits';
 import ComputerLivePreview from './components/x2/ComputerLivePreview';
+const ScreenRecorderDialog = lazy(() => import('./components/ScreenRecorderDialog'));
 
 type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'notifications' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage' | 'memories' | 'teach' | 'secrets';
 
@@ -271,6 +272,7 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [attachments, setAttachments] = useState<string[]>([]);
   const [files, setFiles] = useState<Array<RunFile & { size: number }>>([]);
+  const [screenRecorderOpen, setScreenRecorderOpen] = useState(false);
   const [attachmentProgress, setAttachmentProgress] = useState('');
   const [failedAttachmentReads, setFailedAttachmentReads] = useState<File[]>([]);
   const attachmentReadsRef = useRef(0);
@@ -1551,6 +1553,7 @@ export default function App() {
     { id: 'open', label: '/open', hint: '在浏览器面板打开网址，如 /open localhost:5173', takesArgument: true, run: (target: string) => { if (target.trim()) setBrowserUrl(/^\w+:/.test(target.trim()) ? target.trim() : `http://${target.trim()}`); showInspectorTab('browser'); } },
     ...(activeConversation ? [{ id: 'compact', label: '/compact', hint: '压缩上下文，可附说明让摘要优先保留相关事项', takesArgument: true, run: (note: string) => void store.compactConversation(activeConversation.id, note).then((text) => { if (text) setToast(text); }) }] : []),
     { id: 'voice', label: '/voice', hint: '开始语音通话', run: startVoice },
+      { id: 'record-screen', label: '/record-screen', hint: '录制屏幕视频，预览、保存、删除或作为消息附件发送给 Agent', run: () => setScreenRecorderOpen(true) },
     { id: 'auto', label: '/auto', hint: '打开自动化', run: () => go('auto') },
     { id: 'memory', label: '/memory', hint: '打开记忆', run: () => go('memory') },
     { id: 'context', label: '/context', hint: '查看彩色上下文网格、类别明细和注入来源', run: () => showInspectorTab('context') },
@@ -2533,6 +2536,7 @@ export default function App() {
     {view !== 'chat' && view !== 'home' && <Suspense fallback={null}><ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} /></Suspense>}
     <Suspense fallback={null}><SettingsProposalCards apiBaseUrl={store.apiBaseUrl} onModel={(model) => void store.selectModel(model)} onToast={notify} currentModel={store.model} modelName={(id) => store.models.find((model) => model.id === id)?.name ?? id} /></Suspense>
     <DiagnosticsFloatingOverlay apiBaseUrl={store.apiBaseUrl} />
+    {screenRecorderOpen && <Suspense fallback={null}><ScreenRecorderDialog open onClose={() => setScreenRecorderOpen(false)} onToast={notify} onAttach={(file) => setFiles((current) => [...current, file])} /></Suspense>}
     {toast && <div role="status" className="pop anim-pop fixed bottom-7 left-1/2 z-[80] -translate-x-1/2 rounded-xl px-4 py-2.5 text-[13.5px] text-fg">{toast}</div>}
   </TooltipProvider>;
 }

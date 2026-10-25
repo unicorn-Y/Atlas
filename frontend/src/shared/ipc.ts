@@ -68,6 +68,8 @@ export interface AtlasDesktopApi {
   /** Open allow-listed browser/settings URLs outside the embedded renderer. */
   openExternal?(url: string): Promise<boolean>;
   openMessageEditor?(text: string): Promise<string | null>;
+  saveScreenRecording?(dataBase64: string, fileName: string): Promise<string | null>;
+  deleteScreenRecording?(path: string): Promise<boolean>;
   onMaximizeChange(callback: (maximized: boolean) => void): () => void;
   /** Follow the UI theme with the window/taskbar icon ('light' | 'aurora' | 'dark'). */
   setTheme?(theme: string): void;
