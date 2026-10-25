@@ -56,8 +56,7 @@ def _self_facts(agent: Any, model_id: str, workspace: str | None) -> tuple[str, 
 
     entry: dict[str, Any] = {}
     with contextlib.suppress(Exception):
-        entry = next((item for item in agent._model_mgr.list_models()
-                      if item.get("id") == model_id), {})
+        entry = agent._model_mgr._find_model(model_id) or {}
     wire = str(entry.get("litellm_model") or entry.get("model") or "")
     lines = ["# Atlas self-knowledge", f"- Model id selected in Atlas: {model_id}"]
     if entry.get("name"):
@@ -989,11 +988,7 @@ class AtlasKernel:
                     usage.update({key: value for key, value in attempt_usage.items()
                                   if key not in usage})
                     try:
-                        model_entry = next((item for item in agent._model_mgr.list_models()
-                                            if event.get("model") in {
-                                                str(item.get("id") or ""),
-                                                str(item.get("litellm_model") or ""),
-                                            }), {})
+                        model_entry = agent._model_mgr._find_model(str(event.get("model") or "")) or {}
                         from atlas.usage_pricing import estimate_cost
 
                         cost = estimate_cost(
@@ -1162,8 +1157,7 @@ class AtlasKernel:
                                reason=str(pre_switch.get("reason") or "PreModelSwitch hook blocked the switch"))
                         turn_model = previous_turn_model
                         model_switch_pending = False
-                model_config = next((item for item in agent._model_mgr.list_models()
-                                     if item.get("id") == turn_model), {})
+                model_config = agent._model_mgr._find_model(turn_model) or {}
                 model_capabilities = model_config.get("capabilities")
                 model_capabilities = model_capabilities if isinstance(model_capabilities, dict) else {}
                 context_window = model_config.get("context_window") or model_capabilities.get("context_window")
@@ -1404,10 +1398,7 @@ class AtlasKernel:
 
                 tool_allow = getattr(runtime, "tool_allow", None)
                 tool_deny = getattr(runtime, "tool_deny", ())
-                selected_model_config = next(
-                    (item for item in agent._model_mgr.list_models()
-                     if str(item.get("id")) == str(turn_model)), {},
-                )
+                selected_model_config = agent._model_mgr._find_model(str(turn_model)) or {}
                 capabilities = selected_model_config.get("capabilities")
                 supports_tools = capabilities.get("supports_tools") if isinstance(capabilities, dict) else None
                 if supports_tools is False:

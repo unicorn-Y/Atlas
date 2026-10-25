@@ -58,6 +58,8 @@ class EntryEdit(BaseModel):
 class EntryAdd(BaseModel):
     path: str
     text: str
+    session: str = ""
+    ref: str = ""
 
 
 class EntryRef(BaseModel):
@@ -448,7 +450,21 @@ async def edit_entry(body: EntryEdit) -> dict[str, Any]:
 
 @router.post("/add")
 async def add_entry(body: EntryAdd) -> dict[str, Any]:
-    return await _run(_lib().add_entry, body.path, body.text)
+    library = _lib()
+    session = body.session.strip()[:128]
+    ref = body.ref.strip()[:256]
+    if not session or not ref or not ref.startswith(f"{session}@") or not ref[len(session) + 1:]:
+        raise HTTPException(400, "记忆出处必须是当前会话的消息引用。")
+    message_id = ref[len(session) + 1:]
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import read_session_all_messages
+
+    messages = await asyncio.to_thread(read_session_all_messages, DATA_ROOT / "engine", session)
+    if not any(row.get("role") == "user" and str(row.get("id") or "") == message_id
+               for row in messages):
+        raise HTTPException(400, "记忆出处必须指向当前会话中真实存在的用户消息。")
+    return await asyncio.to_thread(library.add_entry, body.path, body.text,
+                                   session=session, ref=ref)
 
 
 @router.post("/forget")

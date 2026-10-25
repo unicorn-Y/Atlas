@@ -18,6 +18,7 @@ import shutil
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 
@@ -50,6 +51,7 @@ class ShadowGitCheckpointStore:
     def create_checkpoint(
         self, workspace: str | Path, paths: list[str], *,
         run_id: str | None = None, conversation_id: str | None = None,
+        cancel_event: Event | None = None,
     ) -> dict[str, Any]:
         root = Path(workspace).resolve()
         if not root.is_dir():
@@ -60,43 +62,53 @@ class ShadowGitCheckpointStore:
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         snapshot_root = self.storage_dir / checkpoint_id
         files: list[dict[str, Any]] = []
-        for relative in paths:
-            candidate = (root / relative).resolve()
-            if candidate != root and root not in candidate.parents:
-                raise ValueError("checkpoint path escapes the workspace")
-            if self._excluded_file(candidate, root):
-                raise ValueError("checkpoint path is excluded from snapshots")
-            if not candidate.exists():
-                files.append({"path": candidate.relative_to(root).as_posix(), "exists": False})
-                continue
-            found = [candidate] if candidate.is_file() else sorted(
-                p for p in candidate.rglob("*") if p.is_file()
-                and not self._excluded_file(p, root)
-                and (p.resolve() == root or root in p.resolve().parents)
+        try:
+            for relative in paths:
+                if cancel_event and cancel_event.is_set():
+                    raise InterruptedError("workspace checkpoint exceeded its pre-tool time budget")
+                candidate = (root / relative).resolve()
+                if candidate != root and root not in candidate.parents:
+                    raise ValueError("checkpoint path escapes the workspace")
+                if self._excluded_file(candidate, root):
+                    raise ValueError("checkpoint path is excluded from snapshots")
+                if not candidate.exists():
+                    files.append({"path": candidate.relative_to(root).as_posix(), "exists": False})
+                    continue
+                found = [candidate] if candidate.is_file() else sorted(
+                    p for p in candidate.rglob("*") if p.is_file()
+                    and not self._excluded_file(p, root)
+                    and (p.resolve() == root or root in p.resolve().parents)
+                )
+                for source in found:
+                    if cancel_event and cancel_event.is_set():
+                        raise InterruptedError("workspace checkpoint exceeded its pre-tool time budget")
+                    relative_path = source.relative_to(root).as_posix()
+                    target = snapshot_root / "files" / relative_path
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, target)
+                    files.append({"path": relative_path, "exists": True})
+                if candidate.is_dir():
+                    files.append({"path": candidate.relative_to(root).as_posix(), "exists": True,
+                                  "directory": True})
+            if cancel_event and cancel_event.is_set():
+                raise InterruptedError("workspace checkpoint exceeded its pre-tool time budget")
+            manifest = {
+                "id": checkpoint_id, "workspace": str(root),
+                "created_at": datetime.now(UTC).isoformat(), "files": files,
+                "run_id": run_id, "conversation_id": conversation_id,
+                "scopes": [{
+                    "path": Path(relative).as_posix(), "directory": (root / relative).is_dir(),
+                } for relative in paths],
+            }
+            snapshot_root.mkdir(parents=True, exist_ok=True)
+            (snapshot_root / "manifest.json").write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8",
             )
-            for source in found:
-                relative_path = source.relative_to(root).as_posix()
-                target = snapshot_root / "files" / relative_path
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source, target)
-                files.append({"path": relative_path, "exists": True})
-            if candidate.is_dir():
-                files.append({"path": candidate.relative_to(root).as_posix(), "exists": True,
-                              "directory": True})
-        manifest = {
-            "id": checkpoint_id, "workspace": str(root),
-            "created_at": datetime.now(UTC).isoformat(), "files": files,
-            "run_id": run_id, "conversation_id": conversation_id,
-            "scopes": [{
-                "path": Path(relative).as_posix(), "directory": (root / relative).is_dir(),
-            } for relative in paths],
-        }
-        snapshot_root.mkdir(parents=True, exist_ok=True)
-        (snapshot_root / "manifest.json").write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8",
-        )
-        self._prune_checkpoints(checkpoint_id)
-        return manifest
+            self._prune_checkpoints(checkpoint_id)
+            return manifest
+        except Exception:
+            shutil.rmtree(snapshot_root, ignore_errors=True)
+            raise
 
     def manifest_path(self, checkpoint_id: str) -> Path | None:
         """Path to a checkpoint's manifest.json, or None when the id is unknown/unsafe.

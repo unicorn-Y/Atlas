@@ -5,6 +5,7 @@ import { api } from '../../services/api';
 import { LibChangesView, PeopleView, TodayView } from './LibraryPages';
 import { MOCK_MEMLIB_ENABLED, mockMemlib, mockStats, type Episode, type Entry, type MemlibItem, type OpenResult, type Project, type ProjectSummary, type Stats } from './mockMemlib';
 import MemoryJourney from './MemoryJourney';
+import { useAtlasStore } from '../../store/useAtlasStore';
 
 type View = 'search' | 'timeline' | 'journey' | 'projects' | 'people' | 'me' | 'changes';
 type Props = { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void };
@@ -98,6 +99,7 @@ function RefDrawer({ refId, apiBaseUrl, onClose, onToast }: { refId: string; api
 }
 
 export default function MemlibBrowser({ apiBaseUrl, connected, onToast }: Props) {
+  const conversationId = useAtlasStore((state) => state.activeConversationId);
   const [view, setView] = useState<View>('timeline');
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -260,9 +262,9 @@ export default function MemlibBrowser({ apiBaseUrl, connected, onToast }: Props)
   </section>;
 
   const renderContent = () => view === 'journey' ? <MemoryJourney apiBaseUrl={apiBaseUrl} connected={connected} onOpenRef={openDrawer} onToast={onToast} /> : view === 'search' ? renderSearch() : view === 'timeline' ? renderTimeline() : view === 'projects' ? renderProjects() : view === 'people'
-    ? <PeopleView apiBaseUrl={apiBaseUrl} connected={connected || MOCK_MEMLIB_ENABLED} onToast={onToast} />
-    : view === 'me' ? <TodayView apiBaseUrl={apiBaseUrl} connected={connected || MOCK_MEMLIB_ENABLED} onToast={onToast} />
-      : <LibChangesView apiBaseUrl={apiBaseUrl} connected={connected || MOCK_MEMLIB_ENABLED} onToast={onToast} sourceFilter={sources} />;
+    ? <PeopleView apiBaseUrl={apiBaseUrl} connected={connected || MOCK_MEMLIB_ENABLED} onToast={onToast} conversationId={conversationId} />
+    : view === 'me' ? <TodayView apiBaseUrl={apiBaseUrl} connected={connected || MOCK_MEMLIB_ENABLED} onToast={onToast} conversationId={conversationId} />
+      : <LibChangesView apiBaseUrl={apiBaseUrl} connected={connected || MOCK_MEMLIB_ENABLED} onToast={onToast} sourceFilter={sources} conversationId={conversationId} />;
 
   return <div className="memory-browser -mx-4 -mt-4 grid min-h-full grid-cols-1 border-t border-[var(--line)] lg:-mx-6 lg:-mt-6 lg:grid-cols-[220px_minmax(0,1fr)]">
     <aside className="flex min-h-0 flex-col border-b border-[var(--line)] bg-[var(--sunk)] p-3 lg:border-b-0 lg:border-r" aria-label="记忆分区">

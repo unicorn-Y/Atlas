@@ -107,9 +107,11 @@ packages = ["atlas"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "atlas/memory/benchmarks/v1.json" = "atlas/memory/benchmarks/v1.json"
+"atlas/_vendor/sqlite3.dll" = "atlas/_vendor/sqlite3.dll"
 
 [tool.hatch.build.targets.sdist.force-include]
 "atlas/memory/benchmarks/v1.json" = "atlas/memory/benchmarks/v1.json"
+"atlas/_vendor/sqlite3.dll" = "atlas/_vendor/sqlite3.dll"
 
 [tool.ruff]
 target-version = "py311"

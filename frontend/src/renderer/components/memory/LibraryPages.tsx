@@ -20,7 +20,7 @@ interface PageSummary { path: string; title: string; kind: string; aliases: stri
 interface ChangeFile { path: string; added: string[]; removed: string[]; ended: string[] }
 interface Change { sha: string; time: number; message: string; files: ChangeFile[] }
 
-type Props = { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void };
+type Props = { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; conversationId?: string };
 
 const SRC_STYLE: Record<string, { bg: string; fg: string }> = {
   你说的: { bg: 'var(--ok-soft)', fg: 'var(--ok)' },
@@ -109,13 +109,20 @@ function EntryRow({ entry, apiBaseUrl, onChanged, onToast, past = false }: {
   </div>;
 }
 
-function AddRow({ path, apiBaseUrl, onChanged, onToast }: { path: string; apiBaseUrl: string; onChanged: () => void; onToast: (t: string) => void }) {
+function AddRow({ path, apiBaseUrl, conversationId, onChanged, onToast }: { path: string; apiBaseUrl: string; conversationId?: string; onChanged: () => void; onToast: (t: string) => void }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const submit = async () => {
     if (!text.trim()) return;
     try {
-      await api(apiBaseUrl, '/api/memlib/add', { method: 'POST', json: { path, text: text.trim() } });
+      if (!conversationId) throw new Error('先打开一段对话，再添加有出处的记忆。');
+      const messages = await api<Array<{ id?: string; role?: string }>>(apiBaseUrl,
+        `/api/conversations/${encodeURIComponent(conversationId)}/messages?limit=30`);
+      const source = [...messages].reverse().find((row) => row.role === 'user' && row.id);
+      if (!source?.id) throw new Error('当前对话还没有用户消息，无法建立记忆出处。');
+      await api(apiBaseUrl, '/api/memlib/add', { method: 'POST', json: {
+        path, text: text.trim(), session: conversationId, ref: `${conversationId}@${source.id}`,
+      } });
       setText(''); setOpen(false); onToast('已加上'); onChanged();
     } catch (exc) { onToast(exc instanceof Error ? exc.message : String(exc)); }
   };
@@ -128,8 +135,8 @@ function AddRow({ path, apiBaseUrl, onChanged, onToast }: { path: string; apiBas
   </div>;
 }
 
-function PageBlock({ page, apiBaseUrl, onChanged, onToast, emptyText }: {
-  page: MemPage; apiBaseUrl: string; onChanged: () => void; onToast: (t: string) => void; emptyText: string;
+function PageBlock({ page, apiBaseUrl, conversationId, onChanged, onToast, emptyText }: {
+  page: MemPage; apiBaseUrl: string; conversationId?: string; onChanged: () => void; onToast: (t: string) => void; emptyText: string;
 }) {
   const [showHistory, setShowHistory] = useState(false);
   return <>
@@ -137,7 +144,7 @@ function PageBlock({ page, apiBaseUrl, onChanged, onToast, emptyText }: {
       ? <div className="list glass">{page.current.map((e) => <EntryRow key={e.id} entry={e} apiBaseUrl={apiBaseUrl} onChanged={onChanged} onToast={onToast} />)}</div>
       : <div className="note">{emptyText}</div>}
     <div style={{ display: 'flex', gap: 8, margin: '8px 0 4px' }}>
-      <AddRow path={page.path} apiBaseUrl={apiBaseUrl} onChanged={onChanged} onToast={onToast} />
+      <AddRow path={page.path} apiBaseUrl={apiBaseUrl} conversationId={conversationId} onChanged={onChanged} onToast={onToast} />
       {page.history.length > 0 && <button className="btn ghost" aria-pressed={showHistory} onClick={() => setShowHistory((v) => !v)}>
         <History size={13} />{showHistory ? '收起历史' : `历史 ${page.history.length}`}
       </button>}
@@ -168,7 +175,7 @@ function ChangeCard({ change, apiBaseUrl, onChanged, onToast }: { change: Change
   </div>;
 }
 
-export function TodayView({ apiBaseUrl, connected, onToast }: Props) {
+export function TodayView({ apiBaseUrl, connected, onToast, conversationId }: Props) {
   const today = useLoad(() => api<{ changes: Change[]; now: MemPage; turns: number; episodes: MemEntry[] }>(apiBaseUrl, '/api/memlib/today'), [apiBaseUrl, connected]);
   const me = useLoad(() => api<MemPage>(apiBaseUrl, `/api/memlib/page?path=${encodeURIComponent('我.md')}`), [apiBaseUrl, connected]);
   const self = useLoad(() => api<MemPage>(apiBaseUrl, `/api/memlib/page?path=${encodeURIComponent('它自己.md')}`), [apiBaseUrl, connected]);
@@ -188,11 +195,11 @@ export function TodayView({ apiBaseUrl, connected, onToast }: Props) {
       ? <div className="list glass">{changes.map((c) => <ChangeCard key={c.sha} change={c} apiBaseUrl={apiBaseUrl} onToast={onToast} />)}</div>
       : <div className="note">今天还没有新记下的事。</div>}
     <h3 className="cap">进行中 / 有时限的事</h3>
-    <PageBlock page={now} apiBaseUrl={apiBaseUrl} onChanged={reload} onToast={onToast} emptyText="没有进行中的事。你提到面试、出差、要办的事时，它会记在这里，到时间自动移到历史。" />
+    <PageBlock page={now} apiBaseUrl={apiBaseUrl} conversationId={conversationId} onChanged={reload} onToast={onToast} emptyText="没有进行中的事。你提到面试、出差、要办的事时，它会记在这里，到时间自动移到历史。" />
     <h3 className="cap">关于你</h3>
-    <PageBlock page={me.data} apiBaseUrl={apiBaseUrl} onChanged={reload} onToast={onToast} emptyText="还没有记下关于你的事。聊天时说起自己的情况、偏好或计划，它会自动记住。" />
+    <PageBlock page={me.data} apiBaseUrl={apiBaseUrl} conversationId={conversationId} onChanged={reload} onToast={onToast} emptyText="还没有记下关于你的事。聊天时说起自己的情况、偏好或计划，它会自动记住。" />
     <h3 className="cap">它自己</h3>
-    <PageBlock page={self.data} apiBaseUrl={apiBaseUrl} onChanged={reload} onToast={onToast} emptyText="它对自己的记录（表过的态、犯过的错）。第一版只能由你来写。" />
+    <PageBlock page={self.data} apiBaseUrl={apiBaseUrl} conversationId={conversationId} onChanged={reload} onToast={onToast} emptyText="它对自己的记录（表过的态、犯过的错）。第一版只能由你来写。" />
     {episodes.length > 0 && <>
       <h3 className="cap">今天做过的事</h3>
       <div className="list glass">{episodes.map((entry) => <div key={entry.id}>
@@ -205,7 +212,7 @@ export function TodayView({ apiBaseUrl, connected, onToast }: Props) {
   </section>;
 }
 
-export function PeopleView({ apiBaseUrl, connected, onToast }: Props) {
+export function PeopleView({ apiBaseUrl, connected, onToast, conversationId }: Props) {
   const overview = useLoad(() => api<{ pages: PageSummary[]; root: string }>(apiBaseUrl, '/api/memlib/overview'), [apiBaseUrl, connected]);
   const [selected, setSelected] = useState('');
   const pages = (overview.data?.pages ?? []).filter((p) => p.kind === 'person' || p.kind === 'thing');
@@ -246,7 +253,7 @@ export function PeopleView({ apiBaseUrl, connected, onToast }: Props) {
           <input value={aliasText} onChange={(e) => setAliasText(e.target.value)} placeholder="用顿号分开，比如：王总、王建国" style={{ flex: 1 }} />
           <button className="btn ghost" onClick={() => void saveAliases()}>保存</button>
         </div>
-        <PageBlock page={page.data} apiBaseUrl={apiBaseUrl} onChanged={() => { void page.load(); void overview.load(); }} onToast={onToast} emptyText="这一页现在是空的。" />
+        <PageBlock page={page.data} apiBaseUrl={apiBaseUrl} conversationId={conversationId} onChanged={() => { void page.load(); void overview.load(); }} onToast={onToast} emptyText="这一页现在是空的。" />
       </>}
     </div>
   </section>;

@@ -253,14 +253,24 @@ def check_item_5() -> None:
             encoding="utf-8", errors="replace", timeout=270,
         )
         if run.returncode:
-            raise AssertionError(f"real citation run failed with exit {run.returncode}")
+            diagnostics = "\n".join(
+                part.strip()[-6000:] for part in (run.stdout, run.stderr) if part.strip()
+            ) or "(child process produced no output)"
+            raise AssertionError(
+                f"real citation run failed with exit {run.returncode}; child diagnostics:\n{diagnostics}"
+            )
         conversation = str(json.loads(run.stdout).get("conversation_id") or "")
         assistant_messages = [row for row in read_session_messages(
             data_root / "engine", conversation,
         ) if row.get("role") == "assistant"]
         citations = (assistant_messages[-1].get("metadata", {}).get("memory_citations", [])
                      if assistant_messages else [])
-        assert citation_ref in citations, "real answer did not persist the adopted memory source ref"
+        if citation_ref not in citations:
+            final_text = str(assistant_messages[-1].get("content", ""))[-1200:] if assistant_messages else "(no assistant message)"
+            raise AssertionError(
+                "real answer did not persist the adopted memory source ref; "
+                f"persisted_refs={citations!r}; final_text_tail={final_text!r}"
+            )
     finally:
         if original_page is not None:
             memory_path.write_bytes(original_page)

@@ -11,21 +11,30 @@ function VoiceHud() {
   const [transcript, setTranscript] = useState('');
   const [level, setLevel] = useState(0);
   const finalTranscriptRef = useRef('');
+  const startingRef = useRef(false);
   const hudStateRef = useRef(initialHudState());
   const sessionRef = useRef<{ socket: WebSocket; stream: MediaStream; context: AudioContext; processor: ScriptProcessorNode; silent: GainNode } | null>(null);
   const startRef = useRef<() => void>(() => undefined);
-  const stop = useCallback(() => {
+  const stop = useCallback((deliver = false) => {
+    const completedTranscript = finalTranscriptRef.current.trim();
     const session = sessionRef.current;
     sessionRef.current = null;
     if (session) {
       try { if (session.socket.readyState === WebSocket.OPEN) session.socket.send(JSON.stringify({ type: 'end' })); session.socket.close(); } catch { /* socket already closed */ }
       session.processor.disconnect(); session.silent.disconnect(); session.stream.getTracks().forEach((track) => track.stop()); void session.context.close();
     }
-    setLevel(0); setStatus('idle'); setDetail('快捷键开始语音输入');
+    setLevel(0);
+    if (deliver && completedTranscript) {
+      setStatus('idle'); setDetail('转写已送到 Atlas'); setTranscript(completedTranscript);
+      window.atlasDesktop?.submitVoiceHudResult?.(completedTranscript);
+    } else {
+      setStatus('idle'); setDetail('快捷键开始语音输入'); setTranscript('');
+    }
     hudStateRef.current = initialHudState(); finalTranscriptRef.current = '';
   }, []);
   const start = useCallback(async () => {
-    if (sessionRef.current) return;
+    if (sessionRef.current || startingRef.current) return;
+    startingRef.current = true;
     setStatus('connecting'); setDetail('正在连接本地语音识别…'); setTranscript(''); finalTranscriptRef.current = '';
     hudStateRef.current = { ...initialHudState(), status: 'connecting', detail: '正在连接本地语音识别…' };
     let stream: MediaStream | null = null;
@@ -81,12 +90,14 @@ function VoiceHud() {
       try { session?.socket.close(); session?.processor.disconnect(); session?.silent.disconnect(); } catch { /* already closed */ }
       stream?.getTracks().forEach((track) => track.stop()); void context?.close();
       setStatus('error'); setDetail(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      startingRef.current = false;
     }
   }, [stop]);
   startRef.current = () => { void start(); };
   useEffect(() => {
     const offStart = window.atlasDesktop?.onVoiceHudStart?.(() => startRef.current());
-    const offStop = window.atlasDesktop?.onVoiceHudStop?.(stop);
+    const offStop = window.atlasDesktop?.onVoiceHudStop?.(() => stop(true));
     startRef.current();
     return () => { offStart?.(); offStop?.(); stop(); };
   }, [stop]);
@@ -100,7 +111,7 @@ function VoiceHud() {
     <div className="hud-text" aria-live="polite" title={transcript}>{transcript || '转写内容会显示在这里'}</div>
     <div className="hud-spacer" aria-hidden="true" />
     {status === 'error' && <button type="button" className="hud-retry" title="重试语音输入" onClick={() => { void start(); }}><Mic size={15} /></button>}
-    <button type="button" className="hud-stop" title="停止语音输入" aria-label="停止语音输入" onClick={stop}><Square size={14} fill="currentColor" /></button>
+    <button type="button" className="hud-stop" title="结束并发送转写" aria-label="结束并发送转写" onClick={() => stop(true)}><Square size={14} fill="currentColor" /></button>
     <span className="hud-grip" title="拖动定位" aria-hidden="true">⋮⋮</span>
     </div>
   </main>;

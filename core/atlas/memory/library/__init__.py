@@ -330,7 +330,10 @@ class MemoryLibrary:
             for row in self.queue.pending():
                 try:
                     now = datetime.fromisoformat(row["created"])
-                    ref = f"{row['session']}@{row.get('turn_started') or now.isoformat(timespec='seconds')}"
+                    ref = self._turn_source_ref(str(row["session"]), str(row.get("user_text") or ""),
+                                                row.get("turn_started") or now.isoformat(timespec="seconds"))
+                    if not ref:
+                        raise ValueError("source user message is unavailable; refusing to save memory without a source ref")
                     if row["stage"] == "new":
                         await asyncio.to_thread(self._write_diary, now, row["user_text"],
                                                 row["assistant_text"], row["session"], row["mode"], ref)
@@ -365,11 +368,35 @@ class MemoryLibrary:
             else:
                 proposals, episode = await self._extract_full(user_text, assistant_text, model_mgr, now,
                                                               steps, bool(row.get("verified", 0)))
-        ref = f"{row['session']}@{row.get('turn_started') or now.isoformat(timespec='seconds')}"
+        ref = self._turn_source_ref(str(row["session"]), user_text,
+                                    row.get("turn_started") or now.isoformat(timespec="seconds"))
+        if not ref:
+            raise ValueError("source user message is unavailable; refusing to save memory without a source ref")
         return await asyncio.to_thread(self._apply, proposals, user_text,
                                        row["session"], row["mode"], now, episode=episode,
                                        steps=steps, verified=bool(row.get("verified", 0)), ref=ref,
                                        workspace=str(row.get("workspace") or ""))
+
+    @staticmethod
+    def _turn_source_ref(session: str, user_text: str, fallback: str = "") -> str:
+        """Use the persisted user message id so a memory citation opens its source turn."""
+        try:
+            from atlas.config import DATA_ROOT
+            from atlas.engine.session_sync import read_session_all_messages
+
+            rows = read_session_all_messages(DATA_ROOT / "engine", session)
+            expected = " ".join(user_text.split())
+            for row in reversed(rows):
+                if row.get("role") != "user":
+                    continue
+                content = row.get("content")
+                if isinstance(content, str) and (not expected or " ".join(content.split()) == expected):
+                    message_id = str(row.get("id") or "").strip()
+                    if message_id:
+                        return f"{session}@{message_id}"
+        except Exception:
+            log.debug("memory.library.source_message_lookup_failed", session=session, exc_info=True)
+        return ""
 
     @staticmethod
     def _explicit_memory_proposal(user_text: str) -> extract.Proposal | None:
@@ -491,7 +518,7 @@ class MemoryLibrary:
         self.index.sync()
         return {"id": entry_id, "text": text}
 
-    def add_entry(self, rel: str, text: str) -> dict[str, Any]:
+    def add_entry(self, rel: str, text: str, *, session: str = "", ref: str = "") -> dict[str, Any]:
         rel = self._safe_rel(rel)
         text = " ".join((text or "").split())
         if not text or extract.contains_secret(text):
@@ -499,7 +526,8 @@ class MemoryLibrary:
         with self.store.lock:
             page = self.store.read(rel)
             entry = Entry(text=text, id=new_id(), src=SRC_EDITED,
-                          at=_now(self.config).isoformat(timespec="seconds"))
+                          at=_now(self.config).isoformat(timespec="seconds"),
+                          session=session, ref=ref)
             page.current.append(entry)
             self.store.write(page)
             self.store.commit(f"你加了：{text}"[:400])
@@ -575,17 +603,20 @@ class MemoryLibrary:
             "child_scopes": child_scopes, "matches": hits, "agent_scope_path": own.path,
         }
 
-    def agent_memory_write(self, agent_id: str, text: str) -> dict[str, Any]:
+    def agent_memory_write(self, agent_id: str, text: str, *, session: str = "") -> dict[str, Any]:
         """Write a user-visible, source-labelled fact into the agent's Markdown page."""
         text = " ".join(str(text or "").split())[:1000]
         if not text or extract.contains_secret(text):
             raise ValueError("内容为空或含有密码、密钥")
+        ref = self._turn_source_ref(session, "")
+        if not ref:
+            raise ValueError("无法定位本轮用户消息；拒绝保存没有出处的记忆")
         digest = __import__("hashlib").sha256(str(agent_id or "main").encode()).hexdigest()[:16]
         rel = f"代理/{digest}.md"
         with self.store.lock:
             page = self.store.read(rel)
             entry = Entry(text=text, id=new_id(), src="子代理观察", scope=f"agent:{digest}",
-                          at=_now(self.config).isoformat(timespec="seconds"))
+                          at=_now(self.config).isoformat(timespec="seconds"), session=session, ref=ref)
             page.current.append(entry)
             self.store.write(page)
             self.store.commit(f"子代理记忆：{text}"[:400])

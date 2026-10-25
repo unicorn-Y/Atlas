@@ -19,6 +19,7 @@ import re
 import secrets
 import sqlite3
 import subprocess
+import threading
 import time
 import uuid
 from contextlib import suppress
@@ -29,7 +30,6 @@ from typing import Any
 import structlog
 from fastapi import HTTPException, Request
 
-from atlas.api.models_settings_router import _model_supports_reasoning
 from atlas.api.runtime import RunState, RuntimeManager
 from atlas.approval_policy import is_allowed as approval_always_allowed
 from atlas.approval_policy import permission_scope as approval_permission_scope
@@ -1221,6 +1221,7 @@ async def _handle_run_start(
     conn_id: str, data: dict[str, Any], manager: RuntimeManager | None = None,
 ) -> None:
     """Start a new agent run."""
+    request_received_at = time.perf_counter()
     manager = manager or _server().runtime_mgr
     services = manager.services
     model_mgr = getattr(services, "model_mgr", None) or getattr(_server(), "model_mgr", None)
@@ -1541,6 +1542,13 @@ async def _handle_run_start(
                        ignore_project_config=ignore_project_config, session_id=str(conv_id)):
         model_id = model_id or model_mgr.current_model
     run = RunState(run_id, conv_id, model_id)
+    try:
+        from atlas.logs import append_run_event
+        append_run_event(run_id, "api_timing", stage="request_received", elapsed_ms=0)
+        append_run_event(run_id, "api_timing", stage="run_created",
+                         elapsed_ms=round((time.perf_counter() - request_received_at) * 1000))
+    except Exception:
+        log.debug("run.timing_log_failed", run_id=run_id, stage="run_created", exc_info=True)
     run.project_id = run_project_id
     run.config_override = config_override
     run.ignore_project_config = ignore_project_config
@@ -2368,22 +2376,35 @@ def _effective_reasoning_effort(model_mgr: Any, model_id: str, requested: str | 
     (DeepSeek behind the WorkBuddy proxy) only think, and stream their reasoning, when an
     effort is sent at all.
     """
+    # The request path is already validated before it reaches this helper.
+    # Avoid ModelManager.list_models(): it enriches every catalog row with
+    # models.dev capabilities and costs seconds on a warm desktop run.
+    if requested:
+        return requested
     config: dict[str, Any] = {}
     if model_mgr is not None:
         with suppress(Exception):
-            config = next((item for item in model_mgr.list_models()
-                           if item.get("id") == model_id or item.get("litellm_model") == model_id), {})
+            finder = getattr(model_mgr, "_find_model", None)
+            found = finder(model_id) if callable(finder) else None
+            if isinstance(found, dict):
+                config = found
     capabilities = config.get("capabilities") if isinstance(config.get("capabilities"), dict) else {}
-    if requested:
-        return requested
     # The model's own setting (atlas.toml / user settings) applies when the run picks none.
     # "off" must reach the wire as an explicit switch: DeepSeek-family models think when
     # nothing is sent, so dropping to None (or the old "medium" default) left it on.
     configured = str(config.get("reasoning_effort") or capabilities.get("reasoning_effort") or "").strip().lower()
     if configured in {"off", "none", "disabled"} or config.get("supports_reasoning") is False:
         return "off"
-    supported = bool(capabilities.get("supports_reasoning")) or _model_supports_reasoning(
-        config or {"litellm_model": model_id})
+    efforts = None
+    if model_mgr is not None and config:
+        with suppress(Exception):
+            resolver = getattr(model_mgr, "_model_reasoning_efforts", None)
+            efforts = resolver(config) if callable(resolver) else None
+    supported = bool(
+        capabilities.get("supports_reasoning")
+        or config.get("supports_reasoning")
+        or (isinstance(efforts, list) and efforts)
+    )
     if not supported:
         return None
     return configured or "medium"
@@ -2467,25 +2488,66 @@ async def _execute_run(
     resume_from: str | None = None,
 ) -> None:
     """Execute agent run, emitting Runtime Event envelopes."""
+    execution_started_at = time.perf_counter()
+    timing_tool_starts: dict[str, float] = {}
+    try:
+        from atlas.logs import append_run_event
+        append_run_event(run.run_id, "api_timing", stage="execute_run_entered", elapsed_ms=0)
+    except Exception:
+        append_run_event = None
+
+    def record_api_timing(stage: str, **fields: Any) -> None:
+        if append_run_event is None:
+            return
+        try:
+            append_run_event(run.run_id, "api_timing", stage=stage,
+                             elapsed_ms=round((time.perf_counter() - execution_started_at) * 1000),
+                             **fields)
+        except Exception:
+            log.debug("run.timing_log_failed", run_id=run.run_id, stage=stage, exc_info=True)
+    dependency_mark = time.perf_counter()
+
+    def dependency_timing(stage: str) -> None:
+        nonlocal dependency_mark
+        now = time.perf_counter()
+        record_api_timing(stage, duration_ms=round((now - dependency_mark) * 1000))
+        dependency_mark = now
+
     manager = manager or _server().runtime_mgr
+    dependency_timing("runtime_manager_resolved")
     services = manager.services
+    dependency_timing("services_resolved")
     model_mgr = getattr(services, "model_mgr", None) or getattr(_server(), "model_mgr", None)
+    dependency_timing("model_manager_resolved")
     reasoning_effort = _effective_reasoning_effort(model_mgr, model_id or run.model, run.reasoning_effort)
+    dependency_timing("reasoning_effort_resolved")
     memory = getattr(services, "memory", None) or getattr(_server(), "memory", None)
+    dependency_timing("memory_resolved")
     orchestrator = getattr(services, "orchestrator", None) or getattr(_server(), "orchestrator", None)
+    dependency_timing("orchestrator_resolved")
     local_execution = getattr(services, "local_execution", None) or getattr(_server(), "local_execution", None)
+    dependency_timing("local_execution_resolved")
     sandbox_manager = getattr(services, "sandbox_manager", None) or getattr(_server(), "sandbox_manager", None)
+    dependency_timing("sandbox_manager_resolved")
     scheduler = getattr(services, "scheduler", None) or getattr(_server(), "scheduler", None)
+    dependency_timing("scheduler_resolved")
     usage_ledger = getattr(services, "usage_ledger", None) or getattr(_server(), "usage_ledger", None)
+    dependency_timing("usage_ledger_resolved")
     assert orchestrator is not None
     assert memory is not None
     orchestrator_events = None
+    record_api_timing("execution_dependencies_ready")
+    checkpoint_task: asyncio.Task[Any] | None = None
 
     def kernel_owns_lifecycle_hooks() -> bool:
         return run.executor == "atlas"
 
     async def emit(event: str, data: dict[str, Any]) -> None:
         """Emit an event envelope to the client."""
+        if event == "run.started":
+            record_api_timing("run_started_emitted")
+        elif event in {"run.completed", "run.failed", "run.cancelled"}:
+            record_api_timing("terminal_event", terminal=event)
         event_kind = {"run.completed": "completion", "run.failed": "failure", "approval.required": "approval"}.get(event)
         if event_kind:
             try:
@@ -2562,11 +2624,16 @@ async def _execute_run(
             row["reasoning_effort_applied"] = run.reasoning_effort_applied
         if usage_ledger is not None and not duplicate:
             event_model = str(row.get("model") or model_id or run.model)
-            model_config = next((item for item in model_mgr.list_models()
-                                 if item.get("litellm_model") == event_model
-                                 or item.get("id") == event_model
-                                 or str(item.get("litellm_model") or "").rsplit("/", 1)[-1] == event_model
-                                 or str(item.get("native_model") or "") == event_model), {}) if model_mgr else {}
+            model_config = {}
+            if model_mgr is not None:
+                with suppress(Exception):
+                    model_config = model_mgr._find_model(event_model) or {}
+                if not model_config:
+                    model_config = next((item for item in getattr(model_mgr, "_models", ())
+                                         if item.get("litellm_model") == event_model
+                                         or item.get("id") == event_model
+                                         or str(item.get("litellm_model") or "").rsplit("/", 1)[-1] == event_model
+                                         or str(item.get("native_model") or "") == event_model), {})
             try:
                 await usage_ledger.record(
                     run_id=run.run_id, conversation_id=run.conversation_id,
@@ -2605,6 +2672,7 @@ async def _execute_run(
             "resumed": plan_state is not None,
         })
 
+    record_api_timing("run_callback_setup_complete")
     try:
         if run.sandbox:
             docker_status = await sandbox_manager.status()
@@ -2617,6 +2685,7 @@ async def _execute_run(
                 "status": "running", "phase": "planning", "content": content,
             }
             await emit("run.started", started_data)
+            record_api_timing("run_start_setup_complete")
             mcp_client = getattr(services, "mcp_client", None) or getattr(_server(), "mcp_client", None)
             if mcp_client is not None:
                 try:
@@ -2632,6 +2701,7 @@ async def _execute_run(
         # Keep only Atlas metadata; Hermes SessionDB owns the transcript.
         try:
             await memory.save_conversation_metadata(run.conversation_id, title_hint=content)
+            record_api_timing("conversation_metadata_saved")
         except Exception as e:
             log.exception("run.user_message_save_failed")
             run.status = "failed"
@@ -2652,19 +2722,26 @@ async def _execute_run(
                 )
                 tail_id = prior_messages[-1].get("id") if prior_messages else None
                 after_message_id = tail_id if isinstance(tail_id, str) and tail_id else None
-                checkpoint_id = await asyncio.to_thread(
+                checkpoint_cancel = threading.Event()
+                checkpoint_task = asyncio.create_task(asyncio.to_thread(
                     checkpoint_before_turn,
                     run.conversation_id,
                     run.run_id,
                     workspace,
                     after_message_id=after_message_id,
-                )
-                log.info(
-                    "rewind.checkpoint_created",
-                    conversation_id=run.conversation_id,
-                    run_id=run.run_id,
-                    checkpoint_id=checkpoint_id,
-                )
+                    cancel_event=checkpoint_cancel,
+                ))
+                def checkpoint_done(task: asyncio.Task[Any]) -> None:
+                    try:
+                        checkpoint_id = task.result()
+                        record_api_timing("workspace_checkpoint_saved", checkpoint_id=bool(checkpoint_id))
+                        log.info("rewind.checkpoint_created", conversation_id=run.conversation_id,
+                                 run_id=run.run_id, checkpoint_id=checkpoint_id)
+                    except Exception as exc:
+                        record_api_timing("workspace_checkpoint_failed", error_type=type(exc).__name__)
+                        log.exception("rewind.checkpoint_before_turn_failed", conversation_id=run.conversation_id,
+                                      run_id=run.run_id, workspace=workspace)
+                checkpoint_task.add_done_callback(checkpoint_done)
             except Exception:
                 log.exception(
                     "rewind.checkpoint_before_turn_failed",
@@ -2723,6 +2800,7 @@ async def _execute_run(
 
         # Run the agent orchestrator
         full_response = ""
+        record_api_timing("orchestrator_setup_complete")
 
         # Build approval callback that emits approval.required and waits for response
         async def approval_callback(
@@ -2953,7 +3031,34 @@ async def _execute_run(
                     "subtask_id": payload.get("subtask_id", ""), "summary": summary,
                 })
 
+        checkpoint_failure_reported = False
+
         async def user_hook(event_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+            nonlocal checkpoint_failure_reported
+            if (event_name == "PreToolUse" and checkpoint_task is not None
+                    and not checkpoint_failure_reported):
+                done, _ = await asyncio.wait({checkpoint_task}, timeout=0.5)
+                if not done:
+                    checkpoint_cancel.set()
+                    if not checkpoint_failure_reported:
+                        checkpoint_failure_reported = True
+                        await emit("run.recovery.notice", {
+                            "message": "执行前工作区快照超过 0.5 秒预算，已取消快照并继续执行。",
+                            "detail": "InterruptedError: pre-tool checkpoint time budget exceeded",
+                        })
+                else:
+                    try:
+                        await checkpoint_task
+                    except Exception as exc:
+                        # A failed optional rewind snapshot must never turn every
+                        # tool invocation into a tool error. The background
+                        # completion callback records the traceback and timing.
+                        if not checkpoint_failure_reported:
+                            checkpoint_failure_reported = True
+                            await emit("run.recovery.notice", {
+                                "message": "执行前工作区快照失败，本轮继续执行。",
+                                "detail": f"{type(exc).__name__}: {exc}",
+                            })
             hook_payload = dict(payload)
             bridge_event_alias = bool(hook_payload.pop("__atlas_bridge_event_alias__", True))
             hook_store = _server()._hook_store()
@@ -3080,6 +3185,20 @@ async def _execute_run(
 
             # Map orchestrator events to runtime protocol
             etype = event.get("type", "")
+
+            if etype == "tool_call":
+                tool_id = str(event.get("id") or event.get("call_id") or "")
+                if tool_id:
+                    timing_tool_starts[tool_id] = time.perf_counter()
+                    record_api_timing("tool_started", tool_id=tool_id,
+                                      tool=str(event.get("name") or "tool"))
+            elif etype == "tool_result":
+                tool_id = str(event.get("id") or event.get("call_id") or "")
+                started = timing_tool_starts.pop(tool_id, None)
+                if started is not None:
+                    record_api_timing("tool_completed", tool_id=tool_id,
+                                      tool=str(event.get("name") or "tool"),
+                                      duration_ms=round((time.perf_counter() - started) * 1000))
 
             if etype == "chunk":
                 chunk_content = event.get("content", "")

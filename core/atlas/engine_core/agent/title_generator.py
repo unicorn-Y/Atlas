@@ -166,7 +166,10 @@ def _auto_title_enabled() -> bool:
 
 
 def _model_title_upgrade_enabled() -> bool:
-    return _title_config().get("model_upgrade_enabled", True) is not False
+    # The deterministic title is available as soon as the user prompt arrives.
+    # A second, non-user-facing provider call adds latency and competes with the
+    # first response for a simple turn, so an LLM rewrite is explicitly opt-in.
+    return _title_config().get("model_upgrade_enabled", False) is True
 
 
 def generate_title(

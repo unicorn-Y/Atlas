@@ -30,6 +30,7 @@ import inspect
 import json
 import os
 import re
+import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
 from dataclasses import dataclass, field
@@ -291,14 +292,53 @@ async def execute_run(
         {"type": "done", "message_id": "...", "model": "..."}
         {"type": "error", "detail": "..."}
     """
+    phase_started = time.perf_counter()
+
+    def record_phase_timing(stage: str, duration_ms: int) -> None:
+        try:
+            from atlas.logs import append_run_event
+            append_run_event(str(request.run_id or request.source_run_id or "unknown"),
+                             "run_phase_timing", stage=stage, duration_ms=duration_ms)
+        except Exception:
+            log.debug("agent.phase_timing_log_failed", stage=stage, exc_info=True)
+
     state = _RunState(request=request, callbacks=callbacks, message=request.message)
     for phase in (_phase_begin, _phase_prompt_hook, _phase_plan, _phase_context):
-        async with aclosing(phase(agent, state)) as running:
-            async for event in running:
-                yield event
+        started = time.perf_counter()
+        try:
+            if phase is _phase_context:
+                # Memory retrieval is useful context, but must not hold the first
+                # visible response indefinitely. Keep the already loaded history
+                # and continue without memory if this optional preparation stalls.
+                try:
+                    context_budget = float(os.environ.get("ATLAS_PREFLIGHT_CONTEXT_TIMEOUT_SECONDS", "4"))
+                except (TypeError, ValueError):
+                    context_budget = 4.0
+                context_budget = max(0.5, min(context_budget, 10.0))
+                async with asyncio.timeout(context_budget):
+                    async with aclosing(phase(agent, state)) as running:
+                        async for event in running:
+                            yield event
+            else:
+                async with aclosing(phase(agent, state)) as running:
+                    async for event in running:
+                        yield event
+        except TimeoutError:
+            if phase is not _phase_context:
+                raise
+            state.context = {"use_memories": False, "generate_memories": True,
+                             "context_timeout": True}
+            yield {"type": "run.recovery.notice", "data": {
+                "message": "记忆召回超过前置时间上限；本轮保留会话历史并跳过记忆，回复不会继续等待。",
+                "timeout_seconds": context_budget,
+            }}
+        record_phase_timing(phase.__name__, round((time.perf_counter() - started) * 1000))
         if state.abort:
             return
+    started = time.perf_counter()
     state.initial_messages = await _build_messages(agent, state)
+    record_phase_timing("prompt_assembly", round((time.perf_counter() - started) * 1000))
+    record_phase_timing("pre_model_total", round((time.perf_counter() - phase_started) * 1000))
     async with aclosing(_turn(agent, state)) as running:
         async for event in running:
             yield event

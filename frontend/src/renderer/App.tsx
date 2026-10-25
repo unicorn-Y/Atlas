@@ -125,7 +125,7 @@ import ComputerLivePreview from './components/x2/ComputerLivePreview';
 const ScreenRecorderDialog = lazy(() => import('./components/ScreenRecorderDialog'));
 
 type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage' | 'memories' | 'teach' | 'secrets';
-type MemoryMarkerDraft = { text: string; path: string };
+type MemoryMarkerDraft = { text: string; path: string; session?: string; ref?: string };
 
 const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['models', '模型与服务', SlidersHorizontal, 'provider 模型 model API key 密钥 reasoning 推理 连接'],
@@ -811,7 +811,7 @@ export default function App() {
     try {
       for (const item of memoryMarkerDrafts) {
         await api<{ id: string; path: string }>(store.apiBaseUrl, '/api/memlib/add', {
-          method: 'POST', json: { path: item.path, text: item.text },
+          method: 'POST', json: { path: item.path, text: item.text, session: item.session, ref: item.ref },
         });
         saved += 1;
       }
@@ -898,12 +898,27 @@ export default function App() {
     const sent = immediate && activeRun && !runDone
       ? store.sendNow(text, images, documents, refs)
       : store.sendMessage(text, images, documents, refs, undefined, undefined, messageSkills);
-    if (memoryCandidates.length) {
-      setMemoryMarkerDrafts(memoryCandidates.map((candidate) => ({ text: candidate, path: '我.md' })));
-    }
     void sent.then(async () => {
       const projectId = pendingProjectId;
       const conversationId = useAtlasStore.getState().activeConversationId;
+      if (memoryCandidates.length) {
+        let sourceMessageId = '';
+        if (conversationId) {
+          for (let attempt = 0; attempt < 5 && !sourceMessageId; attempt += 1) {
+            if (attempt) await new Promise((resolve) => window.setTimeout(resolve, 180));
+            const rows = await api<Array<{ id?: string; role?: string; content?: unknown }>>(
+              store.apiBaseUrl, `/api/conversations/${encodeURIComponent(conversationId)}/messages?limit=30`,
+            ).catch(() => []);
+            const source = [...rows].reverse().find((row) => row.role === 'user'
+              && typeof row.content === 'string' && row.content.trim() === submittedInput.trim());
+            sourceMessageId = String(source?.id ?? '');
+          }
+        }
+        const ref = sourceMessageId && conversationId ? `${conversationId}@${sourceMessageId}` : '';
+        setMemoryMarkerDrafts(memoryCandidates.map((candidate) => ({
+          text: candidate, path: '我.md', session: ref ? conversationId : undefined, ref: ref || undefined,
+        })));
+      }
       if (!projectId || !conversationId) return;
       try {
         await api(store.apiBaseUrl, `/api/projects/${encodeURIComponent(projectId)}/conversations`, { method: 'POST', json: { conversation_id: conversationId } });
@@ -1128,7 +1143,20 @@ export default function App() {
   useEffect(() => {
     setPref('wake-enabled', String(wakeEnabled));
   }, [wakeEnabled]);
-  useEffect(() => window.atlasDesktop?.onVoiceHotkey?.(() => { void toggleSpeechInputRef.current(); }), []);
+  useEffect(() => window.atlasDesktop?.onVoiceHotkeyStop?.(() => {
+    if (voiceOpen) setVoiceOpen(false);
+    void stopSpeechInput(false).finally(() => window.atlasDesktop?.acknowledgeVoiceHotkeyStop?.());
+  }), [voiceOpen, speechAutoSend]);
+  useEffect(() => window.atlasDesktop?.onVoiceHudResult?.((transcript) => {
+    const text = transcript.trim();
+    if (!text) return;
+    setInput(text);
+    if (speechAutoSend) {
+      window.setTimeout(() => { void submit(false, true, text); }, 0);
+    } else {
+      setToast('语音转写已放入草稿');
+    }
+  }), [speechAutoSend, submit]);
   useEffect(() => {
     setPref('wake-word', wakeWord);
   }, [wakeWord]);

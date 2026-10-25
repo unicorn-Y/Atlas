@@ -1499,7 +1499,7 @@ async def execute_tools_node(
                     elif str(fn_args.get("scope", "project")) == "global":
                         from atlas.memory.library import get_library
                         library = get_library()
-                        data = await asyncio.to_thread(library.agent_memory_write, str(getattr(ctx, "memory_scope_id", "") or ""), str(fn_args.get("text") or "")) if library else {"ok": False, "error": "MemoryLibrary unavailable"}
+                        data = await asyncio.to_thread(library.agent_memory_write, str(getattr(ctx, "memory_scope_id", "") or ""), str(fn_args.get("text") or ""), session=str(getattr(ctx, "conversation_id", "") or "")) if library else {"ok": False, "error": "MemoryLibrary unavailable"}
                     else:
                         data = await project_store.add_project_memory(project_id, str(fn_args.get("text") or ""))
                     result = {"data": data, "is_error": False,
@@ -1514,7 +1514,7 @@ async def execute_tools_node(
                     if fn_name == "agent_memory_read":
                         data = await asyncio.to_thread(library.agent_memory_read, scope_id, str(fn_args.get("query") or ""), max(1, min(20, int(fn_args.get("limit", 8) or 8))))
                     else:
-                        data = await asyncio.to_thread(library.agent_memory_write, scope_id, str(fn_args.get("text") or ""))
+                        data = await asyncio.to_thread(library.agent_memory_write, scope_id, str(fn_args.get("text") or ""), session=str(getattr(ctx, "conversation_id", "") or ""))
                     result = {"data": data, "is_error": False, "content": [{"type": "text", "text": json.dumps(data, ensure_ascii=False)}]}
             elif fn_name == "session_search" and agent._memory is not None:
                 results = await agent._memory.session_search(

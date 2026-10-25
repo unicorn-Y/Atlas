@@ -23,6 +23,7 @@ import os
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Event
 from typing import Callable, Literal
 
 from ..agent.checkpoints import ShadowGitCheckpointStore
@@ -100,6 +101,7 @@ class RewindManager:
         workspace: str,
         *,
         after_message_id: str | None = None,
+        cancel_event: Event | None = None,
     ) -> str:
         """Capture the workspace and bind it to the current conversation turn.
 
@@ -118,6 +120,7 @@ class RewindManager:
             ["."],
             run_id=turn_id,
             conversation_id=conversation_id,
+            cancel_event=cancel_event,
         )
         manifest["turn_id"] = turn_id
         manifest["after_message_id"] = after_message_id
@@ -361,6 +364,7 @@ def checkpoint_before_turn(
     workspace: str,
     *,
     after_message_id: str | None = None,
+    cancel_event: Event | None = None,
 ) -> str:
     """Create a pre-turn checkpoint with the default byte snapshot store."""
     return _default_manager.checkpoint_before_turn(
@@ -368,6 +372,7 @@ def checkpoint_before_turn(
         turn_id,
         workspace,
         after_message_id=after_message_id,
+        cancel_event=cancel_event,
     )
 
 

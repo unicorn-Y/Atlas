@@ -98,6 +98,10 @@ export interface AtlasDesktopApi {
   setScreenshotShortcut?(accelerator: string | null): Promise<GlobalShortcutState>;
   setVoiceShortcut?(accelerator: string | null): Promise<GlobalShortcutState>;
   onVoiceHotkey?(callback: () => void): () => void;
+  onVoiceHotkeyStop?(callback: () => void): () => void;
+  acknowledgeVoiceHotkeyStop?(): void;
+  onVoiceHudResult?(callback: (transcript: string) => void): () => void;
+  submitVoiceHudResult?(transcript: string): void;
   onVoiceHudStart?(callback: () => void): () => void;
   onVoiceHudStop?(callback: () => void): () => void;
   switchDataRoot?(target: string): Promise<{ restarting: boolean }>;

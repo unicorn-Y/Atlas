@@ -39,6 +39,7 @@ function themeIcon(theme: string): Electron.NativeImage | undefined {
 let windowRef: BrowserWindow | null = null;
 let floatingComposerWindow: BrowserWindow | null = null;
 let voiceHudWindow: BrowserWindow | null = null;
+const pendingVoiceHudResults: string[] = [];
 const conversationWindows = new Map<string, BrowserWindow>();
 type WindowBounds = { x: number; y: number; width: number; height: number };
 type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null; screenshotShortcut: string | null; voiceShortcut: string | null; openAtLogin: boolean; windowBounds?: WindowBounds };
@@ -517,29 +518,12 @@ function tryRegisterVoiceShortcut(accelerator: string | null): GlobalShortcutSta
   const invalid = validateGlobalAccelerator(accelerator);
   if (invalid) return { accelerator, registered: false, error: invalid };
   try {
-    const registered = globalShortcut.register(accelerator, () => {
-      triggerVoiceShortcut();
-    });
+    const registered = globalShortcut.register(accelerator, triggerVoiceShortcut);
     return registered ? { accelerator, registered: true } : { accelerator, registered: false, error: '系统未能注册语音快捷键，可能已被其他应用占用。' };
   } catch { return { accelerator, registered: false, error: '系统未能注册语音快捷键。' }; }
 }
 
-function triggerVoiceShortcut(): void {
-  let win = windowRef;
-  if (!win || win.isDestroyed()) {
-    createWindow();
-    win = windowRef;
-  }
-  if (!win || win.isDestroyed()) return;
-  if (win.isMinimized()) win.restore();
-  win.show();
-  win.focus();
-  const send = () => { if (!win?.isDestroyed()) win.webContents.send('app:voice-hotkey'); };
-  if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send);
-  else send();
-}
-
-function toggleVoiceHud(): void {
+async function triggerVoiceShortcut(): Promise<void> {
   if (voiceHudWindow && !voiceHudWindow.isDestroyed() && voiceHudWindow.isVisible()) {
     voiceHudWindow.webContents.send('voice-hud:stop');
     voiceHudWindow.hide();
@@ -559,6 +543,22 @@ function toggleVoiceHud(): void {
     const devUrl = process.env.VITE_DEV_SERVER_URL;
     if (devUrl) void voiceHudWindow.loadURL(new URL('/voice-hud.html', devUrl).href);
     else void voiceHudWindow.loadFile(path.join(here, '../../dist/voice-hud.html'));
+  }
+  // The HUD owns the one ASR stream for a global shortcut. Stop any Composer
+  // dictation first so the shortcut can never open two microphones at once.
+  if (windowRef && !windowRef.isDestroyed()) {
+    const main = windowRef;
+    await new Promise<void>((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        ipcMain.removeListener('app:voice-hotkey-stopped', finish);
+        resolve();
+      };
+      const timer = setTimeout(finish, 1800);
+      ipcMain.once('app:voice-hotkey-stopped', finish);
+      if (!main.isDestroyed()) main.webContents.send('app:voice-hotkey-stop');
+      else finish();
+    });
   }
   const win = voiceHudWindow;
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', () => { if (!win.isDestroyed()) { win.showInactive(); win.webContents.send('voice-hud:start'); } });
@@ -953,6 +953,9 @@ function createWindow() {
   });
   win.webContents.on('did-finish-load', () => {
     win.webContents.send(BACKEND_STARTUP_CHANNEL, lastProgress);
+    for (const transcript of pendingVoiceHudResults.splice(0)) {
+      win.webContents.send('app:voice-hud-result', transcript);
+    }
   });
   windowRef.on('close', (event) => {
     if (!explicitQuit) { event.preventDefault(); disposeVoiceHud(); windowRef?.hide(); }
@@ -1070,6 +1073,23 @@ ipcMain.handle('platform:set-keep-awake', (event, enabled: unknown) => {
   keepAwakeEnabled = enabled;
   updateRuntimeState(runtimeState);
 });
+ipcMain.on('voice-hud:result', (event, value: unknown) => {
+  if (typeof value !== 'string') return;
+  const transcript = value.trim().slice(0, 12000);
+  if (!transcript) return;
+  const deliver = () => {
+    if (windowRef && !windowRef.isDestroyed()) windowRef.webContents.send('app:voice-hud-result', transcript);
+  };
+  if (!windowRef || windowRef.isDestroyed()) {
+    // Keep the result until the user next opens Atlas; never raise the window
+    // merely because a dictation completed in another app.
+    pendingVoiceHudResults.push(transcript);
+    return;
+  }
+  if (windowRef.webContents.isLoading()) windowRef.webContents.once('did-finish-load', deliver);
+  else deliver();
+});
+
 ipcMain.on('runtime:set-state', (event, state: unknown) => {
   assertTrustedAppSender(event);
   if (state === 'running' || state === 'waiting' || state === 'idle') updateRuntimeState(state);
