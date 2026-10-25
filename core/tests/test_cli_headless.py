@@ -177,7 +177,10 @@ def test_exec_jsonl_reports_image_validation_error_as_parseable_events(tmp_path)
     events = [json.loads(line) for line in result.stdout.splitlines()]
     assert events[0]["type"] == "error"
     assert events[0]["code"] == "invalid_image"
-    assert events[1] == {"type": "end", "status": "failed"}
+    assert events[1]["type"] == "turn.failed"
+    assert events[-1]["type"] == "end" and events[-1]["status"] == "failed"
+    assert all(event["protocol"] == "atlas.exec.events" and event["version"] == 1
+               for event in events)
 
 
 def test_exec_passes_images_to_orchestrator_and_emits_jsonl_input(tmp_path, monkeypatch):
