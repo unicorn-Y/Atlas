@@ -1398,6 +1398,13 @@ async def _handle_run_start(
             "category": "validation", "detail": "invalid reasoning_effort",
         }))
         return
+    daybreak = data.get("daybreak", False)
+    if not isinstance(daybreak, bool):
+        invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+        await manager.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation", "detail": "daybreak must be a boolean",
+        }))
+        return
     try:
         active_skill_instructions = await _server()._resolve_active_skill_instructions(
             effective_skills
@@ -1436,6 +1443,9 @@ async def _handle_run_start(
             "category": "validation", "detail": str(exc),
         }))
         return
+    if daybreak:
+        from atlas.daybreak import daybreak_prompt
+        content = daybreak_prompt(content)
     resume_from = data.get("resume_from")
     recovered_plan = None
     prior_run = manager.runs.get(resume_from) if isinstance(resume_from, str) else None

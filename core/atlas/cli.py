@@ -35,6 +35,26 @@ class _LazyConsole:
 _CLI_ATTACH_MAX_BYTES = 5 * 1024 * 1024
 
 
+def _daybreak_enabled() -> bool:
+    from atlas.config import load_user_settings
+
+    return load_user_settings().get("daybreak_enabled") is True
+
+
+def _set_daybreak_enabled(enabled: bool) -> None:
+    from atlas.config import load_user_settings, save_user_settings
+
+    settings = load_user_settings()
+    settings["daybreak_enabled"] = bool(enabled)
+    save_user_settings(settings)
+
+
+def _daybreak_terminal_notice(status: str) -> None:
+    """Emit a content-free terminal bell/status when a Daybreak run settles."""
+    sys.stderr.write(f"\aDaybreak: 长任务{status}。可用同一会话继续或恢复。\n")
+    sys.stderr.flush()
+
+
 console = _LazyConsole()
 
 
@@ -84,6 +104,20 @@ def memory_bench_command(
 @main.group("security")
 def security_group() -> None:
     """Audit local dependency locks and security-sensitive configuration."""
+
+
+@main.command("daybreak")
+@click.argument("state", required=False, type=click.Choice(["on", "off", "status"], case_sensitive=False))
+def daybreak_command(state: str | None) -> None:
+    """Persistently toggle long-task behavior for CLI chat and run commands."""
+    enabled = _daybreak_enabled()
+    if state and state.lower() != "status":
+        enabled = state.lower() == "on"
+        try:
+            _set_daybreak_enabled(enabled)
+        except OSError as exc:
+            raise click.ClickException(f"无法保存 Daybreak 设置：{exc}") from exc
+    console.print(f"Daybreak 长任务模式{'已开启' if enabled else '已关闭'}")
 
 
 @security_group.command("audit")
@@ -603,7 +637,8 @@ def daemon_disable_startup() -> None:
 
 @main.command()
 @click.option("--model", "-m", default=None, help="Model to use")
-def chat(model: str | None) -> None:
+@click.option("--resume", "resume_id", default=None, help="Continue an existing conversation by id")
+def chat(model: str | None, resume_id: str | None) -> None:
     """Start an interactive chat session in the terminal."""
     from atlas.agent import AgentOrchestrator
     from atlas.memory import MemoryStore
@@ -629,11 +664,13 @@ def chat(model: str | None) -> None:
         ide_context = await discover_ide_context()
 
         import uuid
-        conv_id = str(uuid.uuid4())
+        conv_id = resume_id or str(uuid.uuid4())
+        daybreak = _daybreak_enabled()
 
         console.print(f"[bold]Atlas[/bold] v0.1.0 | Model: [cyan]{model_mgr.current_model}[/cyan]")
+        console.print(f"Conversation: [cyan]{conv_id}[/cyan] (resume with atlas chat --resume {conv_id})")
         console.print("Type [bold]quit[/bold] or [bold]exit[/bold] to leave. "
-                      "[bold]/model <id>[/bold] to switch model.\n")
+                      "[bold]/model <id>[/bold] to switch model; [bold]/daybreak [on|off|status][/bold] controls long-task mode.\n")
         if ide_context:
             file_hint = f" · 文件 {ide_context['file']}" if ide_context.get("file") else ""
             console.print(f"[dim]已发现 {ide_context.get('editor') or 'IDE'} 上下文：工作区 {ide_context.get('workspace')}{file_hint}；首次提问时附上。[/dim]\n")
@@ -652,6 +689,23 @@ def chat(model: str | None) -> None:
             if user_input.lower() in ("quit", "exit"):
                 console.print("Bye!")
                 break
+
+            if user_input == "/daybreak" or user_input.startswith("/daybreak "):
+                args = user_input.partition(" ")[2].strip().lower()
+                if args not in {"", "on", "off", "status"}:
+                    console.print("用法：/daybreak [on|off|status]")
+                else:
+                    if args == "status":
+                        pass
+                    else:
+                        daybreak = args == "on" if args else not daybreak
+                        try:
+                            _set_daybreak_enabled(daybreak)
+                        except OSError as exc:
+                            console.print(f"[red]Daybreak 设置保存失败：{exc}[/red]")
+                            continue
+                    console.print(f"Daybreak 长任务模式{'已开启' if daybreak else '已关闭'}")
+                continue
 
             if user_input.startswith("/model "):
                 new_model = user_input.split(" ", 1)[1].strip()
@@ -676,6 +730,10 @@ def chat(model: str | None) -> None:
                 user_input = f"{format_ide_context(ide_context)}\n\nUser request:\n{user_input}"
                 attach_ide_context = False
 
+            if daybreak:
+                from atlas.daybreak import daybreak_prompt
+                user_input = daybreak_prompt(user_input)
+
             console.print(f"[bold]{model_mgr.current_model}[/bold] > ", end="")
             full = ""
             run_kwargs: dict[str, Any] = {}
@@ -687,8 +745,12 @@ def chat(model: str | None) -> None:
                     full += event["content"]
                 elif event["type"] == "error":
                     console.print(f"\n[red]Error: {event['detail']}[/red]")
+                    if daybreak:
+                        _daybreak_terminal_notice("遇到错误")
                 elif event["type"] == "done":
                     print()  # newline after streaming
+                    if daybreak:
+                        _daybreak_terminal_notice("已完成")
             print()  # blank line between turns
 
         await memory.close()
@@ -820,6 +882,9 @@ def exec_command(
             for attempt in range(3):
                 parts: list[str] = []
                 run_prompt = user_prompt
+                if _daybreak_enabled():
+                    from atlas.daybreak import daybreak_prompt
+                    run_prompt = daybreak_prompt(run_prompt)
                 if schema is not None:
                     run_prompt += "\n\nReturn only a JSON value that strictly matches this JSON Schema:\n" + json.dumps(schema, ensure_ascii=False)
                     if attempt:
@@ -880,6 +945,8 @@ def exec_command(
                 _write_line({"type": "end", "session_id": conv_id, "status": "failed" if failed else "completed"}, sys.stdout)
             elif final_text:
                 print()
+            if _daybreak_enabled():
+                _daybreak_terminal_notice("遇到错误" if failed else "已完成")
             return failed
         finally:
             await memory.close()
@@ -1292,6 +1359,7 @@ async def _drive_turn(
     max_turns: int | None,
     output_format: str,
     timeout: float,
+    daybreak: bool,
     out: TextIO,
 ) -> tuple[int, dict[str, Any]]:
     """One headless turn over the existing /ws/chat Runtime Event Protocol."""
@@ -1322,6 +1390,8 @@ async def _drive_turn(
         "type": "run.start", "run_id": run_id, "content": prompt,
         "conversation_id": conversation_id, "workspace": workspace,
     }
+    if daybreak:
+        start_message["daybreak"] = True
     if attachments:
         start_message["files"] = attachments
     if model:
@@ -1456,6 +1526,8 @@ async def _drive_turn(
     if detail:
         summary["detail"] = detail
     renderer.summary(summary)
+    if daybreak:
+        _daybreak_terminal_notice("已完成" if result == "completed" else "遇到错误" if result == "failed" else "已停止")
     if result == "failed":
         _error_line("run", detail or "run failed")
     elif result == "timeout":
@@ -1482,6 +1554,7 @@ async def _run_headless(
     max_turns: int | None,
     server_url: str | None,
     timeout: float,
+    daybreak: bool,
     out: TextIO,
 ) -> int:
     import httpx
@@ -1514,6 +1587,7 @@ async def _run_headless(
                 attachments=attachments,
                 permission_mode=permission_mode, conversation_id=conv_id,
                 max_turns=max_turns, output_format=output_format, timeout=timeout,
+                daybreak=daybreak,
                 out=out,
             )
         except (OSError, ValueError, websockets_exceptions.WebSocketException) as exc:
@@ -1611,6 +1685,7 @@ def run(prompt_text: str | None, attachments: tuple[Path, ...], workspace: str |
             max_turns=max_turns,
             server_url=server_url,
             timeout=timeout,
+            daybreak=_daybreak_enabled(),
             out=out,
         ))
     finally:

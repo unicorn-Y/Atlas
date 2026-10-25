@@ -238,6 +238,7 @@ export default function App() {
   const [view, setView] = useState<View>('home');
   const [inspectorOpen, setInspectorOpen] = useState(() => pref('canvas') === 'true');
   const [focusMode, setFocusMode] = useState(() => pref('focus-mode') === 'true');
+  const [daybreakEnabled, setDaybreakEnabled] = useState(() => pref('daybreak') === 'true');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('artifacts');
   const [previewFile, setPreviewFile] = useState('');
   const [fullScreenDiff, setFullScreenDiff] = useState(false);
@@ -496,6 +497,11 @@ export default function App() {
   }, [defaultWorkspace, store.conversations, store.conversationsLoading]);
   const activeRun = store.runs.find((run) => run.id === store.activeRunId);
   useEffect(() => { if (pref('keep-awake') === 'true') void window.atlasDesktop?.setKeepAwake?.(true); }, []);
+  useEffect(() => {
+    const daybreakRunning = daybreakEnabled && store.runs.some((run) => !TERMINAL.includes(run.status));
+    const userKeepAwake = pref('keep-awake') === 'true';
+    void window.atlasDesktop?.setKeepAwake?.(daybreakRunning || userKeepAwake);
+  }, [daybreakEnabled, store.runs]);
   useEffect(() => {
     const active = store.runs.filter((run) => !TERMINAL.includes(run.status));
     const state = active.some((run) => run.status === 'waiting') ? 'waiting' : active.length ? 'running' : 'idle';
@@ -1703,6 +1709,14 @@ export default function App() {
     } catch (error) { setToast(`创建交接会话失败：${error instanceof Error ? error.message : String(error)}`); }
   };
   const slashCommands: SlashCommand[] = [
+    { id: 'daybreak', label: '/daybreak', hint: '跨夜长任务模式：保存状态、支持续跑，并在运行时保持电脑唤醒', takesArgument: true, run: (value: string) => {
+      const arg = value.trim().toLowerCase();
+      if (arg && !['on', 'off', 'status'].includes(arg)) { setToast('用法：/daybreak [on|off|status]'); return; }
+      if (arg === 'status') { setToast(`Daybreak 长任务模式${daybreakEnabled ? '已开启' : '已关闭'}`); return; }
+      const enabled = arg === 'on' ? true : arg === 'off' ? false : !daybreakEnabled;
+      setDaybreakEnabled(enabled); setPref('daybreak', String(enabled));
+      setToast(`Daybreak 长任务模式已${enabled ? '开启：运行可后台继续，完成时通知并可恢复' : '关闭'}`);
+    } },
     { id: 'new', label: '/new', hint: '生成完整上下文交接并在干净的新对话继续', run: () => {
       if (!activeConversation) { newTask(); return; }
       void prepareHandoff();

@@ -1221,6 +1221,7 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   // W1, so the extra field is attached via an assertion at this one call site.
   const request = {
     type: 'run.start', run_id: run.id, content, conversation_id: run.conversationId, model: overrides?.model ?? state.conversationModels[run.conversationId] ?? state.model, attachments, active_skills: state.activeSkills,
+    ...(storageGet('atlas.preference.daybreak') === 'true' ? { daybreak: true } : {}),
     ...(item.messageSkills?.length ? { message_skills: item.messageSkills } : {}),
     ...(files.length ? { files } : {}), ...(mode === 'plan' ? { mode } : {}), ...(workspace ? { workspace } : {}),
     ...((item.profileId ?? state.profileId) !== 'default' ? { profile_id: item.profileId ?? state.profileId } : {}),
