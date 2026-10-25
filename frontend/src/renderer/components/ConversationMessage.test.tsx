@@ -56,4 +56,11 @@ describe('ConversationMessage', () => {
       else delete (globalThis as { localStorage?: Storage }).localStorage;
     }
   });
+
+  it('offers export and an expanded annotation workflow for rendered Markdown tables', () => {
+    const html = renderToStaticMarkup(<ConversationMessage role="assistant" username="User" content={'| 状态 | 数量 |\n| --- | ---: |\n| 完成 | 3 |'} />);
+    expect(html).toContain('放大与批注');
+    expect(html).toContain('导出表格为 CSV');
+    expect(html).toContain('<table');
+  });
 });

@@ -3,9 +3,10 @@ import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
-import { MoreHorizontal } from 'lucide-react';
+import { Maximize2, MoreHorizontal, X } from 'lucide-react';
 import ClipboardAction from './ClipboardAction';
 import ImagePreview from './ImagePreview';
+import { useAtlasStore } from '../../store/useAtlasStore';
 
 export type ContextAction = { id: string; label: string; onSelect: () => void | Promise<void>; restoreFocus?: boolean };
 type ContextMenuCloseReason = 'escape' | 'select' | 'outside' | 'tab';
@@ -143,14 +144,51 @@ function downloadCsv(rows: string[][]): void {
 
 export function CsvMarkdownTable({ children }: { children?: ReactNode }) {
   const rows = markdownTableRows(children);
-  return <div className="my-3 overflow-x-auto">
-    {rows.length > 0 && <div className="mb-1 flex justify-end">
-      <button type="button" onClick={() => downloadCsv(rows)} aria-label="导出表格为 CSV" title="导出表格为 CSV"
+  const tableRoot = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [selectedRows, setSelectedRows] = useState<number[]>([]);
+  const [comment, setComment] = useState('');
+  const active = useAtlasStore((state) => state.activeConversationId);
+  const toggleRow = (event: MouseEvent<HTMLTableElement>) => {
+    const row = (event.target as HTMLElement).closest('tbody tr');
+    if (!row) return;
+    const index = [...(row.parentElement?.children ?? [])].indexOf(row);
+    row.classList.toggle('bg-brand-soft');
+    setSelectedRows((current) => current.includes(index) ? current.filter((value) => value !== index) : [...current, index]);
+  };
+  const currentRows = () => {
+    const domRows = [...(tableRoot.current?.querySelectorAll('table tr') ?? [])].map((row) => [...row.querySelectorAll('th,td')].map((cell) => cell.textContent?.trim() ?? ''));
+    return domRows.length ? domRows : rows;
+  };
+  const exportCurrentCsv = () => downloadCsv(currentRows());
+  const sendComment = async () => {
+    const tableRows = currentRows();
+    const selection = selectedRows.map((index) => tableRows[index + 1]).filter(Boolean);
+    const excerpt = selection.length ? selection.map((row) => row.map((cell, index) => `${tableRows[0]?.[index] ?? `列${index + 1}`}: ${cell}`).join(' | ')).join('\n') : '未选择具体行';
+    const instruction = `请基于这张 Markdown 表格${active ? '' : '（当前没有活动对话）'}进行修改。\n选中区域：\n${excerpt}\n\n修改意见：${comment.trim() || '请检查并提出改进建议。'}`;
+    if (active) await useAtlasStore.getState().sendMessage(instruction);
+    else window.dispatchEvent(new CustomEvent('atlas:add-selection-to-draft', { detail: { text: instruction } }));
+    setExpanded(false); setComment(''); setSelectedRows([]);
+  };
+  const table = <table onClick={toggleRow} className="w-full">{children}</table>;
+  return <div ref={tableRoot} className="my-3 overflow-x-auto">
+    <div className="mb-1 flex justify-end">
+      <button type="button" onClick={() => { setExpanded(true); setSelectedRows([]); }} aria-label="放大并批注表格" title="放大并批注表格"
+        className="inline-flex min-h-7 items-center gap-1 rounded-md px-2 text-[11.5px] text-fg-3 hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"><Maximize2 size={12} />放大与批注</button>
+      <button type="button" onClick={exportCurrentCsv} aria-label="导出表格为 CSV" title="导出表格为 CSV"
         className="inline-flex min-h-7 items-center rounded-md px-2 text-[11.5px] text-fg-3 hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand">
         导出 CSV
       </button>
-    </div>}
-    <table>{children}</table>
+    </div>
+    {table}
+    {expanded && createPortal(<div className="fixed inset-0 z-[100] grid place-items-center bg-black/55 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExpanded(false); }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="table-dialog-title" className="flex max-h-[92vh] w-[min(1100px,96vw)] flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-2xl">
+        <header className="flex items-center gap-2 border-b border-line px-4 py-3"><Maximize2 size={15} className="text-brand"/><h2 id="table-dialog-title" className="m-0 flex-1 text-[14px] font-semibold text-heading">表格放大查看与区域批注</h2><button type="button" aria-label="关闭表格" onClick={() => setExpanded(false)} className="grid size-8 place-items-center rounded-md text-fg-3 hover:bg-hover"><X size={16}/></button></header>
+        <div className="min-h-0 flex-1 overflow-auto p-4"><p className="mt-0 text-[12px] text-fg-3">点击表格行选择要讨论的区域；可多选。选择行数：{selectedRows.length}</p><div className="overflow-auto rounded-lg border border-line [&_table]:border-collapse [&_table]:text-[12px] [&_th]:sticky [&_th]:top-0 [&_th]:bg-sunken [&_th]:p-2 [&_td]:p-2 [&_td]:align-top [&_tr]:border-b [&_tr]:border-line">{table}</div>
+          <label className="mt-4 grid gap-1 text-[12px] text-fg-2">区域批注<textarea value={comment} onChange={(event) => setComment(event.target.value)} rows={3} placeholder="例如：把这一行的状态更新为已完成，并说明依据。" className="rounded-lg border border-line bg-surface p-2.5 text-[13px] text-fg" /></label>
+        </div><footer className="flex justify-end gap-2 border-t border-line px-4 py-3"><button type="button" onClick={() => setExpanded(false)} className="rounded-lg px-3 py-1.5 text-[12px] text-fg-2 hover:bg-hover">关闭</button><button type="button" onClick={() => void sendComment()} className="rounded-lg bg-brand px-3 py-1.5 text-[12px] font-medium text-white hover:brightness-110">把区域批注发送给 Atlas</button></footer>
+      </section>
+    </div>, document.body)}
   </div>;
 }
 

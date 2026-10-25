@@ -1296,6 +1296,16 @@ export default function App() {
     window.addEventListener('atlas:side-chat-selection', onSelectionForSideChat);
     return () => window.removeEventListener('atlas:side-chat-selection', onSelectionForSideChat);
   }, []);
+  useEffect(() => {
+    const onChartSelection = (event: Event) => {
+      const detail = (event as CustomEvent<{ node?: unknown; source?: unknown }>).detail;
+      const node = typeof detail?.node === 'string' ? detail.node.slice(0, 300) : '';
+      const source = typeof detail?.source === 'string' ? detail.source.slice(0, 4000) : '';
+      if (node) void useAtlasStore.getState().sendMessage(`我在图表中选择了节点“${node}”。请解释它与图中其他节点的关系，并根据需要继续修改图表。\n\n图表源码：\n\`\`\`mermaid\n${source}\n\`\`\``);
+    };
+    window.addEventListener('atlas:chart-selection', onChartSelection);
+    return () => window.removeEventListener('atlas:chart-selection', onChartSelection);
+  }, []);
   useEffect(() => window.atlasDesktop?.onFloatingComposerSubmit?.((text) => {
     go('chat');
     void useAtlasStore.getState().sendMessage(text);

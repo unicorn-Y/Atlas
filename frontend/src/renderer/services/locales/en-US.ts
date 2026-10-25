@@ -1273,6 +1273,14 @@ export const messages: Record<string, string> = {
   "已复制": "Copied",
   "操作失败，请重试。": "Operation failed, please retry.",
   "导出表格为 CSV": "Export table as CSV",
+  "表格放大查看与区域批注": "Expanded table and region comments",
+  "关闭表格": "Close table",
+  "点击表格行选择要讨论的区域；可多选。选择行数：": "Select table rows to discuss; you can select multiple. Selected rows:",
+  "区域批注": "Region comment",
+  "例如：把这一行的状态更新为已完成，并说明依据。": "For example: mark this row complete and explain why.",
+  "把区域批注发送给 Atlas": "Send region comment to Atlas",
+  "结构化卡片「__U26_SLOT_0__」选择：__U26_SLOT_1__\n__U26_SLOT_2__": "Structured card “__U26_SLOT_0__” selection: __U26_SLOT_1__\n__U26_SLOT_2__",
+  "在任务面板预览": "Preview in task panel",
   "导出 CSV": "Export CSV",
   "差异源码": "Diff source",
   "复制代码": "Copy code",
@@ -6394,4 +6402,47 @@ export const messages: Record<string, string> = {
   "独立预览": "Open in Preview",
   "转写已送到 Atlas": "Transcription sent to Atlas",
   "结束并发送转写": "Finish and send transcription"
+  ,"我在图表中选择了节点“__U26_SLOT_0__”。请解释它与图中其他节点的关系，并根据需要继续修改图表。\n\n图表源码：\n```mermaid\n__U26_SLOT_1__\n```": "I selected the chart node “__U26_SLOT_0__”. Explain how it relates to the other nodes and update the chart if needed.\n\nChart source:\n```mermaid\n__U26_SLOT_1__\n```"
+  ,"打开可重放的 Atlas 功能课程": "Open replayable Atlas feature lessons"
+  ,"交互式功能课程": "Interactive feature lessons"
+  ,"显示消息时间戳": "Show message timestamps"
+  ,"在对话中的每条消息旁显示本地时间": "Show local time beside each conversation message"
+  ,"自动目录": "Automatic contents"
+  ,"手动章节": "Manual chapter"
+  ,"让 Atlas 了解你的工作区": "Help Atlas understand your workspace"
+  ,"给对话设置工作目录，Atlas 就能围绕项目读取文件、搜索代码并生成改动。": "Set a working directory for the conversation so Atlas can read files, search code, and make project changes."
+  ,"打开「设置 → 模型与工作区」": "Open Settings → Models & Workspace"
+  ,"选择一个项目文件夹": "Choose a project folder"
+  ,"在对话中问：这个项目的入口在哪里？": "Ask in the conversation: Where is this project's entry point?"
+  ,"试着为当前项目选择一个工作目录，然后让 Atlas 找出应用入口。": "Choose a working directory for this project, then ask Atlas to find the application entry point."
+  ,"查看任务产物和运行记录": "Review task artifacts and run history"
+  ,"生成的文件、工具调用和检查结果都可以从任务活动和右侧面板继续查看。": "Generated files, tool calls, and check results remain available in task activity and the right panel."
+  ,"运行一个会生成文件的任务": "Run a task that creates a file"
+  ,"在产物卡上选择「查看」": "Select View on the artifact card"
+  ,"从右侧面板打开文件并检查内容": "Open the file from the right panel and review it"
+  ,"让 Atlas 创建一份简短的 Markdown 项目说明，再从产物面板打开它。": "Ask Atlas to create a short Markdown project overview, then open it from the Artifacts panel."
+  ,"用斜杠命令快速操作": "Use slash commands for quick actions"
+  ,"输入 / 打开命令列表；命令支持搜索，常用入口也可以通过键盘完成。": "Type / to open searchable commands and run common actions from the keyboard."
+  ,"在输入框键入 /": "Type / in the message box"
+  ,"搜索 /help、/model 或 /usage": "Search for /help, /model, or /usage"
+  ,"按 Enter 执行选中的命令": "Press Enter to run the selected command"
+  ,"在输入框试试 /help，查看完整命令说明。": "Try /help in the message box to see all command details."
+  ,"课程": "Lesson"
+  ,"项已完成": "completed"
+  ,"关闭课程": "Close lessons"
+  ,"演示步骤": "Demo steps"
+  ,"动手练习": "Practice"
+  ,"上一步": "Previous"
+  ,"标记完成": "Mark complete"
+  ,"选择图表节点：__U26_SLOT_0__": "Select chart node: __U26_SLOT_0__"
+  ,"可交互图表；选择节点后可回传给 Atlas": "Interactive chart; select a node to send it back to Atlas"
+  ,"已选节点：": "Selected node: "
+  ,"回传给 Atlas": "Send to Atlas"
+  ,"列__U26_SLOT_0__": "Column __U26_SLOT_0__"
+  ,"未选择具体行": "No specific rows selected"
+  ,"请基于这张 Markdown 表格__U26_SLOT_0__进行修改。\n选中区域：\n__U26_SLOT_1__\n\n修改意见：__U26_SLOT_2__": "Please update this Markdown table__U26_SLOT_0__.\nSelected region:\n__U26_SLOT_1__\n\nRequested change: __U26_SLOT_2__"
+  ,"（当前没有活动对话）": "(no active conversation)"
+  ,"请检查并提出改进建议。": "Please review it and suggest improvements."
+  ,"放大并批注表格": "Expand and annotate table"
+  ,"放大与批注": "Expand and comment"
 };

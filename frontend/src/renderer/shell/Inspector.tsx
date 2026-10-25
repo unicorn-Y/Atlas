@@ -414,6 +414,7 @@ function ArtifactActions({ path, root, onPreview }: { path: string; root: string
     } finally { setDownloading(false); }
   };
   return <div className="flex gap-2">
+    {safeRelative && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('atlas:open-file-preview', { detail: { path: relative } }))} className="rounded-lg px-2 py-1 text-[12.5px] text-brand hover:bg-hover">在任务面板预览</button>}
     {PREVIEWABLE.test(path) && safeRelative && <button onClick={() => onPreview(backend.rawFileUrl(base, relative))} className="rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg">在浏览器预览</button>}
     {safeRelative && <button type="button" disabled={downloading} onClick={() => void download()} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-50"><Download size={13} />{downloading ? '下载中' : '下载'}</button>}
     {window.atlasDesktop?.openPath && (absolute || base) && <button onClick={() => void window.atlasDesktop!.openPath(full)} className="rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg">用默认程序打开</button>}

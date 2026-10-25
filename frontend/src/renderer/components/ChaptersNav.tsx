@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type { ConversationMessage } from '@atlas/backend-adapter';
 import type { AgentEvent } from '../../types/runtime';
 
-type Chapter = { id: string; title: string; rowId: string };
+type Chapter = { id: string; title: string; rowId: string; automatic?: boolean; headingIndex?: number };
 const keyFor = (conversationId: string) => `atlas.chapters.${conversationId}`;
 
 /** User-authored chapter marks in the conversation, with jump targets aligned to MessageThread rows. */
@@ -20,9 +20,15 @@ export default function ChaptersNav({ conversationId, threadRef, history, events
     }
     catch { setChapters([]); }
   }, [conversationId]);
-  const resolved = useMemo(() => chapters.filter((chapter) => history.some((message) => `h-${message.id}` === chapter.rowId)
+  const automatic = useMemo(() => history.flatMap((message) => {
+    if (message.role !== 'assistant') return [];
+    const headings = [...message.content.matchAll(/^#{1,3}\s+(.+)\s*$/gm)].slice(0, 12);
+    return headings.map((match, index) => ({ id: `auto-${message.id}-${index}`, title: match[1].trim().slice(0, 80), rowId: `h-${message.id}`, automatic: true, headingIndex: index }));
+  }).slice(-40), [history]);
+  const allChapters = useMemo(() => [...chapters, ...automatic], [chapters, automatic]);
+  const resolved = useMemo(() => allChapters.filter((chapter) => history.some((message) => `h-${message.id}` === chapter.rowId)
     || [...(threadRef.current?.querySelectorAll<HTMLElement>('[data-conversation-search-row]') ?? [])]
-      .some((row) => row.dataset.conversationSearchRow === chapter.rowId)), [chapters, history, threadRef]);
+      .some((row) => row.dataset.conversationSearchRow === chapter.rowId)), [allChapters, history, threadRef]);
   useEffect(() => { const handle = (event: Event) => {
     const detail = (event as CustomEvent<{ title?: string; runId?: string; sequence?: number }>).detail;
     const title = detail?.title?.trim();
@@ -49,11 +55,14 @@ export default function ChaptersNav({ conversationId, threadRef, history, events
   }, [events]);
   if (!resolved.length) return null;
   return <nav aria-label="对话章节目录" className="absolute right-1 top-1/2 z-10 flex max-h-[60%] -translate-y-1/2 flex-col gap-1 overflow-y-auto rounded-lg border border-line bg-panel/95 p-2 shadow-lg">
-    <span className="px-1 text-[10px] font-semibold text-fg-3">章节</span>{resolved.map((chapter) => <button key={chapter.id} title={chapter.title} onClick={() => {
+    <span className="px-1 text-[10px] font-semibold text-fg-3">目录</span>{resolved.map((chapter) => <button key={chapter.id} title={`${chapter.automatic ? '自动目录' : '手动章节'}：${chapter.title}`} onClick={() => {
     const thread = threadRef.current;
     const row = [...(thread?.querySelectorAll<HTMLElement>('[data-conversation-search-row]') ?? [])]
       .find((element) => element.dataset.conversationSearchRow === chapter.rowId);
-    row?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }} className="max-w-36 truncate rounded-md px-2 py-1 text-left text-[11.5px] text-fg-2 hover:bg-hover">{chapter.title}</button>)}
+    const target = chapter.automatic && row
+      ? row.querySelectorAll<HTMLElement>('h1, h2, h3')[chapter.headingIndex ?? 0] ?? row
+      : row;
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }} className="max-w-36 truncate rounded-md px-2 py-1 text-left text-[11.5px] text-fg-2 hover:bg-hover">{chapter.automatic && <span aria-hidden="true" className="mr-1 text-brand">#</span>}{chapter.title}</button>)}
   </nav>;
 }
