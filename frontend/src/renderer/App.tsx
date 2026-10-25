@@ -2465,6 +2465,20 @@ export default function App() {
     <button type="button" title={conversationGoal.status === 'paused' ? '继续目标' : '暂停目标'} aria-label={conversationGoal.status === 'paused' ? '继续目标' : '暂停目标'} onClick={() => void updateGoal(conversationGoal.status === 'paused' ? 'resume' : 'pause')} className="rounded px-1.5 py-1 hover:bg-hover">{conversationGoal.status === 'paused' ? '继续' : '暂停'}</button>
     <button type="button" title="编辑目标" aria-label="编辑目标" onClick={() => { const value = window.prompt('编辑当前目标', conversationGoal.text); if (value?.trim()) void updateGoal(`edit ${value.trim()}`); }} className="rounded px-1.5 py-1 hover:bg-hover">编辑</button>
     <button type="button" title="清除目标" aria-label="清除目标" onClick={() => void updateGoal('clear')} className="rounded px-1.5 py-1 text-danger hover:bg-hover">清除</button>
+    <details className="relative">
+      <summary className="cursor-pointer rounded px-1.5 py-1 hover:bg-hover">子目标管理</summary>
+      <div className="absolute right-0 top-full z-20 mt-1 w-80 rounded-lg border border-edge bg-panel p-2 shadow-lg">
+        <button type="button" className="mb-2 rounded bg-brand px-2 py-1 text-white" onClick={() => { const value = window.prompt('新增子目标'); if (value?.trim()) void updateGoal(`subgoal add ${value.trim()}`); }}>添加子目标</button>
+        <ol className="grid gap-1">
+          {conversationGoal.subgoals.map((item, index) => <li key={`${index}:${item}`} className="flex items-center gap-1 text-xs">
+            <span className="min-w-0 flex-1 truncate" title={item}>{conversationGoal.completed_subgoals?.includes(index + 1) ? '✓' : '○'} {index + 1}. {item}</span>
+            <button type="button" className="rounded px-1.5 py-1 hover:bg-hover" aria-label={`编辑子目标 ${index + 1}`} onClick={() => { const value = window.prompt('编辑子目标', item); if (value?.trim()) void updateGoal(`subgoal edit ${index + 1} ${value.trim()}`); }}>编辑</button>
+            <button type="button" className="rounded px-1.5 py-1 text-danger hover:bg-hover" aria-label={`删除子目标 ${index + 1}`} onClick={() => { if (window.confirm(`删除子目标 ${index + 1}？`)) void updateGoal(`subgoal remove ${index + 1}`); }}>删除</button>
+          </li>)}
+        </ol>
+        {conversationGoal.subgoals.length > 0 && <button type="button" className="mt-2 rounded px-1.5 py-1 text-danger hover:bg-hover" onClick={() => { if (window.confirm('清除全部子目标？')) void updateGoal('subgoal clear'); }}>清除全部</button>}
+      </div>
+    </details>
   </div>;
   const pinnedSummary = summaryEnabled && messages.some((message) => message.role === 'user') && <div className="mx-8 mt-2 mb-1 flex items-start gap-2 rounded-xl border border-edge bg-panel/95 px-3 py-2 shadow-sm">
     <Pin size={13} className="mt-0.5 shrink-0 text-brand" />

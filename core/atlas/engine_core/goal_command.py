@@ -105,13 +105,21 @@ def _subgoal(mgr, arg):
         index = len(mgr.state.subgoals) + 1
         item = mgr.add_subgoal(rest)
         return GoalCommandResult(f"✓ Subgoal {index} saved: {item}")
+    if verb in {"remove", "rm"} and rest.isdigit():
+        item = mgr.remove_subgoal(int(rest))
+        return GoalCommandResult(f"✓ Removed subgoal {rest}: {item}")
+    if verb == "edit":
+        index, separator, text = rest.partition(" ")
+        if separator and index.isdigit() and text.strip():
+            item = mgr.edit_subgoal(int(index), text)
+            return GoalCommandResult(f"✓ Updated subgoal {index}: {item}")
     if verb in {"done", "complete", "reopen"} and rest.isdigit():
         item = mgr.complete_subgoal(int(rest), completed=verb != "reopen")
         return GoalCommandResult(f"{'✓ Completed' if verb != 'reopen' else '↻ Reopened'} subgoal {rest}: {item}")
     if verb == "clear" and not rest:
         count = mgr.clear_subgoals()
         return GoalCommandResult(f"✓ Cleared {count} subgoal(s).")
-    return GoalCommandResult("Usage: /goal subgoal [list | add <text> | done <N> | reopen <N> | clear]", error=True)
+    return GoalCommandResult("Usage: /goal subgoal [list | add <text> | edit <N> <text> | remove <N> | done <N> | reopen <N> | clear]", error=True)
 
 
 _GATE_HANDLERS = {"add": _gate_add, "remove": _gate_remove, "rm": _gate_remove, "clear": _gate_clear}

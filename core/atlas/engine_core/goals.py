@@ -195,6 +195,12 @@ class GoalManager:
         if not text: raise ValueError("subgoal text is empty")
         self._require().subgoals.append(text); self._save(); return text
     def remove_subgoal(self, index: int): return self._pop("subgoals", index)
+    def edit_subgoal(self, index: int, text: str):
+        text = (text or "").strip()
+        if not text: raise ValueError("subgoal text is empty")
+        state = self._require(); index = int(index)
+        if index < 1 or index > len(state.subgoals): raise IndexError(f"index out of range (1..{len(state.subgoals)})")
+        state.subgoals[index - 1] = text; self._save(); return text
     def clear_subgoals(self):
         return self._clear_items("subgoals")
     def render_subgoals(self): return self._state.render_subgoals_block() if self._state else "(no active goal)"
