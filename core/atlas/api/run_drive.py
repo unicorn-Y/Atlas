@@ -1717,7 +1717,9 @@ async def _handle_run_start(
         model_id = model_id or model_mgr.current_model
     run = preparation_run
     run.conversation_id = conv_id
-    run.model_id = model_id
+    # RunState stores the selected model in ``model``; it is slotted and has no
+    # separate model_id field. Keep the resolved project model on that field.
+    run.model = model_id
     try:
         from atlas.logs import append_run_event
         append_run_event(run_id, "api_timing", stage="request_received", elapsed_ms=0)
