@@ -27,6 +27,21 @@ async def check_project_roots() -> None:
         loaded = await store.find_by_conversation("u16-conversation")
         assert loaded is not None and loaded.workspace_path == str(main)
         assert loaded.workspace_paths == [str(addon)]
+        # Exercise the same edit manager used by file tools: both declared
+        # roots must be writable and an undeclared sibling must stay out.
+        from atlas.kernel.edit import EditManager
+
+        outside = root / "outside"
+        outside.mkdir()
+        editor = EditManager(main, allowed_paths=[str(main), str(addon)])
+        editor.call_tool("write", {"path": str(main / "main.txt"), "content": "main"})
+        editor.call_tool("write", {"path": str(addon / "addon.txt"), "content": "addon"})
+        assert (main / "main.txt").read_text(encoding="utf-8") == "main"
+        assert (addon / "addon.txt").read_text(encoding="utf-8") == "addon"
+        blocked = editor.call_tool("write", {"path": str(outside / "blocked.txt"), "content": "no"})
+        if not blocked.get("is_error"):
+            raise AssertionError("file tool wrote outside all project roots")
+        assert not (outside / "blocked.txt").exists()
         await store.update_project(project.project_id, workspace_paths=[])
         assert (await store.get(project.project_id)).workspace_paths == []
         await store.close()
