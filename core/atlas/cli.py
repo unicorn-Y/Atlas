@@ -881,6 +881,11 @@ def exec_command(
     """Run one non-interactive agent turn; PROMPT may also come from stdin."""
     if json_output:
         output_format = "jsonl"
+    jsonl_stream = None
+    if output_format == "jsonl":
+        from atlas.cli_events import ExecJSONLStream
+
+        jsonl_stream = ExecJSONLStream(conversation_id or str(__import__("uuid").uuid4()))
     from atlas.agent import AgentOrchestrator
     from atlas.config import DATA_ROOT
     from atlas.cli_notifications import emit_cli_notification, notification_config
@@ -899,8 +904,10 @@ def exec_command(
         image_data_urls, image_manifest = _prepare_exec_images(images)
     except (OSError, ValueError) as exc:
         if output_format == "jsonl":
-            _write_line({"type": "error", "code": "invalid_image", "message": str(exc)}, sys.stdout)
-            _write_line({"type": "end", "status": "failed"}, sys.stdout)
+            assert jsonl_stream is not None
+            jsonl_stream.emit("error", code="invalid_image", category="input", message=str(exc))
+            jsonl_stream.emit("turn.failed", error={"code": "invalid_image", "message": str(exc)})
+            jsonl_stream.emit("end", status="failed")
             sys.exit(EXIT_USAGE)
         raise click.BadParameter(str(exc), param_hint="--image") from exc
     ide_context: dict[str, Any] | None = None
@@ -946,7 +953,7 @@ def exec_command(
             migration = await migrate_legacy_sessions(DATA_ROOT / "engine", memory)
             if migration.status != "ready":
                 raise RuntimeError(migration.error or "历史会话尚未完成安全迁移")
-            conv_id = conversation_id or str(__import__("uuid").uuid4())
+            conv_id = conversation_id or (jsonl_stream.session_id if jsonl_stream else str(__import__("uuid").uuid4()))
             await memory.save_conversation_metadata(conv_id, title_hint=user_prompt)
             orchestrator = AgentOrchestrator(model_mgr=model_mgr, memory=memory)
             async def approve_once(event_id: str, tool_name: str, arguments: dict[str, Any]) -> str:
@@ -955,14 +962,31 @@ def exec_command(
             failed = False
             cancelled = False
             if output_format == "jsonl":
-                _write_line({"type": "start", "session_id": conv_id}, sys.stdout)
+                assert jsonl_stream is not None
+                jsonl_stream.emit("start")
+                jsonl_stream.emit("turn.started", status="running")
+                user_item_id = jsonl_stream.start_item("user_message", text=user_prompt, images=image_manifest)
                 input_event: dict[str, Any] = {"type": "input", "session_id": conv_id, "text": user_prompt}
                 if image_manifest:
                     input_event["images"] = image_manifest
-                _write_line(input_event, sys.stdout)
+                jsonl_stream.emit_legacy(input_event)
+                jsonl_stream.complete_item(user_item_id, "user_message", text=user_prompt, images=image_manifest)
             final_text = ""
             validation_error = ""
             structured_output: Any = None
+            assistant_item_id: str | None = None
+            assistant_segments: list[str] = []
+            tool_item_ids: dict[str, str] = {}
+
+            def finish_assistant_item(status: str) -> None:
+                nonlocal assistant_item_id
+                if assistant_item_id is None:
+                    return
+                assert jsonl_stream is not None
+                jsonl_stream.complete_item(assistant_item_id, "assistant_message",
+                                           text="".join(assistant_segments), status=status)
+                assistant_item_id = None
+
             for attempt in range(3):
                 parts: list[str] = []
                 run_prompt = user_prompt
@@ -990,26 +1014,59 @@ def exec_command(
                     if kind == "chunk":
                         part = str(event.get("content", "")); parts.append(part)
                         if output_format == "jsonl":
-                            _write_line({"type": "text_delta", "text": part}, sys.stdout)
+                            assert jsonl_stream is not None
+                            if assistant_item_id is None:
+                                assistant_segments = []
+                                assistant_item_id = jsonl_stream.start_item("assistant_message")
+                            assistant_segments.append(part)
+                            jsonl_stream.emit("text_delta", item_id=assistant_item_id, text=part)
                         else:
                             print(part, end="", flush=True)
                     elif output_format == "jsonl" and kind in {"tool_call", "tool_result", "usage"}:
-                        _write_line(event, sys.stdout)
+                        assert jsonl_stream is not None
+                        if kind == "tool_call":
+                            if assistant_item_id is not None:
+                                jsonl_stream.complete_item(assistant_item_id, "assistant_message",
+                                                           text="".join(assistant_segments), status="completed")
+                                assistant_item_id = None
+                            tool_id = str(event.get("id") or f"tool_{len(tool_item_ids)}")
+                            tool_item_ids[tool_id] = jsonl_stream.start_item(
+                                "tool_call", call_id=tool_id, name=str(event.get("name", "")),
+                                arguments=event.get("arguments", {}),
+                            )
+                        jsonl_stream.emit_legacy(event)
+                        if kind == "tool_result":
+                            tool_id = str(event.get("id") or "")
+                            item_id = tool_item_ids.pop(tool_id, None)
+                            if item_id is not None:
+                                jsonl_stream.complete_item(
+                                    item_id, "tool_call", call_id=tool_id, name=str(event.get("name", "")),
+                                    arguments=event.get("arguments", {}), result=event.get("content"),
+                                    status="failed" if event.get("is_error") else "completed",
+                                )
                     if kind == "tool_call":
                         # Text before a tool call is narration ("let me read the file"); the final
                         # answer is what the model says after its last tool call.
                         parts = []
                     elif kind == "error":
                         failed = True
+                        if output_format == "jsonl":
+                            assert jsonl_stream is not None
+                            jsonl_stream.emit("error", code=str(event.get("category") or "agent_error"),
+                                              category=str(event.get("category") or "agent"),
+                                              message="Agent run failed; see stderr for local diagnostics.")
                         print(str(event.get("detail", "Agent run failed")), file=sys.stderr)
                     elif kind in {"cancelled", "run.cancelled"}:
                         cancelled = True
                 final_text = "".join(parts)
                 if failed:
+                    finish_assistant_item("failed")
                     break
                 if cancelled:
+                    finish_assistant_item("interrupted")
                     break
                 if schema is None:
+                    finish_assistant_item("completed")
                     break
                 try:
                     import jsonschema
@@ -1023,16 +1080,30 @@ def exec_command(
                     if attempt == 2:
                         failed = True
                         print(f"Final response did not match --output-schema: {validation_error}", file=sys.stderr)
+                if output_format == "jsonl" and assistant_item_id is not None:
+                    item_status = "superseded" if validation_error and not failed else "failed" if failed else "completed"
+                    finish_assistant_item(item_status)
             if output_last_message:
                 output_last_message.parent.mkdir(parents=True, exist_ok=True)
                 output_last_message.write_text(final_text, encoding="utf-8")
             if output_format == "jsonl":
+                assert jsonl_stream is not None
+                if failed and validation_error:
+                    jsonl_stream.emit("error", code="schema_validation", category="validation",
+                                      message="Final response did not match --output-schema.")
+                jsonl_stream.complete_open_items(reason="turn_cancelled" if cancelled else "turn_failed")
                 final_event: dict[str, Any] = {"type": "final", "session_id": conv_id, "text": final_text}
                 if schema is not None and not failed:
                     final_event["structured"] = structured_output
-                _write_line(final_event, sys.stdout)
-                _write_line({"type": "end", "session_id": conv_id,
-                             "status": "failed" if failed else "cancelled" if cancelled else "completed"}, sys.stdout)
+                jsonl_stream.emit_legacy(final_event)
+                terminal = "failed" if failed else "cancelled" if cancelled else "completed"
+                if terminal == "failed":
+                    jsonl_stream.emit("turn.failed", error={"code": "turn_failed", "message": "Agent run failed."})
+                elif terminal == "cancelled":
+                    jsonl_stream.emit("turn.cancelled", reason="user_cancelled")
+                else:
+                    jsonl_stream.emit("turn.completed", status="completed")
+                jsonl_stream.emit("end", status=terminal)
             elif final_text:
                 print()
             if _daybreak_enabled():
@@ -1047,13 +1118,20 @@ def exec_command(
         completion_status = asyncio.run(_run_once())
     except KeyboardInterrupt:
         if output_format == "jsonl":
-            _write_line({"type": "end", "session_id": conversation_id, "status": "cancelled"}, sys.stdout)
+            assert jsonl_stream is not None
+            jsonl_stream.complete_open_items(reason="user_cancelled")
+            jsonl_stream.emit("turn.cancelled", reason="user_cancelled")
+            jsonl_stream.emit("end", status="cancelled")
         emit_cli_notification("cancelled", mode=effective_notify_mode, command=notify_argv)
         sys.exit(130)
     except (OSError, RuntimeError, ValueError) as exc:
         if output_format == "jsonl":
-            _write_line({"type": "error", "code": "run_failed", "message": str(exc)}, sys.stdout)
-            _write_line({"type": "end", "session_id": conversation_id, "status": "failed"}, sys.stdout)
+            assert jsonl_stream is not None
+            jsonl_stream.complete_open_items(reason="run_failed")
+            jsonl_stream.emit("error", code="run_failed", category="runtime",
+                              message="Atlas CLI could not complete the run; see stderr for local diagnostics.")
+            jsonl_stream.emit("turn.failed", error={"code": "run_failed", "message": "Run failed."})
+            jsonl_stream.emit("end", status="failed")
         emit_cli_notification("failed", mode=effective_notify_mode, command=notify_argv)
         raise click.ClickException(str(exc)) from exc
     emit_cli_notification(completion_status, mode=effective_notify_mode, command=notify_argv)
