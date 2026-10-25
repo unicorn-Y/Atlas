@@ -6,6 +6,7 @@ import BrowserRecorderPanel, { type BrowserStepView } from '../../components/x2/
 import { api } from '../../services/api';
 import { cn } from '../../ui/cn';
 import { Empty } from './Empty';
+import { BROWSER_FAILURE_GUIDE, classifyBrowserFailure, type BrowserFailureKind } from './browserErrors';
 
 /** Must match BROWSER_PARTITION in the Electron main process: pages here never share the app's session. */
 const PARTITION = 'persist:atlas-browser';
@@ -228,6 +229,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   const [activeTabId, setActiveTabId] = useState(0);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const [loadingTabs, setLoadingTabs] = useState<Set<number>>(() => new Set());
+  const [loadErrors, setLoadErrors] = useState<Record<number, { code: number; description: string; kind: BrowserFailureKind }>>({});
   const [nav, setNav] = useState({ back: false, forward: false });
   const [picking, setPicking] = useState<'' | 'element' | 'region'>('');
   const [pendingPick, setPendingPick] = useState<PickedElement | null>(null);
@@ -278,14 +280,21 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
         reportUrlRef.current(current);
       }
     };
-    const start = () => setLoadingTabs((previous) => new Set(previous).add(id));
+    const start = () => {
+      setLoadingTabs((previous) => new Set(previous).add(id));
+      setLoadErrors((previous) => { if (!previous[id]) return previous; const next = { ...previous }; delete next[id]; return next; });
+    };
     const stop = () => {
       setLoadingTabs((previous) => { const next = new Set(previous); next.delete(id); return next; });
       sync();
     };
     const failed = (event: Event) => {
       const detail = event as Event & { errorCode?: number; errorDescription?: string; isMainFrame?: boolean };
-      if (detail.isMainFrame && detail.errorCode !== -3) onToastRef.current(`打不开这个页面：${detail.errorDescription ?? detail.errorCode}`);
+      if (detail.isMainFrame && detail.errorCode !== -3) {
+        const code = detail.errorCode ?? 0;
+        const description = detail.errorDescription ?? `Chromium error ${code}`;
+        setLoadErrors((previous) => ({ ...previous, [id]: { code, description, kind: classifyBrowserFailure(code, description) } }));
+      }
     };
     const title = (event: Event) => {
       const detail = event as Event & { title?: string };
@@ -603,6 +612,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   };
   const localKind = localFile ? localDocumentKind(localFile) : null;
   const activeView = activeTab ? viewRefs.current.get(activeTab.id) : undefined;
+  const activeLoadError = activeTab ? loadErrors[activeTab.id] : undefined;
   const loading = loadingTabs.has(activeTabId);
   return <div className="flex h-full min-h-0 flex-col gap-2">
     <div className="flex min-w-0 items-center gap-1 border-b border-line" aria-label="浏览器标签">
@@ -689,6 +699,11 @@ ${current}`);
       </section>
       : null}
     <div ref={stageRef} role="tabpanel" id="browser-tabpanel" aria-labelledby={`browser-tab-${activeTabId}`} tabIndex={0} className={cn('relative flex min-h-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand', localFile && 'hidden', size && 'items-start justify-center overflow-hidden')}>
+        {activeLoadError && <section role="alert" aria-label="浏览器加载失败指引" className="absolute inset-x-3 top-3 z-30 max-h-[75%] overflow-auto rounded-xl border border-danger/30 bg-panel p-4 shadow-xl">
+          <div className="flex items-start gap-2"><span className="min-w-0 flex-1"><b className="text-[14px] text-danger">{BROWSER_FAILURE_GUIDE[activeLoadError.kind].title}</b><small className="mt-1 block break-all font-mono text-[11px] text-fg-3">{activeLoadError.description} · Chromium {activeLoadError.code}</small></span><button type="button" aria-label="关闭错误指引" onClick={() => setLoadErrors((previous) => { const next = { ...previous }; delete next[activeTabId]; return next; })} className="rounded px-2 text-fg-3 hover:bg-hover">×</button></div>
+          <ul className="my-2 grid list-disc gap-1 pl-5 text-[12.5px] text-fg-2">{BROWSER_FAILURE_GUIDE[activeLoadError.kind].checks.map((check) => <li key={check}>{check}</li>)}</ul>
+          <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setLoadErrors((previous) => { const next = { ...previous }; delete next[activeTabId]; return next; }); activeView?.reload(); }} className="rounded-lg bg-brand-soft px-3 py-1.5 text-[12px] text-fg">重试</button><button type="button" onClick={() => void window.atlasDesktop?.openExternal?.('ms-settings:network-proxy')} className="rounded-lg px-3 py-1.5 text-[12px] text-fg-2 hover:bg-hover">打开系统代理设置</button></div>
+        </section>}
         {/* Other device sizes render at full size and are scaled to fit, so the page lays out as it would there. */}
         {tabs.filter((tab) => tab.initialUrl).map((tab) => {
           const selected = tab.id === activeTabId;
