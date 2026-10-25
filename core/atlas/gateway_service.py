@@ -77,6 +77,11 @@ class SessionMapper:
                 "conversation_id TEXT NOT NULL, "
                 "created_at TEXT NOT NULL)"
             )
+            self._db.execute(
+                "CREATE TABLE IF NOT EXISTS channel_session_links ("
+                "session_key TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, "
+                "linked_by TEXT NOT NULL, created_at TEXT NOT NULL)"
+            )
 
     def get(self, key: str) -> str | None:
         with self._lock:
@@ -92,6 +97,37 @@ class SessionMapper:
                 "VALUES(?, ?, ?) ON CONFLICT(session_key) DO NOTHING",
                 (key, conversation_id, datetime.now(UTC).isoformat()),
             )
+
+    def link(self, key: str, conversation_id: str, *, linked_by: str) -> None:
+        """Explicitly bind a channel identity to an existing conversation.
+
+        Existing mappings are never silently merged: callers must unlink first,
+        preventing accidental cross-user or cross-group session leakage.
+        """
+        if not key.strip() or not conversation_id.strip() or not linked_by.strip():
+            raise ValueError("session key, conversation id and actor are required")
+        with self._lock, self._db:
+            current = self._db.execute(
+                "SELECT conversation_id FROM channel_sessions WHERE session_key=?", (key,)
+            ).fetchone()
+            if current and current[0] != conversation_id:
+                raise ValueError("channel identity already belongs to another conversation")
+            self._db.execute(
+                "INSERT INTO channel_sessions(session_key,conversation_id,created_at) VALUES(?,?,?) "
+                "ON CONFLICT(session_key) DO NOTHING", (key, conversation_id, datetime.now(UTC).isoformat())
+            )
+            self._db.execute(
+                "INSERT INTO channel_session_links(session_key,conversation_id,linked_by,created_at) "
+                "VALUES(?,?,?,?) ON CONFLICT(session_key) DO UPDATE SET linked_by=excluded.linked_by",
+                (key, conversation_id, linked_by, datetime.now(UTC).isoformat()),
+            )
+
+    def unlink(self, key: str) -> bool:
+        with self._lock, self._db:
+            row = self._db.execute("DELETE FROM channel_session_links WHERE session_key=?", (key,))
+            if row.rowcount:
+                self._db.execute("DELETE FROM channel_sessions WHERE session_key=?", (key,))
+            return bool(row.rowcount)
 
     def close(self) -> None:
         with contextlib.suppress(OSError):
