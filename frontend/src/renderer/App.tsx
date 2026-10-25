@@ -171,6 +171,14 @@ const PERMISSION: Record<PermissionMode, { label: string; hint: string }> = {
   read_only: { label: '只读', hint: '只能查看，不能改任何东西' },
 };
 const EFFORT_LABEL: Record<string, string> = { minimal: '最低', low: '低', medium: '中', high: '高' };
+const PROVIDER_USAGE_URL: Record<string, { label: string; url: string }> = {
+  anthropic: { label: 'Anthropic 用量与账单', url: 'https://platform.claude.com/usage' },
+  openai: { label: 'OpenAI 用量与账单', url: 'https://platform.openai.com/usage' },
+  deepseek: { label: 'DeepSeek 账户用量', url: 'https://platform.deepseek.com/usage' },
+  google: { label: 'Google AI Studio 账户', url: 'https://aistudio.google.com/' },
+  gemini: { label: 'Google AI Studio 账户', url: 'https://aistudio.google.com/' },
+  mistral: { label: 'Mistral 用量与账单', url: 'https://console.mistral.ai/usage/' },
+};
 /** Shift+Tab 和 /permissions 共用的切换顺序；read_only 不在循环里，只能从菜单选。 */
 const PERMISSION_CYCLE: PermissionMode[] = ['ask_each', 'ask_writes', 'auto_file', 'plan', 'full_access'];
 const draftKey = (conversationId: string) => `atlas.draft.${conversationId || 'home'}`;
@@ -1632,7 +1640,11 @@ export default function App() {
       const reasoningTokens = typeof usage?.reasoning_tokens === 'number' ? usage.reasoning_tokens : null;
       const limit = typeof usage?.context_limit === 'number' ? usage.context_limit : null;
       const used = typeof usage?.context_tokens === 'number' ? usage.context_tokens : null;
-      const reset = typeof usage?.rate_limit_reset_at === 'string' ? usage.rate_limit_reset_at : null;
+      const rateFailure = [...(activeRun?.events ?? [])].reverse().find((event) => event.type === 'run.failed'
+        && (['rate_limit', 'billing'].includes(String(event.data.category)) || /rate.?limit|quota|额度|限流|429|余额/i.test(String(event.data.detail ?? ''))))?.data;
+      const resetAt = typeof usage?.rate_limit_reset_at === 'string' ? usage.rate_limit_reset_at : null;
+      const limitEvent = rateFailure?.limit_event as Record<string, unknown> | undefined;
+      const retryAfter = typeof rateFailure?.retry_after_seconds === 'number' ? rateFailure.retry_after_seconds : null;
       setRawTextTitle('Atlas 运行状态');
       setRawText([
         `版本：Atlas ${__APP_VERSION__}`, `模型：${modelName}`, `推理强度：${store.reasoningEffort || '默认'}`,
@@ -1640,7 +1652,7 @@ export default function App() {
         `工具：${store.tools.length} 个可用`, `运行：${activeRun ? `${activeRun.status} · ${activeRun.id}` : '空闲'}`,
         `上下文：${used !== null && limit ? `${Math.round(used / limit * 100)}% 已用 / ${Math.max(0, 100 - Math.round(used / limit * 100))}% 剩余 · ${Math.max(0, limit - used).toLocaleString()} tokens 剩余` : '未知（本轮尚无提供方上下文用量）'}`,
         `Token：input ${inputTokens ?? '未知'} · output ${outputTokens ?? '未知'} · cache ${cachedTokens ?? '未知'} · reasoning ${reasoningTokens ?? '未知'}`,
-        `限额重置：${reset ?? '未知（提供方未返回重置数据）'}`,
+        `限额状态：${typeof limitEvent?.reset_at === 'string' ? `提供方预计重置 ${new Date(limitEvent.reset_at).toLocaleString()}` : retryAfter !== null ? `提供方要求等待 ${Math.ceil(retryAfter)} 秒；重置约 ${new Date(Date.now() + retryAfter * 1000).toLocaleString()}` : resetAt ?? '未知（提供方未返回限额或重置数据）'}`,
         used !== null && limit && used / limit >= 0.8 ? '阈值动作：上下文达到 80%，建议使用 /compact 压缩。' : '阈值动作：达到 80% 时提示压缩。',
       ].join('\n'));
     } },
@@ -1905,20 +1917,29 @@ export default function App() {
       </button>
     </Tip>,
   };
-  const errorNote = store.error && <div role="alert" className="anim-fade mt-3 flex items-start justify-between gap-3 rounded-xl bg-danger-soft px-4 py-2.5 text-[13px] text-danger">
+  const rateFailure = [...(activeRun?.events ?? [])].reverse().find((event) => event.type === 'run.failed'
+    && (['rate_limit', 'billing'].includes(String(event.data.category)) || event.data.reason === 'rate_limit' || /rate.?limit|quota|额度|限流|429|余额/i.test(String(event.data.detail ?? ''))))?.data;
+  const rateRetrySeconds = typeof rateFailure?.retry_after_seconds === 'number' ? Math.max(0, Math.ceil(rateFailure.retry_after_seconds)) : 30;
+  const selectedProvider = store.models.find((item) => item.id === store.model)?.provider?.toLowerCase()
+    || store.models.find((item) => item.id === store.model)?.hermes_provider?.toLowerCase() || '';
+  const usagePage = PROVIDER_USAGE_URL[selectedProvider];
+  const errorNote = (store.error || rateFailure) && <div role="alert" className="anim-fade mt-3 flex items-start justify-between gap-3 rounded-xl bg-danger-soft px-4 py-2.5 text-[13px] text-danger">
     <div className="min-w-0">
-      <span>{store.error}</span>
+      <span>{store.error || String(rateFailure?.detail ?? '服务商报告了限额错误，任务已暂停')}</span>
       {/* 原始报错（多为英文）不直接糊给用户，收进可展开的详情。 */}
       {store.errorDetail && <details className="mt-0.5">
         <summary className="cursor-pointer select-none text-[12px] text-fg-3 hover:text-fg-2">详细信息</summary>
         <pre className="mt-1 mb-0 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-[11.5px] text-fg-3">{store.errorDetail}</pre>
       </details>}
-      {/rate.?limit|quota|额度|限流|429|余额/i.test(`${store.error} ${store.errorDetail ?? ''}`) && <div className="mt-2 flex flex-wrap gap-2">
+      {(rateFailure || /rate.?limit|quota|额度|限流|429|余额/i.test(`${store.error} ${store.errorDetail ?? ''}`)) && <div className="mt-2 flex flex-wrap items-center gap-2">
         <button type="button" className="rounded-md border border-danger/30 px-2 py-1 text-[11.5px] hover:bg-danger/10" onClick={() => {
           if (!activeRun) { setToast('当前没有可重试的任务'); return; }
-          setToast('30 秒后重试当前任务'); window.setTimeout(() => { if (useAtlasStore.getState().runPrompts[activeRun.id]) void useAtlasStore.getState().retryRun(activeRun.id); }, 30_000);
-        }}>等待 30 秒后重试</button>
+          if (!rateRetrySeconds) { void useAtlasStore.getState().retryRun(activeRun.id); return; }
+          setToast(`${rateRetrySeconds} 秒后重试当前任务`); window.setTimeout(() => { if (useAtlasStore.getState().runPrompts[activeRun.id]) void useAtlasStore.getState().retryRun(activeRun.id); }, rateRetrySeconds * 1000);
+        }}>等待 {rateRetrySeconds} 秒后重试</button>
         <button type="button" className="rounded-md border border-danger/30 px-2 py-1 text-[11.5px] hover:bg-danger/10" onClick={() => setSheet('models')}>换模型</button>
+        {usagePage && <a className="rounded-md border border-danger/30 px-2 py-1 text-[11.5px] underline hover:bg-danger/10" href={usagePage.url} target="_blank" rel="noopener noreferrer">打开 {usagePage.label}</a>}
+        {rateRetrySeconds > 0 && <span className="text-[11.5px]">{typeof rateFailure?.retry_after_seconds === 'number' ? '等待时间来自提供方响应' : '提供方未返回等待时间，按 30 秒建议重试'}</span>}
       </div>}
     </div>
     <button aria-label="关闭错误提示" onClick={store.dismissError} className="grid size-6 shrink-0 place-items-center rounded-md hover:bg-hover"><X size={14} /></button>

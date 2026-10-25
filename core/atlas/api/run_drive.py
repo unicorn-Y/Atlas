@@ -3231,7 +3231,7 @@ async def _execute_run(
                     "category": category,
                     "detail": event.get("detail", "Unknown error"),
                 }
-                for key in ("service", "reason", "retry_after_seconds", "status"):
+                for key in ("service", "reason", "retry_after_seconds", "status", "limit_event"):
                     if event.get(key) is not None:
                         failure_event[key] = event[key]
                 await emit("run.failed", failure_event)

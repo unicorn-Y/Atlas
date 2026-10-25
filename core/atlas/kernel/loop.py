@@ -16,6 +16,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable
 
@@ -2228,11 +2229,20 @@ class AtlasKernel:
                 "detail": log_detail, "log_path": str(log_path or ""),
             }
             if isinstance(exc, ModelCallError) and exc.category in {"rate_limit", "billing"}:
+                retry_after = exc.retry_after_seconds
                 error_data.update({
                     "service": exc.service or "模型服务",
                     "reason": "服务速率限制" if exc.category == "rate_limit" else "服务额度不足",
-                    "retry_after_seconds": exc.retry_after_seconds,
+                    "retry_after_seconds": retry_after,
                     "status": exc.status,
+                    "limit_event": {
+                        "category": exc.category,
+                        "observed_at": datetime.now(UTC).isoformat(),
+                        "retry_after_seconds": retry_after,
+                        "reset_at": (datetime.now(UTC) + timedelta(seconds=max(0, retry_after))).isoformat()
+                            if retry_after is not None else None,
+                        "source": "provider_retry_after" if retry_after is not None else "provider_error_without_reset",
+                    },
                 })
             yield emit("error", **error_data)
         finally:
