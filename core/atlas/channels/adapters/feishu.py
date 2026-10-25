@@ -131,10 +131,10 @@ class FeishuAdapter(ChannelAdapter):
     @classmethod
     def is_available(cls) -> bool:
         try:
-            import lark_oapi  # noqa: F401
+            import lark_oapi as _lark_oapi  # noqa: F401
         except ImportError:
             return False
-        return True
+        return _lark_oapi.__name__ == "lark_oapi"
 
     async def start(self) -> None:
         if not self.is_available():
