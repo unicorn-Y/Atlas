@@ -160,6 +160,16 @@ class IngressQueue:
             except sqlite3.IntegrityError:
                 return False
 
+    def update_inbound_event(self, event: MessageEvent) -> bool:
+        """Persist gateway enrichment (such as ASR text) before dispatch begins."""
+        payload = json.dumps(event_to_payload(event), ensure_ascii=False)
+        with self._db:
+            cursor = self._db.execute(
+                "UPDATE inbound_events SET payload=? WHERE channel=? AND account=? AND event_id=? AND attempts=0",
+                (payload, event.channel, event.account, event.event_id),
+            )
+        return cursor.rowcount > 0
+
     def _prune_tombstones(self, now: float, ttl: float = TOMBSTONE_TTL_SECONDS) -> int:
         with self._db:
             cursor = self._db.execute(

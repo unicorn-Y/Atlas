@@ -281,14 +281,50 @@ class TelegramAdapter(ChannelAdapter):
         except ChannelAdapterError:
             file_path = ""
         token = self._token() or ""
-        url = file_download_url(self.api_base, token, file_path) if file_path else ""
+        # Never persist a Bot API download URL: its path contains the bot token.
+        url = file_download_url(self.api_base, token, file_path) if file_path and kind != MessageType.AUDIO else ""
+        meta = {"file_id": str(media["file_id"]), "file_path": file_path} if kind == MessageType.AUDIO else {}
         return Attachment(
             kind=kind,
             url=url,
             filename=str(media.get("file_name", "")),
             mime_type=str(media.get("mime_type", "")),
             size=int(media.get("file_size", 0) or 0) or None,
+            meta=meta,
         )
+
+    async def download_inbound_audio(self, _event: MessageEvent, attachment: Attachment) -> bytes:
+        """Fetch voice bytes without persisting the token-bearing Telegram URL."""
+        token = self._token()
+        if not token or self._client is None:
+            raise ValueError("Telegram 语音下载需要已连接的机器人凭据")
+        file_path = str(attachment.meta.get("file_path") or "")
+        file_id = str(attachment.meta.get("file_id") or "")
+        if not file_path and file_id:
+            try:
+                response = await self._request("getFile", {"file_id": file_id}) or {}
+            except Exception as exc:
+                raise ValueError("Telegram 获取语音文件路径失败") from exc
+            file_path = str(response.get("file_path") or "")
+        if not file_path:
+            raise ValueError("Telegram 没有返回音频文件路径")
+        try:
+            async with self._client.stream("GET", file_download_url(self.api_base, token, file_path)) as response:
+                if response.status_code >= 400:
+                    raise ValueError(f"Telegram 音频下载失败 HTTP {response.status_code}")
+                length = int(response.headers.get("content-length", "0") or 0)
+                if length > 25 * 1024 * 1024:
+                    raise ValueError("Telegram 音频附件超过 25 MiB 限制")
+                data = bytearray()
+                async for chunk in response.aiter_bytes():
+                    data.extend(chunk)
+                    if len(data) > 25 * 1024 * 1024:
+                        raise ValueError("Telegram 音频附件超过 25 MiB 限制")
+        except Exception as exc:
+            if isinstance(exc, ValueError):
+                raise
+            raise ValueError(f"Telegram 音频下载请求失败：{type(exc).__name__}") from exc
+        return bytes(data)
 
     # -- outbound -----------------------------------------------------------------
 

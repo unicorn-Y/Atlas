@@ -168,6 +168,7 @@ class ChannelManager:
         self._drain_task: asyncio.Task[None] | None = None
         self._drain_requested = False
         self._drain_lock = asyncio.Lock()
+        self.audio_transcriber = None
         if self.config_path is not None and self.config_path.exists():
             self._load_configs()
 
@@ -506,6 +507,13 @@ class ChannelManager:
             if not accepted:
                 logger.debug("丢弃重复入站事件 %s/%s", event.channel, event.event_id)
                 return
+            if self.audio_transcriber is not None:
+                from atlas.channels.audio import enrich_audio_event
+
+                adapter = self.adapters.get(event.channel)
+                downloader = getattr(adapter, "download_inbound_audio", None)
+                if await enrich_audio_event(event, self.audio_transcriber, downloader):
+                    self.ingress.update_inbound_event(event)
             if self._control_handler is not None and self._admit(event):
                 if await self._control_handler(event):
                     self.ingress.ack_event(event)

@@ -553,6 +553,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             db_path=cfg.db_path.parent / "channels.sqlite",
             config_path=cfg.db_path.parent / "channel-configs.json",
         )
+
+        async def transcribe_channel_audio(payload: bytes) -> str:
+            asr = app.state.services.asr_manager
+            if asr is None:
+                asr = app.state.services.asr_manager = ASRManager()
+            if not asr.status()["ready"]:
+                raise RuntimeError("本地语音模型尚未下载；请先在设置的语音识别面板下载模型")
+            return await asyncio.to_thread(asr.transcribe_audio_bytes, payload)
+
+        channel_manager.audio_transcriber = transcribe_channel_audio
         register_builtin_channels(channel_manager.register_channel)
         channel_workspace = _default_workspace()
 

@@ -364,6 +364,40 @@ class FeishuAdapter(ChannelAdapter):
             **causality_fields(event_raw, self.name, event_id_value),
         )
 
+    async def download_inbound_audio(self, event: MessageEvent, attachment: Attachment) -> bytes:
+        """Download one received voice resource through Feishu's authenticated SDK."""
+        if self._client is None:
+            raise ValueError("飞书客户端尚未连接")
+        message_id = str(_get(event.raw.get("message") or {}, "message_id") or event.event_id)
+        file_key = str(attachment.meta.get("file_key") or "")
+        if not message_id or not file_key:
+            raise ValueError("飞书语音缺少 message_id 或 file_key")
+
+        def _download() -> bytes:
+            from lark_oapi.api.im.v1 import GetMessageResourceRequest
+
+            request = (GetMessageResourceRequest.builder().message_id(message_id)
+                       .file_key(file_key).type("file").build())
+            response = self._client.im.v1.message_resource.get(request)
+            if not response.success():
+                raise ValueError(f"飞书资源下载失败，API code={response.code}")
+            data = response.file
+            if hasattr(data, "read"):
+                data = data.read(25 * 1024 * 1024 + 1)
+            if not isinstance(data, bytes):
+                data = bytes(data or b"")
+            if len(data) > 25 * 1024 * 1024:
+                raise ValueError("飞书音频附件超过 25 MiB 限制")
+            return data
+
+        try:
+            return await asyncio.to_thread(_download)
+        except ValueError:
+            raise
+        except Exception as exc:
+            # SDK exceptions may include request headers or signed URL details.
+            raise ValueError(f"飞书音频下载失败：{type(exc).__name__}") from exc
+
     # -- outbound -----------------------------------------------------------------
 
     async def send(
