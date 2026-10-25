@@ -24,7 +24,8 @@ describe('PaneWorkspace', () => {
     const markup = renderToStaticMarkup(createElement(PaneWorkspace, {
       besideId: '', activeId: 'main', conversations: [conversation('main', 'Main'), conversation('side-a', 'Side A'), conversation('side-b', 'Side B')],
       username: 'tester', onSwitch: () => undefined, onRemove: () => undefined,
-    }, createElement('div', { id: 'main-pane-content' }, 'main conversation')));
+      children: createElement('div', { id: 'main-pane-content' }, 'main conversation'),
+    }));
 
     expect(markup).toContain('main-pane-content');
     expect(markup.match(/aria-label="调整分屏比例"/g)).toHaveLength(2);
