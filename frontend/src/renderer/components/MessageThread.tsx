@@ -158,9 +158,11 @@ export interface MessageThreadProps {
   onOpenBrowser?: (url: string) => void;
   focusMode?: boolean;
   focusSummary?: string;
+  tuiFullscreen?: boolean;
+  onToast?: (message: string) => void;
 }
 
-export default function MessageThread({ history, componentSelections = {}, username, historyActions, emptyState, footerNote, threadRef, setTab, onOpenBrowser, focusMode = false, focusSummary = '' }: MessageThreadProps) {
+export default function MessageThread({ history, componentSelections = {}, username, historyActions, emptyState, footerNote, threadRef, setTab, onOpenBrowser, focusMode = false, focusSummary = '', tuiFullscreen = false, onToast }: MessageThreadProps) {
   // 窄选择器：只有当前会话的运行事件/正文变化才重渲染这里，别的会话流式输出不打扰。
   const conversationId = useAtlasStore((state) => state.activeConversationId);
   const events = useAtlasStore((state) => state.runs.find((run) => run.id === state.activeRunId)?.events ?? EMPTY_EVENTS);
@@ -538,6 +540,19 @@ export default function MessageThread({ history, componentSelections = {}, usern
   const onThreadKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const target = event.target;
     const editable = target instanceof HTMLElement && (target.isContentEditable || Boolean(target.closest('input, textarea, select, button, [role="button"], [data-shortcut-recorder]')));
+    if (tuiFullscreen && !editable && event.ctrlKey && event.shiftKey && !event.metaKey && event.key.toLowerCase() === 'c') {
+      event.preventDefault();
+      const selected = window.getSelection()?.toString().trim() ?? '';
+      if (!selected) { onToast?.('先选中要复制的对话文字，再按 Ctrl+Shift+C'); return; }
+      if (!navigator.clipboard?.writeText) { onToast?.('剪贴板不可用'); return; }
+      void navigator.clipboard.writeText(selected).then(() => onToast?.('已复制选中的对话文字')).catch(() => onToast?.('剪贴板不可用'));
+      return;
+    }
+    if (tuiFullscreen && !editable && !event.altKey && !event.ctrlKey && !event.metaKey && (event.key === 'PageUp' || event.key === 'PageDown')) {
+      event.preventDefault();
+      threadRef.current?.scrollBy({ top: (event.key === 'PageDown' ? 1 : -1) * threadRef.current.clientHeight * 0.88, behavior: 'smooth' });
+      return;
+    }
     if (editable || event.defaultPrevented || event.altKey || event.shiftKey || !event.ctrlKey || event.metaKey || event.key.toLowerCase() !== 'o') return;
     event.preventDefault();
     const modes: ThreadPresentationMode[] = hasReasoning
@@ -552,12 +567,12 @@ export default function MessageThread({ history, componentSelections = {}, usern
     role="region"
     aria-label="任务活动"
     aria-describedby="thread-keyboard-help"
-    aria-keyshortcuts="Control+O"
+    aria-keyshortcuts={tuiFullscreen ? 'PageUp PageDown Escape Control+Shift+C Control+O' : 'Control+O'}
     tabIndex={0}
     onKeyDown={onThreadKeyDown}
     className="min-h-0 flex-1 overflow-auto px-8 pt-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-[-2px]"
   >
-    <span id="thread-keyboard-help" className="sr-only">对话活动区域。焦点在此区域时，使用 Page Up 和 Page Down 滚动；按 Ctrl 加 O 在常规、思考和详细显示方式间切换。按 Tab 访问消息操作与活动设置。</span>
+    <span id="thread-keyboard-help" className="sr-only">对话活动区域。{tuiFullscreen ? '全屏时按 Page Up 或 Page Down 翻页；按 Escape 退出；选中对话文字后按 Ctrl+Shift+C 复制。' : ''}焦点在此区域时，按 Ctrl 加 O 在常规、思考和详细显示方式间切换。按 Tab 访问消息操作与活动设置。</span>
     <ThreadPresentationControls settings={presentation} onChange={setPresentation} hasReasoning={hasReasoning} />
     <ConversationSearch
       open={searchOpen}

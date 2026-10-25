@@ -891,6 +891,8 @@ function createWindow() {
 
   windowRef.on('maximize', () => windowRef?.webContents.send('window:maximize-change', true));
   windowRef.on('unmaximize', () => windowRef?.webContents.send('window:maximize-change', false));
+  windowRef.on('enter-full-screen', () => windowRef?.webContents.send('window:fullscreen-change', true));
+  windowRef.on('leave-full-screen', () => windowRef?.webContents.send('window:fullscreen-change', false));
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   // The app window carries the preload API and its requests get the backend token, so it must
   // never become a window onto someone else's page: links open in the system browser instead,
@@ -1218,6 +1220,13 @@ ipcMain.on('window:maximize', () => {
   if (!windowRef) return;
   if (windowRef.isMaximized()) windowRef.unmaximize();
   else windowRef.maximize();
+});
+ipcMain.handle('window:set-fullscreen', (event, enabled: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof enabled !== 'boolean') throw new Error('全屏状态必须为布尔值。');
+  if (!windowRef || windowRef.isDestroyed()) return false;
+  if (windowRef.isFullScreen() !== enabled) windowRef.setFullScreen(enabled);
+  return windowRef.isFullScreen();
 });
 ipcMain.on('window:close', () => windowRef?.close());
 // Source mode (running from a git checkout without the Vite dev server): updates are

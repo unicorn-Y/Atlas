@@ -238,6 +238,7 @@ export default function App() {
   const [view, setView] = useState<View>('home');
   const [inspectorOpen, setInspectorOpen] = useState(() => pref('canvas') === 'true');
   const [focusMode, setFocusMode] = useState(() => pref('focus-mode') === 'true');
+  const [tuiFullscreen, setTuiFullscreen] = useState(() => pref('tui-fullscreen') === 'true');
   const [daybreakEnabled, setDaybreakEnabled] = useState(() => pref('daybreak') === 'true');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('artifacts');
   const [previewFile, setPreviewFile] = useState('');
@@ -345,6 +346,13 @@ export default function App() {
   const [homeMode, setHomeMode] = useState('chat');
   const [createPrompt, setCreatePrompt] = useState('');
   const [toast, setToast] = useState('');
+  const setTuiFullscreenMode = (enabled: boolean) => {
+    setTuiFullscreen(enabled); setPref('tui-fullscreen', String(enabled));
+    const desktop = window.atlasDesktop?.setWindowFullScreen;
+    if (desktop) void desktop(enabled).catch((error) => setToast(`全屏切换失败：${error instanceof Error ? error.message : String(error)}`));
+    else if (enabled) void document.documentElement.requestFullscreen?.().catch((error) => setToast(`全屏切换失败：${String(error)}`));
+    else if (document.fullscreenElement) void document.exitFullscreen().catch((error) => setToast(`退出全屏失败：${String(error)}`));
+  };
   const [memoryMarkerDrafts, setMemoryMarkerDrafts] = useState<MemoryMarkerDraft[] | null>(null);
   const [memoryMarkerSaving, setMemoryMarkerSaving] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
@@ -490,6 +498,19 @@ export default function App() {
   };
 
   const activeConversation = store.conversations.find((item) => item.id === store.activeConversationId);
+  const focusedLayout = focusMode || tuiFullscreen;
+  useEffect(() => {
+    const syncFullscreen = (enabled: boolean) => { setTuiFullscreen(enabled); setPref('tui-fullscreen', String(enabled)); };
+    const stopDesktop = window.atlasDesktop?.onWindowFullScreenChange?.(syncFullscreen);
+    const onDocumentFullscreen = () => syncFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onDocumentFullscreen);
+    if (pref('tui-fullscreen') === 'true') {
+      const desktop = window.atlasDesktop?.setWindowFullScreen;
+      if (desktop) void desktop(true).catch((error) => setToast(`恢复全屏失败：${error instanceof Error ? error.message : String(error)}`));
+      else if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch((error) => setToast(`恢复全屏失败：${String(error)}`));
+    }
+    return () => { stopDesktop?.(); document.removeEventListener('fullscreenchange', onDocumentFullscreen); };
+  }, []);
   useEffect(() => {
     if (defaultWorkspace || store.conversationsLoading) return;
     const recentWorkspace = store.conversations.find((item) => typeof item.workspace === 'string' && item.workspace.trim())?.workspace;
@@ -1513,6 +1534,7 @@ export default function App() {
         const target = event.target;
         const draft = target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement ? target.value : '';
         const overlay = document.querySelector('[role="dialog"], [role="menu"]');
+        if (!overlay && !draft.trim() && tuiFullscreen) { event.preventDefault(); setTuiFullscreenMode(false); return; }
         if (draft.trim() || overlay || !store.busy) return;
         event.preventDefault();
         store.stopTask();
@@ -1709,6 +1731,14 @@ export default function App() {
     } catch (error) { setToast(`创建交接会话失败：${error instanceof Error ? error.message : String(error)}`); }
   };
   const slashCommands: SlashCommand[] = [
+    { id: 'tui', label: '/tui', hint: '切换会话全屏渲染；支持翻页、选区复制和 Escape 退出', takesArgument: true, run: (value: string) => {
+      const arg = value.trim().toLowerCase();
+      if (arg && !['fullscreen', 'full-screen', 'normal', 'windowed', 'status'].includes(arg)) { setToast('用法：/tui [fullscreen|normal|status]'); return; }
+      if (arg === 'status') { setToast(`全屏渲染模式${tuiFullscreen ? '已开启' : '已关闭'}；窗口全屏 API ${window.atlasDesktop?.setWindowFullScreen ? '可用' : '浏览器全屏回退'}`); return; }
+      if (view !== 'chat') { setToast('先打开一个会话，再切换全屏渲染模式'); return; }
+      const enabled = ['fullscreen', 'full-screen'].includes(arg) ? true : ['normal', 'windowed'].includes(arg) ? false : !tuiFullscreen;
+      setTuiFullscreenMode(enabled);
+    } },
     { id: 'daybreak', label: '/daybreak', hint: '跨夜长任务模式：保存状态、支持续跑，并在运行时保持电脑唤醒', takesArgument: true, run: (value: string) => {
       const arg = value.trim().toLowerCase();
       if (arg && !['on', 'off', 'status'].includes(arg)) { setToast('用法：/daybreak [on|off|status]'); return; }
@@ -2577,7 +2607,7 @@ export default function App() {
   return <TooltipProvider>
     <MarkDefs />
     <div className="flex h-full">
-      {!focusMode && <Sidebar view={view} onGo={go} mini={sideMini || narrow} onToggleMini={toggleMini}
+      {!focusedLayout && <Sidebar view={view} onGo={go} mini={sideMini || narrow} onToggleMini={toggleMini}
         conversations={store.conversations} conversationsLoading={store.conversationsLoading}
         activeConversationId={store.activeConversationId} loadingConversationId={store.loadingMessagesConversationId}
         onOpenConversation={openConversation} onNewTask={newTask} creating={store.creatingConversation} onSearch={() => setPaletteOpen(true)}
@@ -2610,9 +2640,9 @@ export default function App() {
         onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}
         onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} onOpenBeside={setBesideId} onOpenInWindow={(id) => window.atlasDesktop?.openConversationWindow?.(id)} />}
 
-      <main className={cn('sheet relative flex min-w-0 flex-1 flex-col overflow-hidden', focusMode ? 'm-0 rounded-none' : 'my-1.5 mr-1.5 rounded-[12px]')}>
+      <main className={cn('sheet relative flex min-w-0 flex-1 flex-col overflow-hidden', focusedLayout ? 'm-0 rounded-none' : 'my-1.5 mr-1.5 rounded-[12px]')}>
         <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
-          {focusMode ? <div className="flex min-w-0 flex-1 items-center gap-3"><span className="text-[12px] text-fg-3">专注视图</span><span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{activeConversation?.title ?? '当前对话'}</span><button type="button" className="no-drag rounded-lg px-3 py-1.5 text-[12px] text-fg-2 hover:bg-hover" onClick={() => { setFocusMode(false); setPref('focus-mode', 'false'); }}>退出专注视图 · Ctrl+Shift+O</button></div> : <>
+          {tuiFullscreen ? <div className="flex min-w-0 flex-1 items-center gap-3"><span className="text-[12px] text-fg-3">全屏渲染</span><span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{activeConversation?.title ?? '当前对话'}</span><button type="button" className="no-drag rounded-lg px-3 py-1.5 text-[12px] text-fg-2 hover:bg-hover" onClick={() => setTuiFullscreenMode(false)}>退出全屏 · Esc</button></div> : focusMode ? <div className="flex min-w-0 flex-1 items-center gap-3"><span className="text-[12px] text-fg-3">专注视图</span><span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{activeConversation?.title ?? '当前对话'}</span><button type="button" className="no-drag rounded-lg px-3 py-1.5 text-[12px] text-fg-2 hover:bg-hover" onClick={() => { setFocusMode(false); setPref('focus-mode', 'false'); }}>退出专注视图 · Ctrl+Shift+O</button></div> : <>
           <div className={cn('flex min-w-0 items-center gap-3', showTabs && 'flex-1')}>
             {showTabs
               ? <Suspense fallback={null}><TabStrip tabs={tabs} conversations={store.conversations} activeId={store.activeConversationId} running={runningConversations} onSelect={openConversation} onClose={closeTab} /></Suspense>
@@ -2650,9 +2680,9 @@ export default function App() {
           </div>
           </>}
         </header>
-        {!focusMode && <UpdateBanner />}
-        {!focusMode && startupWarning && <div role="alert" className="flex items-center gap-3 border-b border-danger/20 bg-danger/10 px-4 py-2 text-[12.5px] text-fg"><ShieldAsk size={15} className="shrink-0 text-danger" /><button type="button" onClick={() => setSheet('diagnostics')} className="min-w-0 flex-1 truncate text-left hover:underline">启动检查发现问题：{startupWarning} · 点击查看 /doctor</button><button type="button" aria-label="关闭启动告警" onClick={() => setStartupWarning('')} className="grid size-6 place-items-center rounded hover:bg-hover"><X size={13} /></button></div>}
-        {!focusMode && startupProgress?.phase === 'failed' && !store.connected && <div role="alert" className="mx-4 mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger/25 bg-danger-soft px-4 py-3 text-[12.5px] text-danger">
+        {!focusedLayout && <UpdateBanner />}
+        {!focusedLayout && startupWarning && <div role="alert" className="flex items-center gap-3 border-b border-danger/20 bg-danger/10 px-4 py-2 text-[12.5px] text-fg"><ShieldAsk size={15} className="shrink-0 text-danger" /><button type="button" onClick={() => setSheet('diagnostics')} className="min-w-0 flex-1 truncate text-left hover:underline">启动检查发现问题：{startupWarning} · 点击查看 /doctor</button><button type="button" aria-label="关闭启动告警" onClick={() => setStartupWarning('')} className="grid size-6 place-items-center rounded hover:bg-hover"><X size={13} /></button></div>}
+        {!focusedLayout && startupProgress?.phase === 'failed' && !store.connected && <div role="alert" className="mx-4 mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger/25 bg-danger-soft px-4 py-3 text-[12.5px] text-danger">
           <div className="min-w-0"><p className="m-0 font-medium">Atlas 后端启动失败</p><p className="mb-0 mt-1 break-words opacity-85">{startupProgress.message ?? startupProgress.detail ?? '启动遇到问题，Atlas 会在稍后自动重试。'}</p></div>
           <div className="flex shrink-0 gap-2">
             <Button size="sm" variant="secondary" onClick={() => {
@@ -2662,7 +2692,7 @@ export default function App() {
             <Button size="sm" variant="secondary" onClick={() => { void window.atlasDesktop?.openBackendLog?.(); }}>打开日志</Button>
           </div>
         </div>}
-        {!focusMode && !!pendingComponents.length && <div role="status" aria-live="polite" className="mx-4 mt-2 flex items-center gap-2 rounded-lg bg-sunken px-3 py-2 text-[11.5px] text-fg-3">
+        {!focusedLayout && !!pendingComponents.length && <div role="status" aria-live="polite" className="mx-4 mt-2 flex items-center gap-2 rounded-lg bg-sunken px-3 py-2 text-[11.5px] text-fg-3">
           <i className="size-1.5 animate-pulse rounded-full bg-brand" />
           正在加载{pendingComponents.map((name) => ({ mcp: 'MCP', plugins: '插件', plugin: '插件', memory: '记忆', lsp: '代码服务', scheduler: '计划任务' }[name.toLowerCase()] ?? name)).join('、')}；可以先发送消息。
         </div>}
@@ -2675,27 +2705,27 @@ export default function App() {
             <div className="mt-1.5 flex min-w-0 items-center gap-0.5 overflow-x-auto px-1 text-[11.5px] text-fg-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div></>} />}
 
         {view === 'chat' && <div className="flex min-h-0 flex-1">
-          <Suspense fallback={null}><PaneWorkspace besideId={focusMode ? '' : besideId} activeId={store.activeConversationId} conversations={store.conversations} username={username}
+          <Suspense fallback={null}><PaneWorkspace besideId={focusedLayout ? '' : besideId} activeId={store.activeConversationId} conversations={store.conversations} username={username}
             onSwitch={(conversation) => { const previous = store.activeConversationId; void openConversation(conversation); setBesideId(previous); }}
             onRemove={(id) => { if (besideId === id) setBesideId(''); }}>
           <div className={`relative flex min-w-0 flex-1 flex-col ${paneCount > 0 && mainPaneFocused ? 'ring-1 ring-inset ring-brand/60' : ''}`} onPointerDown={() => setMainPaneFocused(true)}>
-            {!focusMode && activeRun && activeRun.conversationId === store.activeConversationId && <div className="pointer-events-none absolute top-2 left-1/2 z-20 flex -translate-x-1/2 justify-center [&>*]:pointer-events-auto">
+            {!focusedLayout && activeRun && activeRun.conversationId === store.activeConversationId && <div className="pointer-events-none absolute top-2 left-1/2 z-20 flex -translate-x-1/2 justify-center [&>*]:pointer-events-auto">
               <ProgressCapsule run={activeRun} events={activeEvents} onShowAll={() => showInspectorTab('activity')} />
             </div>}
-            {!focusMode && computerRunId && <><ComputerEdgeBar apiBaseUrl={store.apiBaseUrl} runId={computerRunId} canPause={Boolean(foregroundEvent)} className="shrink-0" /><ComputerLivePreview runId={computerRunId} events={activeEvents} /></>}
-            {!focusMode && !!peerInbox.length && <section className="mx-6 mt-2 rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5" aria-label="跨会话收件箱">
+            {!focusedLayout && computerRunId && <><ComputerEdgeBar apiBaseUrl={store.apiBaseUrl} runId={computerRunId} canPause={Boolean(foregroundEvent)} className="shrink-0" /><ComputerLivePreview runId={computerRunId} events={activeEvents} /></>}
+            {!focusedLayout && !!peerInbox.length && <section className="mx-6 mt-2 rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5" aria-label="跨会话收件箱">
               <div className="flex items-center justify-between gap-3"><b className="text-[12.5px] text-fg">跨会话收件箱 · {peerInbox.length} 条未读</b>
                 <button className="text-[11.5px] text-fg-3 hover:text-fg" onClick={() => void api<{ marked_read: number }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(store.activeConversationId)}/peer-inbox/read`, { method: 'POST', json: { message_ids: peerInbox.map((item) => item.id) } }).then(() => setPeerInbox([])).catch((error) => setToast(error instanceof Error ? error.message : '标记已读失败'))}>标记已读</button></div>
               <ul className="mb-0 mt-1 grid max-h-24 gap-1 overflow-auto pl-4 text-[12px] text-fg-2">{peerInbox.map((item) => <li key={item.id}><b>{item.sender_title}</b>：{item.content}</li>)}</ul>
             </section>}
-            {!focusMode && pinnedSummary}
-            {!focusMode && <TimelineNav threadRef={threadRef} resetKey={store.activeConversationId}
+            {!focusedLayout && pinnedSummary}
+            {!focusedLayout && <TimelineNav threadRef={threadRef} resetKey={store.activeConversationId}
               history={historyWithBranchNotes} items={timelineItems}
               hasEarlier={Boolean(store.messagesHasEarlier[store.activeConversationId])}
               truncatedCount={activeRun?.eventsTruncated ? (activeRun.droppedEventCount ?? 0) : 0}
               loading={loadingMessages} />}
-            {!focusMode && store.activeConversationId && <ChaptersNav conversationId={store.activeConversationId} threadRef={threadRef} history={historyWithBranchNotes} events={activeEvents} />}
-            <MessageThread focusMode={focusMode} focusSummary={focusWorkSummary} history={focusMode ? focusHistory : historyWithBranchNotes} componentSelections={componentSelections} username={username} historyActions={historyActions} threadRef={threadRef} setTab={showInspectorTab}
+            {!focusedLayout && store.activeConversationId && <ChaptersNav conversationId={store.activeConversationId} threadRef={threadRef} history={historyWithBranchNotes} events={activeEvents} />}
+            <MessageThread focusMode={focusedLayout} tuiFullscreen={tuiFullscreen} onToast={setToast} focusSummary={focusWorkSummary} history={focusMode ? focusHistory : historyWithBranchNotes} componentSelections={componentSelections} username={username} historyActions={historyActions} threadRef={threadRef} setTab={showInspectorTab}
               onOpenBrowser={(url) => { setBrowserUrl(url); showInspectorTab('browser'); }}
               emptyState={!messages.length && !activeEvents.length && !loadingMessages ? <div className="pt-[16vh] text-center">
                 <Mark className="mx-auto mb-4 size-11" />
@@ -2704,14 +2734,14 @@ export default function App() {
               </div> : null}
               footerNote={<>{retryNote}{errorNote}</>} />
             <div className="px-8 pb-5">
-              <div className={cn('mx-auto w-[min(760px,100%)]', focusMode && 'pt-2')}>
-                {!focusMode && <Suspense fallback={null}>{queueStrip}{todoStrip}</Suspense>}
-                {!focusMode && activeRun && !runDone && <div className="mb-2 flex items-center gap-2 rounded-lg border border-brand/20 bg-brand-soft px-3 py-2 text-[11.5px] text-fg-2" role="status">
+              <div className={cn('mx-auto w-[min(760px,100%)]', focusedLayout && 'pt-2')}>
+                {!focusedLayout && <Suspense fallback={null}>{queueStrip}{todoStrip}</Suspense>}
+                {!focusedLayout && activeRun && !runDone && <div className="mb-2 flex items-center gap-2 rounded-lg border border-brand/20 bg-brand-soft px-3 py-2 text-[11.5px] text-fg-2" role="status">
                   <span className="size-1.5 animate-pulse rounded-full bg-brand" />
                   {activeRun && /^\s*\/review\b/i.test(store.runPrompts[activeRun.id]?.content ?? '') ? 'Reviewing · 正在审查' : '运行中 · 新消息可排队或转为优先任务'}
                 </div>}
-                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={focusMode ? null : <>{suggestionHeader}{editBanner}{goalHeader}{recoveryHeader}{runHeader}{rewindBanner}</>} />
-                <div className={cn('mt-1 flex min-w-0 items-center gap-1 px-1 text-[11.5px] text-fg-3', focusMode && 'hidden')}>
+                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={focusedLayout ? null : <>{suggestionHeader}{editBanner}{goalHeader}{recoveryHeader}{runHeader}{rewindBanner}</>} />
+                <div className={cn('mt-1 flex min-w-0 items-center gap-1 px-1 text-[11.5px] text-fg-3', focusedLayout && 'hidden')}>
                   <div className="flex min-w-0 shrink items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div>
                   <span className="flex-1" />
                 <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-1" aria-label="运行状态">
@@ -2728,7 +2758,7 @@ export default function App() {
               </div>
             </div>
           </PaneWorkspace></Suspense>
-          {inspectorOpen && !focusMode && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => { setFullScreenDiff(false); toggleInspector(false); }} fullScreenDiff={fullScreenDiff} onFullScreenDiffChange={setFullScreenDiff} run={activeRun} canvasEvents={canvasEvents} artifacts={activeArtifacts}
+          {inspectorOpen && !focusedLayout && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => { setFullScreenDiff(false); toggleInspector(false); }} fullScreenDiff={fullScreenDiff} onFullScreenDiffChange={setFullScreenDiff} run={activeRun} canvasEvents={canvasEvents} artifacts={activeArtifacts}
             conversationTitle={activeConversation?.title} modelName={modelName} tools={store.tools} skills={store.skills} activeSkills={store.activeSkills} capabilities={store.capabilities}
             apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
             workspace={typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : null} onChooseWorkspace={() => void chooseWorkspace()}

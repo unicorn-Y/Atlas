@@ -7,6 +7,12 @@ const desktopApi: AtlasDesktopApi = {
   apiBaseUrl: process.env.ATLAS_API_BASE_URL ?? `http://127.0.0.1:${process.env.ATLAS_PORT ?? '8765'}`,
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),
+  setWindowFullScreen: (enabled: boolean) => ipcRenderer.invoke('window:set-fullscreen', enabled) as Promise<boolean>,
+  onWindowFullScreenChange: (callback: (fullScreen: boolean) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, fullScreen: boolean) => callback(fullScreen);
+    ipcRenderer.on('window:fullscreen-change', listener);
+    return () => ipcRenderer.removeListener('window:fullscreen-change', listener);
+  },
   close: () => ipcRenderer.send('window:close'),
   retryBackend: () => ipcRenderer.invoke('backend:retry') as Promise<void>,
   openBackendLog: () => ipcRenderer.invoke('backend:open-log') as Promise<void>,
