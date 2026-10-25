@@ -90,6 +90,48 @@ def security_refresh_db() -> None:
     console.print(f"已更新本机 OSV 快照：{snapshot['package_count']} 个锁定包，时间 {snapshot['updated_at']}")
 
 
+@main.group("lsp")
+def lsp_group() -> None:
+    """Manage local language servers and inspect project diagnostics."""
+
+
+@lsp_group.command("status")
+@click.option("--workspace", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path.cwd())
+def lsp_status_command(workspace: Path) -> None:
+    """List configured language servers and their installation status."""
+    from atlas.lsp.servers import SERVERS, ServerContext
+    root = str(workspace.resolve())
+    ctx = ServerContext(workspace_root=root)
+    for server in SERVERS:
+        try:
+            ready = server.build_spawn(root, ctx) is not None
+        except (OSError, RuntimeError, ValueError):
+            ready = False
+        console.print(f"{'就绪' if ready else '未安装'}  {server.server_id}  {', '.join(server.extensions)}")
+
+
+@lsp_group.command("diagnostics")
+@click.argument("path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+def lsp_diagnostics_command(path: Path) -> None:
+    """Start the matching language server if needed and print fresh diagnostics for PATH."""
+    from atlas.tools.workspace_lsp import query_lsp
+    try:
+        result = query_lsp(str(path.parent.resolve()), operation="diagnostics", path=path.name)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    console.print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    if not result.get("available"):
+        raise click.ClickException(str(result.get("reason", "LSP diagnostics unavailable")))
+
+
+@lsp_group.command("stop")
+def lsp_stop_command() -> None:
+    """Stop all local language-server processes owned by this Atlas process."""
+    from atlas.lsp import shutdown_service
+    shutdown_service()
+    console.print("语言服务已停止。")
+
+
 @main.command()
 @click.option("--port", default=None, type=int, help="Server port (default: from config)")
 @click.option("--reload", is_flag=True, help="Enable auto-reload")
@@ -457,6 +499,7 @@ def exec_command(
                 _write_line({"type": "start", "session_id": conv_id}, sys.stdout)
             final_text = ""
             validation_error = ""
+            structured_output: Any = None
             for attempt in range(3):
                 parts: list[str] = []
                 run_prompt = user_prompt
@@ -485,6 +528,10 @@ def exec_command(
                             print(part, end="", flush=True)
                     elif output_format == "jsonl" and kind in {"tool_call", "tool_result", "usage"}:
                         _write_line(event, sys.stdout)
+                    if kind == "tool_call":
+                        # Text before a tool call is narration ("let me read the file"); the final
+                        # answer is what the model says after its last tool call.
+                        parts = []
                     elif kind == "error":
                         failed = True
                         print(str(event.get("detail", "Agent run failed")), file=sys.stderr)
@@ -495,7 +542,9 @@ def exec_command(
                     break
                 try:
                     import jsonschema
-                    jsonschema.validate(json.loads(final_text), schema)
+                    final_text = _strip_json_fence(final_text)
+                    structured_output = json.loads(final_text)
+                    jsonschema.validate(structured_output, schema)
                     validation_error = ""
                     break
                 except Exception as exc:
@@ -507,6 +556,10 @@ def exec_command(
                 output_last_message.parent.mkdir(parents=True, exist_ok=True)
                 output_last_message.write_text(final_text, encoding="utf-8")
             if output_format == "jsonl":
+                final_event: dict[str, Any] = {"type": "final", "session_id": conv_id, "text": final_text}
+                if schema is not None and not failed:
+                    final_event["structured"] = structured_output
+                _write_line(final_event, sys.stdout)
                 _write_line({"type": "end", "session_id": conv_id, "status": "failed" if failed else "completed"}, sys.stdout)
             elif final_text:
                 print()
@@ -719,6 +772,16 @@ EXIT_APPROVAL = 3      # approval (or workspace trust) was needed but nobody cou
 PERMISSION_MODES = ("full_access", "ask_each", "ask_writes", "auto_file", "plan", "read_only")
 OUTPUT_FORMATS = ("text", "json", "stream-json")
 _TERMINAL_EVENTS = {"run.completed", "run.failed", "run.cancelled"}
+
+
+def _strip_json_fence(text: str) -> str:
+    """Accept a final answer wrapped in a ```json fence: models often add one around the object."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = stripped.split("\n", 1)[1] if "\n" in stripped else ""
+        if stripped.rstrip().endswith("```"):
+            stripped = stripped.rstrip()[:-3]
+    return stripped.strip()
 
 
 def _error_line(scope: str, detail: str) -> None:

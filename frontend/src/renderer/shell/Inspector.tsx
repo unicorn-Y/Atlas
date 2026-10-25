@@ -18,6 +18,7 @@ import PullRequestSection from './panels/PullRequestSection';
 import GitWorkspacePanel from './panels/GitWorkspacePanel';
 import SessionDashboardPanel from './panels/SessionDashboardPanel';
 import TaskOverviewPanel from './panels/TaskOverviewPanel';
+import LspDiagnosticsPanel from './panels/LspDiagnosticsPanel';
 
 export type InspectorTab = 'overview' | 'artifacts' | 'activity' | 'changes' | 'files' | 'specs' | 'terminal' | 'browser' | 'context' | 'processes' | 'dashboard';
 
@@ -241,6 +242,7 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
       refreshKey={gitRefreshKey} onOpenUrl={onPreview} onAsk={onAsk} />}
     {connected && (worktree?.path ?? workspace) && !String(worktree?.path ?? workspace).startsWith('ssh://') && <GitWorkspacePanel root={String(worktree?.path ?? workspace)}
       conversationId={conversationId} refreshKey={gitRefreshKey} onChanged={refreshGit} onToast={onToast} />}
+    {connected && (worktree?.path ?? workspace) && !String(worktree?.path ?? workspace).startsWith('ssh://') && <LspDiagnosticsPanel workspace={String(worktree?.path ?? workspace)} />}
     {worktree && <WorktreeSection conversationId={conversationId} worktree={worktree} onChanged={onWorktreeChanged} onToast={onToast} refreshKey={`${run?.id}:${run?.status}`} />}
     <section>
       <h3 className="m-0 mb-2 text-[12.5px] font-semibold text-fg-2">这次任务用到的技能</h3>
