@@ -75,6 +75,7 @@ def check_service_tier_payload() -> None:
 
 def check_llama_health() -> None:
     from atlas.api import local_models_router
+    from fastapi import HTTPException
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -94,6 +95,38 @@ def check_llama_health() -> None:
     finally:
         local_models_router._llama_config = original
         server.shutdown(); server.server_close(); thread.join(timeout=3)
+
+    with tempfile.TemporaryDirectory() as temp:
+        binary = Path(temp) / "llama-server.exe"
+        model = Path(temp) / "model.gguf"
+        binary.touch(); model.touch()
+
+        class ExitedProcess:
+            returncode = 9
+
+            @staticmethod
+            def poll():
+                return 9
+
+        original_config = local_models_router._llama_config
+        original_popen = local_models_router.subprocess.Popen
+        original_process = local_models_router._LLAMA_PROCESS
+        try:
+            local_models_router._llama_config = lambda: {
+                "binary_path": str(binary), "model_path": str(model), "port": 1,
+            }
+            local_models_router.subprocess.Popen = lambda *_args, **_kwargs: ExitedProcess()
+            local_models_router._LLAMA_PROCESS = None
+            try:
+                local_models_router.llama_start()
+            except HTTPException as exc:
+                assert exc.status_code == 502 and "exit code 9" in exc.detail
+            else:
+                raise AssertionError("llama-server immediate process exit was not reported")
+        finally:
+            local_models_router._llama_config = original_config
+            local_models_router.subprocess.Popen = original_popen
+            local_models_router._LLAMA_PROCESS = original_process
 
 
 def check_egress_probe() -> None:

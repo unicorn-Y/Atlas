@@ -197,6 +197,11 @@ def llama_start() -> dict[str, Any]:
         if _LLAMA_PROCESS is None or _LLAMA_PROCESS.poll() is not None:
             break
         time.sleep(0.2)
+    if _LLAMA_PROCESS is not None and _LLAMA_PROCESS.poll() is not None:
+        exit_code = _LLAMA_PROCESS.returncode
+        _LLAMA_PROCESS = None
+        raise HTTPException(status_code=502,
+                            detail=f"llama-server 启动后立即退出（exit code {exit_code}）。请检查本机二进制和模型文件。")
     return _llama_status()
 
 
