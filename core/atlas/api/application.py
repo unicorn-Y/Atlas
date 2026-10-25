@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from atlas.api.agent_backends_router import router as agent_backends_router
 from atlas.api.agent_skills_router import router as agent_skills_router
+from atlas.api.artifact_sites_router import router as artifact_sites_router
 from atlas.api.app_services import AppServices
 from atlas.api.startup_components import StartupComponents
 from atlas.api.automation_router import automation_router
@@ -169,6 +170,7 @@ def create_app(
         tools_router,
         usage_router,
         u4_router,
+        artifact_sites_router,
         workspace_router,
         workbench_router,
         library_router,

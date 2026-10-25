@@ -11,6 +11,7 @@ import { Empty } from './panels/Empty';
 import ChangesPanel from './panels/ChangesPanel';
 import FilesPanel from './panels/FilesPanel';
 import AgentCanvasPanel from './panels/AgentCanvasPanel';
+import ArtifactSitesPanel from './panels/ArtifactSitesPanel';
 import SpecsPanel from './panels/SpecsPanel';
 import TerminalPanel from './panels/TerminalPanel';
 import BrowserPanel, { type PickedElement } from './panels/BrowserPanel';
@@ -177,15 +178,18 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
         </button>)}
       </section>}
       {tab === 'overview' && <TaskOverviewPanel events={events} artifacts={artifacts} messages={messages} onTab={onTab} />}
-      {tab === 'artifacts' && (artifacts.length ? <div className="grid gap-2">
-        {artifacts.map((artifact) => <button key={artifact.id} onClick={() => setSelected(artifact.id === selected ? '' : artifact.id)}
-          className={cn('card-surface flex items-start gap-3 rounded-xl p-3 text-left', selected === artifact.id && 'shadow-[inset_0_0_0_1px_var(--brand)]')}>
-          <FileText size={16} className="mt-0.5 shrink-0 text-brand" />
-          <span className="min-w-0"><b className="block truncate text-[13.5px] font-medium text-fg">{artifact.name}</b><small className="block truncate text-[12px] text-fg-3">{artifact.path ?? artifact.type}</small></span>
-        </button>)}
-        {current?.summary && <p className="mt-2 rounded-xl bg-sunken p-3 text-[13px] leading-[1.7] text-fg-2">{current.summary}</p>}
-        {current?.path && <ArtifactActions path={current.path} root={worktree?.path ?? workspace ?? ''} onPreview={onPreview} />}
-      </div> : <Empty title="还没有产物" body="Atlas 写出或改动的文件、生成的报告会出现在这里。" />)}
+      {tab === 'artifacts' && <div className="grid gap-2">
+        {artifacts.length ? <>
+          {artifacts.map((artifact) => <button key={artifact.id} onClick={() => setSelected(artifact.id === selected ? '' : artifact.id)}
+            className={cn('card-surface flex items-start gap-3 rounded-xl p-3 text-left', selected === artifact.id && 'shadow-[inset_0_0_0_1px_var(--brand)]')}>
+            <FileText size={16} className="mt-0.5 shrink-0 text-brand" />
+            <span className="min-w-0"><b className="block truncate text-[13.5px] font-medium text-fg">{artifact.name}</b><small className="block truncate text-[12px] text-fg-3">{artifact.path ?? artifact.type}</small></span>
+          </button>)}
+          {current?.summary && <p className="mt-2 rounded-xl bg-sunken p-3 text-[13px] leading-[1.7] text-fg-2">{current.summary}</p>}
+          {current?.path && <ArtifactActions path={current.path} root={worktree?.path ?? workspace ?? ''} onPreview={onPreview} />}
+        </> : <Empty title="还没有产物" body="Atlas 写出或改动的文件、生成的报告会出现在这里。" />}
+        <ArtifactSitesPanel apiBaseUrl={apiBaseUrl} workspace={worktree?.path ?? workspace ?? ''} artifact={current} onPreview={onPreview} onToast={onToast} />
+      </div>}
 
       {tab === 'activity' && (run ? <>
         {steps.length ? <ol className="m-0 grid list-none gap-2.5 p-0">
