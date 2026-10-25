@@ -650,12 +650,35 @@ async def execute_tools_node(
                     data, ensure_ascii=False,
                 )}], "is_error": False}
             elif fn_name == "execute_code":
+                async def code_mode_event(event: dict[str, Any]) -> None:
+                    if ctx.event_queue is not None:
+                        status = str(event.get("status", ""))
+                        tool = str(event.get("tool", ""))
+                        text = f"{event.get('index', '')}. {tool}: {status}"
+                        await ctx.event_queue.put({
+                            "type": "tool_output", "id": tc_id, "name": "execute_code",
+                            "execution_id": f"code_mode:{tc_id}", "stream": "stdout",
+                            "text": text + "\n",
+                        })
+
+                code_tools = []
+                if agent._local_execution:
+                    code_tools.extend(agent._local_execution.get_tools_for_llm())
+                if agent._computer_use:
+                    code_tools.extend(agent._computer_use.get_tools_for_llm())
+                if agent._mcp:
+                    code_tools.extend(agent._mcp.get_tools_for_llm())
+
                 result = {"data": await agent.execute_code(
                     str(fn_args.get("code", "")), run_id=ctx.run_id,
                     conversation_id=ctx.conversation_id,
                     tool_allow=getattr(ctx, "tool_allow", None),
                     tool_deny=getattr(ctx, "tool_deny", []),
                     read_only=getattr(ctx, "read_only", False),
+                    tool_catalog=code_tools,
+                    event_callback=code_mode_event,
+                    cancel_event=ctx.cancel_event,
+                    dry_run=bool(fn_args.get("dry_run", False)),
                 )}
                 result["content"] = [{"type": "text", "text": json.dumps(
                     result["data"], ensure_ascii=False,

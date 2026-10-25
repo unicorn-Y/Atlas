@@ -782,11 +782,14 @@ class AgentOrchestrator:
         self, code: str, *, run_id: str | None = None,
         conversation_id: str | None = None,
         tool_allow: list[str] | None = None, tool_deny: list[str] | None = None,
-        read_only: bool = False,
+        read_only: bool = False, tool_catalog: list[dict[str, Any]] | None = None,
+        event_callback: Any = None, cancel_event: Any = None, dry_run: bool = False,
     ) -> dict[str, Any]:
         return await self._codeact.execute(
             code, run_id=run_id, conversation_id=conversation_id,
             tool_allow=tool_allow, tool_deny=tool_deny, read_only=read_only,
+            tool_catalog=tool_catalog, event_callback=event_callback,
+            cancel_event=cancel_event, dry_run=dry_run,
         )
 
     async def compact_context(self, context: dict[str, Any]) -> dict[str, Any]:

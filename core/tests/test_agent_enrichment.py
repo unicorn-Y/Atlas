@@ -173,11 +173,35 @@ async def test_codeact_subprocess_uses_atlas_bridge_for_three_operations(tmp_pat
     ]
     code = "\n".join([
         "items=[]", *calls,
-        "result={'count':len(items),'sizes':[item['data']['size'] for item in items]}",
+        "result={'count':len(items),'sizes':[item['data']['size'] for item in items],",
+        "'tool_count':len(atlas.list_tools()),'workspace':atlas.workspace}",
     ])
-    result = await runtime.execute(code)
+    events = []
+
+    async def record_event(event: dict) -> None:
+        events.append(event)
+
+    result = await runtime.execute(
+        code,
+        tool_catalog=[{"type": "function", "function": {"name": "local_file"}}],
+        event_callback=record_event,
+    )
     assert result["exit_code"] == 0
-    assert result["result"] == {"count": 3, "sizes": [7, 7, 7]}
+    assert result["result"]["count"] == 3
+    assert result["result"]["sizes"] == [7, 7, 7]
+    assert result["result"]["tool_count"] == 1
+    assert result["workspace_isolated"] is True
+    assert not Path(result["result"]["workspace"]).exists()
+    assert [step["status"] for step in result["steps"]] == ["completed"] * 3
+    assert len(events) == 6
+    preview = await runtime.execute(
+        "atlas.call_tool('local_file', {'action': 'stat', 'path': 'missing'})",
+        dry_run=True,
+    )
+    assert preview["executed"] is False
+    assert preview["preview"] == {
+        "tool_calls": ["local_file"], "call_count": 1, "dynamic_names": False,
+    }
 
 
 async def test_local_file_mutation_is_checkpointed_before_write_and_restorable(

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import ast
 import contextlib
 import json
 import os
 import secrets
 import sys
 import subprocess
+import tempfile
 from collections import defaultdict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -190,7 +192,7 @@ class AtlasToolBridge:
         self, name: str, arguments: dict[str, Any], *,
         run_id: str | None = None, conversation_id: str | None = None,
         tool_allow: list[str] | None = None, tool_deny: list[str] | None = None,
-        read_only: bool = False,
+        read_only: bool = False, workspace: str | None = None,
     ) -> dict[str, Any]:
         if tool_allow is not None and name not in tool_allow:
             raise PermissionError(f"Tool '{name}' is not allowed by the active profile")
@@ -204,6 +206,9 @@ class AtlasToolBridge:
         ):
             raise PermissionError(f"Tool '{name}' is not available in read-only mode")
         if name.startswith("local_") and self.local is not None:
+            if workspace:
+                arguments = {**arguments}
+                arguments.setdefault("cwd", workspace)
             if (name == "local_edit" or (
                 name == "local_file" and arguments.get("action") in {
                     "write", "append", "mkdir", "copy", "move", "delete",
@@ -260,12 +265,41 @@ class CodeActRuntime:
         self, code: str, *, run_id: str | None = None,
         conversation_id: str | None = None,
         tool_allow: list[str] | None = None, tool_deny: list[str] | None = None,
-        read_only: bool = False,
+        read_only: bool = False, tool_catalog: list[dict[str, Any]] | None = None,
+        event_callback: Any = None, cancel_event: Any = None, dry_run: bool = False,
     ) -> dict[str, Any]:
         if not isinstance(code, str) or not code.strip():
             raise ValueError("code must be non-empty text")
+        if dry_run:
+            tree = ast.parse(code, filename="<atlas-code-mode>")
+            calls = []
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                        and node.func.attr == "call_tool"
+                        and isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "atlas"):
+                    tool_name = node.args[0].value if node.args and isinstance(node.args[0], ast.Constant) else None
+                    calls.append((node.lineno, node.col_offset,
+                                  tool_name if isinstance(tool_name, str) else "<dynamic>"))
+            calls.sort(key=lambda entry: (entry[0], entry[1]))
+            call_names = [entry[2] for entry in calls]
+            return {"exit_code": 0, "dry_run": True, "executed": False,
+                    "preview": {"tool_calls": call_names, "call_count": len(call_names),
+                                "dynamic_names": any(name == "<dynamic>" for name in call_names)},
+                    "workspace_isolated": True, "steps": []}
         token = secrets.token_urlsafe(24)
+        workspace = tempfile.mkdtemp(prefix="atlas-code-mode-")
+        steps: list[dict[str, Any]] = []
+        step_lock = asyncio.Lock()
+
+        async def emit(event: dict[str, Any]) -> None:
+            if event_callback is not None:
+                emitted = event_callback(event)
+                if hasattr(emitted, "__await__"):
+                    await emitted
+
         async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+            step: dict[str, Any] | None = None
             try:
                 header = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5)
                 headers = header.decode("latin-1").split("\r\n")
@@ -276,11 +310,24 @@ class CodeActRuntime:
                 request = json.loads(await asyncio.wait_for(reader.readexactly(length), timeout=5))
                 if request.get("token") != token:
                     raise PermissionError("invalid bridge token")
+                if cancel_event is not None and cancel_event.is_set():
+                    raise asyncio.CancelledError("Code mode was cancelled")
+                name = str(request["name"])
+                async with step_lock:
+                    step = {"index": len(steps) + 1, "tool": name, "status": "running"}
+                    steps.append(step)
+                await emit({"type": "code_mode_step", **step})
                 result = await self.bridge.call_tool(
-                    str(request["name"]), dict(request.get("arguments", {})),
+                    name, dict(request.get("arguments", {})),
                     run_id=run_id, conversation_id=conversation_id,
                     tool_allow=tool_allow, tool_deny=tool_deny, read_only=read_only,
+                    workspace=workspace,
                 )
+                is_error = bool(result.get("is_error")) if isinstance(result, dict) else False
+                data = result.get("data") if isinstance(result, dict) else result
+                step.update({"status": "failed" if is_error else "completed",
+                             "result_kind": type(data).__name__})
+                await emit({"type": "code_mode_step", **step})
                 payload = json.dumps(result, ensure_ascii=False, default=str).encode("utf-8")
                 response_body = len(payload).to_bytes(4, "big") + payload
                 writer.write(
@@ -290,10 +337,12 @@ class CodeActRuntime:
                 )
                 await writer.drain()
             except Exception as exc:
-                log.debug(
-                    "agent.codeact.bridge_request_failed", error=str(exc), exc_info=True,
-                )
-                payload = json.dumps({"error": str(exc), "is_error": True}).encode()
+                if step is not None and step.get("status") == "running":
+                    step.update({"status": "failed", "error": type(exc).__name__})
+                    await emit({"type": "code_mode_step", **step})
+                log.debug("agent.codeact.bridge_request_failed",
+                          error_type=type(exc).__name__)
+                payload = json.dumps({"error": type(exc).__name__, "is_error": True}).encode()
                 response_body = len(payload).to_bytes(4, "big") + payload
                 writer.write(
                     b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n"
@@ -312,7 +361,12 @@ class CodeActRuntime:
         runner = (
             "import asyncio,json,sys,urllib.request\n"
             f"TOKEN={token!r}\nPORT={port}\n"
+            f"WORKSPACE={workspace!r}\n"
+            f"TOOLS={json.dumps(tool_catalog or [], ensure_ascii=False)!r}\n"
             "class Bridge:\n"
+            " def list_tools(self): return json.loads(TOOLS)\n"
+            " @property\n"
+            " def workspace(self): return WORKSPACE\n"
             " def call_tool(self,name,arguments=None):\n"
             "  body=json.dumps({'token':TOKEN,'name':name,'arguments':arguments or {}}).encode()\n"
             "  req=urllib.request.Request(f'http://127.0.0.1:{PORT}/',data=body,method='POST')\n"
@@ -327,22 +381,51 @@ class CodeActRuntime:
             " print('ATLAS_RESULT:'+json.dumps(result,ensure_ascii=False,default=str))\n"
             "asyncio.run(_run())\n"
         )
+        from atlas.engine_core.tools.environments.local import hermes_subprocess_env
+
         process = await asyncio.create_subprocess_exec(
             sys.executable, "-u", "-c", runner,
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=workspace,
+            env=hermes_subprocess_env(inherit_credentials=False),
         )
+
+        async def read_tail(reader: asyncio.StreamReader, limit: int) -> bytes:
+            tail = bytearray()
+            while chunk := await reader.read(8192):
+                tail.extend(chunk)
+                if len(tail) > limit:
+                    del tail[:-limit]
+            return bytes(tail)
+
         try:
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(code.encode("utf-8")), timeout=self.timeout,
-            )
+            assert process.stdin is not None
+            process.stdin.write(code.encode("utf-8"))
+            await process.stdin.drain()
+            process.stdin.close()
+            stdout_task = asyncio.create_task(read_tail(process.stdout, 16000))
+            stderr_task = asyncio.create_task(read_tail(process.stderr, 8000))
+            wait_task = asyncio.create_task(process.wait())
+            deadline = asyncio.get_running_loop().time() + self.timeout
+            while not wait_task.done():
+                if cancel_event is not None and cancel_event.is_set():
+                    process.kill()
+                    await wait_task
+                    raise asyncio.CancelledError("Code mode was cancelled")
+                if asyncio.get_running_loop().time() >= deadline:
+                    process.kill()
+                    await wait_task
+                    raise TimeoutError(f"CodeAct exceeded {self.timeout:g}s") from None
+                await asyncio.sleep(0.05)
+            stdout, stderr = await asyncio.gather(stdout_task, stderr_task)
         except TimeoutError:
-            process.kill()
-            await process.wait()
             raise TimeoutError(f"CodeAct exceeded {self.timeout:g}s") from None
         finally:
             server.close()
             await server.wait_closed()
+            import shutil
+            shutil.rmtree(workspace, ignore_errors=True)
         out = stdout.decode("utf-8", errors="replace")[-16000:]
         err = stderr.decode("utf-8", errors="replace")[-8000:]
         result: Any = None
@@ -350,7 +433,8 @@ class CodeActRuntime:
             if line.startswith("ATLAS_RESULT:"):
                 with contextlib.suppress(json.JSONDecodeError):
                     result = json.loads(line.removeprefix("ATLAS_RESULT:"))
-        return {"exit_code": process.returncode, "stdout": out, "stderr": err, "result": result}
+        return {"exit_code": process.returncode, "stdout": out, "stderr": err,
+                "result": result, "steps": steps, "workspace_isolated": True}
 
 
 class DelegationService:

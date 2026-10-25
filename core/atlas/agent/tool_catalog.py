@@ -293,10 +293,16 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
         "function": {
             "name": "execute_code",
             "description": (
-                "Run a bounded Python workflow using atlas.call_tool(name, arguments)."
+                "Run a Python batch workflow in a disposable working directory. Use "
+                "atlas.list_tools() to inspect the active Atlas tool schemas and "
+                "atlas.call_tool(name, arguments) to call them sequentially. "
+                "atlas.workspace is the isolated default working directory for local tools. "
+                "Set dry_run=true to preview statically named tool calls without running the script. "
+                "Returns compact per-call step logs and the script result."
             ),
             "parameters": {"type": "object", "properties": {
                 "code": {"type": "string"},
+                "dry_run": {"type": "boolean", "description": "Parse and preview atlas.call_tool calls without executing the script."},
             }, "required": ["code"], "additionalProperties": False},
         },
     }]
