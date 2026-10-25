@@ -358,15 +358,17 @@ async def upload_file_chunk(transfer_id: str, offset: int, request: Request,
                             device_id: str = Query(min_length=1, max_length=64)) -> dict[str, Any]:
     if offset < 0:
         raise HTTPException(status_code=422, detail="offset cannot be negative")
-    data = await request.body()
-    if len(data) > MAX_CHUNK_BYTES:
-        raise HTTPException(status_code=413, detail=f"chunk exceeds {MAX_CHUNK_BYTES} bytes")
+    data = bytearray()
+    async for block in request.stream():
+        if len(data) + len(block) > MAX_CHUNK_BYTES:
+            raise HTTPException(status_code=413, detail=f"chunk exceeds {MAX_CHUNK_BYTES} bytes")
+        data.extend(block)
     registry = _registry_for(services)
     store = _transfer_store(registry)
     _require_transfer_access(request, store, device_id)
     _require_transfer_capability(registry, device_id, "files.send")
     try:
-        row = await asyncio.to_thread(store.append_chunk, transfer_id, device_id, offset, data)
+        row = await asyncio.to_thread(store.append_chunk, transfer_id, device_id, offset, bytes(data))
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except PermissionError as exc:
