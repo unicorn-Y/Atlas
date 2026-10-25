@@ -175,10 +175,16 @@ def check_pane_and_source_contracts() -> None:
     app = (ROOT / "frontend/src/renderer/App.tsx").read_text(encoding="utf-8")
     pane = (ROOT / "frontend/src/renderer/components/PaneWorkspace.tsx").read_text(encoding="utf-8")
     shortcuts = (ROOT / "frontend/src/renderer/services/shortcuts.ts").read_text(encoding="utf-8")
-    assert "atlas:drop-pane" in app and "pane-layout" in pane
+    assert "onDrop" in pane and "pane-layout" in pane and "children: ReactNode" in pane
     assert "splitAt" in pane and "onPointerDown" in pane and "localStorage.setItem(STORAGE" in pane
     assert "focusNextPane" in shortcuts and "focusPreviousPane" in shortcuts
     assert "handoff-summary" in app and "parent_conversation_id: handoffSource" in app
+    result = subprocess.run(
+        ["npx.cmd", "vitest", "run", "--root", ".", "src/renderer/components/PaneWorkspace.test.tsx"],
+        cwd=ROOT / "frontend", capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    if result.returncode:
+        raise AssertionError(result.stdout + "\n" + result.stderr)
 
 
 async def run() -> None:
