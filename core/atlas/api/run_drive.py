@@ -3074,6 +3074,9 @@ async def _execute_run(
             elif etype == "run_model_switched":
                 await emit("run.model_switched", event.get("data", {}))
 
+            elif etype == "computer_frame":
+                await emit("computer.frame", event.get("data", {}))
+
             elif etype == "session.title":
                 await emit("session.title", {
                     "title": event.get("title", ""),

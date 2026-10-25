@@ -75,6 +75,9 @@ for path in sorted((ROOT / "core" / "atlas").rglob("*.py")):
 # DATA_ROOT / "data" (U10 sidebar metadata and U13 emergency-pause manifest both landed in the repo root).
 for path in sorted((ROOT / "core" / "atlas").rglob("*.py")):
     for number, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1):
+        # Path.cwd() is core/ when the desktop app starts the backend (U15: screenshots landed in core/data).
+        if re.search(r'Path\.cwd\(\)\s*/\s*"data"', line):
+            problems.append(f"{path.relative_to(ROOT)}:{number} data path built from Path.cwd() (use DATA_ROOT / \"data\" / ...)")
         if re.search(r'DATA_ROOT\s*/\s*"[^"/]+\.(json|jsonl|db|sqlite|txt|log|yaml|toml)"', line) and "legacy" not in line:
             problems.append(f"{path.relative_to(ROOT)}:{number} state file written directly under DATA_ROOT (use DATA_ROOT / \"data\" / ...)")
 

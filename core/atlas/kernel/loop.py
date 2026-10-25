@@ -168,6 +168,28 @@ def _attach_turn_context(messages: list[dict[str, Any]], current_text: str, curr
 _PREWARM_TASKS: set["asyncio.Task[Any]"] = set()
 
 
+def _frame_thumbnail(data_url: str, width: int = 480) -> str:
+    """Shrink a screenshot data URL to a small JPEG for the live preview (full PNGs are megabytes)."""
+    if not (data_url.startswith("data:image/") or data_url.startswith("file:")):
+        return ""
+    try:
+        import base64
+        import io
+
+        from PIL import Image
+
+        if data_url.startswith("file:"):
+            image = Image.open(data_url[5:])
+        else:
+            image = Image.open(io.BytesIO(base64.b64decode(data_url.split(",", 1)[1])))
+        image.thumbnail((width, width * 4))
+        buffer = io.BytesIO()
+        image.convert("RGB").save(buffer, format="JPEG", quality=70)
+        return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+    except Exception:
+        return data_url if data_url.startswith("data:") and len(data_url) <= 600_000 else ""
+
+
 def _sticky_fallback_route(runtime: Any, model_id: str) -> tuple[str, list[str]]:
     chain = [str(item) for item in (getattr(runtime, "fallback_models", None) or []) if item]
     sticky = getattr(runtime, "sticky_fallback_model", None)
@@ -1947,8 +1969,31 @@ class AtlasKernel:
                             for block in result.output.get("content") or []:
                                 if isinstance(block, dict) and block.get("type") == "image_url":
                                     images.append(block)
+                        frame_source = images[0].get("image_url", {}).get("url", "") if images else ""
+                        if not frame_source and str(result.name).startswith("computer_") and isinstance(result.output, dict):
+                            # computer_observe stores the screenshot as a PNG artifact and returns its path.
+                            payload = result.output.get("data") if isinstance(result.output.get("data"), dict) else result.output
+                            artifact = str((payload or {}).get("artifact_path") or "")
+                            if artifact.lower().endswith(".png") and os.path.isfile(artifact):
+                                frame_source = "file:" + artifact
+                        if frame_source and str(result.name).startswith("computer_") and not images:
+                            thumbnail = _frame_thumbnail(frame_source)
+                            if thumbnail:
+                                await event_queue.put(emit("computer_frame", data={
+                                    "run_id": run_id, "thumbnail": thumbnail, "captured_at": time.time(),
+                                    "tool": result.name,
+                                }))
                         if images:
                             tool_content = [{"type": "text", "text": content}, *images]
+                            if str(result.name).startswith("computer_"):
+                                # The live preview listens for computer.frame; the real computer_* tools
+                                # (tools/computer_use.py) return screenshots here, not via the X2 runtime.
+                                thumbnail = _frame_thumbnail(images[0].get("image_url", {}).get("url", ""))
+                                if thumbnail:
+                                    await event_queue.put(emit("computer_frame", data={
+                                        "run_id": run_id, "thumbnail": thumbnail, "captured_at": time.time(),
+                                        "tool": result.name,
+                                    }))
                         messages.append({"role": "tool", "tool_call_id": result.call_id,
                                          "name": result.name, "content": tool_content})
                         active_call_ids.discard(result.call_id)
