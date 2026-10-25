@@ -334,6 +334,20 @@ def _usage_row(result: ModelCallResult, call_id: str) -> dict[str, Any]:
     return row
 
 
+def _normalized_limit_event(error: ModelCallError) -> dict[str, Any]:
+    """Keep provider rate/quota reset hints in one explicit, source-labelled shape."""
+    observed_at = datetime.now(UTC)
+    retry_after = error.retry_after_seconds
+    return {
+        "category": error.category,
+        "observed_at": observed_at.isoformat(),
+        "retry_after_seconds": retry_after,
+        "reset_at": (observed_at + timedelta(seconds=max(0, retry_after))).isoformat()
+            if retry_after is not None else None,
+        "source": "provider_retry_after" if retry_after is not None else "provider_error_without_reset",
+    }
+
+
 def _context_breakdown(messages: list[dict[str, Any]], tools: list[dict[str, Any]],
                        used_tokens: int, context_limit: int) -> dict[str, Any]:
     """Attribute the provider's actual input total across estimated prompt parts."""
@@ -2229,20 +2243,14 @@ class AtlasKernel:
                 "detail": log_detail, "log_path": str(log_path or ""),
             }
             if isinstance(exc, ModelCallError) and exc.category in {"rate_limit", "billing"}:
-                retry_after = exc.retry_after_seconds
+                limit_event = _normalized_limit_event(exc)
+                retry_after = limit_event["retry_after_seconds"]
                 error_data.update({
                     "service": exc.service or "模型服务",
                     "reason": "服务速率限制" if exc.category == "rate_limit" else "服务额度不足",
                     "retry_after_seconds": retry_after,
                     "status": exc.status,
-                    "limit_event": {
-                        "category": exc.category,
-                        "observed_at": datetime.now(UTC).isoformat(),
-                        "retry_after_seconds": retry_after,
-                        "reset_at": (datetime.now(UTC) + timedelta(seconds=max(0, retry_after))).isoformat()
-                            if retry_after is not None else None,
-                        "source": "provider_retry_after" if retry_after is not None else "provider_error_without_reset",
-                    },
+                    "limit_event": limit_event,
                 })
             yield emit("error", **error_data)
         finally:
