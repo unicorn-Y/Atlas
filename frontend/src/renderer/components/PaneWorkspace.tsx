@@ -25,27 +25,31 @@ function splitAt(node: PaneNode, target: string, id: string, axis: Split['axis']
 }
 
 /** Recursive session pane tree. Ratios and pane membership persist in the local UI preference. */
-export default function PaneWorkspace({ besideId, activeId, conversations, username, onSwitch }: {
-  besideId: string; activeId: string; conversations: ConversationSummary[]; username: string; onSwitch: (conversation: ConversationSummary) => void;
+export default function PaneWorkspace({ besideId, activeId, conversations, username, onSwitch, onRemove, children }: {
+  besideId: string; activeId: string; conversations: ConversationSummary[]; username: string; onSwitch: (conversation: ConversationSummary) => void; onRemove: (id: string) => void;
+  children: ReactNode;
 }) {
   const [layout, setLayout] = useState<PaneNode | null>(() => {
-    try { const raw = localStorage.getItem(STORAGE); return raw ? JSON.parse(raw) as PaneNode : besideId ? { kind: 'pane', id: besideId } : null; }
-    catch { return besideId ? { kind: 'pane', id: besideId } : null; }
+    try { const raw = localStorage.getItem(STORAGE); return raw ? JSON.parse(raw) as PaneNode : activeId ? { kind: 'pane', id: activeId } : null; }
+    catch { return activeId ? { kind: 'pane', id: activeId } : null; }
   });
-  const [focused, setFocused] = useState(besideId);
+  const [focused, setFocused] = useState(besideId || activeId);
   const [dragged, setDragged] = useState('');
   const byId = useMemo(() => new Map(conversations.map((item) => [item.id, item])), [conversations]);
   const panes = ids(layout).filter((id) => id !== activeId && byId.has(id));
   useEffect(() => { window.dispatchEvent(new CustomEvent('atlas:panes-change', { detail: { count: panes.length } })); }, [panes.join('|')]);
   useEffect(() => {
+    if (activeId && !ids(layout).includes(activeId)) {
+      setLayout((current) => current ? { kind: 'split', splitId: crypto.randomUUID(), axis: 'row', ratio: 0.5, first: { kind: 'pane', id: activeId }, second: current } : { kind: 'pane', id: activeId });
+      setFocused(activeId);
+    }
+  }, [activeId]);
+  useEffect(() => {
     if (besideId && besideId !== activeId && !ids(layout).includes(besideId)) {
-      setLayout((current) => current ? { kind: 'split', splitId: crypto.randomUUID(), axis: 'row', ratio: 0.5, first: current, second: { kind: 'pane', id: besideId } } : { kind: 'pane', id: besideId });
+      setLayout((current) => current ? splitAt(current, activeId, besideId, 'row', false) : { kind: 'pane', id: activeId });
       setFocused(besideId);
     }
   }, [besideId, activeId]);
-  useEffect(() => {
-    if (activeId && ids(layout).includes(activeId)) setLayout((current) => remove(current, activeId));
-  }, [activeId]);
   useEffect(() => { try { if (layout) localStorage.setItem(STORAGE, JSON.stringify(layout)); else localStorage.removeItem(STORAGE); } catch { /* preference storage is optional */ } }, [layout]);
   useEffect(() => {
     const focus = (event: Event) => {
@@ -77,27 +81,14 @@ export default function PaneWorkspace({ besideId, activeId, conversations, usern
   const addAt = (target: string, id: string, axis: Split['axis'], before = false) => {
     if (!layout || id === activeId || id === target) return;
     const without = remove(layout, id);
-    if (!without) { setLayout({ kind: 'pane', id }); return; }
+    if (!without) {
+      setLayout({ kind: 'split', splitId: crypto.randomUUID(), axis, ratio: 0.5,
+        first: before ? { kind: 'pane', id } : { kind: 'pane', id: target },
+        second: before ? { kind: 'pane', id: target } : { kind: 'pane', id } });
+      setFocused(id); return;
+    }
     setLayout(splitAt(without, target, id, axis, before)); setFocused(id);
   };
-  const addToMain = (id: string, axis: Split['axis'], before: boolean) => {
-    if (!byId.has(id) || id === activeId) return;
-    setLayout((current) => {
-      const without = remove(current, id);
-      if (!without) return { kind: 'pane', id };
-      const target = ids(without).find((candidate) => candidate !== activeId);
-      return target ? splitAt(without, target, id, axis, before) : { kind: 'pane', id };
-    });
-    setFocused(id);
-  };
-  useEffect(() => {
-    const drop = (event: Event) => {
-      const detail = (event as CustomEvent<{ id: string; axis: Split['axis']; before: boolean }>).detail;
-      if (detail) addToMain(detail.id, detail.axis, detail.before);
-    };
-    window.addEventListener('atlas:drop-pane', drop);
-    return () => window.removeEventListener('atlas:drop-pane', drop);
-  }, [activeId, byId]);
   const acceptDrop = (event: ReactDragEvent, target: string) => {
     event.preventDefault();
     const sessionId = event.dataTransfer.getData('text/plain') || dragged;
@@ -111,7 +102,10 @@ export default function PaneWorkspace({ besideId, activeId, conversations, usern
   const render = (node: PaneNode): ReactNode => {
     if (isLeaf(node)) {
       const conversation = byId.get(node.id);
-      if (!conversation || node.id === activeId) return null;
+      if (node.id === activeId) return <section key={node.id} onClick={() => { setFocused(node.id); window.dispatchEvent(new Event('atlas:focus-main-pane')); }}
+        onDragOver={(event) => event.preventDefault()} onDrop={(event) => acceptDrop(event, node.id)}
+        className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${focused === node.id && panes.length > 0 ? 'ring-1 ring-inset ring-brand/60' : ''}`}>{children}</section>;
+      if (!conversation) return null;
       return <section key={node.id} tabIndex={0} data-pane-id={node.id} onClick={() => { setFocused(node.id); window.dispatchEvent(new Event('atlas:focus-side-pane')); }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => acceptDrop(event, node.id)}
         className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${focused === node.id ? 'ring-1 ring-inset ring-brand/60' : ''}`}
         onDragStart={(event) => { setDragged(node.id); event.dataTransfer.setData('text/plain', node.id); event.dataTransfer.effectAllowed = 'move'; }} draggable>
@@ -120,9 +114,9 @@ export default function PaneWorkspace({ besideId, activeId, conversations, usern
             <option value="">＋右侧会话</option>{conversations.filter((item) => item.id !== activeId && !panes.includes(item.id)).map((item) => <option key={item.id} value={item.id}>{item.title || '未命名'}</option>)}
           </select>
           <button type="button" title="新增下方分屏" onClick={() => { const id = conversations.find((item) => item.id !== activeId && !panes.includes(item.id))?.id; if (id) addAt(node.id, id, 'column'); }} className="rounded p-1 text-fg-3 hover:bg-hover"><ArrowDown size={12} /></button>
-          <button type="button" aria-label="关闭分屏" onClick={() => { setLayout((current) => remove(current, node.id)); if (focused === node.id) setFocused(activeId); }} className="rounded p-1 text-fg-3 hover:bg-hover"><X size={12} /></button>
+          <button type="button" aria-label="关闭分屏" onClick={() => { setLayout((current) => remove(current, node.id)); onRemove(node.id); if (focused === node.id) setFocused(activeId); }} className="rounded p-1 text-fg-3 hover:bg-hover"><X size={12} /></button>
         </div>
-        <div className="min-h-0 flex-1"><SidePane conversation={conversation} username={username} onClose={() => setLayout((current) => remove(current, node.id))} onSwitch={() => onSwitch(conversation)} /></div>
+        <div className="min-h-0 flex-1"><SidePane conversation={conversation} username={username} onClose={() => { setLayout((current) => remove(current, node.id)); onRemove(node.id); }} onSwitch={() => onSwitch(conversation)} /></div>
       </section>;
     }
     return <div key={node.splitId} className={`flex min-h-0 min-w-0 flex-1 ${node.axis === 'row' ? 'flex-row' : 'flex-col'}`}>
@@ -131,7 +125,7 @@ export default function PaneWorkspace({ besideId, activeId, conversations, usern
       <div className="flex min-h-0 min-w-0" style={{ flex: `${1 - node.ratio} 1 0%` }}>{render(node.second)}</div>
     </div>;
   };
-  if (!layout || !panes.length) return null;
+  if (!layout) return <div className="flex min-h-0 min-w-0 flex-1">{children}</div>;
   return <div className="flex min-h-0 min-w-0 flex-1" aria-label="多会话分屏"><div className="sr-only">焦点分屏：{byId.get(focused)?.title || '当前对话'}。拖动会话标题可重新排列，分隔条可调整大小。</div>{render(layout)}</div>;
 }
 

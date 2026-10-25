@@ -2189,16 +2189,10 @@ export default function App() {
             <div className="mt-1.5 flex min-w-0 items-center gap-0.5 overflow-x-auto px-1 text-[11.5px] text-fg-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div></>} />}
 
         {view === 'chat' && <div className="flex min-h-0 flex-1">
-          <div className={`relative flex min-w-0 flex-1 flex-col ${paneCount > 0 && mainPaneFocused ? 'ring-1 ring-inset ring-brand/60' : ''}`} onPointerDown={() => setMainPaneFocused(true)} onDragOver={(event) => { if (event.dataTransfer.types.includes('text/plain')) event.preventDefault(); }} onDrop={(event) => {
-            const id = event.dataTransfer.getData('text/plain');
-            if (!store.conversations.some((item) => item.id === id) || id === store.activeConversationId) return;
-            event.preventDefault();
-            const rect = event.currentTarget.getBoundingClientRect();
-            const x = (event.clientX - rect.left) / rect.width, y = (event.clientY - rect.top) / rect.height;
-            const axis = Math.min(x, 1 - x) < Math.min(y, 1 - y) ? 'row' : 'column';
-            const before = axis === 'row' ? x < 0.5 : y < 0.5;
-            window.dispatchEvent(new CustomEvent('atlas:drop-pane', { detail: { id, axis, before } }));
-          }}>
+          <Suspense fallback={null}><PaneWorkspace besideId={besideId} activeId={store.activeConversationId} conversations={store.conversations} username={username}
+            onSwitch={(conversation) => { const previous = store.activeConversationId; void openConversation(conversation); setBesideId(previous); }}
+            onRemove={(id) => { if (besideId === id) setBesideId(''); }}>
+          <div className={`relative flex min-w-0 flex-1 flex-col ${paneCount > 0 && mainPaneFocused ? 'ring-1 ring-inset ring-brand/60' : ''}`} onPointerDown={() => setMainPaneFocused(true)}>
             {activeRun && activeRun.conversationId === store.activeConversationId && <div className="pointer-events-none absolute top-2 left-1/2 z-20 flex -translate-x-1/2 justify-center [&>*]:pointer-events-auto">
               <ProgressCapsule run={activeRun} events={activeEvents} onShowAll={() => showInspectorTab('activity')} />
             </div>}
@@ -2247,8 +2241,7 @@ export default function App() {
               </div>
             </div>
           </div>
-          {view === 'chat' && <Suspense fallback={null}><PaneWorkspace besideId={besideId} activeId={store.activeConversationId} conversations={store.conversations} username={username}
-            onSwitch={(conversation) => { const previous = store.activeConversationId; void openConversation(conversation); setBesideId(previous); }} /></Suspense>}
+          </PaneWorkspace></Suspense>
           {inspectorOpen && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => toggleInspector(false)} run={activeRun} artifacts={activeArtifacts}
             conversationTitle={activeConversation?.title} modelName={modelName} tools={store.tools} skills={store.skills} activeSkills={store.activeSkills} capabilities={store.capabilities}
             apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
