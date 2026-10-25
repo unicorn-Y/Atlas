@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
@@ -57,6 +58,8 @@ from atlas.api.ultraplan_router import router as ultraplan_router
 from atlas.api.records_router import router as records_router
 from atlas.api.dashboard_router import router as dashboard_router
 from atlas.api.remote_router import router as remote_router
+from atlas.api.remote_tasks_router import router as remote_tasks_router
+from atlas.api.remote_tasks_router import start_remote_tasks, stop_remote_tasks
 from atlas.api.runtime import RuntimeManager
 from atlas.api.runtime_router import router as runtime_router
 from atlas.api.runtime_ws_router import router as runtime_ws_router
@@ -80,7 +83,16 @@ def create_app(
     services: AppServices,
 ) -> FastAPI:
     """Construct an app whose route dependencies resolve its own services."""
-    app = FastAPI(title="Atlas", version="0.1.0", lifespan=lifespan)
+    @asynccontextmanager
+    async def app_lifespan(app: FastAPI):
+        start_remote_tasks()
+        try:
+            async with lifespan(app):
+                yield
+        finally:
+            await stop_remote_tasks()
+
+    app = FastAPI(title="Atlas", version="0.1.0", lifespan=app_lifespan)
     if services.runtime_mgr is None:
         services.runtime_mgr = RuntimeManager()
     if services.startup is None:
@@ -146,6 +158,7 @@ def create_app(
         u6_router,
         records_router,
         remote_router,
+        remote_tasks_router,
         dashboard_router,
         skills_router,
         runtime_router,

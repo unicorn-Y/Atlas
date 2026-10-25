@@ -1,5 +1,6 @@
 import { ExternalLink, GitPullRequest, MessageCircle, Timer, XCircle } from 'lucide-react';
 import RemoteAccessPanel from './RemoteAccessPanel';
+import RemoteTasksPanel from './RemoteTasksPanel';
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 
@@ -90,6 +91,7 @@ export default function SettingsIntegrationsPanel({ onOpenCode, onOpenChannels, 
       这里汇总 Atlas 当前可用的入口。GitHub PR 使用本机工作区和已安装的 gh CLI；Slack 作为本机 Gateway 渠道运行；自动化由本机调度器执行。
     </p>
     <RemoteAccessPanel apiBaseUrl={apiBaseUrl} onToast={onToast} />
+    <RemoteTasksPanel apiBaseUrl={apiBaseUrl} onToast={onToast} />
     <article className="grid gap-3 rounded-xl border border-line p-4">
       <div><h3 className="m-0 text-[13.5px] font-medium text-heading">Google Drive 与 Gmail（只读）</h3><p className="mb-0 mt-1 text-[12px] text-fg-3">登录后搜索文件或邮件，并由你逐条选择导入当前对话。OAuth refresh token 加密范围仅为本机数据目录；应用申请 Drive readonly 与 Gmail readonly 权限。</p></div>
       {!google.connected ? <><p className="m-0 text-[11px] leading-relaxed text-fg-3">首次使用：在 Google Cloud Console 启用 Drive API 与 Gmail API，创建 OAuth 客户端 ID（桌面应用），将 Client ID 粘贴到此处，并确保测试用户包含你的 Google 账号。Atlas 使用 PKCE loopback 登录，不需要输入或保存 client secret。</p><div className="flex flex-wrap gap-2"><input aria-label="Google OAuth Client ID" value={clientId} onChange={(event) => setClientId(event.target.value)} placeholder="Google 桌面应用 OAuth Client ID" className="min-w-[280px] flex-1 rounded-lg border border-line bg-sunken px-3 py-2 text-[12px] text-fg" /><button type="button" disabled={busy || google.authorizing || !clientId.trim()} onClick={() => void connectGoogle()} className="rounded-lg bg-brand px-3 py-2 text-[12px] font-medium text-white disabled:opacity-50">{busy ? '正在打开登录…' : google.authorizing ? '等待浏览器授权…' : '保存并登录 Google'}</button></div></>
@@ -100,6 +102,6 @@ export default function SettingsIntegrationsPanel({ onOpenCode, onOpenChannels, 
     <Entry icon={GitPullRequest} title="GitHub Pull Request" description="查看工作区变更、创建 PR 并在 Atlas Code 页面跟进。需要本机 git/gh 登录状态。" action="打开 Code" onClick={onOpenCode} />
     <Entry icon={MessageCircle} title="Slack Gateway" description="配置 Slack Socket Mode 机器人凭据，连接本机 Atlas Gateway。可用性取决于可选依赖和凭据。" action="配置渠道" onClick={onOpenChannels} />
     <Entry icon={Timer} title="本机计划任务" description="创建定时、间隔、Webhook 或事件触发自动化；任务在这台机器的 Atlas 实例运行。" action="打开自动化" onClick={onOpenAutomation} />
-    <Entry icon={XCircle} title="云端托管任务" description="当前版本没有 Atlas 云执行服务；请使用本机 Automations。Linear issue 集成可在本页下方配置。" action="当前不可用" disabled />
+    <Entry icon={XCircle} title="Atlas 云执行服务" description="当前没有 Atlas 云端执行服务。上方自托管任务可通过 SSH 在你的另一台电脑执行；本机自动化仍由本机调度器运行。" action="云端不可用" disabled />
   </section>;
 }
