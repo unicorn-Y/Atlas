@@ -44,6 +44,43 @@ def main() -> None:
     pass
 
 
+@main.command("memory-bench")
+@click.option("--dataset", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None,
+              help="Versioned benchmark dataset JSON; defaults to the bundled v1 corpus.")
+@click.option("--k", "k_values", default="1,3,5", show_default=True,
+              help="Comma-separated retrieval cutoffs, for example 1,3,5.")
+@click.option("--format", "output_format", type=click.Choice(["markdown", "json"]), default=None)
+@click.option("--generate/--retrieval-only", default=False, show_default=True,
+              help="Also ask the configured model to answer from retrieved evidence and cite record ids.")
+@click.option("--model", "model_id", default=None, help="Model id for --generate; defaults to Atlas's current model.")
+@click.option("--output", type=click.Path(dir_okay=False, path_type=Path), default=None,
+              help="Atomically write the report; .json selects JSON when --format is omitted.")
+def memory_bench_command(
+    dataset: Path | None, k_values: str, output_format: str | None,
+    generate: bool, model_id: str | None, output: Path | None,
+) -> None:
+    """Evaluate isolated memory recall against a versioned local question set."""
+    from atlas.memory.bench import render_markdown, run_memory_benchmark
+
+    try:
+        ks = tuple(int(value.strip()) for value in k_values.split(",") if value.strip())
+        if not ks or any(value <= 0 for value in ks):
+            raise ValueError("--k must contain positive integers")
+        output_format = output_format or ("json" if output is not None and output.suffix.lower() == ".json" else "markdown")
+        if model_id and not generate:
+            raise ValueError("--model requires --generate")
+        report = run_memory_benchmark(dataset, ks=ks, generate=generate, model_id=model_id)
+        serialized = json.dumps(report, ensure_ascii=False, indent=2) if output_format == "json" else render_markdown(report)
+        if output is not None:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            temporary = output.with_suffix(output.suffix + ".tmp")
+            temporary.write_text(serialized + "\n", encoding="utf-8")
+            temporary.replace(output)
+        click.echo(serialized)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise click.ClickException(f"记忆召回评测失败：{exc}") from exc
+
+
 @main.group("security")
 def security_group() -> None:
     """Audit local dependency locks and security-sensitive configuration."""

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "dataset_id": "atlas-memory-recall-zh-v1",
+  "description": "合成的中文记忆问答与出处基准；不会写入用户记忆库。",
+  "records": [
+    {"id":"bench_workflow","text":"项目约定：开始修改前先确认当前分支和工作区状态；准备提交前检查 git diff。","src":"你说的","ref":"fixture-workflow"},
+    {"id":"bench_voice","text":"语音转写默认只填入草稿，编辑确认后再发送。","src":"你说的","ref":"fixture-voice"},
+    {"id":"bench_timezone","text":"用户常用时区是 America/New_York，日程应显示当地时间。","src":"你说的","ref":"fixture-timezone"},
+    {"id":"bench_color","text":"Atlas 主界面采用低饱和蓝色强调色，避免高亮颜色覆盖内容。","src":"你改的","ref":"fixture-color"},
+    {"id":"bench_git","text":"仓库的默认分支是 main；发布分支由维护者单独创建。","src":"你说的","ref":"fixture-git"},
+    {"id":"bench_mcp","text":"MCP 服务是可选工具，连接失败时普通对话应继续运行。","src":"经历","ref":"fixture-mcp"},
+    {"id":"bench_backup","text":"每周五将重要项目资料备份到本地加密磁盘。","src":"你说的","ref":"fixture-backup"},
+    {"id":"bench_model","text":"记忆召回评测使用固定数据集，指标包括 Recall@K 和引用准确度。","src":"整理","ref":"fixture-model"}
+  ],
+  "cases": [
+    {"id":"workflow-preflight","question":"开始改项目之前要先检查什么？","expected_ids":["bench_workflow"],"answer_terms":["分支","工作区状态"]},
+    {"id":"voice-default","question":"语音识别完成后会直接发出去吗？","expected_ids":["bench_voice"],"answer_terms":["草稿","确认后再发送"]},
+    {"id":"timezone","question":"日程应该按哪个时区显示？","expected_ids":["bench_timezone"],"answer_terms":["America/New_York","当地时间"]},
+    {"id":"mcp-failure","question":"MCP 连不上会不会让普通聊天停住？","expected_ids":["bench_mcp"],"answer_terms":["可选工具","继续运行"]},
+    {"id":"benchmark-metrics","question":"记忆召回质量评测看哪些指标？","expected_ids":["bench_model"],"answer_terms":["Recall@K","引用准确度"]}
+  ]
+}
