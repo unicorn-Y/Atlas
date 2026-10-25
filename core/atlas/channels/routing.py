@@ -128,6 +128,21 @@ def resolve_binding(
         if _match_channel(match, event):
             usable.append((binding, match))
 
+    # External group mentions target the named bot/agent before ordinary peer
+    # routing. Names are configured on each binding as mention_names (or the
+    # agent's display_name/username); adapters supply normalized mention names.
+    if event.is_group and event.mentions:
+        mentioned = {str(value).lstrip("@").casefold() for value in event.mentions}
+        for binding, match in usable:
+            names = match.get("mention_names") or binding.get("mention_names") or []
+            if isinstance(names, str):
+                names = [names]
+            names = [*names, match.get("display_name"), match.get("username"), binding.get("display_name"), binding.get("username")]
+            aliases = {str(value).lstrip("@").casefold() for value in names if value}
+            peer_matches = not _has_peer_scope(match) or _match_peer_id(match, event) or _match_parent_peer(match, event)
+            if aliases & mentioned and _match_account(match, event) and _match_peer_kind(match, event) and peer_matches:
+                return binding
+
     def scoped(predicate) -> dict[str, Any] | None:
         def check(match: dict[str, Any]) -> bool:
             return (

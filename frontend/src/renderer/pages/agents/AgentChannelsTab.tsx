@@ -12,7 +12,7 @@ export default function AgentChannelsTab({ apiBaseUrl, agent, onToast }: {
 }) {
   const [channels, setChannels] = useState<AgentChannelBinding[]>(agent.agent?.channels ?? []);
   const [gateway, setGateway] = useState<string[]>([]);
-  const [form, setForm] = useState({ channel: '', target: '', account: '' });
+  const [form, setForm] = useState({ channel: '', target: '', account: '', mentionNames: '' });
   const [busy, setBusy] = useState(false);
   const base = apiBaseUrl;
   const agentId = agent.id;
@@ -42,8 +42,9 @@ export default function AgentChannelsTab({ apiBaseUrl, agent, onToast }: {
     try {
       setChannels((await agentsApi.addChannel(base, agentId, {
         channel: form.channel, target: form.target.trim(), ...(form.account.trim() ? { account: form.account.trim() } : {}),
+        ...(form.mentionNames.trim() ? { mention_names: form.mentionNames.split(',').map((name) => name.trim().replace(/^@/, '')).filter(Boolean) } : {}),
       })).channels);
-      setForm({ ...form, target: '', account: '' });
+      setForm({ ...form, target: '', account: '', mentionNames: '' });
       onToast('绑定已添加');
     } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
     setBusy(false);
@@ -67,6 +68,7 @@ export default function AgentChannelsTab({ apiBaseUrl, agent, onToast }: {
         <Radio size={14} className="shrink-0 text-brand" />
         <b className="shrink-0 font-medium text-fg">{binding.channel}</b>
         <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg-2">{binding.target}</span>
+        {!!binding.mention_names?.length && <span className="shrink-0 text-[11.5px] text-fg-3">@{binding.mention_names.join(' / @')}</span>}
         {binding.account && <span className="shrink-0 text-[11.5px] text-fg-3">账号 {binding.account}</span>}
         <Button size="icon-sm" variant="ghost" aria-label="移除绑定" disabled={busy} onClick={() => void remove(binding)}><Trash2 /></Button>
       </div>)}
@@ -83,6 +85,9 @@ export default function AgentChannelsTab({ apiBaseUrl, agent, onToast }: {
       </label>
       <label className="grid gap-1 text-[12.5px] text-fg-2">账号（可选）
         <input value={form.account} onChange={(event) => setForm({ ...form, account: event.target.value })} className={cn(field, 'w-36 text-[12.5px]')} />
+      </label>
+      <label className="grid min-w-[180px] flex-1 gap-1 text-[12.5px] text-fg-2">群聊提及名（逗号分隔）
+        <input value={form.mentionNames} onChange={(event) => setForm({ ...form, mentionNames: event.target.value })} placeholder={`@${agent.id}, ${agent.name}`} className={cn(field, 'text-[12.5px]')} />
       </label>
       <Button type="submit" variant="primary" disabled={busy || !form.channel || !gateway.includes(form.channel) || !form.target.trim()}><Plus />添加绑定</Button>
     </form>

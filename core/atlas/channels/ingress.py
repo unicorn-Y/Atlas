@@ -55,6 +55,7 @@ def event_from_payload(data: dict[str, Any]) -> MessageEvent:
         sender_is_bot=bool(data.get("sender_is_bot", False)),
         is_group=bool(data.get("is_group", False)),
         is_mention=bool(data.get("is_mention", False)),
+        mentions=[str(value) for value in data.get("mentions", []) if value],
         reply_to_event_id=str(data.get("reply_to_event_id", "")),
         source_channel=str(data.get("source_channel", "")),
         source_event_id=str(data.get("source_event_id", "")),

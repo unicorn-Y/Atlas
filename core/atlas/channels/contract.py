@@ -59,6 +59,7 @@ class MessageEvent:
     sender_is_bot: bool = False
     is_group: bool = False
     is_mention: bool = False
+    mentions: list[str] = field(default_factory=list)
     reply_to_event_id: str = ""
     source_channel: str = ""
     source_event_id: str = ""

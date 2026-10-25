@@ -234,6 +234,17 @@ class TelegramAdapter(ChannelAdapter):
         reply = message.get("reply_to_message") or {}
         reply_from = reply.get("from") or {}
         reply_to_bot = bool(self.bot_id) and int(reply_from.get("id", 0) or 0) == self.bot_id
+        entities = list(message.get("entities") or []) + list(message.get("caption_entities") or [])
+        mentions = []
+        for entity in entities:
+            if entity.get("type") == "mention":
+                offset, length = int(entity.get("offset", 0)), int(entity.get("length", 0))
+                mentions.append(text[offset:offset + length].lstrip("@").casefold())
+            elif entity.get("type") == "text_mention":
+                user = entity.get("user") or {}
+                username = str(user.get("username") or "").lstrip("@").casefold()
+                if username:
+                    mentions.append(username)
         return MessageEvent(
             channel=self.name,
             account=self.account,
@@ -251,6 +262,7 @@ class TelegramAdapter(ChannelAdapter):
             sender_is_bot=bool(sender.get("is_bot", False)),
             is_group=is_group,
             is_mention=reply_to_bot or self._contains_bot_mention(message, text),
+            mentions=list(dict.fromkeys(mentions)),
             reply_to_event_id=str(reply.get("message_id") or ""),
             attachments=attachments,
             ts=float(message.get("date", 0) or 0.0),

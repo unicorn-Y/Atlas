@@ -14,6 +14,7 @@ def make_event(
     is_group: bool = False,
     thread_id: str = "",
     reply_to: str = "",
+    mentions: list[str] | None = None,
 ) -> MessageEvent:
     return MessageEvent(
         channel=channel,
@@ -24,6 +25,7 @@ def make_event(
         is_group=is_group,
         thread_id=thread_id,
         reply_to_event_id=reply_to,
+        mentions=mentions or [],
     )
 
 
@@ -143,3 +145,23 @@ def test_empty_bindings_without_roster_returns_none():
 def test_channel_mismatch_never_routes():
     bindings = [{"agent_id": "x", "channel": "telegram", "account": "*"}]
     assert resolve_route(bindings, make_event("1", channel="slack")) is None
+
+
+def test_group_mention_routes_to_named_agent_before_group_default():
+    bindings = [
+        {"agent_id": "general", "channel": "telegram", "account": "*", "peer_kind": "group"},
+        {"agent_id": "reviewer", "channel": "telegram", "account": "*", "mention_names": ["review", "reviewer"]},
+    ]
+    event = make_event("42", account="work", is_group=True, mentions=["reviewer"])
+    assert resolve_route(bindings, event) == "reviewer"
+    # Unknown names fall through to ordinary group policy exactly once.
+    assert resolve_route(bindings, make_event("42", account="work", is_group=True, mentions=["missing"])) == "general"
+
+
+def test_group_mention_respects_binding_scope_and_ignores_direct_messages():
+    bindings = [{"agent_id": "ops", "channel": "telegram", "account": "work", "peer_id": "100", "mention_names": ["ops"]}]
+    roster = ["ops", "other"]
+    assert resolve_route(bindings, make_event("200", account="work", is_group=True, mentions=["ops"]), agent_ids=roster) is None
+    assert resolve_route(bindings, make_event("100", account="work", is_group=True, mentions=["ops"]), agent_ids=roster) == "ops"
+    # Mentions are ignored for direct messages, which still follow their normal exact-peer binding.
+    assert resolve_route(bindings, make_event("100", account="work", mentions=["ops"]), agent_ids=roster) == "ops"

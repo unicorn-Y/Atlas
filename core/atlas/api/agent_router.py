@@ -262,6 +262,7 @@ async def add_agent_channel(
         str(req.get("target", "")),
         str(req.get("account", "")),
         permission_mode=req.get("permission_mode"),
+        mention_names=req.get("mention_names") if isinstance(req.get("mention_names"), list) else [],
     ))
     _refresh_gateway_routing(services)
     return {"agent_id": agent_id, "channels": channels}

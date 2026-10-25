@@ -468,6 +468,9 @@ def _sync_channel_routing(agents_service: PersistentAgentService, manager: Chann
                 "channel": str(row.get("channel", "")),
                 "account": str(row.get("account", "")),
                 "peer_id": str(row.get("target", "")),
+                "mention_names": list(dict.fromkeys([
+                    str(name) for name in (row.get("mention_names") or []) if str(name).strip()
+                ] + [str(record["id"]), str((record.get("agent") or {}).get("name") or "")])),
             }
             # H7 §9.1: per-binding permission-mode override (validated by the
             # profile store; routing ignores unknown keys — behavior-neutral).

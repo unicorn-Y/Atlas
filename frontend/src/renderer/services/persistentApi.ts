@@ -18,7 +18,7 @@ export interface AgentHeartbeat {
   delivery: string;
   isolated_session: boolean;
 }
-export interface AgentChannelBinding { channel: string; target: string; account?: string }
+  export interface AgentChannelBinding { channel: string; target: string; account?: string; mention_names?: string[] }
 export interface AgentTable {
   enabled?: boolean;
   workspace?: string;
