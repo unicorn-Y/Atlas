@@ -27,7 +27,7 @@ from typing import Any
 import pytest
 from click.testing import CliRunner
 
-from atlas.cli import main
+from atlas.cli import _prepare_exec_images, main
 from tests.fakes.fake_llm_provider import (
     Error,
     FakeLLMServer,
@@ -147,6 +147,75 @@ def test_doctor_help_documents_checks():
     result = CliRunner().invoke(main, ["doctor", "--help"])
     assert result.exit_code == 0
     assert "--json" in result.output
+
+
+def test_exec_help_exposes_repeatable_image_input():
+    result = CliRunner().invoke(main, ["exec", "--help"])
+    assert result.exit_code == 0
+    assert "--image" in result.output
+
+
+def test_exec_images_become_inline_multimodal_data_urls(tmp_path):
+    first = tmp_path / "one.png"
+    first.write_bytes(b"\x89PNG\r\n\x1a\n" + b"fixture")
+    second = tmp_path / "two.jpg"
+    second.write_bytes(b"\xff\xd8\xff" + b"fixture")
+
+    data_urls, manifest = _prepare_exec_images((first, second))
+
+    assert data_urls[0].startswith("data:image/png;base64,")
+    assert data_urls[1].startswith("data:image/jpeg;base64,")
+    assert [item["name"] for item in manifest] == ["one.png", "two.jpg"]
+    assert [item["size"] for item in manifest] == [15, 10]
+
+
+def test_exec_jsonl_reports_image_validation_error_as_parseable_events(tmp_path):
+    missing = tmp_path / "missing.png"
+    result = CliRunner().invoke(main, ["exec", "describe", "--image", str(missing), "--output-format", "jsonl"])
+
+    assert result.exit_code == 2
+    events = [json.loads(line) for line in result.stdout.splitlines()]
+    assert events[0]["type"] == "error"
+    assert events[0]["code"] == "invalid_image"
+    assert events[1] == {"type": "end", "status": "failed"}
+
+
+def test_exec_passes_images_to_orchestrator_and_emits_jsonl_input(tmp_path, monkeypatch):
+    image = tmp_path / "fixture.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\nfixture")
+    seen: dict[str, Any] = {}
+
+    class Memory:
+        async def init(self): pass
+        async def save_conversation_metadata(self, *_args, **_kwargs): pass
+        async def close(self): pass
+
+    class Orchestrator:
+        def __init__(self, **_kwargs): pass
+        def run(self, _prompt, _conversation, **kwargs):
+            seen["images"] = kwargs["image_attachments"]
+            async def events():
+                yield {"type": "chunk", "content": "looked at it"}
+            return events()
+
+    monkeypatch.setattr("atlas.memory.MemoryStore", Memory)
+    monkeypatch.setattr("atlas.agent.AgentOrchestrator", Orchestrator)
+    monkeypatch.setattr("atlas.cli._daybreak_enabled", lambda: False)
+    async def migration_ready(*_args): return SimpleNamespace(status="ready", error="")
+    monkeypatch.setattr("atlas.engine.session_migration.migrate_legacy_sessions", migration_ready)
+    async def passthrough(_project_id, events, **_kwargs):
+        async for event in events:
+            yield event
+    monkeypatch.setattr("atlas.project_context.project_scoped_events", passthrough)
+
+    result = CliRunner().invoke(main, ["exec", "What is shown?", "--image", str(image), "--json"])
+
+    assert result.exit_code == 0, result.output
+    events = [json.loads(line) for line in result.stdout.splitlines()]
+    input_event = next(item for item in events if item["type"] == "input")
+    assert input_event["text"] == "What is shown?"
+    assert input_event["images"] == [{"name": "fixture.png", "mime": "image/png", "size": 15}]
+    assert seen["images"][0].startswith("data:image/png;base64,")
 
 
 def test_run_without_prompt_exits_2_with_json_error():

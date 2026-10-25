@@ -33,6 +33,43 @@ class _LazyConsole:
 
 
 _CLI_ATTACH_MAX_BYTES = 5 * 1024 * 1024
+_CLI_IMAGE_MAX_COUNT = 4
+_CLI_IMAGE_MAX_BYTES = 4 * 1024 * 1024
+_CLI_IMAGES_MAX_BYTES = 8 * 1024 * 1024
+
+
+def _prepare_exec_images(paths: tuple[Path, ...]) -> tuple[list[str], list[dict[str, Any]]]:
+    """Read bounded local raster images into the model's inline data URL format."""
+    if len(paths) > _CLI_IMAGE_MAX_COUNT:
+        raise ValueError(f"最多允许 {_CLI_IMAGE_MAX_COUNT} 张图片")
+    data_urls: list[str] = []
+    manifest: list[dict[str, Any]] = []
+    total_bytes = 0
+    for path in paths:
+        resolved = path.expanduser().resolve(strict=True)
+        if not resolved.is_file():
+            raise ValueError(f"不是文件：{resolved}")
+        mime = mimetypes.guess_type(resolved.name)[0]
+        if mime not in {"image/png", "image/jpeg", "image/webp"}:
+            raise ValueError(f"只支持 PNG、JPEG、WebP 图片：{resolved.name}")
+        raw = resolved.read_bytes()
+        if not raw:
+            raise ValueError(f"图片为空：{resolved.name}")
+        signature_ok = (
+            raw.startswith(b"\x89PNG\r\n\x1a\n") if mime == "image/png" else
+            raw.startswith(b"\xff\xd8\xff") if mime == "image/jpeg" else
+            len(raw) >= 12 and raw.startswith(b"RIFF") and raw[8:12] == b"WEBP"
+        )
+        if not signature_ok:
+            raise ValueError(f"文件内容与图片类型不匹配或图片已损坏：{resolved.name}")
+        if len(raw) > _CLI_IMAGE_MAX_BYTES:
+            raise ValueError(f"单张图片不能超过 4 MiB：{resolved.name}")
+        total_bytes += len(raw)
+        if total_bytes > _CLI_IMAGES_MAX_BYTES:
+            raise ValueError("图片合计不能超过 8 MiB")
+        data_urls.append(f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}")
+        manifest.append({"name": resolved.name, "mime": mime, "size": len(raw)})
+    return data_urls, manifest
 
 
 def _daybreak_enabled() -> bool:
@@ -784,6 +821,8 @@ def config_migrate(rollback: bool) -> None:
 @main.command("exec")
 @click.argument("prompt", required=False)
 @click.option("--model", "-m", default=None, help="Model to use")
+@click.option("--image", "images", multiple=True, type=click.Path(path_type=Path),
+              help="Attach a local PNG, JPEG, or WebP image (repeatable; up to four images)")
 @click.option("--workspace", "--cwd", type=click.Path(file_okay=False, path_type=Path), default=".",
               show_default=True, help="Workspace directory for this run")
 @click.option("--conversation-id", "--resume", default=None, help="Resume an existing Atlas conversation")
@@ -802,13 +841,15 @@ def config_migrate(rollback: bool) -> None:
 @click.option("--ignore-project-config", is_flag=True, help="Ignore the selected project's saved config for this run")
 @click.option("--ignore-workspace-rules", is_flag=True, help="Skip AGENTS.md / CLAUDE.md workspace instructions for this run")
 def exec_command(
-    prompt: str | None, model: str | None, workspace: Path,
+    prompt: str | None, model: str | None, images: tuple[Path, ...], workspace: Path,
     conversation_id: str | None, output_format: str, json_output: bool,
     output_schema: Path | None, output_last_message: Path | None, approve_writes: bool,
     project_id: str | None, config_override: Path | None, ignore_project_config: bool,
     ignore_workspace_rules: bool,
 ) -> None:
     """Run one non-interactive agent turn; PROMPT may also come from stdin."""
+    if json_output:
+        output_format = "jsonl"
     from atlas.agent import AgentOrchestrator
     from atlas.config import DATA_ROOT
     from atlas.memory import MemoryStore
@@ -822,6 +863,14 @@ def exec_command(
     root = workspace.expanduser().resolve()
     if not root.is_dir():
         raise click.BadParameter(f"workspace is not a directory: {root}", param_hint="--workspace")
+    try:
+        image_data_urls, image_manifest = _prepare_exec_images(images)
+    except (OSError, ValueError) as exc:
+        if output_format == "jsonl":
+            _write_line({"type": "error", "code": "invalid_image", "message": str(exc)}, sys.stdout)
+            _write_line({"type": "end", "status": "failed"}, sys.stdout)
+            sys.exit(EXIT_USAGE)
+        raise click.BadParameter(str(exc), param_hint="--image") from exc
     ide_context: dict[str, Any] | None = None
     try:
         from atlas.ide_context import discover_ide_context
@@ -839,8 +888,6 @@ def exec_command(
         user_prompt = f"{format_ide_context(ide_context)}\n\nUser request:\n{user_prompt}"
         if output_format != "jsonl":
             print(f"IDE context attached ({ide_context.get('editor') or 'IDE'}; workspace {root}).", file=sys.stderr)
-    if json_output:
-        output_format = "jsonl"
     temporary_config = None
     if config_override:
         try:
@@ -876,6 +923,9 @@ def exec_command(
             failed = False
             if output_format == "jsonl":
                 _write_line({"type": "start", "session_id": conv_id}, sys.stdout)
+                if image_manifest:
+                    _write_line({"type": "input", "session_id": conv_id, "text": user_prompt,
+                                 "images": image_manifest}, sys.stdout)
             final_text = ""
             validation_error = ""
             structured_output: Any = None
@@ -891,6 +941,7 @@ def exec_command(
                         run_prompt += f"\nYour previous response failed schema validation: {validation_error}. Rewrite it now."
                 run_events = orchestrator.run(
                     run_prompt, conv_id, workspace=str(root), workspace_trusted=True,
+                    image_attachments=image_data_urls or None,
                     permission_mode="ask_writes",
                     project_id=project_id,
                     ignore_workspace_rules=ignore_workspace_rules,
