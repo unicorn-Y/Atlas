@@ -47,6 +47,21 @@ describe('new wire events are known', () => {
       data: { scope: 'working_tree', findings: [] },
     })?.type).toBe('review.findings');
   });
+
+  it('keeps live structured component pushes in the run event stream', () => {
+    const event = normalizeRuntimeEvent({
+      type: 'agent_event', event_id: 'run-1:12', run_id: 'run-1', sequence: 12,
+      timestamp: '2026-10-02T00:00:00Z', event: 'component.push',
+      data: { component_id: 'color', title: '选个颜色', kind: 'buttons', data: { buttons: [{ label: '红', value: 'red' }, { label: '蓝', value: 'blue' }] } },
+    });
+    expect(event?.type).toBe('component.push');
+    if (!event) throw new Error('component.push should be recognized');
+    const run = applyRuntimeEvent({
+      id: 'run-1', conversationId: 'c1', title: 'T', status: 'running', phase: 'execution',
+      startedAt: '', updatedAt: '', lastEventSequence: 11, events: [],
+    }, event);
+    expect(run.events).toEqual([event]);
+  });
 });
 
 describe('bounded run events', () => {
