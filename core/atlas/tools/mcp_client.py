@@ -1216,7 +1216,9 @@ class MCPClient:
 
     async def restart_server(self, server_name: str) -> None:
         """Disconnect then reconnect a server using its stored config."""
-        cfg = self._server_configs.get(server_name)
+        # Failed startup configs are tracked in ``_configured_configs`` but never
+        # reach ``_server_configs`` (the latter means a live connection exists).
+        cfg = self._server_configs.get(server_name) or self._configured_configs.get(server_name)
         if cfg is None:
             raise ValueError(f"No stored config for server: {server_name}")
         await self.disconnect_server(server_name)
