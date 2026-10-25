@@ -152,6 +152,29 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
     }
   };
 
+  const syncBase = async (strategy: 'merge' | 'rebase') => {
+    if (!conversationId || busy) return;
+    setBusy('sync'); setError(''); setNotice('');
+    try {
+      const result = await api<{ base: string; commit: string }>(apiBaseUrl,
+        `/api/conversations/${encodeURIComponent(conversationId)}/worktree/sync`,
+        { method: 'POST', json: { strategy } });
+      setNotice(`已同步 ${result.base}（${result.commit}）`); await load(); onChanged?.();
+    } catch (exc) {
+      const detail = exc instanceof Error ? exc.message : String(exc);
+      setError(`${detail}。若发生冲突，请在工作区解决冲突后继续，或中止同步。`);
+    } finally { setBusy(''); }
+  };
+  const resolveSync = async (actionName: 'continue' | 'abort') => {
+    if (!conversationId || busy) return;
+    setBusy(actionName); setError(''); setNotice('');
+    try {
+      await api(apiBaseUrl, `/api/conversations/${encodeURIComponent(conversationId)}/worktree/sync/${actionName}`, { method: 'POST' });
+      setNotice(actionName === 'continue' ? '同步已继续完成' : '同步已中止'); await load(); onChanged?.();
+    } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setBusy(''); }
+  };
+
   const field = 'h-8 min-w-0 rounded-[9px] bg-sunken px-2.5 text-[12px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]';
   const action = 'inline-flex h-7 items-center justify-center gap-1 rounded-lg bg-hover px-2.5 text-[11.5px] font-medium text-fg-2 hover:text-fg disabled:cursor-not-allowed disabled:opacity-45';
 
@@ -186,6 +209,18 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
           </form>
         </div>
       </div>
+
+      {conversationId && <div className="grid gap-1.5 rounded-xl bg-sunken p-2.5">
+        <strong className="text-[11.5px] text-fg-2">同步基线分支</strong>
+        <p className="m-0 text-[10.5px] text-fg-3">先 fetch 远端，再把会话的 base 分支合入当前 worktree。同步前检查未提交改动；有冲突时解决文件后继续，或中止。</p>
+        {workspace.status.length > 0 && <p role="status" className="m-0 text-[10.5px] text-danger">当前有 {workspace.status.length} 个未提交改动，同步前请提交或 stash。</p>}
+        <div className="flex gap-1.5">
+          <button type="button" className={`${action} flex-1`} disabled={Boolean(busy) || workspace.status.length > 0} onClick={() => void syncBase('merge')}>Fetch + Merge</button>
+          <button type="button" className={`${action} flex-1`} disabled={Boolean(busy) || workspace.status.length > 0} onClick={() => void syncBase('rebase')}>Fetch + Rebase</button>
+        </div>
+        <div className="flex gap-1.5"><button type="button" className={`${action} flex-1`} disabled={Boolean(busy)} onClick={() => void resolveSync('continue')}>解决后继续</button>
+          <button type="button" className={`${action} flex-1`} disabled={Boolean(busy)} onClick={() => void resolveSync('abort')}>中止同步</button></div>
+      </div>}
 
       <div className="grid gap-2 rounded-xl bg-sunken p-2.5">
         <div className="flex items-center justify-between gap-2">

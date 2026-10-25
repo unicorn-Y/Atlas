@@ -1362,6 +1362,92 @@ async def merge_conversation_worktree(
     return {"status": "merged"}
 
 
+@router.post("/api/conversations/{conversation_id}/worktree/sync")
+async def sync_conversation_worktree(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str, req: dict[str, Any],
+) -> dict[str, Any]:
+    """Fetch and integrate the recorded base branch into this conversation worktree."""
+    import subprocess
+
+    memory = _service("memory", services)
+    assert memory is not None
+    conv = await memory.get_conversation(conversation_id)
+    if not conv or not conv.get("worktree_path"):
+        raise HTTPException(status_code=404, detail="Conversation worktree not found")
+    root = Path(str(conv["worktree_path"])).resolve()
+    strategy = str(req.get("strategy", "merge"))
+    if strategy not in {"merge", "rebase"}:
+        raise HTTPException(status_code=400, detail="strategy must be merge or rebase")
+    branch = str(conv.get("base_branch") or "")
+    if not branch:
+        raise HTTPException(status_code=409, detail="This worktree has no recorded base branch")
+
+    def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        result = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", timeout=120, check=False)
+        if check and result.returncode:
+            raise RuntimeError((result.stderr or result.stdout or "git command failed").strip())
+        return result
+
+    try:
+        status = git("status", "--porcelain").stdout
+        dirty = bool(status.strip())
+        if dirty:
+            raise HTTPException(status_code=409, detail={"message": "Worktree has uncommitted changes; commit or stash them before syncing.", "dirty": True})
+        git("fetch", "--all", "--prune")
+        remote = git("config", "--get", "branch." + branch + ".remote", check=False).stdout.strip()
+        if remote:
+            target = f"{remote}/{branch}"
+        else:
+            target = branch
+        if git("rev-parse", "--verify", target, check=False).returncode:
+            raise HTTPException(status_code=409, detail=f"Fetched base ref was not found: {target}")
+        result = git(strategy, target, check=False)
+        if result.returncode:
+            conflicts = git("diff", "--name-only", "--diff-filter=U", check=False).stdout.splitlines()
+            raise HTTPException(status_code=409, detail={"message": (result.stderr or result.stdout).strip(),
+                                                         "conflicts": conflicts, "operation": strategy})
+        return {"status": "synced", "strategy": strategy, "base": target,
+                "commit": git("rev-parse", "--short", "HEAD").stdout.strip()}
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=504, detail="Git sync timed out") from exc
+    except (OSError, RuntimeError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/api/conversations/{conversation_id}/worktree/sync/{action}")
+async def resolve_worktree_sync(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str, action: str,
+) -> dict[str, Any]:
+    """Continue or abort an in-progress merge/rebase after conflict resolution."""
+    import subprocess
+
+    if action not in {"continue", "abort"}:
+        raise HTTPException(status_code=404, detail="Unknown sync action")
+    memory = _service("memory", services)
+    assert memory is not None
+    conv = await memory.get_conversation(conversation_id)
+    if not conv or not conv.get("worktree_path"):
+        raise HTTPException(status_code=404, detail="Conversation worktree not found")
+    args = ["git", "merge", "--continue"] if action == "continue" else ["git", "rebase", "--abort"]
+    # Continue supports either merge or rebase state; Git will report when none is active.
+    if action == "continue":
+        probe = subprocess.run(["git", "rev-parse", "--git-path", "rebase-merge"], cwd=conv["worktree_path"],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+        rebase_dir = Path(conv["worktree_path"]) / probe.stdout.strip()
+        if rebase_dir.is_dir():
+            args = ["git", "rebase", "--continue"]
+    result = subprocess.run(args, cwd=conv["worktree_path"], capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", timeout=120, check=False)
+    if result.returncode:
+        conflicts = subprocess.run(["git", "diff", "--name-only", "--diff-filter=U"], cwd=conv["worktree_path"],
+                                   capture_output=True, text=True, encoding="utf-8", errors="replace", check=False).stdout.splitlines()
+        raise HTTPException(status_code=409, detail={"message": (result.stderr or result.stdout).strip(), "conflicts": conflicts})
+    return {"status": "continued" if action == "continue" else "aborted"}
+
+
 @router.delete("/api/conversations/{conversation_id}/worktree")
 async def delete_conversation_worktree(
     services: Annotated[AppServices, Depends(get_app_services)],
@@ -1857,3 +1943,34 @@ async def lsp_status(
         servers.append({"id": srv.server_id, "languages": list(srv.extensions),
                         "available": available, "hint": hint})
     return {"servers": servers}
+
+
+@router.get("/api/lsp/diagnostics")
+async def lsp_workspace_diagnostics(workspace: str = Query(..., min_length=1)) -> dict[str, Any]:
+    """Fresh diagnostics for files already opened by language servers in this workspace."""
+    root = Path(workspace).expanduser().resolve()
+    if not root.is_dir():
+        raise HTTPException(status_code=404, detail="Workspace directory not found")
+    from atlas.lsp import get_service
+    service = get_service()
+    if service is None:
+        return {"workspace": str(root), "available": False, "count": 0, "files": []}
+    files: list[dict[str, Any]] = []
+    for client in list(getattr(service, "_clients", {}).values()):
+        for path in list(getattr(client, "_docs", {})):
+            try:
+                relative = Path(path).resolve().relative_to(root).as_posix()
+            except ValueError:
+                continue
+            diagnostics = client.diagnostics_for(path, fresh_only=True)
+            if diagnostics:
+                files.append({"path": relative, "count": len(diagnostics), "diagnostics": [
+                    {"line": d.get("range", {}).get("start", {}).get("line", 0) + 1,
+                     "column": d.get("range", {}).get("start", {}).get("character", 0) + 1,
+                     "severity": d.get("severity", 3), "code": d.get("code"),
+                     "message": d.get("message", "")}
+                    for d in diagnostics[:100]
+                ]})
+    files.sort(key=lambda item: item["path"].casefold())
+    return {"workspace": str(root), "available": True,
+            "count": sum(item["count"] for item in files), "files": files}
