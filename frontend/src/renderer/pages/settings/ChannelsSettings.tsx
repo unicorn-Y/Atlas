@@ -119,7 +119,7 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
     setInstallingDependency(channel);
     setDependencyState((current) => ({ ...current, [channel]: '正在使用当前 Atlas Python 安装依赖…' }));
     const progressTimer = window.setInterval(() => {
-      void api<{ status: string; message: string }>(apiBaseUrl, '/api/channels/dependencies/status')
+      void api<{ status: string; channel?: string | null; message: string }>(apiBaseUrl, '/api/channels/dependencies/status')
         .then((status) => { if (status.channel === channel && status.message) setDependencyState((current) => ({ ...current, [channel]: status.message })); })
         .catch(() => undefined);
     }, 700);
