@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Captions, MessageSquareText, MicOff, PhoneOff, Hand, RotateCcw } from 'lucide-react';
-import { api } from '../services/api';
 
 type Phase = 'listening' | 'thinking' | 'speaking' | 'paused' | 'unavailable';
 
@@ -60,8 +59,7 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
     if (recognitionRef.current && recognitionRef.current.socket.readyState <= WebSocket.OPEN) return;
     void (async () => {
       try {
-        const status = await api<{ ready: boolean; message?: string }>(apiBaseUrl, '/api/asr/status');
-        if (!status.ready) { setProblem(status.message || '请先准备本地语音识别模型。'); setPhase('unavailable'); return; }
+        setProblem('首次使用会自动下载本地语音模型，请保持 Atlas 在线。');
         const inputDevice = localStorage.getItem('atlas.audio.input-device') || '';
         const stream = await navigator.mediaDevices.getUserMedia({ audio: { ...(inputDevice ? { deviceId: { exact: inputDevice } } : {}), channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
         const context = new AudioContext();
@@ -75,7 +73,10 @@ export default function VoiceOverlay({ apiBaseUrl, onClose, onSend, runId, reply
         const connectedAt = Date.now();
         socket.onmessage = (event) => {
           try {
-            const message = JSON.parse(String(event.data)) as { type?: string; text?: string; detail?: string };
+            const message = JSON.parse(String(event.data)) as { type?: string; text?: string; detail?: string; progress?: number };
+            if (message.type === 'preparing') setProblem(message.detail || '正在准备本地语音模型…');
+            if (message.type === 'progress') setProblem(`正在下载本地语音模型… ${Math.round((message.progress || 0) * 100)}%`);
+            if (message.type === 'ready') setProblem('本地语音模型已就绪，开始聆听。');
             if (message.type === 'partial') setHeard(message.text || '');
             if (message.type === 'final' && message.text?.trim() && !utteranceAcceptedRef.current && (phaseRef.current === 'listening' || phaseRef.current === 'speaking')) {
               utteranceAcceptedRef.current = true;

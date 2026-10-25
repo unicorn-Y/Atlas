@@ -1161,7 +1161,14 @@ ipcMain.handle('shell:open-path', async (event, target?: unknown) => {
 });
 ipcMain.handle('shell:open-external', async (event, target?: unknown) => {
   if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame || typeof target !== 'string') return false;
-  if (!['chrome://extensions', 'edge://extensions', 'ms-settings:network-proxy'].includes(target)
+  let dashboardUrl = false;
+  try {
+    const parsed = new URL(target);
+    dashboardUrl = parsed.protocol === 'http:' && parsed.hostname === '127.0.0.1'
+      && /^\d+$/.test(parsed.port) && parsed.pathname === '/dashboard'
+      && /^[A-Za-z0-9_-]{32,256}$/.test(parsed.hash.slice(1));
+  } catch { /* other explicitly supported schemes are checked below */ }
+  if (!dashboardUrl && !['chrome://extensions', 'edge://extensions', 'ms-settings:network-proxy'].includes(target)
       && !/^https:\/\/[a-z0-9.-]+(?:\/[^\s]*)?$/i.test(target)) return false;
   await shell.openExternal(target);
   return true;

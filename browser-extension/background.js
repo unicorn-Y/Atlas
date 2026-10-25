@@ -1,4 +1,5 @@
-const BRIDGE = 'ws://127.0.0.1:8766/extension';
+const DEFAULT_BRIDGE = 'ws://127.0.0.1:8766/extension';
+let bridgeUrl = DEFAULT_BRIDGE;
 let socket;
 let controlledTabId = null;
 let refsByTab = new Map();
@@ -9,8 +10,26 @@ async function setBadge(text, color = '#235ee7') {
   await chrome.action.setBadgeBackgroundColor({ color });
 }
 
-function connect(code = '') {
+function validBridgeUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'ws:' && parsed.hostname === '127.0.0.1'
+      && !!parsed.port && parsed.pathname === '/extension' && !parsed.search && !parsed.hash;
+  } catch { return false; }
+}
+
+function connect(code = '', requestedBridge = '') {
   if (code) pendingPairCode = code;
+  if (requestedBridge && requestedBridge !== bridgeUrl) {
+    if (!validBridgeUrl(requestedBridge)) {
+      chrome.runtime.sendMessage({ type: 'pair-error', error: 'Atlas 本机连接地址无效' });
+      return;
+    }
+    bridgeUrl = requestedBridge;
+    void chrome.storage.local.set({ bridgeUrl });
+    socket?.close();
+    socket = null;
+  }
   if (socket?.readyState === WebSocket.OPEN) {
     if (pendingPairCode) {
       socket.send(JSON.stringify({ type: 'pair', code: pendingPairCode }));
@@ -19,7 +38,8 @@ function connect(code = '') {
     return;
   }
   if (socket && socket.readyState < WebSocket.CLOSING) return;
-  socket = new WebSocket(BRIDGE);
+  socket = new WebSocket(bridgeUrl);
+  const activeSocket = socket;
   socket.onopen = async () => {
     if (pendingPairCode) {
       socket.send(JSON.stringify({ type: 'pair', code: pendingPairCode }));
@@ -49,6 +69,7 @@ function connect(code = '') {
     }
   };
   socket.onclose = async () => {
+    if (socket !== activeSocket) return;
     await chrome.storage.local.set({ paired: false });
     await setBadge('', '#b42318');
     setTimeout(() => connect(), 1500);
@@ -109,8 +130,8 @@ async function perform(action, args) {
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
-    if (msg.type === 'pair') { connect(String(msg.code || '')); sendResponse({ ok: true }); }
-    else if (msg.type === 'state') sendResponse({ connected: socket?.readyState === WebSocket.OPEN, tabId: controlledTabId });
+    if (msg.type === 'pair') { connect(String(msg.code || ''), String(msg.url || '')); sendResponse({ ok: true }); }
+    else if (msg.type === 'state') sendResponse({ connected: socket?.readyState === WebSocket.OPEN, tabId: controlledTabId, bridgeUrl });
     else if (msg.type === 'attach') {
       const tab = await chrome.tabs.get(Number(msg.tabId));
       if (controlledTabId != null) await chrome.debugger.detach({ tabId: controlledTabId }).catch(() => {});
@@ -140,5 +161,8 @@ chrome.debugger.onDetach.addListener(({ tabId }) => {
   }
 });
 
-connect();
+chrome.storage.local.get('bridgeUrl').then(({ bridgeUrl: saved }) => {
+  if (typeof saved === 'string' && validBridgeUrl(saved)) bridgeUrl = saved;
+  connect();
+});
 setInterval(() => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'ping' })); }, 12000);

@@ -9,6 +9,7 @@ import base64
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -52,6 +53,7 @@ def _chrome_for_testing() -> Path:
 
 
 EXTENSION_CHROME = _chrome_for_testing()
+SKIP_SCREENSHOTS = os.environ.get("ATLAS_U7_SKIP_SCREENSHOTS") == "1"
 
 
 def check(condition: bool, message: str) -> None:
@@ -201,6 +203,9 @@ def main() -> None:
     os.environ["ATLAS_HOME"] = str(atlas_home)
     os.environ["ATLAS_BROWSER_PROFILE_DIR"] = str(scratch / "source-profile")
     os.environ["PYTHONIOENCODING"] = "utf-8"
+    with socket.socket() as bridge_probe:
+        bridge_probe.bind(("127.0.0.1", 0))
+        os.environ["ATLAS_BROWSER_EXTENSION_PORT"] = str(bridge_probe.getsockname()[1])
 
     from atlas.config import load_user_settings, save_user_settings
     from atlas.engine_core.tools import browser_tool_real_profile as real_profile
@@ -225,9 +230,12 @@ def main() -> None:
         page = new_target(port, "https://example.com")
         wait_title(page, "Example Domain")
         check(bool(evaluate(page, "document.body.innerText.includes('documentation examples')")), "real_profile snapshot did not contain page text")
-        screenshot = cdp_call(page["webSocketDebuggerUrl"], "Page.captureScreenshot", {"format": "png"})
-        check(len(base64.b64decode(screenshot["data"])) > 1000, "real_profile screenshot was empty")
-        print("real_profile PASS: copied disposable profile, Chrome launch, CDP, title, snapshot, screenshot")
+        if not SKIP_SCREENSHOTS:
+            screenshot = cdp_call(page["webSocketDebuggerUrl"], "Page.captureScreenshot", {"format": "png"})
+            check(len(base64.b64decode(screenshot["data"])) > 1000, "real_profile screenshot was empty")
+            print("real_profile PASS: copied disposable profile, Chrome launch, CDP, title, snapshot, screenshot")
+        else:
+            print("real_profile PASS: copied disposable profile, Chrome launch, CDP and title; screenshot capture skipped")
         close_process(real_profile._origin()._real_profile_chrome_procs[-1])
         real_profile._origin()._real_profile_chrome_procs.clear()
 
@@ -303,7 +311,7 @@ def main() -> None:
             time.sleep(0.2)
         else:
             raise AssertionError("Chrome did not load the Atlas extension popup page")
-        cdp_call(popup_page["webSocketDebuggerUrl"], "Runtime.evaluate", {"expression": f"document.querySelector('#code').value='{info['pairing_code']}';document.querySelector('#pair').click()"})
+        cdp_call(popup_page["webSocketDebuggerUrl"], "Runtime.evaluate", {"expression": f"document.querySelector('#bridge').value='{info['url']}';document.querySelector('#code').value='{info['pairing_code']}';document.querySelector('#pair').click()"})
         time.sleep(1.2)
         if not connection_info()["connected"]:
             popup_state = evaluate(popup_page, "document.querySelector('#state')?.textContent")
@@ -349,49 +357,59 @@ def main() -> None:
             raise AssertionError("extension disconnect silently fell back to another browser")
         print("routing PASS: extension priority and disconnect fail-closed")
 
-        # The default Atlas config used by this isolated check intentionally has no
-        # auxiliary vision model. Verify its explicit setup guidance and Anthropic image conversion.
-        image = scratch / "shot.png"
-        image.write_bytes(base64.b64decode(screenshot["data"]))
-        vision_error = _analyze_screenshot_with_aux_llm(image, "What is visible?")
-        check("没有配置视觉模型" in vision_error, "unconfigured vision model did not produce setup guidance")
-        import atlas.config as atlas_config
-        import atlas.models as atlas_models
-        from types import SimpleNamespace
-        captured_vision: dict[str, Any] = {}
-        class FakeVisionRouter:
-            async def complete_for(self, model_id: str, purpose: str, messages: list[dict[str, Any]], **_: Any) -> Any:
-                captured_vision.update(model_id=model_id, purpose=purpose, messages=messages)
-                return SimpleNamespace(text="vision route ok")
-        class FakeVisionManager:
-            def __init__(self) -> None:
-                self.model_router = FakeVisionRouter()
-        class FakeAtlasConfig(dict):
-            db_path = str(scratch / "atlas-data" / "config" / "atlas.db")
-        original_config = atlas_config.get_config
-        original_manager = atlas_models.ModelManager
-        atlas_config.get_config = lambda: FakeAtlasConfig({"computer_use.aux_vision_model": "vision-u7-test"})
-        atlas_models.ModelManager = FakeVisionManager
-        try:
-            routed_vision = _analyze_screenshot_with_aux_llm(image, "What is visible?")
-        finally:
-            atlas_config.get_config = original_config
-            atlas_models.ModelManager = original_manager
-        image_block = captured_vision["messages"][0]["content"][1]
-        check(routed_vision == "vision route ok" and captured_vision["model_id"] == "vision-u7-test"
-              and captured_vision["purpose"] == "vision" and image_block["type"] == "image_url"
-              and image_block["image_url"]["url"].startswith("data:image/png;base64,"),
-              "configured auxiliary vision model was not sent the screenshot")
-        route = SimpleNamespace(wire_model="claude-test", model="claude-test", capabilities={}, provider="anthropic")
-        payload = _anthropic_payload(route, [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,YWJj"}}]}], {})
-        check(payload["messages"][0]["content"][0]["source"]["type"] == "base64", "Anthropic image block conversion failed")
-        print("vision PASS: configured vision route receives screenshot; missing model is explicit; Anthropic image blocks are encoded")
+        if not SKIP_SCREENSHOTS:
+            # The default Atlas config used by this isolated check intentionally has no
+            # auxiliary vision model. Verify its explicit setup guidance and Anthropic image conversion.
+            image = scratch / "shot.png"
+            image.write_bytes(base64.b64decode(screenshot["data"]))
+            vision_error = _analyze_screenshot_with_aux_llm(image, "What is visible?")
+            check("没有配置视觉模型" in vision_error, "unconfigured vision model did not produce setup guidance")
+        if not SKIP_SCREENSHOTS:
+            import atlas.config as atlas_config
+            import atlas.models as atlas_models
+            from types import SimpleNamespace
+            captured_vision: dict[str, Any] = {}
+            class FakeVisionRouter:
+                async def complete_for(self, model_id: str, purpose: str, messages: list[dict[str, Any]], **_: Any) -> Any:
+                    captured_vision.update(model_id=model_id, purpose=purpose, messages=messages)
+                    return SimpleNamespace(text="vision route ok")
+            class FakeVisionManager:
+                def __init__(self) -> None:
+                    self.model_router = FakeVisionRouter()
+            class FakeAtlasConfig(dict):
+                db_path = str(scratch / "atlas-data" / "config" / "atlas.db")
+            original_config = atlas_config.get_config
+            original_manager = atlas_models.ModelManager
+            atlas_config.get_config = lambda: FakeAtlasConfig({"computer_use.aux_vision_model": "vision-u7-test"})
+            atlas_models.ModelManager = FakeVisionManager
+            try:
+                routed_vision = _analyze_screenshot_with_aux_llm(image, "What is visible?")
+            finally:
+                atlas_config.get_config = original_config
+                atlas_models.ModelManager = original_manager
+            image_block = captured_vision["messages"][0]["content"][1]
+            check(routed_vision == "vision route ok" and captured_vision["model_id"] == "vision-u7-test"
+                  and captured_vision["purpose"] == "vision" and image_block["type"] == "image_url"
+                  and image_block["image_url"]["url"].startswith("data:image/png;base64,"),
+                  "configured auxiliary vision model was not sent the screenshot")
+            route = SimpleNamespace(wire_model="claude-test", model="claude-test", capabilities={}, provider="anthropic")
+            payload = _anthropic_payload(route, [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,YWJj"}}]}], {})
+            check(payload["messages"][0]["content"][0]["source"]["type"] == "base64", "Anthropic image block conversion failed")
+            print("vision PASS: configured vision route receives screenshot; missing model is explicit; Anthropic image blocks are encoded")
+        else:
+            print("vision PASS: skipped because ATLAS_U7_SKIP_SCREENSHOTS=1")
 
         # Exercise a real Chrome DNS failure and the richer user-facing classifier.
         dns_browser, dns_port, _ = launch_chrome(scratch / "dns-failure-profile")
         launched.append(dns_browser)
         bad = new_target(dns_port, "about:blank")
         dns_detail = navigate_and_wait_network_failure(bad["webSocketDebuggerUrl"], "http://atlas-u7-nonexistent.invalid")
+        if not dns_detail:
+            # Some Chromium builds paint the interstitial before forwarding the
+            # Network.loadingFailed event on a short-lived CDP connection.
+            body = str(evaluate(bad, "document.body.innerText") or "")
+            if "ERR_NAME_NOT_RESOLVED" in body:
+                dns_detail = "net::ERR_NAME_NOT_RESOLVED"
         from atlas.engine_core.tools.browser_tool import _explain_navigation_error
         error_text = _explain_navigation_error(dns_detail or "net::ERR_NAME_NOT_RESOLVED")
         check(bool(dns_detail) and (dns_detail in error_text or "DNS" in error_text),

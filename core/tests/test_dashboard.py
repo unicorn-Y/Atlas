@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import json
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -84,11 +85,18 @@ def test_dashboard_cli_attaches_to_existing_server_and_does_not_stop_it(monkeypa
     from atlas.cli import main
 
     monkeypatch.setattr(dashboard_access, "control_path", lambda: tmp_path / "dashboard.json")
-    monkeypatch.setattr("atlas.cli._daemon_request", lambda *args, **kwargs: SimpleNamespace(is_success=True))
+    def request(method, path, *_args, **_kwargs):
+        if method == "POST":
+            client = TestClient(dashboard_app(), client=("127.0.0.1", 50000), base_url="http://127.0.0.1:18765")
+            response = client.post(path)
+            return SimpleNamespace(is_success=response.is_success, status_code=response.status_code, json=response.json)
+        return SimpleNamespace(is_success=True)
+    monkeypatch.setattr("atlas.cli._daemon_request", request)
     runner = CliRunner()
     started = runner.invoke(main, ["dashboard", "start", "--port", "18765"])
     assert started.exit_code == 0, started.output
     assert "http://127.0.0.1:18765/dashboard#" in started.output
+    assert "PID= " not in started.output
     token_record = (tmp_path / "dashboard.json").read_text(encoding="utf-8")
     assert "token_hash" in token_record
     bearer = started.output.split("/dashboard#", 1)[1].split()[0]
@@ -100,6 +108,25 @@ def test_dashboard_cli_attaches_to_existing_server_and_does_not_stop_it(monkeypa
     assert not (tmp_path / "dashboard.json").exists()
 
 
+def test_running_backend_creates_dashboard_token_in_its_data_root(monkeypatch, tmp_path):
+    from atlas import dashboard_access
+
+    monkeypatch.setattr(dashboard_access, "control_path", lambda: tmp_path / "backend" / "dashboard.json")
+    client = TestClient(dashboard_app(), client=("127.0.0.1", 50000), base_url="http://127.0.0.1:18765")
+    created = client.post("/api/dashboard/access")
+    assert created.status_code == 200
+    access = created.json()
+    assert access["url"].startswith("http://127.0.0.1:18765/dashboard#")
+    record = json.loads((tmp_path / "backend" / "dashboard.json").read_text(encoding="utf-8"))
+    assert access["pid"] == record["pid"]
+    assert access["url"].rsplit("#", 1)[1] not in json.dumps(record)
+    headers = {"x-atlas-dashboard-token": access["url"].rsplit("#", 1)[1]}
+    assert client.get("/api/dashboard/status", headers=headers).json()["status"] == "ready"
+    assert client.post("/api/dashboard/access", headers={"Origin": "https://evil.example"}).status_code == 200
+    remote = TestClient(dashboard_app(), client=("192.0.2.5", 50000), base_url="http://127.0.0.1:18765")
+    assert remote.post("/api/dashboard/access").status_code == 403
+
+
 def test_dashboard_cli_starts_and_stops_only_its_loopback_server(monkeypatch, tmp_path):
     import httpx
 
@@ -108,11 +135,23 @@ def test_dashboard_cli_starts_and_stops_only_its_loopback_server(monkeypatch, tm
 
     monkeypatch.setattr(dashboard_access, "control_path", lambda: tmp_path / "dashboard.json")
     invocations: list[tuple[str, str, int]] = []
+    stopped = False
 
     def request(method, path, port, **kwargs):
+        nonlocal stopped
         invocations.append((method, path, port))
-        if method == "GET" and len(invocations) in (1, 4):
+        if method == "GET" and (len(invocations) == 1 or stopped):
             raise httpx.ConnectError("offline")
+        if method == "POST" and path == "/api/runtime/shutdown":
+            stopped = True
+            return SimpleNamespace(is_success=True)
+        if method == "POST":
+            token, info = dashboard_access.create_access(port=port, pid=4321, owns_server=True,
+                                                         shutdown_token="test-shutdown")
+            return SimpleNamespace(is_success=True, json=lambda: {
+                "url": f"http://127.0.0.1:{port}/dashboard#{token}", "pid": info["pid"],
+                "expires_at": info["expires_at"],
+            })
         return SimpleNamespace(is_success=True)
 
     class Process:

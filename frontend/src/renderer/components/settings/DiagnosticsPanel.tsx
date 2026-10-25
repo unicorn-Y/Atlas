@@ -43,6 +43,7 @@ export default function DiagnosticsPanel({ apiBaseUrl, workspacePath = '' }: { a
   const [message, setMessage] = useState<string | null>(null);
   const [modelProbe, setModelProbe] = useState<{ ok: boolean; message: string } | null>(null);
   const [probingModel, setProbingModel] = useState(false);
+  const [openingDashboard, setOpeningDashboard] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
@@ -75,6 +76,18 @@ export default function DiagnosticsPanel({ apiBaseUrl, workspacePath = '' }: { a
     catch (reason) { setModelProbe({ ok: false, message: reason instanceof Error ? reason.message : String(reason) }); }
     finally { setProbingModel(false); }
   };
+  const openDashboard = async () => {
+    setOpeningDashboard(true);
+    setError(null);
+    try {
+      const access = await api<{ url: string }>(apiBaseUrl, '/api/dashboard/access', { method: 'POST', json: {} });
+      const opened = await window.atlasDesktop?.openExternal?.(access.url);
+      if (!opened) throw new Error('系统浏览器未能打开本地控制台网址。');
+      setMessage('已在系统浏览器打开本地控制台。');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally { setOpeningDashboard(false); }
+  };
   const advice = (check: DiagnosticCheck) => {
     if (check.status === 'ok') return '';
     if (check.id === 'backend') return '建议重启 Atlas 后端并查看启动日志。';
@@ -90,9 +103,14 @@ export default function DiagnosticsPanel({ apiBaseUrl, workspacePath = '' }: { a
   return <><section className={styles.settingsCard} aria-label="诊断报告">
     <div className={styles.settingsCardHeading}>
       <h2>本机诊断</h2>
-      <button className={styles.settingsActionSecondary} type="button" disabled={loading} onClick={() => void refresh()}>
-        {loading ? '检查中…' : '刷新检查'}
-      </button>
+      <div className="flex gap-2">
+        <button className={styles.settingsActionSecondary} type="button" disabled={openingDashboard} onClick={() => void openDashboard()}>
+          {openingDashboard ? '正在打开…' : '打开本地控制台'}
+        </button>
+        <button className={styles.settingsActionSecondary} type="button" disabled={loading} onClick={() => void refresh()}>
+          {loading ? '检查中…' : '刷新检查'}
+        </button>
+      </div>
     </div>
     <p>诊断报告只读取本机后端状态和配置文件格式，不上传报告。密钥、令牌、配置内容和本机路径不会写入报告。单独点击模型连通性测试时，会向当前模型发送一条短测试请求。</p>
     {error && <p className={styles.settingsError} role="alert">{error}</p>}

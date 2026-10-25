@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import os
 from typing import Annotated, Any
 from pathlib import Path
 
@@ -17,6 +18,31 @@ from atlas.dashboard_access import read_control, token_valid
 from atlas.config import PROJECT_ROOT
 
 router = APIRouter()
+
+
+@router.post("/api/dashboard/access")
+async def create_dashboard_access(request: Request) -> dict[str, Any]:
+    """Create a browser token in the running backend's own data directory.
+
+    The CLI can attach to an already-running Atlas process whose DATA_ROOT differs
+    from the CLI's environment. Creating the token here keeps the read path and
+    write path in the same service process.
+    """
+    if not _is_loopback(request):
+        raise HTTPException(status_code=403, detail="Dashboard is available only from loopback")
+    from atlas.dashboard_access import create_access
+
+    host = request.url.hostname or "127.0.0.1"
+    port = request.url.port or 8765
+    shutdown_token = os.environ.get("ATLAS_SHUTDOWN_TOKEN", "")
+    token, info = create_access(
+        port=port, pid=os.getpid(), owns_server=bool(shutdown_token),
+        shutdown_token=shutdown_token,
+    )
+    return {
+        "url": f"http://{host}:{port}/dashboard#{token}",
+        "pid": info["pid"], "expires_at": info["expires_at"],
+    }
 
 
 def _require_dashboard_access(request: Request) -> None:

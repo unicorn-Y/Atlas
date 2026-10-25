@@ -15,6 +15,8 @@ import time
 import urllib.request
 import wave
 import io
+import os
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +25,7 @@ from atlas.config import get_config
 MODEL_NAME = "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09"
 MODEL_URL = f"https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/{MODEL_NAME}.tar.bz2"
 VAD_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx"
+FFMPEG_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 
 
 def filter_transcription(text: str) -> str:
@@ -45,31 +48,91 @@ class ASRManager:
         self._last_used = 0.0
         self._pending: list[float] = []
         self._partial_at = 0
+        self._download_lock = asyncio.Lock()
+        self.ffmpeg_progress = 0.0
+        self.ffmpeg_detail = ""
 
     def status(self) -> dict[str, Any]:
         model = self.root / MODEL_NAME
         ready = (model / "model.int8.onnx").is_file() and (model / "tokens.txt").is_file() and (self.root / "silero_vad.onnx").is_file()
         if self._recognizer is not None and time.monotonic() - self._last_used > 600:
             self._recognizer = self._vad = None
+        ffmpeg = self._ffmpeg_path()
+        ffmpeg_ready = ffmpeg.is_file() or shutil.which("ffmpeg") is not None
         return {"ready": ready, "model": MODEL_NAME if ready else None,
                 "downloading": self.downloading, "progress": round(self.progress, 3),
-                "detail": self.detail}
+                "detail": self.detail, "ffmpeg_ready": ffmpeg_ready,
+                "ffmpeg_progress": round(self.ffmpeg_progress, 3), "ffmpeg_detail": self.ffmpeg_detail}
 
     async def download(self) -> None:
-        if self.downloading:
-            return
-        self.downloading = True
-        self.progress = 0.0
-        self.detail = "正在下载 SenseVoice 和 Silero VAD。"
+        async with self._download_lock:
+            if self.status()["ready"]:
+                return
+            self.downloading = True
+            self.progress = 0.0
+            self.detail = f"正在从 sherpa-onnx 官方发布下载 {MODEL_NAME} 和 Silero VAD。"
+            try:
+                await asyncio.to_thread(self._download)
+                self.progress = 1.0
+                self.detail = "本地 SenseVoice 和 Silero VAD 模型已准备就绪。"
+            except Exception as exc:
+                self.detail = f"模型下载失败（{MODEL_URL}）：{type(exc).__name__}: {exc}"
+                raise RuntimeError(self.detail) from exc
+            finally:
+                self.downloading = False
+
+    def _ffmpeg_path(self) -> Path:
+        executable = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
+        return self.root / "ffmpeg" / executable
+
+    async def ensure_ffmpeg(self) -> Path:
+        path = self._ffmpeg_path()
+        if path.is_file():
+            return path
+        system_ffmpeg = shutil.which("ffmpeg")
+        if system_ffmpeg:
+            return Path(system_ffmpeg)
+        if os.name != "nt":
+            raise RuntimeError("未找到 ffmpeg；当前系统的自动下载源仅支持 Windows 静态构建")
+        self.ffmpeg_detail = "正在从 gyan.dev 下载 Windows FFmpeg essentials 静态构建。"
+        self.ffmpeg_progress = 0.0
         try:
-            await asyncio.to_thread(self._download)
-            self.progress = 1.0
-            self.detail = "本地语音模型已准备就绪。"
+            await asyncio.to_thread(self._download_ffmpeg)
+            self.ffmpeg_progress = 1.0
+            self.ffmpeg_detail = f"ffmpeg 已缓存到 {path}。"
+            return path
         except Exception as exc:
-            self.detail = f"模型下载失败：{exc}"
-            raise
+            self.ffmpeg_detail = f"ffmpeg 下载失败（{FFMPEG_URL}）：{type(exc).__name__}: {exc}"
+            raise RuntimeError(self.ffmpeg_detail) from exc
+
+    def _download_ffmpeg(self) -> None:
+        destination = self.root / "ffmpeg"
+        destination.mkdir(parents=True, exist_ok=True)
+        archive = destination / "ffmpeg-release-essentials.zip.part"
+        try:
+            with urllib.request.urlopen(FFMPEG_URL, timeout=60) as response, archive.open("wb") as output:
+                total = int(response.headers.get("Content-Length", "0"))
+                done = 0
+                while block := response.read(1024 * 1024):
+                    done += len(block)
+                    if done > 600 * 1024 * 1024:
+                        raise ValueError("FFmpeg archive exceeds the 600 MiB download limit")
+                    output.write(block)
+                    self.ffmpeg_progress = done / total if total else 0.0
+            with zipfile.ZipFile(archive) as bundle:
+                candidates = [item for item in bundle.infolist()
+                              if item.filename.lower().endswith("/bin/ffmpeg.exe")]
+                if not candidates:
+                    raise ValueError("FFmpeg archive does not contain bin/ffmpeg.exe")
+                member = candidates[0]
+                if member.file_size <= 0 or member.file_size > 150 * 1024 * 1024:
+                    raise ValueError("FFmpeg executable has an invalid size")
+                temporary = destination / "ffmpeg.exe.part"
+                with bundle.open(member) as source, temporary.open("wb") as output:
+                    shutil.copyfileobj(source, output)
+                temporary.replace(destination / "ffmpeg.exe")
         finally:
-            self.downloading = False
+            archive.unlink(missing_ok=True)
 
     def _download(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -141,19 +204,21 @@ class ASRManager:
             raise ValueError("音频附件为空或超过 25 MiB 限制")
         wav_payload = payload
         if not payload.startswith(b"RIFF") or payload[8:12] != b"WAVE":
-            ffmpeg = shutil.which("ffmpeg")
+            ffmpeg_path = self._ffmpeg_path()
+            ffmpeg = str(ffmpeg_path if ffmpeg_path.is_file() else shutil.which("ffmpeg") or "")
             if not ffmpeg:
-                raise ValueError("附件不是 WAV，且当前环境没有 ffmpeg（OGG/MP3 等格式无法解码）")
+                raise ValueError(f"附件不是 WAV 且 ffmpeg 不可用；请重试自动下载：{FFMPEG_URL}")
             try:
                 converted = subprocess.run(
                     [ffmpeg, "-nostdin", "-v", "error", "-i", "pipe:0", "-t", "600",
                      "-ac", "1", "-ar", "16000", "-f", "wav", "pipe:1"],
                     input=payload, capture_output=True, timeout=45, check=False,
+                    encoding="utf-8", errors="replace",
                 )
             except (OSError, subprocess.TimeoutExpired) as exc:
                 raise ValueError(f"音频格式转换失败：{type(exc).__name__}") from exc
             if converted.returncode != 0 or not converted.stdout:
-                detail = converted.stderr.decode("utf-8", errors="replace")[-500:]
+                detail = str(converted.stderr or "")[-500:]
                 raise ValueError(f"ffmpeg 无法解码音频：{detail or converted.returncode}")
             wav_payload = converted.stdout
         try:
@@ -188,6 +253,14 @@ class ASRManager:
         if not samples:
             raise ValueError("音频没有可识别的样本")
         return self._decode(samples)
+
+    async def transcribe_audio_bytes_async(self, payload: bytes) -> str:
+        """Prepare missing local runtime assets on first audio use, then recognize."""
+        if not self.status()["ready"]:
+            await self.download()
+        if not payload.startswith(b"RIFF") or payload[8:12] != b"WAVE":
+            await self.ensure_ffmpeg()
+        return await asyncio.to_thread(self.transcribe_audio_bytes, payload)
 
     def process_frame(self, pcm: bytes, *, final: bool = False) -> tuple[list[str], list[str]]:
         if self._recognizer is None or self._vad is None:

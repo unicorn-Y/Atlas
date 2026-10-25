@@ -31,6 +31,33 @@ def test_local_asr_converts_channel_wav_to_16000hz_mono(monkeypatch):
     assert observed[0] == pytest.approx(0)
 
 
+async def test_first_use_prepares_missing_model_and_ffmpeg_only_for_compressed_audio(monkeypatch):
+    manager = ASRManager()
+    prepared: list[str] = []
+    monkeypatch.setattr(manager, "status", lambda: {"ready": "model" in prepared})
+
+    async def download():
+        prepared.append("model")
+
+    async def ffmpeg():
+        prepared.append("ffmpeg")
+        return manager.root / "ffmpeg.exe"
+
+    def transcribe(payload: bytes) -> str:
+        assert payload.startswith(b"RIFF")
+        return "识别成功"
+
+    monkeypatch.setattr(manager, "download", download)
+    monkeypatch.setattr(manager, "ensure_ffmpeg", ffmpeg)
+    monkeypatch.setattr(manager, "transcribe_audio_bytes", transcribe)
+    assert await manager.transcribe_audio_bytes_async(wav_bytes(channels=1)) == "识别成功"
+    assert prepared == ["model"]
+    prepared.clear()
+    monkeypatch.setattr(manager, "transcribe_audio_bytes", lambda _payload: "压缩音频识别成功")
+    assert await manager.transcribe_audio_bytes_async(b"OggS compressed") == "压缩音频识别成功"
+    assert prepared == ["model", "ffmpeg"]
+
+
 async def test_audio_event_is_enriched_and_attachment_reference_remains(tmp_path):
     path = tmp_path / "voice.wav"
     path.write_bytes(wav_bytes(channels=1))

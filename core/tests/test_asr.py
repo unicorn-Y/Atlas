@@ -49,11 +49,32 @@ def test_asr_websocket_segments_partial_final_and_end(monkeypatch) -> None:
             return (["你好"] if data else []), []
 
     monkeypatch.setattr(server.app.state.services, "asr_manager", MockASR())
-    with TestClient(app).websocket_connect("/ws/asr") as websocket:
+    with TestClient(app, client=("127.0.0.1", 50000)).websocket_connect("/ws/asr") as websocket:
         websocket.send_bytes(b"\x00\x00")
         assert websocket.receive_json() == {"type": "partial", "text": "你好"}
         websocket.send_json({"type": "end"})
         assert websocket.receive_json() == {"type": "final", "text": "你好，Atlas"}
+        assert websocket.receive_json() == {"type": "ended"}
+
+
+def test_asr_websocket_prepares_model_on_first_use(monkeypatch) -> None:
+    class MockASR:
+        ready = False
+
+        def status(self):
+            return {"ready": self.ready, "progress": 1.0 if self.ready else 0.0}
+
+        async def download(self):
+            self.ready = True
+
+        def process_frame(self, data: bytes, *, final: bool = False):
+            return [], []
+
+    monkeypatch.setattr(server.app.state.services, "asr_manager", MockASR())
+    with TestClient(app, client=("127.0.0.1", 50000)).websocket_connect("/ws/asr") as websocket:
+        assert websocket.receive_json()["type"] == "preparing"
+        assert websocket.receive_json()["type"] == "ready"
+        websocket.send_json({"type": "end"})
         assert websocket.receive_json() == {"type": "ended"}
 
 

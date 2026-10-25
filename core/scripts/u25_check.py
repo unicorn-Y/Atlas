@@ -41,6 +41,20 @@ def main() -> int:
             print("U25 CHECK FAIL", flush=True)
             return result.returncode
         print(f"U25 scene passed: {title}", flush=True)
+    print("U25 scene: live backend + CLI dashboard token and data read with separate DATA_ROOTs", flush=True)
+    live = subprocess.run(
+        [sys.executable, str(CORE / "scripts" / "u25_dashboard_live.py")], cwd=ROOT,
+        env=os.environ.copy(), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+    )
+    if live.stdout:
+        print(live.stdout, end="" if live.stdout.endswith("\n") else "\n")
+    if live.stderr:
+        print(live.stderr, end="" if live.stderr.endswith("\n") else "\n", file=sys.stderr)
+    if live.returncode:
+        print("U25 live dashboard scene failed", flush=True)
+        print("U25 CHECK FAIL", flush=True)
+        return live.returncode
+    print("U25 scene passed: live backend + CLI dashboard token and data read with separate DATA_ROOTs", flush=True)
     print("External services use fake/local adapters; no real SSH host or Electron process was started.", flush=True)
     print("U25 CHECK PASS", flush=True)
     return 0

@@ -296,7 +296,7 @@ def dashboard_start(port: int | None) -> None:
     import subprocess
     import time
     from atlas.config import get_config
-    from atlas.dashboard_access import create_access, read_control
+    from atlas.dashboard_access import read_control
 
     selected_port = port or get_config().server_port
     control = _dashboard_control_file()
@@ -334,10 +334,18 @@ def dashboard_start(port: int | None) -> None:
         else:
             raise click.ClickException(f"Atlas dashboard backend failed to start; see {log_path}")
 
-    token, info = create_access(port=selected_port, pid=pid, owns_server=owns_server, shutdown_token=shutdown_token)
-    url = f"http://127.0.0.1:{selected_port}/dashboard#{token}"
-    console.print(f"本地控制台已启动：{url}")
-    console.print(f"PID={info['pid']} · 仅 loopback · 访问令牌有效至 {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(info['expires_at']))}")
+    # Provision on the live backend: it may use a different DATA_ROOT from this
+    # CLI process, and that backend is the process which validates the token.
+    try:
+        access = _daemon_request("POST", "/api/dashboard/access", selected_port, timeout=5.0)
+        if not access.is_success:
+            detail = access.json().get("detail", f"HTTP {access.status_code}")
+            raise click.ClickException(f"无法启用本地控制台：{detail}")
+        details = access.json()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"无法连接 Atlas 后端以启用本地控制台：{type(exc).__name__}") from exc
+    click.echo(f"本地控制台已启动：{details['url']}")
+    click.echo(f"PID={details['pid']} · 仅 loopback · 访问令牌有效至 {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(details['expires_at']))}")
 
 
 @dashboard_group.command("status")

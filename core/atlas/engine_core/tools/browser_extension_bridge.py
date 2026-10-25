@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import secrets
 import threading
 import time
@@ -20,7 +21,7 @@ _SOCKET: Any = None
 _PENDING: dict[str, Future] = {}
 _SERVER_THREAD: threading.Thread | None = None
 _LAST_SEEN = 0.0
-_PORT = 8766
+_PORT = int(os.environ.get("ATLAS_BROWSER_EXTENSION_PORT", "8766"))
 
 
 def _browser_settings() -> dict[str, Any]:

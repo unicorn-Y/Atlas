@@ -980,8 +980,7 @@ export default function App() {
     }
     if (!navigator.mediaDevices?.getUserMedia) { setToast('当前环境无法访问麦克风'); return; }
     try {
-      const status = await api<{ ready: boolean; message?: string }>(store.apiBaseUrl, '/api/asr/status');
-      if (!status.ready) { setToast(status.message || '请先在语音设置中准备本地识别模型'); return; }
+      setToast('正在连接本地语音识别；首次使用会自动下载模型并显示进度');
       const inputDevice = localStorage.getItem('atlas.audio.input-device') || '';
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { ...(inputDevice ? { deviceId: { exact: inputDevice } } : {}), channelCount: 1, echoCancellation: true, noiseSuppression: true } });
       const context = new AudioContext();
@@ -998,6 +997,9 @@ export default function App() {
           const message = JSON.parse(String(event.data)) as { type?: string; text?: string; detail?: string };
           if (message.type === 'final' && message.text) { session.finalText += `${session.finalText ? ' ' : ''}${message.text}`; render(); }
           else if (message.type === 'partial') render(message.text || '');
+          else if (message.type === 'preparing') setToast(message.detail || '正在准备本地语音模型…');
+          else if (message.type === 'progress') setToast(`正在下载语音模型… ${Math.round(Number(message.progress || 0) * 100)}%`);
+          else if (message.type === 'ready') setToast('本地语音模型已就绪');
           else if (message.type === 'error') setToast(message.detail || '本地语音识别失败');
         } catch { /* ignore malformed ASR event */ }
       };
@@ -1048,8 +1050,7 @@ export default function App() {
       if (starting || !active || voiceOpen) return;
       starting = true;
       try {
-        const status = await api<{ ready: boolean }>(store.apiBaseUrl, '/api/asr/status');
-        if (!status.ready || !active) return;
+        if (!active) return;
         const device = localStorage.getItem('atlas.audio.input-device') || '';
         const stream = await navigator.mediaDevices.getUserMedia({ audio: { ...(device ? { deviceId: { exact: device } } : {}), channelCount: 1, echoCancellation: true, noiseSuppression: true } });
         const context = new AudioContext(); const source = context.createMediaStreamSource(stream); const processor = context.createScriptProcessor(4096, 1, 1);
@@ -1057,7 +1058,9 @@ export default function App() {
         const socket = new WebSocket(url); const session = { socket, stream, context, processor }; wakeSessionRef.current = session;
         socket.onmessage = (event) => {
           try {
-            const message = JSON.parse(String(event.data)) as { type?: string; text?: string };
+            const message = JSON.parse(String(event.data)) as { type?: string; text?: string; progress?: number; detail?: string };
+            if (message.type === 'error') { setToast(message.detail || '本地唤醒词模型准备失败'); return; }
+            if (message.type === 'progress') { setToast(`正在准备本地唤醒识别… ${Math.round(Number(message.progress || 0) * 100)}%`); return; }
             if (message.type !== 'final' || !message.text) return;
             setWakeTranscript(message.text);
             const normalize = (value: string) => value.toLocaleLowerCase().replace(/[\s，。！？,.!?]/g, '');

@@ -456,9 +456,18 @@ async def asr_websocket(
     await websocket.accept()
     asr_manager = _get_asr_manager(services)
     if not asr_manager.status()["ready"]:
-        await websocket.send_json({"type": "error", "detail": "请先下载本地语音模型。"})
-        await websocket.close(code=1013)
-        return
+        await websocket.send_json({"type": "preparing", "detail": "首次使用正在自动下载并准备本地 SenseVoice 语音模型。"})
+        preparation = asyncio.create_task(asr_manager.download())
+        while not preparation.done():
+            await websocket.send_json({"type": "progress", **asr_manager.status()})
+            await asyncio.sleep(0.5)
+        try:
+            await preparation
+        except Exception as exc:  # noqa: BLE001 — preserve transport detail for a recoverable user error
+            await websocket.send_json({"type": "error", "detail": str(exc)})
+            await websocket.close(code=1013)
+            return
+        await websocket.send_json({"type": "ready", **asr_manager.status()})
     try:
         while True:
             packet = await websocket.receive()
