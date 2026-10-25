@@ -156,9 +156,11 @@ export interface MessageThreadProps {
   setTab: (tab: InspectorTab) => void;
   /** X2 交接卡「在浏览器面板打开」：带网址打开浏览器面板。 */
   onOpenBrowser?: (url: string) => void;
+  focusMode?: boolean;
+  focusSummary?: string;
 }
 
-export default function MessageThread({ history, componentSelections = {}, username, historyActions, emptyState, footerNote, threadRef, setTab, onOpenBrowser }: MessageThreadProps) {
+export default function MessageThread({ history, componentSelections = {}, username, historyActions, emptyState, footerNote, threadRef, setTab, onOpenBrowser, focusMode = false, focusSummary = '' }: MessageThreadProps) {
   // 窄选择器：只有当前会话的运行事件/正文变化才重渲染这里，别的会话流式输出不打扰。
   const conversationId = useAtlasStore((state) => state.activeConversationId);
   const events = useAtlasStore((state) => state.runs.find((run) => run.id === state.activeRunId)?.events ?? EMPTY_EVENTS);
@@ -203,7 +205,15 @@ export default function MessageThread({ history, componentSelections = {}, usern
     return () => window.removeEventListener('atlas:jump-message', onJump);
   }, []);
 
-  const timelineItems = useMemo(() => buildTimeline(events), [events]);
+  const timelineItems = useMemo(() => {
+    const items = buildTimeline(events);
+    if (!focusMode || !working) return focusMode ? [] : items;
+    const compact: TimelineItem[] = items.filter((item) => item.kind === 'user' || item.kind === 'reply');
+    const userIndex = compact.reduce((found, item, index) => item.kind === 'user' ? index : found, -1);
+    const insertAt = compact.findIndex((item, index) => index > userIndex && item.kind === 'reply');
+    compact.splice(insertAt < 0 ? compact.length : insertAt, 0, { kind: 'notice', id: 'focus-summary', tone: 'switch', text: focusSummary || '正在处理当前请求' });
+    return compact;
+  }, [events, focusMode, working, focusSummary]);
   // The placeholder only covers the gap before anything streams; once thinking text arrives the
   // reasoning row takes over (keeping both stacked them on top of each other).
   const thinking = working && !events.some((event) => event.type === 'message.delta' || event.type === 'tool.started' || event.type === 'tool.preparing'
@@ -214,8 +224,8 @@ export default function MessageThread({ history, componentSelections = {}, usern
 
   const rows = useMemo<ThreadRow[]>(() => {
     const rows: ThreadRow[] = [];
-    if (hasEarlier) rows.push({ kind: 'load-earlier', id: 'load-earlier' });
-    if (truncatedCount > 0) rows.push({ kind: 'truncated', id: 'truncated', count: truncatedCount });
+    if (hasEarlier && !focusMode) rows.push({ kind: 'load-earlier', id: 'load-earlier' });
+    if (truncatedCount > 0 && !focusMode) rows.push({ kind: 'truncated', id: 'truncated', count: truncatedCount });
     // Stored turns: text replies stay messages; tool calls and their results fold into the same
     // compact step track the live view uses, so reopened chats don't show empty "Atlas" headers.
     let historyHeaded = false;
@@ -311,7 +321,7 @@ export default function MessageThread({ history, componentSelections = {}, usern
       rows.push({ kind: 'timeline', id: `t-${item.id}`, item, firstInTurn, last: index === timelineItems.length - 1 });
     }
     return rows;
-  }, [history, componentSelections, loading, timelineItems, hasEarlier, truncatedCount]);
+  }, [history, componentSelections, loading, timelineItems, hasEarlier, truncatedCount, focusMode]);
 
   const hasReasoning = rows.some((row) => row.kind === 'timeline' && row.item.kind === 'reasoning' && row.item.text.trim().length > 0);
 
@@ -581,12 +591,12 @@ export default function MessageThread({ history, componentSelections = {}, usern
         restoreStateFrom={savedScrollStates.get(scrollStateKey)}
       />}
       {loading && <p className="py-6 text-center text-[13px] text-fg-3" role="status">正在载入这段对话…</p>}
-      {presentation.show.tools && <ComputerUseTrail events={events} />}
-      {thinking && <div className="my-5 flex items-center gap-3 text-[13px] text-fg-3" aria-label="Atlas 正在思考">
+      {!focusMode && presentation.show.tools && <ComputerUseTrail events={events} />}
+      {!focusMode && thinking && <div className="my-5 flex items-center gap-3 text-[13px] text-fg-3" aria-label="Atlas 正在思考">
         <Mark className="size-[26px]" working />正在想…
       </div>}
       {screenReaderAnnouncement && <div className="sr-only" role="status" aria-live={presentation.announceCompletedReplies ? 'polite' : 'off'} aria-atomic="true">Atlas 回复：{screenReaderAnnouncement}</div>}
-      {footerNote}
+      {!focusMode && footerNote}
     </div>
   </div>;
 }

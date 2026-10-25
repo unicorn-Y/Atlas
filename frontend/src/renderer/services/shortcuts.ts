@@ -14,7 +14,7 @@ export type ShortcutAction =
   | 'toggleSidebar' | 'toggleInspector' | 'focusComposer' | 'stopRun'
   | 'sidebarSearch' | 'sidebarProjectPicker' | 'sidebarNextGroup' | 'sidebarPreviousGroup' | 'sendNow' | 'stashInput'
   | 'focusNextPane' | 'focusPreviousPane' | 'openDiff' | 'diffPreviousHunk' | 'diffNextHunk'
-  | 'diffCollapseHunks' | 'diffExpandHunks';
+  | 'diffCollapseHunks' | 'diffExpandHunks' | 'toggleFocus';
 
 export type ShortcutBindings = Record<ShortcutAction, string[]>;
 export type ShortcutBindingValue = string | readonly string[];
@@ -30,6 +30,7 @@ export const SHORTCUTS: Array<{ action: ShortcutAction; label: string; hint?: st
   { action: 'toggleSidebar', label: '收起/展开侧边栏', combo: 'Ctrl+B' },
   { action: 'toggleInspector', label: '打开/关闭任务面板', combo: 'Ctrl+.' },
   { action: 'focusComposer', label: '跳到输入框', combo: 'Ctrl+L' },
+  { action: 'toggleFocus', label: '切换对话专注视图', hint: '隐藏侧栏和任务面板，只保留当前对话', combo: 'Ctrl+Shift+O' },
   { action: 'stopRun', label: '停止当前任务', hint: '只在任务运行时有效', combo: 'Ctrl+Shift+Backspace' },
   { action: 'sendNow', label: '中断并立即发送', hint: '运行中中断当前任务并发送输入；空闲时正常发送', combo: 'Ctrl+Enter' },
   { action: 'stashInput', label: '暂存当前输入', combo: 'Ctrl+Shift+S' },
