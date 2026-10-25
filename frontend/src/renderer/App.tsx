@@ -1491,6 +1491,10 @@ export default function App() {
   useEffect(() => { setPref('tabs', JSON.stringify(tabs)); }, [tabs]);
   useEffect(() => { setPref('closed-tabs', JSON.stringify(closedTabs.slice(-12))); }, [closedTabs]);
   const closeTab = (id: string) => {
+    const hasDraft = (id === store.activeConversationId ? input : readDraft(id)).trim().length > 0;
+    const isRunning = store.runs.some((run) => run.conversationId === id && !TERMINAL.includes(run.status));
+    if ((hasDraft || isRunning) && !window.confirm(`${hasDraft ? '此标签有未发送草稿（会保存在本机）。' : ''}${isRunning ? '此会话任务仍在运行，关闭标签不会停止任务。' : ''}\n仍要关闭当前标签吗？可用 Ctrl+Shift+T 恢复标签。`)) return;
+    if (id === store.activeConversationId && hasDraft) writeDraft(id, input);
     const index = tabs.indexOf(id);
     const next = tabs.filter((item) => item !== id);
     setClosedTabs((current) => [...current.filter((item) => item !== id), id].slice(-12));
@@ -1582,6 +1586,7 @@ export default function App() {
         case 'nextTab': cycleTab(1); break;
         case 'prevTab': cycleTab(-1); break;
         case 'closeTab': if (view === 'chat' && store.activeConversationId) closeTab(store.activeConversationId); break;
+        case 'closeWindow': window.atlasDesktop?.close(); break;
         case 'toggleSidebar': toggleMini(); break;
         case 'toggleInspector': if (view === 'chat') toggleInspector(); break;
         case 'focusComposer': document.querySelector<HTMLTextAreaElement>('textarea[aria-label="消息内容"]')?.focus(); break;
