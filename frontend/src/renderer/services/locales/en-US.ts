@@ -4229,6 +4229,7 @@ export const messages: Record<string, string> = {
   "开放（仍检查允许名单）": "Open (still checks allowlist)",
   "仅允许名单": "Allowlist only",
   "配对门控（设备页批准后允许私信）": "Pairing gated (direct messages are allowed after approval on the Devices page)",
+  "群策略设为“仅允许名单”且群名单为空时，运行时回退到私聊允许名单；两者都空时，现有运行时会放行。提及检查使用事件的 is_mention 或 reply_to_event_id。DM 配对门控会创建 24 小时有效的申请，可在设备页批准或撤销。": "When a group policy is Allowlist only and its list is empty, runtime falls back to the DM allowlist; if both are empty, current runtime admits the message. Mention checks use the event's is_mention or reply_to_event_id. DM pairing creates a request valid for 24 hours; approve or revoke it on the Devices page.",
   "私聊允许发送者 ID（每行一项；* 匹配所有人）": "DM allowed sender IDs (one per line; * matches everyone)",
   "空私聊允许名单时放行（仅影响开放 / 仅名单策略）": "Allow when DM allowlist is empty (only affects Open / Allowlist only policies)",
   "群消息策略": "Group message policy",

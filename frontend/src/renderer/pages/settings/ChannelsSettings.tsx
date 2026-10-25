@@ -404,7 +404,7 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
             </label>
             <label className="flex items-start gap-2 text-[12.5px] text-fg-2"><input type="checkbox" checked={policy.require_mention} onChange={(event) => updatePolicy(name, { require_mention: event.target.checked })} />群消息要求提及或回复事件</label>
           </div>
-          <p className="mb-0 mt-2 text-[11.5px] leading-[1.55] text-fg-3">群策略设为“仅允许名单”且群名单为空时，运行时回退到私聊允许名单；两者都空时，现有运行时会放行。提及检查使用事件的 is_mention 或 reply_to_event_id。配对门控目前没有自动申请 / 批准流程。</p>
+          <p className="mb-0 mt-2 text-[11.5px] leading-[1.55] text-fg-3">群策略设为“仅允许名单”且群名单为空时，运行时回退到私聊允许名单；两者都空时，现有运行时会放行。提及检查使用事件的 is_mention 或 reply_to_event_id。DM 配对门控会创建 24 小时有效的申请，可在设备页批准或撤销。</p>
         </div>
       </section>;
     })}
