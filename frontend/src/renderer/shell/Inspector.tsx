@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Download, FileText, FolderOpen, GitBranch, GitMerge, Minimize2, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { Download, FileText, FolderOpen, GitBranch, GitMerge, LayoutGrid, Minimize2, Trash2, X } from 'lucide-react';
 import type { ConversationMessage, WorktreeInfo } from '@atlas/backend-adapter';
 import type { AgentEvent, AgentRun } from '../../types/runtime';
 import type { Artifact } from '../../types/artifact';
@@ -22,7 +22,7 @@ import LspDiagnosticsPanel from './panels/LspDiagnosticsPanel';
 import RolloutPanel from './panels/RolloutPanel';
 import AndroidEmulatorPanel from './panels/AndroidEmulatorPanel';
 
-export type InspectorTab = 'overview' | 'artifacts' | 'activity' | 'changes' | 'rollout' | 'android' | 'files' | 'specs' | 'terminal' | 'browser' | 'context' | 'processes' | 'dashboard';
+export type InspectorTab = 'tabs' | 'overview' | 'artifacts' | 'activity' | 'changes' | 'rollout' | 'android' | 'files' | 'specs' | 'terminal' | 'browser' | 'context' | 'processes' | 'dashboard';
 
 const EMPTY_MESSAGES: ConversationMessage[] = [];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', waiting: '等你确认', paused: '已暂停', completed: '已完成', failed: '出错了', cancelled: '已停止', idle: '空闲' };
@@ -39,12 +39,26 @@ function commandForConversation(command: { id: string; text: string } | null, co
 // Diffs, file trees and a shell need room; the reading tabs keep the narrow column.
 const WIDE: InspectorTab[] = ['changes', 'rollout', 'android', 'files', 'specs', 'terminal', 'browser'];
 const WIDTH_KEY = 'atlas.preference.inspector-width';
-const readWidth = () => { try { const value = Number(localStorage.getItem(WIDTH_KEY)); return value >= 300 ? value : null; } catch { return null; } };
+const readWidth = () => { try { const value = Number(localStorage.getItem(WIDTH_KEY)); return value >= 180 ? value : null; } catch { return null; } };
+const widthLimits = () => {
+  const min = Math.min(300, Math.max(180, window.innerWidth * 0.38));
+  return { min, max: Math.max(min, Math.min(window.innerWidth * 0.62, Math.max(220, window.innerWidth * 0.82))) };
+};
 
 /** Drag the panel's left edge to set its width (kept on this machine); double-click goes back to automatic. */
 function useResizableWidth() {
   const [width, setWidth] = useState<number | null>(readWidth);
   const [dragging, setDragging] = useState(false);
+  useEffect(() => {
+    const clamp = () => setWidth((current) => {
+      if (current === null) return null;
+      const { min, max } = widthLimits();
+      return Math.min(max, Math.max(min, current));
+    });
+    clamp();
+    window.addEventListener('resize', clamp);
+    return () => window.removeEventListener('resize', clamp);
+  }, []);
   const start = (event: ReactPointerEvent<HTMLDivElement>) => {
     const panel = event.currentTarget.parentElement;
     if (!panel) return;
@@ -57,7 +71,8 @@ function useResizableWidth() {
       // A click (or the two of a double-click) is not a drag: start only once the pointer travels.
       if (!moved && Math.abs(moveEvent.clientX - startX) < 3) return;
       if (!moved) { moved = true; setDragging(true); }
-      latest = Math.round(Math.min(window.innerWidth * 0.62, Math.max(300, startWidth + startX - moveEvent.clientX)));
+      const { min: minWidth, max: maxWidth } = widthLimits();
+      latest = Math.round(Math.min(maxWidth, Math.max(minWidth, startWidth + startX - moveEvent.clientX)));
       setWidth(latest);
     };
     const end = () => {
@@ -69,8 +84,17 @@ function useResizableWidth() {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end);
   };
+  const resizeByKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    const panelWidth = event.currentTarget.parentElement?.getBoundingClientRect().width ?? 340;
+    const { min, max } = widthLimits();
+    const next = Math.round(Math.min(max, Math.max(min, (width ?? panelWidth) + (event.key === 'ArrowLeft' ? 20 : -20))));
+    setWidth(next);
+    try { localStorage.setItem(WIDTH_KEY, String(next)); } catch { /* storage unavailable */ }
+  };
   const reset = () => { setWidth(null); try { localStorage.removeItem(WIDTH_KEY); } catch { /* storage unavailable */ } };
-  return { width, dragging, start, reset };
+  return { width, dragging, start, reset, resizeByKeyboard };
 }
 
 export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false, onFullScreenDiffChange, run, artifacts, conversationTitle, modelName, tools, skills, activeSkills, capabilities, apiBaseUrl, connected, onToast, workspace, onChooseWorkspace, browserUrl, onBrowserUrl, browserSuggestions, onPick, terminalCommand, onSendToAtlas, onPreview, conversationId, worktree, onWorktreeChanged, onAsk }: {
@@ -125,14 +149,15 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
     ['overview', '任务概览'], ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['rollout', '运行记录'], ['android', 'Android'], ['files', '文件'], ['specs', '规格'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'], ['processes', '进程'], ['dashboard', '看板'],
   ];
   return <aside aria-label={fullScreenDiff ? '全屏差异查看器' : '任务面板'} style={!fullScreenDiff && resize.width ? { width: resize.width } : undefined}
-    className={cn('anim-fade relative flex shrink-0 flex-col shadow-[inset_1px_0_0_var(--line)]', fullScreenDiff ? 'fixed inset-3 z-40 bg-canvas' : '', !resize.dragging && 'transition-[width] duration-200', !fullScreenDiff && !resize.width && (WIDE.includes(tab) ? 'w-[480px]' : 'w-[340px]'))}>
-    {!fullScreenDiff && <div role="separator" aria-orientation="vertical" aria-label="拖动调整任务面板宽度，双击恢复自动" title="拖动调整宽度，双击恢复自动"
-      onPointerDown={resize.start} onDoubleClick={resize.reset}
+    className={cn('anim-fade relative flex shrink-0 flex-col bg-canvas shadow-[inset_1px_0_0_var(--line)]', fullScreenDiff ? 'fixed inset-3 z-40 min-w-0' : 'min-w-0', !resize.dragging && 'transition-[width] duration-200', !fullScreenDiff && !resize.width && (WIDE.includes(tab) ? 'w-[min(480px,62vw)]' : 'w-[min(340px,62vw)]'))}>
+    {!fullScreenDiff && <div role="separator" aria-orientation="vertical" aria-label="拖动或使用方向键调整任务面板宽度，双击恢复自动" aria-valuemin={widthLimits().min} aria-valuemax={widthLimits().max} aria-valuenow={Math.min(widthLimits().max, Math.max(widthLimits().min, resize.width ?? (WIDE.includes(tab) ? 480 : 340)))} tabIndex={0} title="拖动或用方向键调整宽度，双击恢复自动"
+      onPointerDown={resize.start} onDoubleClick={resize.reset} onKeyDown={resize.resizeByKeyboard}
       className={cn('absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize after:absolute after:inset-y-0 after:left-[3px] after:w-0.5 after:rounded-full after:transition-colors hover:after:bg-brand/50', resize.dragging && 'after:bg-brand')} />}
     {/* While dragging, keep the embedded browser from swallowing the pointer. */}
     {resize.dragging && <div className="fixed inset-0 z-50 cursor-col-resize" />}
     <div className={cn('flex items-center gap-2 pr-2 shadow-[inset_0_-1px_0_var(--line)]', fullScreenDiff ? 'min-h-12 px-4' : 'pl-4 pt-3')}>
       {fullScreenDiff && <div className="flex min-w-0 flex-1 items-center gap-2"><FileText size={16} className="shrink-0 text-brand" /><strong className="truncate text-[14px] text-fg">全屏差异查看器</strong><span className="hidden text-[11.5px] text-fg-3 sm:inline">Ctrl+Alt+[ / Ctrl+Alt+] 折叠或展开 · Ctrl+Alt+↑/↓ 跳转差异块</span></div>}
+      {!fullScreenDiff && <button type="button" aria-label="查看任务面板标签概览" title="查看所有任务面板标签" onClick={() => onTab('tabs' as InspectorTab)} className="grid size-7 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><LayoutGrid size={15} /></button>}
       <div className="flex min-w-0 flex-1 items-center gap-3.5 overflow-x-auto [scrollbar-width:none]" role="tablist">
       {!fullScreenDiff && tabs.map(([id, label]) =>
         <button key={id} role="tab" aria-selected={tab === id} onClick={() => onTab(id)}
@@ -143,6 +168,11 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
     </div>
 
     <div className="min-h-0 flex-1 overflow-auto p-5">
+      {tab === 'tabs' && <section aria-label="任务面板标签概览" className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+        {tabs.map(([id, label]) => <button key={id} type="button" onClick={() => onTab(id)} className="card-surface flex min-h-24 flex-col items-start justify-between rounded-xl p-3 text-left hover:shadow-[inset_0_0_0_1px_var(--brand)]">
+          <span className="text-[13px] font-medium text-fg">{label}</span><span className="text-[11.5px] text-fg-3">{id === tab ? '当前标签' : id === 'artifacts' ? `${artifacts.length} 个产物` : id === 'activity' ? `${steps.length} 个当前步骤` : id === 'changes' ? (run ? RUN_LABEL[run.status] ?? run.status : '暂无运行') : '点击打开此标签'}</span>
+        </button>)}
+      </section>}
       {tab === 'overview' && <TaskOverviewPanel events={events} artifacts={artifacts} messages={messages} onTab={onTab} />}
       {tab === 'artifacts' && (artifacts.length ? <div className="grid gap-2">
         {artifacts.map((artifact) => <button key={artifact.id} onClick={() => setSelected(artifact.id === selected ? '' : artifact.id)}
