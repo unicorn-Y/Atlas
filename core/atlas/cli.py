@@ -44,6 +44,52 @@ def main() -> None:
     pass
 
 
+@main.group("security")
+def security_group() -> None:
+    """Audit local dependency locks and security-sensitive configuration."""
+
+
+@security_group.command("audit")
+@click.option("--json", "as_json", is_flag=True, help="输出机器可读 JSON")
+@click.option("--output", type=click.Path(path_type=Path), help="将审计报告写入文件")
+def security_audit(as_json: bool, output: Path | None) -> None:
+    """Offline-first CVE and configuration audit; use refresh-db to update OSV data."""
+    from atlas.config import DATA_ROOT, PROJECT_ROOT
+    from atlas.security_audit import audit
+
+    report = audit(PROJECT_ROOT, DATA_ROOT / "data" / "security-osv-cache.json")
+    serialized = json.dumps(report, ensure_ascii=False, indent=2)
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        temporary = output.with_suffix(output.suffix + ".tmp")
+        temporary.write_text(serialized + "\n", encoding="utf-8")
+        temporary.replace(output)
+    if as_json:
+        click.echo(serialized)
+    else:
+        console.print(f"离线依赖审计：{report['dependency_count']} 个锁定包；漏洞数据库更新时间：{report['advisory_updated_at'] or '尚无本机快照'}")
+        console.print(f"快照覆盖：{report['indexed_dependency_count']}/{report['dependency_count']}；配置/依赖发现：{len(report['findings'])} 项")
+        for item in report["findings"]:
+            console.print(f"[{item['severity']}] {item['id']} · {item.get('package', item.get('file', 'Atlas'))}")
+            console.print(f"  证据：{item['evidence']}\n  建议：{item['recommendation']}")
+        if report["dependency_coverage"] != "complete":
+            console.print("依赖漏洞覆盖不完整；运行 atlas security refresh-db 更新本机 OSV 快照。")
+    raise SystemExit(1 if any(item.get("package") or item["severity"] in {"high", "critical", "error"} for item in report["findings"]) else 0)
+
+
+@security_group.command("refresh-db")
+def security_refresh_db() -> None:
+    """Download exact-version advisories from OSV and save a local offline snapshot."""
+    from atlas.config import DATA_ROOT, PROJECT_ROOT
+    from atlas.security_audit import refresh_advisories
+
+    try:
+        snapshot = refresh_advisories(PROJECT_ROOT, DATA_ROOT / "data" / "security-osv-cache.json")
+    except Exception as exc:  # noqa: BLE001 — provide a clear command error without losing local settings
+        raise click.ClickException(f"无法刷新 OSV 漏洞快照：{type(exc).__name__}: {exc}") from exc
+    console.print(f"已更新本机 OSV 快照：{snapshot['package_count']} 个锁定包，时间 {snapshot['updated_at']}")
+
+
 @main.command()
 @click.option("--port", default=None, type=int, help="Server port (default: from config)")
 @click.option("--reload", is_flag=True, help="Enable auto-reload")
