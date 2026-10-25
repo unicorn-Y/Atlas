@@ -28,6 +28,7 @@ log = structlog.get_logger()
 _MAX_PARALLEL_SERVER_REQUESTS = 8
 _MCP_REQUEST_TIMEOUT_SECONDS = 30.0
 _MCP_MAX_CONSECUTIVE_TERMINAL_ERRORS = 3
+_MCP_START_FAILURE_COOLDOWN_SECONDS = 60.0
 _SENSITIVE_ARGUMENT_KEYS = frozenset({
     "api_key", "apikey", "access_token", "refresh_token", "authorization",
     "password", "secret", "client_secret", "private_key", "token",
@@ -448,6 +449,10 @@ class MCPClient:
         self._session_recovery_locks: dict[str, asyncio.Lock] = {}
         self._reconnect_tasks: dict[str, asyncio.Task[Any]] = {}
         self._request_semaphores: dict[str, asyncio.Semaphore] = {}
+        # A broken optional server must not be spawned repeatedly by repeated
+        # discovery/start requests. Keep the last failed config in memory so a
+        # config edit bypasses the cooldown without persisting credentials.
+        self._startup_failures: dict[str, tuple[MCPServerConfig, float]] = {}
         self._stopping = False
 
     def _request_semaphore(self, server_name: str) -> asyncio.Semaphore:
@@ -543,6 +548,16 @@ class MCPClient:
         """Connect to a single MCP server."""
         self._configured_configs[cfg.name] = cfg
         status = self._server_status.setdefault(cfg.name, {"name": cfg.name})
+        previous_failure = self._startup_failures.get(cfg.name)
+        if previous_failure is not None:
+            failed_config, failed_at = previous_failure
+            if (cfg == failed_config
+                    and asyncio.get_running_loop().time() - failed_at
+                    < _MCP_START_FAILURE_COOLDOWN_SECONDS):
+                # Preserve the diagnostic and failed state. Configuration edits
+                # and explicit restart_server() both allow an immediate retry.
+                return
+            self._startup_failures.pop(cfg.name, None)
         status.update({
             "configured": True, "enabled": cfg.enabled, "transport": cfg.transport,
             "state": "starting", "connected": False,
@@ -601,6 +616,7 @@ class MCPClient:
                 "tool_discovery": "complete", "tool_count": len(handle.tools),
                 "blocking_reason": None,
             })
+            self._startup_failures.pop(cfg.name, None)
             log.info("mcp.server_ready", server=cfg.name,
                      tools=[t.name for t in handle.tools])
             self._progress(cfg.name, "ready", f"已就绪 · {len(handle.tools)} 个工具", cfg.transport)
@@ -631,6 +647,9 @@ class MCPClient:
                 "state": "failed", "connected": False,
                 "tool_discovery": "failed", "blocking_reason": diagnostic or _failure_reason(exc),
             })
+            self._startup_failures[cfg.name] = (
+                cfg, asyncio.get_running_loop().time(),
+            )
             self._progress(cfg.name, "failed", str(diagnostic or _failure_reason(exc)), cfg.transport)
             if diagnostic:
                 raise _MCPStartupError(diagnostic) from exc
@@ -1201,6 +1220,7 @@ class MCPClient:
         if cfg is None:
             raise ValueError(f"No stored config for server: {server_name}")
         await self.disconnect_server(server_name)
+        self._startup_failures.pop(server_name, None)
         await self._connect_server(cfg)
 
     @property

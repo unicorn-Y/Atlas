@@ -1973,14 +1973,14 @@ async def _handle_run_start(
     manager.conn_runs[conn_id] = run_id
     await manager.persist_run(run)
 
-    # S3 (§10.4): a run arriving before the deferred MCP component is ready
-    # waits briefly, then proceeds degraded — without MCP tools, never a 503
-    # and never a dropped turn. The client sees the recovery notice envelope.
+    # MCP is an optional enrichment. Never put its process launch/handshake on
+    # the first-turn critical path: a run can begin with the tools already
+    # registered, or without them while background startup continues.
     startup = getattr(services, "startup", None)
     if startup is not None and "mcp" in startup.snapshot():
-        if not await startup.wait_ready("mcp", timeout=10.0):
+        if startup.state("mcp") == "failed":
             notice = run.next_envelope("run.recovery.notice", {
-                "message": "MCP 仍在启动，本次运行先以无 MCP 工具的降级模式继续。",
+                "message": "MCP 启动失败，本次运行继续使用当前可用工具；可在设置→工具中检查 MCP 服务。",
             })
             await manager.send(conn_id, notice)
 
