@@ -83,6 +83,16 @@ class SessionMapper:
                 "linked_by TEXT NOT NULL, created_at TEXT NOT NULL)"
             )
 
+    def links(self) -> list[dict[str, str]]:
+        """List explicitly linked channel identities without exposing message data."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT l.session_key,l.conversation_id,l.linked_by,l.created_at "
+                "FROM channel_session_links l ORDER BY l.created_at DESC"
+            ).fetchall()
+        return [dict(zip(("session_key", "conversation_id", "linked_by", "created_at"), row))
+                for row in rows]
+
     def get(self, key: str) -> str | None:
         with self._lock:
             row = self._db.execute(
@@ -287,6 +297,14 @@ class GatewayBridge:
             peer=event.chat_id,
         )
 
+    @staticmethod
+    def session_key_for_identity(*, agent_id: str, channel: str, account: str,
+                                 peer: str) -> str:
+        """Canonical identity builder shared with the explicit session-link API."""
+        if not all(value.strip() for value in (agent_id, channel, peer)):
+            raise ValueError("agent_id, channel and peer are required")
+        return session_key(agent_id, channel=channel, account=account, peer=peer)
+
     async def resolve_conversation(self, key: str, event: MessageEvent) -> str | None:
         """Existing conversation for the session key, else create + remember it."""
         known = self.sessions.get(key)
@@ -325,6 +343,17 @@ class GatewayBridge:
 
     async def _dispatch(self, event: MessageEvent, agent_id: str | None) -> None:
         content = str(event.text or "")
+        def safe(value: str, limit: int = 160) -> str:
+            return str(value or "").replace("\r", " ").replace("\n", " ").replace("]", "）")[:limit]
+
+        origin_context = (
+            f"\n\n[Atlas channel origin: channel={safe(event.channel)}; "
+            f"account={safe(event.account or 'default')}; chat={safe(event.chat_id)}; "
+            f"thread={safe(event.thread_id or 'none')}; "
+            f"sender={safe(event.sender_name or event.sender_id)}]\n"
+            if event.channel else ""
+        )
+        content = origin_context + content
         local_paths = [
             attachment.local_path for attachment in (event.attachments or [])
             if getattr(attachment, "local_path", "")

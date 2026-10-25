@@ -17,7 +17,7 @@ import inspect
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from structlog import get_logger
 
 from atlas.channels import ChannelManager, WebhookError
@@ -65,6 +65,64 @@ async def channel_catalog() -> dict[str, Any]:
     from atlas.channels.catalog import list_channels
 
     return {"channels": list_channels()}
+
+
+class SessionLinkPayload(BaseModel):
+    agent_id: str = Field(min_length=1, max_length=120)
+    channel: str = Field(min_length=1, max_length=80)
+    account: str = Field(default="", max_length=120)
+    peer: str = Field(min_length=1, max_length=240)
+    conversation_id: str = Field(min_length=1, max_length=120)
+    linked_by: str = Field(default="local-user", min_length=1, max_length=120)
+
+
+@router.get("/session-links", dependencies=[Depends(_require_trusted_origin)])
+async def list_session_links() -> dict[str, Any]:
+    """List explicit cross-channel aliases (identity keys only)."""
+    from atlas import server as atlas_server
+
+    bridge = getattr(atlas_server, "gateway_bridge", None)
+    if bridge is None:
+        raise HTTPException(status_code=503, detail="渠道会话服务尚未启动")
+    return {"links": bridge.sessions.links()}
+
+
+@router.put("/session-links", dependencies=[Depends(_require_trusted_origin)])
+async def put_session_link(payload: SessionLinkPayload, request: Request) -> dict[str, Any]:
+    """Bind one channel identity to an existing conversation explicitly."""
+    from atlas import server as atlas_server
+    from atlas.persistent_agents import session_key
+
+    bridge = getattr(atlas_server, "gateway_bridge", None)
+    if bridge is None:
+        raise HTTPException(status_code=503, detail="渠道会话服务尚未启动")
+    if payload.channel not in bridge.manager.registry:
+        raise HTTPException(status_code=404, detail="渠道尚未注册")
+    memory = getattr(atlas_server, "memory", None)
+    conversation = await memory.get_conversation(payload.conversation_id) if memory else None
+    if not conversation:
+        raise HTTPException(status_code=404, detail="目标会话不存在")
+    key = session_key(payload.agent_id.strip(), channel=payload.channel.strip(),
+                      account=payload.account.strip(), peer=payload.peer.strip())
+    try:
+        bridge.sessions.link(key, payload.conversation_id.strip(), linked_by=payload.linked_by.strip())
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    log.info("channels.session_link_created", actor=payload.linked_by, channel=payload.channel,
+             account=payload.account or "default", peer=payload.peer,
+             conversation_id=payload.conversation_id, origin=request.headers.get("origin", ""))
+    return {"ok": True, "session_key": key, "conversation_id": payload.conversation_id}
+
+
+@router.delete("/session-links", dependencies=[Depends(_require_trusted_origin)])
+async def delete_session_link(session_key: str) -> dict[str, Any]:
+    """Remove an explicit alias so the channel identity creates a fresh session."""
+    from atlas import server as atlas_server
+
+    bridge = getattr(atlas_server, "gateway_bridge", None)
+    if bridge is None:
+        raise HTTPException(status_code=503, detail="渠道会话服务尚未启动")
+    return {"ok": True, "removed": bridge.sessions.unlink(session_key)}
 
 
 class ChannelPolicyPayload(BaseModel):

@@ -55,6 +55,15 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
   const [values, setValues] = useState<Record<string, Record<string, string>>>({});
   const [busyChannel, setBusyChannel] = useState('');
   const [test, setTest] = useState({ channel: '', chatId: '', text: 'Atlas 测试消息' });
+  const [sessionLinks, setSessionLinks] = useState<Array<{ session_key: string; conversation_id: string; linked_by: string; created_at: string }>>([]);
+  const [linkDraft, setLinkDraft] = useState({ agent_id: 'main', channel: 'telegram', account: '', peer: '', conversation_id: '' });
+
+  const reloadSessionLinks = useCallback(async () => {
+    try {
+      const result = await api<{ links: typeof sessionLinks }>(apiBaseUrl, '/api/channels/session-links');
+      setSessionLinks(result.links);
+    } catch { setSessionLinks([]); }
+  }, [apiBaseUrl]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -69,11 +78,12 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
       setDispatcher(status.dispatcher_connected ?? null);
       setDegraded('');
       setEnabled((current) => ({ ...Object.fromEntries(status.channels.map((row) => [row.name, row.enabled])), ...current }));
+      await reloadSessionLinks();
     } catch (error) {
       setRows([]); setDegraded(error instanceof Error ? error.message : String(error));
     }
     setLoading(false);
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, reloadSessionLinks]);
   useEffect(() => { void reload(); }, [reload]);
 
   const enabledRows = rows.filter((row) => row.enabled);
@@ -168,6 +178,22 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
   const setValue = (name: string, key: string, value: string) =>
     setValues((current) => ({ ...current, [name]: { ...current[name], [key]: value } }));
 
+  const linkSession = async () => {
+    try {
+      await api(apiBaseUrl, '/api/channels/session-links', { method: 'PUT', json: linkDraft });
+      setLinkDraft((current) => ({ ...current, peer: '', conversation_id: '' }));
+      await reloadSessionLinks();
+      onToast('渠道身份已绑定到既有会话');
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+  };
+  const unlinkSession = async (key: string) => {
+    try {
+      await api(apiBaseUrl, `/api/channels/session-links?session_key=${encodeURIComponent(key)}`, { method: 'DELETE' });
+      await reloadSessionLinks();
+      onToast('渠道会话绑定已解除');
+    } catch (error) { onToast(error instanceof Error ? error.message : String(error)); }
+  };
+
   return <div className="grid max-w-[680px] gap-5 text-[13px] text-fg-2">
     <section aria-label="Gateway 状态" className="rounded-xl bg-sunken px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
       <header className="flex items-center gap-2.5">
@@ -250,6 +276,20 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
         </div>
       </section>;
     })}
+
+    <section aria-label="跨渠道会话绑定" className="rounded-xl px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
+      <b className="font-medium text-fg">跨渠道会话延续</b>
+      <p className="mb-3 mt-1 text-[12px] text-fg-3">将一个渠道账号中的 chat id 显式接到既有会话。绑定按渠道、账号、chat id 和 Agent 唯一；已有不同会话的身份必须先解除绑定。这里不合并消息记录。</p>
+      <div className="grid gap-2 md:grid-cols-2">
+        <label className="grid gap-1">Agent ID<input className={field} value={linkDraft.agent_id} onChange={(event) => setLinkDraft({ ...linkDraft, agent_id: event.target.value })} /></label>
+        <label className="grid gap-1">渠道<select className={field} value={linkDraft.channel} onChange={(event) => setLinkDraft({ ...linkDraft, channel: event.target.value })}>{rows.map((row) => <option key={row.name} value={row.name}>{row.name}</option>)}</select></label>
+        <label className="grid gap-1">账号标签（可空）<input className={field} value={linkDraft.account} onChange={(event) => setLinkDraft({ ...linkDraft, account: event.target.value })} /></label>
+        <label className="grid gap-1">chat id / peer<input className={field} value={linkDraft.peer} onChange={(event) => setLinkDraft({ ...linkDraft, peer: event.target.value })} /></label>
+        <label className="grid gap-1 md:col-span-2">既有会话 ID<input className={field} value={linkDraft.conversation_id} onChange={(event) => setLinkDraft({ ...linkDraft, conversation_id: event.target.value })} /></label>
+      </div>
+      <div className="mt-2 flex justify-end"><Button size="sm" variant="secondary" disabled={!linkDraft.peer.trim() || !linkDraft.conversation_id.trim()} onClick={() => void linkSession()}>绑定既有会话</Button></div>
+      <div className="mt-2 grid gap-1">{sessionLinks.map((item) => <div key={item.session_key} className="flex items-center gap-2 rounded-lg bg-sunken px-2.5 py-2 text-[11px]"><code className="min-w-0 flex-1 truncate">{item.session_key} → {item.conversation_id}</code><Button size="sm" variant="ghost" onClick={() => void unlinkSession(item.session_key)}>解除</Button></div>)}{!sessionLinks.length && <span className="text-[11px] text-fg-3">尚无显式绑定</span>}</div>
+    </section>
 
     <section aria-label="测试发送" className="rounded-xl px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
       <b className="font-medium text-fg">测试发送</b>
