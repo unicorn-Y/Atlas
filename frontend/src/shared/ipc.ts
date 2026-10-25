@@ -120,7 +120,7 @@ export interface AtlasDesktopApi {
   /** Open an existing local workspace with a fixed allowlisted IDE CLI (never through a shell). */
   openWorkspaceInEditor?(editor: PlatformEditorId, workspacePath: string): Promise<void>;
   /** Open the small native floating composer. The desktop shell forwards submitted text to the main UI. */
-  showFloatingComposer?(): void;
+  showFloatingComposer?(context?: { selectedText?: string; conversationId?: string }): void;
   /** Open the selected conversation in a separate synchronized desktop window. */
   openConversationWindow?(conversationId: string): void;
   openNewWindow?(): void;
@@ -132,6 +132,10 @@ export interface AtlasDesktopApi {
   hideFloatingComposer?(): void;
   submitFloatingComposer?(text: string): void;
   onFloatingComposerSubmit?(callback: (text: string) => void): () => void;
+  returnFloatingDraft?(text: string, conversationId?: string): void;
+  onFloatingDraft?(callback: (draft: { text: string; conversationId?: string }) => void): () => void;
+  onFloatingComposerContext?(callback: (context: { selectedText: string; conversationId?: string }) => void): () => void;
+  getFloatingComposerContext?(): Promise<{ selectedText: string; conversationId?: string }>;
   /** Open one existing file in a fixed allowlisted IDE CLI, after validating it stays inside the workspace. */
   openFileInEditor?(editor: PlatformEditorId, workspacePath: string, filePath: string): Promise<void>;
   /** Receive validated atlas://conversation/<id> or atlas://settings/<section> routes. */

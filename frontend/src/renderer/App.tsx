@@ -1389,6 +1389,17 @@ export default function App() {
     go('chat');
     void useAtlasStore.getState().sendMessage(text);
   }), [go]);
+  useEffect(() => window.atlasDesktop?.onFloatingDraft?.(({ text, conversationId }) => {
+    const state = useAtlasStore.getState();
+    go('chat');
+    const target = conversationId ? state.conversations.find((item) => item.id === conversationId) : undefined;
+    if (target && target.id !== state.activeConversationId) {
+      void state.openConversation(target).then(() => { writeDraft(target.id, text); setInput(text); });
+      return;
+    }
+    writeDraft(state.activeConversationId, text);
+    setInput(text);
+  }), [go]);
   // C6R: /review「打开文件」请求 → 切到文件面板;FilesPanel 自己消费请求并定位行。
   useEffect(() => { if (storeData.fileOpenRequest) showInspectorTab('files'); }, [storeData.fileOpenRequest]);
   useEffect(() => {

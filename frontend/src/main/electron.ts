@@ -48,6 +48,7 @@ let globalShortcutState: GlobalShortcutState = { accelerator: null, registered: 
 let screenshotShortcutState: GlobalShortcutState = { accelerator: 'Control+Shift+X', registered: false };
 let voiceShortcutState: GlobalShortcutState = { accelerator: 'Control+Shift+V', registered: false };
 let screenshotContext: { conversationId: string; lastInteractionAt: number } = { conversationId: '', lastInteractionAt: 0 };
+let floatingComposerContext: { selectedText: string; conversationId?: string } = { selectedText: '' };
 const recentScreenshots: RecentScreenshot[] = [];
 let keepAwakeEnabled = false;
 let keepAwakeBlockerId: number | null = null;
@@ -389,17 +390,22 @@ function focusAtlasWindow(): void {
   windowRef.focus();
 }
 
-function showFloatingComposer(): void {
+function showFloatingComposer(context?: { selectedText?: string; conversationId?: string }): void {
   if (!app.isReady()) return;
+  floatingComposerContext = {
+    selectedText: typeof context?.selectedText === 'string' ? context.selectedText.slice(0, 12_000) : '',
+    conversationId: typeof context?.conversationId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(context.conversationId)
+      ? context.conversationId : screenshotContext.conversationId || undefined,
+  };
   if (!floatingComposerWindow || floatingComposerWindow.isDestroyed()) {
     const devUrl = process.env.VITE_DEV_SERVER_URL;
     const win = new BrowserWindow({
-      width: 620,
-      height: 190,
+      width: 720,
+      height: 640,
       minWidth: 420,
-      minHeight: 170,
+      minHeight: 320,
       maxWidth: 900,
-      maxHeight: 320,
+      maxHeight: 900,
       show: false,
       frame: false,
       resizable: true,
@@ -414,6 +420,9 @@ function showFloatingComposer(): void {
       },
     });
     floatingComposerWindow = win;
+    win.webContents.on('did-finish-load', () => {
+      if (!win.isDestroyed()) win.webContents.send('floating-composer:context', floatingComposerContext);
+    });
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     win.webContents.on('will-navigate', (event, url) => {
       const allowed = devUrl ? (() => { try {
@@ -428,6 +437,7 @@ function showFloatingComposer(): void {
     else void win.loadFile(path.join(here, '../../dist/floating-composer.html'));
     win.once('ready-to-show', () => { win.show(); win.focus(); });
   } else {
+    floatingComposerWindow.webContents.send('floating-composer:context', floatingComposerContext);
     floatingComposerWindow.show();
     floatingComposerWindow.focus();
   }
@@ -955,6 +965,10 @@ function createWindow() {
         { label: '全选', role: 'selectAll', enabled: editFlags.canSelectAll },
       ]
       : [{ label: '复制', role: 'copy' }, { label: '全选', role: 'selectAll' }];
+    if (hasSelection) items.push({ type: 'separator' }, {
+      label: '随手写 / 改写选中文字',
+      click: () => showFloatingComposer({ selectedText: selectionText.trim(), conversationId: screenshotContext.conversationId }),
+    });
     Menu.buildFromTemplate(items).popup({ window: win });
   });
   win.webContents.on('did-start-loading', () => {
@@ -1189,9 +1203,13 @@ ipcMain.handle('platform:open-workspace-in-editor', async (event, editor: unknow
   if (typeof workspacePath !== 'string') throw new Error('请选择一个有效的本地工作区目录。');
   await openWorkspaceInEditor(editor as PlatformEditorId, workspacePath);
 });
-ipcMain.handle('floating-composer:show', (event) => {
+ipcMain.handle('floating-composer:show', (event, context: unknown) => {
   assertTrustedAppSender(event);
-  showFloatingComposer();
+  showFloatingComposer(context && typeof context === 'object' ? context as { selectedText?: string; conversationId?: string } : undefined);
+});
+ipcMain.handle('floating-composer:get-context', (event) => {
+  if (event.sender !== floatingComposerWindow?.webContents || event.senderFrame !== event.sender.mainFrame) return { selectedText: '' };
+  return floatingComposerContext;
 });
 ipcMain.on('floating-composer:hide', (event) => {
   if (event.sender === floatingComposerWindow?.webContents && event.senderFrame === event.sender.mainFrame) {
@@ -1203,6 +1221,19 @@ ipcMain.on('floating-composer:submit', (event, text: unknown) => {
   if (typeof text !== 'string' || !text.trim() || text.length > 20_000) return;
   if (windowRef && !windowRef.isDestroyed()) {
     windowRef.webContents.send('floating-composer:deliver', text.trim());
+    focusAtlasWindow();
+  }
+  floatingComposerWindow?.hide();
+});
+ipcMain.on('floating-composer:return-draft', (event, payload: unknown) => {
+  if (event.sender !== floatingComposerWindow?.webContents || event.senderFrame !== event.sender.mainFrame) return;
+  if (!payload || typeof payload !== 'object') return;
+  const draft = payload as { text?: unknown; conversationId?: unknown };
+  if (typeof draft.text !== 'string' || !draft.text.trim() || draft.text.length > 20_000) return;
+  const conversationId = typeof draft.conversationId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(draft.conversationId)
+    ? draft.conversationId : '';
+  if (windowRef && !windowRef.isDestroyed()) {
+    windowRef.webContents.send('floating-composer:return-draft', { text: draft.text.trim(), conversationId });
     focusAtlasWindow();
   }
   floatingComposerWindow?.hide();

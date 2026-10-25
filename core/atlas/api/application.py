@@ -21,6 +21,7 @@ from atlas.api.browser_router import router as browser_router
 from atlas.api.mobile_preview_router import router as mobile_preview_router
 from atlas.api.channel_router import router as channel_router
 from atlas.api.conversations_router import router as conversations_router
+from atlas.api.quick_write_router import router as quick_write_router
 from atlas.api.shares_router import router as shares_router
 from atlas.api.conversation_activity_router import router as conversation_activity_router
 from atlas.api.triage_router import router as triage_router
@@ -134,6 +135,7 @@ def create_app(
         local_models_router,
         agent_skills_router,
         conversations_router,
+        quick_write_router,
         shares_router,
         conversation_activity_router,
         triage_router,

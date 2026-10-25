@@ -66,7 +66,7 @@ const desktopApi: AtlasDesktopApi = {
   setRuntimeState: (state) => ipcRenderer.send('runtime:set-state', state),
   openWorkspaceInEditor: (editor: PlatformEditorId, workspacePath: string) =>
     ipcRenderer.invoke('platform:open-workspace-in-editor', editor, workspacePath),
-  showFloatingComposer: () => ipcRenderer.invoke('floating-composer:show'),
+  showFloatingComposer: (context) => ipcRenderer.invoke('floating-composer:show', context),
   openConversationWindow: (conversationId: string) => ipcRenderer.invoke('conversation:open-window', conversationId),
   openNewWindow: () => ipcRenderer.invoke('conversation:open-window'),
   openNewSessionWindow: () => ipcRenderer.invoke('conversation:open-window', undefined, true),
@@ -76,6 +76,18 @@ const desktopApi: AtlasDesktopApi = {
   deleteRecentScreenshot: (id: string) => ipcRenderer.invoke('screenshot:delete-recent', id),
   hideFloatingComposer: () => ipcRenderer.send('floating-composer:hide'),
   submitFloatingComposer: (text: string) => ipcRenderer.send('floating-composer:submit', text),
+  returnFloatingDraft: (text: string, conversationId?: string) => ipcRenderer.send('floating-composer:return-draft', { text, conversationId }),
+  onFloatingDraft: (callback: (draft: { text: string; conversationId?: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, draft: { text: string; conversationId?: string }) => callback(draft);
+    ipcRenderer.on('floating-composer:return-draft', listener);
+    return () => ipcRenderer.removeListener('floating-composer:return-draft', listener);
+  },
+  onFloatingComposerContext: (callback: (context: { selectedText: string; conversationId?: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, context: { selectedText: string; conversationId?: string }) => callback(context);
+    ipcRenderer.on('floating-composer:context', listener);
+    return () => ipcRenderer.removeListener('floating-composer:context', listener);
+  },
+  getFloatingComposerContext: () => ipcRenderer.invoke('floating-composer:get-context') as Promise<{ selectedText: string; conversationId?: string }>,
   onFloatingComposerSubmit: (callback: (text: string) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, text: string) => callback(text);
     ipcRenderer.on('floating-composer:deliver', listener);
