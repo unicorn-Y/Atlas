@@ -49,12 +49,13 @@ interface SettingsPageProps {
   selectedModel: string;
   subagentsEnabled: boolean;
   subagentDefaultModel: string;
+  subagentMaxConcurrent: number;
   /** Catalog of supported model services with this installation's keys and endpoints. */
   providers: ProviderState[];
   reasoningStages: ReasoningStagesConfig;
   onBack: () => void;
   onSelectModel: (model: string) => void;
-  onSaveSubagentSettings: (enabled: boolean, defaultModel: string) => Promise<boolean>;
+  onSaveSubagentSettings: (enabled: boolean, defaultModel: string, maxConcurrent?: number) => Promise<boolean>;
   onSaveProvider: (baseUrl: string, apiKey: string) => Promise<boolean>;
   onAddModel: (model: CustomModelRequest) => Promise<boolean>;
   onTestConnection: (model: string) => void;
@@ -82,6 +83,8 @@ export default function SettingsPage(props: SettingsPageProps) {
   const [pinnedProviderIds, setPinnedProviderIds] = useState<string[]>(readPinnedProviders);
   const [editingModelId, setEditingModelId] = useState<string | null>(null);
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
+  const [parallelLimit, setParallelLimit] = useState(String(props.subagentMaxConcurrent));
+  useEffect(() => setParallelLimit(String(props.subagentMaxConcurrent)), [props.subagentMaxConcurrent]);
 
   useEffect(() => { props.onLoadProviders(); }, []);
   useEffect(() => {
@@ -275,6 +278,10 @@ export default function SettingsPage(props: SettingsPageProps) {
           <select aria-label="默认子 Agent 模型" value={props.subagentDefaultModel || props.selectedModel} disabled={!props.subagentsEnabled || props.busy || !props.connected || !props.models.length} onChange={(event) => void props.onSaveSubagentSettings(props.subagentsEnabled, event.target.value)}>
             {subagentModelOptions.map((model) => <option key={model.id} value={model.id} disabled={hiddenModelIds.has(model.id)}>{model.name ?? model.id}{hiddenModelIds.has(model.id) ? '（当前值已隐藏）' : ''}</option>)}
           </select>
+        </label>
+        <label>最多同时运行的子 Agent
+          <input aria-label="并行子 Agent 上限" type="number" min={1} max={128} step={1} value={parallelLimit} disabled={props.busy || !props.connected} onChange={(event) => setParallelLimit(event.target.value)} />
+          <button type="button" className="btn ghost" disabled={props.busy || !props.connected || !Number.isInteger(Number(parallelLimit)) || Number(parallelLimit) < 1 || Number(parallelLimit) > 128} onClick={() => void props.onSaveSubagentSettings(props.subagentsEnabled, props.subagentDefaultModel || props.selectedModel, Number(parallelLimit))}>保存并行上限</button>
         </label>
       </div>
     </section>

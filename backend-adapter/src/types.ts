@@ -45,6 +45,7 @@ export interface ConfigurationResponse extends ModelListResponse {
   compression_model: string;
   subagents_enabled?: boolean;
   subagent_default_model?: string;
+  subagent_max_concurrent?: number;
 }
 
 export interface CustomModelRequest {

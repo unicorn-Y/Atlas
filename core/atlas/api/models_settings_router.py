@@ -94,6 +94,7 @@ class ProviderSettingsRequest(BaseModel):
     memory_model: str | None = None
     subagents_enabled: bool | None = None
     subagent_default_model: str | None = None
+    subagent_max_concurrent: int | None = None
 
 
 class CustomModelRequest(BaseModel):
@@ -194,7 +195,13 @@ def _configuration_payload(model_mgr) -> dict[str, Any]:
             if isinstance(settings.get("subagents_enabled"), bool) else True
         ),
         "subagent_default_model": str(settings.get("subagent_default_model") or ""),
+        "subagent_max_concurrent": _subagent_max_concurrent(settings),
     }
+
+
+def _subagent_max_concurrent(settings: dict[str, Any]) -> int:
+    value = settings.get("subagent_max_concurrent", 8)
+    return value if type(value) is int and value > 0 else 8
 
 
 class ImageGenerateRequest(BaseModel):
@@ -294,7 +301,7 @@ async def update_configuration(
         if req.memory_model is not None:
             settings["memory_model"] = req.memory_model
         _server().save_user_settings(settings)
-    if req.subagents_enabled is not None or req.subagent_default_model is not None:
+    if req.subagents_enabled is not None or req.subagent_default_model is not None or req.subagent_max_concurrent is not None:
         settings = _server().load_user_settings()
         if req.subagents_enabled is not None:
             settings["subagents_enabled"] = req.subagents_enabled
@@ -305,7 +312,15 @@ async def update_configuration(
             ):
                 raise HTTPException(status_code=400, detail="默认子 Agent 模型必须来自已配置的模型列表")
             settings["subagent_default_model"] = subagent_model
+        if req.subagent_max_concurrent is not None:
+            if type(req.subagent_max_concurrent) is not int or req.subagent_max_concurrent < 1 or req.subagent_max_concurrent > 128:
+                raise HTTPException(status_code=422, detail="并行子 Agent 上限必须是 1 到 128 的正整数")
+            settings["subagent_max_concurrent"] = req.subagent_max_concurrent
         _server().save_user_settings(settings)
+        if req.subagent_max_concurrent is not None:
+            from atlas.agent.subagent_capacity import get_subagent_capacity
+
+            await get_subagent_capacity().set_limits(max_concurrent=req.subagent_max_concurrent)
     return _configuration_payload(_resolved_model_mgr(services))
 
 

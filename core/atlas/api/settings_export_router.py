@@ -30,6 +30,7 @@ _ALLOWED_KEYS = frozenset({
     "memory_model",
     "subagents_enabled",
     "subagent_default_model",
+    "subagent_max_concurrent",
     "reasoning_stages",
 })
 _MODEL_PREFERENCE_KEYS = frozenset({
@@ -123,6 +124,12 @@ def _validate_settings(raw: Any, model_ids: set[str]) -> dict[str, Any]:
             raise HTTPException(status_code=400, detail="subagents_enabled 必须是布尔值")
         result["subagents_enabled"] = value
 
+    if "subagent_max_concurrent" in raw:
+        value = raw["subagent_max_concurrent"]
+        if type(value) is not int or value < 1 or value > 128:
+            raise HTTPException(status_code=400, detail="subagent_max_concurrent 必须是 1 到 128 的整数")
+        result["subagent_max_concurrent"] = value
+
     if "reasoning_stages" in raw:
         stages = raw["reasoning_stages"]
         expected = {"enabled", "planning", "execution", "verification"}
@@ -152,6 +159,8 @@ def _current_safe_settings(settings: dict[str, Any], model_ids: set[str]) -> dic
             if key in _MODEL_PREFERENCE_KEYS and isinstance(value, str) and value in model_ids:
                 safe[key] = value
             elif key == "subagents_enabled" and isinstance(value, bool):
+                safe[key] = value
+            elif key == "subagent_max_concurrent" and type(value) is int and 1 <= value <= 128:
                 safe[key] = value
             elif key == "reasoning_stages" and isinstance(value, dict):
                 try:

@@ -34,6 +34,7 @@ interface AtlasState extends PersistentSlice {
   compressionModel: string;
   subagentsEnabled: boolean;
   subagentDefaultModel: string;
+  subagentMaxConcurrent: number;
   /** The backend's model configuration has been read at least once (apiKeyConfigured is meaningful). */
   configLoaded: boolean;
   settingsBusy: boolean;
@@ -122,7 +123,7 @@ interface AtlasState extends PersistentSlice {
   applySkill: (name: string) => void;
   removeSkill: (name: string) => void;
   saveProviderSettings: (baseUrl: string, apiKey: string) => Promise<boolean>;
-  saveSubagentSettings: (enabled: boolean, defaultModel: string) => Promise<boolean>;
+  saveSubagentSettings: (enabled: boolean, defaultModel: string, maxConcurrent?: number) => Promise<boolean>;
   saveCompressionModel: (model: string) => Promise<boolean>;
   addCustomModel: (model: CustomModelRequest) => Promise<boolean>;
   /** C5: provider catalog, provider keys, custom-model edit/delete and reasoning stages. */
@@ -321,7 +322,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
   return {
     // Persistent-Atlas slices (agents/groups/channels/devices/localModels/automations).
     ...createPersistentSlice(set as unknown as SetPersistent, get as () => AtlasState),
-    apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, compressionModel: '', subagentsEnabled: true, subagentDefaultModel: '', configLoaded: false, settingsBusy: false, connectionTest: null,
+    apiBaseUrl: backend.apiBaseUrl, providerBaseUrl: backend.apiBaseUrl, apiKeyConfigured: false, compressionModel: '', subagentsEnabled: true, subagentDefaultModel: '', subagentMaxConcurrent: 8, configLoaded: false, settingsBusy: false, connectionTest: null,
     mode: 'mock', connected: false, backendStarting: false, startupDetail: null, busy: false, paused: false, error: null, errorDetail: null,
     model: '', models: [], providers: [], reasoningStages: { enabled: false, planning: 'high', execution: 'medium', verification: 'high' }, tools: [], conversations: [], conversationsLoading: false, loadingMessagesConversationId: null, creatingConversation: false, draftWorkspace: storageGet(DRAFT_WORKSPACE), conversationMessages: {}, messagesHasEarlier: {}, loadingEarlierConversationId: null, activeConversationId: '', conversationModels: (() => { try { const v = JSON.parse(storageGet(CONVERSATION_MODELS) ?? '{}'); return v && typeof v === 'object' ? v as Record<string, string> : {}; } catch { return {}; } })(),
     runs: [], activeRunId: null, artifacts: [], skills: [], capabilities: [], activeSkills: readList(ACTIVE_SKILLS),
@@ -356,7 +357,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
           const config = configuration.value;
           const preferredModel = storageGet('atlas.preference.model');
           const model = mode === 'backend' ? config.current : preferredModel || config.current;
-          set({ models: config.models, model, providerBaseUrl: config.gateway_base_url, apiKeyConfigured: config.api_key_configured, compressionModel: config.compression_model ?? '', subagentsEnabled: config.subagents_enabled ?? true, subagentDefaultModel: config.subagent_default_model || config.current, configLoaded: true });
+          set({ models: config.models, model, providerBaseUrl: config.gateway_base_url, apiKeyConfigured: config.api_key_configured, compressionModel: config.compression_model ?? '', subagentsEnabled: config.subagents_enabled ?? true, subagentDefaultModel: config.subagent_default_model || config.current, subagentMaxConcurrent: config.subagent_max_concurrent ?? 8, configLoaded: true });
         }
         if (toolList.status === 'fulfilled') set({ tools: toolList.value.tools });
         if (skills.status === 'fulfilled') set({ skills: skills.value });
@@ -541,11 +542,11 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       } finally { set({ settingsBusy: false }); }
     },
 
-    saveSubagentSettings: async (enabled, defaultModel) => {
+    saveSubagentSettings: async (enabled, defaultModel, maxConcurrent) => {
       set({ settingsBusy: true, error: null, errorDetail: null });
       try {
-        const configuration = await backend.updateSubagentSettings(enabled, defaultModel);
-        set({ subagentsEnabled: configuration.subagents_enabled ?? enabled, subagentDefaultModel: configuration.subagent_default_model ?? defaultModel, error: null, errorDetail: null });
+        const configuration = await backend.updateSubagentSettings(enabled, defaultModel, maxConcurrent);
+        set({ subagentsEnabled: configuration.subagents_enabled ?? enabled, subagentDefaultModel: configuration.subagent_default_model ?? defaultModel, subagentMaxConcurrent: configuration.subagent_max_concurrent ?? maxConcurrent ?? get().subagentMaxConcurrent, error: null, errorDetail: null });
         return true;
       } catch (error) {
         set(errorPatch(error, '保存子 Agent 设置失败'));

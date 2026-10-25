@@ -103,3 +103,16 @@ class SubagentCapacity:
         async with self._condition:
             self.max_concurrent, self.max_children_per_parent, self.max_spawn_depth = values
             self._condition.notify_all()
+
+
+# DelegationService instances are short lived in some tool paths. Keep one
+# scheduler per process so the configured global limit actually applies across
+# every concurrently created service instance.
+_SHARED_CAPACITY = SubagentCapacity()
+
+
+def get_subagent_capacity() -> SubagentCapacity:
+    return _SHARED_CAPACITY
+
+
+__all__ = ["CapacityTicket", "SubagentCapacity", "get_subagent_capacity"]

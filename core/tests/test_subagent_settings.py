@@ -82,6 +82,7 @@ async def test_subagent_settings_apply_to_new_children_only(monkeypatch, tmp_pat
             subtask_group_completed=None, event_queue=asyncio.Queue(),
             read_only=False, tool_allow=None, tool_deny=[], conversation_id="parent",
             approval_callback=None, sandbox_tool_callback=None, sandbox_enabled=False,
+            reasoning_effort=None,
         )
         return await orchestrator._execute_tools_node({
             "messages": [AIMessage(content="", tool_calls=[{

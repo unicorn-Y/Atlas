@@ -111,9 +111,9 @@ export class BackendAdapter {
     if (!this.live) throw new Error('连接 Atlas 后端后才能保存 API 配置');
     return this.request('/api/settings/configuration', { method: 'PUT', body: JSON.stringify({ gateway_base_url: gatewayBaseUrl, api_key: apiKey || null, ...(compressionModel !== undefined ? { compression_model: compressionModel } : {}) }) });
   }
-  async updateSubagentSettings(enabled: boolean, defaultModel: string): Promise<ConfigurationResponse> {
+  async updateSubagentSettings(enabled: boolean, defaultModel: string, maxConcurrent?: number): Promise<ConfigurationResponse> {
     if (!this.live) throw new Error('连接 Atlas 后端后才能保存子 Agent 设置');
-    return this.request('/api/settings/configuration', { method: 'PUT', body: JSON.stringify({ subagents_enabled: enabled, subagent_default_model: defaultModel }) });
+    return this.request('/api/settings/configuration', { method: 'PUT', body: JSON.stringify({ subagents_enabled: enabled, subagent_default_model: defaultModel, ...(maxConcurrent === undefined ? {} : { subagent_max_concurrent: maxConcurrent }) }) });
   }
   async addCustomModel(model: CustomModelRequest): Promise<ConfigurationResponse> {
     if (!this.live) throw new Error('连接 Atlas 后端后才能保存自定义模型');

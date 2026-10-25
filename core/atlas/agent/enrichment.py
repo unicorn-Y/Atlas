@@ -18,7 +18,7 @@ from typing import Any
 import structlog
 
 from atlas.engine.tool_permissions import intersect_tool_allow
-from atlas.agent.subagent_capacity import SubagentCapacity
+from atlas.agent.subagent_capacity import get_subagent_capacity
 from atlas.agent.mailbox import AgentMailbox, MailMessage, normalize_address
 
 log = structlog.get_logger()
@@ -363,7 +363,7 @@ class DelegationService:
         self._subtasks: dict[str, dict[str, Any]] = {}
         self._background_tasks: dict[str, asyncio.Task[Any]] = {}
         self._steer_queues: dict[str, asyncio.Queue[dict[str, str]]] = {}
-        self.capacity = SubagentCapacity()
+        self.capacity = get_subagent_capacity()
         self.mailbox = AgentMailbox()
         self._mailbox_pumps: dict[str, asyncio.Task[Any]] = {}
 
@@ -494,6 +494,14 @@ class DelegationService:
     ) -> dict[str, Any]:
         if not goal.strip():
             raise ValueError("goal must be non-empty")
+        # Config is read at admission time so persisted changes survive process
+        # restarts and newly queued children observe the latest global limit.
+        from atlas import agent as agent_module
+
+        configured_limit = agent_module.load_user_settings().get("subagent_max_concurrent", 8)
+        if type(configured_limit) is not int or configured_limit < 1:
+            configured_limit = 8
+        await self.capacity.set_limits(max_concurrent=configured_limit)
         from atlas.agent.delegation_output_schema import (
             append_output_contract, build_retry_message, coerce_output_schema,
             validate_output,
