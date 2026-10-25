@@ -11,6 +11,7 @@ import base64
 import json
 import logging
 import re
+import subprocess
 import uuid
 from contextlib import suppress
 from datetime import UTC, datetime
@@ -293,8 +294,20 @@ async def create_handoff_summary(
                 f"worktree: {conversation.get('worktree_path') or 'none'}; "
                 f"base: {conversation.get('base_branch') or 'unknown'}" if conversation.get("worktree_path")
                 else f"Workspace: {conversation.get('workspace') or 'none'}")
+    workspace_root = conversation.get("worktree_path") or conversation.get("workspace")
+    git_state = "Git status: unavailable"
+    if isinstance(workspace_root, str) and workspace_root and not workspace_root.startswith("ssh://"):
+        try:
+            status = await asyncio.to_thread(
+                subprocess.run, ["git", "status", "--short", "--branch"], cwd=workspace_root,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5, check=False,
+            )
+            if status.returncode == 0:
+                git_state = "Git status:\n" + ("\n".join(status.stdout.splitlines()[:200]) or "clean")
+        except (OSError, subprocess.TimeoutExpired):
+            pass
     prompt = (f"Source conversation: {conversation.get('title') or 'Untitled'} ({conversation_id})\n"
-              f"{worktree}\n\nComplete transcript, oldest first:\n{transcript}")
+              f"{worktree}\n{git_state}\n\nComplete transcript, oldest first:\n{transcript}")
     if model is not None and (not isinstance(model, str) or len(model) > 256):
         raise HTTPException(status_code=400, detail="model must be a valid model id")
     selected = model or model_mgr.current_model
