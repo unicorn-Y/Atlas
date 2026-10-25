@@ -49,8 +49,13 @@ def apply_wsl_session_policy(sandbox: dict[str, Any] | None, *, runtime_is_wsl: 
     policy = get_wsl_policy()
     if not policy["enabled"]:
         raise PermissionError("本机策略已禁用 WSL 会话")
-    if policy["require_isolation"] and sandbox is None:
-        return {"type": "docker", "network": False}
+    if policy["require_isolation"]:
+        # This is a forced runtime policy: a caller-provided Docker config must
+        # not be able to turn networking back on or select a non-isolated host.
+        forced = {"type": "docker", "network": False}
+        if isinstance(sandbox, dict) and isinstance(sandbox.get("image"), str):
+            forced["image"] = sandbox["image"]
+        return forced
     return sandbox
 
 

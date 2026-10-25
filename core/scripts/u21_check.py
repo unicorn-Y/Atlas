@@ -30,6 +30,11 @@ def check_wsl_policy() -> None:
     with patch.object(wsl_policy_router, "get_wsl_policy", return_value={"enabled": True, "require_isolation": True}):
         sandbox = wsl_policy_router.apply_wsl_session_policy(None, runtime_is_wsl=True)
         assert sandbox == {"type": "docker", "network": False}
+        forced = wsl_policy_router.apply_wsl_session_policy(
+            {"type": "docker", "network": True, "image": "atlas-test:latest"},
+            runtime_is_wsl=True,
+        )
+        assert forced == {"type": "docker", "network": False, "image": "atlas-test:latest"}
     with patch.object(wsl_policy_router, "get_wsl_policy", return_value={"enabled": False, "require_isolation": False}):
         try:
             wsl_policy_router.apply_wsl_session_policy(None, runtime_is_wsl=True)
