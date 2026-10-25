@@ -9,6 +9,7 @@ import type { AutomationRecord } from '../services/persistentApi';
 import { automationsApi } from '../services/persistentApi';
 import GoalsPanel from './GoalsPanel';
 import { describeAutomation, describeTrigger } from './automations/describe';
+import { AUTOMATION_TEMPLATES, AUTOMATION_TEMPLATE_CATALOG_VERSION, materializeAutomationTemplate } from './automations/templateCatalog';
 
 const RUN_STATUS: Record<string, string> = {
   completed: '完成', failed: '失败', running: '运行中', cancelled: '已停止', error: '出错', queued: '排队中',
@@ -80,6 +81,9 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
   const [tab, setTab] = useState<'tasks' | 'goals'>('tasks');
   const [selected, setSelected] = useState('');
   const [creating, setCreating] = useState(false);
+  const [templateChoiceOpen, setTemplateChoiceOpen] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templateParameters, setTemplateParameters] = useState<Record<string, string>>({});
   const [form, setForm] = useState<CreateForm>(EMPTY_FORM);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -105,6 +109,30 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
 
   const agentsById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
   const editable = (item: AutomationRecord) => item.payload?.kind !== 'heartbeat';
+  const selectedTemplate = AUTOMATION_TEMPLATES.find((item) => item.id === selectedTemplateId);
+  const chooseTemplate = (templateId: string) => {
+    const template = AUTOMATION_TEMPLATES.find((item) => item.id === templateId);
+    const parameters = Object.fromEntries((template?.parameters ?? []).map((item) => [item.key, item.defaultValue]));
+    setSelectedTemplateId(template?.id ?? '');
+    setTemplateParameters(parameters);
+    setForm(template ? {
+      ...EMPTY_FORM, name: template.name, kind: template.trigger.kind,
+      cron: template.trigger.cron ?? EMPTY_FORM.cron,
+      everyHours: template.trigger.everyHours ?? EMPTY_FORM.everyHours,
+      path: template.trigger.path ?? '', glob: template.trigger.glob ?? '',
+      message: materializeAutomationTemplate(template, parameters),
+    } : { ...EMPTY_FORM });
+    setTemplateChoiceOpen(false);
+  };
+  const updateTemplateParameter = (key: string, value: string) => {
+    const next = { ...templateParameters, [key]: value };
+    setTemplateParameters(next);
+    if (selectedTemplate) setForm((current) => ({
+      ...current,
+      message: materializeAutomationTemplate(selectedTemplate, next),
+      ...(selectedTemplate.trigger.kind === 'event' && key === 'folder' ? { path: value } : {}),
+    }));
+  };
 
   const act = async (task: () => Promise<unknown>, done: string) => {
     setBusy(true);
@@ -171,7 +199,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
         <button className="btn" disabled={importing || !connected} onClick={() => void doImport()} title="把旧版 /api/schedules 的调度一次性导入">
           {importing ? <LoaderCircle size={15} className="spin" /> : <Upload size={15} />}导入旧调度
         </button>
-        <button className="btn primary" disabled={!connected} onClick={() => setCreating(true)}><Plus size={15} />新建自动化</button>
+        <button className="btn primary" disabled={!connected} onClick={() => { setEditingId(''); setSelectedTemplateId(''); setTemplateParameters({}); setTemplateChoiceOpen(true); setCreating(true); }}><Plus size={15} />新建自动化</button>
       </div>}
     </header>
 
@@ -199,8 +227,20 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
 
     {tab === 'goals' && <GoalsPanel apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />}
     {tab === 'tasks' && <>
-      {creating && <form className="card glass form mb-3.5" onSubmit={create}>
+      {creating && !editingId && templateChoiceOpen && <section className="card glass mb-3.5 p-4" aria-label="选择自动化模板">
+        <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><h2 className="m-0 text-[15px] font-semibold text-fg">先选择一个任务模板</h2><p className="mb-3 mt-1 text-[11.5px] text-fg-3">内置模板目录 v{AUTOMATION_TEMPLATE_CATALOG_VERSION} · 选择后可修改触发器、参数和任务内容；创建结果仍保存为普通自动化。</p></div><button type="button" className="btn ghost" onClick={() => { setCreating(false); setTemplateChoiceOpen(false); }}>取消</button></div>
+        <div className="grid gap-2 sm:grid-cols-2">{AUTOMATION_TEMPLATES.map((template) => <button key={template.id} type="button" className="rounded-xl border border-line bg-panel p-3 text-left hover:border-brand" onClick={() => chooseTemplate(template.id)}><b className="block text-[13px] text-fg">{template.name}<span className="ml-1 text-[10px] text-fg-3">v{template.version}</span></b><span className="mt-1 block text-[11.5px] leading-5 text-fg-3">{template.purpose}</span><span className="mt-2 block text-[10.5px] text-brand">{template.trigger.kind === 'cron' ? `定时 · ${template.trigger.cron}` : template.trigger.kind === 'event' ? '文件变化触发' : '固定间隔'}</span></button>)}
+          <button type="button" className="rounded-xl border border-line bg-panel p-3 text-left hover:border-brand" onClick={() => chooseTemplate('')}><b className="block text-[13px] text-fg">从空白开始</b><span className="mt-1 block text-[11.5px] leading-5 text-fg-3">不套用模板，手动配置触发条件和任务描述。</span></button>
+        </div>
+      </section>}
+      {creating && (!templateChoiceOpen || Boolean(editingId)) && <form className="card glass form mb-3.5" onSubmit={create}>
         <h2>{editingId ? '编辑自动化' : '新建自动化'}</h2>
+        {!editingId && <div className="flex items-center gap-2 rounded-lg bg-sunken px-3 py-2 text-[11px] text-fg-3"><span className="flex-1">{selectedTemplate ? `模板：${selectedTemplate.name} v${selectedTemplate.version}（目录 v${AUTOMATION_TEMPLATE_CATALOG_VERSION}）` : '空白自动化'}</span><button type="button" className="text-brand hover:underline" onClick={() => setTemplateChoiceOpen(true)}>更换模板</button></div>}
+        {selectedTemplate && !editingId && <section className="rounded-lg border border-line bg-sunken p-3" aria-label="模板参数和任务预览">
+          <b className="text-[12px] text-fg">模板参数</b>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">{selectedTemplate.parameters.map((parameter) => <label key={parameter.key} className="grid gap-1 text-[11.5px] text-fg-2">{parameter.label}<input value={templateParameters[parameter.key] ?? ''} onChange={(event) => updateTemplateParameter(parameter.key, event.target.value)} placeholder={parameter.placeholder} className="rounded-lg border border-line bg-panel px-2.5 py-2 text-[12px] text-fg" /></label>)}</div>
+          <div className="mt-3 border-t border-line pt-2"><b className="text-[11px] text-fg-3">生成的任务内容预览</b><pre className="mb-0 mt-1 whitespace-pre-wrap break-words text-[12px] leading-5 text-fg-2">{materializeAutomationTemplate(selectedTemplate, templateParameters)}</pre></div>
+        </section>}
         <div className="two">
           <label>名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="留空则用内容开头" /></label>
           <label>归谁（owner Agent）
