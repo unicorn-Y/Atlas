@@ -111,6 +111,7 @@ import type { PickedElement } from './shell/panels/BrowserPanel';
 import { THEMES, applyStoredTheme, clearCustomTheme, initialTheme, nextTheme, themeInfo, type Theme } from './shell/themes';
 import { observeLocalizedCopy, readLocale, saveLocale, t } from './services/i18n';
 import { api, relativeTime } from './services/api';
+import { extractMemoryMarkers } from './services/memoryMarkers';
 import { buildTimeline } from './components/timeline';
 const ComputerEdgeBar = lazy(() => import('./components/x2').then((module) => ({ default: module.ComputerEdgeBar })));
 import UpdateBanner from './components/UpdateBanner';
@@ -124,6 +125,7 @@ import ComputerLivePreview from './components/x2/ComputerLivePreview';
 const ScreenRecorderDialog = lazy(() => import('./components/ScreenRecorderDialog'));
 
 type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage' | 'memories' | 'teach' | 'secrets';
+type MemoryMarkerDraft = { text: string; path: string };
 
 const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['models', '模型与服务', SlidersHorizontal, 'provider 模型 model API key 密钥 reasoning 推理 连接'],
@@ -292,6 +294,8 @@ export default function App() {
   const [homeMode, setHomeMode] = useState('chat');
   const [createPrompt, setCreatePrompt] = useState('');
   const [toast, setToast] = useState('');
+  const [memoryMarkerDrafts, setMemoryMarkerDrafts] = useState<MemoryMarkerDraft[] | null>(null);
+  const [memoryMarkerSaving, setMemoryMarkerSaving] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [recentScreenshots, setRecentScreenshots] = useState<RecentScreenshot[]>([]);
   const [files, setFiles] = useState<Array<RunFile & { size: number }>>([]);
@@ -795,6 +799,31 @@ export default function App() {
     setVoiceOpen(true);
   };
 
+  const dismissMemoryMarkerReview = () => {
+    if (!memoryMarkerDrafts) return;
+    setMemoryMarkerDrafts(null);
+    setToast('消息已发送；记忆标记未保存');
+  };
+  const saveMemoryMarkerDrafts = async () => {
+    if (!memoryMarkerDrafts?.length || memoryMarkerSaving) return;
+    setMemoryMarkerSaving(true);
+    let saved = 0;
+    try {
+      for (const item of memoryMarkerDrafts) {
+        await api<{ id: string; path: string }>(store.apiBaseUrl, '/api/memlib/add', {
+          method: 'POST', json: { path: item.path, text: item.text },
+        });
+        saved += 1;
+      }
+      setMemoryMarkerDrafts(null);
+      setToast(`已保存 ${saved} 条记忆`);
+      window.dispatchEvent(new Event('atlas:memories-updated'));
+    } catch (error) {
+      if (saved) setMemoryMarkerDrafts((current) => current?.slice(saved) ?? null);
+      setToast(`记忆保存${saved ? `（已保存 ${saved} 条）` : ''}失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally { setMemoryMarkerSaving(false); }
+  };
+
   const submit = async (fromHome: boolean, immediate = false, inputOverride?: string) => {
     const submittedInput = inputOverride ?? input;
     if (!submittedInput.trim() && !attachments.length && !files.length && !mentions.length) return;
@@ -804,6 +833,7 @@ export default function App() {
     }
     scheduleBypass.current = false;
     let text = submittedInput;
+    const memoryCandidates = extractMemoryMarkers(submittedInput);
     const images = attachments;
     const documents = files.map(({ name, mime, data_base64 }) => ({ name, mime, data_base64 }));
     const elementRefs = mentions.filter((item) => item.kind === 'element');
@@ -868,6 +898,9 @@ export default function App() {
     const sent = immediate && activeRun && !runDone
       ? store.sendNow(text, images, documents, refs)
       : store.sendMessage(text, images, documents, refs, undefined, undefined, messageSkills);
+    if (memoryCandidates.length) {
+      setMemoryMarkerDrafts(memoryCandidates.map((candidate) => ({ text: candidate, path: '我.md' })));
+    }
     void sent.then(async () => {
       const projectId = pendingProjectId;
       const conversationId = useAtlasStore.getState().activeConversationId;
@@ -2641,6 +2674,17 @@ export default function App() {
       <p className="my-2 text-[12px] text-fg-3">摘要由完整会话记录生成，可编辑。新会话会保存原会话引用，摘要会放入新会话输入框供你继续编辑后发送。</p>
       {handoffBusy ? <p role="status" className="m-0 py-8 text-center text-[13px] text-fg-3">正在整理目标、决策、约束、文件状态和待办…</p> : <textarea aria-label="交接摘要预览与编辑" autoFocus value={handoffDraft} onChange={(event) => setHandoffDraft(event.target.value)} className="min-h-0 flex-1 resize-y rounded-xl border border-line bg-sunken p-3 font-mono text-[12px] leading-relaxed text-fg outline-none focus:border-brand" />}
       {!handoffBusy && <div className="mt-3 flex justify-end gap-2"><Button variant="secondary" onClick={() => { setHandoffDraft(''); setHandoffSource(''); }}>取消</Button><Button variant="primary" disabled={!handoffDraft.trim()} onClick={() => void createHandoffConversation()}>创建关联的新会话</Button></div>}
+    </Dialog>
+    <Dialog open={Boolean(memoryMarkerDrafts?.length)} onOpenChange={(open) => { if (!open && !memoryMarkerSaving) dismissMemoryMarkerReview(); }} label="审阅待保存记忆" className="flex max-h-[86vh] w-[min(720px,92vw)] flex-col bg-panel p-5 shadow-xl">
+      <div className="flex items-center gap-2"><h2 className="m-0 text-[16px] font-semibold text-heading">审阅待保存记忆</h2><span className="flex-1"/><button type="button" disabled={memoryMarkerSaving} onClick={dismissMemoryMarkerReview} className="rounded-lg px-3 py-1.5 text-[12px] text-fg-2 hover:bg-hover">关闭</button></div>
+      <p className="mt-2 mb-3 text-[12px] text-fg-3">原消息已完整发送，标记内容不会从消息正文移除。检查或编辑后再确认写入记忆库；“仅发送”会放弃保存。</p>
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">{memoryMarkerDrafts?.map((item, index) => <section key={index} className="rounded-xl border border-line p-3">
+        <label className="mb-1 block text-[11px] text-fg-3" htmlFor={`memory-marker-${index}`}>记忆内容 {index + 1}</label>
+        <textarea id={`memory-marker-${index}`} value={item.text} onChange={(event) => setMemoryMarkerDrafts((current) => current?.map((row, rowIndex) => rowIndex === index ? { ...row, text: event.target.value } : row) ?? null)} className="min-h-20 w-full resize-y rounded-lg border border-line bg-sunken p-2 text-[13px] text-fg" />
+        <label className="mt-2 flex items-center gap-2 text-[11px] text-fg-3">保存到<select aria-label={`记忆内容 ${index + 1} 保存页面`} value={item.path} onChange={(event) => setMemoryMarkerDrafts((current) => current?.map((row, rowIndex) => rowIndex === index ? { ...row, path: event.target.value } : row) ?? null)} className="rounded-md border border-line bg-panel px-2 py-1 text-fg"><option value="我.md">关于我</option><option value="现状.md">当前情况</option><option value="它自己.md">Atlas 的记录</option></select></label>
+      </section>)}</div>
+      <p className="mt-3 mb-0 text-[11px] text-fg-3">语法：单行 `# 记忆内容` 或 `#记住：记忆内容`；后续非空行属于同一条，空行开始新段。代码围栏中的 # 不触发；行首写 `\#` 表示普通文本。</p>
+      <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" disabled={memoryMarkerSaving} onClick={dismissMemoryMarkerReview}>仅发送，不保存</Button><Button variant="primary" disabled={memoryMarkerSaving || !memoryMarkerDrafts?.length || memoryMarkerDrafts.some((item) => !item.text.trim())} onClick={() => void saveMemoryMarkerDrafts()}>{memoryMarkerSaving ? '正在保存…' : '确认保存记忆'}</Button></div>
     </Dialog>
     {activeConversation && <Suspense fallback={null}><SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} /></Suspense>}
     <Dialog open={schedulePromptOpen} onOpenChange={setSchedulePromptOpen} label="安排插话" className="w-[min(480px,92vw)] bg-panel p-5 shadow-xl">

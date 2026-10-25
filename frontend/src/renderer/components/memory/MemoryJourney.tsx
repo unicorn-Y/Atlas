@@ -29,6 +29,11 @@ export default function MemoryJourney({ apiBaseUrl, connected, onOpenRef, onToas
     finally { setLoading(false); }
   };
   useEffect(() => { setItems([]); setBefore(''); setHasMore(true); void load(true); }, [apiBaseUrl, connected, kind, query]);
+  useEffect(() => {
+    const refresh = () => { setItems([]); setBefore(''); setHasMore(true); void load(true); };
+    window.addEventListener('atlas:memories-updated', refresh);
+    return () => window.removeEventListener('atlas:memories-updated', refresh);
+  }, [apiBaseUrl, connected, kind, query]);
 
   const openSource = async (item: JourneyItem) => {
     if (item.ref) { onOpenRef(item.ref); return; }

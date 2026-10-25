@@ -37,6 +37,8 @@ export interface MentionItem { kind: 'file' | 'conversation' | 'resource' | 'ele
 
 /** The @, #, or $ query being typed at the end of the draft, if any. */
 export function mentionAt(value: string): { trigger: '@' | '#' | '$'; query: string; start: number } | null {
+  const line = value.slice(value.lastIndexOf('\n') + 1);
+  if (/^\s*#(?:\s+|记住(?=[:：\s]|$))/.test(line)) return null;
   const match = /(^|\s)([@#$])([^\s@#$]*)$/.exec(value);
   if (!match) return null;
   return { trigger: match[2] as '@' | '#' | '$', query: match[3], start: match.index + match[1].length };
@@ -652,7 +654,7 @@ export default function Composer(props: ComposerProps) {
       }}
       className={cn('block w-full resize-none border-0 bg-transparent p-0 text-fg outline-none placeholder:text-fg-3',
         hero ? 'min-h-[60px] text-[16px] leading-[1.65]' : 'min-h-[26px] text-[15px] leading-[1.6]')} />
-    <span id={`${textareaId}-help`} className="sr-only">按 Enter 发送，Shift 加 Enter 换行；建议列表可用上下方向键选择、Tab 补全，Escape 关闭。选中文字后按 Alt 加 Shift 加 A，可将选中文字放入消息草稿。</span>
+    <span id={`${textareaId}-help`} className="sr-only">按 Enter 发送，Shift 加 Enter 换行；建议列表可用上下方向键选择、Tab 补全，Escape 关闭。行首 `# 内容` 或 `#记住：内容` 会在消息照常发送后打开记忆审阅；代码围栏内不触发，写 `\#` 可表示普通文本。选中文字后按 Alt 加 Shift 加 A，可将选中文字放入消息草稿。</span>
     {showShortcutHints && <div className="mt-1 flex items-center gap-2 text-[10.5px] text-fg-3" aria-label="快捷键提示">Enter 发送 · Shift+Enter 换行 · Ctrl+P 切换模型 · Ctrl+Shift+S 暂存 · ? 或 /keymap 查看快捷键 {vimEnabled && <span role="status" aria-label={`Vim ${t(vimMode === 'normal' ? '普通模式' : vimMode === 'visual' ? '可视模式' : '插入模式', readLocale())}`} className="rounded bg-brand-soft px-1.5 py-0.5 font-mono text-brand">VIM {t(vimMode === 'normal' ? '普通模式' : vimMode === 'visual' ? '可视模式' : '插入模式', readLocale())}</span>}</div>}
     <span id={`${textareaId}-screen-reader-help`} className={screenReaderMode ? 'sr-only' : 'hidden'}>屏幕阅读增强已开启。建议列表打开时焦点保留在消息输入框；使用上下方向键浏览，当前项和运行提示会自动播报，Enter 选择，Escape 关闭。</span>
     <span id={`${textareaId}-status`} role={screenReaderMode ? undefined : 'status'} aria-live={screenReaderMode ? undefined : 'polite'}
