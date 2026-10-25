@@ -7,6 +7,7 @@ import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
 
 const field = 'h-9 rounded-[9px] bg-sunken px-3 text-[13.5px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]';
+type TopicRouteDraft = { id: string; keywords: string; role: string; agentIds: string[]; priority: string; enabled: boolean };
 
 const ACTOR_STYLE: Record<string, string> = {
   user: 'bg-brand-soft text-fg',
@@ -33,6 +34,7 @@ export default function GroupsView({ onToast }: { onToast: (text: string) => voi
   const sendGroupTurn = useAtlasStore((state) => state.sendGroupTurn);
   const loadGroupTimeline = useAtlasStore((state) => state.loadGroupTimeline);
   const stopGroup = useAtlasStore((state) => state.stopGroup);
+  const updateGroup = useAtlasStore((state) => state.updateGroup);
 
   const [selected, setSelected] = useState('');
   const [creating, setCreating] = useState(false);
@@ -40,6 +42,10 @@ export default function GroupsView({ onToast }: { onToast: (text: string) => voi
   const [members, setMembers] = useState<string[]>([]);
   const [input, setInput] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [routeEditor, setRouteEditor] = useState(false);
+  const [topicRoutes, setTopicRoutes] = useState<TopicRouteDraft[]>([]);
+  const [defaultRoute, setDefaultRoute] = useState<string[]>([]);
+  const [routeFallback, setRouteFallback] = useState<'broadcast' | 'default'>('broadcast');
 
   useEffect(() => { void loadAgents(); void loadGroups(); }, [loadAgents, loadGroups]);
 
@@ -47,6 +53,15 @@ export default function GroupsView({ onToast }: { onToast: (text: string) => voi
   const group = groups.find((item) => item.id === selected);
   const timeline = timelines[selected] ?? [];
   const busy = Boolean(busyMap[selected]);
+
+  useEffect(() => {
+    setTopicRoutes((group?.topic_routes ?? []).map((route) => ({
+      id: route.id, keywords: route.keywords.join(', '), role: route.role ?? '',
+      agentIds: route.agent_ids, priority: String(route.priority), enabled: route.enabled,
+    })));
+    setDefaultRoute(group?.default_route ?? []);
+    setRouteFallback(group?.route_fallback ?? 'broadcast');
+  }, [selected, groups]);
 
   useEffect(() => {
     if (selected || !groups.length) return;
@@ -78,6 +93,27 @@ export default function GroupsView({ onToast }: { onToast: (text: string) => voi
       onToast('群聊已创建');
     }
   };
+
+  const saveRoutes = async () => {
+    if (!group) return;
+    const invalid = topicRoutes.some((route) => (!route.keywords.split(',').map((value) => value.trim()).filter(Boolean).length && !route.role.trim()) || !route.agentIds.length);
+    if (invalid) { onToast('每条话题规则都要设置关键词或角色，并选择至少一个 Agent'); return; }
+    const saved = await updateGroup(group.id, {
+      topic_routes: topicRoutes.map((route) => ({
+        id: route.id,
+        keywords: route.keywords.split(',').map((value) => value.trim()).filter(Boolean),
+        role: route.role.trim(), agent_ids: route.agentIds,
+        priority: Number(route.priority) || 0, enabled: route.enabled,
+      })),
+      default_route: defaultRoute,
+      route_fallback: routeFallback,
+    });
+    if (saved) { setRouteEditor(false); onToast('群组路由规则已保存'); }
+    else onToast(useAtlasStore.getState().groupsError || '保存群组路由失败');
+  };
+
+  const toggleTargets = (current: string[], agentId: string) => current.includes(agentId)
+    ? current.filter((id) => id !== agentId) : [...current, agentId];
 
   if (groupsAvailable === false) return <div className="screen page"><div className="page-inner">
     <header className="page-head"><div><h1>群聊</h1><p>把几个 Agent 拉进同一个房间，@谁谁说话。</p></div></header>
@@ -139,6 +175,7 @@ export default function GroupsView({ onToast }: { onToast: (text: string) => voi
           <b className="text-[13.5px] font-medium text-fg">{group.name}</b>
           <span className="text-[12px] text-fg-3">{(group.members ?? []).map((member) => agentName(member.agent_id)).join('、')}</span>
           <span className="flex-1" />
+          <Button size="sm" variant={routeEditor ? 'secondary' : 'ghost'} aria-expanded={routeEditor} onClick={() => setRouteEditor((value) => !value)}>话题路由</Button>
           <Button size="sm" variant="ghost" disabled={busy} aria-label="停止群聊回合" onClick={() => void stopGroup(group.id).then(() => onToast('已请求停止'))}><Square />停止</Button>
           <Button size="icon-sm" variant="ghost" aria-label="刷新时间线" onClick={() => void loadGroupTimeline(group.id)}><RefreshCw /></Button>
           <Button size="icon-sm" variant={confirmDelete ? 'danger' : 'ghost'} aria-label="解散群聊"
@@ -146,6 +183,28 @@ export default function GroupsView({ onToast }: { onToast: (text: string) => voi
             <Trash2 />
           </Button>
         </header>
+        {routeEditor && <section className="max-h-[38vh] shrink-0 overflow-auto border-b border-line bg-surface px-5 py-3" aria-label="群组话题路由设置">
+          <div className="mb-2 flex items-center justify-between"><b className="text-[13px]">群组路由规则</b><Button size="sm" variant="ghost" onClick={() => setTopicRoutes((current) => [...current, { id: `topic-${Date.now().toString(36)}`, keywords: '', role: '', agentIds: [], priority: '0', enabled: true }])}><Plus />添加规则</Button></div>
+          <div className="mb-3 rounded-lg bg-sunken p-2.5">
+            <div className="mb-1 text-[11.5px] text-fg-3">未命中规则时的默认 Agent（留空则广播给全员）</div>
+            <div className="flex flex-wrap gap-1">{group.members?.map((member) => <button key={member.agent_id} type="button" aria-pressed={defaultRoute.includes(member.agent_id)} onClick={() => setDefaultRoute((current) => toggleTargets(current, member.agent_id))} className={cn('rounded-md px-2 py-1 text-[11.5px]', defaultRoute.includes(member.agent_id) ? 'bg-brand-soft text-fg' : 'bg-surface text-fg-3')}>{agentName(member.agent_id)}</button>)}</div>
+            <label className="mt-2 flex items-center gap-2 text-[11.5px] text-fg-2">规则优先级冲突时
+              <select className={field} value={routeFallback} onChange={(event) => setRouteFallback(event.target.value as 'broadcast' | 'default')}><option value="broadcast">广播给所有成员</option><option value="default">使用默认 Agent</option></select>
+            </label>
+          </div>
+          {!topicRoutes.length && <p className="text-[12px] text-fg-3">还没有话题规则。显式 @成员仍会优先路由。</p>}
+          <div className="grid gap-2">{topicRoutes.map((route, index) => <div key={route.id} className="rounded-lg border border-line p-2.5">
+            <div className="mb-2 grid grid-cols-[minmax(180px,1fr)_minmax(120px,0.7fr)_100px_auto_auto] gap-2">
+              <label className="grid gap-1 text-[10.5px] text-fg-3">话题关键词（逗号分隔）<input className={field} value={route.keywords} onChange={(event) => setTopicRoutes((current) => current.map((item, i) => i === index ? { ...item, keywords: event.target.value } : item))} placeholder="部署, 发布" /></label>
+              <label className="grid gap-1 text-[10.5px] text-fg-3">角色（可选）<input className={field} value={route.role} onChange={(event) => setTopicRoutes((current) => current.map((item, i) => i === index ? { ...item, role: event.target.value } : item))} placeholder="ops" /></label>
+              <label className="grid gap-1 text-[10.5px] text-fg-3">优先级<input className={field} type="number" step={1} value={route.priority} onChange={(event) => setTopicRoutes((current) => current.map((item, i) => i === index ? { ...item, priority: event.target.value } : item))} /></label>
+              <label className="flex items-center gap-1 text-[11px] text-fg-2"><input type="checkbox" checked={route.enabled} onChange={(event) => setTopicRoutes((current) => current.map((item, i) => i === index ? { ...item, enabled: event.target.checked } : item))} />启用</label>
+              <button type="button" className="self-end rounded px-2 py-1 text-danger hover:bg-hover" aria-label={`删除路由规则 ${route.id}`} onClick={() => setTopicRoutes((current) => current.filter((_, i) => i !== index))}><Trash2 size={14} /></button>
+            </div>
+            <div className="flex flex-wrap gap-1">{group.members?.map((member) => <button key={member.agent_id} type="button" aria-pressed={route.agentIds.includes(member.agent_id)} onClick={() => setTopicRoutes((current) => current.map((item, i) => i === index ? { ...item, agentIds: toggleTargets(item.agentIds, member.agent_id) } : item))} className={cn('rounded-md px-2 py-1 text-[11.5px]', route.agentIds.includes(member.agent_id) ? 'bg-brand-soft text-fg' : 'bg-sunken text-fg-3')}>{agentName(member.agent_id)}</button>)}</div>
+          </div>)}</div>
+          <div className="mt-3 flex justify-end gap-2"><Button size="sm" variant="ghost" onClick={() => setRouteEditor(false)}>取消</Button><Button size="sm" variant="primary" onClick={() => void saveRoutes()}>保存路由</Button></div>
+        </section>}
         <div className="min-h-0 flex-1 overflow-auto px-6 py-4" aria-label="群聊时间线">
           <div className="mx-auto grid w-[min(720px,100%)] gap-3">
             {timeline.map((entry, index) => <GroupBubble key={entry.id ?? index} entry={entry} agentName={agentName} />)}

@@ -6,7 +6,7 @@ vi.mock('../services/persistentApi', () => ({
     status: vi.fn(), putHeartbeat: vi.fn(), listChannels: vi.fn(), addChannel: vi.fn(), removeChannel: vi.fn(),
   },
   agentSkillsApi: { list: vi.fn(), set: vi.fn(), proposals: vi.fn(), approve: vi.fn(), reject: vi.fn(), rollback: vi.fn() },
-  groupsApi: { list: vi.fn(), create: vi.fn(), remove: vi.fn(), turn: vi.fn(), timeline: vi.fn(), stop: vi.fn() },
+  groupsApi: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), turn: vi.fn(), timeline: vi.fn(), stop: vi.fn() },
   automationsApi: { list: vi.fn(), create: vi.fn(), patch: vi.fn(), remove: vi.fn(), runNow: vi.fn(), cancel: vi.fn(), pause: vi.fn(), resume: vi.fn(), runs: vi.fn(), importLegacy: vi.fn() },
   devicesApi: { list: vi.fn(), register: vi.fn(), patch: vi.fn(), remove: vi.fn(), takeover: vi.fn(), takeoverAction: vi.fn(), activity: vi.fn(), handoff: vi.fn(), handoffAction: vi.fn() },
   channelsApi: { status: vi.fn(), putAccounts: vi.fn(), setCredential: vi.fn(), sendTest: vi.fn() },
@@ -74,6 +74,16 @@ describe('persistent slice', () => {
     vi.mocked(groupsApi.timeline).mockClear();
     expect(await slice.sendGroupTurn('g1', 'hello')).toBe(true);
     expect(groupsApi.timeline).toHaveBeenCalledWith('http://test', 'g1');
+  });
+
+  it('persists group topic routes and replaces the current group record', async () => {
+    const { state, slice } = makeStore();
+    state.groups = [{ id: 'g1', name: 'Review', member_agent_ids: ['ops'] }];
+    const updated = { id: 'g1', name: 'Review', topic_routes: [{ id: 'deploy', keywords: ['deploy'], agent_ids: ['ops'], priority: 2, enabled: true }] };
+    vi.mocked(groupsApi.update).mockResolvedValue(updated);
+    expect(await slice.updateGroup('g1', { topic_routes: updated.topic_routes })).toBe(true);
+    expect(groupsApi.update).toHaveBeenCalledWith('http://test', 'g1', { topic_routes: updated.topic_routes });
+    expect(state.groups[0].topic_routes).toEqual(updated.topic_routes);
   });
 
   it('status meta covers the four projected states', () => {

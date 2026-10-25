@@ -182,11 +182,26 @@ class GroupOrchestrator:
             kind="user" if from_actor == "user" else "member",
             actor=from_actor, text=text.strip(),
         )
-        mentioned = self._parse_mentions(entry["text"], members)
-        if mentioned:
-            responders = [m for m in members if m["id"] in mentioned and m["id"] != from_actor]
-        else:
-            responders = [m for m in members if m["id"] != from_actor]
+        from atlas.channels.routing import resolve_group_recipients
+
+        mentions = incoming.get("mentions", [])
+        if not isinstance(mentions, list):
+            raise ValueError("mentions must be a list of normalized mention names")
+        route = resolve_group_recipients(
+            members, entry["text"], mentions=[str(value) for value in mentions],
+            role=str(incoming.get("role") or ""),
+            topic_routes=group.get("topic_routes", []),
+            default_route=group.get("default_route", []),
+            fallback=str(group.get("route_fallback") or "broadcast"),
+        )
+        target_ids = set(route["agent_ids"])
+        responders = [m for m in members if m["id"] in target_ids and m["id"] != from_actor]
+        if route["reason"] != "fallback":
+            self._append(
+                group_id, thread_id=thread_id, kind="event", actor="system",
+                text=(f"route.{route['reason']} · rule={route['matched_rule']} · "
+                      f"targets={', '.join('@' + item['id'] for item in responders) or '(none)'}"),
+            )
 
         self._running.add(key)
         try:
@@ -546,7 +561,13 @@ class GroupOrchestrator:
                 found = self._lookup.get(agent_id)
                 if found and found.get("name"):
                     name = str(found["name"])
-            records.append({"id": agent_id, "name": name})
+            aliases: list[str] = []
+            if self._lookup is not None:
+                found = self._lookup.get(agent_id) or {}
+                agent_config = found.get("agent") or {}
+                for binding in agent_config.get("channels", []) or []:
+                    aliases.extend(str(alias) for alias in binding.get("mention_names", []) or [])
+            records.append({"id": agent_id, "name": name, "mention_names": list(dict.fromkeys(aliases))})
         return records
 
     @staticmethod

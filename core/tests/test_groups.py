@@ -99,6 +99,8 @@ def test_group_defaults_and_roundtrip(tmp_path: Path) -> None:
     assert record["enabled"] is True
     assert record["delivery"] == "origin"
     assert record["round_caps"] == DEFAULT_ROUND_CAPS
+    assert record["topic_routes"] == [] and record["default_route"] == []
+    assert record["route_fallback"] == "broadcast"
     reloaded = GroupService(GroupStore(tmp_path))
     assert reloaded.get(GID) == record
     assert [g["id"] for g in reloaded.list_groups()] == [GID]
@@ -152,6 +154,12 @@ def test_group_field_validation(tmp_path: Path) -> None:
                         "round_caps": {"bogus": 1}})
     with pytest.raises(ValueError, match="delivery"):
         service.create({"id": GID, "name": "T", "member_agent_ids": ["a"], "delivery": "wat"})
+    with pytest.raises(ValueError, match="needs keywords or a role"):
+        service.create({"id": GID, "name": "route", "member_agent_ids": ["a"],
+                        "topic_routes": [{"id": "empty", "keywords": [], "agent_ids": ["a"]}]})
+    with pytest.raises(ValueError, match="group member ids"):
+        service.create({"id": GID, "name": "route", "member_agent_ids": ["a"],
+                        "default_route": ["ghost"]})
 
 
 def test_update_partial_caps_merge(tmp_path: Path) -> None:
@@ -164,6 +172,17 @@ def test_update_partial_caps_merge(tmp_path: Path) -> None:
         "max_continuations": DEFAULT_ROUND_CAPS["max_continuations"],
     }
     assert updated["created_at"] == service.get(GID)["created_at"]
+
+
+def test_removing_member_prunes_route_targets(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    make_group(service, members=("alice", "bob"), topic_routes=[{
+        "id": "route", "keywords": ["review"], "agent_ids": ["alice", "bob"],
+    }], default_route=["bob"])
+    service.remove_member(GID, "bob")
+    group = service.get(GID)
+    assert group["topic_routes"][0]["agent_ids"] == ["alice"]
+    assert group["default_route"] == []
 
 
 # -- round engine: deterministic rotation, @ resolution, passes ----------------
@@ -192,6 +211,44 @@ def test_explicit_mention_selects_named_members(tmp_path: Path) -> None:
     assert report.status == "settled" and report.rounds == 1
     run(orch, "@Carol hi")  # display name resolves too (case-insensitive)
     assert call_order(dispatcher)[-1] == "carol"
+
+
+def test_topic_route_selects_members_and_records_rule_in_timeline(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    make_group(service, topic_routes=[{
+        "id": "design-review", "keywords": ["design", "mockup"],
+        "role": "designer", "agent_ids": ["bob"], "priority": 4,
+    }], default_route=["carol"], route_fallback="default")
+    orch, dispatcher = make_orchestrator(service)
+    run(orch, "Please review this design")
+    assert call_order(dispatcher) == ["bob"]
+    timeline = orch.timeline(GID)["entries"]
+    route_event = next(entry for entry in timeline if entry["kind"] == "event")
+    assert "rule=design-review" in route_event["text"]
+    assert "@bob" in route_event["text"]
+
+
+def test_topic_route_priority_and_conflict_fallback(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    make_group(service, topic_routes=[
+        {"id": "topic-a", "keywords": ["deploy"], "role": "ops", "agent_ids": ["alice"], "priority": 1},
+        {"id": "topic-b", "keywords": ["deploy"], "role": "design", "agent_ids": ["bob"], "priority": 1},
+        {"id": "priority", "keywords": ["release"], "role": "ops", "agent_ids": ["alice"], "priority": 8},
+    ], default_route=["carol"], route_fallback="default")
+    orch, dispatcher = make_orchestrator(service)
+    run(orch, "deploy release")
+    assert call_order(dispatcher) == ["alice"]
+    assert "rule=priority" in next(entry["text"] for entry in orch.timeline(GID)["entries"] if entry["kind"] == "event")
+
+    service2 = make_service(tmp_path / "conflict")
+    make_group(service2, topic_routes=[
+        {"id": "topic-a", "keywords": ["deploy"], "role": "ops", "agent_ids": ["alice"], "priority": 1},
+        {"id": "topic-b", "keywords": ["deploy"], "role": "design", "agent_ids": ["bob"], "priority": 1},
+    ], default_route=["carol"], route_fallback="default")
+    orch2, dispatcher2 = make_orchestrator(service2)
+    run(orch2, "deploy now")
+    assert call_order(dispatcher2) == ["carol"]
+    assert "route-conflict-default" in next(entry["text"] for entry in orch2.timeline(GID)["entries"] if entry["kind"] == "event")
 
 
 def test_mention_everyone_selects_all(tmp_path: Path) -> None:

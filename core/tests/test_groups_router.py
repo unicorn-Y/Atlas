@@ -68,21 +68,27 @@ def test_group_crud_roundtrip(client: TestClient, agent_service) -> None:
     alice, bob = make_agents(agent_service, "Alice", "Bob")
     created = client.post("/api/groups", json={
         "id": "team", "name": "Team", "member_agent_ids": [alice, bob],
+        "topic_routes": [{"id": "ops", "keywords": ["deploy"], "role": "ops",
+                          "agent_ids": [alice], "priority": 5}],
+        "default_route": [bob], "route_fallback": "default",
     })
     assert created.status_code == 201
     record = created.json()
     assert record["enabled"] is True
     assert record["delivery"] == "origin"
     assert record["round_caps"] == DEFAULT_ROUND_CAPS
+    assert record["topic_routes"][0]["id"] == "ops"
+    assert record["default_route"] == [bob] and record["route_fallback"] == "default"
 
     listed = client.get("/api/groups").json()["groups"]
     assert [g["id"] for g in listed] == ["team"]
     assert client.get("/api/groups/team").json()["name"] == "Team"
     assert client.get("/api/groups/ghost").status_code == 404
 
-    patched = client.patch("/api/groups/team", json={"name": "核心群"})
+    patched = client.patch("/api/groups/team", json={"name": "核心群", "default_route": [alice]})
     assert patched.status_code == 200
     assert patched.json()["name"] == "核心群"
+    assert patched.json()["default_route"] == [alice]
     bad = client.patch("/api/groups/team", json={"bogus": 1})
     assert bad.status_code == 422
 

@@ -35,6 +35,14 @@ def _binding_match(binding: dict[str, Any]) -> dict[str, Any]:
     return match if isinstance(match, dict) else binding
 
 
+def _normalized_names(values: Any) -> set[str]:
+    if isinstance(values, str):
+        values = [values]
+    if not isinstance(values, (list, tuple, set)):
+        return set()
+    return {str(value).strip().lstrip("@").casefold() for value in values if str(value).strip()}
+
+
 def _peer_id(match: dict[str, Any]) -> str:
     """Exact peer id (OpenClaw ``peer.id`` / Atlas agent-profile ``target``)."""
     return str(match.get("peer_id") or match.get("target") or "")
@@ -133,13 +141,11 @@ def resolve_binding(
     # routing. Names are configured on each binding as mention_names (or the
     # agent's display_name/username); adapters supply normalized mention names.
     if event.is_group and event.mentions:
-        mentioned = {str(value).lstrip("@").casefold() for value in event.mentions}
+        mentioned = _normalized_names(event.mentions)
         for binding, match in usable:
             names = match.get("mention_names") or binding.get("mention_names") or []
-            if isinstance(names, str):
-                names = [names]
             names = [*names, match.get("display_name"), match.get("username"), binding.get("display_name"), binding.get("username")]
-            aliases = {str(value).lstrip("@").casefold() for value in names if value}
+            aliases = _normalized_names([value for value in names if value])
             peer_matches = not _has_peer_scope(match) or _match_peer_id(match, event) or _match_parent_peer(match, event)
             if aliases & mentioned and _match_account(match, event) and _match_peer_kind(match, event) and peer_matches:
                 return binding
@@ -150,10 +156,8 @@ def resolve_binding(
         if text_mentions:
             for binding, match in usable:
                 names = match.get("mention_names") or binding.get("mention_names") or []
-                if isinstance(names, str):
-                    names = [names]
                 names = [*names, match.get("display_name"), match.get("username"), binding.get("display_name"), binding.get("username")]
-                aliases = {str(value).lstrip("@").casefold() for value in names if value}
+                aliases = _normalized_names([value for value in names if value])
                 peer_matches = not _has_peer_scope(match) or _match_peer_id(match, event) or _match_parent_peer(match, event)
                 if aliases & text_mentions and _match_account(match, event) and _match_peer_kind(match, event) and peer_matches:
                     return binding
@@ -222,4 +226,65 @@ def resolve_route(
     return _binding_agent(binding) if binding else None
 
 
-__all__ = ["resolve_route", "resolve_binding", "validate_permission_mode"]
+def resolve_group_recipients(
+    members: list[dict[str, Any]], text: str, *, mentions: list[str] | None = None,
+    role: str = "", topic_routes: list[dict[str, Any]] | None = None,
+    default_route: list[str] | None = None, fallback: str = "broadcast",
+) -> dict[str, Any]:
+    """Choose deterministic group responders from mentions, topic rules or default.
+
+    Explicit mentions win. Otherwise enabled rules match a supplied role or any
+    case-insensitive keyword contained in the message. Highest priority wins;
+    equal-priority rules with different targets use the configured fallback.
+    This shares alias normalization with external channel routing.
+    """
+    member_ids = [str(member.get("id") or member.get("agent_id") or "") for member in members]
+    name_to_id: dict[str, str] = {}
+    for member in members:
+        member_id = str(member.get("id") or member.get("agent_id") or "")
+        aliases = _normalized_names([
+            member_id, member.get("name"), member.get("display_name"),
+            member.get("mention_names", []),
+        ])
+        for alias in aliases:
+            name_to_id[alias] = member_id
+    mentioned = _normalized_names(mentions or [])
+    text_mentions = _normalized_names(re.findall(r"@([^\s,，:：@]{1,80})", text or ""))
+    explicit = mentioned | text_mentions
+    explicit_ids = {name_to_id[alias] for alias in explicit if alias in name_to_id}
+    selected = [member_id for member_id in member_ids if member_id in explicit_ids]
+    if selected:
+        return {"agent_ids": selected, "matched_rule": "mention", "reason": "mention", "conflict": False}
+
+    normalized_role = str(role or "").strip().casefold()
+    lowered = (text or "").casefold()
+    matches = []
+    for route in topic_routes or []:
+        if route.get("enabled", True) is False:
+            continue
+        keywords = [str(value).casefold() for value in route.get("keywords", []) if value]
+        route_role = str(route.get("role") or "").casefold()
+        if ((normalized_role and route_role == normalized_role)
+                or (route_role and route_role in lowered)
+                or any(word in lowered for word in keywords)):
+            matches.append(route)
+    if matches:
+        highest = max(int(route.get("priority", 0)) for route in matches)
+        winners = [route for route in matches if int(route.get("priority", 0)) == highest]
+        target_sets = {tuple(route.get("agent_ids") or []) for route in winners}
+        if len(target_sets) == 1:
+            winner = winners[0]
+            return {"agent_ids": [item for item in winner.get("agent_ids", []) if item in member_ids],
+                    "matched_rule": str(winner.get("id") or "topic"), "reason": "topic", "conflict": False}
+        if fallback == "default" and default_route:
+            return {"agent_ids": [item for item in default_route if item in member_ids],
+                    "matched_rule": "route-conflict-default", "reason": "conflict", "conflict": True}
+        return {"agent_ids": member_ids, "matched_rule": "route-conflict-broadcast",
+                "reason": "conflict", "conflict": True}
+    if default_route:
+        return {"agent_ids": [item for item in default_route if item in member_ids],
+                "matched_rule": "default", "reason": "default", "conflict": False}
+    return {"agent_ids": member_ids, "matched_rule": "broadcast", "reason": "fallback", "conflict": False}
+
+
+__all__ = ["resolve_route", "resolve_binding", "resolve_group_recipients", "validate_permission_mode"]

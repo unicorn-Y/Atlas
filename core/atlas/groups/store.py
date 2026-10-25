@@ -19,7 +19,7 @@ from atlas.task_artifacts import TomlRecordStore
 
 GROUP_FIELDS: frozenset[str] = frozenset({
     "id", "name", "member_agent_ids", "enabled", "delivery", "round_caps",
-    "created_at", "updated_at",
+    "created_at", "updated_at", "topic_routes", "default_route", "route_fallback",
 })
 
 ROUND_CAP_FIELDS: frozenset[str] = frozenset({
@@ -35,6 +35,7 @@ DEFAULT_ROUND_CAPS: dict[str, int] = {
 }
 
 DELIVERY_MODES: frozenset[str] = frozenset({"origin", "owner", "none"})
+ROUTE_FALLBACKS: frozenset[str] = frozenset({"broadcast", "default"})
 
 _DELIVERY_RE = re.compile(r"^[^:\s]+:[^:\s]+$")
 
@@ -87,6 +88,45 @@ def validate_group_record(value: dict[str, Any]) -> dict[str, Any]:
         delivery in DELIVERY_MODES or _DELIVERY_RE.fullmatch(delivery)
     ):
         raise ValueError("delivery must be 'origin', 'owner', 'none' or '<channel:target>'")
+    member_ids = set(members)
+    default_route = value.get("default_route", [])
+    if not isinstance(default_route, list) or any(not isinstance(item, str) or item not in member_ids for item in default_route):
+        raise ValueError("default_route must contain only group member ids")
+    routes = value.get("topic_routes", [])
+    if not isinstance(routes, list):
+        raise ValueError("topic_routes must be a list")
+    normalized_routes: list[dict[str, Any]] = []
+    route_ids: set[str] = set()
+    for index, route in enumerate(routes, 1):
+        if not isinstance(route, dict):
+            raise ValueError(f"topic_routes[{index - 1}] must be an object")
+        route_id = str(route.get("id") or f"topic-{index}").strip()
+        keywords = route.get("keywords", [])
+        targets = route.get("agent_ids", [])
+        role = str(route.get("role") or "").strip()
+        if not route_id or route_id in route_ids:
+            raise ValueError("topic route ids must be non-empty and unique")
+        if not isinstance(keywords, list) or any(not isinstance(item, str) or not item.strip() for item in keywords):
+            raise ValueError(f"topic route {route_id}: keywords must be non-empty strings")
+        if not keywords and not role:
+            raise ValueError(f"topic route {route_id} needs keywords or a role")
+        if not isinstance(targets, list) or not targets or any(not isinstance(item, str) or item not in member_ids for item in targets):
+            raise ValueError(f"topic route {route_id}: agent_ids must be group members")
+        priority = route.get("priority", 0)
+        if type(priority) is not int:
+            raise ValueError(f"topic route {route_id}: priority must be an integer")
+        enabled = route.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ValueError(f"topic route {route_id}: enabled must be a boolean")
+        normalized_routes.append({
+            "id": route_id, "keywords": list(dict.fromkeys(item.strip() for item in keywords)),
+            "role": role, "agent_ids": list(dict.fromkeys(targets)),
+            "priority": priority, "enabled": enabled,
+        })
+        route_ids.add(route_id)
+    fallback = value.get("route_fallback", "broadcast")
+    if fallback not in ROUTE_FALLBACKS:
+        raise ValueError("route_fallback must be 'broadcast' or 'default'")
     return {
         **value,
         "name": name,
@@ -94,6 +134,9 @@ def validate_group_record(value: dict[str, Any]) -> dict[str, Any]:
         "enabled": enabled,
         "delivery": delivery,
         "round_caps": validate_round_caps(value.get("round_caps") or {}),
+        "topic_routes": normalized_routes,
+        "default_route": list(dict.fromkeys(default_route)),
+        "route_fallback": fallback,
     }
 
 
@@ -142,6 +185,9 @@ class GroupService:
         data.setdefault("enabled", True)
         data.setdefault("delivery", "origin")
         data.setdefault("round_caps", default_round_caps())
+        data.setdefault("topic_routes", [])
+        data.setdefault("default_route", [])
+        data.setdefault("route_fallback", "broadcast")
         self.validate_members(data.get("member_agent_ids", []))
         return self._store.put(data)
 
@@ -152,6 +198,10 @@ class GroupService:
             # A partial caps PATCH merges over the stored caps instead of resetting
             # the sibling limits back to defaults (same rule as agent tables).
             merged["round_caps"] = {**old.get("round_caps", {}), **(patch.get("round_caps") or {})}
+        if "topic_routes" in patch:
+            merged["topic_routes"] = patch.get("topic_routes") or []
+        if "default_route" in patch:
+            merged["default_route"] = patch.get("default_route") or []
         self.validate_members(merged.get("member_agent_ids", []))
         return self._store.put(merged)
 
@@ -177,7 +227,14 @@ class GroupService:
         remaining = [item for item in group["member_agent_ids"] if item != agent_id]
         if not remaining:
             raise ValueError("a group needs at least one member")
-        updated = self._store.put({**group, "member_agent_ids": remaining})
+        routes = [
+            {**route, "agent_ids": [item for item in route.get("agent_ids", []) if item != agent_id]}
+            for route in group.get("topic_routes", [])
+        ]
+        routes = [route for route in routes if route["agent_ids"]]
+        default_route = [item for item in group.get("default_route", []) if item != agent_id]
+        updated = self._store.put({**group, "member_agent_ids": remaining,
+                                   "topic_routes": routes, "default_route": default_route})
         return updated["member_agent_ids"]
 
     def validate_members(self, agent_ids: list[str]) -> None:

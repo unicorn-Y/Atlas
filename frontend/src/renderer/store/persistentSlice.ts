@@ -67,6 +67,7 @@ export interface PersistentActions {
   setAgentSkills: (id: string, skills: Array<{ skill_name: string; enabled: boolean; relation?: string; note?: string }>) => Promise<boolean>;
   loadGroups: () => Promise<void>;
   createGroup: (name: string, memberIds: string[]) => Promise<boolean>;
+  updateGroup: (id: string, patch: Partial<GroupRecord>) => Promise<boolean>;
   deleteGroup: (id: string) => Promise<void>;
   sendGroupTurn: (id: string, text: string) => Promise<boolean>;
   loadGroupTimeline: (id: string) => Promise<void>;
@@ -184,6 +185,16 @@ export function createPersistentSlice(
         return true;
       } catch (error) {
         set({ groupsAvailable: isNotFound(error) ? false : get().groupsAvailable, groupsError: isNotFound(error) ? null : errorText(error) });
+        return false;
+      }
+    },
+    updateGroup: async (id, patch) => {
+      try {
+        const group = await groupsApi.update(base(), id, patch);
+        set((state) => ({ groups: state.groups.map((item) => item.id === id ? group : item), groupsError: null }));
+        return true;
+      } catch (error) {
+        set({ groupsError: errorText(error) });
         return false;
       }
     },

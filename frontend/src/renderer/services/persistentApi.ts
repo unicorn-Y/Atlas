@@ -126,7 +126,11 @@ export interface GroupMember { agent_id: string; name?: string }
 export interface GroupRecord {
   id: string;
   name: string;
+  member_agent_ids?: string[];
   members?: GroupMember[];
+  topic_routes?: Array<{ id: string; keywords: string[]; role?: string; agent_ids: string[]; priority: number; enabled: boolean }>;
+  default_route?: string[];
+  route_fallback?: 'broadcast' | 'default';
   [key: string]: unknown;
 }
 export interface GroupTimelineEntry {
@@ -140,9 +144,11 @@ export interface GroupTimelineEntry {
 
 export const groupsApi = {
   list: (base: string) =>
-    api<{ groups: GroupRecord[] }>(base, '/api/groups').then((body) => body.groups ?? []),
+    api<{ groups: GroupRecord[] }>(base, '/api/groups').then((body) => (body.groups ?? []).map(normalizeGroup)),
   create: (base: string, name: string, members: string[]) =>
-    api<GroupRecord>(base, '/api/groups', { method: 'POST', json: { name, members: members.map((agent_id) => ({ agent_id })) } }),
+    api<GroupRecord>(base, '/api/groups', { method: 'POST', json: { id: `group-${Date.now().toString(36)}`, name, member_agent_ids: members } }).then(normalizeGroup),
+  update: (base: string, id: string, patch: Partial<GroupRecord>) =>
+    api<GroupRecord>(base, `/api/groups/${encodeURIComponent(id)}`, { method: 'PATCH', json: patch }).then(normalizeGroup),
   remove: (base: string, id: string) =>
     api<unknown>(base, `/api/groups/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** One participant turn: the user's text is appended and agents answer in turn. */
@@ -153,6 +159,11 @@ export const groupsApi = {
   stop: (base: string, id: string) =>
     api<unknown>(base, `/api/groups/${encodeURIComponent(id)}/stop`, { method: 'POST' }),
 };
+
+function normalizeGroup(group: GroupRecord): GroupRecord {
+  const ids = group.member_agent_ids ?? group.members?.map((member) => member.agent_id) ?? [];
+  return { ...group, member_agent_ids: ids, members: ids.map((agent_id) => ({ agent_id })) };
+}
 
 // -- automations (W4) ---------------------------------------------------------
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from atlas.channels.contract import MessageEvent
-from atlas.channels.routing import resolve_route
+from atlas.channels.routing import resolve_group_recipients, resolve_route
 
 
 def make_event(
@@ -168,6 +168,24 @@ def test_wecom_rendered_text_at_name_routes_to_agent():
     event = make_event("wr_group", channel="wecom", account="main", is_group=True,
                        text="@代码助手 请检查")
     assert resolve_route(bindings, event) == "reviewer"
+
+
+def test_group_topic_route_priority_conflict_fallback_and_mention_precedence():
+    members = [{"id": "ops", "name": "Operations"}, {"id": "design", "name": "Designer"}]
+    routes = [
+        {"id": "ops-topic", "keywords": ["deploy"], "role": "ops", "agent_ids": ["ops"], "priority": 3},
+        {"id": "design-topic", "keywords": ["deploy"], "role": "design", "agent_ids": ["design"], "priority": 3},
+        {"id": "ops-priority", "keywords": ["release"], "role": "ops", "agent_ids": ["ops"], "priority": 9},
+    ]
+    assert resolve_group_recipients(members, "Please deploy", topic_routes=routes)["agent_ids"] == ["ops", "design"]
+    conflict = resolve_group_recipients(members, "Please deploy", topic_routes=routes,
+                                        default_route=["design"], fallback="default")
+    assert conflict["conflict"] is True and conflict["agent_ids"] == ["design"]
+    priority = resolve_group_recipients(members, "deploy release", topic_routes=routes)
+    assert priority["agent_ids"] == ["ops"] and priority["matched_rule"] == "ops-priority"
+    mention = resolve_group_recipients(members, "Please deploy", mentions=["design"],
+                                       topic_routes=routes)
+    assert mention["reason"] == "mention" and mention["agent_ids"] == ["design"]
 
 
 def test_group_mention_respects_binding_scope_and_ignores_direct_messages():
