@@ -37,6 +37,15 @@ export interface McpServerRequest {
 
 interface DependencyCheckResponse {
   mcp_servers?: McpRuntimeServer[];
+  mcp_runtime?: { startup_progress?: McpStartupProgress[] };
+}
+
+export interface McpStartupProgress {
+  server: string;
+  state: string;
+  message: string;
+  transport: string;
+  timestamp: string;
 }
 
 interface McpServerListResponse {
@@ -91,6 +100,11 @@ export async function loadMcpServers(baseUrl: string): Promise<McpServerRow[]> {
     }
   }
   return rows;
+}
+
+export async function loadMcpStartupProgress(baseUrl: string): Promise<McpStartupProgress[]> {
+  const result = await request<DependencyCheckResponse>(baseUrl, '/api/runtime/dependency-check');
+  return result.mcp_runtime?.startup_progress ?? [];
 }
 
 export function addMcpServer(baseUrl: string, config: McpServerRequest): Promise<McpServerToolListItem> {

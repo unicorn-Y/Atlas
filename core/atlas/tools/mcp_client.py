@@ -442,6 +442,7 @@ class MCPClient:
         self._server_configs: dict[str, MCPServerConfig] = {}  # name → config
         self._configured_configs: dict[str, MCPServerConfig] = {}
         self._server_status: dict[str, dict[str, Any]] = {}
+        self._startup_progress: list[dict[str, Any]] = []
         self._startup_tasks: set[asyncio.Task[Any]] = set()
         self._refresh_locks: dict[str, asyncio.Lock] = {}
         self._session_recovery_locks: dict[str, asyncio.Lock] = {}
@@ -483,6 +484,8 @@ class MCPClient:
                     else config.blocking_reason or "server is disabled"
                 ),
             }
+            if config.enabled:
+                self._progress(config.name, "connecting", "正在连接 MCP 服务", config.transport)
         enabled = [c for c in configs if c.enabled]
         if not enabled:
             log.info("mcp.no_servers_configured")
@@ -546,6 +549,7 @@ class MCPClient:
             "tool_discovery": "pending", "tool_count": 0,
             "blocking_reason": None,
         })
+        self._progress(cfg.name, "connecting", "正在建立传输连接", cfg.transport)
         handle = MCPServerHandle(name=cfg.name, transport=cfg.transport)
         try:
             if cfg.transport == "stdio":
@@ -561,6 +565,7 @@ class MCPClient:
             init_result = await asyncio.wait_for(
                 handle.session.initialize(), timeout=_MCP_REQUEST_TIMEOUT_SECONDS,
             )
+            self._progress(cfg.name, "initializing", "连接已建立，正在初始化协议", cfg.transport)
             handle.instructions = str(getattr(init_result, "instructions", "") or "")
             log.info("mcp.server_initialized", server=cfg.name,
                      protocol=init_result.protocol_version,
@@ -569,6 +574,7 @@ class MCPClient:
             tools_result = await asyncio.wait_for(
                 handle.session.list_tools(), timeout=_MCP_REQUEST_TIMEOUT_SECONDS,
             )
+            self._progress(cfg.name, "discovering_tools", "正在读取工具目录", cfg.transport)
             for tool in tools_result.tools:
                 if not _mcp_tool_allowed(cfg, tool.name):
                     continue
@@ -597,6 +603,7 @@ class MCPClient:
             })
             log.info("mcp.server_ready", server=cfg.name,
                      tools=[t.name for t in handle.tools])
+            self._progress(cfg.name, "ready", f"已就绪 · {len(handle.tools)} 个工具", cfg.transport)
             old_monitor = self._reconnect_tasks.pop(cfg.name, None)
             if old_monitor and old_monitor is not asyncio.current_task():
                 old_monitor.cancel()
@@ -622,9 +629,20 @@ class MCPClient:
                 "state": "failed", "connected": False,
                 "tool_discovery": "failed", "blocking_reason": diagnostic or _failure_reason(exc),
             })
+            self._progress(cfg.name, "failed", str(diagnostic or _failure_reason(exc)), cfg.transport)
             if diagnostic:
                 raise _MCPStartupError(diagnostic) from exc
             raise
+
+    def _progress(self, name: str, state: str, message: str, transport: str) -> None:
+        """Record a safe, structured lifecycle event for startup UI consumers."""
+        from datetime import datetime, UTC
+
+        self._startup_progress.append({
+            "server": name, "state": state, "message": message[:500],
+            "transport": transport, "timestamp": datetime.now(UTC).isoformat(),
+        })
+        del self._startup_progress[:-100]
 
     async def _connect_stdio(self, cfg: MCPServerConfig,
                              handle: MCPServerHandle) -> None:
@@ -1033,6 +1051,7 @@ class MCPClient:
                 node_status["blocking_reason"] if node_blocker else server_blocker
             ),
             "servers": statuses,
+            "startup_progress": [dict(item) for item in self._startup_progress],
         }
 
     def get_server_tools(self, server_name: str) -> list[ToolInfo]:

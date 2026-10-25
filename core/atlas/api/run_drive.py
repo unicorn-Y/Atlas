@@ -2617,6 +2617,17 @@ async def _execute_run(
                 "status": "running", "phase": "planning", "content": content,
             }
             await emit("run.started", started_data)
+            mcp_client = getattr(services, "mcp_client", None) or getattr(_server(), "mcp_client", None)
+            if mcp_client is not None:
+                try:
+                    progress = mcp_client.get_runtime_status().get("startup_progress", [])
+                    for item in progress[-24:]:
+                        if isinstance(item, dict) and item.get("state") in {
+                            "connecting", "initializing", "discovering_tools", "ready", "failed",
+                        }:
+                            await emit("mcp.startup.progress", item)
+                except Exception as exc:
+                    log.warning("mcp.startup_progress_unavailable", reason=type(exc).__name__)
 
         # Keep only Atlas metadata; Hermes SessionDB owns the transcript.
         try:

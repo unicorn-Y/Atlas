@@ -13,6 +13,7 @@ export type AgentEventType =
   | 'check.results'
   | 'rules.trust_required' | 'hook.ran'
   | 'run.model_switched' | 'run.verify_nudge'
+  | 'mcp.startup.progress'
   | 'session.title'
   | 'process.completed' | 'process.notification' | 'run.compaction.progress' | 'run.recovery.notice' | 'context.window.switched' | 'chapter.marked'
   | 'run.completed' | 'run.failed' | 'run.cancelled'

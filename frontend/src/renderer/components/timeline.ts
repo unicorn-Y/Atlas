@@ -597,6 +597,15 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         } });
         break;
       }
+      case 'mcp.startup.progress': {
+        closeReply(); closeBlocks();
+        const state = String(data.state ?? '');
+        const label = state === 'ready' ? '已就绪' : state === 'failed' ? '启动失败' : '启动中';
+        const server = String(data.server ?? 'MCP 服务');
+        const message = String(data.message ?? '正在连接');
+        items.push({ kind: 'notice', id: event.id, tone: state === 'failed' ? 'verify' : 'switch', text: `${server} · ${label}：${message}` });
+        break;
+      }
       case 'run.model_switched': {
         closeReply(); closeBlocks();
         const reason = String(data.reason ?? '').trim();

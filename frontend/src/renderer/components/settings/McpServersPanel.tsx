@@ -12,11 +12,13 @@ import { Button } from '../../ui/Button';
 import {
   addMcpServer,
   loadMcpServers,
+  loadMcpStartupProgress,
   removeMcpServer,
   restartMcpServer,
   type McpServerRequest,
   type McpServerRow,
   type McpTransport,
+  type McpStartupProgress,
 } from '../../services/mcpSettingsApi';
 
 type Draft = {
@@ -92,6 +94,7 @@ function makeRequest(draft: Draft): McpServerRequest {
 
 export default function McpServersPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [servers, setServers] = useState<McpServerRow[]>([]);
+  const [startupProgress, setStartupProgress] = useState<McpStartupProgress[]>([]);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [formOpen, setFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -103,14 +106,22 @@ export default function McpServersPanel({ apiBaseUrl }: { apiBaseUrl: string }) 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError('');
-    try { setServers(await loadMcpServers(apiBaseUrl)); }
+    try {
+      const [loaded, progress] = await Promise.all([loadMcpServers(apiBaseUrl), loadMcpStartupProgress(apiBaseUrl)]);
+      setServers(loaded);
+      setStartupProgress(progress.slice(-24).reverse());
+    }
     catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setLoading(false); }
   }, [apiBaseUrl]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
-    const timer = window.setInterval(() => { void loadMcpServers(apiBaseUrl).then(setServers).catch(() => undefined); }, busy.startsWith('restart:') || busy === 'add' ? 450 : 1200);
+    const timer = window.setInterval(() => {
+      void Promise.all([loadMcpServers(apiBaseUrl), loadMcpStartupProgress(apiBaseUrl)]).then(([loaded, progress]) => {
+        setServers(loaded); setStartupProgress(progress.slice(-24).reverse());
+      }).catch(() => undefined);
+    }, busy.startsWith('restart:') || busy === 'add' ? 450 : 1200);
     return () => window.clearInterval(timer);
   }, [apiBaseUrl, busy]);
 
@@ -172,6 +183,16 @@ export default function McpServersPanel({ apiBaseUrl }: { apiBaseUrl: string }) 
     <p className="m-0 text-[12px] leading-[1.6] text-fg-3">
       当前 API 支持添加、重启和移除已连接的服务；配置读取、编辑和启停接口尚未提供。失败或停用的服务可在依赖检查中查看状态。
     </p>
+
+    {startupProgress.length > 0 && <details className="rounded-xl bg-sunken px-3 py-2.5 text-[12px] text-fg-2" open={startupProgress.some((event) => ['connecting', 'initializing', 'discovering_tools'].includes(event.state))}>
+      <summary className="cursor-pointer select-none">启动进度（{startupProgress.length} 条）</summary>
+      <ol className="m-0 mt-2 grid gap-1.5 pl-5">
+        {startupProgress.map((event, index) => <li key={`${event.server}:${event.timestamp}:${index}`}>
+          <span className={event.state === 'failed' ? 'text-danger' : event.state === 'ready' ? 'text-ok' : 'text-fg-2'}>{event.server} · {event.message}</span>
+          <time className="ml-2 text-[11px] text-fg-3">{new Date(event.timestamp).toLocaleTimeString()}</time>
+        </li>)}
+      </ol>
+    </details>}
 
     <div className="grid gap-2.5" aria-label="MCP 服务列表" aria-busy={loading}>
       {servers.map((server) => <article key={server.name} className="grid gap-2.5 rounded-xl bg-sunken p-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
