@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight, Lightbulb } from 'lucide-react';
 import type { ConversationSummary } from '@atlas/backend-adapter';
 import { relativeTime } from '../services/api';
 
@@ -16,6 +17,10 @@ export function greeting() {
   return hour < 5 ? '夜深了' : hour < 11 ? '早上好' : hour < 13 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
 }
 
+export function stepHomeTip(index: number, offset: number): number {
+  return (index + offset + SUGGESTIONS.length) % SUGGESTIONS.length;
+}
+
 export default function HomeView({ username, composer, notice, recent, onOpen, onSuggest, suggestions = SUGGESTIONS }: {
   username: string;
   composer: ReactNode;
@@ -25,6 +30,8 @@ export default function HomeView({ username, composer, notice, recent, onOpen, o
   onSuggest: (suggestion: Suggestion) => void;
   suggestions?: Suggestion[];
 }) {
+  const [tipIndex, setTipIndex] = useState(0);
+  const tip = SUGGESTIONS[tipIndex % SUGGESTIONS.length];
   return <div className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
     <div className="relative mx-auto w-[min(800px,100%)] px-6 pt-[14vh] pb-16">
       <h1 className="m-0 text-[28px] leading-[1.25] font-semibold tracking-[-.01em] text-heading [text-wrap:balance]">
@@ -33,12 +40,30 @@ export default function HomeView({ username, composer, notice, recent, onOpen, o
       <p className="mt-1.5 mb-7 text-[14px] text-fg-3">今天想让 Atlas 做点什么？</p>
       {composer}
       {notice}
-      <div className="mt-4 flex flex-wrap gap-2">
+      <section aria-label="固定提示示例" className="mt-4 rounded-2xl border border-line bg-surface p-3.5 shadow-sm">
+        <div className="flex items-center gap-2">
+          <Lightbulb size={15} className="shrink-0 text-brand" />
+          <b className="min-w-0 flex-1 truncate text-[12px] font-medium text-fg">试试这个完整示例：{tip.label}</b>
+          <button type="button" aria-label="上一条首页示例" onClick={() => setTipIndex((index) => stepHomeTip(index, -1))} className="grid size-7 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><ChevronLeft size={16} /></button>
+          <button type="button" aria-label="下一条首页示例" onClick={() => setTipIndex((index) => stepHomeTip(index, 1))} className="grid size-7 place-items-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"><ChevronRight size={16} /></button>
+        </div>
+        <p className="mb-3 mt-2 whitespace-pre-wrap text-[12.5px] leading-5 text-fg-2">{tip.text}</p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1" aria-label={`第 ${tipIndex + 1} 条，共 ${SUGGESTIONS.length} 条`}>
+            {SUGGESTIONS.map((item, index) => <button type="button" key={item.label} aria-label={`查看示例 ${index + 1}`} aria-current={index === tipIndex ? 'true' : undefined} onClick={() => setTipIndex(index)} className={`h-1.5 rounded-full transition-all ${index === tipIndex ? 'w-5 bg-brand' : 'w-1.5 bg-line-strong hover:bg-fg-3'}`} />)}
+          </div>
+          <button type="button" onClick={() => onSuggest(tip)} className="rounded-lg bg-brand px-3 py-1.5 text-[11.5px] font-medium text-white hover:brightness-105">填入完整示例</button>
+        </div>
+      </section>
+      <section aria-label="结合当前工作区的建议" className="mt-4">
+        <div className="mb-2 text-[11.5px] font-medium text-fg-3">结合当前工作区的建议</div>
+        <div className="flex flex-wrap gap-2">
         {suggestions.map((suggestion) => <button key={suggestion.label} onClick={() => onSuggest(suggestion)}
           className="h-8 rounded-full px-3.5 text-[13px] text-fg-2 shadow-[inset_0_0_0_1px_var(--line-strong)] transition-colors hover:bg-hover hover:text-fg">
           {suggestion.label}
         </button>)}
-      </div>
+        </div>
+      </section>
       {recent.length > 0 && <section className="mt-14">
         <h2 className="m-0 mb-2.5 text-[12.5px] font-medium text-fg-3">继续</h2>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">

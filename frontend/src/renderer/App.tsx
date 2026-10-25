@@ -115,6 +115,7 @@ import { THEMES, applyStoredTheme, clearCustomTheme, initialTheme, nextTheme, th
 import { observeLocalizedCopy, readLocale, saveLocale, t } from './services/i18n';
 import { api, relativeTime } from './services/api';
 import { extractMemoryMarkers } from './services/memoryMarkers';
+import { filterSafeSuggestions } from './services/suggestionSafety';
 import { buildTimeline } from './components/timeline';
 const ComputerEdgeBar = lazy(() => import('./components/x2').then((module) => ({ default: module.ComputerEdgeBar })));
 import UpdateBanner from './components/UpdateBanner';
@@ -547,7 +548,7 @@ export default function App() {
     // 本轮的目标是最近一条用户消息，不是整段对话的第一条。
     const goal = [...messages].reverse().find((message) => message.role === 'user')?.content ?? '';
     void api<{ suggestions: string[] }>(store.apiBaseUrl, '/api/u6/suggestions', { method: 'POST', json: { goal, response } })
-      .then((result) => setTurnSuggestions(Array.isArray(result.suggestions) ? result.suggestions.slice(0, 3) : []))
+      .then((result) => setTurnSuggestions(filterSafeSuggestions(result.suggestions)))
       .catch(() => setTurnSuggestions([]));
   }, [activeRun?.id, activeRun?.status, activeRun?.conversationId, messages, proactiveEnabled, store.activeConversationId, store.apiBaseUrl]);
   // Once a run finishes the store reloads saved history, which then also contains the run's own turn.

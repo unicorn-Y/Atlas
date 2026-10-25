@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 from atlas.config import load_user_settings
+from atlas.suggestions_safety import filter_safe_suggestions
 
 router = APIRouter()
 _last_retention_sweep = 0.0
@@ -285,6 +286,7 @@ async def generate_suggestions(
         "根据本轮用户目标和 Atlas 回复，给出 2 到 3 条用户接下来很可能真的想让 Atlas 做的具体请求。\n"
         "要求：每条是能直接发给 Atlas 执行的完整中文请求（例如“把这个函数补上单元测试并运行”），"
         "要结合回复里的具体对象（文件、命令、结论）；禁止“继续”“确认”“收到”“好的”“谢谢”这类没有具体内容的话；"
+        "禁止建议递归/强制删除、清空磁盘或数据库、不可逆重置、从网络下载后直接执行脚本，或读取/打印/上传密钥、密码、凭据。"
         "如果这一轮只是寒暄、简单问答或已经彻底完成、没有有价值的后续，就返回空数组 []。\n"
         "只返回 JSON 数组，不要解释。\n"
         f"目标：{goal}\n回复：{response}"
@@ -303,11 +305,6 @@ async def generate_suggestions(
             return {"suggestions": []}
         if not isinstance(suggestions, list):
             return {"suggestions": []}
-        cleaned = [item.strip()[:180] for item in suggestions
-                   if isinstance(item, str) and len(item.strip()) >= 6
-                   and item.strip().rstrip("。.!！") not in _GENERIC_SUGGESTIONS]
+        cleaned = filter_safe_suggestions(suggestions)
         return {"suggestions": cleaned[:3] if len(cleaned) >= 2 else []}
     return {"suggestions": []}
-
-
-_GENERIC_SUGGESTIONS = {"继续", "请继续", "继续吧", "确认", "收到", "好的", "好", "谢谢", "明白", "没问题", "OK", "ok"}
