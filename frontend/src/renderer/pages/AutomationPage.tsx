@@ -10,6 +10,7 @@ import { automationsApi } from '../services/persistentApi';
 import GoalsPanel from './GoalsPanel';
 import { describeAutomation, describeTrigger } from './automations/describe';
 import { AUTOMATION_TEMPLATES, AUTOMATION_TEMPLATE_CATALOG_VERSION, materializeAutomationTemplate } from './automations/templateCatalog';
+import StandingOrdersPanel from './StandingOrdersPanel';
 
 const RUN_STATUS: Record<string, string> = {
   completed: '完成', failed: '失败', running: '运行中', cancelled: '已停止', error: '出错', queued: '排队中',
@@ -78,7 +79,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
   const loadAgents = useAtlasStore((state) => state.loadAgents);
   const runs = useAtlasStore((state) => state.automationRuns);
 
-  const [tab, setTab] = useState<'tasks' | 'goals'>('tasks');
+  const [tab, setTab] = useState<'tasks' | 'goals' | 'standing'>('tasks');
   const [selected, setSelected] = useState('');
   const [creating, setCreating] = useState(false);
   const [templateChoiceOpen, setTemplateChoiceOpen] = useState(false);
@@ -204,7 +205,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
     </header>
 
     <div role="tablist" aria-label="自动化类型" className="mb-4 flex gap-5 shadow-[inset_0_-1px_0_var(--line)]">
-      {([['tasks', '定时与触发'], ['goals', '持续目标']] as const).map(([id, label]) => <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+      {([['tasks', '定时与触发'], ['goals', '持续目标'], ['standing', '常驻指令']] as const).map(([id, label]) => <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
         className={tab === id ? 'pb-2.5 text-[13.5px] font-medium text-fg shadow-[inset_0_-2px_0_var(--brand)]' : 'pb-2.5 text-[13.5px] text-fg-3 hover:text-fg'}>{label}</button>)}
     </div>
 
@@ -226,6 +227,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast }: { api
     </details>}
 
     {tab === 'goals' && <GoalsPanel apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />}
+    {tab === 'standing' && <StandingOrdersPanel apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />}
     {tab === 'tasks' && <>
       {creating && !editingId && templateChoiceOpen && <section className="card glass mb-3.5 p-4" aria-label="选择自动化模板">
         <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><h2 className="m-0 text-[15px] font-semibold text-fg">先选择一个任务模板</h2><p className="mb-3 mt-1 text-[11.5px] text-fg-3">内置模板目录 v{AUTOMATION_TEMPLATE_CATALOG_VERSION} · 选择后可修改触发器、参数和任务内容；创建结果仍保存为普通自动化。</p></div><button type="button" className="btn ghost" onClick={() => { setCreating(false); setTemplateChoiceOpen(false); }}>取消</button></div>

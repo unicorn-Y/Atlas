@@ -15,6 +15,7 @@ from atlas.api.artifact_sites_router import router as artifact_sites_router
 from atlas.api.app_services import AppServices
 from atlas.api.startup_components import StartupComponents
 from atlas.api.automation_router import automation_router
+from atlas.api.standing_orders_router import router as standing_orders_router
 from atlas.api.workflow_router import router as workflow_router
 from atlas.api.browser_router import router as browser_router
 from atlas.api.mobile_preview_router import router as mobile_preview_router
@@ -182,4 +183,5 @@ def create_app(
     ):
         app.include_router(router)
     app.include_router(memory_library_router)
+    app.include_router(standing_orders_router)
     return app
