@@ -625,8 +625,6 @@ def _repair_arguments(raw: str) -> dict[str, Any] | None:
 
 def _endpoint(base_url: Any) -> str:
     """host:port of a provider URL (no path, query or credentials)."""
-    from urllib.parse import urlsplit
-
     try:
         parts = urlsplit(str(base_url or ""))
         host = parts.hostname or ""
@@ -839,6 +837,7 @@ async def complete_stream(
             attempt_reasoning_details: list[dict[str, Any]] = []
             finish_reason: str | None = None
             attempt_started = time.monotonic()
+            trace_started_at = datetime.now(timezone.utc).isoformat()
             first_token_ms: int | None = None
             got_chunk = False
             first_chunk_limit, idle_limit = _stream_limits()
@@ -871,6 +870,23 @@ async def complete_stream(
                     kwargs["reasoning_config"] = {"effort": reasoning_effort}
                 if fast_requested and fast_tier_supported:
                     kwargs["service_tier"] = "priority"
+                try:
+                    from atlas.diagnostic_store import record_model_request
+                    parts = urlsplit(str(route.base_url or ""))
+                    record_model_request(
+                        request_id=request_id, run_id=str(getattr(agent, "run_id", "")),
+                        model=route.model_id or candidate, provider=route.provider,
+                        endpoint=f"{parts.scheme}://{parts.hostname or ''}{':' + str(parts.port) if parts.port else ''}",
+                        params={"api_mode": route.api_mode, "message_count": len(wire_messages),
+                                "tool_count": len(wire_tools), "stream": True,
+                                "max_tokens": kwargs.get("max_tokens"),
+                                "reasoning_effort": reasoning_effort or None,
+                                "service_tier": kwargs.get("service_tier"),
+                                "estimated_input_tokens": estimated},
+                        started_at=trace_started_at,
+                    )
+                except Exception:
+                    logging.getLogger(__name__).debug("model request trace write failed", exc_info=True)
                 stream = await asyncio.to_thread(
                     router.stream, route, wire_messages, **kwargs,
                 )
@@ -1009,6 +1025,11 @@ async def complete_stream(
                 record_success(route.model_id or candidate)
                 last_usage = attempt_usage or last_usage
                 duration_ms = int((time.monotonic() - overall_started) * 1000)
+                try:
+                    from atlas.diagnostic_store import finish_model_request
+                    finish_model_request(request_id, duration_ms=int((time.monotonic() - attempt_started) * 1000), status="ok")
+                except Exception:
+                    logging.getLogger(__name__).debug("model request trace update failed", exc_info=True)
                 result = ModelCallResult(
                     combined_text,
                     _tool_calls(attempt_tools, truncated=finish_reason in {"length", "max_tokens"},
@@ -1052,6 +1073,11 @@ async def complete_stream(
                         await published
                 return result
             except asyncio.CancelledError:
+                try:
+                    from atlas.diagnostic_store import finish_model_request
+                    finish_model_request(request_id, duration_ms=int((time.monotonic() - attempt_started) * 1000), status="cancelled")
+                except Exception:
+                    logging.getLogger(__name__).debug("model request trace update failed", exc_info=True)
                 if usage_budget is not None:
                     usage_budget.release(request_id)
                 raise
@@ -1067,6 +1093,12 @@ async def complete_stream(
                     _provider_error_detail(exc, secret=str(_get(route, "key") or "")),
                     category=category, status=status, retryable=retryable,
                 )
+                try:
+                    from atlas.diagnostic_store import finish_model_request
+                    finish_model_request(request_id, duration_ms=int((time.monotonic() - attempt_started) * 1000),
+                                         status="error", error_category=category, error_detail=str(error))
+                except Exception:
+                    logging.getLogger(__name__).debug("model request trace update failed", exc_info=True)
                 unsupported_tier_text = str(error).casefold()
                 if (kwargs.get("service_tier") == "priority" and error.status in {400, 422}
                         and "service_tier" in unsupported_tier_text):

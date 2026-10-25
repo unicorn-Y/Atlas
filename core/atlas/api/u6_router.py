@@ -69,12 +69,17 @@ async def clear_storage(category: str, request: dict[str, Any], services: Annota
         try:
             await services.memory._db.execute("VACUUM")
         except Exception: pass
-        return {"category": category, "released_bytes": max(0, released - sum(_size(path) for path in paths[category]))}
+        result = {"category": category, "released_bytes": max(0, released - sum(_size(path) for path in paths[category]))}
+        from atlas.diagnostic_store import record_audit_event
+        record_audit_event("storage", "clear", details={"category": category, "released_bytes": result["released_bytes"]})
+        return result
     for path in paths[category]:
         if path.is_dir(): shutil.rmtree(path, ignore_errors=True)
         elif path.is_file():
             try: path.unlink()
             except OSError: pass
+    from atlas.diagnostic_store import record_audit_event
+    record_audit_event("storage", "clear", details={"category": category, "released_bytes": released})
     return {"category": category, "released_bytes": released}
 
 

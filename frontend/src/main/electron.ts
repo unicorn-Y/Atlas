@@ -2,7 +2,7 @@ import './stdoutSafety.js';
 import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerSaveBlocker, screen, session, shell, systemPreferences, Tray } from 'electron';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { setImmediate } from 'node:timers';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -97,6 +97,34 @@ const IDE_COMMANDS: Record<PlatformEditorId, string> = {
 
 function preferencesPath(): string {
   return path.join(app.getPath('userData'), 'platform-settings.json');
+}
+
+function dataRootPreferencePath(): string {
+  return path.join(app.getPath('userData'), 'atlas-data-root.json');
+}
+
+function currentDataRoot(): string {
+  return path.resolve(process.env.ATLAS_DATA_DIR ?? process.env.ATLAS_ROOT ?? (app.isPackaged ? app.getPath('userData') : path.resolve(app.getAppPath(), '..')));
+}
+
+function saveDesktopCrashReport(reason: string, details: Record<string, unknown>): void {
+  try {
+    const directory = path.join(currentDataRoot(), 'data', 'crash-reports');
+    mkdirSync(directory, { recursive: true });
+    const report = { id: randomUUID(), created_at: new Date().toISOString(), reason: reason.slice(0, 300),
+      app_version: app.getVersion(), platform: process.platform, electron: process.versions.electron,
+      details: Object.fromEntries(Object.entries(details).filter(([key]) => !/(key|token|secret|password|credential)/i.test(key))) };
+    writeFileSync(path.join(directory, `crash-${report.id}.json`), `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+  } catch { /* a crash archive must never prevent window recovery or shutdown */ }
+}
+
+function applySavedDataRoot(): void {
+  try {
+    const saved = JSON.parse(readFileSync(dataRootPreferencePath(), 'utf8')) as { current_root?: unknown };
+    if (typeof saved.current_root === 'string' && path.isAbsolute(saved.current_root) && existsSync(saved.current_root)) {
+      process.env.ATLAS_DATA_DIR = path.resolve(saved.current_root);
+    }
+  } catch { /* first launch uses the configured default data root */ }
 }
 
 function loadPlatformPreferences(): PlatformPreferences {
@@ -874,6 +902,7 @@ function createWindow() {
   // window until the user manually restarts: bring the page back on its own.
   win.webContents.on('render-process-gone', (_event, details) => {
     if (details.reason === 'clean-exit') return;
+    saveDesktopCrashReport('renderer-process-gone', { reason: details.reason, exitCode: details.exitCode, processType: 'renderer' });
     win.webContents.reload();
   });
   let loadRetries = 0;
@@ -1051,6 +1080,37 @@ async function restartBackendNow(reason: string): Promise<void> {
 ipcMain.handle('backend:retry', (event) => {
   assertTrustedAppSender(event);
   void restartBackendNow('user_retry');
+});
+ipcMain.handle('data-root:switch', async (event, rawTarget: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof rawTarget !== 'string' || !path.isAbsolute(rawTarget)) throw new Error('数据目录必须是绝对路径。');
+  const target = path.resolve(rawTarget);
+  if (!existsSync(target)) throw new Error('目标数据目录不存在。');
+  const oldRoot = currentDataRoot();
+  if (target === oldRoot) throw new Error('目标目录已经是当前数据目录。');
+  let verifiedTarget = false;
+  try {
+    const marker = JSON.parse(readFileSync(path.join(target, 'data', '.atlas-data-migration.json'), 'utf8')) as Record<string, unknown>;
+    verifiedTarget = marker.verified === true && path.resolve(String(marker.target_root)) === target;
+  } catch { /* may be a rollback to the previous, still-preserved source */ }
+  let validRollback = false;
+  try {
+    const marker = JSON.parse(readFileSync(path.join(oldRoot, 'data', '.atlas-data-migration.json'), 'utf8')) as Record<string, unknown>;
+    validRollback = marker.verified === true && typeof marker.source_root === 'string' && path.resolve(marker.source_root) === target;
+  } catch { /* no prior verified migration */ }
+  if (!verifiedTarget && !validRollback) throw new Error('目标目录没有已验证的迁移副本，也不是当前迁移的原始目录。');
+  const preference = dataRootPreferencePath();
+  mkdirSync(path.dirname(preference), { recursive: true });
+  const temporary = `${preference}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify({ current_root: target, previous_root: oldRoot, updated_at: new Date().toISOString() }, null, 2)}\n`, 'utf8');
+  renameSync(temporary, preference);
+  process.env.ATLAS_DATA_DIR = target;
+  const pid = readRunningBackendPid();
+  await stopManagedBackend('data_root_switch');
+  if (pid !== null) await terminateBackendPid(pid, 'data_root_switch');
+  app.relaunch();
+  app.exit(0);
+  return { restarting: true };
 });
 ipcMain.handle('backend:open-log', async (event) => {
   assertTrustedAppSender(event);
@@ -1278,6 +1338,7 @@ ipcMain.handle('skill-center:token', (event) => {
 
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
+  applySavedDataRoot();
   platformPreferences = loadPlatformPreferences();
   app.setLoginItemSettings({ openAtLogin: platformPreferences.openAtLogin, args: platformPreferences.openAtLogin ? ['--background'] : [] });
   registerPreferredGlobalShortcut();

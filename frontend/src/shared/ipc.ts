@@ -100,6 +100,7 @@ export interface AtlasDesktopApi {
   onVoiceHotkey?(callback: () => void): () => void;
   onVoiceHudStart?(callback: () => void): () => void;
   onVoiceHudStop?(callback: () => void): () => void;
+  switchDataRoot?(target: string): Promise<{ restarting: boolean }>;
   setScreenshotContext?(conversationId: string, lastInteractionAt: number): void;
   onSessionScreenshot?(callback: (imageDataUrl: string, conversationId: string) => void): () => void;
   onSessionScreenshotError?(callback: (message: string) => void): () => void;
