@@ -923,9 +923,10 @@ def exec_command(
             failed = False
             if output_format == "jsonl":
                 _write_line({"type": "start", "session_id": conv_id}, sys.stdout)
+                input_event: dict[str, Any] = {"type": "input", "session_id": conv_id, "text": user_prompt}
                 if image_manifest:
-                    _write_line({"type": "input", "session_id": conv_id, "text": user_prompt,
-                                 "images": image_manifest}, sys.stdout)
+                    input_event["images"] = image_manifest
+                _write_line(input_event, sys.stdout)
             final_text = ""
             validation_error = ""
             structured_output: Any = None

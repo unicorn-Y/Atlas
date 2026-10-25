@@ -833,12 +833,15 @@ def _history_index() -> dict[str, Any]:
     try:
         raw = json.loads(_HISTORY_INDEX_PATH.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return {"version": 1, "sessions": {}}
+        return {"version": 1, "sessions": {}, "jsonl": {}}
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError("外部会话导入索引无法读取；为避免重复导入，未继续操作") from exc
     if not isinstance(raw, dict) or raw.get("version") != 1 or not isinstance(raw.get("sessions"), dict):
         raise ValueError("外部会话导入索引格式未知；为避免重复导入，未继续操作")
-    return {"version": 1, "sessions": raw["sessions"]}
+    jsonl = raw.get("jsonl", {})
+    if not isinstance(jsonl, dict):
+        jsonl = {}
+    return {"version": 1, "sessions": raw["sessions"], "jsonl": jsonl}
 
 
 def _save_history_index(index: Mapping[str, Any]) -> None:

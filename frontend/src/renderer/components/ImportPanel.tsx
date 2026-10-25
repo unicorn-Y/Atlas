@@ -43,6 +43,17 @@ type ExternalHistoryScan = {
   truncated: boolean;
 };
 
+type JsonlPreview = {
+  format: 'pi' | 'hermes' | 'atlas-cli';
+  detected_format: string | null;
+  available_fields: string[];
+  mapping: Record<string, string>;
+  file_key: string;
+  message_count: number;
+  invalid_lines: number;
+  preview: Array<{ role: string; content: string; timestamp?: string }>;
+};
+
 function formatHistoryTime(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString();
@@ -67,6 +78,13 @@ export default function ImportPanel({ workspace }: { workspace?: string }) {
   const [historyDays, setHistoryDays] = useState<7 | 30 | 90 | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyNotice, setHistoryNotice] = useState<string | null>(null);
+  const [jsonlFile, setJsonlFile] = useState<{ name: string; content: string } | null>(null);
+  const [jsonlFormat, setJsonlFormat] = useState<'auto' | 'pi' | 'hermes' | 'atlas-cli'>('auto');
+  const [jsonlMapping, setJsonlMapping] = useState<Record<string, string>>({});
+  const [jsonlPreview, setJsonlPreview] = useState<JsonlPreview | null>(null);
+  const [jsonlBusy, setJsonlBusy] = useState(false);
+  const [jsonlError, setJsonlError] = useState<string | null>(null);
+  const [jsonlNotice, setJsonlNotice] = useState<string | null>(null);
 
   const keyOf = (item: ExternalImportItem) => `${item.kind}:${item.path}`;
 
@@ -137,6 +155,34 @@ export default function ImportPanel({ workspace }: { workspace?: string }) {
     } finally {
       setHistoryImporting(false);
     }
+  };
+
+  const previewJsonl = async (file: { name: string; content: string }, format = jsonlFormat, mapping?: Record<string, string>) => {
+    setJsonlBusy(true); setJsonlError(null); setJsonlNotice(null);
+    try {
+      const result = await api<JsonlPreview>(apiBaseUrl, '/api/import/external/jsonl/preview', {
+        method: 'POST', json: { filename: file.name, content: file.content, format, mapping },
+      });
+      setJsonlFile(file); setJsonlPreview(result); setJsonlFormat(result.format);
+      setJsonlMapping(mapping ?? result.mapping);
+    } catch (exc) {
+      setJsonlPreview(null); setJsonlError(exc instanceof Error ? exc.message : String(exc));
+    } finally { setJsonlBusy(false); }
+  };
+
+  const importJsonl = async () => {
+    if (!jsonlFile || !jsonlPreview) return;
+    setJsonlBusy(true); setJsonlError(null); setJsonlNotice(null);
+    try {
+      const result = await api<{ status: string; conversation_id: string; messages_imported: number }>(
+        apiBaseUrl, '/api/import/external/jsonl/import', {
+          method: 'POST', json: { filename: jsonlFile.name, content: jsonlFile.content, format: jsonlPreview.format, mapping: jsonlMapping },
+        },
+      );
+      setJsonlNotice(result.status === 'already_imported' ? '该文件已导入；来源副本未写入或改动。' : `已导入 ${result.messages_imported} 条消息到会话 ${result.conversation_id}。`);
+      await refreshConversations();
+    } catch (exc) { setJsonlError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setJsonlBusy(false); }
   };
 
   const runImport = async () => {
@@ -280,5 +326,48 @@ export default function ImportPanel({ workspace }: { workspace?: string }) {
           </ul>}
       </>}
     </div>}
+    <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
+      <h3 style={{ margin: 0, fontSize: 14 }}>导入 JSONL 会话</h3>
+      <p style={{ margin: '4px 0 9px', fontSize: 12, color: 'var(--fg-3)' }}>选择 Pi、Hermes 或 Atlas CLI（atlas --print --output-format jsonl）导出的 JSONL 文件。Atlas 只在内存中读取所选文件，不改动源文件；导入前会预览并允许调整字段映射。使用同一数据目录的 `atlas chat` 会话已经在 Atlas 会话列表中，无需重复迁移。</p>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input aria-label="选择 JSONL 会话文件" type="file" accept=".jsonl,.json,.ndjson,text/plain,application/json" disabled={jsonlBusy}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            if (file.size > 32 * 1024 * 1024) { setJsonlError('文件超过 32 MiB 上限'); setJsonlPreview(null); return; }
+            void file.text().then((content) => previewJsonl({ name: file.name, content })).catch((exc) => setJsonlError(String(exc)));
+          }} />
+        <label style={{ fontSize: 12, color: 'var(--fg-3)' }}>格式
+          <select aria-label="JSONL 格式" value={jsonlFormat} disabled={jsonlBusy} onChange={(event) => {
+            const format = event.target.value as typeof jsonlFormat; setJsonlFormat(format);
+            if (jsonlFile) void previewJsonl(jsonlFile, format);
+          }} style={{ marginLeft: 6, padding: '5px 8px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--fg)' }}>
+            <option value="auto">自动检测</option><option value="pi">Pi</option><option value="hermes">Hermes</option><option value="atlas-cli">Atlas CLI JSONL</option>
+          </select>
+        </label>
+        {jsonlPreview && <button className={styles.settingsAction} disabled={jsonlBusy || !jsonlPreview.message_count} onClick={() => void importJsonl()}>
+          {jsonlBusy ? <LoaderCircle size={14} className={styles.settingsSpinner} /> : <CheckSquare size={14} />}导入为新会话
+        </button>}
+      </div>
+      {jsonlError && <p className={styles.settingsError} role="alert">{jsonlError}</p>}
+      {jsonlNotice && <p className={styles.settingsSuccess} role="status">{jsonlNotice}</p>}
+      {jsonlPreview && <div style={{ marginTop: 10 }}>
+        <p style={{ margin: '0 0 8px', fontSize: 12.5, color: 'var(--fg-2)' }}>识别为 {jsonlPreview.format}；{jsonlPreview.message_count} 条文本消息可导入，{jsonlPreview.invalid_lines} 行格式无效。源摘要键 {jsonlPreview.file_key.slice(0, 12)}…（用于重复导入识别）。</p>
+        {jsonlPreview.format !== 'atlas-cli' && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          {(['role', 'content', 'timestamp', 'id'] as const).map((field) => <label key={field} style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{({ role: '角色字段', content: '内容字段', timestamp: '时间字段', id: '消息 ID' })[field]}
+            <select aria-label={`JSONL ${field} 字段映射`} value={jsonlMapping[field] ?? ''} disabled={jsonlBusy} onChange={(event) => {
+              const next = { ...jsonlMapping, [field]: event.target.value }; setJsonlMapping(next);
+              if (jsonlFile) void previewJsonl(jsonlFile, jsonlPreview.format, next);
+            }} style={{ display: 'block', marginTop: 3, maxWidth: 220, padding: '4px 7px', borderRadius: 7, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--fg)' }}>
+              {field !== 'role' && <option value="">不映射</option>}{jsonlPreview.available_fields.map((path) => <option key={path} value={path}>{path}</option>)}
+            </select>
+          </label>)}
+        </div>}
+        <ul className={styles.integrationList}>{jsonlPreview.preview.map((item, index) => <li key={`${item.role}-${index}`} style={{ listStyle: 'none', padding: '8px 12px', borderRadius: 9, background: 'var(--sunken)' }}>
+          <strong style={{ fontSize: 12 }}>{item.role === 'user' ? '用户' : '助手'}</strong>{item.timestamp && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--fg-3)' }}>{item.timestamp}</span>}
+          <p style={{ margin: '4px 0 0', whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--fg-2)' }}>{item.content}</p>
+        </li>)}</ul>
+      </div>}
+    </div>
   </section>;
 }
