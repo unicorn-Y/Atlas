@@ -108,6 +108,26 @@ def mcp_serve_command() -> None:
     serve_mcp()
 
 
+@main.group("ide")
+def ide_group() -> None:
+    """Inspect editor context available to Atlas."""
+
+
+@ide_group.command("context")
+@click.option("--json", "as_json", is_flag=True, help="输出机器可读 JSON")
+def ide_context_command(as_json: bool) -> None:
+    """Show active file, selection, and workspace detected from this IDE terminal."""
+    from atlas.ide_context import discover_ide_context
+
+    context = asyncio.run(discover_ide_context())
+    if as_json:
+        click.echo(json.dumps(context, ensure_ascii=False, indent=2))
+    elif context:
+        console.print(json.dumps(context, ensure_ascii=False, indent=2))
+    else:
+        console.print(f"没有发现 IDE 环境；当前工作目录为 {Path.cwd()}。可通过 ATLAS_IDE_FILE、ATLAS_IDE_SELECTION 和 ATLAS_IDE_WORKSPACE 提供上下文。")
+
+
 @lsp_group.command("status")
 @click.option("--workspace", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path.cwd())
 def lsp_status_command(workspace: Path) -> None:
@@ -399,12 +419,19 @@ def chat(model: str | None) -> None:
 
         orch = AgentOrchestrator(model_mgr=model_mgr, memory=memory)
 
+        from atlas.ide_context import discover_ide_context, format_ide_context
+        ide_context = await discover_ide_context()
+
         import uuid
         conv_id = str(uuid.uuid4())
 
         console.print(f"[bold]Atlas[/bold] v0.1.0 | Model: [cyan]{model_mgr.current_model}[/cyan]")
         console.print("Type [bold]quit[/bold] or [bold]exit[/bold] to leave. "
                       "[bold]/model <id>[/bold] to switch model.\n")
+        if ide_context:
+            file_hint = f" · 文件 {ide_context['file']}" if ide_context.get("file") else ""
+            console.print(f"[dim]已发现 {ide_context.get('editor') or 'IDE'} 上下文：工作区 {ide_context.get('workspace')}{file_hint}；首次提问时附上。[/dim]\n")
+        attach_ide_context = bool(ide_context)
 
         while True:
             try:
@@ -439,9 +466,16 @@ def chat(model: str | None) -> None:
             # Save user message and run agent
             await memory.save_conversation_metadata(conv_id, title_hint=user_input)
 
+            if attach_ide_context and ide_context:
+                user_input = f"{format_ide_context(ide_context)}\n\nUser request:\n{user_input}"
+                attach_ide_context = False
+
             console.print(f"[bold]{model_mgr.current_model}[/bold] > ", end="")
             full = ""
-            async for event in orch.run(user_input, conv_id):
+            run_kwargs: dict[str, Any] = {}
+            if ide_context and ide_context.get("workspace"):
+                run_kwargs = {"workspace": str(ide_context["workspace"]), "workspace_trusted": True}
+            async for event in orch.run(user_input, conv_id, **run_kwargs):
                 if event["type"] == "chunk":
                     print(event["content"], end="", flush=True)
                     full += event["content"]
@@ -520,6 +554,23 @@ def exec_command(
     root = workspace.expanduser().resolve()
     if not root.is_dir():
         raise click.BadParameter(f"workspace is not a directory: {root}", param_hint="--workspace")
+    ide_context: dict[str, Any] | None = None
+    try:
+        from atlas.ide_context import discover_ide_context
+
+        ide_context = asyncio.run(discover_ide_context(cwd=root))
+    except (OSError, RuntimeError, ValueError):
+        ide_context = None
+    if ide_context:
+        if root == Path.cwd().resolve() and ide_context.get("workspace"):
+            detected_workspace = Path(str(ide_context["workspace"])).expanduser().resolve()
+            if detected_workspace.is_dir():
+                root = detected_workspace
+        from atlas.ide_context import format_ide_context
+
+        user_prompt = f"{format_ide_context(ide_context)}\n\nUser request:\n{user_prompt}"
+        if output_format != "jsonl":
+            print(f"IDE context attached ({ide_context.get('editor') or 'IDE'}; workspace {root}).", file=sys.stderr)
     if json_output:
         output_format = "jsonl"
     temporary_config = None
