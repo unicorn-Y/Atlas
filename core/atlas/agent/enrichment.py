@@ -25,6 +25,22 @@ from atlas.agent.mailbox import AgentMailbox, MailMessage, normalize_address
 
 log = structlog.get_logger()
 
+
+def _codeact_json_value(value: Any) -> Any:
+    """Return JSON-safe values without allowing lone surrogates across stdio."""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="backslashreplace")
+    if isinstance(value, str):
+        return value.encode("utf-8", errors="backslashreplace").decode("utf-8")
+    if isinstance(value, dict):
+        return {_codeact_json_value(key): _codeact_json_value(item)
+                for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_codeact_json_value(item) for item in value]
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return _codeact_json_value(str(value))
+
 # Delegation lifecycle, bounded schema retry, and child-worktree cleanup follow
 # NousResearch/hermes-agent at 330d9d6df9c7bffe125ba0ae64a0abc488a7d2c3
 # (MIT), adapted to Atlas run callbacks and workspace permissions.
@@ -332,7 +348,9 @@ class CodeActRuntime:
                 step.update({"status": "failed" if is_error else "completed",
                              "result_kind": type(data).__name__})
                 await emit({"type": "code_mode_step", **step})
-                payload = json.dumps(result, ensure_ascii=False, default=str).encode("utf-8")
+                payload = json.dumps(
+                    _codeact_json_value(result), ensure_ascii=True, default=str,
+                ).encode("utf-8", errors="replace")
                 response_body = len(payload).to_bytes(4, "big") + payload
                 writer.write(
                     b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n"
@@ -346,7 +364,8 @@ class CodeActRuntime:
                     await emit({"type": "code_mode_step", **step})
                 log.debug("agent.codeact.bridge_request_failed",
                           error_type=type(exc).__name__)
-                payload = json.dumps({"error": type(exc).__name__, "is_error": True}).encode()
+                payload = json.dumps({"error": type(exc).__name__, "is_error": True},
+                                     ensure_ascii=True).encode("utf-8", errors="replace")
                 response_body = len(payload).to_bytes(4, "big") + payload
                 writer.write(
                     b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n"
@@ -362,27 +381,35 @@ class CodeActRuntime:
 
         server = await asyncio.start_server(handle, "127.0.0.1", 0)
         port = int(server.sockets[0].getsockname()[1])
+        # The catalog travels through a file, never argv: the whole
+        # ``python -c <runner>`` command line is capped at 32767 characters on
+        # Windows, and a full tool catalog blows past it (WinError 206).
+        catalog_path = Path(workspace) / "_atlas_tool_catalog.json"
+        catalog_path.write_text(
+            json.dumps(tool_catalog or [], ensure_ascii=False), encoding="utf-8",
+        )
         runner = (
             "import asyncio,json,sys,urllib.request\n"
             f"TOKEN={token!r}\nPORT={port}\n"
             f"WORKSPACE={workspace!r}\n"
-            f"TOOLS={json.dumps(tool_catalog or [], ensure_ascii=False)!r}\n"
+            f"TOOLS_PATH={str(catalog_path)!r}\n"
             "class Bridge:\n"
-            " def list_tools(self): return json.loads(TOOLS)\n"
+            " def list_tools(self):\n"
+            "  with open(TOOLS_PATH,encoding='utf-8') as f: return json.load(f)\n"
             " @property\n"
             " def workspace(self): return WORKSPACE\n"
             " def call_tool(self,name,arguments=None):\n"
-            "  body=json.dumps({'token':TOKEN,'name':name,'arguments':arguments or {}}).encode()\n"
+            "  body=json.dumps({'token':TOKEN,'name':name,'arguments':arguments or {}},ensure_ascii=True).encode('utf-8',errors='replace')\n"
             "  req=urllib.request.Request(f'http://127.0.0.1:{PORT}/',data=body,method='POST')\n"
             "  with urllib.request.urlopen(req,timeout=15) as r: data=r.read()\n"
-            "  n=int.from_bytes(data[:4],'big'); return json.loads(data[4:4+n])\n"
+            "  n=int.from_bytes(data[:4],'big'); return json.loads(data[4:4+n].decode('utf-8',errors='replace'))\n"
             "atlas=Bridge()\n"
             "async def _run():\n"
             " ns={'atlas':atlas}\n"
             " exec(compile(sys.stdin.read(),'<atlas-codeact>','exec'),ns,ns)\n"
             " result=ns.get('result')\n"
             " if asyncio.iscoroutine(result): result=await result\n"
-            " print('ATLAS_RESULT:'+json.dumps(result,ensure_ascii=False,default=str))\n"
+            " print('ATLAS_RESULT:'+json.dumps(result,ensure_ascii=True,default=str))\n"
             "asyncio.run(_run())\n"
         )
         from atlas.engine_core.tools.environments.local import hermes_subprocess_env
@@ -392,7 +419,8 @@ class CodeActRuntime:
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=workspace,
-            env=hermes_subprocess_env(inherit_credentials=False),
+            env={**hermes_subprocess_env(inherit_credentials=False),
+                 "PYTHONIOENCODING": "utf-8:replace", "PYTHONUTF8": "1"},
         )
 
         async def read_tail(reader: asyncio.StreamReader, limit: int) -> bytes:
@@ -405,7 +433,7 @@ class CodeActRuntime:
 
         try:
             assert process.stdin is not None
-            process.stdin.write(code.encode("utf-8"))
+            process.stdin.write(code.encode("utf-8", errors="replace"))
             await process.stdin.drain()
             process.stdin.close()
             stdout_task = asyncio.create_task(read_tail(process.stdout, 16000))
@@ -437,8 +465,11 @@ class CodeActRuntime:
             if line.startswith("ATLAS_RESULT:"):
                 with contextlib.suppress(json.JSONDecodeError):
                     result = json.loads(line.removeprefix("ATLAS_RESULT:"))
-        return {"exit_code": process.returncode, "stdout": out, "stderr": err,
-                "result": result, "steps": steps, "workspace_isolated": True}
+        return {"exit_code": process.returncode,
+                "stdout": _codeact_json_value(out),
+                "stderr": _codeact_json_value(err),
+                "result": _codeact_json_value(result),
+                "steps": _codeact_json_value(steps), "workspace_isolated": True}
 
 
 class DelegationService:

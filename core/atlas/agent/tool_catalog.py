@@ -293,10 +293,16 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
         "function": {
             "name": "execute_code",
             "description": (
-                "Run a Python batch workflow in a disposable working directory. Use "
-                "atlas.list_tools() to inspect tools exposed to the current run and "
-                "atlas.call_tool(name, arguments) to call them sequentially. "
-                "atlas.workspace is the isolated default working directory for local tools. "
+                "Run a Python batch workflow in a disposable temporary working directory. "
+                "Use the injected atlas object directly; do not import atlas, which shadows "
+                "the tool bridge. atlas.call_tool(name, arguments) returns content text blocks "
+                "and is_error; for local_file read, count numbered lines from result['content']. "
+                "There is no atlas.result attribute. Example: r=atlas.call_tool('local_file', "
+                "{'action':'read','path':'README.md'}); t='\\n'.join(x.get('text','') for x in r.get('content',[]) if x.get('type')=='text'); "
+                "count=sum(1 for line in t.splitlines() if line.partition('\\t')[0].isdigit()). "
+                "Call atlas.call_tool(name, arguments) to run tools sequentially. "
+                "The script's cwd and atlas.workspace are temporary; relative paths passed "
+                "to atlas.call_tool for local tools resolve from the current session workspace. "
                 "Set dry_run=true to preview statically named tool calls without running the script. "
                 "Returns compact per-call step logs and the script result."
             ),

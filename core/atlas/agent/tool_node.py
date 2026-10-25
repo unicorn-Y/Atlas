@@ -670,8 +670,10 @@ async def execute_tools_node(
                     name: str, arguments: dict[str, Any], code_workspace: str,
                 ) -> dict[str, Any]:
                     nested_args = dict(arguments)
-                    if name.startswith("local_"):
-                        nested_args.setdefault("cwd", code_workspace)
+                    if name.startswith("local_") and ctx.workspace:
+                        # The script itself runs in code_workspace; calls through
+                        # Atlas resolve relative paths from the session workspace.
+                        nested_args.setdefault("cwd", ctx.workspace)
                     nested_id = f"{tc_id}:code:{uuid.uuid4().hex[:12]}"
                     nested_state = {
                         "messages": [AIMessage(content="", tool_calls=[{
