@@ -19,6 +19,8 @@ from atlas.config import load_user_settings
 from atlas.suggestions_safety import filter_safe_suggestions
 
 router = APIRouter()
+# Retain the module-level set for existing regression scripts and integrations.
+_GENERIC_SUGGESTIONS = {"继续", "请继续", "继续吧", "确认", "收到", "好的", "好", "谢谢", "明白", "没问题", "OK", "ok"}
 _last_retention_sweep = 0.0
 
 
