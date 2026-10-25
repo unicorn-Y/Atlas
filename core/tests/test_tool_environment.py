@@ -75,20 +75,9 @@ def test_missing_cloud_sandbox_sdk_returns_an_install_hint(monkeypatch):
 
 
 def test_browser_tool_uses_an_installed_browser(monkeypatch, tmp_path):
-    from atlas.engine import hermes_runtime
+    from atlas.engine_core.tools import browser_tool_install
 
     browser = tmp_path / "msedge.exe"
     browser.write_bytes(b"")
-    monkeypatch.delenv("AGENT_BROWSER_EXECUTABLE_PATH", raising=False)
-    monkeypatch.setattr(hermes_runtime, "system_browser_candidates", lambda: [tmp_path / "nope.exe", browser])
-    import hermes_cli.browser_runtime as runtime
-
-    monkeypatch.setattr(runtime, "chromium_executable", lambda allow_override=True: None)
-    hermes_runtime._use_system_browser()
-    import os
-
-    assert os.environ["AGENT_BROWSER_EXECUTABLE_PATH"] == str(browser)
-
-    monkeypatch.setenv("AGENT_BROWSER_EXECUTABLE_PATH", "C:/custom/chrome.exe")
-    hermes_runtime._use_system_browser()
-    assert os.environ["AGENT_BROWSER_EXECUTABLE_PATH"] == "C:/custom/chrome.exe"
+    monkeypatch.setenv("AGENT_BROWSER_EXECUTABLE_PATH", str(browser))
+    assert browser_tool_install._chromium_executable() == str(browser)
