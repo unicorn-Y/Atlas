@@ -22,6 +22,19 @@ const CHANNEL_FIELDS: Record<string, ChannelField[]> = {
     { key: 'password', label: '密码 / 授权码', secret: true },
     { key: 'smtp_host', label: 'SMTP 服务器（可选）' },
   ],
+  feishu: [
+    { key: 'app_id', label: 'App ID' }, { key: 'app_secret', label: 'App Secret', secret: true },
+    { key: 'mode', label: '接收模式（websocket / webhook）', placeholder: 'websocket' },
+  ],
+  dingtalk: [
+    { key: 'client_id', label: 'Client ID' }, { key: 'client_secret', label: 'Client Secret', secret: true },
+    { key: 'robot_code', label: 'Robot Code（可选）' },
+  ],
+  wecom: [
+    { key: 'corp_id', label: 'Corp ID' }, { key: 'corp_secret', label: 'Corp Secret', secret: true },
+    { key: 'agent_id', label: 'Agent ID' }, { key: 'token', label: '回调 Token', secret: true },
+    { key: 'encoding_aes_key', label: 'Encoding AES Key', secret: true },
+  ],
 };
 
 type ChannelPolicy = {
@@ -33,6 +46,7 @@ type ChannelPolicy = {
   require_mention: boolean;
 };
 type ChannelStatusWithPolicy = ChannelStatusRow & { policy?: ChannelPolicy };
+type ChannelCatalogRow = { id: string; label: string; status: string; registered: boolean; inbound: boolean; outbound: boolean; attachments: boolean; groups: boolean; mentions: boolean; dependency?: string | null; credentials: string[]; setup: string; docs: string };
 type ChannelPolicyPatch = Partial<ChannelPolicy>;
 const DEFAULT_CHANNEL_POLICY: ChannelPolicy = {
   dm_policy: 'open', dm_allowlist: ['*'], allow_when_empty: true,
@@ -56,6 +70,7 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
   const [busyChannel, setBusyChannel] = useState('');
   const [test, setTest] = useState({ channel: '', chatId: '', text: 'Atlas 测试消息' });
   const [sessionLinks, setSessionLinks] = useState<Array<{ session_key: string; conversation_id: string; linked_by: string; created_at: string }>>([]);
+  const [catalog, setCatalog] = useState<ChannelCatalogRow[]>([]);
   const [linkDraft, setLinkDraft] = useState({ agent_id: 'main', channel: 'telegram', account: '', peer: '', conversation_id: '' });
 
   const reloadSessionLinks = useCallback(async () => {
@@ -70,6 +85,8 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
     try {
       const status = await channelsApi.status(apiBaseUrl) as { channels: ChannelStatusWithPolicy[]; dispatcher_connected?: boolean };
       setRows(status.channels);
+      const directory = await api<{ channels: ChannelCatalogRow[] }>(apiBaseUrl, '/api/channels/catalog');
+      setCatalog(directory.channels);
       setPolicies((current) => {
         const next = { ...current };
         for (const row of status.channels) next[row.name] ??= cloneChannelPolicy(row.policy);
@@ -81,6 +98,7 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
       await reloadSessionLinks();
     } catch (error) {
       setRows([]); setDegraded(error instanceof Error ? error.message : String(error));
+      try { setCatalog((await api<{ channels: ChannelCatalogRow[] }>(apiBaseUrl, '/api/channels/catalog')).channels); } catch { setCatalog([]); }
     }
     setLoading(false);
   }, [apiBaseUrl, reloadSessionLinks]);
@@ -218,6 +236,17 @@ export default function ChannelsSettings({ apiBaseUrl, onToast }: { apiBaseUrl: 
           {row.counts && <span className="shrink-0 tabular-nums text-fg-3">收 {row.counts.received ?? 0} / 发 {row.counts.delivered ?? 0}{row.counts.dropped ? ` / 丢 ${row.counts.dropped}` : ''}</span>}
         </div>)}
       </div>
+    </section>
+
+    <section aria-label="支持平台目录" className="rounded-xl px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
+      <b className="font-medium text-fg">支持平台目录</b>
+      <p className="mb-3 mt-1 text-[12px] text-fg-3">能力与状态来自后端渠道目录和当前适配器注册表。未实现的平台不会显示凭据输入项。</p>
+      <div className="grid gap-2 sm:grid-cols-2">{catalog.map((item) => <article key={item.id} className="rounded-lg bg-sunken p-3">
+        <div className="flex items-center gap-2"><b className="text-fg">{item.label}</b><span className="text-[10px] text-fg-3">{item.status === 'available' ? '已注册' : item.status === 'dependency_missing' ? '缺少可选依赖' : item.status === 'optional' ? '可选适配器' : '未实现'}</span><span className="flex-1" /><a href={item.docs} target="_blank" rel="noreferrer" className="text-brand hover:underline">平台文档 ↗</a></div>
+        <p className="mb-1 mt-1.5 text-[11.5px] text-fg-3">{item.setup}</p>
+        <p className="m-0 text-[10.5px] text-fg-3">入站 {item.inbound ? '✓' : '—'} · 出站 {item.outbound ? '✓' : '—'} · 附件 {item.attachments ? '✓' : '—'} · 群组 {item.groups ? '✓' : '—'} · 提及 {item.mentions ? '✓' : '—'}{item.dependency ? ` · 依赖 ${item.dependency}` : ''}</p>
+        {item.registered && item.credentials.length > 0 && <p className="mb-0 mt-1 text-[10.5px] text-fg-3">凭据字段：{item.credentials.join('、')}</p>}
+      </article>)}</div>
     </section>
 
     {rows.map(({ name }) => {

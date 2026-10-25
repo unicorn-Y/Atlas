@@ -27,6 +27,10 @@ router = APIRouter(prefix="/api/channels", tags=["channels"])
 log = get_logger()
 
 _manager: ChannelManager | None = None
+_SECRET_FIELDS = {
+    "secret", "password", "bot_token", "app_token", "app_secret", "client_secret",
+    "corp_secret", "webhook_secret", "encoding_aes_key", "token",
+}
 
 
 def set_channel_manager(manager: ChannelManager | None) -> None:
@@ -61,10 +65,10 @@ async def channel_status() -> dict[str, Any]:
 
 @router.get("/catalog")
 async def channel_catalog() -> dict[str, Any]:
-    """Return the shared feature catalog, including platforms not yet implemented."""
-    from atlas.channels.catalog import list_channels
+    """Return shared capabilities plus the live adapter registration state."""
+    from atlas.channels.catalog import channels_with_registry
 
-    return {"channels": list_channels()}
+    return {"channels": channels_with_registry(_manager.registry if _manager else {})}
 
 
 class SessionLinkPayload(BaseModel):
@@ -191,7 +195,7 @@ async def put_accounts(payload: AccountsPayload) -> dict[str, Any]:
     for name, config in (payload.configs or {}).items():
         if name not in manager.registry:
             raise HTTPException(status_code=404, detail=f"未注册的渠道：{name}")
-        cleaned = {k: v for k, v in config.items() if k not in ("secret", "password", "bot_token")}
+        cleaned = {k: v for k, v in config.items() if k not in _SECRET_FIELDS}
         saved[name] = manager.configure(name, cleaned)
         if name == "telegram" and cleaned.get("enabled"):
             # P10: enabling the gateway telegram adapter at runtime must stop
