@@ -1431,16 +1431,23 @@ async def resolve_worktree_sync(
     conv = await memory.get_conversation(conversation_id)
     if not conv or not conv.get("worktree_path"):
         raise HTTPException(status_code=404, detail="Conversation worktree not found")
-    args = ["git", "merge", "--continue"] if action == "continue" else ["git", "rebase", "--abort"]
-    # Continue supports either merge or rebase state; Git will report when none is active.
-    if action == "continue":
-        probe = subprocess.run(["git", "rev-parse", "--git-path", "rebase-merge"], cwd=conv["worktree_path"],
-                              capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
-        rebase_dir = Path(conv["worktree_path"]) / probe.stdout.strip()
-        if rebase_dir.is_dir():
-            args = ["git", "rebase", "--continue"]
+    def git_path(name: str) -> Path | None:
+        probe = subprocess.run(["git", "rev-parse", "--git-path", name], cwd=conv["worktree_path"],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+        if probe.returncode:
+            return None
+        value = Path(probe.stdout.strip())
+        return value if value.is_absolute() else Path(conv["worktree_path"]) / value
+
+    rebasing = any(path and path.exists() for path in (git_path("rebase-merge"), git_path("rebase-apply")))
+    merging = bool(git_path("MERGE_HEAD") and git_path("MERGE_HEAD").exists())
+    if not (rebasing or merging):
+        raise HTTPException(status_code=409, detail="No merge or rebase is in progress")
+    args = (["git", "rebase", "--continue"] if rebasing else ["git", "merge", "--continue"]) if action == "continue" else (
+        ["git", "rebase", "--abort"] if rebasing else ["git", "merge", "--abort"])
+    env = {**os.environ, "GIT_EDITOR": "true"} if action == "continue" else None
     result = subprocess.run(args, cwd=conv["worktree_path"], capture_output=True, text=True,
-                            encoding="utf-8", errors="replace", timeout=120, check=False)
+                            encoding="utf-8", errors="replace", env=env, timeout=120, check=False)
     if result.returncode:
         conflicts = subprocess.run(["git", "diff", "--name-only", "--diff-filter=U"], cwd=conv["worktree_path"],
                                    capture_output=True, text=True, encoding="utf-8", errors="replace", check=False).stdout.splitlines()
