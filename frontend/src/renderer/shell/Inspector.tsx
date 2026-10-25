@@ -163,7 +163,7 @@ export default function Inspector({ tab, onTab, onClose, run, artifacts, convers
       </> : <Empty title="还没有开始" body="发出一个任务后，Atlas 做的每一步都会记在这里。" />)}
 
       {tab === 'changes' && <ChangesPanel runId={run?.id} runStatus={run?.status} apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} onAsk={onAsk} workspace={worktree?.path ?? workspace} />}
-      {tab === 'rollout' && <RolloutPanel runId={run?.id} apiBaseUrl={apiBaseUrl} />}
+      {tab === 'rollout' && <RolloutPanel runId={run?.id} apiBaseUrl={apiBaseUrl} conversationId={conversationId} />}
       {tab === 'android' && <AndroidEmulatorPanel apiBaseUrl={apiBaseUrl} workspace={worktree?.path ?? workspace} connected={connected} />}
 
       {tab === 'specs' && <SpecsPanel workspace={worktree?.path ?? workspace} onChooseWorkspace={onChooseWorkspace} refreshKey={refreshKey} onAsk={onAsk} />}

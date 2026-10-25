@@ -5,7 +5,19 @@ import { Empty } from './Empty';
 interface RolloutArchive { run_id: string; exists: boolean; path: string | null; events: Array<Record<string, unknown>>; event_count?: number; size_bytes?: number; error?: string }
 
 /** Read only view of Atlas's redacted per-run JSONL diagnostic archive. */
-export default function RolloutPanel({ runId, apiBaseUrl }: { runId?: string; apiBaseUrl: string }) {
+export default function RolloutPanel({ runId: liveRunId, apiBaseUrl, conversationId }: { runId?: string; apiBaseUrl: string; conversationId?: string }) {
+  // After a reload the store no longer holds finished runs, but their archives are still on disk:
+  // fall back to the conversation's most recent run id from the backend activity index.
+  const [latestRunId, setLatestRunId] = useState('');
+  useEffect(() => {
+    if (liveRunId || !conversationId) { setLatestRunId(''); return; }
+    let stale = false;
+    api<{ items?: Array<{ conversation_id: string; run_id: string }> }>(apiBaseUrl, '/api/conversation-activity')
+      .then((result) => { if (!stale) setLatestRunId(result.items?.find((item) => item.conversation_id === conversationId)?.run_id ?? ''); })
+      .catch(() => { if (!stale) setLatestRunId(''); });
+    return () => { stale = true; };
+  }, [liveRunId, conversationId, apiBaseUrl]);
+  const runId = liveRunId || latestRunId;
   const [archive, setArchive] = useState<RolloutArchive | null>(null);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -19,7 +31,7 @@ export default function RolloutPanel({ runId, apiBaseUrl }: { runId?: string; ap
       .catch((exc) => { if (!stale) setError(exc instanceof Error ? exc.message : String(exc)); });
     return () => { stale = true; };
   }, [runId, apiBaseUrl, refresh]);
-  if (!runId) return <Empty title="没有活动运行" body="开始一项任务后，这里会显示它的完整事件归档。" />;
+  if (!runId) return <Empty title="这个会话还没有运行记录" body="开始一项任务后，这里会显示它的完整事件归档。" />;
   if (error) return <section role="alert" className="rounded-xl bg-danger-soft p-3 text-[12.5px] text-danger">读取运行归档失败：{error}<button type="button" onClick={() => setRefresh((value) => value + 1)} className="ml-2 underline">重试</button></section>;
   if (!archive) return <p role="status" className="py-6 text-center text-[13px] text-fg-3">正在读取运行事件归档…</p>;
   if (!archive.exists) return <Empty title="归档文件不存在" body={archive.error ?? '运行事件没有保存归档文件。'} />;
