@@ -476,9 +476,7 @@ def dashboard_start(port: int | None) -> None:
     selected_port = port or get_config().server_port
     control = _dashboard_control_file()
     prior = read_control(include_expired=True)
-    owns_server = bool(prior.get("owns_server"))
     shutdown_token = str(prior.get("shutdown_token") or "")
-    pid = int(prior.get("pid") or 0)
     try:
         response = _daemon_request("GET", "/api/health", selected_port, timeout=1.0)
         if not response.is_success:
@@ -496,7 +494,6 @@ def dashboard_start(port: int | None) -> None:
                 env=env, cwd=os.getcwd(), stdin=subprocess.DEVNULL, stdout=log_file, stderr=log_file,
                 creationflags=flags, start_new_session=os.name != "nt",
             )
-        pid, owns_server = process.pid, True
         deadline = time.time() + 60
         while time.time() < deadline and process.poll() is None:
             try:
