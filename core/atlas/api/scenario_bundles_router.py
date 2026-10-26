@@ -88,4 +88,3 @@ async def unload_bundle() -> dict[str, Any]:
         return ScenarioBundleStore().unload()
     except (OSError, ValueError) as exc:
         raise HTTPException(500, f"卸载场景包失败：{exc}") from exc
-
