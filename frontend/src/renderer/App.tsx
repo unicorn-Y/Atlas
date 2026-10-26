@@ -112,7 +112,7 @@ const SecretsPanel = lazy(() => import('./components/settings/SecretsPanel'));
 const LinearIntegrationPanel = lazy(() => import('./components/settings/LinearIntegrationPanel'));
 const ConnectorDirectory = lazy(() => import('./components/settings/ConnectorDirectory'));
 const OPEN_EXPERT_SETTINGS = 'atlas:open-expert-settings';
-import Sidebar, { MORE_NAV, NAV, type View } from './shell/Sidebar';
+import Sidebar, { MORE_NAV, NAV, type SidebarZoom, type View } from './shell/Sidebar';
 import UserSidebarPage, { readUserSidebarPages, USER_SIDEBAR_PAGES_KEY, type UserSidebarPageDefinition } from './pages/UserSidebarPage';
 import HomeView, { type Suggestion } from './shell/HomeView';
 import type { InspectorTab } from './shell/Inspector';
@@ -299,6 +299,10 @@ export default function App() {
     return () => query.removeEventListener('change', update);
   }, []);
   const [sideMini, setSideMini] = useState(() => pref('sidebar-mini') === 'true');
+  const [sidebarZoom, setSidebarZoom] = useState<SidebarZoom>(() => {
+    const saved = pref('sidebar-zoom');
+    return saved === 'compact' || saved === 'wide' ? saved : 'default';
+  });
   // Narrow windows collapse the sidebar to icons without touching the saved preference.
   const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 900px)').matches);
   useEffect(() => {
@@ -1610,6 +1614,7 @@ export default function App() {
   const chooseTheme = (next: Theme) => { clearCustomTheme(); setTheme(next); setPref('appearance', next); setPref('theme-mode', 'manual'); };
   const toggleTheme = () => { const next = nextTheme(theme); chooseTheme(next); setToast(`已切换到${themeInfo(next).label}`); };
   const toggleMini = () => setSideMini((current) => { setPref('sidebar-mini', String(!current)); return !current; });
+  const changeSidebarZoom = (zoom: SidebarZoom) => { setSidebarZoom(zoom); setPref('sidebar-zoom', zoom); };
   const createUserSidebarPage = (pageTitle: string) => {
     const title = pageTitle.trim();
     if (!title) return;
@@ -3198,7 +3203,7 @@ export default function App() {
   return <TooltipProvider>
     <MarkDefs />
     <div className="flex h-full">
-      {!focusedLayout && <Sidebar view={view} onGo={go} mini={sideMini || narrow} onToggleMini={toggleMini}
+      {!focusedLayout && <Sidebar view={view} onGo={go} mini={sideMini || narrow} onToggleMini={toggleMini} zoom={sidebarZoom} onZoomChange={changeSidebarZoom}
         userPages={userSidebarPages} selectedUserPageId={selectedUserSidebarPageId} onSelectUserPage={(id) => { setSelectedUserSidebarPageId(id); go('user-page'); }}
         onCreateUserPage={createUserSidebarPage} onRenameUserPage={renameUserSidebarPage} onDeleteUserPage={deleteUserSidebarPage} onMoveUserPage={moveUserSidebarPage}
         conversations={store.conversations} conversationsLoading={store.conversationsLoading}

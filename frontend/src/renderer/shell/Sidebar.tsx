@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import {
   Archive, ArchiveRestore, ArrowUpDown, AppWindow, Blocks, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
   Folder, FolderOpen, GitBranch, GripVertical, Home, Info, KanbanSquare, MessageSquare, MonitorSmartphone, Moon, MoreHorizontal, PanelLeft,
-  Library, ListTodo, Pause, Pencil, Pin, PinOff, Play, Plus, Repeat, Search, Settings, Sparkles, Square, SquarePen, Sun, Trash2, Users, X, Wand2, type LucideIcon,
+  Library, ListTodo, Pause, Pencil, Pin, PinOff, Play, Plus, Repeat, Search, Settings, Sparkles, Square, SquarePen, Sun, Trash2, Users, X, Wand2, ZoomIn, type LucideIcon,
 } from 'lucide-react';
 import type { ConversationSummary } from '@atlas/backend-adapter';
 import type { AgentRun } from '../../types/runtime';
@@ -23,6 +23,7 @@ import TriageBoardDialog from '../components/TriageBoardDialog';
 import type { UserSidebarPageDefinition } from '../pages/UserSidebarPage';
 
 export type View = 'home' | 'chat' | 'groups' | 'agents' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills' | 'devices' | 'evolution' | 'workbench' | 'library' | 'user-page';
+export type SidebarZoom = 'compact' | 'default' | 'wide';
 
 export const NAV: Array<{ view: View; label: string; icon: LucideIcon }> = [
   { view: 'chat', label: '聊天', icon: MessageSquare },
@@ -124,7 +125,7 @@ function groupByDay(conversations: ConversationSummary[]): Section[] {
 }
 
 interface SidebarProps {
-  view: View; onGo: (view: View) => void; mini: boolean; onToggleMini: () => void;
+  view: View; onGo: (view: View) => void; mini: boolean; onToggleMini: () => void; zoom: SidebarZoom; onZoomChange: (zoom: SidebarZoom) => void;
   userPages: UserSidebarPageDefinition[]; selectedUserPageId: string; onSelectUserPage: (id: string) => void;
   onCreateUserPage: (title: string) => void; onRenameUserPage: (id: string, title: string) => void; onDeleteUserPage: (id: string) => void; onMoveUserPage: (id: string, direction: -1 | 1) => void;
   conversations: ConversationSummary[]; conversationsLoading: boolean;
@@ -151,7 +152,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar(props: SidebarProps) {
-  const { mini } = props;
+  const { mini, zoom } = props;
   const [showArchived, setShowArchived] = useState(false);
   const [triageOpen, setTriageOpen] = useState(false);
   const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);
@@ -919,11 +920,18 @@ export default function Sidebar(props: SidebarProps) {
       </Tip>
     </div>}
 
-    {!mini && <div className="flex w-[238px] min-h-0 flex-col bg-[var(--panel-bg)] pt-2.5 pr-1.5 pb-2 pl-1">
+    {!mini && <div className="min-h-0 flex flex-col bg-[var(--panel-bg)] pt-2.5 pr-1.5 pb-2 pl-1" style={{ width: zoom === 'compact' ? 218 : zoom === 'wide' ? 264 : 238, zoom: zoom === 'compact' ? 0.94 : zoom === 'wide' ? 1.06 : 1 }}>
     <div className="drag flex h-9 items-center gap-1 pr-0.5 pl-2">
       <b className="text-[15px] font-semibold tracking-[-.01em] text-heading">Atlas</b>
       <span className="flex-1" />
       <Tip label="搜索和命令 Ctrl K"><button onClick={props.onSearch} aria-label="搜索和命令" className="no-drag grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Search size={15} /></button></Tip>
+      <Menu><MenuTrigger asChild><button type="button" aria-label={`侧栏缩放：${zoom === 'compact' ? '紧凑' : zoom === 'wide' ? '宽' : '默认'}`} title="侧栏缩放" className="no-drag grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><ZoomIn size={15} /></button></MenuTrigger>
+        <MenuContent align="end" className="min-w-[150px]"><MenuLabel>侧栏缩放</MenuLabel>
+          <MenuItem checked={zoom === 'compact'} onSelect={() => props.onZoomChange('compact')}>紧凑 · 218 px</MenuItem>
+          <MenuItem checked={zoom === 'default'} onSelect={() => props.onZoomChange('default')}>默认 · 238 px</MenuItem>
+          <MenuItem checked={zoom === 'wide'} onSelect={() => props.onZoomChange('wide')}>宽 · 264 px</MenuItem>
+        </MenuContent>
+      </Menu>
       <Tip label="收起任务栏"><button aria-label="收起侧边栏" onClick={props.onToggleMini} className="no-drag grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><PanelLeft size={15} /></button></Tip>
     </div>
     <div className="mt-1.5 flex h-8 items-center gap-1">
