@@ -208,6 +208,12 @@ function localDocumentKind(file: File): 'html' | 'pdf' | 'image' | 'video' | nul
   return null;
 }
 
+function safeNavigation(view?: WebviewElement): { back: boolean; forward: boolean } {
+  if (!view) return { back: false, forward: false };
+  try { return { back: view.canGoBack(), forward: view.canGoForward() }; }
+  catch { return { back: false, forward: false }; }
+}
+
 /**
  * A browser next to the conversation for checking what the Agent built.
  * Pages run in their own session with no access to Atlas; picking an element hands its details to the composer.
@@ -255,6 +261,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   const lastBrowserArtifactRef = useRef({ runId: '', sequence: -1 });
   const nextTabIdRef = useRef(1);
   const viewRefs = useRef(new Map<number, WebviewElement>());
+  const readyWebviewsRef = useRef(new Set<number>());
   const boundViewRefs = useRef(new Map<number, { view: WebviewElement; listeners: Array<[string, EventListener]> }>());
   const zoomGestureRef = useRef<(id: number, event: Event) => void>(() => undefined);
   const webviewRefCallbacks = useRef(new Map<number, (node: Element | null) => void>());
@@ -273,15 +280,17 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
       for (const [name, listener] of existing.listeners) existing.view.removeEventListener(name, listener);
       boundViewRefs.current.delete(id);
     }
-    if (!node) { viewRefs.current.delete(id); return; }
+    if (!node) { viewRefs.current.delete(id); readyWebviewsRef.current.delete(id); return; }
     const view = node as WebviewElement;
     viewRefs.current.set(id, view);
     const sync = () => {
-      const current = view.getURL();
+      if (!readyWebviewsRef.current.has(id)) return;
+      let current = '';
+      try { current = view.getURL(); } catch { return; }
       if (!current) return;
       setTabs((previous) => previous.map((tab) => tab.id === id ? { ...tab, url: current, address: current } : tab));
       if (activeTabIdRef.current === id) {
-        setNav({ back: view.canGoBack(), forward: view.canGoForward() });
+        setNav(safeNavigation(view));
         reportUrlRef.current(current);
       }
     };
@@ -292,7 +301,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
     const stop = () => {
       setLoadingTabs((previous) => { const next = new Set(previous); next.delete(id); return next; });
       const current = tabsRef.current.find((tab) => tab.id === id);
-      if (current) view.setZoomFactor(current.zoom);
+      if (current && readyWebviewsRef.current.has(id)) { try { view.setZoomFactor(current.zoom); } catch { /* guest may be tearing down */ } }
       sync();
     };
     const failed = (event: Event) => {
@@ -312,9 +321,15 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
       if (result && activeTabIdRef.current === id) setFindCount(result);
     };
     const zoomGesture = (event: Event) => zoomGestureRef.current(id, event);
+    const ready = () => {
+      readyWebviewsRef.current.add(id);
+      if (activeTabIdRef.current !== id) return;
+      try { window.atlasDesktop?.setBrowserAddressShortcutWebContents?.(view.getWebContentsId()); } catch { /* guest not initialized yet */ }
+      setNav(safeNavigation(view));
+    };
     const listeners: Array<[string, EventListener]> = [
       ['did-start-loading', start], ['did-stop-loading', stop], ['did-navigate', sync],
-      ['did-navigate-in-page', sync], ['did-fail-load', failed], ['page-title-updated', title], ['found-in-page', found],
+      ['did-navigate-in-page', sync], ['did-fail-load', failed], ['page-title-updated', title], ['found-in-page', found], ['dom-ready', ready],
       ['keydown', zoomGesture],
     ];
     for (const [name, listener] of listeners) view.addEventListener(name, listener);
@@ -370,7 +385,8 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
       setFindCount({ activeMatchOrdinal: 0, matches: 0 });
       return;
     }
-    view.findInPage(query, { forward, findNext, matchCase: false });
+    if (!readyWebviewsRef.current.has(activeTabIdRef.current)) return;
+    try { view.findInPage(query, { forward, findNext, matchCase: false }); } catch { /* guest is navigating */ }
   };
   useEffect(() => {
     const open = () => { setFindOpen(true); window.requestAnimationFrame(() => { findInputRef.current?.focus(); findInputRef.current?.select(); }); };
@@ -387,7 +403,12 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
 
   useEffect(() => {
     if (!userRecordingId || !apiBaseUrl) {
-      for (const view of viewRefs.current.values()) void view.executeJavaScript(USER_RECORDER_REMOVE).catch(() => undefined);
+      for (const view of viewRefs.current.values()) {
+        const id = [...viewRefs.current.entries()].find(([, candidate]) => candidate === view)?.[0];
+        if (id === undefined || !readyWebviewsRef.current.has(id)) continue;
+        try { void view.executeJavaScript(USER_RECORDER_REMOVE).catch(() => undefined); }
+        catch { /* A newly mounted webview has no guest process until dom-ready. */ }
+      }
       return;
     }
     let stale = false;
@@ -409,7 +430,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
     const poll = async () => {
       if (stale || busy) return;
       const view = viewRefs.current.get(activeTabIdRef.current);
-      if (!view) return;
+      if (!view || !readyWebviewsRef.current.has(activeTabIdRef.current)) return;
       busy = true;
       try {
         const url = view.getURL();
@@ -449,7 +470,10 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
       ...item, url: next, address: next, initialUrl: item.initialUrl || next,
       title: tabTitle(next),
     } : item));
-    if (tab.initialUrl) void viewRefs.current.get(id)?.loadURL(next).catch(() => undefined);
+    if (tab.initialUrl) {
+      try { void viewRefs.current.get(id)?.loadURL(next).catch(() => undefined); }
+      catch { /* A just-mounted guest starts from its `src`; Electron throws before dom-ready. */ }
+    }
     if (notify && activeTabIdRef.current === id) reportUrlRef.current(next);
   };
   useEffect(() => {
@@ -511,7 +535,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   useEffect(() => {
     if (activeTab) {
       const view = viewRefs.current.get(activeTab.id);
-      setNav(view ? { back: view.canGoBack(), forward: view.canGoForward() } : { back: false, forward: false });
+      setNav(safeNavigation(view));
     }
   }, [activeTabId, activeTab?.id]);
 
@@ -527,7 +551,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
     setPendingPick(null);
     setAnnotation('');
     const view = viewRefs.current.get(id);
-    setNav(view ? { back: view.canGoBack(), forward: view.canGoForward() } : { back: false, forward: false });
+    setNav(safeNavigation(view));
     reportUrlRef.current(tab.url);
   };
   const addTab = () => {
@@ -571,7 +595,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
       setPendingPick(null);
       setAnnotation('');
       const view = viewRefs.current.get(target.id);
-      setNav(view ? { back: view.canGoBack(), forward: view.canGoForward() } : { back: false, forward: false });
+      setNav(safeNavigation(view));
       reportUrlRef.current(target.url);
       window.requestAnimationFrame(() => tabButtonRefs.current.get(target.id)?.focus());
     }
@@ -630,20 +654,22 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   const loading = loadingTabs.has(activeTabId);
   useEffect(() => {
     const view = viewRefs.current.get(activeTabId);
-    if (view && activeTab) view.setZoomFactor(activeTab.zoom);
+    if (view && activeTab && readyWebviewsRef.current.has(activeTabId)) { try { view.setZoomFactor(activeTab.zoom); } catch { /* guest teardown */ } }
   }, [activeTabId, activeTab?.zoom]);
   const updateZoom = (id: number, next: number) => {
     const factor = Math.max(0.5, Math.min(2, Math.round(next * 100) / 100));
     setTabs((previous) => previous.map((tab) => tab.id === id ? { ...tab, zoom: factor } : tab));
     tabsRef.current = tabsRef.current.map((tab) => tab.id === id ? { ...tab, zoom: factor } : tab);
-    viewRefs.current.get(id)?.setZoomFactor(factor);
+    if (readyWebviewsRef.current.has(id)) { try { viewRefs.current.get(id)?.setZoomFactor(factor); } catch { /* guest teardown */ } }
     setZoomBannerTab(id);
     if (zoomBannerTimerRef.current !== null) window.clearTimeout(zoomBannerTimerRef.current);
     zoomBannerTimerRef.current = window.setTimeout(() => setZoomBannerTab((current) => current === id ? null : current), 2200);
   };
   useEffect(() => {
     const unsubscribe = window.atlasDesktop?.onBrowserZoom?.(({ webContentsId, action, factor: actualFactor }) => {
-      const entry = [...viewRefs.current.entries()].find(([, view]) => view.getWebContentsId() === webContentsId);
+      const entry = [...viewRefs.current.entries()].find(([, view]) => {
+        try { return view.getWebContentsId() === webContentsId; } catch { return false; }
+      });
       if (!entry) return;
       const current = tabsRef.current.find((tab) => tab.id === entry[0])?.zoom ?? 1;
       const factor = action === 'sync' ? Number(actualFactor) : action === 'in' ? current + 0.1 : action === 'out' ? current - 0.1 : 1;
@@ -669,8 +695,8 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
     event.preventDefault();
   };
   useEffect(() => {
-    const view = viewRefs.current.get(activeTabId);
-    if (view && activeTab) view.setZoomFactor(activeTab.zoom);
+    const view = readyWebviewsRef.current.has(activeTabId) ? viewRefs.current.get(activeTabId) : undefined;
+    if (view && activeTab && readyWebviewsRef.current.has(activeTabId)) { try { view.setZoomFactor(activeTab.zoom); } catch { /* guest teardown */ } }
   }, [activeTabId, activeTab?.zoom]);
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
