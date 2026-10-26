@@ -7,7 +7,6 @@ import subprocess
 import shutil
 import sys
 import tempfile
-import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -42,6 +41,7 @@ def main() -> None:
     from atlas.skills import SkillManager, SkillSource
 
     scenario("safe mode startup option", lambda: cli_help("chat", ["--safe-mode"]))
+    scenario("safe mode server startup option", lambda: cli_help("serve", ["--safe-mode"]))
     safe_env = dict(os.environ)
     safe_env["ATLAS_ROOT"] = r"C:\engine-reg\_atlasroot"
     safe = subprocess.run([sys.executable, "-m", "atlas.cli", "chat", "--safe-mode"],
@@ -50,6 +50,23 @@ def main() -> None:
     check(safe.returncode == 0 and "安全模式已启用" in safe.stdout and "Bye!" in safe.stdout,
           "safe-mode chat startup/exit scenario failed")
     print("U38 scenario: safe-mode chat starts, reports diagnostic state, and exits cleanly PASS", flush=True)
+    from atlas.api.deferred_startup import _register_extensions, _start_mcp, _start_skills_plugins
+    from atlas.api.startup_components import StartupComponents
+    previous_safe = os.environ.get("ATLAS_SAFE_MODE")
+    os.environ["ATLAS_SAFE_MODE"] = "1"
+    try:
+        components = StartupComponents()
+        asyncio.run(_start_skills_plugins(None, components))
+        asyncio.run(_start_mcp(None))
+        asyncio.run(_register_extensions(SimpleNamespace()))
+        check(components.state("skills") == "ready" and components.state("plugins") == "ready",
+              "safe-mode startup did not settle skipped components")
+    finally:
+        if previous_safe is None:
+            os.environ.pop("ATLAS_SAFE_MODE", None)
+        else:
+            os.environ["ATLAS_SAFE_MODE"] = previous_safe
+    print("U38 scenario: safe mode skips plugin, skill, MCP, and extension startup and records diagnostics PASS", flush=True)
     scenario("CLI per-run skill preload options", lambda: cli_help("exec", ["--skills", "--skills-file"]))
     live_root = Path(r"C:\engine-reg\_atlasroot")
     live_skill = live_root / "skills" / "testing" / "u38-smoke-temp"
@@ -97,7 +114,6 @@ def main() -> None:
         manager.scan_skills_sync()
         denied = False
         try:
-            import asyncio
             asyncio.run(manager.activate("market-skill"))
         except PermissionError:
             denied = True

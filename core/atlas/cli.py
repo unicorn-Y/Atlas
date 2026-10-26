@@ -391,13 +391,17 @@ def review_command(workspace: Path, model: str | None, ci: bool, as_json: bool, 
 @click.option("--port", default=None, type=int, help="Server port (default: from config)")
 @click.option("--host", default=None, help="Bind host (for example 127.0.0.1)")
 @click.option("--reload", is_flag=True, help="Enable auto-reload")
-def serve(port: int | None, host: str | None, reload: bool) -> None:
+@click.option("--safe-mode", is_flag=True, help="Start core services only; skip MCP, skill/plugin, and extension auto-start")
+def serve(port: int | None, host: str | None, reload: bool, safe_mode: bool) -> None:
     """Start the Atlas backend server."""
     import uvicorn
 
     from atlas.config import get_config
 
     cfg = get_config()
+    if safe_mode:
+        os.environ["ATLAS_SAFE_MODE"] = "1"
+        console.print("[yellow]安全模式：已跳过 MCP、技能/插件和扩展自动启动；退出服务后普通运行 atlas serve 可恢复。[/yellow]")
     actual_port = port or cfg.server_port
     host = host or cfg.server_host
 
@@ -771,6 +775,7 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool) -> None:
 
         console.print(f"[bold]Atlas[/bold] v0.1.0 | Model: [cyan]{model_mgr.current_model}[/cyan]")
         if safe_mode:
+            structlog.get_logger().info("cli.safe_mode.enabled", command="chat", skipped="plugins,extensions,market_skills")
             console.print("[yellow]安全模式已启用：本次 CLI 会话不启动插件/扩展服务；输入 quit/exit 退出，重新运行 atlas chat 可恢复正常模式。[/yellow]")
         console.print(f"Conversation: [cyan]{conv_id}[/cyan] (resume with atlas chat --resume {conv_id})")
         console.print("Type [bold]quit[/bold] or [bold]exit[/bold] to leave. "

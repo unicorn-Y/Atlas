@@ -263,6 +263,10 @@ async def _start_mcp(services: Any) -> None:
     component is settled without importing the SDK; the deferred proxy keeps
     dynamic add and first-use access compatible.
     """
+    import os
+    if os.environ.get("ATLAS_SAFE_MODE") == "1":
+        log.info("startup.safe_mode.skipped", component="mcp")
+        return
     if not _mcp_servers_configured():
         log.info("mcp.no_servers_configured")
         return
@@ -321,6 +325,12 @@ async def _start_skills_plugins(services: Any, components: StartupComponents) ->
     Two components on one serial branch (the plugin index refresh must follow
     the initial scan); each sub-step settles its own component state.
     """
+    import os
+    if os.environ.get("ATLAS_SAFE_MODE") == "1":
+        components.mark("skills", "ready")
+        components.mark("plugins", "ready")
+        log.info("startup.safe_mode.skipped", component="skills_plugins_extensions")
+        return
     from atlas.api.run_drive import _refresh_extension_sources
 
     try:
@@ -490,6 +500,10 @@ async def _start_telegram(services: Any) -> None:
 async def _register_extensions(app: Any) -> None:
     """S2.10: /init 与 /review 的路由和工具注册。这些模块由独立子模块提供，
     注册失败只降级告警，绝不能拖垮 Atlas 本体启动。"""
+    import os
+    if os.environ.get("ATLAS_SAFE_MODE") == "1":
+        log.info("startup.safe_mode.skipped", component="extension_routes_and_tools")
+        return
     errors: list[str] = []
     try:
         # MCP's SDK import graph is large; load its resource routes after the
