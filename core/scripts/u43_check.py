@@ -2,9 +2,14 @@
 from __future__ import annotations
 
 import socket
+import json
+import os
+import subprocess
+import sys
 import tempfile
 import threading
 import time
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +23,65 @@ from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 from atlas.api.runtime import RunState
 from atlas.office import render_isolated_preview
+
+
+def check_interactive_cli_and_private_bug_bundle() -> None:
+    core = Path(__file__).resolve().parents[1]
+    repo = core.parent
+    app_source = (repo / "frontend/src/renderer/App.tsx").read_text(encoding="utf-8")
+    diagnostics_ui = (repo / "frontend/src/renderer/components/settings/DiagnosticsPanel.tsx").read_text(encoding="utf-8")
+    tool_source = (core / "atlas/agent/tool_node.py").read_text(encoding="utf-8")
+    assert all(token in app_source for token in ("id: 'env'", "id: 'tui'", "id: 'quit'", "id: 'bug'", "id: 'battery'", "setQuitActivity"))
+    assert "session_env" in tool_source and "fn_args[\"env\"]" in tool_source
+    assert "saveBugBundle" in diagnostics_ui and "导出脱敏 Bug Bundle" in diagnostics_ui
+    with tempfile.TemporaryDirectory(prefix="u43-cli-") as directory:
+        root = Path(directory)
+        env = {**os.environ, "ATLAS_ROOT": str(root / "atlas-root"), "PYTHONPATH": str(core)}
+        (root / "atlas-root").mkdir()
+
+        def run(*arguments: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, "-m", "atlas.cli", *arguments], cwd=core, env=env,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+            )
+
+        for shell in ("bash", "zsh", "fish"):
+            result = run("completion", shell)
+            assert result.returncode == 0 and "_ATLAS_COMPLETE" in result.stdout and len(result.stdout) > 100
+        version = run("version")
+        assert version.returncode == 0 and version.stdout.startswith("Atlas v")
+        chat_quit = subprocess.run(
+            [sys.executable, "-m", "atlas.cli", "chat", "--safe-mode"], cwd=core, env=env,
+            input="/quit\n", capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        )
+        assert chat_quit.returncode == 0 and "Bye!" in chat_quit.stdout
+        terminal = run("terminal", "doctor")
+        assert terminal.returncode == 0 and "平台：" in terminal.stdout and "建议：" in terminal.stdout
+        assert run("uninstall", "--help").returncode == 0
+        fake_uninstaller = root / "Uninstall Atlas.exe"
+        fake_uninstaller.write_text("placeholder; the prompt below must cancel before launching", encoding="utf-8")
+        uninstall_env = {**env, "ATLAS_UNINSTALLER_EXECUTABLE": str(fake_uninstaller)}
+        cancelled = subprocess.run(
+            [sys.executable, "-m", "atlas.cli", "uninstall"], cwd=core, env=uninstall_env,
+            input="n\n", capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+        )
+        assert cancelled.returncode == 0 and "已取消卸载" in cancelled.stdout and fake_uninstaller.exists()
+        assert run("desktop", "--help").returncode == 0
+
+        bundle_path = root / "selected-bundle.json"
+        generated = run("bug", "--output", str(bundle_path))
+        bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+        assert generated.returncode == 0 and bundle["kind"] == "atlas-local-bug-bundle"
+        assert bundle["privacy"]["local_only"] and bundle["privacy"]["uploaded"] is False
+        serialized = json.dumps(bundle, ensure_ascii=False).lower()
+        assert "api_key" not in serialized and "secrets.json" not in serialized
+        assert "atlas.preference.session-env-presets" not in serialized
+
+    from atlas.api.diagnostics_router import get_battery_status
+
+    battery = asyncio.run(get_battery_status())
+    assert set(battery) == {"supported", "level", "charging", "seconds_left"}
+    assert (battery["supported"] and isinstance(battery["level"], int)) or battery["level"] is None
 
 
 def check_isolated_preview() -> None:
@@ -200,6 +264,7 @@ def check_cluster_control() -> None:
 def main() -> None:
     check_isolated_preview()
     check_cluster_control()
+    check_interactive_cli_and_private_bug_bundle()
     print("U43 CHECK PASS")
 
 

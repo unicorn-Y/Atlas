@@ -24,22 +24,23 @@ type DiagnosticReport = {
   };
 };
 
-function saveReport(report: DiagnosticReport) {
+async function saveReport(report: DiagnosticReport): Promise<string | null> {
   const bundle = {
     schema_version: 1,
     kind: 'atlas-local-bug-bundle',
     created_at: new Date().toISOString(),
-    app: { user_agent: navigator.userAgent, locale: navigator.language },
+    app: { platform: window.atlasDesktop?.platform ?? navigator.platform, locale: navigator.language },
     diagnostics: report,
     privacy: '本地生成；不含模型凭据、配置内容或本机路径；由用户选择是否分享。',
   };
-  const blob = new Blob([`${JSON.stringify(bundle, null, 2)}\n`], { type: 'application/json' });
+  const payload = `${JSON.stringify(bundle, null, 2)}\n`;
+  const name = `atlas-bug-bundle-${new Date().toISOString().slice(0, 10)}.json`;
+  const save = window.atlasDesktop?.saveBugBundle;
+  if (save) return save(payload, name);
+  const blob = new Blob([payload], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `atlas-bug-bundle-${new Date().toISOString().slice(0, 10)}.json`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; anchor.click(); URL.revokeObjectURL(url);
+  return 'browser-download';
 }
 
 // Behavior reference: Claude Code's /doctor and /status diagnostics are local,
@@ -178,7 +179,7 @@ export default function DiagnosticsPanel({ apiBaseUrl, workspacePath = '' }: { a
       <div className="my-3 flex flex-wrap gap-2">
         <button className={styles.settingsActionSecondary} type="button" disabled={probingModel} onClick={() => void probeModel()}>{probingModel ? '测试模型连接中…' : '测试模型连通性'}</button>
         <button className={styles.settingsActionSecondary} type="button" onClick={() => void copyReport()}>复制 JSON</button>
-        <button className={styles.settingsActionSecondary} type="button" onClick={() => saveReport(report)}>导出脱敏 Bug Bundle</button>
+        <button className={styles.settingsActionSecondary} type="button" onClick={() => void saveReport(report).then((path) => setMessage(path ? (path === 'browser-download' ? '脱敏缺陷包已生成；请在浏览器下载列表中选择保存或分享。' : `脱敏缺陷包已保存在本机：${path}`) : '已取消保存。')).catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))}>导出脱敏 Bug Bundle</button>
         <button className={styles.settingsActionSecondary} type="button" disabled={nativeAction !== ''} onClick={() => void captureHeap()}>{nativeAction === 'heap' ? '正在采集…' : '导出 Heap Snapshot'}</button>
         <button className={styles.settingsActionSecondary} type="button" disabled={nativeAction !== ''} onClick={() => void toggleTrace()}>{nativeAction === 'trace' ? '正在处理…' : traceActive ? '停止并导出性能追踪' : '开始性能追踪'}</button>
       </div>

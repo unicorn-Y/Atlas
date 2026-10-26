@@ -223,6 +223,27 @@ async def get_diagnostic_tasks(services: Annotated[AppServices, Depends(get_app_
             "note": "CPU/内存仅对操作系统可枚举子进程提供；当前 Python 运行时未暴露该数据。"}
 
 
+@router.get("/api/diagnostics/battery")
+async def get_battery_status() -> dict[str, Any]:
+    """Return local battery state without exposing device identifiers or paths."""
+    try:
+        import psutil
+        battery = psutil.sensors_battery()
+    except (ImportError, OSError, RuntimeError, NotImplementedError):
+        battery = None
+    if battery is None:
+        return {"supported": False, "level": None, "charging": None, "seconds_left": None}
+    if not isinstance(battery.percent, (int, float)):
+        return {"supported": False, "level": None, "charging": None, "seconds_left": None}
+    seconds_left = battery.secsleft
+    return {
+        "supported": True,
+        "level": max(0, min(100, round(float(battery.percent)))),
+        "charging": bool(battery.power_plugged),
+        "seconds_left": int(seconds_left) if isinstance(seconds_left, (int, float)) and seconds_left >= 0 else None,
+    }
+
+
 _EMERGENCY_KINDS = {"会话运行", "子 agent", "后台进程", "浏览器会话"}
 
 

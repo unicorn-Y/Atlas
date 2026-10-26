@@ -246,7 +246,10 @@ export default function App() {
   const [windowFileDrop, setWindowFileDrop] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(() => pref('canvas') === 'true');
   const [focusMode, setFocusMode] = useState(() => pref('focus-mode') === 'true');
-  const [tuiFullscreen, setTuiFullscreen] = useState(() => pref('tui-fullscreen') === 'true');
+  const [tuiFullscreen, setTuiFullscreen] = useState(() => {
+    const nextMode = pref('tui-mode-next');
+    return nextMode ? nextMode === 'compact' : pref('tui-fullscreen') === 'true';
+  });
   const [daybreakEnabled, setDaybreakEnabled] = useState(() => pref('daybreak') === 'true');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('artifacts');
   const [previewFile, setPreviewFile] = useState('');
@@ -358,6 +361,7 @@ export default function App() {
   const [homeMode, setHomeMode] = useState('chat');
   const [createPrompt, setCreatePrompt] = useState('');
   const [toast, setToast] = useState('');
+  const [batteryStatus, setBatteryStatus] = useState<{ level: number | null; charging: boolean | null } | null>(null);
   const setTuiFullscreenMode = (enabled: boolean) => {
     setTuiFullscreen(enabled); setPref('tui-fullscreen', String(enabled));
     const desktop = window.atlasDesktop?.setWindowFullScreen;
@@ -547,6 +551,7 @@ export default function App() {
   }, [defaultWorkspace, store.conversations, store.conversationsLoading]);
   const activeRun = store.runs.find((run) => run.id === store.activeRunId);
   const [skillExtracting, setSkillExtracting] = useState(false);
+  const quitScheduledCount = useRef(0);
   useEffect(() => { if (pref('keep-awake') === 'true') void window.atlasDesktop?.setKeepAwake?.(true); }, []);
   useEffect(() => {
     const daybreakRunning = daybreakEnabled && store.runs.some((run) => !TERMINAL.includes(run.status));
@@ -554,10 +559,55 @@ export default function App() {
     void window.atlasDesktop?.setKeepAwake?.(daybreakRunning || userKeepAwake);
   }, [daybreakEnabled, store.runs]);
   useEffect(() => {
-    const active = store.runs.filter((run) => !TERMINAL.includes(run.status));
+    const active = store.runs.filter((run) => !TERMINAL.includes(run.status) && run.status !== 'paused');
     const state = active.some((run) => run.status === 'waiting') ? 'waiting' : active.length ? 'running' : 'idle';
     window.atlasDesktop?.setRuntimeState?.(state);
+    window.atlasDesktop?.setQuitActivity?.({ runningTasks: active.length, scheduledTasks: quitScheduledCount.current });
   }, [store.runs]);
+  useEffect(() => {
+    let disposed = false;
+    let battery: (EventTarget & { level: number; charging: boolean }) | null = null;
+    const update = () => {
+      if (battery) setBatteryStatus({ level: Math.round(battery.level * 100), charging: battery.charging });
+    };
+    const detect = async () => {
+      const getBattery = (navigator as Navigator & { getBattery?: () => Promise<EventTarget & { level: number; charging: boolean }> }).getBattery;
+      if (getBattery) {
+        try {
+          battery = await getBattery.call(navigator);
+          if (!disposed) { update(); battery.addEventListener('levelchange', update); battery.addEventListener('chargingchange', update); }
+          return;
+        } catch { /* use the native power-state fallback below */ }
+      }
+      try {
+        const status = await api<{ supported: boolean; level: number | null; charging: boolean | null }>(store.apiBaseUrl, '/api/diagnostics/battery');
+        if (!disposed && status.supported) setBatteryStatus({ level: status.level, charging: status.charging });
+      } catch { /* battery status is optional on desktops without a battery */ }
+    };
+    void detect();
+    const timer = window.setInterval(() => { if (!battery) void detect(); }, 60_000);
+    return () => { disposed = true; window.clearInterval(timer); battery?.removeEventListener('levelchange', update); battery?.removeEventListener('chargingchange', update); };
+  }, [store.apiBaseUrl]);
+  useEffect(() => {
+    let disposed = false;
+    const refresh = async () => {
+      let runningTasks = useAtlasStore.getState().runs.filter((run) => !TERMINAL.includes(run.status) && run.status !== 'paused').length;
+      try {
+        const result = await api<{ tasks?: Array<{ status?: string }> }>(store.apiBaseUrl, '/api/diagnostics/tasks');
+        runningTasks = Math.max(runningTasks, Array.isArray(result.tasks) ? result.tasks.filter((task) => task.status !== 'paused').length : 0);
+      } catch { /* the local store still supplies the active run count */ }
+      try {
+        const result = await api<{ automations?: Array<{ enabled?: boolean; next_run_at?: string; trigger?: { kind?: string } }> }>(store.apiBaseUrl, '/api/automations');
+        quitScheduledCount.current = Array.isArray(result.automations)
+          ? result.automations.filter((item) => item.enabled === true && Boolean(item.next_run_at) && ['cron', 'interval', 'date'].includes(item.trigger?.kind ?? 'cron')).length
+          : 0;
+      } catch { /* automation service may not be configured in this installation */ }
+      if (!disposed) window.atlasDesktop?.setQuitActivity?.({ runningTasks, scheduledTasks: quitScheduledCount.current });
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 15_000);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [store.apiBaseUrl]);
   const activeArtifacts = [...store.artifacts.filter((artifact) => artifact.runId === store.activeRunId),
     ...(ultraplanArtifact && ultraplanArtifact.name === `高级计划：${activeConversation?.title ?? ''}` ? [ultraplanArtifact] : [])];
   const activeEvents = activeRun?.events ?? [];
@@ -1849,13 +1899,109 @@ export default function App() {
   };
   const slashCommands: SlashCommand[] = [
     { id: 'mobile', label: '/mobile', hint: '打开移动 Web 二维码和 Telegram 接入说明', run: () => setSheet('mobile') },
-    { id: 'tui', label: '/tui', hint: '切换会话全屏渲染；支持翻页、选区复制和 Escape 退出', takesArgument: true, run: (value: string) => {
+    { id: 'tui', label: '/tui', hint: '选择下次启动的紧凑/标准呈现；也可切换当前全屏渲染', takesArgument: true, run: (value: string) => {
       const arg = value.trim().toLowerCase();
-      if (arg && !['fullscreen', 'full-screen', 'normal', 'windowed', 'status'].includes(arg)) { setToast('用法：/tui [fullscreen|normal|status]'); return; }
-      if (arg === 'status') { setToast(`全屏渲染模式${tuiFullscreen ? '已开启' : '已关闭'}；窗口全屏 API ${window.atlasDesktop?.setWindowFullScreen ? '可用' : '浏览器全屏回退'}`); return; }
+      if (arg && !['fullscreen', 'full-screen', 'normal', 'windowed', 'compact', 'standard', 'status'].includes(arg)) { setToast('用法：/tui [compact|standard|fullscreen|normal|status]'); return; }
+      if (arg === 'status') { setToast(`下次启动呈现：${pref('tui-mode-next') || (tuiFullscreen ? 'compact' : 'standard')}；当前全屏渲染${tuiFullscreen ? '已开启' : '已关闭'}`); return; }
       if (view !== 'chat') { setToast('先打开一个会话，再切换全屏渲染模式'); return; }
-      const enabled = ['fullscreen', 'full-screen'].includes(arg) ? true : ['normal', 'windowed'].includes(arg) ? false : !tuiFullscreen;
+      const enabled = ['compact', 'fullscreen', 'full-screen'].includes(arg) ? true : ['standard', 'normal', 'windowed'].includes(arg) ? false : !tuiFullscreen;
+      setPref('tui-mode-next', enabled ? 'compact' : 'standard');
       setTuiFullscreenMode(enabled);
+    } },
+    ...(activeConversation ? [{ id: 'env', label: '/env', hint: '查看、设置当前会话工具环境变量；可保存或应用本地预设', takesArgument: true, run: (raw: string) => {
+      const envKey = 'atlas.preference.session-env-by-conversation';
+      const presetsKey = 'atlas.preference.session-env-presets';
+      const readObject = <T extends Record<string, unknown>,>(key: string): T => {
+        try { const value = JSON.parse(localStorage.getItem(key) || '{}') as unknown; return value && typeof value === 'object' && !Array.isArray(value) ? value as T : {} as T; }
+        catch { return {} as T; }
+      };
+      const envByConversation = readObject<Record<string, Record<string, string>>>(envKey);
+      const validEnvName = (name: string) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) && !['__proto__', 'prototype', 'constructor'].includes(name.toLowerCase());
+      const current = Object.fromEntries(Object.entries(envByConversation[activeConversation.id] ?? {})
+        .filter(([name, value]) => validEnvName(name) && typeof value === 'string' && value.length <= 4096));
+      const [actionText, ...rest] = raw.trim().split(/\s+/);
+      const action = (actionText || 'show').toLowerCase();
+      const tail = rest.join(' ').trim();
+      if (action === 'show' || action === 'status' || !actionText) {
+        setRawTextTitle('当前会话环境变量');
+        setRawText(`会话：${activeConversation.title || '当前会话'}\n工作目录：${activeConversation.workspace || '默认目录'}\n变量名：${Object.keys(current).sort().join(', ') || '无'}\n\n变量值仅保存在本机设置中；运行时只注入本地 shell 与 PowerShell 工具，不写入 Atlas 日志。`);
+        return;
+      }
+      if (action === 'set' || actionText.includes('=')) {
+        const assignment = action === 'set' ? tail : raw.trim();
+        const splitAt = assignment.indexOf('=');
+        const name = assignment.slice(0, splitAt).trim();
+        const value = assignment.slice(splitAt + 1);
+        if (splitAt < 1 || !validEnvName(name) || value.length > 4096) { setToast('用法：/env set NAME=value（变量名需为字母、数字或下划线，最长值 4096 字符）'); return; }
+        if (!(name in current) && Object.keys(current).length >= 64) { setToast('每个会话最多保存 64 个环境变量'); return; }
+        current[name] = value;
+      } else if (action === 'unset' || action === 'remove') {
+        if (!validEnvName(tail)) { setToast('用法：/env unset NAME'); return; }
+        delete current[tail];
+      } else if (action === 'clear') {
+        Object.keys(current).forEach((key) => delete current[key]);
+      } else if (action === 'preset') {
+        const [subcommand = '', ...nameParts] = rest;
+        const sub = subcommand.toLowerCase();
+        const name = nameParts.join(' ').trim();
+        const presets = readObject<Record<string, { env?: Record<string, string>; workspace?: string }>>(presetsKey);
+        if (sub === 'list') { setRawTextTitle('本地会话环境预设'); setRawText(Object.keys(presets).sort().join('\n') || '还没有保存环境预设。'); return; }
+        if (!name || name.length > 64 || ['__proto__', 'prototype', 'constructor'].includes(name.toLowerCase())) { setToast('用法：/env preset [list|save NAME|use NAME|delete NAME]'); return; }
+        if (sub === 'save') {
+          presets[name] = { env: current, workspace: typeof activeConversation.workspace === 'string' ? activeConversation.workspace : '' };
+          localStorage.setItem(presetsKey, JSON.stringify(presets));
+          setToast(`已在本机保存环境预设「${name}」（包含变量名和值及当前工作目录）`); return;
+        }
+        if (sub === 'delete') { delete presets[name]; localStorage.setItem(presetsKey, JSON.stringify(presets)); setToast(`已删除本地环境预设「${name}」`); return; }
+        if (sub === 'use' || sub === 'apply') {
+          const preset = presets[name];
+          if (!preset) { setToast(`没有找到环境预设「${name}」`); return; }
+          Object.keys(current).forEach((key) => delete current[key]);
+          for (const [name, value] of Object.entries(preset.env ?? {})) {
+            if (validEnvName(name) && typeof value === 'string' && value.length <= 4096 && (name in current || Object.keys(current).length < 64)) current[name] = value;
+          }
+          if (preset.workspace) store.setConversationSettings(activeConversation.id, { workspace: preset.workspace });
+        } else { setToast('用法：/env preset [list|save NAME|use NAME|delete NAME]'); return; }
+      } else { setToast('用法：/env [show|set NAME=value|unset NAME|clear|preset list|save NAME|use NAME|delete NAME]'); return; }
+      envByConversation[activeConversation.id] = current;
+      localStorage.setItem(envKey, JSON.stringify(envByConversation));
+      setToast(`当前会话环境变量已更新（${Object.keys(current).length} 项）；下一轮本地 shell 与 PowerShell 工具会使用这些值`);
+    } }] : []),
+    { id: 'quit', label: '/quit', hint: '退出 Atlas；有运行或排期任务时会先说明影响并确认', run: () => {
+      const requestQuit = window.atlasDesktop?.requestQuit;
+      if (!requestQuit) { setToast('退出 Atlas 需要桌面版。'); return; }
+      void requestQuit().then((closed) => { if (!closed) setToast('已取消退出。'); }).catch((error) => setToast(`退出确认失败：${error instanceof Error ? error.message : String(error)}`));
+    } },
+    { id: 'bug', label: '/bug', hint: '生成本地脱敏缺陷包；检查后由你自行选择分享', run: () => {
+      void (async () => {
+        try {
+          const diagnostics = await api<Record<string, unknown>>(store.apiBaseUrl, '/api/diagnostics');
+          const bundle = {
+            schema_version: 1,
+            kind: 'atlas-local-bug-bundle',
+            created_at: new Date().toISOString(),
+            app: { version: __APP_VERSION__, platform: window.atlasDesktop?.platform ?? navigator.platform, locale: navigator.language },
+            diagnostics,
+            privacy: { local_only: true, uploaded: false, secrets_included: false, paths_included: false, note: '本文件只保存在你选择的位置；请检查内容后再自行分享。' },
+          };
+          const payload = `${JSON.stringify(bundle, null, 2)}\n`;
+          const save = window.atlasDesktop?.saveBugBundle;
+          if (save) {
+            const path = await save(payload, `atlas-bug-bundle-${new Date().toISOString().slice(0, 10)}.json`);
+            setToast(path ? `脱敏缺陷包已保存在本机：${path}` : '已取消保存缺陷包。');
+          } else {
+            const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+            const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'atlas-bug-bundle.json'; anchor.click(); URL.revokeObjectURL(url);
+            setToast('已生成本地脱敏缺陷包；浏览器会让你选择保存位置。');
+          }
+        } catch (error) { setToast(`缺陷包生成失败：${error instanceof Error ? error.message : String(error)}`); }
+      })();
+    } },
+    { id: 'battery', label: '/battery', hint: '显示本机电池电量或供电状态', run: () => {
+      setToast(batteryStatus ? (batteryStatus.level === null
+        ? (batteryStatus.charging ? '当前接通外部电源；此设备不提供电量百分比。' : '当前使用电池供电；此设备不提供电量百分比。')
+        : `电量 ${batteryStatus.level}% · ${batteryStatus.charging ? '正在充电或接通电源' : '使用电池供电'}`)
+        : '当前没有可读取的电量数据；设备可能接通外部电源或不支持电池状态 API。');
     } },
     { id: 'daybreak', label: '/daybreak', hint: '跨夜长任务模式：保存状态、支持续跑，并在运行时保持电脑唤醒', takesArgument: true, run: (value: string) => {
       const arg = value.trim().toLowerCase();
@@ -2948,6 +3094,7 @@ export default function App() {
                 <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-1" aria-label="运行状态">
                   {statusBar.model && <span className="max-w-36 truncate" title={modelName}>{modelName}</span>}{statusBar.reasoning && <span>推理 {store.reasoningEffort ? EFFORT_LABEL[store.reasoningEffort] : '默认'}</span>}
                   {statusBar.context && contextUse !== null && <Tip label={contextUse >= 80 ? '上下文达到 80% 预警阈值，可用 /compact 压缩' : '上下文占用比例'}><span className={contextUse >= 80 ? 'text-danger' : ''}>上下文 {contextUse}% 已用 · {100 - contextUse}% 剩余</span></Tip>}
+                  {batteryStatus && <Tip label="本机电池状态；使用 /battery 查看详情"><span aria-label="电池状态">{batteryStatus.level === null ? (batteryStatus.charging ? '接通电源' : '电池供电') : `电池 ${batteryStatus.level}%${batteryStatus.charging ? ' · 充电' : ''}`}</span></Tip>}
                   {statusBar.tokens && typeof latestUsage?.input_tokens === 'number' && <span>用量 {Number(latestUsage.input_tokens) + Number(latestUsage.output_tokens ?? 0)} tokens</span>}
                   {statusBar.cost && typeof latestUsage?.cost_usd === 'number' && <span>${Number(latestUsage.cost_usd).toFixed(4)}</span>}
                   {statusBar.git && (activeConversation?.worktree_branch || gitBranch) && <span className="max-w-32 truncate"><GitBranch size={10} className="mr-1 inline" />{String(activeConversation?.worktree_branch || gitBranch)}</span>}

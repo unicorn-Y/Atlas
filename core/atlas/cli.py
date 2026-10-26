@@ -7,6 +7,7 @@ import importlib.metadata
 import importlib.util
 import mimetypes
 import os
+import platform
 import shutil
 import socket
 import subprocess
@@ -205,6 +206,117 @@ def completion_command(shell: str) -> None:
     # Generate from Click's maintained template directly. Click's BashComplete.source()
     # probes `bash --version`, which breaks when Atlas runs under a Windows Python.
     click.echo(completion.source_template % completion.source_vars())
+
+
+@main.group("terminal")
+def terminal_group() -> None:
+    """Inspect terminal capabilities and print platform setup suggestions."""
+
+
+@terminal_group.command("doctor")
+def terminal_doctor() -> None:
+    """Detect the current terminal and suggest settings without changing it."""
+    system = platform.system()
+    term = os.environ.get("TERM", "")
+    term_program = os.environ.get("TERM_PROGRAM", "")
+    is_tmux = bool(os.environ.get("TMUX"))
+    is_termux = "termux" in os.environ.get("PREFIX", "").lower() or bool(os.environ.get("TERMUX_VERSION"))
+    is_windows_terminal = bool(os.environ.get("WT_SESSION"))
+    shell = Path(os.environ.get("SHELL", "")).name or os.environ.get("ComSpec", "").split("\\")[-1]
+    click.echo(f"平台：{system}；shell：{shell or '未知'}；TERM：{term or '未设置'}；终端：{term_program or ('Windows Terminal' if is_windows_terminal else '未识别')}")
+    click.echo(f"tmux：{'是' if is_tmux else '否'}；Termux：{'是' if is_termux else '否'}；颜色：{os.environ.get('COLORTERM', '未声明')}")
+    if is_tmux:
+        click.echo('建议：在 ~/.tmux.conf 设置 `set -g default-terminal "tmux-256color"` 与 `set -ga terminal-overrides ",*:Tc"`，再重启 tmux。')
+    if system == "Windows":
+        click.echo("建议：在 Windows Terminal 或 PowerShell 7 中运行；若颜色异常，可检查 Windows Terminal 的 24 位颜色和字体设置。")
+    elif is_termux:
+        click.echo("建议：使用 Termux:API 之外的普通终端会话运行；先在 Termux 设置中授予存储访问，再按需安装 git 与 Python。")
+    elif term in {"", "dumb"}:
+        click.echo("建议：使用支持 ANSI/256 色的终端；确认 TERM 与终端模拟器能力一致。")
+    else:
+        click.echo("当前终端已提供 TERM；若方向键或颜色异常，请核对终端的 ANSI/256 色配置。")
+
+
+@main.command("bug")
+@click.option("--output", type=click.Path(dir_okay=False, path_type=Path), default=None,
+              help="Write the local, redacted bundle to this file instead of prompting for a path.")
+def bug_bundle_command(output: Path | None) -> None:
+    """Create a private local bug bundle that the user can inspect and share."""
+    from atlas import __version__
+
+    target = output or Path(click.prompt(
+        "选择缺陷包保存路径（仅本地保存，不会自动上传）",
+        default=str(Path.cwd() / f"atlas-bug-bundle-{time.strftime('%Y%m%d')}.json"),
+        type=str,
+    )).expanduser()
+    safe_environment = {
+        "term": os.environ.get("TERM", "")[:80],
+        "color_term": os.environ.get("COLORTERM", "")[:40],
+        "tmux": bool(os.environ.get("TMUX")),
+        "windows_terminal": bool(os.environ.get("WT_SESSION")),
+        "termux": bool(os.environ.get("TERMUX_VERSION") or "termux" in os.environ.get("PREFIX", "").lower()),
+    }
+    bundle = {
+        "schema_version": 1,
+        "kind": "atlas-local-bug-bundle",
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "app": {"version": __version__, "platform": platform.platform(), "python": platform.python_version()},
+        "terminal": safe_environment,
+        "privacy": {
+            "local_only": True,
+            "uploaded": False,
+            "secrets_included": False,
+            "paths_included": False,
+            "note": "本文件只保存在所选位置；请检查内容后再自行分享。",
+        },
+    }
+    target = target.resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(json.dumps(bundle, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(target)
+    except OSError as exc:
+        temporary.unlink(missing_ok=True)
+        raise click.ClickException(f"无法保存缺陷包：{exc}") from exc
+    click.echo(f"已在本机保存脱敏缺陷包：{target}\n检查后可由你自行选择是否分享；Atlas 没有上传该文件。")
+
+
+@main.command("uninstall")
+@click.option("--yes", is_flag=True, help="Skip the interactive confirmation.")
+def uninstall_command(yes: bool) -> None:
+    """Start the installed desktop app's uninstaller without deleting user data."""
+    candidates: list[Path] = []
+    configured = os.environ.get("ATLAS_UNINSTALLER_EXECUTABLE", "").strip()
+    if configured:
+        candidates.append(Path(configured).expanduser())
+    desktop = os.environ.get("ATLAS_DESKTOP_EXECUTABLE", "").strip()
+    if desktop:
+        candidates.append(Path(desktop).expanduser().parent / "Uninstall Atlas.exe")
+    if os.name == "nt":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        program_files = os.environ.get("ProgramFiles")
+        if local_app_data:
+            candidates.append(Path(local_app_data) / "Programs" / "Atlas" / "Uninstall Atlas.exe")
+        if program_files:
+            candidates.append(Path(program_files) / "Atlas" / "Uninstall Atlas.exe")
+    uninstaller = next((item.resolve() for item in candidates if item.is_file()), None)
+    if uninstaller is None:
+        raise click.ClickException("没有找到 Atlas 桌面版卸载程序；CLI/源码安装不能用此命令移除。请从 Windows「已安装的应用」卸载桌面版，或使用对应 Python 包管理器卸载 CLI。")
+    if not yes and not click.confirm(
+        f"将启动 {uninstaller}。这会移除 Atlas 桌面程序，不会删除用户数据目录。继续？",
+        default=False,
+    ):
+        click.echo("已取消卸载。")
+        return
+    try:
+        options: dict[str, Any] = {"cwd": str(uninstaller.parent), "close_fds": True}
+        if os.name == "nt":
+            options["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        subprocess.Popen([str(uninstaller)], **options)
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(f"无法启动卸载程序：{exc}") from exc
+    click.echo("已启动卸载程序。用户数据未被命令删除。")
 
 
 def _desktop_dev_command(repo_root: Path) -> tuple[list[str], Path] | None:
@@ -967,7 +1079,7 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool) -> None:
             structlog.get_logger().info("cli.safe_mode.enabled", command="chat", skipped="plugins,extensions,market_skills")
             console.print("[yellow]安全模式已启用：本次 CLI 会话不启动插件/扩展服务；输入 quit/exit 退出，重新运行 atlas chat 可恢复正常模式。[/yellow]")
         console.print(f"Conversation: [cyan]{conv_id}[/cyan] (resume with atlas chat --resume {conv_id})")
-        console.print("Type [bold]quit[/bold] or [bold]exit[/bold] to leave. "
+        console.print("Type [bold]/quit[/bold], [bold]quit[/bold], or [bold]exit[/bold] to leave. "
                       "[bold]/model <id>[/bold] to switch model; [bold]/daybreak [on|off|status][/bold] controls long-task mode.\n")
         if ide_context:
             file_hint = f" · 文件 {ide_context['file']}" if ide_context.get("file") else ""
@@ -984,7 +1096,7 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool) -> None:
             if not user_input:
                 continue
 
-            if user_input.lower() in ("quit", "exit"):
+            if user_input.lower() in ("/quit", "quit", "exit"):
                 console.print("Bye!")
                 break
 
@@ -1059,7 +1171,9 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool) -> None:
 @main.command()
 def version() -> None:
     """Show Atlas version."""
-    console.print("Atlas v0.1.0")
+    from atlas import __version__
+
+    console.print(f"Atlas v{__version__}")
 
 
 @main.command("config-migrate")

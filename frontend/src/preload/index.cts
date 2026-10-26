@@ -14,6 +14,9 @@ const desktopApi: AtlasDesktopApi = {
     return () => ipcRenderer.removeListener('window:fullscreen-change', listener);
   },
   close: () => ipcRenderer.send('window:close'),
+  requestQuit: () => ipcRenderer.invoke('app:quit-request') as Promise<boolean>,
+  setQuitActivity: (summary: { runningTasks: number; scheduledTasks: number }) => ipcRenderer.send('app:set-quit-activity', summary),
+  saveBugBundle: (payload: string, fileName?: string) => ipcRenderer.invoke('diagnostics:bug-bundle-save', payload, fileName) as Promise<string | null>,
   retryBackend: () => ipcRenderer.invoke('backend:retry') as Promise<void>,
   restartBackend: (safeMode: boolean) => ipcRenderer.invoke('backend:restart', safeMode) as Promise<void>,
   getSafeMode: () => ipcRenderer.invoke('backend:get-safe-mode') as Promise<boolean>,

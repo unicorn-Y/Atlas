@@ -55,6 +55,8 @@ let keepAwakeEnabled = false;
 let keepAwakeBlockerId: number | null = null;
 let performanceTraceActive = false;
 let runtimeState: 'running' | 'waiting' | 'idle' = 'idle';
+let quitActivitySummary = { runningTasks: 0, scheduledTasks: 0 };
+let closePromptOpen = false;
 let pendingDeepLinks: AtlasDeepLink[] = [];
 let deepLinkSubscriber: Electron.WebContents | null = null;
 process.env.ATLAS_SKILL_CENTER_TOKEN ??= randomBytes(32).toString('base64url');
@@ -239,7 +241,7 @@ function buildTrayMenu(): void {
     { type: 'separator' },
     { label: '开机自启', type: 'checkbox', checked: platformPreferences.openAtLogin, click: (item) => setOpenAtLogin(item.checked) },
     { type: 'separator' },
-    { label: '退出 Atlas', click: () => { explicitQuit = true; app.quit(); } },
+    { label: '退出 Atlas', click: () => { void requestExplicitQuit(); } },
   ]));
 }
 
@@ -271,6 +273,37 @@ function updateRuntimeState(state: 'running' | 'waiting' | 'idle'): void {
     trayRef.setToolTip(`Atlas · ${label}`);
   }
   buildTrayMenu();
+}
+
+function activityDetail(): string {
+  const lines = [
+    `本地运行任务：${quitActivitySummary.runningTasks} 个（退出会中断仍在运行的任务）`,
+    `已启用排期任务：${quitActivitySummary.scheduledTasks} 个（退出期间不会触发，Atlas 下次启动后恢复）`,
+  ];
+  return lines.join('\n');
+}
+
+async function requestExplicitQuit(owner?: BrowserWindow | null): Promise<boolean> {
+  const hasActivity = quitActivitySummary.runningTasks > 0 || quitActivitySummary.scheduledTasks > 0;
+  if (hasActivity) {
+    const options = {
+      type: 'warning' as const,
+      title: '退出 Atlas？',
+      message: '退出会停止本地活动并暂停排期任务。',
+      detail: activityDetail(),
+      buttons: ['退出并中断任务', '取消'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    };
+    const result = owner && !owner.isDestroyed()
+      ? await dialog.showMessageBox(owner, options)
+      : await dialog.showMessageBox(options);
+    if (result.response !== 0) return false;
+  }
+  explicitQuit = true;
+  app.quit();
+  return true;
 }
 
 function backendLogPath(): string {
@@ -1047,7 +1080,31 @@ function createWindow() {
     }
   });
   windowRef.on('close', (event) => {
-    if (!explicitQuit) { event.preventDefault(); disposeVoiceHud(); windowRef?.hide(); }
+    if (explicitQuit) return;
+    event.preventDefault();
+    disposeVoiceHud();
+    if (quitActivitySummary.runningTasks === 0 && quitActivitySummary.scheduledTasks === 0) {
+      windowRef?.hide();
+      return;
+    }
+    if (closePromptOpen) return;
+    closePromptOpen = true;
+    const owner = windowRef;
+    if (!owner || owner.isDestroyed()) { closePromptOpen = false; return; }
+    void dialog.showMessageBox(owner, {
+      type: 'warning',
+      title: '关闭 Atlas',
+      message: '当前仍有本地运行或排期任务。',
+      detail: activityDetail(),
+      buttons: ['继续后台运行', '退出并中断任务', '取消'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+    }).then(({ response }) => {
+      closePromptOpen = false;
+      if (response === 0) windowRef?.hide();
+      else if (response === 1) { explicitQuit = true; app.quit(); }
+    }).catch(() => { closePromptOpen = false; });
   });
   windowRef.on('closed', () => {
     windowRef = null;
@@ -1192,6 +1249,17 @@ ipcMain.on('voice-hud:result', (event, value: unknown) => {
 ipcMain.on('runtime:set-state', (event, state: unknown) => {
   assertTrustedAppSender(event);
   if (state === 'running' || state === 'waiting' || state === 'idle') updateRuntimeState(state);
+});
+ipcMain.on('app:set-quit-activity', (event, summary: unknown) => {
+  assertTrustedAppSender(event);
+  if (!summary || typeof summary !== 'object') return;
+  const value = summary as Record<string, unknown>;
+  const count = (raw: unknown) => typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.min(10000, Math.floor(raw))) : 0;
+  quitActivitySummary = { runningTasks: count(value.runningTasks), scheduledTasks: count(value.scheduledTasks) };
+});
+ipcMain.handle('app:quit-request', async (event) => {
+  assertTrustedAppSender(event);
+  return requestExplicitQuit(BrowserWindow.fromWebContents(event.sender));
 });
 ipcMain.handle('platform:set-open-at-login', (event, enabled: unknown) => {
   assertTrustedAppSender(event);
@@ -1412,6 +1480,24 @@ ipcMain.handle('diagnostics:heap-snapshot', async (event) => {
   if (contents.isDestroyed()) throw new Error('Atlas 窗口已关闭。');
   await contents.takeHeapSnapshot(result.filePath);
   return result.filePath;
+});
+ipcMain.handle('diagnostics:bug-bundle-save', async (event, payload: unknown, fileName: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof payload !== 'string' || Buffer.byteLength(payload, 'utf8') > 1024 * 1024) throw new Error('缺陷包内容无效或超过 1 MiB。');
+  const parsed: unknown = JSON.parse(payload);
+  if (!parsed || typeof parsed !== 'object' || (parsed as Record<string, unknown>).kind !== 'atlas-local-bug-bundle') throw new Error('缺陷包格式无效。');
+  const requestedName = typeof fileName === 'string' ? fileName : 'atlas-bug-bundle.json';
+  const safeName = path.basename(requestedName).replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/\.json$/i, '') + '.json';
+  const options = {
+    title: '保存脱敏 Bug Bundle',
+    defaultPath: path.join(app.getPath('downloads'), safeName),
+    filters: [{ name: 'JSON 文件', extensions: ['json'] }],
+  };
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  const result = owner ? await dialog.showSaveDialog(owner, options) : await dialog.showSaveDialog(options);
+  if (result.canceled || !result.filePath) return null;
+  writeFileSync(result.filePath, payload.endsWith('\n') ? payload : `${payload}\n`, { encoding: 'utf8', flag: 'w' });
+  return path.resolve(result.filePath);
 });
 ipcMain.handle('diagnostics:trace-start', async (event) => {
   assertTrustedAppSender(event);

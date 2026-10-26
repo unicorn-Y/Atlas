@@ -64,6 +64,9 @@ export interface AtlasDesktopApi {
   setWindowFullScreen?(enabled: boolean): Promise<boolean>;
   onWindowFullScreenChange?(callback: (fullScreen: boolean) => void): () => void;
   close(): void;
+  requestQuit?(): Promise<boolean>;
+  setQuitActivity?(summary: { runningTasks: number; scheduledTasks: number }): void;
+  saveBugBundle?(payload: string, fileName?: string): Promise<string | null>;
   retryBackend?(): Promise<void>;
   restartBackend?(safeMode: boolean): Promise<void>;
   getSafeMode?(): Promise<boolean>;
