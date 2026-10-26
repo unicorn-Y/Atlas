@@ -2541,7 +2541,32 @@ export default function App() {
     { id: 'ps', label: '/ps', hint: '查看后台进程和最近输出', run: () => showInspectorTab('processes') },
     { id: 'stop', label: '/stop', hint: '停止后台进程；不带编号时停止当前运行', takesArgument: true, run: (id: string) => { if (!id.trim()) store.stopTask(); else void backend.killProcess(id.trim()).then(() => setToast('后台进程已停止')).catch((error) => setToast(String(error))); } },
     { id: 'goal', label: '/goal', hint: '设置、查看、暂停、恢复、管理子目标（subgoal add/done）或清除目标', takesArgument: true, run: (command: string) => { if (!activeConversation) { setToast('先打开一个对话再设置目标'); return; } void backend.runConversationGoalCommand(activeConversation.id, command).then((result) => { setConversationGoal(result.goal as typeof conversationGoal); setToast(result.output); if (result.prompt) void store.sendMessage(result.prompt); }).catch((error) => setToast(error instanceof Error ? error.message : String(error))); } },
-    { id: 'copy', label: '/copy', hint: '复制最近一条 Atlas 回复', run: () => { const text = [...messages].reverse().find((item) => item.role === 'assistant')?.content; if (text) void navigator.clipboard.writeText(text).then(() => setToast('已复制最近回复')).catch(() => setToast('复制失败')); else setToast('还没有可复制的回复'); } },
+    { id: 'copy', label: '/copy', hint: '复制最近回复；/copy N 按当前消息序号复制；/copy file <路径> 复制最近读取的文件内容', takesArgument: true, argumentHint: 'N | file <路径>', run: (argument: string) => {
+      const requested = argument.trim();
+      const ordered = [...messages];
+      const assistantMessages = ordered.filter((item) => item.role === 'assistant');
+      const match = requested.match(/^file\s+(.+)$/i);
+      if (match) {
+        const path = match[1].trim();
+        const workspace = activeConversation?.workspace;
+        if (!workspace) { setToast('当前对话没有工作区，无法读取文件'); return; }
+        void backend.getWorkspaceFile(workspace, path).then((file) => navigator.clipboard.writeText(file.content)).then(() => setToast(`已复制文件 ${path} 的完整内容`)).catch((error) => setToast(`文件读取/复制失败：${error instanceof Error ? error.message : String(error)}`));
+        return;
+      }
+      const index = requested ? Number(requested) : assistantMessages.length;
+      const item = Number.isInteger(index) && index > 0 ? assistantMessages[index - 1] : undefined;
+      if (!item && !requested) { setToast('还没有可复制的回复'); return; }
+      if (!item) { setToast('用法：/copy N（N 为当前对话中助手回复的序号）或 /copy file <路径>'); return; }
+      void navigator.clipboard.writeText(item.content).then(() => setToast(`已复制第 ${index} 条助手回复`)).catch(() => setToast('复制失败'));
+    } },
+    { id: 'paste', label: '/paste', hint: '读取系统剪贴板并插入草稿；显示来源提示后由你确认发送', run: async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (!text) { setToast('剪贴板为空'); return; }
+        window.dispatchEvent(new CustomEvent('atlas:add-selection-to-draft', { detail: { text } }));
+        setToast(`已从系统剪贴板插入 ${text.length.toLocaleString()} 字符；来源：系统剪贴板。检查草稿后再发送。`);
+      } catch { setToast('无法读取剪贴板；请检查系统剪贴板权限'); }
+    } },
     ...store.skills.map((skill) => ({
       id: `skill-${skill.name}`, label: `/${skill.name}`,
       hint: `${skill.description || '技能'} · $ 提及作为消息文本插入，不会切换全局技能状态`,

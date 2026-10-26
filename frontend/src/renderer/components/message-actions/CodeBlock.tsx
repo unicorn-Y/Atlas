@@ -148,6 +148,7 @@ export function CsvMarkdownTable({ children }: { children?: ReactNode }) {
   const [expanded, setExpanded] = useState(false);
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [comment, setComment] = useState('');
+  const [copyTableStatus, setCopyTableStatus] = useState('');
   const active = useAtlasStore((state) => state.activeConversationId);
   const toggleRow = (event: MouseEvent<HTMLTableElement>) => {
     const row = (event.target as HTMLElement).closest('tbody tr');
@@ -175,6 +176,9 @@ export function CsvMarkdownTable({ children }: { children?: ReactNode }) {
     <div className="mb-1 flex justify-end">
       <button type="button" onClick={() => { setExpanded(true); setSelectedRows([]); }} aria-label="放大并批注表格" title="放大并批注表格"
         className="inline-flex min-h-7 items-center gap-1 rounded-md px-2 text-[11.5px] text-fg-3 hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"><Maximize2 size={12} />放大与批注</button>
+      <button type="button" onClick={() => { void navigator.clipboard.writeText(currentRows().map((row) => row.join('\t')).join('\n')).then(() => setCopyTableStatus('已复制完整表格（TSV）')).catch(() => setCopyTableStatus('复制表格失败')); }} aria-label="复制完整表格" title="复制完整表格"
+        className="inline-flex min-h-7 items-center rounded-md px-2 text-[11.5px] text-fg-3 hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand">复制整表</button>
+      {copyTableStatus && <span role="status" className="self-center text-[11px] text-fg-3">{copyTableStatus}</span>}
       <button type="button" onClick={exportCurrentCsv} aria-label="导出表格为 CSV" title="导出表格为 CSV"
         className="inline-flex min-h-7 items-center rounded-md px-2 text-[11.5px] text-fg-3 hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand">
         导出 CSV
