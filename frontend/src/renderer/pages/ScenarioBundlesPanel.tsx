@@ -39,7 +39,7 @@ export default function ScenarioBundlesPanel({ apiBaseUrl, onToast, onApplySkill
     setBusy(true);
     try {
       const result = await request<{ active_skills: string[] }>(apiBaseUrl, `/${encodeURIComponent(preview.name)}/load`, { method: 'POST' });
-      onApplySkills(result.active_skills); await refresh(); onToast(`已加载「${preview.name}」；技能会用于后续对话，记忆集合与工具配置已切换`); setPreview(null);
+      onApplySkills(result.active_skills); await refresh(); onToast(`已加载「${preview.name}」；技能和记忆集合会用于后续对话，工具配置名称已保存在场景包中`); setPreview(null);
     } catch (cause) { onToast((cause as Error).message); } finally { setBusy(false); }
   };
   const unload = async () => {

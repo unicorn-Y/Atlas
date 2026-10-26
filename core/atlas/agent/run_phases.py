@@ -568,19 +568,62 @@ async def _merge_library_recall(context: Any, message: str) -> Any:
         if library is None:
             return context
         recall = await asyncio.to_thread(library.recall, message)
+        bundle_memory = await asyncio.to_thread(_loaded_bundle_memory, library)
     except Exception as exc:
         log.warning("memory.library.recall_failed", error=str(exc), error_type=type(exc).__name__)
         return context
-    if not (recall["system_block"] or recall["relevant"]) or not isinstance(context, dict):
+    if not (recall["system_block"] or recall["relevant"] or bundle_memory["text"]) or not isinstance(context, dict):
         return context
     # Resident pages change rarely and stay in the cacheable system prompt; this turn's
     # cued memories change every message and travel with it as turn context.
     prior = str(context.get("turn_recall") or "") if isinstance(context, dict) else ""
-    combined = "\n\n".join(part for part in (recall["relevant"], prior) if part)
-    return {**context, "system_prompt_prefix": recall["system_block"],
-            "turn_recall": combined, "library_refs": recall["refs"],
-            "memory_source_paths": recall.get("source_paths", []),
-            "memory_resident_sources": recall.get("resident_sources", [])}
+    combined = "\n\n".join(part for part in (bundle_memory["text"], recall["relevant"], prior) if part)
+    system_block = "\n\n".join(part for part in (recall["system_block"], bundle_memory["text"]) if part)
+    return {**context, "system_prompt_prefix": system_block,
+            "turn_recall": combined,
+            "memory_resident_sources": recall.get("resident_sources", []),
+            "library_refs": list(dict.fromkeys([*recall["refs"], *bundle_memory["refs"]])),
+            "memory_source_paths": list(dict.fromkeys([*recall.get("source_paths", []), *bundle_memory["refs"]]))}
+
+
+def _loaded_bundle_memory(library: Any) -> dict[str, Any]:
+    """Load the selected bundle's named memory collections into this turn's context."""
+    try:
+        from atlas.skills.scenario_bundles import ScenarioBundleStore
+
+        loaded = ScenarioBundleStore().list().get("loaded") or {}
+        collections = {str(value).strip().replace("\\", "/").strip("/").casefold()
+                       for value in loaded.get("memory_collections", []) if str(value).strip()}
+        if not collections:
+            return {"text": "", "refs": []}
+        pages = library.store.pages()
+        selected: list[tuple[str, str]] = []
+        for rel in pages:
+            normalized = str(rel).replace("\\", "/").strip("/")
+            parent = str(Path(normalized).parent).replace("\\", "/").casefold()
+            if normalized.casefold() in collections or parent in collections:
+                page = library.store.read(rel)
+                content = page.render().strip()
+                if content:
+                    selected.append((normalized, content))
+        if not selected:
+            return {"text": "", "refs": []}
+        # Keep explicit scenario context bounded; ordinary query recall remains available too.
+        parts = ["当前场景包指定的记忆集合（仅本轮上下文）："]
+        used = len(parts[0])
+        refs: list[str] = []
+        for rel, content in selected:
+            part = f"\n\n[{rel}]\n{content}"
+            remaining = 8000 - used
+            if remaining <= 0:
+                break
+            parts.append(part[:remaining])
+            used += min(len(part), remaining)
+            refs.append(rel)
+        return {"text": "".join(parts), "refs": refs}
+    except Exception as exc:
+        log.warning("agent.scenario_bundle_memory_load_failed", error=str(exc), error_type=type(exc).__name__)
+        return {"text": "", "refs": []}
 
 
 def _schedule_library_write(agent: Any, state: _RunState, full_response: Any) -> None:
