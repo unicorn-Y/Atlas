@@ -336,26 +336,36 @@ async def test_ephemeral_run_does_not_change_source_conversation(tmp_path: Path,
     await save_memory_fixture_message(store, temp_id, "user", "existing")
 
     class Orchestrator:
+        seen = None
+
         async def run(self, **kwargs):
+            self.seen = kwargs
             yield {"type": "chunk", "content": "answer"}
             yield {"type": "done"}
 
+    orchestrator = Orchestrator()
+    data_root = tmp_path / "atlas-data"
+    from atlas import config as atlas_config
+
+    monkeypatch.setattr(atlas_config, "DATA_ROOT", data_root)
     monkeypatch.setattr(server, "memory", store)
-    monkeypatch.setattr(server, "orchestrator", Orchestrator())
+    monkeypatch.setattr(server, "orchestrator", orchestrator)
     # H5: _execute_run reads the run manager's AppServices first and only falls
     # back to the atlas.server globals, so the doubles must sit on that seam too.
     monkeypatch.setattr(server.runtime_mgr, "services", SimpleNamespace(
-        memory=store, orchestrator=Orchestrator(), model_mgr=None,
+        memory=store, orchestrator=orchestrator, model_mgr=None,
         local_execution=None, sandbox_manager=None, scheduler=None,
         usage_ledger=None,
     ))
     run = server.RunState("ephemeral-run", temp_id, "model")
     run.ephemeral = True
-    run.ephemeral_source = temp_id
     monkeypatch.setattr(server.runtime_mgr, "send_run", lambda *args, **kwargs: asyncio.sleep(0))
     await server._execute_run("test", run, "side question", "model")
     assert [m["content"] for m in await store.get_conversation_messages(conversation_id)] == ["existing"]
-    assert await store.get_conversation(temp_id) is None
+    assert await store.get_conversation(temp_id) is not None
+    assert run.conversation_id == temp_id
+    assert orchestrator.seen["ephemeral"] is True
+    assert not (data_root / "engine").exists()
     await store.close()
 
 

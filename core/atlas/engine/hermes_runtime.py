@@ -851,6 +851,7 @@ class HermesRuntime:
         lifecycle_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None,
         plan_state: dict[str, Any] | None = None,
         plan_update_callback: Callable[[dict[str, Any]], Any] | None = None,
+        ephemeral: bool = False,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute one Hermes turn on a worker thread and yield callback events."""
         from atlas.config import get_config
@@ -876,10 +877,14 @@ class HermesRuntime:
             request_system_message = system_message or ""
             initial_notices: list[dict[str, Any]] = []
             try:
+                if ephemeral:
+                    raise LookupError("ephemeral turn has no persistent notifications")
                 from atlas.engine.notifications import consume_notifications, subscribe_notifications
 
                 notification_handle = subscribe_notifications(conversation_id)
                 initial_notices = await consume_notifications(conversation_id)
+            except LookupError:
+                notification_handle = None
             except Exception as exc:
                 logger.warning("Atlas kernel notification read failed for %s: %s",
                                conversation_id, exc, exc_info=True)
@@ -984,12 +989,13 @@ class HermesRuntime:
                 moa_references=moa_references, moa_latency_ms=moa_latency_ms,
                 initial_usage_rows=moa_usage_rows, usage_budget=usage_budget,
                 runtime_config=atlas_config.raw,
+                ephemeral=ephemeral,
             )
             # The title depends only on the user's message: generate it alongside the model
             # call instead of after the reply (it used to hold run.completed for up to 5s).
             title_task: asyncio.Task[Any] | None = None
             user_turn_count = sum(1 for item in history if item.get("role") == "user")
-            if user_turn_count <= 3:
+            if not ephemeral and user_turn_count <= 3:
                 title_callbacks: list[Any] = []
                 title_events: list[dict[str, str]] = []
                 title_loop = asyncio.get_running_loop()

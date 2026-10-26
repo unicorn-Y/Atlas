@@ -34,6 +34,25 @@ async def test_runtime_manager_recovers_interrupted_run_as_failed(tmp_path) -> N
         await restarted.close()
 
 
+@pytest.mark.asyncio
+async def test_ephemeral_runs_are_not_written_to_runtime_database(tmp_path) -> None:
+    db_path = tmp_path / "runtime.sqlite3"
+    manager = RuntimeManager(db_path)
+    await manager.init()
+    run = RunState("temporary-run", "ephemeral-temporary-run", "model-1")
+    run.ephemeral = True
+    run.next_envelope("run.started", {})
+    await manager.persist_run(run)
+    await manager.close()
+
+    restarted = RuntimeManager(db_path)
+    await restarted.init()
+    try:
+        assert "temporary-run" not in restarted.runs
+    finally:
+        await restarted.close()
+
+
 def test_cancel_subtask_route_uses_app_runtime_manager() -> None:
     manager = RuntimeManager()
     run = RunState("run-1", "conversation-1", "model-1")

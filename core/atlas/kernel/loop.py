@@ -121,6 +121,7 @@ class KernelRequest:
     initial_usage_rows: list[dict[str, Any]] = field(default_factory=list)
     usage_budget: Any = None
     runtime_config: dict[str, Any] = field(default_factory=dict)
+    ephemeral: bool = False
 
 
 def _message_text(message: dict[str, Any]) -> str:
@@ -492,6 +493,8 @@ class AtlasKernel:
 
         def record(event: str, **fields: Any) -> None:
             nonlocal log_path
+            if request.ephemeral:
+                return
             try:
                 log_path = append_run_event(run_id, event, **fields)
             except Exception:
@@ -505,6 +508,8 @@ class AtlasKernel:
                 state.transition(phase)
 
         def persist(role: str, content: Any, metadata: dict[str, Any] | None = None) -> None:
+            if request.ephemeral:
+                return
             from atlas.engine.session_sync import append_session_message
 
             append_session_message(self.data_dir / "engine", session_id, role, content, metadata)
@@ -538,6 +543,8 @@ class AtlasKernel:
             from atlas.engine.session_sync import read_session_model_messages
             restored_snapshot_state: dict[str, Any] = {}
             try:
+                if request.ephemeral:
+                    raise LookupError("ephemeral run has no durable session transcript")
                 canonical_rows = await asyncio.to_thread(
                     read_session_model_messages, self.data_dir / "engine", session_id,
                 )
@@ -554,6 +561,8 @@ class AtlasKernel:
                         str(item) for item in restored_snapshot_state.get("open_tool_call_ids", [])
                         if item
                     )
+            except LookupError:
+                canonical_rows = []
             except ToolHistoryError as exc:
                 raise ModelCallError(str(exc), category="invalid_history") from exc
             except Exception:
@@ -561,14 +570,15 @@ class AtlasKernel:
                 canonical_rows = []
             history = _session_history(canonical_rows) if canonical_rows else copy.deepcopy(request.history)
             if not any(m.get("role") == "user" and _message_text(m) == request.message for m in history[-3:]):
-                from atlas.engine.session_sync import append_user_message_before_model
+                if not request.ephemeral:
+                    from atlas.engine.session_sync import append_user_message_before_model
 
-                await asyncio.to_thread(
-                    append_user_message_before_model, self.data_dir / "engine", session_id,
-                    request.user_content if request.user_content is not None else request.message,
-                    {"kernel_run_id": run_id,
-                     **({"turn_context": turn_context} if turn_context else {})},
-                )
+                    await asyncio.to_thread(
+                        append_user_message_before_model, self.data_dir / "engine", session_id,
+                        request.user_content if request.user_content is not None else request.message,
+                        {"kernel_run_id": run_id,
+                         **({"turn_context": turn_context} if turn_context else {})},
+                    )
                 history.append({"role": "user", "content": request.user_content or request.message,
                                 **({"turn_context": turn_context} if turn_context else {})})
             elif request.user_content is not None and history and history[-1].get("role") == "user":
@@ -594,6 +604,8 @@ class AtlasKernel:
                 })
 
             try:
+                if request.ephemeral:
+                    raise LookupError("ephemeral run has no durable session transcript")
                 canonical_rows = await asyncio.to_thread(
                     read_session_model_messages, self.data_dir / "engine", session_id,
                 )
@@ -606,6 +618,8 @@ class AtlasKernel:
                                              and _message_text(item) == request.message), None)
                         if current_user is not None:
                             current_user["content"] = request.user_content
+            except LookupError:
+                pass
             except Exception:
                 log.exception("kernel.session_refresh_failed", extra={"session_id": session_id})
 
@@ -1118,6 +1132,8 @@ class AtlasKernel:
                     yield steer["event"]
 
                 try:
+                    if request.ephemeral:
+                        raise LookupError("ephemeral run has no durable session transcript")
                     canonical_rows = await asyncio.to_thread(
                         read_session_model_messages, self.data_dir / "engine", session_id,
                     )
@@ -1134,6 +1150,8 @@ class AtlasKernel:
                         messages = prompt.messages
                         messages.extend(copy.deepcopy(pending_stop_responses))
                         messages.extend(copy.deepcopy(pending_nudges))
+                except LookupError:
+                    pass
                 except Exception:
                     log.exception("kernel.session_refresh_failed", extra={"session_id": session_id})
 
@@ -1224,6 +1242,8 @@ class AtlasKernel:
                         reason = str(hook.get("reason") or "Compaction blocked by PreCompact hook")
                         record("hook_blocked", hook="PreCompact", reason=reason)
                         raise ModelCallError(reason, category="hook_blocked")
+                    if request.ephemeral:
+                        return
                     if compaction_lease["holder"] is None:
                         if not held_messages:
                             raise RuntimeError("Cannot compact without a canonical SessionDB history snapshot")
@@ -1271,7 +1291,14 @@ class AtlasKernel:
                                 context_manager.budget(model_window),
                             )
                         raise
-                    if result.method != "none":
+                    if result.method != "none" and request.ephemeral:
+                        # Keep compacted prompt history only in this run's memory.
+                        durable_history = copy.deepcopy(result.messages)
+                        held_messages = copy.deepcopy(result.messages)
+                        history = copy.deepcopy(result.messages)
+                        messages = result.messages
+                        transition(RunPhase.COMPACTING)
+                    elif result.method != "none":
                         holder = compaction_lease["holder"]
                         if not holder:
                             raise ModelCallError("compaction has no SessionDB lease",
@@ -1676,6 +1703,8 @@ class AtlasKernel:
                         state.streamed_refusal = ""
                         state.streamed_tool_calls.clear()
                         try:
+                            if request.ephemeral:
+                                raise LookupError("ephemeral run has no durable session transcript")
                             canonical_rows = await asyncio.to_thread(
                                 read_session_model_messages, self.data_dir / "engine", session_id,
                             )
@@ -1692,6 +1721,8 @@ class AtlasKernel:
                                 messages = prompt.messages
                                 messages.extend(copy.deepcopy(pending_stop_responses))
                                 messages.extend(copy.deepcopy(pending_nudges))
+                        except LookupError:
+                            pass
                         except Exception:
                             log.exception("kernel.session_refresh_failed", extra={"session_id": session_id})
                         transition(RunPhase.AWAITING_MODEL_RESPONSE)

@@ -399,6 +399,8 @@ class RuntimeManager:
     async def persist_run(
         self, run: RunState, recovery_event: dict[str, Any] | None = None,
     ) -> None:
+        if run.ephemeral:
+            return
         if self._db is None:
             return
         async with self._persist_lock:

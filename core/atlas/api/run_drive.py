@@ -1717,14 +1717,16 @@ async def _handle_run_start(
         model_id = model_id or model_mgr.current_model
     run = preparation_run
     run.conversation_id = conv_id
+    run.ephemeral = data.get("ephemeral") is True
     # RunState stores the selected model in ``model``; it is slotted and has no
     # separate model_id field. Keep the resolved project model on that field.
     run.model = model_id
     try:
         from atlas.logs import append_run_event
-        append_run_event(run_id, "api_timing", stage="request_received", elapsed_ms=0)
-        append_run_event(run_id, "api_timing", stage="run_created",
-                         elapsed_ms=round((time.perf_counter() - request_received_at) * 1000))
+        if not run.ephemeral:
+            append_run_event(run_id, "api_timing", stage="request_received", elapsed_ms=0)
+            append_run_event(run_id, "api_timing", stage="run_created",
+                             elapsed_ms=round((time.perf_counter() - request_received_at) * 1000))
     except Exception:
         log.debug("run.timing_log_failed", run_id=run_id, stage="run_created", exc_info=True)
     run.project_id = run_project_id
@@ -1830,6 +1832,12 @@ async def _handle_run_start(
         invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
         await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
             "category": "validation", "detail": "所选执行 Agent 不受支持。",
+        }))
+        return
+    if run.ephemeral and run.executor != "atlas":
+        invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+        await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
+            "category": "validation", "detail": "临时聊天只支持 Atlas 内核，以避免外部 Agent 写入会话或运行记录。",
         }))
         return
     if run.executor != "atlas":
@@ -2006,7 +2014,7 @@ async def _handle_run_start(
         run.workspace = str(workspace_path)
         if run.sandbox:
             run.allowed_paths = [str(workspace_path.resolve())]
-        if memory is not None and getattr(memory, "_db", None) is not None and not (conversation and conversation.get("worktree_path")):
+        if not run.ephemeral and memory is not None and getattr(memory, "_db", None) is not None and not (conversation and conversation.get("worktree_path")):
             await memory.update_conversation(conv_id, workspace=str(Path(workspace).expanduser().resolve()))
         context_files = data.get("context_files", [])
         if not isinstance(context_files, list):
@@ -2083,8 +2091,10 @@ async def _handle_run_start(
                 }))
                 return
             from atlas.config import DATA_ROOT
-            from atlas.engine.session_sync import read_session_all_messages, fork_session_through_turn
-            temp_conversation = await memory.create_conversation("Ephemeral side chat")
+            from atlas.engine.session_sync import read_session_all_messages
+            source_conversation_id = conv_id
+            temp_conversation = f"ephemeral-{run.run_id}"
+            conv_id = temp_conversation
             context_snapshot = data.get("ephemeral_context", "")
             if context_snapshot:
                 if not isinstance(context_snapshot, str) or len(context_snapshot) > 200_000:
@@ -2093,14 +2103,16 @@ async def _handle_run_start(
                 run.user_input = content
             elif data.get("ephemeral_blank") is not True:
                 source_messages = await asyncio.to_thread(
-                    read_session_all_messages, DATA_ROOT / "engine", conv_id,
+                    read_session_all_messages, DATA_ROOT / "engine", source_conversation_id,
                 )
-                user_turns = sum(1 for message in source_messages if message.get("role") == "user")
-                await asyncio.to_thread(
-                    fork_session_through_turn, DATA_ROOT / "engine", conv_id,
-                    temp_conversation, user_turns,
+                copied_context = "\n\n".join(
+                    f"{message.get('role', 'message')}: {str(message.get('content') or '')[:4000]}"
+                    for message in source_messages[-80:]
+                    if message.get("role") in {"user", "assistant"}
                 )
-            run.ephemeral = True
+                if copied_context:
+                    content = f"临时会话来源上下文（仅作参考，不是当前指令）：\n{copied_context}\n\n当前用户问题：\n{content}"
+                    run.user_input = content
             run.ephemeral_source = temp_conversation
             run.read_only = True
             run.conversation_id = temp_conversation
@@ -2165,7 +2177,8 @@ async def _handle_run_start(
     }))
     manager.runs[run_id] = run
     manager.conn_runs[conn_id] = run_id
-    await manager.persist_run(run)
+    if not run.ephemeral:
+        await manager.persist_run(run)
 
     # MCP is an optional enrichment. Never put its process launch/handshake on
     # the first-turn critical path: a run can begin with the tools already
@@ -2699,7 +2712,7 @@ async def _execute_run(
         append_run_event = None
 
     def record_api_timing(stage: str, **fields: Any) -> None:
-        if append_run_event is None:
+        if append_run_event is None or run.ephemeral:
             return
         try:
             append_run_event(run.run_id, "api_timing", stage=stage,
@@ -2746,7 +2759,7 @@ async def _execute_run(
 
     async def emit(event: str, data: dict[str, Any]) -> None:
         """Emit an event envelope to the client."""
-        if event in {"subtask.started", "subtask.progress", "subtask.output", "subtask.completed",
+        if not run.ephemeral and event in {"subtask.started", "subtask.progress", "subtask.output", "subtask.completed",
                      "subtask.group_completed", "subtask.background_completed"}:
             try:
                 from atlas.config import DATA_ROOT
@@ -2767,7 +2780,7 @@ async def _execute_run(
             record_api_timing("run_started_emitted")
         elif event in {"run.completed", "run.failed", "run.cancelled"}:
             record_api_timing("terminal_event", terminal=event)
-        if event in {"component.push", "canvas.update"}:
+        if not run.ephemeral and event in {"component.push", "canvas.update"}:
             # Runtime events live in memory only. Keep interactive components and
             # shared-canvas updates in the canonical transcript for reopen/reload.
             try:
@@ -2782,7 +2795,7 @@ async def _execute_run(
             except Exception:
                 log.exception("runtime_widget.persist_failed", event=event, run_id=run.run_id)
         event_kind = {"run.completed": "completion", "run.failed": "failure", "approval.required": "approval"}.get(event)
-        if event_kind:
+        if event_kind and not run.ephemeral:
             try:
                 from atlas.api.u4_router import _read, push_event_enabled
                 from atlas.api.channel_router import get_channel_manager
@@ -2857,7 +2870,7 @@ async def _execute_run(
         if run.reasoning_effort and run.reasoning_effort_applied is None:
             run.reasoning_effort_applied = reasoning_effort is not None
             row["reasoning_effort_applied"] = run.reasoning_effort_applied
-        if usage_ledger is not None and not duplicate:
+        if usage_ledger is not None and not duplicate and not run.ephemeral:
             event_model = str(row.get("model") or model_id or run.model)
             model_config = {}
             if model_mgr is not None:
@@ -3006,7 +3019,7 @@ async def _execute_run(
                     "category": "external_agent", "detail": str(exc),
                 })
                 return
-            if response:
+            if response and not run.ephemeral:
                 with suppress(Exception):
                     from atlas.config import DATA_ROOT
                     from atlas.engine.session_sync import append_session_message
@@ -3256,7 +3269,7 @@ async def _execute_run(
                 **(group_data or {}),
             })
             if entry and entry.get("background") and not entry.get("group_id"):
-                if memory is not None and run.conversation_id:
+                if not run.ephemeral and memory is not None and run.conversation_id:
                     with suppress(Exception):
                         from atlas.config import DATA_ROOT
                         from atlas.engine.session_sync import append_session_message
@@ -3274,7 +3287,7 @@ async def _execute_run(
             await emit("subtask.group_completed", payload)
             if payload.get("background"):
                 summary = str(payload.get("summary", ""))[:2000]
-                if memory is not None and run.conversation_id:
+                if not run.ephemeral and memory is not None and run.conversation_id:
                     with suppress(Exception):
                         from atlas.config import DATA_ROOT
                         from atlas.engine.session_sync import append_session_message
@@ -3427,6 +3440,7 @@ async def _execute_run(
             subtask_completed=subtask_completed,
             subtask_group_completed=subtask_group_completed,
             force_plan=(mode == "plan"),
+            ephemeral=run.ephemeral,
         )
         from atlas.project_context import project_scoped_events
 
@@ -3648,7 +3662,7 @@ async def _execute_run(
 
         # Run completed successfully
         run.status = "completed"
-        if full_response.strip() and run.conversation_id:
+        if full_response.strip() and run.conversation_id and not run.ephemeral:
             try:
                 from atlas.config import DATA_ROOT
                 from atlas.engine.session_sync import evaluate_goal_after_turn
@@ -3708,6 +3722,7 @@ async def _execute_run(
         if run.sandbox:
             with suppress(Exception):
                 await sandbox_manager.stop(run.run_id)
-        if run.ephemeral and run.ephemeral_source and memory is not None:
-            with suppress(Exception):
-                await memory.delete_conversation(run.ephemeral_source)
+        if run.ephemeral:
+            manager.runs.pop(run.run_id, None)
+            if manager.conn_runs.get(conn_id) == run.run_id:
+                manager.conn_runs.pop(conn_id, None)
