@@ -18,11 +18,12 @@ ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "core"
 
 
-def _run_cli(*arguments: str) -> str:
+def _run_cli(*arguments: str, timeout: float = 60) -> str:
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(CORE) + (os.pathsep + environment["PYTHONPATH"] if environment.get("PYTHONPATH") else "")
     result = subprocess.run([sys.executable, "-m", "atlas.cli", *arguments], cwd=CORE, env=environment,
-                            text=True, encoding="utf-8", errors="replace", capture_output=True, check=False)
+                            text=True, encoding="utf-8", errors="replace", capture_output=True, check=False,
+                            timeout=timeout)
     if result.returncode:
         raise AssertionError(f"CLI failed ({result.returncode}): {result.stderr[-1200:]}")
     return result.stdout
@@ -54,6 +55,78 @@ def check_shell_aliases() -> None:
             content = profile.read_text(encoding="utf-8")
             assert "# >>> atlas alias: atlas_work >>>" not in content and content.strip() == "# User-owned line"
     print("PASS shell-aliases: add/list/update/revoke for PowerShell, Bash, and Zsh profiles")
+
+
+def check_cli_tui_modes() -> None:
+    """Drive both interactive input modes with /exit and a disposable data root."""
+    with tempfile.TemporaryDirectory(prefix="atlas-u46-chat-") as temp_dir:
+        environment = os.environ.copy()
+        environment["ATLAS_DATA_DIR"] = temp_dir
+        environment["PYTHONPATH"] = str(CORE) + (os.pathsep + environment["PYTHONPATH"] if environment.get("PYTHONPATH") else "")
+        outputs: dict[str, str] = {}
+        for mode in ("--tui", "--cli"):
+            result = subprocess.run(
+                [sys.executable, "-m", "atlas.cli", "chat", mode], cwd=CORE, env=environment,
+                input="/exit\n", text=True, encoding="utf-8", errors="replace", capture_output=True,
+                check=False, timeout=60,
+            )
+            assert result.returncode == 0, f"atlas chat {mode} failed: {result.stderr[-1200:]}"
+            outputs[mode] = result.stdout
+        assert "Terminal mode: TUI (Rich)" in outputs["--tui"]
+        assert "Terminal mode: CLI (plain text)" in outputs["--cli"]
+        assert "You:" in outputs["--cli"] and "[bold" not in outputs["--cli"] and "\x1b[" not in outputs["--cli"]
+    help_text = _run_cli("moa", "--help")
+    assert "--sample-model" in help_text and "--parallelism" in help_text and "-p, --print" in help_text
+    print("PASS cli-modes: --tui and --cli accept an interactive /exit; CLI output stays plain; moa --print help is wired")
+
+
+async def check_moa_pipeline() -> None:
+    """Check bounded concurrent sampling with a fake router, then use configured DeepSeek routes."""
+    from types import SimpleNamespace
+    from atlas.cli import _moa_pipeline
+
+    class FakeRouter:
+        def __init__(self) -> None:
+            self.active = 0
+            self.max_active = 0
+            self.calls: list[str] = []
+
+        async def complete_for(self, model: str, purpose: str, messages: list[dict], **kwargs):
+            assert purpose == "moa" and "max_tokens" in kwargs
+            self.calls.append(model)
+            if "Synthesize" in messages[0]["content"]:
+                return SimpleNamespace(text="combined answer")
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+            await asyncio.sleep(0.05)
+            self.active -= 1
+            return SimpleNamespace(text=f"sample from {model}")
+
+    class FakeModelManager:
+        model_router = FakeRouter()
+
+        @staticmethod
+        def list_models():
+            return [{"id": name, "litellm_model": name} for name in
+                    ("deepseek-v4.1-flash", "deepseek-v3", "deepseek-r1")]
+
+    fake = FakeModelManager()
+    simulated = await _moa_pipeline(
+        "Compare two approaches.", ["deepseek-v3", "deepseek-r1"], "deepseek-v4.1-flash", fake, max_parallel=2,
+    )
+    assert simulated["answer"] == "combined answer" and len(simulated["samples"]) == 2
+    assert fake.model_router.max_active == 2 and len(fake.model_router.calls) == 3, fake.model_router.calls
+
+    live = _run_cli(
+        "moa", "--print", "用一句话说明 MoA 的作用，包含并行采样与合成。",
+        "--sample-model", "deepseek-v3", "--sample-model", "deepseek-r1",
+        "--model", "deepseek-v4.1-flash", "--max-references", "2", "--parallelism", "2",
+        "--output-format", "json", timeout=300,
+    )
+    result = json.loads(live)
+    assert result["synthesis_model"] == "deepseek-v4.1-flash" and result["answer"].strip()
+    assert len(result["samples"]) == 2 and any(item.get("text") for item in result["samples"]), result
+    print("PASS moa: fake router confirms concurrent 2-model sampling then synthesis; real DeepSeek CLI request returns JSON answer")
 
 
 def check_workspace_treemap_api() -> None:
@@ -359,6 +432,8 @@ async def main() -> None:
     await check_window_title()
     await check_workspace_treemap_ui()
     await check_plugin_capability_projection()
+    check_cli_tui_modes()
+    await check_moa_pipeline()
     print("U46 CHECK PASS")
 
 

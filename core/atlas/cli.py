@@ -1241,19 +1241,100 @@ def daemon_disable_startup() -> None:
     console.print("Automation daemon will no longer start at Windows login; any running daemon remains active.")
 
 
+def _moa_resolve_model(model_manager: Any, requested: str) -> tuple[str, str]:
+    """Return the configured model ID and route name without exposing credentials."""
+    key = requested.strip()
+    row = next((item for item in model_manager.list_models()
+                if key in {str(item.get("id") or ""), str(item.get("litellm_model") or "")}), None)
+    if row is None:
+        raise ValueError(f"未知模型：{key}")
+    return str(row.get("id") or key), str(row.get("litellm_model") or row.get("id") or key)
+
+
+async def _moa_pipeline(
+    prompt: str, sample_models: list[str], synthesis_model: str, model_manager: Any,
+    *, max_parallel: int = 4,
+) -> dict[str, Any]:
+    """Sample independent models concurrently, then ask the selected model to synthesize."""
+    synthesis_id, synthesis_route = _moa_resolve_model(model_manager, synthesis_model)
+    selected: list[tuple[str, str]] = []
+    seen = {synthesis_route}
+    for requested in sample_models:
+        model_id, route = _moa_resolve_model(model_manager, requested)
+        if route in seen:
+            continue
+        seen.add(route)
+        selected.append((model_id, route))
+        if len(selected) >= 8:
+            break
+    if not selected:
+        raise ValueError("MoA 至少需要一个不同于合成模型的 --sample-model")
+
+    semaphore = asyncio.Semaphore(max(1, min(8, int(max_parallel))))
+    sample_system = "Independently answer the user's request. Be concise and include key facts or caveats."
+
+    async def sample(model_id: str, route: str) -> dict[str, Any]:
+        started = time.perf_counter()
+        try:
+            async with semaphore:
+                result = await model_manager.model_router.complete_for(
+                    route, "moa", [
+                        {"role": "system", "content": sample_system},
+                        {"role": "user", "content": prompt},
+                    ], max_tokens=1200,
+                )
+            return {"model": model_id, "text": str(result.text)[:6000],
+                    "latency_ms": int((time.perf_counter() - started) * 1000)}
+        except Exception as exc:  # each sampler is independent; retain successes from the others
+            return {"model": model_id, "error": type(exc).__name__,
+                    "latency_ms": int((time.perf_counter() - started) * 1000)}
+
+    samples = list(await asyncio.gather(*(sample(model_id, route) for model_id, route in selected)))
+    successful = [item for item in samples if item.get("text")]
+    if not successful:
+        raise RuntimeError("所有 MoA 采样模型均失败：" + ", ".join(f"{row['model']} ({row['error']})" for row in samples))
+    synthesis_messages = [
+        {"role": "system", "content": (
+            "Synthesize the independent model answers into one direct response to the original request. "
+            "Resolve disagreements carefully, preserve uncertainty, and do not mention internal model routing."
+        )},
+        {"role": "user", "content": "Original request:\n" + prompt + "\n\nIndependent answers:\n" + "\n\n".join(
+            f"[{item['model']}]\n{item['text']}" for item in successful
+        )},
+    ]
+    try:
+        result = await model_manager.model_router.complete_for(
+            synthesis_route, "moa", synthesis_messages, max_tokens=1800,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"MoA synthesis failed: {type(exc).__name__}") from exc
+    return {"synthesis_model": synthesis_id, "samples": samples, "answer": str(result.text)}
+
+
 @main.command()
 @click.option("--model", "-m", default=None, help="Model to use")
 @click.option("--resume", "resume_id", default=None, help="Continue an existing conversation by id")
 @click.option("--safe-mode", is_flag=True, help="Start with only Atlas core chat capabilities; skip plugin and extension startup")
 @click.option("--toolsearch-mode", type=click.Choice(["all", "on-demand"]), default=None,
               help="Override the saved tool definition loading mode for this chat")
-def chat(model: str | None, resume_id: str | None, safe_mode: bool, toolsearch_mode: str | None) -> None:
+@click.option("--tui/--cli", "use_tui", default=True,
+              help="Use the Rich terminal UI (default) or plain-text input/output")
+def chat(model: str | None, resume_id: str | None, safe_mode: bool, toolsearch_mode: str | None,
+         use_tui: bool) -> None:
     """Start an interactive chat session in the terminal."""
     from atlas.agent import AgentOrchestrator
     from atlas.memory import MemoryStore
     from atlas.models import ModelManager
 
     async def _chat() -> None:
+        from rich.console import Console
+
+        chat_console = console if use_tui else Console(no_color=True, highlight=False, markup=False)
+
+        def chat_print(message: str, style: str | None = None, **kwargs: Any) -> None:
+            rendered = f"[{style}]{message}[/{style}]" if use_tui and style else message
+            chat_console.print(rendered, **kwargs)
+
         effective_tool_mode = _resolve_tool_search_mode(toolsearch_mode)
         model_mgr = ModelManager()
         if model:
@@ -1290,65 +1371,75 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool, toolsearch_m
             await memory.update_conversation(conv_id, workspace=str(workspace))
         daybreak = _daybreak_enabled()
 
-        console.print(f"[bold]Atlas[/bold] v0.1.0 | Model: [cyan]{model_mgr.current_model}[/cyan]")
+        chat_console.print(f"[bold]Atlas[/bold] v0.1.0 | Model: [cyan]{model_mgr.current_model}[/cyan]" if use_tui
+                           else f"Atlas v0.1.0 | Model: {model_mgr.current_model}")
+        chat_console.print(f"Terminal mode: {'TUI (Rich)' if use_tui else 'CLI (plain text)'}")
         if safe_mode:
             structlog.get_logger().info("cli.safe_mode.enabled", command="chat", skipped="plugins,extensions,market_skills")
-            console.print("[yellow]安全模式已启用：本次 CLI 会话不启动插件/扩展服务；输入 quit/exit 退出，重新运行 atlas chat 可恢复正常模式。[/yellow]")
-        console.print(f"Conversation: [cyan]{conv_id}[/cyan] (resume with atlas chat --resume {conv_id})")
-        console.print(f"Tool search mode: [cyan]{effective_tool_mode}[/cyan] (override with --toolsearch-mode)")
-        console.print("Type [bold]/exit[/bold], [bold]/quit[/bold], [bold]quit[/bold], or [bold]exit[/bold] to leave. "
-                      "[bold]/app [draft][/bold] opens this session in Atlas; [bold]/cd <path>|--none[/bold] and [bold]/pwd[/bold] manage the workspace. "
-                      "[bold]/model <id>[/bold] switches model; [bold]/daybreak [on|off|status][/bold] controls long-task mode.\n")
+            message = "安全模式已启用：本次 CLI 会话不启动插件/扩展服务；输入 quit/exit 退出，重新运行 atlas chat 可恢复正常模式。"
+            chat_console.print(f"[yellow]{message}[/yellow]" if use_tui else message)
+        chat_console.print(f"Conversation: [cyan]{conv_id}[/cyan] (resume with atlas chat --resume {conv_id})" if use_tui
+                           else f"Conversation: {conv_id} (resume with atlas chat --resume {conv_id})")
+        chat_console.print(f"Tool search mode: [cyan]{effective_tool_mode}[/cyan] (override with --toolsearch-mode)" if use_tui
+                           else f"Tool search mode: {effective_tool_mode} (override with --toolsearch-mode)")
+        instructions = ("Type /exit, /quit, quit, or exit to leave. /app [draft] opens this session in Atlas; "
+                        "/cd <path>|--none and /pwd manage the workspace. /model <id> switches model; "
+                        "/daybreak [on|off|status] controls long-task mode.\n")
+        chat_console.print("Type [bold]/exit[/bold], [bold]/quit[/bold], [bold]quit[/bold], or [bold]exit[/bold] to leave. "
+                           "[bold]/app [draft][/bold] opens this session in Atlas; [bold]/cd <path>|--none[/bold] and [bold]/pwd[/bold] manage the workspace. "
+                           "[bold]/model <id>[/bold] switches model; [bold]/daybreak [on|off|status][/bold] controls long-task mode.\n"
+                           if use_tui else instructions)
         if ide_context:
             file_hint = f" · 文件 {ide_context['file']}" if ide_context.get("file") else ""
-            console.print(f"[dim]已发现 {ide_context.get('editor') or 'IDE'} 上下文：工作区 {ide_context.get('workspace')}{file_hint}；首次提问时附上。[/dim]\n")
+            message = f"已发现 {ide_context.get('editor') or 'IDE'} 上下文：工作区 {ide_context.get('workspace')}{file_hint}；首次提问时附上。\n"
+            chat_console.print(f"[dim]{message}[/dim]" if use_tui else message)
         attach_ide_context = bool(ide_context)
 
         while True:
             try:
-                user_input = console.input("[bold green]You:[/bold green] ").strip()
+                user_input = (chat_console.input("[bold green]You:[/bold green] ") if use_tui else input("You: ")).strip()
             except (EOFError, KeyboardInterrupt):
-                console.print("\nBye!")
+                chat_console.print("\nBye!")
                 break
 
             if not user_input:
                 continue
 
             if user_input.lower() in ("/exit", "/quit", "quit", "exit"):
-                console.print("Bye!")
+                chat_console.print("Bye!")
                 break
 
             if user_input == "/pwd":
-                console.print(f"工作目录：{workspace}")
+                chat_print(f"工作目录：{workspace}")
                 continue
 
             if user_input == "/cd" or user_input.startswith("/cd "):
                 destination = user_input.partition(" ")[2].strip()
                 if not destination:
-                    console.print("用法：/cd <目录绝对路径> | /cd --none（清除会话目录关联，保留当前终端目录）")
+                    chat_print("用法：/cd <目录绝对路径> | /cd --none（清除会话目录关联，保留当前终端目录）")
                     continue
                 try:
                     if destination == "--none":
                         await memory.update_conversation(conv_id, workspace="")
                         workspace = Path.cwd().resolve()
-                        console.print(f"已清除会话工作目录关联；当前终端目录：{workspace}")
+                        chat_print(f"已清除会话工作目录关联；当前终端目录：{workspace}")
                     else:
                         target = Path(destination).expanduser().resolve(strict=True)
                         if not target.is_dir():
-                            console.print(f"不是目录：{target}")
+                            chat_print(f"不是目录：{target}")
                             continue
                         os.chdir(target)
                         workspace = target
                         await memory.update_conversation(conv_id, workspace=str(workspace))
-                        console.print(f"工作目录：{workspace}")
+                        chat_print(f"工作目录：{workspace}")
                 except (OSError, RuntimeError) as exc:
-                    console.print(f"切换工作目录失败：{exc}")
+                    chat_print(f"切换工作目录失败：{exc}")
                 continue
 
             if user_input == "/app" or user_input.startswith("/app "):
                 draft = user_input.partition(" ")[2].strip()
                 if len(draft) > 12000:
-                    console.print("草稿超过 12000 个字符；请缩短后重试。")
+                    chat_print("草稿超过 12000 个字符；请缩短后重试。")
                     continue
                 deep_link = f"atlas://conversation/{conv_id}"
                 if draft:
@@ -1357,15 +1448,15 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool, toolsearch_m
                     if not _queue_cli_desktop_handoff(conv_id, draft):
                         _open_atlas_deep_link(deep_link)
                 except OSError as exc:
-                    console.print(f"无法打开 Atlas 桌面端：{exc}\n请在 Atlas 地址栏打开：{deep_link}")
+                    chat_print(f"无法打开 Atlas 桌面端：{exc}\n请在 Atlas 地址栏打开：{deep_link}")
                     continue
-                console.print("已请求 Atlas 打开当前会话；命令后附带的文本已作为草稿载入桌面输入框，需手动发送。")
+                chat_print("已请求 Atlas 打开当前会话；命令后附带的文本已作为草稿载入桌面输入框，需手动发送。")
                 continue
 
             if user_input == "/daybreak" or user_input.startswith("/daybreak "):
                 args = user_input.partition(" ")[2].strip().lower()
                 if args not in {"", "on", "off", "status"}:
-                    console.print("用法：/daybreak [on|off|status]")
+                    chat_print("用法：/daybreak [on|off|status]")
                 else:
                     if args == "status":
                         pass
@@ -1374,25 +1465,25 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool, toolsearch_m
                         try:
                             _set_daybreak_enabled(daybreak)
                         except OSError as exc:
-                            console.print(f"[red]Daybreak 设置保存失败：{exc}[/red]")
+                            chat_print(f"Daybreak 设置保存失败：{exc}", "red")
                             continue
-                    console.print(f"Daybreak 长任务模式{'已开启' if daybreak else '已关闭'}")
+                    chat_print(f"Daybreak 长任务模式{'已开启' if daybreak else '已关闭'}")
                 continue
 
             if user_input.startswith("/model "):
                 new_model = user_input.split(" ", 1)[1].strip()
                 try:
                     model_mgr.select(new_model)
-                    console.print(f"Switched to [cyan]{new_model}[/cyan]")
+                    chat_print(f"Switched to {new_model}", "cyan")
                 except ValueError as e:
-                    console.print(f"[red]{e}[/red]")
+                    chat_print(str(e), "red")
                 continue
 
             if user_input == "/models":
                 for m in model_mgr.list_models():
                     star = " *" if m["selected"] else ""
                     fav = " ★" if m["favorite"] else ""
-                    console.print(f"  {m['id']}{star}{fav} — {m['name']}")
+                    chat_print(f"  {m['id']}{star}{fav} — {m['name']}")
                 continue
 
             # Save user message and run agent
@@ -1406,7 +1497,7 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool, toolsearch_m
                 from atlas.daybreak import daybreak_prompt
                 user_input = daybreak_prompt(user_input)
 
-            console.print(f"[bold]{model_mgr.current_model}[/bold] > ", end="")
+            chat_print(f"{model_mgr.current_model} > ", "bold")
             full = ""
             run_kwargs: dict[str, Any] = {"workspace": str(workspace), "workspace_trusted": True}
             from atlas.project_context import project_scoped_events
@@ -1417,7 +1508,7 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool, toolsearch_m
                     print(event["content"], end="", flush=True)
                     full += event["content"]
                 elif event["type"] == "error":
-                    console.print(f"\n[red]Error: {event['detail']}[/red]")
+                    chat_print(f"\nError: {event['detail']}", "red")
                     if daybreak:
                         _daybreak_terminal_notice("遇到错误")
                 elif event["type"] == "done":
@@ -1429,6 +1520,62 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool, toolsearch_m
         await memory.close()
 
     asyncio.run(_chat())
+
+
+@main.command("moa")
+@click.option("--print", "-p", "prompt_text", default=None,
+              help="一次性任务；缺省时从 stdin 读取，与 atlas run --print 一致")
+@click.option("--model", "synthesis_model", default=None, help="答案合成模型（默认当前所选模型）")
+@click.option("--sample-model", multiple=True, help="采样模型 ID；可重复指定，未指定时读取 MoA 配置")
+@click.option("--max-references", type=click.IntRange(1, 8), default=None,
+              help="最多采样模型数（默认使用配置值，范围 1–8）")
+@click.option("--parallelism", type=click.IntRange(1, 8), default=4, show_default=True,
+              help="最多并发采样请求数")
+@click.option("--output-format", type=click.Choice(["text", "json"]), default="text", show_default=True,
+              help="输出合成答案，或输出包含采样结果的 JSON")
+def moa(prompt_text: str | None, synthesis_model: str | None, sample_model: tuple[str, ...],
+        max_references: int | None, parallelism: int, output_format: str) -> None:
+    """Concurrently sample multiple models, then synthesize their answers."""
+    from atlas.config import get_config
+    from atlas.models import ModelManager
+
+    prompt = prompt_text
+    if prompt is None and not sys.stdin.isatty():
+        prompt = sys.stdin.read()
+    if not prompt or not prompt.strip():
+        raise click.ClickException('缺少任务：用 -p "<任务>" 或通过 stdin 传入')
+    model_manager = ModelManager()
+    synthesizer = synthesis_model or model_manager.current_model
+    configured = get_config().get("moa.reference_models", []) or []
+    if isinstance(configured, str):
+        configured = [configured]
+    if not isinstance(configured, list):
+        configured = []
+    try:
+        configured_limit = max(1, min(8, int(get_config().get("moa.max_references", 3))))
+    except (TypeError, ValueError):
+        configured_limit = 3
+    limit = max_references or configured_limit
+    references = list(sample_model) if sample_model else [str(item) for item in configured if str(item).strip()]
+    if not references:
+        references = ["deepseek-v3"]
+    references = references[:limit]
+    try:
+        result = asyncio.run(_moa_pipeline(
+            prompt.strip(), references, synthesizer, model_manager, max_parallel=parallelism,
+        ))
+    except (ValueError, RuntimeError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    if output_format == "json":
+        print(json.dumps(result, ensure_ascii=False))
+        return
+    for item in result["samples"]:
+        status = f"失败：{item['error']}" if item.get("error") else f"{item['latency_ms']} ms"
+        print(f"[{item['model']}] ({status})")
+        if item.get("text"):
+            print(item["text"])
+        print()
+    print(f"[合成 · {result['synthesis_model']}]\n{result['answer']}")
 
 
 @main.command()
