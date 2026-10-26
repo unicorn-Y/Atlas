@@ -2141,11 +2141,18 @@ export default function App() {
     } },
     { id: 'reasoning', label: '/reasoning', hint: '打开模型选择，查看当前可用的推理强度', run: () => setSheet('models') },
     { id: 'usage', label: '/usage', hint: '查看用量和费用', run: () => setSheet('usage') },
-    { id: 'insights', label: '/insights', hint: '生成最近 7 天使用习惯报告', takesArgument: true, run: (range: string) => {
-      const days = range.trim() === '30' ? 30 : 7;
-      void api<{ path: string; markdown: string }>(store.apiBaseUrl, `/api/u4/insights?days=${days}`).then((report) => {
+    { id: 'session', label: '/session', hint: '直达当前会话统计（消息数、运行次数、Token、费用与耗时）', run: () => {
+      if (!activeConversation) { setToast('先打开一个会话再查看 /session'); return; }
+      setSheet('usage');
+    } },
+    { id: 'insights', label: '/insights', hint: '生成按天的调用/费用趋势；用法：/insights 7|30 [model]', takesArgument: true, run: (range: string) => {
+      const [daysPart, ...modelParts] = range.trim().split(/\s+/).filter(Boolean);
+      const days = daysPart === '30' ? 30 : 7;
+      const model = (daysPart === '7' || daysPart === '30' ? modelParts : [daysPart, ...modelParts]).join(' ');
+      const params = new URLSearchParams({ days: String(days), ...(model ? { model } : {}) });
+      void api<{ path: string; markdown: string }>(store.apiBaseUrl, `/api/u4/insights?${params}`).then((report) => {
         const id = `u4-insights-${Date.now()}`;
-        useAtlasStore.getState().addArtifact({ id, runId: id, type: 'report', name: `最近 ${days} 天使用习惯报告`, path: report.path, summary: report.markdown, createdAt: new Date().toISOString() });
+        useAtlasStore.getState().addArtifact({ id, runId: id, type: 'report', name: `最近 ${days} 天使用习惯报告${model ? ` · ${model}` : ''}`, path: report.path, summary: report.markdown, createdAt: new Date().toISOString() });
         useAtlasStore.getState().setActiveRun(id); showInspectorTab('artifacts'); setToast('使用习惯报告已加入产物面板');
       }).catch((error) => setToast(`生成报告失败：${error instanceof Error ? error.message : String(error)}`));
     } },
@@ -2248,7 +2255,7 @@ export default function App() {
       : ['new', 'clear', 'resume', 'fork', 'undo', 'redo', 'rename', 'export', 'handoff', 'preset', 'import-chatgpt', 'bg'].includes(command.id) ? '会话'
         : ['folder', 'pwd', 'cd', 'init', 'ide', 'worktree', 'open'].includes(command.id) ? '工作区'
           : ['model', 'reasoning', 'usage', 'cost', 'advisor'].includes(command.id) ? '模型'
-            : ['doctor', 'config', 'release-notes', 'about', 'help', 'version', 'insights'].includes(command.id) ? '诊断'
+            : ['doctor', 'config', 'release-notes', 'about', 'help', 'version', 'insights', 'session'].includes(command.id) ? '诊断'
               : command.id.startsWith('skill-') ? '技能' : '工具';
   });
   const conversationsRef = useRef(store.conversations);

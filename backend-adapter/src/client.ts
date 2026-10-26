@@ -365,10 +365,10 @@ export class BackendAdapter {
     return this.request(`/api/custom-tools/${encodeURIComponent(id)}/test`, { method: 'POST', body: JSON.stringify({ arguments: args }) });
   }
   /** Token usage and estimated cost from the backend ledger; `from` / `to` are ISO dates (to is exclusive). */
-  async getUsage(groupBy: UsageGroup, from?: string, to?: string): Promise<UsageReport> {
+  async getUsage(groupBy: UsageGroup, from?: string, to?: string, model?: string): Promise<UsageReport> {
     const empty: UsageReport = { rows: [], totals: { runs: 0, input_tokens: 0, output_tokens: 0, cached_input_tokens: 0, cache_hit_rate: null, est_cost: 0 } };
     if (!this.live) return empty;
-    const query = new URLSearchParams({ group_by: groupBy, ...(from ? { from } : {}), ...(to ? { to } : {}) });
+    const query = new URLSearchParams({ group_by: groupBy, ...(from ? { from } : {}), ...(to ? { to } : {}), ...(model ? { model } : {}) });
     return this.request(`/api/usage?${query}`);
   }
   async getTelegram(): Promise<TelegramSettings> { return this.request('/api/channels/telegram'); }

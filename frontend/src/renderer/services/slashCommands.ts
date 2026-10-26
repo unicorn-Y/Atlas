@@ -43,7 +43,7 @@ function inferArgumentHint(id: string): string {
     pr: 'new 或 PR 编号', cd: '目录路径或 --none', review: 'branch <名称> 或 commit <SHA>',
     ultrareview: '审查范围', 'security-review': 'branch <名称> 或 commit <SHA>', simplify: '简化范围',
     workflow: '目标', open: '文件或网址', chapter: '章节名称', model: '模型名', fast: 'on、off 或 status',
-    suggestions: 'on 或 off', summary: 'on 或 off', insights: '天数（7 或 30）', advisor: '模型名',
+    suggestions: 'on 或 off', summary: 'on 或 off', insights: '天数（7 或 30），可选模型 ID', advisor: '模型名',
     wake: 'on 或 off', stop: '进程编号（可省略）', goal: '目标操作',
   };
   return hints[id] || '参数';

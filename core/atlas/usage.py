@@ -458,7 +458,7 @@ class UsageLedger:
         return [str(row[0]) for row in rows if row[0]]
 
     async def query(
-        self, *, start: str | None, end: str | None, group_by: str,
+        self, *, start: str | None, end: str | None, group_by: str, model: str | None = None,
     ) -> dict[str, Any]:
         if self._db is None:
             return {"rows": [], "totals": _aggregate([])}
@@ -474,6 +474,9 @@ class UsageLedger:
         if end:
             where.append("started_at < ?")
             params.append(end)
+        if model:
+            where.append("model = ?")
+            params.append(model)
         sql = ("SELECT " + expression
                + " AS grp, run_id, subtask_id, model, input_tokens, output_tokens, "
                + "cached_input_tokens, est_cost, cache_miss_reason FROM usage_records")

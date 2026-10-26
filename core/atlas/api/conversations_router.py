@@ -719,6 +719,11 @@ async def get_conversation_stats(
         except ValueError:
             continue
     usage_ledger = _service("usage_ledger", services)
+    runtime_mgr = _service("runtime_mgr", services)
+    run_count = sum(
+        1 for run in getattr(runtime_mgr, "runs", {}).values()
+        if getattr(run, "conversation_id", None) == conversation_id
+    ) if runtime_mgr is not None else 0
     usage = None
     if usage_ledger is not None:
         report = await usage_ledger.query(start=None, end=None, group_by="conversation")
@@ -727,7 +732,7 @@ async def get_conversation_stats(
         "conversation_id": conversation_id,
         "message_count": len(messages),
         "user_turns": user_turns,
-        "runs": usage.get("runs", 0) if usage else 0,
+        "runs": run_count,
         "input_tokens": usage.get("input_tokens", 0) if usage else 0,
         "output_tokens": usage.get("output_tokens", 0) if usage else 0,
         "cached_input_tokens": usage.get("cached_input_tokens", 0) if usage else 0,

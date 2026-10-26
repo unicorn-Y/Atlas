@@ -392,13 +392,16 @@ async def get_usage(
     from_: str | None = Query(default=None, alias="from"),
     to: str | None = Query(default=None),
     group_by: str = Query(default="day", pattern="^(day|conversation|model)$"),
+    model: str | None = Query(default=None, max_length=256),
 ) -> dict[str, Any]:
     usage_ledger = _service("usage_ledger", services)
     if usage_ledger is None:
         return {"rows": [], "totals": {"runs": 0, "input_tokens": 0,
                 "output_tokens": 0, "cached_input_tokens": 0,
                 "cache_hit_rate": None, "est_cost": 0}}
-    return await usage_ledger.query(start=from_, end=to, group_by=group_by)
+    report = await usage_ledger.query(start=from_, end=to, group_by=group_by, model=model)
+    model_rows = await usage_ledger.query(start=from_, end=to, group_by="model")
+    return {**report, "models": [row["key"] for row in model_rows.get("rows", [])]}
 
 
 @router.get("/api/safety")

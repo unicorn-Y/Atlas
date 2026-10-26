@@ -138,7 +138,7 @@ export interface UsageRow extends UsageTotals {
   cache_miss_reason?: string;
 }
 
-export interface UsageReport { rows: UsageRow[]; totals: UsageTotals }
+export interface UsageReport { rows: UsageRow[]; totals: UsageTotals; models?: string[] }
 
 export interface ConnectionTestResponse {
   ok: boolean;

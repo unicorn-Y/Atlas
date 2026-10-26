@@ -28,6 +28,7 @@ interface UsagePanelProps {
 interface ConversationStats {
   input_tokens: number; output_tokens: number; cached_input_tokens: number;
   cache_hit_rate: number | null; est_cost: number | null; duration_seconds: number | null;
+  message_count: number; user_turns: number; runs: number; started_at: string | null; last_activity_at: string | null;
 }
 
 function readLocalProfile(): { name: string; about: string } {
@@ -46,6 +47,7 @@ export default function UsagePanel({ username, onSaveUsername, apiBaseUrl = '', 
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [days, setDays] = useState<number | null>(7);
   const [group, setGroup] = useState<UsageGroup>('day');
+  const [selectedModel, setSelectedModel] = useState('');
   const [report, setReport] = useState<UsageReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sessionStats, setSessionStats] = useState<ConversationStats | null>(null);
@@ -53,11 +55,11 @@ export default function UsagePanel({ username, onSaveUsername, apiBaseUrl = '', 
   useEffect(() => {
     let live = true;
     setError(null);
-    backend.getUsage(group, days ? isoDaysAgo(days) : undefined)
+    backend.getUsage(group, days ? isoDaysAgo(days) : undefined, undefined, selectedModel || undefined)
       .then((value) => { if (live) setReport(value); })
       .catch((exc: unknown) => { if (live) setError(exc instanceof Error ? exc.message : String(exc)); });
     return () => { live = false; };
-  }, [group, days]);
+  }, [group, days, selectedModel]);
 
   useEffect(() => {
     let live = true;
@@ -103,13 +105,15 @@ export default function UsagePanel({ username, onSaveUsername, apiBaseUrl = '', 
   return <div className="grid max-w-[720px] gap-5 text-[13px] text-fg-2">
     {conversationId && <section aria-label="本会话用量" className="rounded-xl card-surface p-4">
       <h4 className="m-0 text-[13.5px] font-medium text-heading">本会话</h4>
-      {sessionStats ? <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+      {sessionStats ? <><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-7">
+        <Tile label="消息数" value={sessionStats.message_count.toLocaleString()} hint={`${sessionStats.user_turns.toLocaleString()} 条用户消息`} />
+        <Tile label="运行次数" value={sessionStats.runs.toLocaleString()} hint="根据用量账本中不同 run 统计，缺失 usage 的 run 不计入" />
         <Tile label="输入 Token" value={tokens(sessionStats.input_tokens)} />
         <Tile label="输出 Token" value={tokens(sessionStats.output_tokens)} />
         <Tile label="缓存命中" value={percent(sessionStats.cache_hit_rate)} />
         <Tile label="估算费用" value={cost(sessionStats.est_cost)} />
         <Tile label="耗时" value={sessionStats.duration_seconds === null ? '未知' : `${Math.floor(sessionStats.duration_seconds / 3600)}小时${Math.floor(sessionStats.duration_seconds % 3600 / 60)}分`} />
-      </div> : <p className="mt-2 mb-0 text-[12px] text-fg-3">正在读取本会话用量…</p>}
+      </div><p className="mb-0 mt-2 text-[11px] text-fg-3">时间范围：{sessionStats.started_at ? new Date(sessionStats.started_at).toLocaleString() : '未知'} – {sessionStats.last_activity_at ? new Date(sessionStats.last_activity_at).toLocaleString() : '未知'}；费用按当前模型价格估算。</p></> : <p className="mt-2 mb-0 text-[12px] text-fg-3">正在读取本会话用量…</p>}
       {sessionStats?.est_cost === null && <p className="mt-2 mb-0 text-[12px] text-fg-3">该模型未配置价格，可在设置里填写。 <button type="button" onClick={onOpenModels} className="text-brand underline">打开模型设置</button></p>}
     </section>}
     <form onSubmit={saveProfile} className="rounded-xl card-surface p-4">
@@ -134,6 +138,8 @@ export default function UsagePanel({ username, onSaveUsername, apiBaseUrl = '', 
         {GROUPS.map(([value, text]) => <button key={value} role="radio" aria-checked={group === value} onClick={() => setGroup(value)}
           className={cn(pill, group === value ? 'bg-selected text-fg' : 'text-fg-3 hover:text-fg')}>{text}</button>)}
       </div>
+      <label className="flex items-center gap-2 text-[12px] text-fg-3">模型筛选<select aria-label="按模型筛选用量" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)} className="h-8 max-w-[220px] rounded-lg border border-line bg-surface px-2 text-fg"><option value="">全部模型</option>{(report?.models ?? []).map((model) => <option key={model} value={model}>{model}</option>)}</select></label>
+      <span className="text-[11px] text-fg-3">统计范围：{days ? `${days} 天（${isoDaysAgo(days)} 至 ${new Date().toISOString().slice(0, 10)}）` : '全部历史'} · 费用沿用模型价格估算</span>
     </div>
 
     {error && <p role="alert" className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-danger">没能读取用量：{error}</p>}
@@ -260,16 +266,16 @@ function DayBars({ rows, label }: { rows: UsageRow[]; label: (row: UsageRow) => 
   const max = Math.max(...values, 1);
   const height = 140;
   return <figure className="m-0 rounded-xl card-surface px-4 pt-3 pb-2">
-    <figcaption className="mb-2 text-[12px] text-fg-3">每天的 token 用量（输入 + 输出）</figcaption>
+    <figcaption className="mb-2 text-[12px] text-fg-3">每天调用次数与估算费用趋势（柱高为输入 + 输出 Token）</figcaption>
     <div className="relative flex items-end gap-[2px] border-b border-line" style={{ height }} onMouseLeave={() => setHover(null)}>
       {rows.map((row, index) => {
         const barHeight = values[index] ? Math.max(2, (values[index] / max) * (height - 18)) : 0;
         return <div key={row.key} className="relative flex h-full min-w-0 flex-1 items-end justify-center" onMouseEnter={() => setHover(index)}
-          aria-label={`${label(row)}：${tokens(values[index])}`}>
+          aria-label={`${label(row)}：${row.runs} 次调用，${cost(row.est_cost)}`}>
           <div className={cn('w-full max-w-[36px] rounded-t-[4px] transition-opacity', hover !== null && hover !== index && 'opacity-50')}
             style={{ height: barHeight, background: 'var(--brand)' }} />
           {hover === index && <div role="tooltip" className="pop pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12px] text-fg">
-            <b className="font-medium">{label(row)}</b>　{tokens(values[index])} tokens · 缓存 {percent(row.cache_hit_rate)}
+            <b className="font-medium">{label(row)}</b>　{row.runs} 次调用 · 费用 {cost(row.est_cost)} · {tokens(values[index])} tokens · 缓存 {percent(row.cache_hit_rate)}{row.est_cost === null && <span> · 缺少模型价格</span>}
           </div>}
         </div>;
       })}

@@ -185,3 +185,20 @@ async def test_usage_groups_time_range_and_subtasks(tmp_path) -> None:
     assert result["rows"][0]["cache_hit_rate"] == 0.25
     assert result["totals"]["runs"] == 2
     await ledger.close()
+
+
+@pytest.mark.asyncio
+async def test_usage_query_filters_model_without_changing_group_aggregation(tmp_path) -> None:
+    ledger = UsageLedger(tmp_path / "usage.db")
+    await ledger.init()
+    base = dict(conversation_id="conv-a", subtask_id=None,
+                started_at="2026-10-01T10:00:00+00:00",
+                usage={"input_tokens": 100, "output_tokens": 20})
+    await ledger.record(run_id="run-a", model="model-a", price={"input": 1, "output": 2, "cached_input": 1}, **base)
+    await ledger.record(run_id="run-b", model="model-b", price={"input": 10, "output": 20, "cached_input": 10}, **base)
+    result = await ledger.query(start="2026-10-01", end="2026-10-02", group_by="day", model="model-a")
+    assert len(result["rows"]) == 1
+    assert result["rows"][0]["runs"] == 1
+    assert result["rows"][0]["est_cost"] == 0.00014
+    assert result["totals"]["input_tokens"] == 100
+    await ledger.close()

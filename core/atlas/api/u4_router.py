@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
@@ -243,15 +243,46 @@ def _insights_cost_text(totals: dict[str, Any]) -> str:
 
 
 @router.get("/api/u4/insights")
-async def get_insights(services: Annotated[AppServices, Depends(get_app_services)], days: int = 7) -> dict[str, Any]:
+async def get_insights(
+    services: Annotated[AppServices, Depends(get_app_services)], days: int = 7,
+    model: str | None = Query(default=None, max_length=256),
+) -> dict[str, Any]:
     if days not in {7, 30}:
         raise HTTPException(status_code=422, detail="days must be 7 or 30")
+    model = model.strip() if model and model.strip() else None
+    today = datetime.now(UTC).date()
+    start_date = today - timedelta(days=days - 1)
+    end_date = today
+    start = start_date.isoformat()
+    end = (end_date + timedelta(days=1)).isoformat()
     ledger = services.usage_ledger
-    usage = await ledger.query(start=(datetime.now(UTC).date() - timedelta(days=days - 1)).isoformat(), end=None, group_by="model") if ledger else {"rows": [], "totals": {}}
+    usage = await ledger.query(start=start, end=end, group_by="model", model=model) if ledger else {"rows": [], "totals": {}}
+    daily = await ledger.query(start=start, end=end, group_by="day", model=model) if ledger else {"rows": [], "totals": {}}
+    all_models = await ledger.query(start=start, end=end, group_by="model") if ledger else {"rows": []}
+    daily_by_date = {str(row.get("key")): row for row in daily.get("rows", [])}
+    trends = []
+    for offset in range(days):
+        date_key = (start_date + timedelta(days=offset)).isoformat()
+        row = daily_by_date.get(date_key)
+        has_records = row is not None
+        row = row or {}
+        trends.append({
+            "date": date_key, "runs": int(row.get("runs") or 0),
+            "input_tokens": int(row.get("input_tokens") or 0),
+            "output_tokens": int(row.get("output_tokens") or 0),
+            "est_cost": row.get("est_cost") if has_records else 0.0,
+            "known_cost": float(row.get("known_cost") or 0),
+            "unpriced_records": int(row.get("unpriced_records") or 0),
+        })
+    trend_lines = []
+    for row in trends:
+        cost_label = f"≈ {row['est_cost']:.4f}" if row["est_cost"] is not None else f"缺价（{row['unpriced_records']} 条）"
+        trend_lines.append(
+            f"| {row['date']} | {row['runs']} | {row['input_tokens']} / {row['output_tokens']} | {cost_label} |"
+        )
     memory = services.memory
     conversations = await memory.list_conversations(limit=None) if memory else []
-    since = datetime.now(UTC) - timedelta(days=days)
-    recent = [item for item in conversations if str(item.get("updated_at") or "")[:10] >= since.date().isoformat()]
+    recent = [item for item in conversations if start <= str(item.get("updated_at") or "")[:10] <= end_date.isoformat()]
     task_types: dict[str, int] = {}
     tool_counts: dict[str, int] = {}
     errors = 0
@@ -283,12 +314,15 @@ async def get_insights(services: Annotated[AppServices, Depends(get_app_services
     common_tools = sorted(tool_counts.items(), key=lambda item: item[1], reverse=True)[:5]
     average_duration = int(sum(durations) / len(durations)) if durations else None
     markdown = "\n".join([
-        f"# 最近 {days} 天使用习惯报告", "", f"- 会话数：{len(recent)}",
+        f"# 最近 {days} 天使用习惯报告", "", f"- 统计范围：{start} 至 {end_date.isoformat()}（UTC，含首尾日期）",
+        f"- 模型筛选：{model or '全部模型'}", f"- 会话数：{len(recent)}",
         f"- 平均会话跨度：{f'{average_duration // 3600} 小时 {average_duration % 3600 // 60} 分钟' if average_duration is not None else '未知'}（根据创建与最近更新时间估算）",
         f"- 模型调用：{totals.get('runs', 0)} 次", f"- 输入/输出：{totals.get('input_tokens', 0)} / {totals.get('output_tokens', 0)} tokens",
         f"- 缓存命中率：{format(totals['cache_hit_rate'], '.1%') if totals.get('cache_hit_rate') is not None else '未知'}",
-        f"- 费用：{_insights_cost_text(totals)}", "",
-        "## 常用模型", *[f"- {row.get('key')}: {row.get('runs', 0)} 次" for row in models],
+        f"- 费用：{_insights_cost_text(totals)}（按本机模型价格估算 USD）", "",
+        "## 每日调用与估算费用趋势", "| 日期（UTC） | 调用次数 | 输入/输出 Token | 估算费用（USD） |", "| --- | ---: | ---: | ---: |",
+        *trend_lines,
+        "", "## 常用模型", *[f"- {row.get('key')}: {row.get('runs', 0)} 次" for row in models],
         "", "## 常用任务类型", *[f"- {name}: {count} 个会话" for name, count in common_tasks],
         "", "## 常用工具", *([f"- {name}: {count} 次" for name, count in common_tools] or ["- 用量记录没有工具调用明细"]),
         "", f"## 出错情况\n检测到 {errors} 条包含错误线索的 Atlas 回复。",
@@ -299,7 +333,14 @@ async def get_insights(services: Annotated[AppServices, Depends(get_app_services
     artifact_dir.mkdir(parents=True, exist_ok=True)
     filename = f"insights-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}.md"
     (artifact_dir / filename).write_text(markdown + "\n", encoding="utf-8")
-    return {"days": days, "markdown": markdown, "path": f"artifacts/{filename}", "conversation_count": len(recent), "usage": totals}
+    return {
+        "days": days, "start_date": start, "end_date": end_date.isoformat(),
+        "model": model, "models": [row.get("key") for row in all_models.get("rows", [])],
+        "trends": trends,
+        "missing_price_records": sum(row["unpriced_records"] for row in trends),
+        "markdown": markdown, "path": f"artifacts/{filename}",
+        "conversation_count": len(recent), "usage": totals,
+    }
 
 
 @router.get("/api/u4/presets")
