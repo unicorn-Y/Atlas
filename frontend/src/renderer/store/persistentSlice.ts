@@ -50,6 +50,7 @@ export interface PersistentState {
   localModelsError: string | null;
   localModelsBusy: boolean;
   automations: AutomationRecord[];
+  maxAutomationCount: number;
   automationsEngineStarted: boolean | null;
   automationsLoading: boolean;
   automationsError: string | null;
@@ -119,7 +120,7 @@ export function createPersistentSlice(
     channelStatus: null, channelStatusError: null,
     localStatus: null, localHardware: null, localBackends: [], localCatalog: [], localJobs: [], localActivation: null,
     localModelsError: null, localModelsBusy: false,
-    automations: [], automationsEngineStarted: null, automationsLoading: false, automationsError: null,
+    automations: [], maxAutomationCount: 20, automationsEngineStarted: null, automationsLoading: false, automationsError: null,
     automationRuns: {}, migrationReport: null,
 
     // -- agents ---------------------------------------------------------
@@ -375,7 +376,7 @@ export function createPersistentSlice(
       set({ automationsLoading: true, automationsError: null });
       try {
         const body = await automationsApi.list(base());
-        set({ automations: body.automations, automationsEngineStarted: body.engine_started, automationsLoading: false });
+        set({ automations: body.automations, maxAutomationCount: body.max_automations ?? 20, automationsEngineStarted: body.engine_started, automationsLoading: false });
       } catch (error) { set({ automationsLoading: false, automationsError: errorText(error) }); }
     },
     createAutomation: async (payload) => {

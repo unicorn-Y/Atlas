@@ -22,15 +22,61 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import os
 import re
 import threading
 import tomllib
 import uuid
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from atlas.task_artifacts import _toml_value
+
+_STORE_LOCKS_GUARD = threading.Lock()
+_STORE_LOCKS: dict[str, threading.RLock] = {}
+
+
+@contextmanager
+def _exclusive_store_file(path: Path):
+    """Serialize read-check-write across processes while the TOML file is replaced."""
+    if os.name == "nt":
+        import ctypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateMutexW.argtypes = (ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p)
+        kernel32.CreateMutexW.restype = ctypes.c_void_p
+        kernel32.WaitForSingleObject.argtypes = (ctypes.c_void_p, ctypes.c_uint32)
+        kernel32.WaitForSingleObject.restype = ctypes.c_uint32
+        kernel32.ReleaseMutex.argtypes = (ctypes.c_void_p,)
+        kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
+        lock_name = "Local\\AtlasAutomationStore-" + hashlib.sha256(str(path.resolve()).casefold().encode("utf-8")).hexdigest()
+        handle = kernel32.CreateMutexW(None, False, lock_name)
+        if not handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        status = kernel32.WaitForSingleObject(handle, 0xFFFFFFFF)
+        if status not in (0, 0x80):
+            kernel32.CloseHandle(handle)
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            yield
+        finally:
+            kernel32.ReleaseMutex(handle)
+            kernel32.CloseHandle(handle)
+        return
+
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as handle:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 TRIGGER_KINDS = ("cron", "interval", "date", "event", "webhook")
 PAYLOAD_KINDS = ("agent_turn", "heartbeat", "script")
@@ -304,12 +350,32 @@ def default_automations_path() -> Path:
     return get_config().db_path.parent / "automations.toml"
 
 
+class AutomationLimitError(Exception):
+    """Raised atomically when a create would exceed the configured global cap."""
+
+    def __init__(self, maximum: int, current: int) -> None:
+        self.maximum = maximum
+        self.current = current
+        super().__init__(f"自动化数量已达上限 {maximum}（当前 {current}）；请先删除不再需要的自动化。")
+
+
 class AutomationStore:
     """Single-file TOML store; the only writer of ``data/automations.toml``."""
 
+    DEFAULT_MAX_AUTOMATIONS = 20
+
+    @staticmethod
+    def max_automations() -> int:
+        """Global product cap; operators may raise/lower it with an environment setting."""
+        try:
+            return max(1, int(os.environ.get("ATLAS_AUTOMATION_MAX_COUNT", "20")))
+        except ValueError:
+            return AutomationStore.DEFAULT_MAX_AUTOMATIONS
+
     def __init__(self, path: str | Path | None = None) -> None:
         self.path = Path(path) if path is not None else default_automations_path()
-        self._lock = threading.Lock()
+        with _STORE_LOCKS_GUARD:
+            self._lock = _STORE_LOCKS.setdefault(str(self.path.resolve()), threading.RLock())
 
     # -- raw format ---------------------------------------------------------
 
@@ -369,7 +435,7 @@ class AutomationStore:
     # -- public API ---------------------------------------------------------
 
     def list(self) -> list[dict[str, Any]]:
-        with self._lock:
+        with self._lock, _exclusive_store_file(self.path):
             records = self._read()
         return [normalize_record(item) for item in records.values()]
 
@@ -385,6 +451,9 @@ class AutomationStore:
         with self._lock:
             records = self._read()
             existing = records.get(normalized["id"])
+            maximum = self.max_automations()
+            if existing is None and len(records) >= maximum:
+                raise AutomationLimitError(maximum, len(records))
             if existing is not None:
                 normalized["created_at"] = existing.get("created_at") or normalized["created_at"]
             normalized["created_at"] = normalized["created_at"] or _stamp()
@@ -392,6 +461,7 @@ class AutomationStore:
             records[normalized["id"]] = normalized
             self._write(records)
         return normalized
+
 
     def update_state(self, automation_id: str, **fields: Any) -> dict[str, Any] | None:
         """Merge a partial ``state`` projection (last_run_at / errors / paused_reason...)."""

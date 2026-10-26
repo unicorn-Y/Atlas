@@ -232,7 +232,7 @@ export interface MigrationReport {
 
 export const automationsApi = {
   list: (base: string) =>
-    api<{ automations: AutomationRecord[]; engine_started: boolean }>(base, '/api/automations'),
+    api<{ automations: AutomationRecord[]; engine_started: boolean; max_automations?: number }>(base, '/api/automations'),
   create: (base: string, payload: Record<string, unknown>) =>
     api<{ automation: AutomationRecord }>(base, '/api/automations', { method: 'POST', json: payload }),
   patch: (base: string, id: string, patch: Record<string, unknown>) =>

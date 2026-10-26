@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ProcessPoolExecutor
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,47 @@ import urllib.request
 import websockets
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _create_automation_probe(arguments: tuple[str, str]) -> bool:
+    """Cross-process writer used to prove the cap check and TOML replacement are atomic."""
+    from atlas.automation.store import AutomationLimitError, AutomationStore, normalize_record
+
+    path, automation_id = arguments
+    store = AutomationStore(path)
+    record = normalize_record({
+        "id": automation_id,
+        "name": automation_id,
+        "trigger": {"kind": "interval", "every_seconds": 3600},
+        "payload": {"kind": "agent_turn", "message": "U46 disposable cap probe"},
+    })
+    try:
+        store.put(record)
+        return True
+    except AutomationLimitError:
+        return False
+
+
+def check_automation_cap() -> None:
+    """Run concurrent stores against a temporary TOML path and confirm the configured ceiling."""
+    from atlas.automation.store import AutomationStore
+
+    previous = os.environ.get("ATLAS_AUTOMATION_MAX_COUNT")
+    os.environ["ATLAS_AUTOMATION_MAX_COUNT"] = "2"
+    try:
+        with tempfile.TemporaryDirectory(prefix="atlas-u46-automation-") as temp_dir:
+            path = str(Path(temp_dir) / "automations.toml")
+            with ProcessPoolExecutor(max_workers=6) as pool:
+                created = list(pool.map(_create_automation_probe, [(path, f"u46-probe-{index}") for index in range(12)]))
+            assert sum(created) == 2, f"configured cap should admit exactly 2 creates, got {sum(created)}"
+            records = AutomationStore(path).list()
+            assert len(records) == 2, f"concurrent creates persisted {len(records)} records"
+        print("PASS automation-cap: 12 cross-process creates persisted exactly 2 records at configured cap")
+    finally:
+        if previous is None:
+            os.environ.pop("ATLAS_AUTOMATION_MAX_COUNT", None)
+        else:
+            os.environ["ATLAS_AUTOMATION_MAX_COUNT"] = previous
 
 
 async def _cdp_eval(ws: websockets.ClientConnection, request_id: int, expression: str) -> object:
@@ -50,26 +92,29 @@ async def check_scroll_speed() -> None:
         before = await _cdp_eval(ws, 1, "localStorage.getItem('atlas.preference.scroll-speed')")
         try:
             await _cdp_eval(ws, 9, "(()=>{const d=document.querySelector('[role=dialog]');if(d)[...d.querySelectorAll('button')].find(b=>b.innerText.includes('完成'))?.click()})()")
+            await _cdp_eval(ws, 10, "document.querySelector('button[aria-label=\\\"新建对话\\\"]')?.click()")
+            await asyncio.sleep(0.3)
             await _cdp_eval(ws, 2, "(()=>{const e=document.querySelector('textarea[aria-label=\\\"消息内容\\\"]');if(!e)throw Error('composer missing');e.focus();e.value='';e.dispatchEvent(new Event('input',{bubbles:true}))})()")
             await _cdp_command(ws, 3, "Input.insertText", {"text": "/scroll-speed"})
             await _cdp_command(ws, 4, "Input.dispatchKeyEvent", {"type": "keyDown", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
             await _cdp_command(ws, 5, "Input.dispatchKeyEvent", {"type": "keyUp", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
+            await asyncio.sleep(0.5)
             dialog = await _cdp_eval(ws, 6, "({open:!!document.querySelector('[role=dialog]'),slider:!!document.querySelector('input[aria-label=\\\"对话滚轮速度\\\"]')})")
             assert dialog == {"open": True, "slider": True}, dialog
-            current = float(await _cdp_eval(ws, 7, "(()=>{const e=document.querySelector('input[aria-label=\\\"对话滚轮速度\\\"]');e.focus();return e.value})()"))
-            delta_steps = round((1.5 - current) / 0.05)
-            key = "ArrowRight" if delta_steps > 0 else "ArrowLeft"
-            for index in range(abs(delta_steps)):
-                await _cdp_command(ws, 8 + index * 2, "Input.dispatchKeyEvent", {"type": "keyDown", "key": key, "code": key, "windowsVirtualKeyCode": 39 if key == "ArrowRight" else 37})
-                await _cdp_command(ws, 9 + index * 2, "Input.dispatchKeyEvent", {"type": "keyUp", "key": key, "code": key, "windowsVirtualKeyCode": 39 if key == "ArrowRight" else 37})
+            await _cdp_eval(ws, 7, "[...document.querySelectorAll('[role=dialog] button')].find(b=>b.innerText.includes('恢复默认'))?.click()")
+            await _cdp_eval(ws, 8, "document.querySelector('input[aria-label=\\\"对话滚轮速度\\\"]').focus()")
+            await _cdp_command(ws, 11, "Input.dispatchKeyEvent", {"type": "keyDown", "key": "ArrowRight", "code": "ArrowRight", "windowsVirtualKeyCode": 39})
+            await _cdp_command(ws, 12, "Input.dispatchKeyEvent", {"type": "keyUp", "key": "ArrowRight", "code": "ArrowRight", "windowsVirtualKeyCode": 39})
+            await asyncio.sleep(0.2)
             changed = await _cdp_eval(ws, 1000, "(()=>{const e=document.querySelector('input[aria-label=\\\"对话滚轮速度\\\"]');const thread=document.querySelector('[aria-label=\\\"任务活动\\\"]');const wheel=new WheelEvent('wheel',{deltaY:100,bubbles:true,cancelable:true});const nativeAllowed=thread.dispatchEvent(wheel);return {slider:e.value,saved:localStorage.getItem('atlas.preference.scroll-speed'),wheelIntercepted:!nativeAllowed}})()")
-            assert changed == {"slider": "1.5", "saved": "1.5", "wheelIntercepted": True}, changed
+            assert changed == {"slider": "1.05", "saved": "1.05", "wheelIntercepted": True}, changed
             print("PASS scroll-speed: /scroll-speed dialog, persisted live preview, and session-only wheel interception")
         finally:
             await _cdp_eval(ws, 8, "(()=>{const d=document.querySelector('[role=dialog]');if(d)[...d.querySelectorAll('button')].find(b=>b.innerText.includes('完成'))?.click();if(" + json.dumps(before) + "===null)localStorage.removeItem('atlas.preference.scroll-speed');else localStorage.setItem('atlas.preference.scroll-speed'," + json.dumps(before) + ");window.dispatchEvent(new CustomEvent('atlas:scroll-speed',{detail:Number(" + json.dumps(before) + "||1)}))})()")
 
 
 async def main() -> None:
+    check_automation_cap()
     await check_scroll_speed()
     print("U46 CHECK PASS")
 

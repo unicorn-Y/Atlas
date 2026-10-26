@@ -64,6 +64,7 @@ export function describeSchedule(task: LegacyTriggerShape): string {
  */
 export default function AutomationPage({ apiBaseUrl, connected, onToast, onOpenConversation }: { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void; onOpenConversation: (id: string) => void }) {
   const automations = useAtlasStore((state) => state.automations);
+  const maxAutomationCount = useAtlasStore((state) => state.maxAutomationCount);
   const engineStarted = useAtlasStore((state) => state.automationsEngineStarted);
   const loading = useAtlasStore((state) => state.automationsLoading);
   const error = useAtlasStore((state) => state.automationsError);
@@ -138,6 +139,7 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast, onOpenC
   }, [automations, selected]);
   // 引擎没接线时 run-now/runs 都是 503，只刷列表。
   const current = automations.find((item) => item.id === selected);
+  const atAutomationLimit = automations.length >= maxAutomationCount;
   useEffect(() => {
     if (!current || !engineStarted) return;
     void loadAutomationRuns(current.id);
@@ -258,9 +260,13 @@ export default function AutomationPage({ apiBaseUrl, connected, onToast, onOpenC
         <button className="btn" disabled={importing || !connected} onClick={() => void doImport()} title="把旧版 /api/schedules 的调度一次性导入">
           {importing ? <LoaderCircle size={15} className="spin" /> : <Upload size={15} />}导入旧调度
         </button>
-        <button className="btn primary" disabled={!connected} onClick={() => { setEditingId(''); setSelectedTemplateId(''); setTemplateParameters({}); setTemplateChoiceOpen(true); setCreating(true); }}><Plus size={15} />新建自动化</button>
+        <button className="btn primary" disabled={!connected || atAutomationLimit} title={atAutomationLimit ? `已达到 ${maxAutomationCount} 条上限，请先删除不再需要的自动化` : undefined} onClick={() => { setEditingId(''); setSelectedTemplateId(''); setTemplateParameters({}); setTemplateChoiceOpen(true); setCreating(true); }}><Plus size={15} />新建自动化</button>
       </div>}
     </header>
+
+    {tab === 'tasks' && <p className={`mb-3 mt-[-8px] text-[11.5px] ${atAutomationLimit ? 'text-danger' : 'text-fg-3'}`} role={atAutomationLimit ? 'status' : undefined}>
+      自动化 {automations.length} / {maxAutomationCount}{atAutomationLimit ? ' · 已达上限。删除不再需要的任务后即可新建。' : ''}
+    </p>}
 
     <div role="tablist" aria-label="自动化类型" className="mb-4 flex gap-5 shadow-[inset_0_-1px_0_var(--line)]">
       {([['tasks', '定时与触发'], ['inbox', `运行收件箱${inboxUnread ? ` · ${inboxUnread}` : ''}`], ['goals', '持续目标'], ['standing', '常驻指令']] as const).map(([id, label]) => <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}

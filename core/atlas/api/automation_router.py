@@ -24,7 +24,7 @@ from atlas.automation import (
 )
 from atlas.automation.engine import AutomationEngine, compute_next_run_at
 from atlas.automation.migrate import import_legacy_schedules
-from atlas.automation.store import normalize_record
+from atlas.automation.store import AutomationLimitError, normalize_record
 from atlas.automation.webhooks import get_webhook_credentials
 
 log = structlog.get_logger()
@@ -247,7 +247,7 @@ def _not_found(automation_id: str) -> HTTPException:
 async def list_automations() -> dict[str, Any]:
     engine = _engine()
     items = [_project(record) for record in engine.store.list()]
-    return {"automations": items, "engine_started": engine.started}
+    return {"automations": items, "engine_started": engine.started, "max_automations": engine.store.max_automations()}
 
 
 @automation_router.get("/global-pause")
@@ -288,6 +288,8 @@ async def create_automation(body: AutomationCreate) -> dict[str, Any]:
     record["name"] = record["name"] or record["id"]
     try:
         saved = engine.store.put(record)
+    except AutomationLimitError as exc:
+        raise HTTPException(status_code=409, detail={"code": "automation_limit_reached", "message": str(exc), "current": exc.current, "maximum": exc.maximum, "remedy": "删除不再需要的自动化后重试。"}) from exc
     except AutomationValidationError as exc:
         raise _validation_error(exc) from exc
     await engine.sync_automation(saved)
