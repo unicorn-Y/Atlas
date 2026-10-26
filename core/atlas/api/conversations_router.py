@@ -13,6 +13,7 @@ import logging
 import re
 import subprocess
 import sqlite3
+from collections import deque
 from contextlib import closing
 import uuid
 from contextlib import suppress
@@ -70,6 +71,35 @@ class ConversationUpdateRequest(BaseModel):
     extra_roots: list[str] | None = None
     use_memories: bool | None = None
     generate_memories: bool | None = None
+
+
+@router.post("/api/desktop/handoffs")
+async def queue_cli_desktop_handoff(
+    services: Annotated[AppServices, Depends(get_app_services)], body: dict[str, Any],
+) -> dict[str, bool]:
+    """Queue an in-process CLI session handoff for a connected Atlas desktop window."""
+    conversation_id = body.get("conversation_id")
+    draft = body.get("draft", "")
+    if not isinstance(conversation_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", conversation_id):
+        raise HTTPException(status_code=422, detail="conversation_id is invalid")
+    if not isinstance(draft, str) or len(draft) > 12000:
+        raise HTTPException(status_code=422, detail="draft must be a string up to 12000 characters")
+    memory = services.memory or _server().memory
+    if memory is None or await memory.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if services.cli_handoffs is None:
+        services.cli_handoffs = deque(maxlen=32)
+    services.cli_handoffs.append({"conversation_id": conversation_id, "draft": draft})
+    return {"queued": True}
+
+
+@router.get("/api/desktop/handoffs/next")
+async def take_cli_desktop_handoff(
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    """Return and consume the oldest pending CLI-to-desktop handoff, if any."""
+    queue = services.cli_handoffs
+    return {"handoff": queue.popleft() if queue else None}
 
 
 @router.post("/api/conversations/{conversation_id}/suggest-title")

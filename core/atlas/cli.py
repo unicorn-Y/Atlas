@@ -14,8 +14,10 @@ import subprocess
 import sys
 import time
 import uuid
+from urllib.request import Request, urlopen
 from pathlib import Path
 from typing import Any, TextIO
+from urllib.parse import urlencode
 
 import click
 
@@ -74,6 +76,37 @@ def _write_cli_usage_file(path: Path, record: dict[str, Any]) -> None:
         except OSError:
             pass
         raise
+
+
+def _open_atlas_deep_link(url: str) -> None:
+    """Ask the operating system to deliver an Atlas protocol URL to its desktop app."""
+    if os.name == "nt":
+        os.startfile(url)  # type: ignore[attr-defined]
+        return
+    opener = "open" if sys.platform == "darwin" else "xdg-open"
+    subprocess.Popen(
+        [opener, url], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace",
+        start_new_session=True,
+    )
+
+
+def _queue_cli_desktop_handoff(conversation_id: str, draft: str) -> bool:
+    """Deliver a draft to an already-running local Atlas backend when available."""
+    from atlas.config import get_config
+
+    port = os.environ.get("ATLAS_PORT") or str(get_config().server_port)
+    payload = json.dumps({"conversation_id": conversation_id, "draft": draft}, ensure_ascii=False).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    token = os.environ.get("ATLAS_API_TOKEN")
+    if token:
+        headers["x-atlas-api-token"] = token
+    request = Request(f"http://127.0.0.1:{port}/api/desktop/handoffs", data=payload, headers=headers, method="POST")
+    try:
+        with urlopen(request, timeout=1.5) as response:
+            return response.status == 200 and json.loads(response.read().decode("utf-8")).get("queued") is True
+    except (OSError, ValueError, json.JSONDecodeError):
+        return False
 
 
 def _cli_usage_record(
@@ -1090,6 +1123,19 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool, toolsearch_m
 
         import uuid
         conv_id = resume_id or str(uuid.uuid4())
+        existing_conversation = await memory.get_conversation(conv_id) if resume_id else None
+        if not resume_id:
+            await memory.save_conversation_metadata(conv_id, title_hint="CLI session")
+        stored_workspace_value = (existing_conversation or {}).get("workspace")
+        workspace_detached = bool(resume_id and existing_conversation and stored_workspace_value == "")
+        stored_workspace = str(stored_workspace_value or "").strip()
+        ide_workspace = str((ide_context or {}).get("workspace") or "").strip()
+        candidate_workspace = stored_workspace or ide_workspace or str(Path.cwd())
+        workspace = Path(candidate_workspace).expanduser().resolve()
+        if not workspace.is_dir():
+            workspace = Path.cwd().resolve()
+        if not workspace_detached:
+            await memory.update_conversation(conv_id, workspace=str(workspace))
         daybreak = _daybreak_enabled()
 
         console.print(f"[bold]Atlas[/bold] v0.1.0 | Model: [cyan]{model_mgr.current_model}[/cyan]")
@@ -1098,8 +1144,9 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool, toolsearch_m
             console.print("[yellow]安全模式已启用：本次 CLI 会话不启动插件/扩展服务；输入 quit/exit 退出，重新运行 atlas chat 可恢复正常模式。[/yellow]")
         console.print(f"Conversation: [cyan]{conv_id}[/cyan] (resume with atlas chat --resume {conv_id})")
         console.print(f"Tool search mode: [cyan]{effective_tool_mode}[/cyan] (override with --toolsearch-mode)")
-        console.print("Type [bold]/quit[/bold], [bold]quit[/bold], or [bold]exit[/bold] to leave. "
-                      "[bold]/model <id>[/bold] to switch model; [bold]/daybreak [on|off|status][/bold] controls long-task mode.\n")
+        console.print("Type [bold]/exit[/bold], [bold]/quit[/bold], [bold]quit[/bold], or [bold]exit[/bold] to leave. "
+                      "[bold]/app [draft][/bold] opens this session in Atlas; [bold]/cd <path>|--none[/bold] and [bold]/pwd[/bold] manage the workspace. "
+                      "[bold]/model <id>[/bold] switches model; [bold]/daybreak [on|off|status][/bold] controls long-task mode.\n")
         if ide_context:
             file_hint = f" · 文件 {ide_context['file']}" if ide_context.get("file") else ""
             console.print(f"[dim]已发现 {ide_context.get('editor') or 'IDE'} 上下文：工作区 {ide_context.get('workspace')}{file_hint}；首次提问时附上。[/dim]\n")
@@ -1115,9 +1162,53 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool, toolsearch_m
             if not user_input:
                 continue
 
-            if user_input.lower() in ("/quit", "quit", "exit"):
+            if user_input.lower() in ("/exit", "/quit", "quit", "exit"):
                 console.print("Bye!")
                 break
+
+            if user_input == "/pwd":
+                console.print(f"工作目录：{workspace}")
+                continue
+
+            if user_input == "/cd" or user_input.startswith("/cd "):
+                destination = user_input.partition(" ")[2].strip()
+                if not destination:
+                    console.print("用法：/cd <目录绝对路径> | /cd --none（清除会话目录关联，保留当前终端目录）")
+                    continue
+                try:
+                    if destination == "--none":
+                        await memory.update_conversation(conv_id, workspace="")
+                        workspace = Path.cwd().resolve()
+                        console.print(f"已清除会话工作目录关联；当前终端目录：{workspace}")
+                    else:
+                        target = Path(destination).expanduser().resolve(strict=True)
+                        if not target.is_dir():
+                            console.print(f"不是目录：{target}")
+                            continue
+                        os.chdir(target)
+                        workspace = target
+                        await memory.update_conversation(conv_id, workspace=str(workspace))
+                        console.print(f"工作目录：{workspace}")
+                except (OSError, RuntimeError) as exc:
+                    console.print(f"切换工作目录失败：{exc}")
+                continue
+
+            if user_input == "/app" or user_input.startswith("/app "):
+                draft = user_input.partition(" ")[2].strip()
+                if len(draft) > 12000:
+                    console.print("草稿超过 12000 个字符；请缩短后重试。")
+                    continue
+                deep_link = f"atlas://conversation/{conv_id}"
+                if draft:
+                    deep_link += "?" + urlencode({"draft": draft})
+                try:
+                    if not _queue_cli_desktop_handoff(conv_id, draft):
+                        _open_atlas_deep_link(deep_link)
+                except OSError as exc:
+                    console.print(f"无法打开 Atlas 桌面端：{exc}\n请在 Atlas 地址栏打开：{deep_link}")
+                    continue
+                console.print("已请求 Atlas 打开当前会话；命令后附带的文本已作为草稿载入桌面输入框，需手动发送。")
+                continue
 
             if user_input == "/daybreak" or user_input.startswith("/daybreak "):
                 args = user_input.partition(" ")[2].strip().lower()
@@ -1165,9 +1256,7 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool, toolsearch_m
 
             console.print(f"[bold]{model_mgr.current_model}[/bold] > ", end="")
             full = ""
-            run_kwargs: dict[str, Any] = {}
-            if ide_context and ide_context.get("workspace"):
-                run_kwargs = {"workspace": str(ide_context["workspace"]), "workspace_trusted": True}
+            run_kwargs: dict[str, Any] = {"workspace": str(workspace), "workspace_trusted": True}
             from atlas.project_context import project_scoped_events
             events = orch.run(user_input, conv_id, **run_kwargs)
             async for event in project_scoped_events(None, events,

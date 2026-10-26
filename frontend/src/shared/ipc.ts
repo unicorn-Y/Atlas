@@ -31,7 +31,7 @@ export type AtlasSettingsSection =
   | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network';
 
 export type AtlasDeepLink =
-  | { id: string; type: 'conversation'; conversationId: string }
+  | { id: string; type: 'conversation'; conversationId: string; draft?: string }
   | { id: string; type: 'share-import'; token: string; shareUrl: string }
   | { id: string; type: 'settings'; section: AtlasSettingsSection };
 
@@ -135,6 +135,7 @@ export interface AtlasDesktopApi {
   showFloatingComposer?(context?: { selectedText?: string; conversationId?: string }): void;
   /** Open the selected conversation in a separate synchronized desktop window. */
   openConversationWindow?(conversationId: string): void;
+  focusApp?(): void;
   openSideChatWindow?(conversationId: string, initialQuestion?: string): void;
   openNewWindow?(): void;
   openNewSessionWindow?(): void;

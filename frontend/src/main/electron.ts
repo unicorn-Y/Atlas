@@ -808,11 +808,15 @@ function parseAtlasDeepLink(raw: string): AtlasDeepLink | null {
           || !shared.pathname.endsWith(`/api/shared/${segments[0]}`)) return null;
       return { id: randomUUID(), type: 'share-import', token: segments[0], shareUrl: source };
     }
-    if (segments.length !== 1 || url.search) return null;
+    if (segments.length !== 1) return null;
     if (url.hostname === 'conversation' && /^[A-Za-z0-9_-]{1,128}$/.test(segments[0])) {
-      return { id: randomUUID(), type: 'conversation', conversationId: segments[0] };
+      const allowedParams = [...url.searchParams.keys()];
+      if (allowedParams.some((key) => key !== 'draft') || allowedParams.length > 1) return null;
+      const draft = url.searchParams.get('draft');
+      if (draft !== null && draft.length > 12000) return null;
+      return { id: randomUUID(), type: 'conversation', conversationId: segments[0], ...(draft !== null ? { draft } : {}) };
     }
-    if (url.hostname === 'settings' && SETTINGS_SECTIONS.has(segments[0] as AtlasSettingsSection)) {
+    if (!url.search && url.hostname === 'settings' && SETTINGS_SECTIONS.has(segments[0] as AtlasSettingsSection)) {
       return { id: randomUUID(), type: 'settings', section: segments[0] as AtlasSettingsSection };
     }
   } catch {
@@ -1141,6 +1145,10 @@ ipcMain.handle('conversation:open-window', (event, conversationId?: unknown, new
   assertTrustedAppSender(event);
   if (conversationId !== undefined && typeof conversationId !== 'string') throw new Error('无效的会话 ID。');
   openConversationWindow(conversationId as string | undefined, newSession === true);
+});
+ipcMain.handle('app:focus-window', (event) => {
+  assertTrustedAppSender(event);
+  focusAtlasWindow();
 });
 ipcMain.handle('pet-overlay:toggle', (event) => {
   assertTrustedAppSender(event);

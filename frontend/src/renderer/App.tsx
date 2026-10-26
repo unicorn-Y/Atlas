@@ -811,6 +811,7 @@ export default function App() {
       return;
     }
     const openLinkedConversation = async () => {
+      setToast(route.draft !== undefined ? '正在从 CLI 接收草稿…' : '正在打开 CLI 会话…');
       const current = useAtlasStore.getState();
       await current.refreshConversations();
       const target = useAtlasStore.getState().conversations.find((item) => item.id === route.conversationId);
@@ -820,12 +821,49 @@ export default function App() {
       }
       setSheet(null);
       go('chat');
+      if (target.id !== useAtlasStore.getState().activeConversationId) skipDraftRestoreRef.current = true;
       await useAtlasStore.getState().openConversation(target);
+      if (route.draft !== undefined) {
+        writeDraft(target.id, route.draft);
+        setInput(route.draft);
+        setToast(route.draft ? 'CLI 草稿已载入输入框；检查后按 Enter 发送。' : '已从 CLI 打开当前会话。');
+      }
     };
     void openLinkedConversation().catch((error: unknown) => {
       setToast(error instanceof Error ? error.message : '无法打开深链接中的对话。');
     });
   }), [go]);
+  useEffect(() => {
+    if (!window.atlasDesktop || !store.connected) return;
+    let active = true;
+    let busy = false;
+    const poll = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const result = await api<{ handoff: { conversation_id: string; draft: string } | null }>(
+          store.apiBaseUrl, '/api/desktop/handoffs/next',
+        );
+        const handoff = result.handoff;
+        if (!active || !handoff) return;
+        const current = useAtlasStore.getState();
+        await current.refreshConversations();
+        const target = useAtlasStore.getState().conversations.find((item) => item.id === handoff.conversation_id);
+        if (!target) { setToast('CLI 交接会话已删除，无法打开。'); return; }
+        setSheet(null); go('chat');
+        if (target.id !== useAtlasStore.getState().activeConversationId) skipDraftRestoreRef.current = true;
+        await useAtlasStore.getState().openConversation(target);
+        writeDraft(target.id, handoff.draft);
+        setInput(handoff.draft);
+        window.atlasDesktop?.focusApp?.();
+        setToast(handoff.draft ? 'CLI 草稿已载入输入框；检查后按 Enter 发送。' : '已从 CLI 打开当前会话。');
+      } catch { /* the local queue is idle when no CLI handoff is pending */ }
+      finally { busy = false; }
+    };
+    const timer = window.setInterval(() => void poll(), 700);
+    void poll();
+    return () => { active = false; window.clearInterval(timer); };
+  }, [go, store.apiBaseUrl, store.connected]);
   // H8 §10.3/§10.4: the backend boots in parallel with the window; startup progress
   // drives the「启动中」surfaces and re-reads real data once the backend is ready.
   useEffect(() => window.atlasDesktop?.onBackendStartupProgress((progress) => {
@@ -1627,10 +1665,10 @@ export default function App() {
   }, [store.conversations]);
   useEffect(() => { setPref('tabs', JSON.stringify(tabs)); }, [tabs]);
   useEffect(() => { setPref('closed-tabs', JSON.stringify(closedTabs.slice(-12))); }, [closedTabs]);
-  const closeTab = (id: string) => {
+  const closeTab = (id: string, alreadyConfirmed = false) => {
     const hasDraft = (id === store.activeConversationId ? input : readDraft(id)).trim().length > 0;
     const isRunning = store.runs.some((run) => run.conversationId === id && !TERMINAL.includes(run.status));
-    if ((hasDraft || isRunning) && !window.confirm(`${hasDraft ? '此标签有未发送草稿（会保存在本机）。' : ''}${isRunning ? '此会话任务仍在运行，关闭标签不会停止任务。' : ''}\n仍要关闭当前标签吗？可用 Ctrl+Shift+T 恢复标签。`)) return;
+    if ((hasDraft || isRunning) && !alreadyConfirmed && !window.confirm(`${hasDraft ? '此标签有未发送草稿（会保存在本机）。' : ''}${isRunning ? '此会话任务仍在运行，关闭标签不会停止任务。' : ''}\n仍要关闭当前标签吗？可用 Ctrl+Shift+T 恢复标签。`)) return;
     if (id === store.activeConversationId && hasDraft) writeDraft(id, input);
     const index = tabs.indexOf(id);
     const next = tabs.filter((item) => item !== id);
@@ -2176,6 +2214,16 @@ export default function App() {
       }).catch((error) => setToast(`PR 关联失败：${error instanceof Error ? error.message : String(error)}`));
     } },
     { id: 'folder', label: '/folder', hint: '选择这个对话的工作目录', run: () => void chooseWorkspace() },
+    { id: 'exit', label: '/exit', hint: '结束当前聊天标签并返回首页；草稿保存在本机，运行任务会在确认后继续后台运行', run: () => {
+      if (!activeConversation) {
+        if (window.confirm('退出当前聊天视图并返回首页？对话记录仍会保留。')) { go('home'); setToast('已返回首页；对话记录仍保留。'); }
+        return;
+      }
+      const hasDraft = Boolean(input.trim());
+      const isRunning = store.runs.some((run) => run.conversationId === activeConversation.id && !TERMINAL.includes(run.status));
+      const details = `${hasDraft ? '未发送草稿会保存在本机。' : ''}${isRunning ? '未完成运行会继续在后台执行。' : ''}`;
+      if (window.confirm(`结束当前会话并返回首页？对话记录仍会保留。${details ? `\n${details}` : ''}`)) closeTab(activeConversation.id, true);
+    } },
     { id: 'pwd', label: '/pwd', hint: '显示当前对话的工作目录', run: () => {
       const path = activeConversation
         ? (typeof activeConversation.workspace === 'string' ? activeConversation.workspace : '')
@@ -2456,7 +2504,7 @@ export default function App() {
   }
   slashCommands.forEach((command) => {
     command.group ??= command.id.startsWith('skill-') ? '技能'
-      : ['new', 'clear', 'resume', 'fork', 'undo', 'redo', 'rename', 'export', 'handoff', 'preset', 'import-chatgpt', 'bg'].includes(command.id) ? '会话'
+      : ['new', 'clear', 'resume', 'fork', 'undo', 'redo', 'rename', 'exit', 'export', 'handoff', 'preset', 'import-chatgpt', 'bg'].includes(command.id) ? '会话'
         : ['folder', 'pwd', 'cd', 'init', 'ide', 'worktree', 'open'].includes(command.id) ? '工作区'
           : ['model', 'reasoning', 'usage', 'cost', 'advisor'].includes(command.id) ? '模型'
             : ['doctor', 'config', 'release-notes', 'about', 'help', 'version', 'insights', 'session'].includes(command.id) ? '诊断'

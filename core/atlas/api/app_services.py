@@ -65,3 +65,4 @@ class AppServices:
     # H8 S1/S2: per-component startup state (starting/ready/failed) reported by
     # /api/health and used by S3's bounded wait_ready gates on request paths.
     startup: Any = None
+    cli_handoffs: Any = None

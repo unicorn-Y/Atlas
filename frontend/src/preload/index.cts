@@ -84,6 +84,7 @@ const desktopApi: AtlasDesktopApi = {
     ipcRenderer.invoke('platform:open-workspace-in-editor', editor, workspacePath),
   showFloatingComposer: (context) => ipcRenderer.invoke('floating-composer:show', context),
   openConversationWindow: (conversationId: string) => ipcRenderer.invoke('conversation:open-window', conversationId),
+  focusApp: () => ipcRenderer.invoke('app:focus-window'),
   openSideChatWindow: (conversationId: string, initialQuestion?: string) => ipcRenderer.invoke('side-chat:open-window', conversationId, initialQuestion),
   openNewWindow: () => ipcRenderer.invoke('conversation:open-window'),
   openNewSessionWindow: () => ipcRenderer.invoke('conversation:open-window', undefined, true),
