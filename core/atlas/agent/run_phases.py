@@ -50,6 +50,14 @@ log = structlog.get_logger()
 _EVENT_STREAM_DONE = object()
 
 _MEMORY_CITATION_MARKER = re.compile(r"\s*<!--\s*atlas-memory-citations:\s*([^<>\r\n]{1,2000})\s*-->\s*$")
+_MEMORY_REF_MARKER = re.compile(r"\[ref:([^\]\s]+)\]")
+_MEMORY_MATCH_TOKEN = re.compile(r"[\u4e00-\u9fff]{2,}|[a-z0-9][a-z0-9_-]{2,}", re.IGNORECASE)
+_MEMORY_MATCH_STOPWORDS = frozenset({
+    "a", "about", "and", "are", "as", "at", "be", "been", "by", "fact",
+    "for", "from", "have", "i", "in", "is", "it", "memory", "my", "of",
+    "on", "or", "personal", "preference", "remember", "source", "that", "the",
+    "this", "to", "was", "were", "with", "you", "your",
+})
 
 
 def _extract_memory_citations(text: str, allowed_refs: list[str]) -> tuple[str, list[str]]:
@@ -63,6 +71,55 @@ def _extract_memory_citations(text: str, allowed_refs: list[str]) -> tuple[str, 
         if ref.strip() in allowed
     ))
     return _MEMORY_CITATION_MARKER.sub("", text).rstrip(), cited
+
+
+def _infer_memory_citations(text: str, recall: str, allowed_refs: list[str]) -> list[str]:
+    """Match answer phrases to the exact recalled lines when the model omits refs.
+
+    This is deliberately lexical and conservative: a source is adopted only when
+    the answer contains both tokens from a two-token phrase (or a copied CJK
+    phrase) on the recalled line carrying that source ref.
+    """
+    allowed = set(allowed_refs)
+    answer_tokens = [token.casefold() for token in _MEMORY_MATCH_TOKEN.findall(text)]
+    if not answer_tokens:
+        return []
+    answer_token_set = set(answer_tokens)
+    answer_pairs = set(zip(answer_tokens, answer_tokens[1:]))
+    answer_phrases = text.casefold()
+    matched: list[str] = []
+    for line in recall.splitlines():
+        refs = [ref for ref in _MEMORY_REF_MARKER.findall(line) if ref in allowed]
+        if not refs:
+            continue
+        source = _MEMORY_REF_MARKER.sub("", line)
+        source_tokens = [
+            token.casefold() for token in _MEMORY_MATCH_TOKEN.findall(source)
+            if token.casefold() not in _MEMORY_MATCH_STOPWORDS
+        ]
+        if not source_tokens:
+            continue
+        for left, right in zip(source_tokens, source_tokens[1:]):
+            # Require both adjacent source tokens. Models sometimes restate
+            # the same fact in a different order (e.g. "lantern, cobalt").
+            phrase = f"{left} {right}"
+            if (phrase in answer_phrases or (left, right) in answer_pairs
+                    or (left in answer_token_set and right in answer_token_set)):
+                matched.extend(refs)
+                break
+        else:
+            # CJK recall lines are commonly a single uninterrupted token; a
+            # copied four-character phrase is sufficiently specific on its own.
+            source_cjk = [token for token in source_tokens if re.fullmatch(r"[\u4e00-\u9fff]+", token)]
+            if any(
+                source[i:i + size] in answer
+                for source in source_cjk
+                for size in range(min(8, len(source)), 3, -1)
+                for i in range(len(source) - size + 1)
+                for answer in answer_tokens
+            ):
+                matched.extend(refs)
+    return list(dict.fromkeys(matched))
 _CANCEL_REQUESTED = object()
 
 _TASK_COMPLETION_GUIDANCE = (
@@ -327,6 +384,8 @@ async def execute_run(
         except TimeoutError:
             if phase is not _phase_context:
                 raise
+            if os.environ.get("ATLAS_DEBUG_MEMORY_CITATIONS") == "1":
+                log.info("agent.memory_citation_context_timed_out", timeout_seconds=context_budget)
             state.context = {"use_memories": False, "generate_memories": True,
                              "context_timeout": True}
             yield {"type": "run.recovery.notice", "data": {
@@ -568,7 +627,15 @@ async def _merge_library_recall(context: Any, message: str) -> Any:
         library = get_library()
         if library is None:
             return context
+        if os.environ.get("ATLAS_DEBUG_MEMORY_CITATIONS") == "1":
+            log.info("agent.memory_citation_recall_started", memory_root=str(library.store.root))
         recall = await asyncio.to_thread(library.recall, message)
+        if os.environ.get("ATLAS_DEBUG_MEMORY_CITATIONS") == "1":
+            log.info(
+                "agent.memory_citation_recall_finished",
+                ref_count=len(recall.get("refs") or []),
+                relevant_loaded=bool(recall.get("relevant")),
+            )
         bundle_memory = await asyncio.to_thread(_loaded_bundle_memory, library)
     except Exception as exc:
         log.warning("memory.library.recall_failed", error=str(exc), error_type=type(exc).__name__)
@@ -725,6 +792,9 @@ def _note_tool_step(state: _RunState, event: dict[str, Any]) -> None:
 async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
     """Load the conversation history and this turn's memory library recall."""
     request, runtime = state.request, state.runtime
+    debug_citations = os.environ.get("ATLAS_DEBUG_MEMORY_CITATIONS") == "1"
+    if debug_citations:
+        log.info("agent.memory_citation_context_started", worker=request.worker)
     try:
         if request.worker:
             state.history = []
@@ -753,6 +823,12 @@ async def _phase_context(agent, state: _RunState) -> AsyncIterator[dict[str, Any
                 project = await projects.find_by_conversation(request.conversation_id)
                 project_only = bool(project and project.memory_scope == "project-only")
             state.context["project_memory_scope"] = "project-only" if project_only else "global"
+            if debug_citations:
+                log.info(
+                    "agent.memory_citation_context_state",
+                    memory_enabled=bool(state.context.get("use_memories")),
+                    project_only=project_only,
+                )
             if project is not None:
                 state.context["project_id"] = project.project_id
                 if state.context["use_memories"]:
@@ -848,6 +924,7 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
             "记忆来源引用规则：记忆块内列出的来源 ref 是可引用的原始出处。只有当本次回答实际采用某条记忆的信息时，"
             "才在完整回答最后追加一个 HTML 注释，格式严格为 <!-- atlas-memory-citations: ref1,ref2 -->。"
             "只列真正采用且确实出现在本次记忆上下文中的 ref；被检索到但未用于回答的记忆不要引用。"
+            "例如，记忆行‘我喜欢燕麦奶 [ref:abc]’，如果回答采用了这个偏好，末尾写 <!-- atlas-memory-citations: abc -->。"
             "没有采用任何记忆时不要输出该注释。不要在正文中展示这个标记。\n可用 ref："
             + ",".join(memory_refs)
         )))
@@ -1299,6 +1376,28 @@ async def _phase_finalize(agent, state: _RunState) -> AsyncIterator[dict[str, An
         list(dict.fromkeys(str(ref) for ref in (state.context.get("library_refs") or []) if ref))
         if isinstance(state.context, dict) else [],
     )
+    if isinstance(state.context, dict) and state.context.get("turn_recall"):
+        allowed_refs = list(dict.fromkeys(
+            str(ref) for ref in (state.context.get("library_refs") or []) if ref
+        ))
+        inferred_refs = _infer_memory_citations(
+            full_response, str(state.context.get("turn_recall") or ""), allowed_refs,
+        )
+        cited_refs = list(dict.fromkeys([*cited_refs, *inferred_refs]))
+        if os.environ.get("ATLAS_DEBUG_MEMORY_CITATIONS") == "1":
+            log.info(
+                "agent.memory_citation_fallback",
+                recall_loaded=True,
+                allowed_ref_count=len(allowed_refs),
+                inferred_ref_count=len(inferred_refs),
+            )
+    elif isinstance(state.context, dict) and os.environ.get("ATLAS_DEBUG_MEMORY_CITATIONS") == "1":
+        log.info(
+            "agent.memory_citation_fallback",
+            recall_loaded=False,
+            allowed_ref_count=len(state.context.get("library_refs") or []),
+            inferred_ref_count=0,
+        )
 
     if (not request.worker and not runtime.verify_nudge_sent
             and runtime.changed_paths and not runtime.verification_passed

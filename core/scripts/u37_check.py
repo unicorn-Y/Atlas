@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,15 +16,25 @@ def check(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
-def scenario(name: str, command: list[str], *, cwd: Path = ROOT) -> None:
+def scenario(
+    name: str, command: list[str], *, cwd: Path = ROOT,
+    env: dict[str, str] | None = None, basetemp: Path | None = None,
+) -> None:
     print(f"U37 scenario: {name}", flush=True)
-    env = dict(os.environ)
-    env["ATLAS_ROOT"] = r"C:\engine-reg\_atlasroot"
+    child_env = dict(os.environ if env is None else env)
     result = subprocess.run(
-        command, cwd=cwd, env=env, check=False,
+        command, cwd=cwd, env=child_env, check=False,
+        capture_output=basetemp is not None,
         encoding="utf-8", errors="replace",
     )
-    check(result.returncode == 0, f"U37 scenario failed ({result.returncode}): {name}")
+    output = "\n".join(part for part in (result.stdout, result.stderr) if part)
+    if output:
+        print(output, end="" if output.endswith("\n") else "\n", flush=True)
+    if result.returncode:
+        detail = f"U37 scenario failed ({result.returncode}): {name}"
+        if output:
+            detail += f"\npytest diagnostics:\n{output[-12000:]}"
+        raise AssertionError(detail)
     print(f"U37 scenario PASS: {name}", flush=True)
 
 
@@ -31,7 +42,33 @@ def pytest_scenario(name: str, *nodeids: str) -> None:
     import sys
 
     normalized = [nodeid.removeprefix("core/") for nodeid in nodeids]
-    scenario(name, [sys.executable, "-m", "pytest", *normalized, "-q"], cwd=ROOT / "core")
+    # Plugin/MCP coverage must not inspect or mutate the user's Atlas home or
+    # inherit state from earlier acceptance suites in the shared _atlasroot.
+    with tempfile.TemporaryDirectory(prefix="atlas-u37-") as temp:
+        isolated = Path(temp)
+        isolated_root = isolated / "atlas-root"
+        isolated_root.mkdir()
+        isolated_data = isolated / "atlas-data"
+        isolated_data.mkdir()
+        home = isolated / "home"
+        home.mkdir()
+        scratch = isolated / "pytest-tmp"
+        env = dict(os.environ)
+        env.update({
+            "ATLAS_ROOT": str(isolated_root),
+            "ATLAS_DATA_DIR": str(isolated_data),
+            "HOME": str(home),
+            "USERPROFILE": str(home),
+            "APPDATA": str(home / "AppData" / "Roaming"),
+            "LOCALAPPDATA": str(home / "AppData" / "Local"),
+            "TMP": str(isolated),
+            "TEMP": str(isolated),
+        })
+        scenario(
+            name,
+            [sys.executable, "-m", "pytest", "--basetemp", str(scratch), *normalized, "-q"],
+            cwd=ROOT / "core", env=env, basetemp=scratch,
+        )
 
 
 def main() -> int:

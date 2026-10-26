@@ -207,18 +207,15 @@ def check_item_5() -> None:
     # Verify a real model turn against an isolated memory entry. Disable only
     # the unrelated background vector worker in this fixture so its SQLite
     # handle cannot race the temporary test's index lifecycle.
-    from atlas.memory.library import get_library
+    from atlas.memory.library import MemoryLibrary
     from atlas.memory.library.store import Entry
     from atlas.engine.session_sync import append_session_message
 
-    library = get_library()
-    if library is None:
-        raise AssertionError("memory library is disabled in the regression configuration")
+    memory_temp = tempfile.TemporaryDirectory(prefix="atlas-u27-memory-")
+    library = MemoryLibrary(Path(memory_temp.name))
     library.index._schedule_embeddings = lambda: None
     library.ready()
     memory_rel = "人/U27-fixture.md"
-    memory_path = library.store.root / memory_rel
-    original_page = memory_path.read_bytes() if memory_path.exists() else None
     marker = "U27 cobalt lantern personal fact"
     conversation_id = "u27-source-" + os.urandom(5).hex()
     at = datetime.now().astimezone().isoformat(timespec="seconds")
@@ -245,13 +242,22 @@ def check_item_5() -> None:
         env = os.environ.copy()
         env["ATLAS_ROOT"] = str(ROOT)
         env["ATLAS_DATA_DIR"] = str(data_root)
-        run = subprocess.run(
-            [sys.executable, "-m", "atlas.cli", "run", "--print", prompt,
-             "--model", "deepseek-v4.1-flash", "--permission-mode", "read_only",
-             "--output-format", "json", "--timeout", "240"],
-            cwd=CORE, env=env, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=270,
-        )
+        env["ATLAS_TEST_MEMORY_ROOT"] = str(library.store.root)
+        # The isolated child CLI opens its own memory index; allow its bounded
+        # preflight enough time to load the fixture instead of testing fallback
+        # behavior on a turn that deliberately skipped memory after timeout.
+        env["ATLAS_PREFLIGHT_CONTEXT_TIMEOUT_SECONDS"] = "10"
+        env["ATLAS_TEST_DISABLE_MEMORY_EMBEDDINGS"] = "1"
+        env["ATLAS_DEBUG_MEMORY_CITATIONS"] = "1"
+        with tempfile.TemporaryDirectory(prefix="atlas-u27-workspace-") as workspace:
+            run = subprocess.run(
+                [sys.executable, "-m", "atlas.cli", "run", "--print", prompt,
+                 "--workspace", workspace,
+                 "--model", "deepseek-v4.1-flash", "--permission-mode", "read_only",
+                 "--output-format", "json", "--timeout", "240"],
+                cwd=CORE, env=env, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=270,
+            )
         if run.returncode:
             diagnostics = "\n".join(
                 part.strip()[-6000:] for part in (run.stdout, run.stderr) if part.strip()
@@ -260,6 +266,18 @@ def check_item_5() -> None:
                 f"real citation run failed with exit {run.returncode}; child diagnostics:\n{diagnostics}"
             )
         conversation = str(json.loads(run.stdout).get("conversation_id") or "")
+        citation_logs = [
+            json.loads(line) for line in run.stderr.splitlines()
+            if line.startswith("{") and '"event": "agent.memory_citation_fallback"' in line
+        ]
+        if not any(row.get("recall_loaded") and row.get("allowed_ref_count", 0) > 0 for row in citation_logs):
+            citation_trace = "\n".join(
+                line for line in run.stderr.splitlines() if "agent.memory_citation_" in line
+            )
+            raise AssertionError(
+                "isolated real-model workspace did not load library refs; "
+                f"citation_diagnostics={citation_logs!r}; trace={citation_trace or '(empty)'}"
+            )
         assistant_messages = [row for row in read_session_messages(
             data_root / "engine", conversation,
         ) if row.get("role") == "assistant"]
@@ -267,19 +285,29 @@ def check_item_5() -> None:
                      if assistant_messages else [])
         if citation_ref not in citations:
             final_text = str(assistant_messages[-1].get("content", ""))[-1200:] if assistant_messages else "(no assistant message)"
+            citation_diagnostics = "\n".join(
+                line for line in run.stderr.splitlines()
+                if "agent.memory_citation_fallback" in line
+            )
             raise AssertionError(
                 "real answer did not persist the adopted memory source ref; "
-                f"persisted_refs={citations!r}; final_text_tail={final_text!r}"
+                f"persisted_refs={citations!r}; final_text_tail={final_text!r}; "
+                f"fallback_diagnostics={citation_diagnostics or '(not emitted)'}"
             )
+        fallback_rows = [row for row in citation_logs if row.get("event") == "agent.memory_citation_fallback"]
+        latest_fallback = fallback_rows[-1] if fallback_rows else {}
+        print(
+            "Real model citation persisted: memory refs loaded="
+            f"{latest_fallback.get('allowed_ref_count', 0)}, inferred refs="
+            f"{latest_fallback.get('inferred_ref_count', 0)}.",
+            flush=True,
+        )
     finally:
-        if original_page is not None:
-            memory_path.write_bytes(original_page)
-        elif memory_path.exists():
-            memory_path.unlink()
         library.index.sync()
         if library.index._db is not None:
             library.index._db.close()
             library.index._db = None
+        memory_temp.cleanup()
 
 
 def check_item_6() -> None:

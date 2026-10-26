@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import tempfile
 from datetime import datetime
@@ -699,7 +700,9 @@ def get_library() -> MemoryLibrary | None:
     if not enabled:
         return None
     if _SINGLETON is None:
-        root = str(config.get("memory.library.root", "") or "").strip()
+        root = os.environ.get("ATLAS_TEST_MEMORY_ROOT", "").strip()
+        if not root:
+            root = str(config.get("memory.library.root", "") or "").strip()
         _SINGLETON = MemoryLibrary(Path(root) if root else DATA_ROOT / "data" / "memory", config)
     return _SINGLETON
 

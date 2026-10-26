@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import math
+import os
 import re
 import sqlite3
 import struct
@@ -327,6 +328,12 @@ class MemoryIndex:
         return results[:limit]
 
     def _schedule_embeddings(self) -> None:
+        # The citation acceptance fixture validates lexical recall and runs in
+        # a disposable CLI process. Avoid starting an unrelated vector worker
+        # there; production behavior stays enabled unless explicitly opted out.
+        if os.environ.get("ATLAS_TEST_DISABLE_MEMORY_EMBEDDINGS") == "1":
+            self._embedding_state = "disabled_for_test"
+            return
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -477,8 +484,12 @@ class MemoryIndex:
         keyword = self._keyword_search(query, limit=400, kinds=requested,
                                        include_history=include_history, now=now,
                                        exclude_paths=exclude_paths) if requested else []
-        vector = self._vector_search(query, kinds=requested, include_history=include_history,
-                                     now=now, exclude_paths=exclude_paths) if requested else []
+        test_embeddings_disabled = os.environ.get("ATLAS_TEST_DISABLE_MEMORY_EMBEDDINGS") == "1"
+        vector = (
+            self._vector_search(query, kinds=requested, include_history=include_history,
+                                now=now, exclude_paths=exclude_paths)
+            if requested and not test_embeddings_disabled else []
+        )
         include_raw = "raw" in kinds
         results = merge_scores(keyword, vector, now=now, limit=400 if include_raw else limit)
         if include_raw:
