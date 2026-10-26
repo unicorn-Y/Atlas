@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
@@ -245,7 +245,7 @@ def _insights_cost_text(totals: dict[str, Any]) -> str:
 @router.get("/api/u4/insights")
 async def get_insights(
     services: Annotated[AppServices, Depends(get_app_services)], days: int = 7,
-    model: str | None = Query(default=None, max_length=256),
+    model: str | None = None,
 ) -> dict[str, Any]:
     if days not in {7, 30}:
         raise HTTPException(status_code=422, detail="days must be 7 or 30")
