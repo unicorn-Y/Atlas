@@ -11,8 +11,8 @@ interface Turn { question: string; answer: string; state: 'running' | 'done' | '
  * Ask something about the conversation without steering it: the backend runs these read-only and
  * never saves them, so the main task and its history stay untouched.
  */
-export default function SideChat({ open, onClose, conversationId, model, initialQuestion }: {
-  open: boolean; onClose: () => void; conversationId: string; model: string; initialQuestion?: string;
+export default function SideChat({ open, onClose, conversationId, model, initialQuestion, blank = false, sourceContext = '' }: {
+  open: boolean; onClose: () => void; conversationId?: string; model: string; initialQuestion?: string; blank?: boolean; sourceContext?: string;
 }) {
   const [question, setQuestion] = useState('');
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -30,8 +30,11 @@ export default function SideChat({ open, onClose, conversationId, model, initial
     const update = (patch: Partial<Turn> | ((turn: Turn) => Partial<Turn>)) => setTurns((current) => current.map((turn, index) =>
       index === current.length - 1 ? { ...turn, ...(typeof patch === 'function' ? patch(turn) : patch) } : turn));
     const priorContext = turns.filter((turn) => turn.state === 'done' && turn.answer).map((turn) => `用户：${turn.question}\n旁聊助手：${turn.answer}`).join('\n\n');
-    const runContent = priorContext ? `临时旁聊此前内容（仅用于本次回答）：\n${priorContext}\n\n当前问题：${content}` : content;
-    void backend.startRun({ type: 'run.start', run_id: runId, content: runContent, conversation_id: conversationId, model, ephemeral: true }, (envelope) => {
+    const runContent = priorContext ? `临时聊天此前内容（仅用于本次回答）：\n${priorContext}\n\n当前问题：${content}` : content;
+    const conversationSnapshot = blank ? '' : sourceContext;
+    void backend.startRun({ type: 'run.start', run_id: runId, content: runContent,
+      conversation_id: conversationId || crypto.randomUUID(), model, ephemeral: true, ephemeral_blank: true,
+      ...(conversationSnapshot ? { ephemeral_context: conversationSnapshot } : {}) }, (envelope) => {
       if (envelope.event === 'message.delta') update((turn) => ({ answer: turn.answer + String(envelope.data?.content ?? '') }));
       else if (envelope.event === 'message.completed' && envelope.data?.content) update({ answer: String(envelope.data.content) });
       else if (envelope.event === 'run.completed') update({ state: 'done' });
@@ -65,7 +68,7 @@ export default function SideChat({ open, onClose, conversationId, model, initial
         setQuestion(''); return;
       }
       if (command === '/status') {
-        setTurns((current) => [...current, { question: trimmed, answer: `模型：${model}\n会话：${conversationId}\n模式：临时旁聊（不写入主对话）`, state: 'done' }]);
+        setTurns((current) => [...current, { question: trimmed, answer: `模型：${model}\n会话：${conversationId || '空白临时会话'}\n模式：临时聊天（不写入主对话）`, state: 'done' }]);
         setQuestion(''); return;
       }
       ask(`请只读检查当前工作区的 Git diff${argument ? `（范围：${argument}）` : ''}，归纳改动与需要注意的问题；不要修改文件或调用有副作用的操作。`);
@@ -75,11 +78,11 @@ export default function SideChat({ open, onClose, conversationId, model, initial
   };
   const running = turns.at(-1)?.state === 'running';
 
-  return <Dialog open={open} onOpenChange={(next) => { if (!next) { if (turns.length && !window.confirm('关闭临时旁聊？未保存的旁聊内容将清除。')) return; stop(); setTurns([]); onClose(); } }} label="临时旁聊" className="flex h-[min(620px,calc(100vh-48px))] w-[min(680px,calc(100vw-32px))] flex-col">
+  return <Dialog open={open} onOpenChange={(next) => { if (!next) { if (!window.confirm('关闭临时聊天？未保存的内容将清除。')) return; stop(); setTurns([]); onClose(); } }} label={blank ? '空白临时聊天' : '临时旁聊'} className="flex h-[min(620px,calc(100vh-48px))] w-[min(680px,calc(100vw-32px))] flex-col">
     <header className="flex items-center gap-2 px-5 pt-4 pb-3 shadow-[inset_0_-1px_0_var(--line)]">
       <MessagesSquare size={17} className="text-brand" />
-      <b className="text-[15px] font-semibold text-heading">临时旁聊</b>
-      <span className="text-[12.5px] text-fg-3">内容仅保留在此窗口；关闭后清除，不进入历史、搜索或同步</span>
+      <b className="text-[15px] font-semibold text-heading">{blank ? '空白临时聊天' : '临时旁聊'}</b>
+      <span className="text-[12.5px] text-fg-3">{blank ? '不使用任何会话作为来源；内容仅保留在内存中' : '内容仅保留在此窗口；关闭后清除，不进入历史、搜索或同步'}</span>
     </header>
     <div className="min-h-0 flex-1 overflow-auto px-5">
       {turns.map((turn, index) => <div key={index}>

@@ -227,6 +227,10 @@ def _port_accepts(port: int) -> bool:
 
 
 def main() -> None:
+    if "--safe-mode" in sys.argv[1:]:
+        os.environ["ATLAS_SAFE_MODE"] = "1"
+        sys.stderr.write("atlas.desktop.safe_mode enabled: minimal startup requested by Electron\n")
+        sys.stderr.flush()
     _guard_loopback_socketpair()
     if sys.argv[1:] == ["--atlas-mcp-bridge"]:
         import asyncio

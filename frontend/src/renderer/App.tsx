@@ -118,6 +118,7 @@ import { api, relativeTime } from './services/api';
 import { extractMemoryMarkers } from './services/memoryMarkers';
 import { filterSafeSuggestions } from './services/suggestionSafety';
 import { buildTimeline } from './components/timeline';
+import { shouldSuggestSkillExtraction } from './services/skillExtraction';
 const ComputerEdgeBar = lazy(() => import('./components/x2').then((module) => ({ default: module.ComputerEdgeBar })));
 import UpdateBanner from './components/UpdateBanner';
 import DiagnosticsFloatingOverlay from './components/DiagnosticsFloatingOverlay';
@@ -387,7 +388,7 @@ export default function App() {
   const [recipesOpen, setRecipesOpen] = useState(false);
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
   const [ideManagerOpen, setIdeManagerOpen] = useState(false);
-  const [side, setSide] = useState<{ open: boolean; question?: string }>({ open: false });
+  const [side, setSide] = useState<{ open: boolean; question?: string; blank?: boolean }>({ open: false });
   const sideChatParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const sideChatWindow = sideChatParams.get('sideChat') === '1';
   const sideChatQuestion = sideChatParams.get('question') || undefined;
@@ -406,6 +407,7 @@ export default function App() {
   const [messageTimestampsEnabled, setMessageTimestampsEnabled] = useState(() => pref('message-timestamps') === 'true');
   const [startupWarning, setStartupWarning] = useState('');
   const [diagnosticUnread, setDiagnosticUnread] = useState(0);
+  const [safeModeActive, setSafeModeActive] = useState(false);
   const [automationInboxUnread, setAutomationInboxUnread] = useState(0);
   const [peerInbox, setPeerInbox] = useState<Array<{ id: string; sender_conversation_id: string; sender_title: string; content: string; created_at: string }>>([]);
   const [besideId, setBesideId] = useState('');
@@ -808,6 +810,11 @@ export default function App() {
     setSheet('models');
   }, [store.apiKeyConfigured, store.connected, store.conversationsLoading]);
   useEffect(() => window.atlasDesktop?.onMaximizeChange(setMaximized), []);
+  useEffect(() => {
+    const update = () => void window.atlasDesktop?.getSafeMode?.().then(setSafeModeActive).catch(() => undefined);
+    update();
+    return window.atlasDesktop?.onBackendStartupProgress((progress) => { if (progress.phase === 'ready') update(); });
+  }, []);
 
   useEffect(() => {
     const activeTheme = applyStoredTheme(theme);
@@ -1605,6 +1612,7 @@ export default function App() {
       switch (action) {
         case 'palette': setPaletteOpen((value) => !value); break;
         case 'newTask': newTask(); break;
+        case 'temporaryChat': setSide({ open: true, blank: true }); break;
         case 'settings': setSheet((value) => value ? null : 'models'); break;
         case 'nextTab': cycleTab(1); break;
         case 'prevTab': cycleTab(-1); break;
@@ -1687,6 +1695,7 @@ export default function App() {
 
   const paletteItems: PaletteItem[] = [
     { id: 'new', group: '操作', label: '新任务', hint: 'Ctrl N', icon: <Plus />, run: newTask },
+    { id: 'temporary-chat', group: '操作', label: '空白临时聊天', hint: 'Ctrl Shift Y', icon: <MessagesSquare />, run: () => setSide({ open: true, blank: true }) },
     { id: 'new-window', group: '操作', label: '新建窗口', hint: 'Ctrl Shift N', icon: <Plus />, run: () => window.atlasDesktop?.openNewWindow?.() },
     { id: 'new-session-window', group: '操作', label: '新会话并在新窗口打开', hint: 'Ctrl Alt N', icon: <Plus />, run: () => window.atlasDesktop?.openNewSessionWindow?.() },
     { id: 'voice', group: '操作', label: '开始语音通话', icon: <AudioLines />, run: startVoice },
@@ -2004,7 +2013,8 @@ export default function App() {
       setFocusMode((value) => { const next = !value; setPref('focus-mode', String(next)); return next; });
     } },
     { id: 'dwf', label: '/dwf', hint: '查看工作流运行、节点输出、错误、产物并管理已保存定义', run: () => setWorkflowManagerOpen(true) },
-    ...(activeConversation ? [{ id: 'btw', label: '/btw', hint: '打开临时旁聊：不打断正在做的事，不写入对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) }, { id: 'temp', label: '/temp', hint: '开启不落历史的临时聊天', run: () => setSide({ open: true }) }] : []),
+    { id: 'temp', label: '/temp', hint: '开启空白、不落历史的临时聊天', run: () => setSide({ open: true, blank: true }) },
+    ...(activeConversation ? [{ id: 'btw', label: '/btw', hint: '围绕当前对话打开临时旁聊', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined, blank: false }) }] : []),
     { id: 'open', label: '/open', hint: '在浏览器面板打开网址，如 /open localhost:5173', takesArgument: true, run: (target: string) => { if (target.trim()) setBrowserUrl(/^\w+:/.test(target.trim()) ? target.trim() : `http://${target.trim()}`); showInspectorTab('browser'); } },
     ...(activeConversation ? [{ id: 'compact', label: '/compact', hint: '压缩上下文，可附说明让摘要优先保留相关事项', takesArgument: true, run: (note: string) => void store.compactConversation(activeConversation.id, note).then((text) => { if (text) setToast(text); }) }] : []),
     { id: 'voice', label: '/voice', hint: '切换语音通话；再次执行可结束', run: startVoice },
@@ -2564,7 +2574,9 @@ export default function App() {
     } finally { setSkillExtracting(false); }
   };
   const extractSkillBanner = activeRun?.conversationId === store.activeConversationId
-    && activeRun.status === 'completed' && !focusedLayout && <div className="mb-2 flex items-center gap-2 rounded-lg border border-brand/20 bg-brand-soft px-3 py-1.5 text-[11.5px] text-fg-2">
+    && activeRun.status === 'completed' && !focusedLayout
+    && shouldSuggestSkillExtraction(activeEvents, (store.conversationMessages[store.activeConversationId] ?? []).filter((message) => message.role === 'user').map((message) => message.content))
+    && <div className="mb-2 flex items-center gap-2 rounded-lg border border-brand/20 bg-brand-soft px-3 py-1.5 text-[11.5px] text-fg-2">
       <Sparkles size={13} className="text-brand" /><span className="flex-1">这次成功的做法可以留成技能，先进入候选审核。</span>
       <button type="button" className="rounded-md px-2 py-1 font-medium text-brand hover:bg-hover" disabled={skillExtracting}
         aria-label="把当前对话提炼为技能" onClick={() => void extractConversationSkill()}>
@@ -2778,6 +2790,7 @@ export default function App() {
         </header>
         {!focusedLayout && <UpdateBanner />}
         {!focusedLayout && startupWarning && <div role="alert" className="flex items-center gap-3 border-b border-danger/20 bg-danger/10 px-4 py-2 text-[12.5px] text-fg"><ShieldAsk size={15} className="shrink-0 text-danger" /><button type="button" onClick={() => setSheet('diagnostics')} className="min-w-0 flex-1 truncate text-left hover:underline">启动检查发现问题：{startupWarning} · 点击查看 /doctor</button><button type="button" aria-label="关闭启动告警" onClick={() => setStartupWarning('')} className="grid size-6 place-items-center rounded hover:bg-hover"><X size={13} /></button></div>}
+        {!focusedLayout && safeModeActive && <div role="status" aria-label="安全模式提示" className="flex items-center gap-3 border-b border-warning/30 bg-warning/10 px-4 py-2 text-[12.5px] text-fg"><ShieldCheck size={15} className="shrink-0 text-warning" /><span className="min-w-0 flex-1">后端正在以安全模式运行：MCP、市场技能、插件和扩展自动启动已跳过。</span><button type="button" className="rounded-md px-2 py-1 font-medium hover:bg-hover" onClick={() => void window.atlasDesktop?.restartBackend?.(false)}>正常重启</button></div>}
         {!focusedLayout && startupProgress?.phase === 'failed' && !store.connected && <div role="alert" className="mx-4 mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger/25 bg-danger-soft px-4 py-3 text-[12.5px] text-danger">
           <div className="min-w-0"><p className="m-0 font-medium">Atlas 后端启动失败</p><p className="mb-0 mt-1 break-words opacity-85">{startupProgress.message ?? startupProgress.detail ?? '启动遇到问题，Atlas 会在稍后自动重试。'}</p></div>
           <div className="flex shrink-0 gap-2">
@@ -3115,7 +3128,7 @@ export default function App() {
       <p className="mt-3 mb-0 text-[11px] text-fg-3">语法：单行 `# 记忆内容` 或 `#记住：记忆内容`；后续非空行属于同一条，空行开始新段。代码围栏中的 # 不触发；行首写 `\#` 表示普通文本。</p>
       <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" disabled={memoryMarkerSaving} onClick={dismissMemoryMarkerReview}>仅发送，不保存</Button><Button variant="primary" disabled={memoryMarkerSaving || !memoryMarkerDrafts?.length || memoryMarkerDrafts.some((item) => !item.text.trim())} onClick={() => void saveMemoryMarkerDrafts()}>{memoryMarkerSaving ? '正在保存…' : '确认保存记忆'}</Button></div>
     </Dialog>
-    {activeConversation && <Suspense fallback={null}><SideChat open={side.open || sideChatWindow} onClose={() => { setSide({ open: false }); if (sideChatWindow) window.close(); }} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question || sideChatQuestion} /></Suspense>}
+    {(side.open || sideChatWindow) && <Suspense fallback={null}><SideChat open onClose={() => { setSide({ open: false }); if (sideChatWindow) window.close(); }} conversationId={side.blank ? undefined : activeConversation?.id} blank={side.blank || (!activeConversation && !sideChatWindow)} sourceContext={(store.conversationMessages[activeConversation?.id ?? ''] ?? []).map((message) => `${message.role}: ${message.content}`).join('\n\n').slice(-200_000)} model={store.model} initialQuestion={side.question || sideChatQuestion} /></Suspense>}
     <Dialog open={schedulePromptOpen} onOpenChange={setSchedulePromptOpen} label="安排插话" className="w-[min(480px,92vw)] bg-panel p-5 shadow-xl">
       <h2 className="m-0 text-[16px] font-semibold text-heading">这条消息怎么交给正在运行的任务？</h2>
       <p className="mt-2 mb-4 text-[13px] text-fg-3">Atlas 会按文本初步识别意图；请确认执行时机。{/(刚才|上一步|改成|修改|更正|补充|不要|改为)/.test(input) ? '这句话看起来像对当前任务的修正。' : '这句话看起来可能是一个后续任务。'}</p>

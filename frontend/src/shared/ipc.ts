@@ -65,6 +65,10 @@ export interface AtlasDesktopApi {
   onWindowFullScreenChange?(callback: (fullScreen: boolean) => void): () => void;
   close(): void;
   retryBackend?(): Promise<void>;
+  restartBackend?(safeMode: boolean): Promise<void>;
+  getSafeMode?(): Promise<boolean>;
+  getSafeModePreference?(): Promise<boolean>;
+  setSafeModePreference?(enabled: boolean): Promise<void>;
   openBackendLog?(): Promise<void>;
   getSkillCenterToken(): Promise<string | undefined>;
   /** Native folder picker; resolves to the chosen absolute path, or null when cancelled. */

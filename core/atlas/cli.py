@@ -939,6 +939,7 @@ def notify_command(mode: str | None, command_args: tuple[str, ...], clear_comman
 @click.option("--approve-writes", is_flag=True,
               help="Approve write-capable tool calls for this non-interactive run")
 @click.option("--project-id", default=None, help="Run within one Atlas project configuration/credential scope")
+@click.option("--agent-id", default=None, help="Include this agent's enabled skill collection")
 @click.option("--config-override", type=click.Path(dir_okay=False, path_type=Path), default=None,
               help="Apply a strict temporary JSON config override for this run only")
 @click.option("--ignore-project-config", is_flag=True, help="Ignore the selected project's saved config for this run")
@@ -949,7 +950,7 @@ def exec_command(
     prompt: str | None, model: str | None, images: tuple[Path, ...], workspace: Path,
     conversation_id: str | None, output_format: str, notify_mode: str | None, json_output: bool,
     output_schema: Path | None, output_last_message: Path | None, approve_writes: bool,
-    project_id: str | None, config_override: Path | None, ignore_project_config: bool,
+    project_id: str | None, agent_id: str | None, config_override: Path | None, ignore_project_config: bool,
     ignore_workspace_rules: bool, preload_skills: tuple[str, ...], skills_file: Path | None,
 ) -> None:
     """Run one non-interactive agent turn; PROMPT may also come from stdin."""
@@ -1039,21 +1040,51 @@ def exec_command(
             await memory.save_conversation_metadata(conv_id, title_hint=user_prompt)
             orchestrator = AgentOrchestrator(model_mgr=model_mgr, memory=memory)
             active_skill_instructions: list[dict[str, str]] = []
-            if requested_skills:
-                from atlas.skills import SkillManager
+            agent_skills: list[str] = []
+            if agent_id:
+                from atlas.config import get_config
+                from atlas.skills.agent_collections import AgentSkillCollections
+                from atlas.skills.registry import SkillRegistry
+
+                registry_path = get_config().db_path.parent / "skill-registry.db"
+                if registry_path.is_file():
+                    agent_skills = [str(item["skill_name"]) for item in
+                                    AgentSkillCollections(SkillRegistry(registry_path)).effective_skills(agent_id)]
+            if project_id and not ignore_project_config:
+                try:
+                    from atlas.project_settings import load_project_config
+
+                    project_skills = load_project_config(project_id).get("active_skills", [])
+                    if isinstance(project_skills, list):
+                        agent_skills.extend(name.strip() for name in project_skills
+                                            if isinstance(name, str) and name.strip())
+                except (OSError, ValueError):
+                    agent_skills = list(agent_skills)
+            effective_preload = list(dict.fromkeys([*agent_skills, *requested_skills]))
+            if effective_preload:
+                from atlas.skills import SkillManager, default_skill_sources
                 skill_manager = SkillManager()
+                for source in default_skill_sources(workspace=root):
+                    skill_manager.register_skill_source(source)
                 await skill_manager.scan_skills()
-                unknown = [name for name in requested_skills if skill_manager.get_skill(name) is None]
+                unknown = [name for name in effective_preload if skill_manager.get_skill(name) is None]
                 if unknown:
-                    raise click.BadParameter(f"unknown skill(s): {', '.join(unknown)}", param_hint="--skills")
-                for name in requested_skills:
+                    raise click.BadParameter(f"skills not found in the current project/agent scope: {', '.join(unknown)}", param_hint="--skills")
+                for name in effective_preload:
                     info = skill_manager.get_skill(name)
                     content = await skill_manager.activate(name)
                     if not content:
                         raise click.ClickException(f"skill could not be loaded: {name}")
                     active_skill_instructions.append({"name": name, "path": info.path, "content": str(content)})
                 if output_format != "jsonl":
-                    print(f"Preloaded skills: {', '.join(requested_skills)}", file=sys.stderr)
+                    print(f"Preloaded skills: {', '.join(effective_preload)}", file=sys.stderr)
+            if output_format == "jsonl":
+                assert jsonl_stream is not None
+                jsonl_stream.emit("skills.preloaded", skills=[{
+                    "name": item["name"], "path": item.get("path", ""),
+                    "source": getattr(skill_manager.get_skill(str(item["name"])), "source", "unknown") if effective_preload else "unknown",
+                    "scope": "agent_or_project" if str(item["name"]) in agent_skills else "explicit",
+                } for item in active_skill_instructions])
             async def approve_once(event_id: str, tool_name: str, arguments: dict[str, Any]) -> str:
                 return "allow" if approve_writes else "deny"
 

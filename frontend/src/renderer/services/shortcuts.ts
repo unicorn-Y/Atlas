@@ -11,7 +11,7 @@
 export type ShortcutAction =
   | 'palette' | 'newTask' | 'settings' | 'nextTab' | 'prevTab' | 'closeTab' | 'closeWindow'
   | 'tab1' | 'tab2' | 'tab3' | 'tab4' | 'tab5' | 'tab6' | 'tab7' | 'tab8' | 'tab9'
-  | 'toggleSidebar' | 'toggleInspector' | 'focusComposer' | 'stopRun'
+  | 'toggleSidebar' | 'toggleInspector' | 'focusComposer' | 'stopRun' | 'temporaryChat'
   | 'sidebarSearch' | 'sidebarProjectPicker' | 'sidebarNextGroup' | 'sidebarPreviousGroup' | 'sendNow' | 'stashInput'
   | 'focusNextPane' | 'focusPreviousPane' | 'openSideChat' | 'openDiff' | 'diffPreviousHunk' | 'diffNextHunk'
   | 'diffCollapseHunks' | 'diffExpandHunks' | 'toggleFocus';
@@ -22,6 +22,7 @@ export type ShortcutBindingValue = string | readonly string[];
 export const SHORTCUTS: Array<{ action: ShortcutAction; label: string; hint?: string; combo: string }> = [
   { action: 'palette', label: '搜索与命令', combo: 'Ctrl+K' },
   { action: 'newTask', label: '新任务', combo: 'Ctrl+N' },
+  { action: 'temporaryChat', label: '空白临时聊天', combo: 'Ctrl+Shift+Y' },
   { action: 'settings', label: '打开设置', combo: 'Ctrl+,' },
   { action: 'nextTab', label: '下一个标签页', combo: 'Ctrl+Tab' },
   { action: 'prevTab', label: '上一个标签页', combo: 'Ctrl+Shift+Tab' },

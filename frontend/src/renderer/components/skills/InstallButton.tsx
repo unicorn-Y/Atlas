@@ -41,14 +41,17 @@ export default function InstallButton({ apiBaseUrl, source, id, scope, onInstall
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState(false);
+  const [confirmInstall, setConfirmInstall] = useState(false);
+  const [overrideSourcePolicy, setOverrideSourcePolicy] = useState(false);
 
-  const run = async (overwrite: boolean) => {
+  const run = async (overwrite: boolean, overridePolicy = overrideSourcePolicy) => {
     setBusy(true);
     setError('');
     try {
-      await installSkill(apiBaseUrl, { source, id, scope, overwrite });
+      await installSkill(apiBaseUrl, { source, id, scope, overwrite, override_source_policy: overridePolicy });
       setDone(true);
       setConflict(false);
+      setConfirmInstall(false);
       onInstalled?.(id);
     } catch (cause) {
       if (isMarketConflictError(cause)) { setConflict(true); setError(''); }
@@ -59,10 +62,21 @@ export default function InstallButton({ apiBaseUrl, source, id, scope, onInstall
   const cls = size === 'sm' ? 'btn h-7 px-2.5 text-[12px]' : 'btn primary';
   if (done) return <span className="btn h-7 px-2.5 text-[12px]" aria-live="polite"><Check size={15} />已安装</span>;
   return <>
-    <button type="button" className={cls} disabled={busy} title={SCOPE_LABEL[scope]} onClick={() => void run(false)}>
+    <button type="button" className={cls} disabled={busy} title={SCOPE_LABEL[scope]} onClick={() => { setOverrideSourcePolicy(false); setConfirmInstall(true); }}>
       {busy ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}{busy ? '正在安装…' : size === 'sm' ? '安装' : '安装技能'}
     </button>
     {error && <span role="alert" className="text-[12px] text-danger">{error}</span>}
+    {confirmInstall && <div role="dialog" aria-modal="true" aria-label="确认安装技能" className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-6">
+      <section className="card-surface grid w-full max-w-[430px] gap-3 rounded-2xl p-5">
+        <h3 className="m-0 text-[15px] font-semibold text-heading">确认安装「{id}」</h3>
+        <p className="m-0 text-[13px] text-fg-2">{SCOPE_LABEL[scope]}。安装后技能文件会写入所选目录。</p>
+        <label className="flex items-start gap-2 text-[12.5px] text-fg-2"><input type="checkbox" checked={overrideSourcePolicy} onChange={(event) => setOverrideSourcePolicy(event.target.checked)} />
+          <span>本次允许市场来源创建/加载（仅覆盖本次创建策略，不修改已保存的来源策略）</span></label>
+        {error && <p role="alert" className="m-0 text-[12px] text-danger">{error}</p>}
+        <div className="flex justify-end gap-2"><button type="button" className="btn ghost" disabled={busy} onClick={() => setConfirmInstall(false)}>取消</button>
+          <button type="button" className="btn primary" disabled={busy} onClick={() => void run(false, overrideSourcePolicy)}>{busy ? '正在安装…' : '确认安装'}</button></div>
+      </section>
+    </div>}
     {conflict && <ConflictDialog name={id} busy={busy} onCancel={() => setConflict(false)} onOverwrite={() => void run(true)} />}
   </>;
 }

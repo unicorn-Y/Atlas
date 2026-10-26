@@ -224,11 +224,14 @@ export async function getMarketSkill(apiBaseUrl: string, source: string, id: str
 
 export async function installSkill(apiBaseUrl: string, options: {
   source: string; id: string; scope: InstallScope; overwrite?: boolean;
+  override_source_policy?: boolean;
 }, fetcher: FetchLike = fetch): Promise<{ ok: true }> {
   try {
     await request(apiBaseUrl, '/api/skills/market/install', {
       method: 'POST',
-      json: { source: options.source, id: options.id, scope: options.scope, ...(options.overwrite ? { overwrite: true } : {}) },
+      json: { source: options.source, id: options.id, scope: options.scope,
+        ...(options.overwrite ? { overwrite: true } : {}),
+        ...(options.override_source_policy ? { override_source_policy: true } : {}) },
     }, fetcher);
     return { ok: true };
   } catch (cause) {

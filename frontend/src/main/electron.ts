@@ -42,8 +42,8 @@ let voiceHudWindow: BrowserWindow | null = null;
 const pendingVoiceHudResults: string[] = [];
 const conversationWindows = new Map<string, BrowserWindow>();
 type WindowBounds = { x: number; y: number; width: number; height: number };
-type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null; screenshotShortcut: string | null; voiceShortcut: string | null; openAtLogin: boolean; windowBounds?: WindowBounds };
-let platformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null, screenshotShortcut: 'Control+Shift+X', voiceShortcut: 'Control+Shift+V', openAtLogin: true };
+type PlatformPreferences = { alwaysOnTop: boolean; globalShortcut: string | null; screenshotShortcut: string | null; voiceShortcut: string | null; openAtLogin: boolean; safeModeOnNextStart: boolean; windowBounds?: WindowBounds };
+let platformPreferences: PlatformPreferences = { alwaysOnTop: false, globalShortcut: null, screenshotShortcut: 'Control+Shift+X', voiceShortcut: 'Control+Shift+V', openAtLogin: true, safeModeOnNextStart: false };
 let globalShortcutState: GlobalShortcutState = { accelerator: null, registered: false };
 let screenshotShortcutState: GlobalShortcutState = { accelerator: 'Control+Shift+X', registered: false };
 let voiceShortcutState: GlobalShortcutState = { accelerator: 'Control+Shift+V', registered: false };
@@ -65,6 +65,7 @@ let lastProgress: BackendStartupProgress = { phase: 'probing', managed: false, e
 let componentStatuses: Record<string, string> = {};
 let consecutiveBackendHealthFailures = 0;
 let backendAvailability: BackendAvailability = 'unknown';
+let backendSafeModeActive = false;
 
 /** Session for pages shown in the browser panel. Separate from the app's, so they never get the backend token. */
 export const BROWSER_PARTITION = 'persist:atlas-browser';
@@ -138,10 +139,11 @@ function loadPlatformPreferences(): PlatformPreferences {
       screenshotShortcut: typeof data.screenshotShortcut === 'string' ? data.screenshotShortcut : 'Control+Shift+X',
       voiceShortcut: typeof data.voiceShortcut === 'string' ? data.voiceShortcut : 'Control+Shift+V',
       openAtLogin: data.openAtLogin !== false,
+      safeModeOnNextStart: data.safeModeOnNextStart === true,
       ...(isWindowBounds(data.windowBounds) ? { windowBounds: data.windowBounds } : {}),
     };
   } catch {
-    return { alwaysOnTop: false, globalShortcut: null, screenshotShortcut: 'Control+Shift+X', voiceShortcut: 'Control+Shift+V', openAtLogin: true };
+    return { alwaysOnTop: false, globalShortcut: null, screenshotShortcut: 'Control+Shift+X', voiceShortcut: 'Control+Shift+V', openAtLogin: true, safeModeOnNextStart: false };
   }
 }
 
@@ -228,7 +230,9 @@ function buildTrayMenu(): void {
     { label: '后台组件', submenu: Object.entries(componentStatuses).length
       ? Object.entries(componentStatuses).map(([name, state]) => ({ label: `${name}：${state}`, enabled: false }))
       : [{ label: '等待状态', enabled: false }] },
-    { label: '重启后台', click: () => { void restartBackendNow('tray_menu'); } },
+    { label: '以安全模式重启', click: () => { void restartBackendNow('tray_safe_mode', true); } },
+    ...(platformPreferences.safeModeOnNextStart ? [{ label: '正常重启', click: () => { void restartBackendNow('tray_normal_mode', false); } }] : []),
+    ...(!platformPreferences.safeModeOnNextStart ? [{ label: '重启后台', click: () => { void restartBackendNow('tray_menu', false); } }] : []),
     { label: '查看日志', click: () => { void shell.openPath(backendLogPath()); } },
     { type: 'separator' },
     { label: '开机自启', type: 'checkbox', checked: platformPreferences.openAtLogin, click: (item) => setOpenAtLogin(item.checked) },
@@ -345,11 +349,13 @@ function startBackend(manual = false): void {
   if (pendingRetry) { clearTimeout(pendingRetry); pendingRetry = null; }
   const attempt = ++backendAttempt;
   if (manual) retryCount = 0;
-  void ensureBackendRunning({ onProgress: publishProgress }).then(() => {
+  void ensureBackendRunning({ onProgress: publishProgress, safeMode: platformPreferences.safeModeOnNextStart }).then(() => {
     if (attempt !== backendAttempt) return;
+    backendSafeModeActive = platformPreferences.safeModeOnNextStart;
     retryCount = 0;
   }).catch((error: unknown) => {
     if (attempt !== backendAttempt || explicitQuit) return;
+    backendSafeModeActive = false;
     const message = error instanceof Error ? error.message : String(error);
     const detail = message.slice(-6000);
     publishProgress({ phase: 'failed', managed: false, elapsedMs: lastProgress.elapsedMs, detail, message: detail, logPath: backendLogPath() });
@@ -1148,7 +1154,8 @@ ipcMain.handle('platform:set-open-at-login', (event, enabled: unknown) => {
  * restart IPC), never a probe result: a slow answer is not a reason to abort the user's
  * work. A backend we did not spawn is only replaced when the user asked for it here.
  */
-async function restartBackendNow(reason: string): Promise<void> {
+async function restartBackendNow(reason: string, safeMode = platformPreferences.safeModeOnNextStart): Promise<void> {
+  savePlatformPreferences({ ...platformPreferences, safeModeOnNextStart: safeMode });
   await stopManagedBackend(reason);
   const pid = readRunningBackendPid();
   if (pid !== null) await terminateBackendPid(pid, reason);
@@ -1158,6 +1165,24 @@ async function restartBackendNow(reason: string): Promise<void> {
 ipcMain.handle('backend:retry', (event) => {
   assertTrustedAppSender(event);
   void restartBackendNow('user_retry');
+});
+ipcMain.handle('backend:restart', async (event, safeMode: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof safeMode !== 'boolean') throw new Error('重启模式参数无效。');
+  await restartBackendNow(safeMode ? 'user_safe_mode_restart' : 'user_normal_restart', safeMode);
+});
+ipcMain.handle('backend:get-safe-mode', (event) => {
+  assertTrustedAppSender(event);
+  return backendSafeModeActive;
+});
+ipcMain.handle('backend:get-safe-mode-preference', (event) => {
+  assertTrustedAppSender(event);
+  return platformPreferences.safeModeOnNextStart;
+});
+ipcMain.handle('backend:set-safe-mode-preference', (event, enabled: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof enabled !== 'boolean') throw new Error('安全模式偏好必须是布尔值。');
+  savePlatformPreferences({ ...platformPreferences, safeModeOnNextStart: enabled });
 });
 ipcMain.handle('data-root:switch', async (event, rawTarget: unknown) => {
   assertTrustedAppSender(event);
@@ -1478,7 +1503,8 @@ app.whenReady().then(async () => {
   lockDownWebviews();
   createTray();
   createWindow();
-  startBackend();
+  if (platformPreferences.safeModeOnNextStart) void restartBackendNow('safe_mode_preference_start', true);
+  else startBackend();
   void refreshTrayBackendStatus();
   trayRefreshTimer = setInterval(() => { void refreshTrayBackendStatus(); }, 5_000);
   const initialDeepLink = findAtlasUrl(process.argv);

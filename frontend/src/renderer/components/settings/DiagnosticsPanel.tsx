@@ -44,6 +44,26 @@ export default function DiagnosticsPanel({ apiBaseUrl, workspacePath = '' }: { a
   const [modelProbe, setModelProbe] = useState<{ ok: boolean; message: string } | null>(null);
   const [probingModel, setProbingModel] = useState(false);
   const [openingDashboard, setOpeningDashboard] = useState(false);
+  const [safeMode, setSafeMode] = useState(false);
+  const [rememberSafeMode, setRememberSafeMode] = useState(false);
+  const [restartingSafeMode, setRestartingSafeMode] = useState(false);
+
+  useEffect(() => {
+    void Promise.all([window.atlasDesktop?.getSafeMode?.(), window.atlasDesktop?.getSafeModePreference?.()])
+      .then(([active, preferred]) => { setSafeMode(active === true); setRememberSafeMode(preferred === true); }).catch(() => undefined);
+  }, []);
+
+  const setRemember = async (enabled: boolean) => {
+    setRememberSafeMode(enabled);
+    try { await window.atlasDesktop?.setSafeModePreference?.(enabled); }
+    catch (reason) { setRememberSafeMode(!enabled); setError(reason instanceof Error ? reason.message : String(reason)); }
+  };
+  const restart = async (safe: boolean) => {
+    setRestartingSafeMode(true); setError(null);
+    try { await window.atlasDesktop?.restartBackend?.(safe); setSafeMode(safe); setRememberSafeMode(safe); setMessage(safe ? '正在以安全模式重启后端…' : '正在正常重启后端…'); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setRestartingSafeMode(false); }
+  };
 
   const refresh = async () => {
     setLoading(true);
@@ -113,6 +133,13 @@ export default function DiagnosticsPanel({ apiBaseUrl, workspacePath = '' }: { a
       </div>
     </div>
     <p>诊断报告只读取本机后端状态和配置文件格式，不上传报告。密钥、令牌、配置内容和本机路径不会写入报告。单独点击模型连通性测试时，会向当前模型发送一条短测试请求。</p>
+    <div className="my-3 grid gap-2 rounded-lg bg-sunken p-3" aria-label="安全模式控制">
+      <p className="m-0 text-[12.5px]">后端当前{safeMode ? '以安全模式运行：跳过 MCP、市场技能、插件和扩展自动启动。' : '以正常模式运行。'}</p>
+      <label className="flex items-center gap-2 text-[12.5px]"><input type="checkbox" checked={rememberSafeMode} onChange={(event) => void setRemember(event.target.checked)} />下次仍以安全模式启动</label>
+      <button className={styles.settingsActionSecondary} type="button" disabled={restartingSafeMode} onClick={() => void restart(!safeMode)}>
+        {restartingSafeMode ? '正在重启…' : safeMode ? '正常重启' : '以安全模式重启'}
+      </button>
+    </div>
     {error && <p className={styles.settingsError} role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
     {report && <div aria-live="polite">

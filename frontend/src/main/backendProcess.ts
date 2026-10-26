@@ -14,6 +14,8 @@ export interface BackendLaunchResult {
 export interface EnsureBackendOptions {
   /** Receives startup progress while the backend boots (H8 §10.3: the UI shows progress). */
   onProgress?: (progress: BackendStartupProgress) => void;
+  /** Launch the backend with its optional minimal-startup mode. */
+  safeMode?: boolean;
 }
 
 const HEALTH_URL = `http://127.0.0.1:${process.env.ATLAS_PORT ?? '8765'}/api/health`;
@@ -647,10 +649,10 @@ async function ensureBackendRunningImpl(options?: EnsureBackendOptions): Promise
     : path.resolve(moduleDir, '../../..');
   const coreDir = packagedBackend ? rootDir : resolveCoreDir();
   const candidates: BackendCandidate[] = packagedBackend
-    ? [{ command: packagedBackend, args: [], cwd: rootDir }]
+    ? [{ command: packagedBackend, args: options?.safeMode ? ['--safe-mode'] : [], cwd: rootDir }]
     : pythonCandidates(coreDir).map((candidate) => ({
       command: candidate.command,
-      args: [...candidate.args, '-m', 'atlas.desktop_entry'],
+      args: [...candidate.args, '-m', 'atlas.desktop_entry', ...(options?.safeMode ? ['--safe-mode'] : [])],
       cwd: coreDir,
     }));
   let lastNotFound: NodeJS.ErrnoException | null = null;

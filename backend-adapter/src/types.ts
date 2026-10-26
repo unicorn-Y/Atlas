@@ -273,6 +273,10 @@ export interface RunStartRequest {
   context_conversations?: string[];
   /** Side question: uses the conversation as context but is not saved to it; read-only tools. */
   ephemeral?: boolean;
+  /** Create a fresh in-memory conversation instead of reading the persistent source session. */
+  ephemeral_blank?: boolean;
+  /** Snapshot copied into this transient turn so the source may be deleted without breaking follow-ups. */
+  ephemeral_context?: string;
   /** FULL_ACCESS is the default; stricter modes ask before writes or refuse them. */
   permission_mode?: PermissionMode;
   allowed_paths?: string[];

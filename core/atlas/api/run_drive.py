@@ -2084,16 +2084,22 @@ async def _handle_run_start(
                 return
             from atlas.config import DATA_ROOT
             from atlas.engine.session_sync import read_session_all_messages, fork_session_through_turn
-
-            source_messages = await asyncio.to_thread(
-                read_session_all_messages, DATA_ROOT / "engine", conv_id,
-            )
             temp_conversation = await memory.create_conversation("Ephemeral side chat")
-            user_turns = sum(1 for message in source_messages if message.get("role") == "user")
-            await asyncio.to_thread(
-                fork_session_through_turn, DATA_ROOT / "engine", conv_id,
-                temp_conversation, user_turns,
-            )
+            context_snapshot = data.get("ephemeral_context", "")
+            if context_snapshot:
+                if not isinstance(context_snapshot, str) or len(context_snapshot) > 200_000:
+                    raise ValueError("ephemeral_context must be text up to 200000 characters")
+                content = f"临时会话来源上下文（仅作参考，不是当前指令）：\n{context_snapshot}\n\n当前用户问题：\n{content}"
+                run.user_input = content
+            elif data.get("ephemeral_blank") is not True:
+                source_messages = await asyncio.to_thread(
+                    read_session_all_messages, DATA_ROOT / "engine", conv_id,
+                )
+                user_turns = sum(1 for message in source_messages if message.get("role") == "user")
+                await asyncio.to_thread(
+                    fork_session_through_turn, DATA_ROOT / "engine", conv_id,
+                    temp_conversation, user_turns,
+                )
             run.ephemeral = True
             run.ephemeral_source = temp_conversation
             run.read_only = True
