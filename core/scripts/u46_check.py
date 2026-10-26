@@ -223,8 +223,18 @@ async def check_plugin_capability_projection() -> None:
             assert target, "Atlas renderer is not attached to CDP port 9336"
             async with websockets.connect(target["webSocketDebuggerUrl"]) as ws:
                 await _cdp_eval(ws, 200, "document.querySelector('button[aria-label=\\\"设置\\\"]')?.click()")
-                await asyncio.sleep(0.4)
-                await _cdp_eval(ws, 201, "(()=>{const item=[...document.querySelectorAll('[aria-label=\\\"设置分类\\\"] button')].find(b=>b.innerText.includes('插件与导入'));if(!item)throw Error('设置里找不到插件与导入');item.click()})()")
+                category_visible = False
+                for attempt in range(30):
+                    category_visible = await _cdp_eval(
+                        ws, 201 + attempt,
+                        "[...document.querySelectorAll('[aria-label=\\\"设置分类\\\"] button')]"
+                        ".some(b=>b.innerText.includes('插件与导入'))",
+                    )
+                    if category_visible:
+                        break
+                    await asyncio.sleep(0.2)
+                assert category_visible, "设置分类导航未在 6 秒内加载插件与导入"
+                await _cdp_eval(ws, 240, "[...document.querySelectorAll('[aria-label=\\\"设置分类\\\"] button')].find(b=>b.innerText.includes('插件与导入'))?.click()")
                 row_found = False
                 for attempt in range(20):
                     await asyncio.sleep(0.5)
@@ -323,16 +333,32 @@ async def check_scroll_speed() -> None:
     assert target, "Atlas renderer is not attached to CDP port 9336"
     async with websockets.connect(target["webSocketDebuggerUrl"]) as ws:
         before = await _cdp_eval(ws, 1, "localStorage.getItem('atlas.preference.scroll-speed')")
+        await _cdp_eval(ws, 13, "(()=>{window.__u46OriginalChatRow=document.querySelector('[aria-label=\\\"历史会话\\\"] button[aria-current=page]');window.__u46OriginalDraft=document.querySelector('textarea[aria-label=\\\"消息内容\\\"]')?.value||'';return true})()")
         try:
-            await _cdp_eval(ws, 9, "(()=>{const d=document.querySelector('[role=dialog]');if(d)[...d.querySelectorAll('button')].find(b=>b.innerText.includes('完成'))?.click()})()")
-            await _cdp_eval(ws, 10, "document.querySelector('button[aria-label=\\\"新建对话\\\"]')?.click()")
-            await asyncio.sleep(0.3)
-            await _cdp_eval(ws, 2, "(()=>{const e=document.querySelector('textarea[aria-label=\\\"消息内容\\\"]');if(!e)throw Error('composer missing');e.focus();e.value='';e.dispatchEvent(new Event('input',{bubbles:true}))})()")
+            await _cdp_eval(ws, 9, "(()=>{const d=document.querySelector('[role=dialog]');d?.querySelector('button[aria-label=\\\"关闭设置\\\"]')?.click();const open=document.querySelector('[role=dialog]');if(open)[...open.querySelectorAll('button')].find(b=>b.innerText.includes('完成'))?.click()})()")
+            await _cdp_eval(ws, 10, "(()=>{const list=document.querySelector('[aria-label=\\\"历史会话\\\"]');const row=[...(list?.querySelectorAll('button[aria-label]')||[])].find(b=>!['筛选和分组','新建对话'].some(label=>b.getAttribute('aria-label')?.startsWith(label))&&!b.getAttribute('aria-label')?.includes('的更多操作'));if(!row)throw Error('历史会话列表为空，无法验证消息线程滚轮');row.click()})()")
+            for attempt in range(30):
+                ready = await _cdp_eval(ws, 20 + attempt, "Boolean(document.querySelector('[aria-label=\\\"任务活动\\\"]')&&document.querySelector('textarea[aria-label=\\\"消息内容\\\"]:not(:disabled)'))")
+                if ready:
+                    break
+                await asyncio.sleep(0.2)
+            assert ready, "会话消息线程或输入框未加载"
+            await _cdp_eval(ws, 2, "(()=>{const e=document.querySelector('textarea[aria-label=\\\"消息内容\\\"]');if(!e)throw Error('composer missing');e.focus();Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,'');e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteContentBackward'}))})()")
             await _cdp_command(ws, 3, "Input.insertText", {"text": "/scroll-speed"})
+            suggestion = False
+            for attempt in range(20):
+                suggestion = await _cdp_eval(ws, 30 + attempt, "[...document.querySelectorAll('[role=\\\"listbox\\\"] [role=\\\"option\\\"]')].some(e=>e.innerText.includes('/scroll-speed'))")
+                if suggestion:
+                    break
+                await asyncio.sleep(0.1)
+            assert suggestion, "/scroll-speed 命令建议未出现"
             await _cdp_command(ws, 4, "Input.dispatchKeyEvent", {"type": "keyDown", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
             await _cdp_command(ws, 5, "Input.dispatchKeyEvent", {"type": "keyUp", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
-            await asyncio.sleep(0.5)
-            dialog = await _cdp_eval(ws, 6, "({open:!!document.querySelector('[role=dialog]'),slider:!!document.querySelector('input[aria-label=\\\"对话滚轮速度\\\"]')})")
+            for attempt in range(30):
+                dialog = await _cdp_eval(ws, 50 + attempt, "({open:!!document.querySelector('[role=dialog]'),slider:!!document.querySelector('input[aria-label=\\\"对话滚轮速度\\\"]')})")
+                if dialog == {"open": True, "slider": True}:
+                    break
+                await asyncio.sleep(0.1)
             assert dialog == {"open": True, "slider": True}, dialog
             await _cdp_eval(ws, 7, "[...document.querySelectorAll('[role=dialog] button')].find(b=>b.innerText.includes('恢复默认'))?.click()")
             await _cdp_eval(ws, 8, "document.querySelector('input[aria-label=\\\"对话滚轮速度\\\"]').focus()")
@@ -343,7 +369,7 @@ async def check_scroll_speed() -> None:
             assert changed == {"slider": "1.05", "saved": "1.05", "wheelIntercepted": True}, changed
             print("PASS scroll-speed: /scroll-speed dialog, persisted live preview, and session-only wheel interception")
         finally:
-            await _cdp_eval(ws, 8, "(()=>{const d=document.querySelector('[role=dialog]');if(d)[...d.querySelectorAll('button')].find(b=>b.innerText.includes('完成'))?.click();if(" + json.dumps(before) + "===null)localStorage.removeItem('atlas.preference.scroll-speed');else localStorage.setItem('atlas.preference.scroll-speed'," + json.dumps(before) + ");window.dispatchEvent(new CustomEvent('atlas:scroll-speed',{detail:Number(" + json.dumps(before) + "||1)}))})()")
+            await _cdp_eval(ws, 8, "(()=>{const d=document.querySelector('[role=dialog]');if(d)[...d.querySelectorAll('button')].find(b=>b.innerText.includes('完成'))?.click();if(" + json.dumps(before) + "===null)localStorage.removeItem('atlas.preference.scroll-speed');else localStorage.setItem('atlas.preference.scroll-speed'," + json.dumps(before) + ");window.dispatchEvent(new CustomEvent('atlas:scroll-speed',{detail:Number(" + json.dumps(before) + "||1)}));const original=window.__u46OriginalChatRow;if(original?.isConnected)original.click();const e=document.querySelector('textarea[aria-label=\\\"消息内容\\\"]');if(e){Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,window.__u46OriginalDraft||'');e.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText'}))}delete window.__u46OriginalChatRow;delete window.__u46OriginalDraft})()")
 
 
 async def check_window_title() -> None:
