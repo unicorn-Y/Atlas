@@ -29,10 +29,15 @@ def check_interactive_cli_and_private_bug_bundle() -> None:
     core = Path(__file__).resolve().parents[1]
     repo = core.parent
     app_source = (repo / "frontend/src/renderer/App.tsx").read_text(encoding="utf-8")
+    progress_source = (repo / "frontend/src/renderer/components/ProgressCapsule.tsx").read_text(encoding="utf-8")
+    motion_source = (repo / "frontend/src/renderer/styles/app.css").read_text(encoding="utf-8")
     diagnostics_ui = (repo / "frontend/src/renderer/components/settings/DiagnosticsPanel.tsx").read_text(encoding="utf-8")
     tool_source = (core / "atlas/agent/tool_node.py").read_text(encoding="utf-8")
     assert all(token in app_source for token in ("id: 'env'", "id: 'tui'", "id: 'quit'", "id: 'bug'", "id: 'battery'", "setQuitActivity"))
     assert "session_env" in tool_source and "fn_args[\"env\"]" in tool_source
+    assert "id: 'indicator'" in app_source and all(value in app_source for value in ("'static'", "'spin'", "'subtle'", "'indicator-style'"))
+    assert all(value in progress_source for value in ("indicatorStyle === 'spin'", "indicatorStyle === 'subtle'", "indicatorStyle = 'spin'"))
+    assert "prefers-reduced-motion: reduce" in motion_source and "animation: none !important" in motion_source
     assert "saveBugBundle" in diagnostics_ui and "导出脱敏 Bug Bundle" in diagnostics_ui
     with tempfile.TemporaryDirectory(prefix="u43-cli-") as directory:
         root = Path(directory)

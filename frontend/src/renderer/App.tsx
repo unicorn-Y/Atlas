@@ -1899,6 +1899,14 @@ export default function App() {
   };
   const slashCommands: SlashCommand[] = [
     { id: 'mobile', label: '/mobile', hint: '打开移动 Web 二维码和 Telegram 接入说明', run: () => setSheet('mobile') },
+    { id: 'indicator', label: '/indicator', hint: '选择任务运行指示器样式：static、spin 或 subtle', takesArgument: true, run: (value: string) => {
+      const styles = ['static', 'spin', 'subtle'];
+      const next = value.trim().toLowerCase();
+      if (!next) { setToast(`当前运行指示器：${pref('indicator-style') || 'spin'}。用法：/indicator static|spin|subtle`); return; }
+      if (!styles.includes(next)) { setToast('用法：/indicator static|spin|subtle'); return; }
+      setPref('indicator-style', next);
+      setToast(`运行指示器样式已设为 ${next}`);
+    } },
     { id: 'tui', label: '/tui', hint: '选择下次启动的紧凑/标准呈现；也可切换当前全屏渲染', takesArgument: true, run: (value: string) => {
       const arg = value.trim().toLowerCase();
       if (arg && !['fullscreen', 'full-screen', 'normal', 'windowed', 'compact', 'standard', 'status'].includes(arg)) { setToast('用法：/tui [compact|standard|fullscreen|normal|status]'); return; }
@@ -3057,7 +3065,7 @@ export default function App() {
             onRemove={(id) => { if (besideId === id) setBesideId(''); }}>
           <div className={`relative flex min-w-0 flex-1 flex-col ${paneCount > 0 && mainPaneFocused ? 'ring-1 ring-inset ring-brand/60' : ''}`} onPointerDown={() => setMainPaneFocused(true)}>
             {!focusedLayout && activeRun && activeRun.conversationId === store.activeConversationId && <div className="pointer-events-none absolute top-2 left-1/2 z-20 flex -translate-x-1/2 justify-center [&>*]:pointer-events-auto">
-              <ProgressCapsule run={activeRun} events={activeEvents} onShowAll={() => showInspectorTab('activity')} />
+              <ProgressCapsule run={activeRun} events={activeEvents} indicatorStyle={pref('indicator-style') === 'static' ? 'static' : pref('indicator-style') === 'subtle' ? 'subtle' : 'spin'} onShowAll={() => showInspectorTab('activity')} />
             </div>}
             {!focusedLayout && computerRunId && <><ComputerEdgeBar apiBaseUrl={store.apiBaseUrl} runId={computerRunId} canPause={Boolean(foregroundEvent)} className="shrink-0" /><ComputerLivePreview runId={computerRunId} events={activeEvents} /></>}
             {!focusedLayout && !!peerInbox.length && <section className="mx-6 mt-2 rounded-xl border border-brand/20 bg-brand-soft px-3.5 py-2.5" aria-label="跨会话收件箱">

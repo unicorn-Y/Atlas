@@ -37,32 +37,36 @@ function progressSteps(events: AgentEvent[]): { steps: ProgressStep[]; source: '
   };
 }
 
-function Ring({ value, running, state }: { value: number | null; running: boolean; state: string }) {
+type IndicatorStyle = 'static' | 'spin' | 'subtle';
+
+function Ring({ value, running, state, indicatorStyle }: { value: number | null; running: boolean; state: string; indicatorStyle: IndicatorStyle }) {
   if (state === 'completed') return <span className="grid size-[18px] shrink-0 place-items-center rounded-full bg-ok text-white"><Check size={11} strokeWidth={3} /></span>;
   if (state === 'failed') return <span className="grid size-[18px] shrink-0 place-items-center rounded-full bg-danger text-white"><X size={11} strokeWidth={3} /></span>;
   if (state === 'cancelled') return <span className="grid size-[18px] shrink-0 place-items-center rounded-full bg-fg-3 text-white"><Square size={8} fill="currentColor" /></span>;
   const radius = 7;
   const circumference = 2 * Math.PI * radius;
   const shown = value ?? 0.25;
-  return <svg viewBox="0 0 18 18" className={cn('size-[18px] shrink-0 -rotate-90', value === null && running && 'animate-spin')} aria-hidden>
+  return <svg viewBox="0 0 18 18" className={cn('size-[18px] shrink-0 -rotate-90', running && indicatorStyle === 'spin' && 'animate-spin', running && indicatorStyle === 'subtle' && 'animate-pulse')} aria-hidden>
     <circle cx="9" cy="9" r={radius} fill="none" stroke="var(--line-strong)" strokeWidth="2" />
     <circle cx="9" cy="9" r={radius} fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round"
       strokeDasharray={`${circumference * shown} ${circumference}`} className="transition-[stroke-dasharray] duration-500" />
   </svg>;
 }
 
-function StepIcon({ state, live }: { state: StepState; live: boolean }) {
+function StepIcon({ state, live, indicatorStyle }: { state: StepState; live: boolean; indicatorStyle: IndicatorStyle }) {
   if (state === 'done') return <Check size={13} className="text-ok" strokeWidth={2.6} />;
   if (state === 'failed') return <X size={13} className="text-danger" strokeWidth={2.6} />;
   if (state === 'cancelled') return <X size={13} className="text-fg-3" />;
-  if (state === 'running') return live ? <LoaderCircle size={13} className="animate-spin text-brand" /> : <i className="size-[7px] rounded-full bg-brand" />;
+  if (state === 'running') return live && indicatorStyle === 'spin'
+    ? <LoaderCircle size={13} className="animate-spin text-brand" />
+    : <i className={cn('size-[7px] rounded-full bg-brand', live && indicatorStyle === 'subtle' && 'animate-pulse')} />;
   return <CircleDashed size={13} className="text-fg-3" />;
 }
 
 const RUN_TEXT: Record<string, string> = { completed: '已完成', failed: '没有完成', cancelled: '已停止', paused: '已暂停', waiting: '等你确认', planning: '正在规划' };
 
 /** Floating pill at the top-right of the conversation: where the task is now; click for every step. */
-export default function ProgressCapsule({ run, events, onShowAll }: { run: AgentRun; events: AgentEvent[]; onShowAll: () => void }) {
+export default function ProgressCapsule({ run, events, onShowAll, indicatorStyle = 'spin' }: { run: AgentRun; events: AgentEvent[]; onShowAll: () => void; indicatorStyle?: IndicatorStyle }) {
   const live = !TERMINAL.has(run.status);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -91,7 +95,7 @@ export default function ProgressCapsule({ run, events, onShowAll }: { run: Agent
     <Popover.Trigger asChild>
       <button type="button" aria-label="任务进展"
         className="group raised no-drag anim-pop flex h-8 max-w-[360px] items-center gap-2 rounded-full py-0 pr-2.5 pl-1.5 text-[12.5px] text-fg-2 transition-shadow hover:text-fg data-[state=open]:text-fg">
-        <Ring value={ratio} running={live} state={run.status} />
+        <Ring value={ratio} running={live} state={run.status} indicatorStyle={indicatorStyle} />
         {run.status === 'paused' && <Pause size={12} className="shrink-0 text-fg-3" />}
         <span className={cn('min-w-0 truncate', live && run.status === 'running' && 'text-fg')}>{headline}</span>
         {planned && countable.length > 0 && <span className="shrink-0 tabular-nums text-fg-3">{done}/{countable.length}</span>}
@@ -105,7 +109,7 @@ export default function ProgressCapsule({ run, events, onShowAll }: { run: Agent
         className="pop anim-pop z-[60] w-[360px] overflow-hidden rounded-2xl outline-none">
         <div className="px-4 pt-3.5 pb-3">
           <div className="flex items-center gap-2">
-            <Ring value={ratio} running={live} state={run.status} />
+            <Ring value={ratio} running={live} state={run.status} indicatorStyle={indicatorStyle} />
             <b className="text-[14px] font-semibold text-heading">任务进展</b>
             <span className="text-[12px] text-fg-3">{live ? (RUN_TEXT[run.status] ?? '进行中') : RUN_TEXT[run.status]}</span>
             <span className="flex-1" />
@@ -128,7 +132,7 @@ export default function ProgressCapsule({ run, events, onShowAll }: { run: Agent
               {shownSteps.map((step, index) => <li key={step.id}
                 className={cn('relative flex items-start gap-2.5 rounded-lg px-2 py-[5px]', step.state === 'running' && 'bg-brand-soft')}>
                 {index < shownSteps.length - 1 && <span className="absolute top-[22px] bottom-[-6px] left-[14.5px] w-px bg-line" aria-hidden />}
-                <span className="relative z-[1] mt-[3px] grid size-[13px] shrink-0 place-items-center bg-[var(--overlay)]"><StepIcon state={step.state} live={live} /></span>
+                <span className="relative z-[1] mt-[3px] grid size-[13px] shrink-0 place-items-center bg-[var(--overlay)]"><StepIcon state={step.state} live={live} indicatorStyle={indicatorStyle} /></span>
                 <span className="min-w-0 flex-1 text-[12.5px] leading-[1.55]">
                   <span className={cn(step.state === 'done' || step.state === 'cancelled' ? 'text-fg-2' : step.state === 'failed' ? 'text-danger' : step.state === 'running' ? 'font-medium text-fg' : 'text-fg-3',
                     step.state === 'cancelled' && 'line-through')}>{step.text}</span>
