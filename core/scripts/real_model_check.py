@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 import inspect
+import json
 import re
 from typing import Any, Callable
 
@@ -33,6 +34,72 @@ def redact_diagnostic(value: str) -> str:
     return value[-1600:]
 
 
+def classify_failure(detail: str = "", answer: str = "") -> str:
+    """Classify provider failures without depending on provider-specific exception classes."""
+    text = f"{detail}\n{answer}".lower()
+    status = re.search(r"(?:http(?: status)?\s*[:=]?\s*|status\s*[:=]\s*)([45]\d\d)\b", text)
+    if status:
+        return f"HTTP {status.group(1)}"
+    for code in ("429", "503", "502", "504", "401", "403", "400"):
+        if re.search(rf"\b{code}\b", text):
+            return f"HTTP {code}"
+    if any(marker in text for marker in ("timeout", "timed out", "超时", "readtimeout", "connecttimeout")):
+        return "timeout"
+    if any(marker in text for marker in ("relay rejected", "upstream rejected", "中转拒绝", "gateway rejected")):
+        return "relay rejection"
+    if not answer.strip() or "(empty/unavailable)" in text or "empty model answer" in text:
+        return "empty reply"
+    if any(marker in text for marker in ("refused", "rejected", "拒绝", "content filter")):
+        return "provider/model rejection"
+    return "model assertion/runtime failure"
+
+
+def latest_run_log_path(since: float | None = None) -> str:
+    """Find a run log path for diagnostics; return no contents, prompts, or credentials."""
+    try:
+        from atlas.logs import LOG_DIR
+
+        paths = [path for path in (LOG_DIR / "runs").rglob("*.jsonl")
+                 if path.is_file() and (since is None or path.stat().st_mtime >= since - 2)]
+    except Exception:
+        return "unavailable"
+    paths.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    return str(paths[0]) if paths else "none"
+
+
+def latest_run_error_event(since: float | None = None) -> str:
+    """Return a redacted summary of the newest failure event, never raw log JSON."""
+    try:
+        from atlas.logs import LOG_DIR
+
+        paths = [path for path in (LOG_DIR / "runs").rglob("*.jsonl")
+                 if path.is_file() and (since is None or path.stat().st_mtime >= since - 2)]
+    except Exception:
+        return "unavailable"
+    paths.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    for path in paths[:20]:
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in reversed(lines[-300:]):
+            try:
+                row = json.loads(line)
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(row, dict):
+                continue
+            event = str(row.get("event") or "")
+            if not any(marker in event.lower() for marker in ("error", "fail", "timeout")):
+                continue
+            summary = {key: row[key] for key in (
+                "timestamp", "event", "run_id", "tool", "tool_name", "error_type", "status",
+                "status_code", "category", "error"
+            ) if key in row}
+            return redact_diagnostic(json.dumps(summary, ensure_ascii=False, default=str))
+    return "none"
+
+
 def _attempt_prompt(prompt: str, attempt_number: int) -> str:
     if attempt_number == 1:
         return prompt
@@ -46,8 +113,11 @@ def _attempt_prompt(prompt: str, attempt_number: int) -> str:
 def _report_failure(name: str, attempt_number: int, result: AttemptResult) -> None:
     answer_tail = redact_diagnostic(result.answer)
     reason = redact_diagnostic(result.detail or "assertion did not match")
+    category = classify_failure(result.detail, result.answer)
+    log_path = latest_run_log_path()
     print(
-        f"Real-model check {name} attempt {attempt_number}/2 failed: {reason}; "
+        f"Real-model check {name} attempt {attempt_number}/2 failed: "
+        f"failure_category={category}; run_log_path={log_path}; {reason}; "
         f"actual answer tail (redacted): {answer_tail or '(empty/unavailable)'}",
         flush=True,
     )

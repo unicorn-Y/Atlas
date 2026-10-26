@@ -56,14 +56,41 @@ def _last_run_error_event(since: float) -> str:
                 record = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if not isinstance(record, dict):
+                continue
             event = str(record.get("event") or "")
             if not ("error" in event.lower() or "fail" in event.lower() or "timeout" in event.lower()):
                 continue
             summary = {key: record[key] for key in (
-                "timestamp", "event", "run_id", "tool", "tool_name", "error_type", "status_code", "error"
+                "timestamp", "event", "run_id", "tool", "tool_name", "error_type", "status",
+                "status_code", "category", "error"
             ) if key in record}
             return _redact_diagnostic(json.dumps(summary, ensure_ascii=False, default=str))
     return "none"
+
+
+def _action_continuation_count(since: float) -> int:
+    try:
+        from atlas.logs import LOG_DIR
+
+        paths = [path for path in (LOG_DIR / "runs").rglob("*.jsonl")
+                 if path.is_file() and path.stat().st_mtime >= since - 2]
+    except Exception:
+        return 0
+    count = 0
+    for path in paths:
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict) and record.get("event") == "unfulfilled_action_continuation":
+                count += 1
+    return count
 
 
 def check_office_generation(workspace: Path) -> None:
@@ -94,7 +121,9 @@ def check_office_generation(workspace: Path) -> None:
 
 def check_live_model_template(workspace: Path) -> None:
     """Exercise the real configured model and the same create_document tool used by the UI."""
-    from real_model_check import AttemptResult, retry_real_model_check
+    from real_model_check import (
+        AttemptResult, latest_run_log_path, retry_real_model_check,
+    )
 
     instruction = (
         "Use create_document to create u22-live-template.docx in the current workspace. "
@@ -110,6 +139,7 @@ def check_live_model_template(workspace: Path) -> None:
         part for part in (str(CORE), os.environ.get("PYTHONPATH", "")) if part
     )}
     target = workspace / "u22-live-template.docx"
+    continuation_samples: list[int] = []
 
     def run_attempt(prompt: str, attempt_number: int) -> AttemptResult:
         del attempt_number
@@ -133,18 +163,28 @@ def check_live_model_template(workspace: Path) -> None:
             return_code = "spawn-error"
             stderr_text = str(exc)
             answer = ""
+        continuation_samples.append(_action_continuation_count(started_at))
         if return_code == 0 and target.is_file() and target.stat().st_size > 0:
             return AttemptResult(True, answer=answer, value=target)
         stderr = stderr_text.lower()
+        last_error_event = _last_run_error_event(started_at)
         category = next((label for needle, label in (("503", "upstream 503"), ("429", "rate limited"), ("timeout", "timeout"),
                                                      ("timed out", "timeout"), ("401", "auth"), ("create_document", "tool error"))
-                         if needle in stderr), "model did not create the file" if return_code == 0 else "run failed")
+                         if needle in (stderr + " " + last_error_event.lower())),
+                        "model did not create the file" if return_code == 0 else "run failed")
         return AttemptResult(False, answer=answer, detail=(
-            f"exit {return_code}: {category}; stderr_tail={_redact_diagnostic(stderr_text)}; "
-            f"last_run_error_event={_last_run_error_event(started_at)}"
+            f"exit_code={return_code}; failure_category={category}; "
+            f"run_log_path={latest_run_log_path(started_at)}; "
+            f"stderr_tail={_redact_diagnostic(stderr_text)}; "
+            f"last_run_error_event={last_error_event}"
         ))
 
     retry_real_model_check("U22 Office DOCX tool creation", instruction, run_attempt)
+    print(
+        "U22 model action-intent continuation events across acceptance attempts: "
+        f"{sum(continuation_samples)} (samples={len(continuation_samples)})",
+        flush=True,
+    )
 
 
 def check_ide_fallback(workspace: Path) -> None:

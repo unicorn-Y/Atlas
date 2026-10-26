@@ -13,6 +13,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -42,6 +43,27 @@ _THINKING_OFF = frozenset({"off", "none", "disabled"})
 # high and the hard ceiling only guards against a runaway integer in config.
 DEFAULT_MAX_TURNS = 1000
 MAX_TURNS_CAP = 100_000
+MAX_UNFULFILLED_ACTION_CONTINUATIONS = 2
+
+_ACTION_INTENT_RE = re.compile(
+    r"(?:我(?:现在就|现在|马上|立刻|这就|馬上|馬上就)?来(?:帮你)?(?:创建|生成|制作|写|保存|导出|下载|发送|查找|搜索|打开|运行|执行)"
+    r"|接下来我(?:会|将|马上会|准备)(?:去)?(?:创建|生成|制作|写|保存|导出|下载|发送|查找|搜索|打开|运行|执行)"
+    r"|我(?:会|将|准备)(?:马上|立刻|现在|接下来)?(?:为你|帮你)?(?:创建|生成|制作|写|保存|导出|下载|发送|查找|搜索|打开|运行|执行)"
+    r"|(?:I'll|I will|I'm going to|Let me|I am going to)\s+(?:now\s+)?(?:create|generate|make|write|save|export|download|send|find|search|open|run|execute)\b)",
+    re.IGNORECASE,
+)
+_ACTION_COMPLETE_RE = re.compile(
+    r"(?:已(?:经)?(?:创建|生成|制作|写好|保存|导出|下载|发送|完成)|已完成|文件已|文档已|表格已|幻灯片已"
+    r"|(?:created|generated|made|written|saved|exported|downloaded|sent|completed)\b|done\b)",
+    re.IGNORECASE,
+)
+
+
+def _is_unfulfilled_action_intent(text: str) -> bool:
+    """Catch a reply that only promises an action and then ends without using a tool."""
+    cleaned = str(text or "").strip()
+    return bool(cleaned and _ACTION_INTENT_RE.search(cleaned)
+                and not _ACTION_COMPLETE_RE.search(cleaned))
 
 
 def _self_facts(agent: Any, model_id: str, workspace: str | None) -> tuple[str, str]:
@@ -1073,6 +1095,7 @@ class AtlasKernel:
             pending_nudges: list[dict[str, str]] = []
             pending_stop_responses: list[dict[str, str]] = []
             stop_hook_active = False
+            unfulfilled_action_continuations = 0
             compaction_trigger = "automatic"
 
             async def preserve_partial_output(finish_reason: str) -> None:
@@ -1877,6 +1900,43 @@ class AtlasKernel:
                         record("hook_block_ignored", hook="Stop",
                                reason=str(stop_hook.get("reason") or ""),
                                stop_hook_active=True)
+                    if (not stop_blocked
+                            and unfulfilled_action_continuations < MAX_UNFULFILLED_ACTION_CONTINUATIONS
+                            and _is_unfulfilled_action_intent(final_response)):
+                        unfulfilled_action_continuations += 1
+                        continuation = (
+                            "You just stated an intention to act, but this run has not made any tool call "
+                            "and the requested task is still unverified. Continue the user's original "
+                            "request now: perform the required action with the appropriate tool, inspect "
+                            "the result, and then report what was actually completed. Do not repeat a "
+                            "promise or claim completion without evidence."
+                        )
+                        await persist_async("assistant", final_response, {
+                            "kernel_run_id": run_id, "finish_reason": "unfulfilled_action_intent",
+                            "unfulfilled_action_intent": True,
+                        })
+                        messages.append({"role": "assistant", "content": final_response})
+                        messages.append({"role": "user", "content": continuation})
+                        await persist_async("user", continuation, {
+                            "kernel_run_id": run_id, "meta": True,
+                            "recovery": "unfulfilled_action_intent",
+                            "attempt": unfulfilled_action_continuations,
+                        })
+                        record("unfulfilled_action_continuation",
+                               attempt=unfulfilled_action_continuations,
+                               max_attempts=MAX_UNFULFILLED_ACTION_CONTINUATIONS,
+                               response_chars=len(final_response))
+                        yield emit("run.recovery.notice", data={
+                            "message": "模型只表态未执行操作，内核正在续跑原任务。",
+                            "attempt": unfulfilled_action_continuations,
+                            "max_attempts": MAX_UNFULFILLED_ACTION_CONTINUATIONS,
+                        })
+                        state.streamed_text = ""
+                        state.streamed_reasoning = ""
+                        state.streamed_refusal = ""
+                        state.streamed_tool_calls.clear()
+                        transition(RunPhase.AWAITING_MODEL_RESPONSE)
+                        continue
                     if final_response:
                         await persist_async("assistant", final_response, {
                             "kernel_run_id": run_id, "finish_reason": "stop", "reasoning": turn_reasoning or None,

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -150,6 +152,98 @@ def check_annual_api() -> None:
     assert status == 422 and "year must be between" in invalid["detail"]
 
 
+def check_kernel_continuation_classifier() -> None:
+    from atlas.kernel.loop import _is_unfulfilled_action_intent
+
+    assert _is_unfulfilled_action_intent("我现在就来生成这份文档。")
+    assert _is_unfulfilled_action_intent("接下来我会创建报告。")
+    assert _is_unfulfilled_action_intent("I'll create the document now.")
+    assert not _is_unfulfilled_action_intent("文档已生成并保存。")
+    assert not _is_unfulfilled_action_intent("我现在就来生成这份文档。文档已生成。")
+
+
+def _continuation_events_since(since: float) -> int:
+    try:
+        from atlas.logs import LOG_DIR
+
+        paths = [path for path in (LOG_DIR / "runs").rglob("*.jsonl")
+                 if path.is_file() and path.stat().st_mtime >= since - 2]
+    except Exception:
+        return 0
+    count = 0
+    for path in paths:
+        try:
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                try:
+                    if json.loads(line).get("event") == "unfulfilled_action_continuation":
+                        count += 1
+                except (json.JSONDecodeError, AttributeError):
+                    continue
+        except OSError:
+            continue
+    return count
+
+
+def check_live_action_intent_five_runs() -> None:
+    """Repeat the U22 document request five times against the configured real model."""
+    from real_model_check import (
+        classify_failure, latest_run_error_event, latest_run_log_path, redact_diagnostic,
+    )
+
+    prompt = (
+        "Use create_document to create u22-live-template.docx in the current workspace. "
+        "Make a concise project decision brief with a title, executive summary, assumptions, "
+        "risks, and three owner/action rows. Use concrete sample wording and no placeholders. "
+        "After creating the file, reply with a short confirmation."
+    )
+    command = [
+        sys.executable, "-m", "atlas.cli", "exec", "--model", "deepseek-v4.1-flash",
+        "--approve-writes", prompt,
+    ]
+    environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
+        part for part in (str(REPO_ROOT / "core"), os.environ.get("PYTHONPATH", "")) if part
+    )}
+    successes = 0
+    recovery_events = 0
+    with tempfile.TemporaryDirectory(prefix="atlas-u47-u22-") as temporary:
+        workspace = Path(temporary).resolve()
+        target = workspace / "u22-live-template.docx"
+        for sample in range(1, 6):
+            target.unlink(missing_ok=True)
+            started = time.time()
+            exit_code: int | str
+            stderr = ""
+            try:
+                result = subprocess.run(
+                    [*command[:-1], "--workspace", str(workspace), command[-1]],
+                    cwd=REPO_ROOT, env=environment, capture_output=True,
+                    encoding="utf-8", errors="replace", timeout=300, check=False,
+                )
+                exit_code, stderr = result.returncode, result.stderr or ""
+            except subprocess.TimeoutExpired as exc:
+                exit_code = "timeout"
+                raw = exc.stderr or ""
+                stderr = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else str(raw)
+            except OSError as exc:
+                exit_code, stderr = "spawn-error", str(exc)
+            recovery_events += _continuation_events_since(started)
+            if exit_code == 0 and target.is_file() and target.stat().st_size:
+                successes += 1
+                print(f"PASS U47 U22 real-model sample {sample}/5: document created", flush=True)
+                continue
+            category = classify_failure(stderr, "")
+            print(
+                f"FAIL U47 U22 real-model sample {sample}/5: exit_code={exit_code}; "
+                f"failure_category={category}; run_log_path={latest_run_log_path(started)}; "
+                f"stderr_tail={redact_diagnostic(stderr)}; "
+                f"last_run_error_event={latest_run_error_event(started)}",
+                flush=True,
+            )
+    print(f"U47 U22 five-run sample: {successes}/5 succeeded; "
+          f"auto-continuation observed {recovery_events} time(s)", flush=True)
+    assert successes == 5, f"U22 real-model request succeeded {successes}/5 times"
+
+
 def check_live_ui() -> None:
     status, targets = read_json_url("http://127.0.0.1:9336/json/list")
     assert status == 200
@@ -235,7 +329,9 @@ def check_live_ui() -> None:
 def main() -> int:
     check_cli_desktop_commands()
     check_annual_api()
+    check_kernel_continuation_classifier()
     check_live_ui()
+    check_live_action_intent_five_runs()
     print("U47 CHECK PASS")
     return 0
 
