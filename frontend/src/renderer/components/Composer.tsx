@@ -496,6 +496,12 @@ export default function Composer(props: ComposerProps) {
   };
   const submit = (event?: FormEvent, confirmedShell = false) => {
     event?.preventDefault();
+    // Exact, argument-free built-ins are commands even if the suggestion cursor
+    // currently points at another fuzzy match (e.g. `/title`).
+    const exactTitle = props.value.trim() === '/title'
+      ? registeredCommands.find((command) => command.id === 'title' && command.label === '/title' && !command.takesArgument)
+      : undefined;
+    if (exactTitle) { runCommand(exactTitle); return; }
     if (matches.length) { choose(matches[Math.min(cursor, matches.length - 1)]); return; }
     if (canSend) {
       const shellCommand = props.value.trim();

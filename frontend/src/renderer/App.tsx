@@ -375,6 +375,9 @@ export default function App() {
   const editingDraftRef = useRef<{ text: string; attachments: string[]; files: Array<RunFile & { size: number }>; mentions: MentionItem[] } | null>(null);
   const [rawText, setRawText] = useState<string | null>(null);
   const [rawTextTitle, setRawTextTitle] = useState('最近回复的原始文本');
+  const [titlePreview, setTitlePreview] = useState<{ conversationId: string; title: string } | null>(null);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [titleBusy, setTitleBusy] = useState(false);
   useEffect(() => {
     if (!store.connected || whatsNewLoaded) return;
     void api<{ highlights: Array<string | { date?: string; title?: string }> }>(store.apiBaseUrl, '/api/u6/whatsnew').then((result) => {
@@ -1008,9 +1011,26 @@ export default function App() {
     } finally { setMemoryMarkerSaving(false); }
   };
 
+  const generateConversationTitle = (conversationId = activeConversation?.id) => {
+    if (!conversationId) { setToast('先打开一个会话再生成标题'); return; }
+    setTitleBusy(true);
+    void api<{ title: string }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(conversationId)}/suggest-title`, { method: 'POST' })
+      .then(({ title }) => {
+        setTitleDraft(title);
+        setTitlePreview({ conversationId, title });
+      })
+      .catch((error) => setToast(`生成标题失败，原标题保留：${error instanceof Error ? error.message : String(error)}`))
+      .finally(() => setTitleBusy(false));
+  };
+
   const submit = async (fromHome: boolean, immediate = false, inputOverride?: string) => {
     const submittedInput = inputOverride ?? input;
     if (!submittedInput.trim() && !attachments.length && !files.length && !mentions.length) return;
+    if (!fromHome && submittedInput.trim() === '/title' && activeConversation) {
+      setInput(''); writeDraft(store.activeConversationId, '');
+      generateConversationTitle(activeConversation.id);
+      return;
+    }
     if (!fromHome && activeRun && !runDone && !immediate && !scheduleBypass.current) {
       setSchedulePromptOpen(true);
       return;
@@ -1868,14 +1888,7 @@ export default function App() {
         void navigator.clipboard.writeText(`# ${activeConversation.title || 'Atlas 会话'}\n\n${transcript}${toolSummary ? `\n\n## 工具调用摘要\n\n${toolSummary}` : ''}`).then(() => setToast('会话 Markdown 已复制')).catch(() => setToast('剪贴板不可用'));
       } },
       { id: 'rename', label: '/rename', hint: '把后面的文字设为对话名称', takesArgument: true, run: (title: string) => { if (title.trim()) void store.renameConversation(activeConversation.id, title); else setToast('在 /rename 后面写上新名称'); } },
-      { id: 'title', label: '/title', hint: '根据首轮目标生成标题；确认后保存', run: () => {
-        void api<{ title: string }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(activeConversation.id)}/suggest-title`, { method: 'POST' })
-          .then(({ title }) => {
-            const confirmed = window.prompt('确认或编辑生成的会话标题', title);
-            if (confirmed?.trim()) void store.renameConversation(activeConversation.id, confirmed.trim());
-          })
-          .catch((error) => setToast(`生成标题失败，原标题保留：${error instanceof Error ? error.message : String(error)}`));
-      } },
+      { id: 'title', label: '/title', hint: '根据首轮目标生成标题；预览、编辑并确认后保存', run: () => generateConversationTitle() },
       { id: 'resume', label: '/resume', hint: '继续打开最近对话，或按名称搜索', takesArgument: true, run: (query: string) => { const target = query.trim() ? store.conversations.find((item) => item.id === query.trim() || item.title.toLowerCase().includes(query.trim().toLowerCase())) : null; if (target) openConversation(target); else if (!query.trim()) setResumePickerOpen(true); else setToast('没有找到可恢复的对话'); } },
       { id: 'fork', label: '/fork', hint: '从最近消息或指定检查点分叉', takesArgument: true, run: (target: string) => {
         const requested = target.trim();
@@ -3169,6 +3182,26 @@ export default function App() {
         {hostedShare && <div className="rounded-lg border border-line bg-sunken p-3 text-[12px]"><p className="m-0 break-all font-mono">{hostedShare.url}</p><p className="mt-1 mb-2 text-fg-3">到期：{hostedShare.expires_at}</p><div className="flex gap-2"><Button type="button" variant="secondary" onClick={() => void navigator.clipboard.writeText(hostedShare.url).then(() => setToast('分享链接已复制'))}>复制链接</Button><Button type="button" variant="ghost" onClick={() => void api(store.apiBaseUrl, `/api/shares/${encodeURIComponent(hostedShare.id)}`, { method: 'DELETE' }).then(() => { setHostedShare(null); setToast('分享链接已撤销'); }).catch((error) => setToast(`撤销失败：${error instanceof Error ? error.message : String(error)}`))}>立即撤销</Button></div></div>}
         <div className="mt-1 flex justify-end gap-2"><Button type="button" variant="secondary" disabled={shareBusy} onClick={() => setShareDialogOpen(false)}>关闭</Button><Button type="submit" variant="primary" disabled={shareBusy || !shareBaseUrl.trim()}>{shareBusy ? '正在创建…' : '创建并复制链接'}</Button></div>
       </form>
+    </Dialog>
+    <Dialog open={titlePreview !== null || titleBusy} onOpenChange={(open) => { if (!open && !titleBusy) setTitlePreview(null); }} label="预览生成的会话标题" className="w-[min(560px,92vw)] bg-panel p-5 shadow-xl">
+      {titleBusy ? <p role="status" className="m-0 text-[13px] text-fg-3">正在根据首轮目标生成标题…</p> : titlePreview && <>
+        <h2 className="m-0 text-[16px] font-semibold text-heading">预览并确认会话标题</h2>
+        <p className="mt-2 mb-3 text-[12px] leading-[1.6] text-fg-3">检查自动生成的标题。你可以先编辑，再确认保存；取消会保留原标题。</p>
+        <label className="grid gap-1 text-[12px] text-fg-2">会话标题
+          <input autoFocus aria-label="预览会话标题" maxLength={120} value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)}
+            className="h-10 rounded-lg border border-line bg-sunken px-3 text-[14px] text-fg" />
+        </label>
+        <p className="mt-2 mb-0 break-all rounded-lg bg-sunken px-3 py-2 text-[12px] text-fg-3">当前原标题：{store.conversations.find((item) => item.id === titlePreview.conversationId)?.title || '未命名对话'}</p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={() => setTitlePreview(null)}>取消</Button>
+          <Button type="button" variant="primary" disabled={!titleDraft.trim()} onClick={() => {
+            const nextTitle = titleDraft.trim();
+            void store.renameConversation(titlePreview.conversationId, nextTitle).then(() => {
+              setTitlePreview(null); setToast('会话标题已更新');
+            }).catch((error) => setToast(`保存标题失败，原标题保留：${error instanceof Error ? error.message : String(error)}`));
+          }}>确认并保存</Button>
+        </div>
+      </>}
     </Dialog>
     <Dialog open={rawText !== null} onOpenChange={(open) => { if (!open) setRawText(null); }} label={rawTextTitle} className="flex max-h-[82vh] w-[min(900px,92vw)] flex-col bg-panel p-4 shadow-xl">
       <div className="mb-3 flex items-center gap-2">
