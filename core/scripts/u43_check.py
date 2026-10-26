@@ -21,6 +21,8 @@ import atlas.cluster_control as cluster_control
 from atlas.api import cluster_router
 from atlas.api import workflow_router
 from atlas.api import tool_search_settings_router
+from atlas.api import mcp_resources_router
+from atlas.api import mcp_resources_lazy_router
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 from atlas.api.runtime import RunState
@@ -174,6 +176,75 @@ def _run_cli_mode_check(core: Path) -> int:
     result = subprocess.run([sys.executable, "-m", "atlas.cli", "exec", "--help"], cwd=core,
                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
     return result.returncode if "--toolsearch-mode" in result.stdout else 2
+
+
+def check_mcp_resource_templates() -> None:
+    from types import SimpleNamespace
+
+    class FakeSession:
+        server_capabilities = SimpleNamespace(resources=object())
+
+        async def list_resources(self, params: Any = None) -> Any:
+            return SimpleNamespace(resources=[], nextCursor=None)
+
+        async def list_resource_templates(self, params: Any = None) -> Any:
+            return SimpleNamespace(resourceTemplates=[SimpleNamespace(
+                uriTemplate="fake://items/{id}{?q}", name="fake item", title="Fake item",
+                description="Local U43 fake MCP template", mimeType="text/plain")], nextCursor=None)
+
+        async def read_resource(self, uri: str) -> Any:
+            self.last_uri = uri
+            return SimpleNamespace(contents=[SimpleNamespace(uri=uri, mimeType="text/plain", text=f"fake-content:{uri}")])
+
+    class FakeMcpClient:
+        def __init__(self) -> None:
+            self.session = FakeSession()
+            self._servers = {"localhost-fake": SimpleNamespace(session=self.session)}
+
+        def get_runtime_status(self) -> dict[str, Any]:
+            return {"servers": [{"name": "localhost-fake", "enabled": True, "connected": True, "state": "connected"}]}
+
+        async def list_resource_templates(self, server_name: str | None = None, cursor: str | None = None) -> dict[str, Any]:
+            response = await self.session.list_resource_templates()
+            return {"localhost-fake": {"resourceTemplates": [
+                {"uriTemplate": item.uriTemplate, "name": item.name, "title": item.title,
+                 "description": item.description, "mimeType": item.mimeType}
+                for item in response.resourceTemplates], "nextCursor": None}}
+
+    fake_client = FakeMcpClient()
+    services = AppServices(mcp_client=fake_client)
+    app = FastAPI()
+    app.include_router(mcp_resources_lazy_router.router)
+    app.dependency_overrides[get_app_services] = lambda: services
+    with TestClient(app) as client:
+        response = client.get("/api/mcp/resource-templates")
+        assert response.status_code == 200 and response.json()["servers"][0]["template_state"] == "ready"
+        response = client.post("/api/mcp/resource-templates/read", json={
+            "server_name": "localhost-fake", "uri_template": "fake://items/{id}{?q}",
+            "variables": {"id": "route/item", "q": "via http"},
+        })
+        assert response.status_code == 200 and response.json()["uri"] == "fake://items/route%2Fitem?q=via+http"
+    app.dependency_overrides.clear()
+    listed = asyncio.run(mcp_resources_router.list_mcp_resource_templates(services))
+    fake_server = listed["servers"][0]
+    assert fake_server["template_state"] == "ready" and fake_server["templates"][0]["uri_template"] == "fake://items/{id}{?q}"
+    read = asyncio.run(mcp_resources_router.read_mcp_resource_template(
+        mcp_resources_router.ResourceTemplateReadRequest(
+            server_name="localhost-fake", uri_template="fake://items/{id}{?q}",
+            variables={"id": "folder/a b", "q": "hello world"}), services))
+    assert read["uri"] == "fake://items/folder%2Fa%20b?q=hello+world"
+    assert read["contents"][0]["text"].startswith("fake-content:")
+    assert fake_client.session.last_uri == read["uri"]
+    try:
+        asyncio.run(mcp_resources_router.read_mcp_resource_template(
+            mcp_resources_router.ResourceTemplateReadRequest(
+                server_name="localhost-fake", uri_template="fake://items/{id}{?q}", variables={"id": "x"}), services))
+    except Exception as exc:
+        assert "Missing MCP resource template variable: q" in str(exc)
+    else:
+        raise AssertionError("missing MCP resource template variable was accepted")
+    ui = (Path(__file__).resolve().parents[1].parent / "frontend/src/renderer/components/settings/McpResourcesPanel.tsx").read_text(encoding="utf-8")
+    assert all(token in ui for token in ("/api/mcp/resource-templates", "模板参数", "读取模板资源", "解析 URI：", "MCP resource templates 浏览器"))
 
 
 def check_isolated_preview() -> None:
@@ -359,6 +430,7 @@ def main() -> None:
     check_interactive_cli_and_private_bug_bundle()
     check_workflow_blueprints()
     check_tool_search_modes()
+    check_mcp_resource_templates()
     print("U43 CHECK PASS")
 
 
