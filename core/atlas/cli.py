@@ -218,6 +218,71 @@ def main() -> None:
     pass
 
 
+@main.group("marketplace")
+def marketplace_cli() -> None:
+    """Search, inspect, install, and remove community skills."""
+
+
+def _cli_skill_market():
+    """Use the exact SkillMarket and registry used by the graphical market."""
+    try:
+        from atlas.api.skills_market_router import get_market
+        return get_market()
+    except Exception as exc:
+        raise click.ClickException(f"技能市场初始化失败：{type(exc).__name__}: {exc}") from exc
+
+
+@marketplace_cli.command("search")
+@click.argument("query", required=False, default="")
+@click.option("--source", default=None, help="只搜索指定来源。")
+@click.option("--limit", type=click.IntRange(1, 100), default=20, show_default=True)
+def marketplace_search(query: str, source: str | None, limit: int) -> None:
+    """Search installed market sources."""
+    result = asyncio.run(_cli_skill_market().search(query=query, source=source, limit=limit))
+    skills = result.get("results", [])
+    if not skills:
+        console.print("没有找到技能。")
+        return
+    for item in skills:
+        console.print(f"{item.get('source', '?')}  {item.get('identifier', '?')}  {item.get('name', '')} — {item.get('description', '')}")
+
+
+@marketplace_cli.command("show")
+@click.argument("source")
+@click.argument("identifier")
+def marketplace_show(source: str, identifier: str) -> None:
+    """Show candidate metadata, manifest, dependencies, and review diagnostics."""
+    result = asyncio.run(_cli_skill_market().detail(source, identifier))
+    console.print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@marketplace_cli.command("install")
+@click.argument("source")
+@click.argument("identifier")
+@click.option("--scope", type=click.Choice(["user", "project"]), default="user", show_default=True)
+@click.option("--overwrite", is_flag=True, help="替换同名市场技能。")
+def marketplace_install(source: str, identifier: str, scope: str, overwrite: bool) -> None:
+    """Install from a source; SkillMarket validates manifests and dependencies."""
+    market = _cli_skill_market()
+    result = asyncio.run(market.detail(source, identifier))
+    console.print(f"安装前检查：{result.get('name', identifier)} · 来源 {source}")
+    for key in ("security", "validation", "dependencies", "provider_integrity", "computed_sha256"):
+        if key in result:
+            console.print(f"{key}: {json.dumps(result[key], ensure_ascii=False)}")
+    if result.get("security", {}).get("result") == "BLOCK":
+        raise click.ClickException("安装前检查阻止了此技能。")
+    installed = asyncio.run(market.install(source, identifier, scope=scope, overwrite=overwrite))
+    console.print(f"已安装 {installed.get('name')} {installed.get('version', '')} → {installed.get('path')}")
+
+
+@marketplace_cli.command("uninstall")
+@click.argument("name")
+def marketplace_uninstall(name: str) -> None:
+    """Uninstall a skill managed by the marketplace."""
+    result = _cli_skill_market().uninstall(name)
+    console.print(f"已卸载 {name}：{', '.join(result.get('removed_paths', []))}")
+
+
 @main.command("verify")
 def verify_command() -> None:
     """Check that the Atlas Python installation and version metadata agree."""
