@@ -19,6 +19,7 @@ import uvicorn
 
 import atlas.cluster_control as cluster_control
 from atlas.api import cluster_router
+from atlas.api import workflow_router
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 from atlas.api.runtime import RunState
@@ -87,6 +88,41 @@ def check_interactive_cli_and_private_bug_bundle() -> None:
     battery = asyncio.run(get_battery_status())
     assert set(battery) == {"supported", "level", "charging", "seconds_left"}
     assert (battery["supported"] and isinstance(battery["level"], int)) or battery["level"] is None
+
+
+def check_workflow_blueprints() -> None:
+    core = Path(__file__).resolve().parents[1]
+    repo = core.parent
+    ui = (repo / "frontend/src/renderer/components/WorkflowManagerDialog.tsx").read_text(encoding="utf-8")
+    assert all(token in ui for token in ("Blueprint 工作流", "depends_on", "acceptance", "步骤上移", "保存模板变更", "按此方案创建工作流", "JSON.stringify(plan"))
+    with tempfile.TemporaryDirectory(prefix="u43-blueprints-") as directory:
+        workflow_router._templates = lambda: __import__("atlas.task_artifacts", fromlist=["TomlRecordStore"]).TomlRecordStore(Path(directory), "templates")
+        builtins = asyncio.run(workflow_router.list_templates())["templates"]
+        assert len([item for item in builtins if item["builtin"]]) >= 2
+        created = asyncio.run(workflow_router.create_template({"name": "Test DAG", "goal": "verify", "steps": [
+            {"id": "inspect", "title": "Inspect", "goal": "inspect code", "depends_on": [], "acceptance": ["evidence"]},
+            {"id": "fix", "title": "Fix", "goal": "fix root", "depends_on": ["inspect"], "acceptance": ["passes"]},
+        ]}))['template']
+        assert created["steps"][1]["depends_on"] == ["inspect"]
+        updated = asyncio.run(workflow_router.update_template(created["id"], {"steps": [
+            {"id": "inspect", "title": "Inspect", "goal": "inspect code", "depends_on": [], "acceptance": ["evidence", "reproduced"]},
+        ]}))['template']
+        assert updated["steps"][0]["acceptance"] == ["evidence", "reproduced"]
+        try:
+            asyncio.run(workflow_router.create_template({"name": "Bad", "goal": "bad", "steps": [
+                {"id": "later", "title": "Later", "goal": "later", "depends_on": ["future"], "acceptance": ["done"]},
+            ]}))
+        except Exception as exc:
+            assert "earlier steps" in str(exc)
+        else:
+            raise AssertionError("forward or unknown dependency was accepted")
+        assert asyncio.run(workflow_router.delete_template(created["id"]))["deleted"]
+        try:
+            asyncio.run(workflow_router.delete_template("builtin-implementation"))
+        except Exception as exc:
+            assert "cannot be deleted" in str(exc)
+        else:
+            raise AssertionError("built-in blueprint deletion was accepted")
 
 
 def check_isolated_preview() -> None:
@@ -270,6 +306,7 @@ def main() -> None:
     check_isolated_preview()
     check_cluster_control()
     check_interactive_cli_and_private_bug_bundle()
+    check_workflow_blueprints()
     print("U43 CHECK PASS")
 
 
