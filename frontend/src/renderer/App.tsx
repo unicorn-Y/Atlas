@@ -211,6 +211,14 @@ const writeDraft = (conversationId: string, text: string) => {
 };
 const pref = (key: string) => { try { return localStorage.getItem(`atlas.preference.${key}`); } catch { return null; } };
 const setPref = (key: string, value: string) => { try { localStorage.setItem(`atlas.preference.${key}`, value); } catch { /* storage unavailable */ } };
+const WINDOW_TITLE_FIELDS = ['conversation', 'model', 'workspace', 'status'] as const;
+type WindowTitleField = typeof WINDOW_TITLE_FIELDS[number];
+const DEFAULT_WINDOW_TITLE_FIELDS: WindowTitleField[] = ['conversation', 'status'];
+const readWindowTitleFields = (): WindowTitleField[] => {
+  const saved = pref('window-title-fields');
+  if (saved === null) return [...DEFAULT_WINDOW_TITLE_FIELDS];
+  return saved.split(',').filter((value): value is WindowTitleField => WINDOW_TITLE_FIELDS.includes(value as WindowTitleField));
+};
 const STATUS_BAR_KEYS: Array<keyof StatusBarPreferences> = ['model', 'reasoning', 'context', 'tokens', 'cost', 'git', 'permission', 'processes'];
 const readStatusBarPreferences = (): StatusBarPreferences => {
   let saved: Partial<StatusBarPreferences> = {};
@@ -256,6 +264,8 @@ export default function App() {
     const value = Number(pref('scroll-speed'));
     return Number.isFinite(value) && value >= 0.25 && value <= 3 ? value : 1;
   });
+  const [windowTitleOpen, setWindowTitleOpen] = useState(false);
+  const [windowTitleFields, setWindowTitleFields] = useState<WindowTitleField[]>(readWindowTitleFields);
   const [daybreakEnabled, setDaybreakEnabled] = useState(() => pref('daybreak') === 'true');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('artifacts');
   const [previewFile, setPreviewFile] = useState('');
@@ -716,10 +726,19 @@ export default function App() {
   }
   const modelName = store.models.find((model) => model.id === store.model)?.name ?? store.model ?? '默认模型';
   useEffect(() => {
-    const sessionName = activeConversation?.title?.trim() || '新任务';
-    const status = store.busy ? ' · 运行中…' : '';
-    document.title = `${sessionName}${status} — Atlas`;
-  }, [activeConversation?.title, store.busy]);
+    const values: Record<WindowTitleField, string> = {
+      conversation: activeConversation?.title?.trim() || '新任务',
+      model: modelName,
+      workspace: typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : store.draftWorkspace ?? defaultWorkspace,
+      status: store.busy ? (store.paused ? '已暂停' : '运行中') : '',
+    };
+    const parts = windowTitleFields.map((field) => values[field]?.trim()).filter((value): value is string => Boolean(value));
+    const suffix = parts.length ? ' — Atlas' : '';
+    const fullTitle = `${parts.join(' · ') || 'Atlas'}${suffix}`;
+    const title = fullTitle.length > 160 ? `${fullTitle.slice(0, 159).trimEnd()}…` : fullTitle;
+    document.title = title;
+    window.atlasDesktop?.setWindowTitle?.(title);
+  }, [activeConversation?.title, activeConversation?.workspace, defaultWorkspace, modelName, store.busy, store.draftWorkspace, store.paused, windowTitleFields]);
   const loadingMessages = store.loadingMessagesConversationId === store.activeConversationId && Boolean(store.activeConversationId);
   const working = store.busy && !store.paused;
   const reply = useMemo(() => {
@@ -1985,7 +2004,13 @@ export default function App() {
       setHandoffDraft(''); setHandoffSource('');
     } catch (error) { setToast(`创建交接会话失败：${error instanceof Error ? error.message : String(error)}`); }
   };
+  const updateWindowTitleFields = (fields: WindowTitleField[]) => {
+    const clean = WINDOW_TITLE_FIELDS.filter((field) => fields.includes(field));
+    setWindowTitleFields(clean);
+    setPref('window-title-fields', clean.join(','));
+  };
   const slashCommands: SlashCommand[] = [
+    { id: 'window-title', label: '/window-title', hint: '选择窗口标题显示的会话、模型、工作目录和运行状态', run: () => setWindowTitleOpen(true) },
     { id: 'scroll-speed', label: '/scroll-speed', hint: '调整对话滚轮速度并即时预览', run: () => setScrollSpeedOpen(true) },
     ...(activeConversation ? [{ id: 'break-cache', label: '/break-cache', hint: '下一轮插入唯一提示前缀以避开提示缓存；status 显示真实服务商命中数据', takesArgument: true, run: (raw: string) => {
       const key = 'cache-bypass-next-conversation';
@@ -3624,6 +3649,19 @@ export default function App() {
       <div className="mt-4 flex justify-between gap-2"><Button variant="ghost" onClick={() => {
         setScrollSpeed(1); setPref('scroll-speed', '1'); window.dispatchEvent(new CustomEvent('atlas:scroll-speed', { detail: 1 }));
       }}>恢复默认</Button><Button variant="primary" onClick={() => setScrollSpeedOpen(false)}>完成</Button></div>
+    </Dialog>
+    <Dialog open={windowTitleOpen} onOpenChange={setWindowTitleOpen} label="窗口标题信息选择" className="w-[min(520px,92vw)] bg-panel p-5 shadow-xl">
+      <h2 className="m-0 text-[16px] font-semibold text-heading">窗口标题显示内容</h2>
+      <p className="mt-2 text-[12.5px] text-fg-3">标题会立即同步到 Atlas 窗口和任务栏，最长 160 个字符。未选择工作区时该部分会自动略过。</p>
+      <div className="mt-4 grid gap-2">
+        {([
+          ['conversation', '会话标题'], ['model', '当前模型'], ['workspace', '工作目录'], ['status', '运行状态'],
+        ] as Array<[WindowTitleField, string]>).map(([field, label]) => <label key={field} className="flex items-center gap-2 rounded-lg border border-line bg-sunken px-3 py-2 text-[13px] text-fg-2">
+          <input type="checkbox" checked={windowTitleFields.includes(field)} onChange={(event) => updateWindowTitleFields(event.target.checked ? [...windowTitleFields, field] : windowTitleFields.filter((item) => item !== field))} />
+          {label}
+        </label>)}
+      </div>
+      <div className="mt-4 flex justify-between gap-2"><Button variant="ghost" onClick={() => updateWindowTitleFields([...DEFAULT_WINDOW_TITLE_FIELDS])}>恢复默认</Button><Button variant="primary" onClick={() => setWindowTitleOpen(false)}>完成</Button></div>
     </Dialog>
     {recapViewerOpen && <div role="dialog" aria-modal="true" aria-label="最近自动回顾" className="fixed inset-0 z-[90] grid place-items-center bg-black/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setRecapViewerOpen(false); }}><section className="card-surface flex max-h-[75vh] w-full max-w-2xl flex-col gap-3 rounded-2xl p-5 shadow-xl"><header className="flex items-center gap-2"><h2 className="m-0 flex-1 text-[16px] font-semibold text-heading">最近自动回顾 · {activeConversation?.title ?? '当前会话'}</h2><button type="button" aria-label="关闭最近回顾" className="btn ghost" onClick={() => setRecapViewerOpen(false)}>关闭</button></header><div className="min-h-0 flex-1 space-y-3 overflow-auto">{recentRecaps.map((recap) => <article key={recap.run_id} className="rounded-xl border border-line bg-sunken p-3"><div className="mb-2 flex items-center gap-2 text-[11px] text-fg-3"><span>运行 {recap.run_id.slice(0, 8)}</span><time>{new Date(recap.created_at).toLocaleString()}</time></div><div className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-fg-2">{recap.summary}</div></article>)}{!recentRecaps.length && <p role="status" className="m-0 p-6 text-center text-[12px] text-fg-3">这个会话还没有自动回顾。可在外观与语音设置中开启“每轮自动回顾”。</p>}</div></section></div>}
 

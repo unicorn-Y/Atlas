@@ -1516,6 +1516,11 @@ ipcMain.handle('window:set-fullscreen', (event, enabled: unknown) => {
   if (windowRef.isFullScreen() !== enabled) windowRef.setFullScreen(enabled);
   return windowRef.isFullScreen();
 });
+ipcMain.on('window:set-title', (event, value: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof value !== 'string' || !windowRef || windowRef.isDestroyed()) return;
+  windowRef.setTitle(value.trim().slice(0, 180) || 'Atlas');
+});
 ipcMain.on('window:close', () => windowRef?.close());
 // Source mode (running from a git checkout without the Vite dev server): updates are
 // pulled and rebuilt by scripts/atlas-update.mjs instead of reinstalling a package.

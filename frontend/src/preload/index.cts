@@ -9,6 +9,7 @@ const desktopApi: AtlasDesktopApi = {
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),
   setWindowFullScreen: (enabled: boolean) => ipcRenderer.invoke('window:set-fullscreen', enabled) as Promise<boolean>,
+  setWindowTitle: (title: string) => ipcRenderer.send('window:set-title', title),
   onWindowFullScreenChange: (callback: (fullScreen: boolean) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, fullScreen: boolean) => callback(fullScreen);
     ipcRenderer.on('window:fullscreen-change', listener);

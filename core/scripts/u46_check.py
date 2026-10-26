@@ -154,10 +154,37 @@ async def check_scroll_speed() -> None:
             await _cdp_eval(ws, 8, "(()=>{const d=document.querySelector('[role=dialog]');if(d)[...d.querySelectorAll('button')].find(b=>b.innerText.includes('完成'))?.click();if(" + json.dumps(before) + "===null)localStorage.removeItem('atlas.preference.scroll-speed');else localStorage.setItem('atlas.preference.scroll-speed'," + json.dumps(before) + ");window.dispatchEvent(new CustomEvent('atlas:scroll-speed',{detail:Number(" + json.dumps(before) + "||1)}))})()")
 
 
+async def check_window_title() -> None:
+    """Use the renderer slash command and checkbox to update both title preference and document title."""
+    target = next((item for item in json.load(urllib.request.urlopen("http://127.0.0.1:9336/json/list"))
+                   if item.get("type") == "page" and "127.0.0.1:5173" in item.get("url", "")), None)
+    assert target, "Atlas renderer is not attached to CDP port 9336"
+    async with websockets.connect(target["webSocketDebuggerUrl"]) as ws:
+        before = await _cdp_eval(ws, 1, "localStorage.getItem('atlas.preference.window-title-fields')")
+        original = (before.split(",") if isinstance(before, str) else ["conversation", "status"])
+        try:
+            await _cdp_eval(ws, 2, "(()=>{const d=document.querySelector('[role=dialog]');if(d)[...d.querySelectorAll('button')].find(b=>b.innerText.includes('完成'))?.click();const e=document.querySelector('textarea[aria-label=\\\"消息内容\\\"]');e.focus();e.value='';e.dispatchEvent(new Event('input',{bubbles:true}))})()")
+            await _cdp_command(ws, 3, "Input.insertText", {"text": "/window-title"})
+            await _cdp_command(ws, 4, "Input.dispatchKeyEvent", {"type": "keyDown", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
+            await _cdp_command(ws, 5, "Input.dispatchKeyEvent", {"type": "keyUp", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
+            dialog = await _cdp_eval(ws, 6, "({open:!!document.querySelector('[role=dialog]'),labels:[...document.querySelectorAll('[role=dialog] label')].map(x=>x.innerText.trim())})")
+            assert dialog["open"] and dialog["labels"] == ["会话标题", "当前模型", "工作目录", "运行状态"], dialog
+            old_title = await _cdp_eval(ws, 7, "document.title")
+            await _cdp_eval(ws, 8, "[...document.querySelectorAll('[role=dialog] label')].find(x=>x.innerText.includes('当前模型'))?.querySelector('input')?.click()")
+            await asyncio.sleep(0.2)
+            changed = await _cdp_eval(ws, 9, "({title:document.title,fields:localStorage.getItem('atlas.preference.window-title-fields'),ipc:typeof window.atlasDesktop?.setWindowTitle,tooLong:document.title.length>160})")
+            assert changed["ipc"] == "function" and not changed["tooLong"] and changed["title"] != old_title, changed
+            assert ("model" in (changed["fields"] or "")) != ("model" in original), changed
+            print("PASS window-title: field picker updates persisted selection, renderer title, and main-process IPC bridge")
+        finally:
+            await _cdp_eval(ws, 10, "(()=>{const l=[...document.querySelectorAll('[role=dialog] label')].find(x=>x.innerText.includes('当前模型'));if(l){const checked=l.querySelector('input')?.checked;const wanted=" + json.dumps("model" in original) + ";if(checked!==wanted)l.querySelector('input')?.click()}const pref=" + json.dumps(before) + ";if(pref===null)localStorage.removeItem('atlas.preference.window-title-fields');else localStorage.setItem('atlas.preference.window-title-fields',pref);const d=document.querySelector('[role=dialog]');if(d)[...d.querySelectorAll('button')].find(b=>b.innerText.includes('完成'))?.click()})()")
+
+
 async def main() -> None:
     check_shell_aliases()
     check_automation_cap()
     await check_scroll_speed()
+    await check_window_title()
     print("U46 CHECK PASS")
 
 

@@ -62,6 +62,7 @@ export interface AtlasDesktopApi {
   minimize(): void;
   maximize(): void;
   setWindowFullScreen?(enabled: boolean): Promise<boolean>;
+  setWindowTitle?(title: string): void;
   onWindowFullScreenChange?(callback: (fullScreen: boolean) => void): () => void;
   close(): void;
   requestQuit?(): Promise<boolean>;
