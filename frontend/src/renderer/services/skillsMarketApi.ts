@@ -116,6 +116,12 @@ export async function removeSkillFromAgent(apiBaseUrl: string, agentId: string, 
   await request(apiBaseUrl, `/api/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(skillName)}`, { method: 'DELETE' });
 }
 
+export type SkillSourcePolicy = { schema_version: number; create: Record<'bundled' | 'local' | 'marketplace' | 'evolved', boolean>; load: Record<'bundled' | 'local' | 'marketplace' | 'evolved', boolean>; overrides: Record<string, boolean> };
+export async function getSkillSourcePolicy(apiBaseUrl: string): Promise<SkillSourcePolicy> { return request(apiBaseUrl, '/api/skills/source-policy'); }
+export async function saveSkillSourcePolicy(apiBaseUrl: string, policy: SkillSourcePolicy): Promise<SkillSourcePolicy> {
+  return request(apiBaseUrl, '/api/skills/source-policy', { method: 'PUT', json: policy });
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const str = (value: unknown, fallback = ''): string => typeof value === 'string' ? value : fallback;
 const num = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;

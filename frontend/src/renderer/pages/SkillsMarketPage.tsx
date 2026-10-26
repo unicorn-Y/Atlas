@@ -4,6 +4,7 @@ import {
   listInstalledSkills, searchMarket, setSkillEnabled, SOURCE_KIND_LABEL,
   uninstallMarketSkill, type InstalledSkillRecord, type MarketSearchHit, type MarketTap,
   getSkillUsageOverview, removeSkillFromAgent,
+  getSkillSourcePolicy, saveSkillSourcePolicy, type SkillSourcePolicy,
 } from '../services/skillsMarketApi';
 import SkillCard from '../components/skills/SkillCard';
 import SkillDetail from '../components/skills/SkillDetail';
@@ -13,7 +14,7 @@ import SourcesManager from '../components/skills/SourcesManager';
 import SkillDiscoveryPage from './SkillDiscoveryPage';
 import { useAtlasStore } from '../store/useAtlasStore';
 
-export type SkillsTabId = 'market' | 'installed' | 'updates' | 'discovery' | 'doctor';
+export type SkillsTabId = 'market' | 'installed' | 'updates' | 'discovery' | 'doctor' | 'sources-policy';
 
 const TABS: Array<{ id: SkillsTabId; label: string }> = [
   { id: 'market', label: '市场' },
@@ -21,9 +22,10 @@ const TABS: Array<{ id: SkillsTabId; label: string }> = [
   { id: 'updates', label: '更新' },
   { id: 'discovery', label: '安全发现' },
   { id: 'doctor', label: '使用体检' },
+  { id: 'sources-policy', label: '来源策略' },
 ];
 
-const isTab = (value: unknown): value is SkillsTabId => value === 'market' || value === 'installed' || value === 'updates' || value === 'discovery' || value === 'doctor';
+const isTab = (value: unknown): value is SkillsTabId => value === 'market' || value === 'installed' || value === 'updates' || value === 'discovery' || value === 'doctor' || value === 'sources-policy';
 
 /** 侧栏「技能」入口的主页面：市场 / 已安装 / 更新 三个标签页。 */
 export default function SkillsMarketPage({ apiBaseUrl, onToast, onTryInConversation, initialTab = 'market' }: {
@@ -48,6 +50,9 @@ export default function SkillsMarketPage({ apiBaseUrl, onToast, onTryInConversat
   const [usageRows, setUsageRows] = useState<Awaited<ReturnType<typeof getSkillUsageOverview>>['skills']>([]);
   const [usageError, setUsageError] = useState('');
   const [usageFilter, setUsageFilter] = useState<'all' | 'unused' | 'stale'>('all');
+  const [sourcePolicy, setSourcePolicy] = useState<SkillSourcePolicy | null>(null);
+  const [overrideName, setOverrideName] = useState('');
+  const loadSourcePolicy = useCallback(async () => { try { setSourcePolicy(await getSkillSourcePolicy(apiBaseUrl)); } catch (error) { onToast?.(error instanceof Error ? error.message : '来源策略加载失败'); } }, [apiBaseUrl, onToast]);
   const loadUsage = useCallback(async () => {
     try { setUsageError(''); setUsageRows((await getSkillUsageOverview(apiBaseUrl)).skills); }
     catch (error) { setUsageError(error instanceof Error ? error.message : '技能使用数据读取失败'); }
@@ -220,6 +225,15 @@ export default function SkillsMarketPage({ apiBaseUrl, onToast, onTryInConversat
         <div className="mt-2 grid gap-1 text-[12px] text-fg-2">{row.agents.map((agent) => <div key={agent.agent_id} className="flex items-center gap-2"><span className="flex-1">{agent.agent_id} · {agent.use_count} 次 · {agent.last_used_at ? new Date(agent.last_used_at).toLocaleString() : '未记录'}</span><button className="btn ghost" onClick={async () => { await removeSkillFromAgent(apiBaseUrl, agent.agent_id, row.skill_name); await loadUsage(); onToast?.(`已从 ${agent.agent_id} 移除 ${row.skill_name}`); }}>从 Agent 移除</button></div>)}</div>
       </article>)}
       {!usageRows.length && !usageError && <div className="card-surface rounded-xl p-4 text-[12.5px] text-fg-3">点击“检查使用情况”加载技能体检数据。</div>}
+    </section>}
+    {tab === 'sources-policy' && <section aria-label="技能来源策略" className="grid gap-3">
+      <div className="flex items-center gap-2"><p className="m-0 flex-1 text-[12.5px] text-fg-3">分别控制各来源技能能否创建和加载；按名称的加载覆盖优先于来源设置。</p><button className="btn ghost" onClick={() => void loadSourcePolicy()}>读取策略</button></div>
+      {!sourcePolicy && <div className="card-surface rounded-xl p-4 text-[12.5px] text-fg-3">读取当前策略后可修改。</div>}
+      {sourcePolicy && <>
+        {(['bundled', 'local', 'marketplace', 'evolved'] as const).map((source) => <div key={source} className="card-surface flex flex-wrap items-center gap-4 rounded-xl p-3"><b className="min-w-28">{{ bundled: '内置', local: '本地', marketplace: '市场', evolved: '演化' }[source]}</b><label><input type="checkbox" checked={sourcePolicy.create[source]} onChange={(event) => setSourcePolicy({ ...sourcePolicy, create: { ...sourcePolicy.create, [source]: event.target.checked } })} /> 允许创建/安装</label><label><input type="checkbox" checked={sourcePolicy.load[source]} onChange={(event) => setSourcePolicy({ ...sourcePolicy, load: { ...sourcePolicy.load, [source]: event.target.checked } })} /> 允许运行时加载</label></div>)}
+        <div className="card-surface flex flex-wrap items-center gap-2 rounded-xl p-3"><input className="input h-9 min-w-48 flex-1" value={overrideName} onChange={(event) => setOverrideName(event.target.value)} placeholder="技能名称（覆盖加载策略）" aria-label="技能策略覆盖名称" /><button className="btn ghost" disabled={!overrideName.trim()} onClick={() => { setSourcePolicy({ ...sourcePolicy, overrides: { ...sourcePolicy.overrides, [overrideName.trim()]: true } }); setOverrideName(''); }}>允许此技能加载</button><button className="btn ghost" disabled={!overrideName.trim()} onClick={() => { setSourcePolicy({ ...sourcePolicy, overrides: { ...sourcePolicy.overrides, [overrideName.trim()]: false } }); setOverrideName(''); }}>禁用此技能加载</button></div>
+        <button className="btn primary justify-self-start" onClick={async () => { try { setSourcePolicy(await saveSkillSourcePolicy(apiBaseUrl, sourcePolicy)); onToast?.('技能来源策略已保存'); } catch (error) { onToast?.(error instanceof Error ? error.message : '策略保存失败'); } }}>保存来源策略</button>
+      </>}
     </section>}
     {tab === 'discovery' && <section aria-label="技能安全发现与信任审查">
       <div className="mb-3 rounded-xl border border-line bg-sunken px-3 py-2 text-[12.5px] leading-relaxed text-fg-2">

@@ -269,6 +269,9 @@ async def market_detail(source: str, skill_id: str) -> dict[str, Any]:
 @router.post("/api/skills/market/install", dependencies=[Depends(_require_trusted_origin)])
 async def market_install(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     try:
+        from atlas.skills.source_policy import get_policy
+        if not get_policy()["create"].get("marketplace", True) and payload.get("override_source_policy") is not True:
+            raise HTTPException(status_code=403, detail="市场技能创建已被来源策略禁用；显式确认后可覆盖一次。")
         return await get_market().install(
             str(payload.get("source", "")), str(payload.get("id", "")),
             scope=str(payload.get("scope", "user")),

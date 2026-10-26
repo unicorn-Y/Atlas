@@ -485,6 +485,9 @@ class SkillManager:
         skill = self._index.get(name)
         if skill is None:
             return None
+        from atlas.skills.source_policy import skill_load_allowed
+        if not skill_load_allowed(skill):
+            raise PermissionError(f"skill loading is disabled by source policy ({skill.name})")
 
         blockers = [item for item in self.preflight_dependencies(
             name, connected_servers=connected_servers,

@@ -326,6 +326,21 @@ async def skill_usage_overview() -> dict[str, Any]:
     return {"skills": items, "estimated_token_method": "SKILL.md characters / 4; approximate"}
 
 
+@router.get("/api/skills/source-policy", dependencies=[Depends(_require_trusted_origin)])
+async def get_skill_source_policy() -> dict[str, Any]:
+    from atlas.skills.source_policy import get_policy
+    return get_policy()
+
+
+@router.put("/api/skills/source-policy", dependencies=[Depends(_require_trusted_origin)])
+async def put_skill_source_policy(payload: dict[str, Any]) -> dict[str, Any]:
+    from atlas.skills.source_policy import set_policy
+    try:
+        return set_policy(payload)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Cannot persist skill source policy: {exc}") from exc
+
+
 __all__ = [
     "router", "set_collections", "set_proposals",
     "get_collections", "get_proposals",
