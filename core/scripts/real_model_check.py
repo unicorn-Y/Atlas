@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import inspect
 import json
 import re
+import time
 from typing import Any, Callable
 
 
@@ -15,6 +16,10 @@ class AttemptResult:
     answer: str = ""
     detail: str = ""
     value: Any = None
+    exit_code: int | str | None = None
+    stderr_tail: str = ""
+    run_log_path: str = ""
+    last_run_error_event: str = ""
 
 
 _SECRET_FIELD = re.compile(
@@ -110,14 +115,18 @@ def _attempt_prompt(prompt: str, attempt_number: int) -> str:
     )
 
 
-def _report_failure(name: str, attempt_number: int, result: AttemptResult) -> None:
+def _report_failure(name: str, attempt_number: int, result: AttemptResult, *, since: float) -> None:
     answer_tail = redact_diagnostic(result.answer)
     reason = redact_diagnostic(result.detail or "assertion did not match")
     category = classify_failure(result.detail, result.answer)
-    log_path = latest_run_log_path()
+    exit_code = result.exit_code if result.exit_code is not None else "not reported by callback"
+    stderr_tail = redact_diagnostic(result.stderr_tail or "not reported by callback")
+    log_path = result.run_log_path or latest_run_log_path(since)
+    error_event = result.last_run_error_event or latest_run_error_event(since)
     print(
         f"Real-model check {name} attempt {attempt_number}/2 failed: "
-        f"failure_category={category}; run_log_path={log_path}; {reason}; "
+        f"failure_category={category}; exit_code={exit_code}; stderr_tail={stderr_tail}; "
+        f"last_run_error_event={error_event}; run_log_path={log_path}; {reason}; "
         f"actual answer tail (redacted): {answer_tail or '(empty/unavailable)'}",
         flush=True,
     )
@@ -135,6 +144,7 @@ async def retry_real_model_check_async(
     """
     last = AttemptResult(False, detail="no attempt completed")
     for attempt_number in (1, 2):
+        started_at = time.time()
         try:
             outcome = attempt(_attempt_prompt(prompt, attempt_number), attempt_number)
             if inspect.isawaitable(outcome):
@@ -147,7 +157,7 @@ async def retry_real_model_check_async(
         if last.passed:
             print(f"PASS real-model check: {name} (attempt {attempt_number})", flush=True)
             return last
-        _report_failure(name, attempt_number, last)
+        _report_failure(name, attempt_number, last, since=started_at)
     raise AssertionError(
         f"real-model check failed after one retry: {name}; "
         f"last answer tail (redacted): {redact_diagnostic(last.answer) or '(empty/unavailable)'}"
@@ -162,6 +172,7 @@ def retry_real_model_check(
     """Synchronous entry point that does not wrap sync callbacks in an event loop."""
     last = AttemptResult(False, detail="no attempt completed")
     for attempt_number in (1, 2):
+        started_at = time.time()
         try:
             outcome = attempt(_attempt_prompt(prompt, attempt_number), attempt_number)
             if inspect.isawaitable(outcome):
@@ -174,7 +185,7 @@ def retry_real_model_check(
         if last.passed:
             print(f"PASS real-model check: {name} (attempt {attempt_number})", flush=True)
             return last
-        _report_failure(name, attempt_number, last)
+        _report_failure(name, attempt_number, last, since=started_at)
     raise AssertionError(
         f"real-model check failed after one retry: {name}; "
         f"last answer tail (redacted): {redact_diagnostic(last.answer) or '(empty/unavailable)'}"

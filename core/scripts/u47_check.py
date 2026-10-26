@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import io
 import os
 import subprocess
 import sys
 import tempfile
 import time
+from contextlib import redirect_stdout
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -154,12 +156,25 @@ def check_annual_api() -> None:
 
 def check_kernel_continuation_classifier() -> None:
     from atlas.kernel.loop import _is_unfulfilled_action_intent
+    from real_model_check import AttemptResult, _report_failure
 
     assert _is_unfulfilled_action_intent("我现在就来生成这份文档。")
     assert _is_unfulfilled_action_intent("接下来我会创建报告。")
     assert _is_unfulfilled_action_intent("I'll create the document now.")
     assert not _is_unfulfilled_action_intent("文档已生成并保存。")
     assert not _is_unfulfilled_action_intent("我现在就来生成这份文档。文档已生成。")
+    diagnostic = io.StringIO()
+    with redirect_stdout(diagnostic):
+        _report_failure("U47 diagnostic fixture", 1, AttemptResult(
+            False, detail="HTTP status 503", exit_code=503,
+            stderr_tail="api_key=never-show", run_log_path="fixture/run.jsonl",
+            last_run_error_event='{"event":"model_error","status":503}',
+        ), since=10**12)
+    rendered = diagnostic.getvalue()
+    assert "failure_category=HTTP 503" in rendered and "exit_code=503" in rendered
+    assert "stderr_tail=api_key=[REDACTED]" in rendered
+    assert "last_run_error_event=" in rendered and "run_log_path=fixture/run.jsonl" in rendered
+    assert "never-show" not in rendered
 
 
 def _continuation_events_since(since: float) -> int:

@@ -177,7 +177,9 @@ def check_live_model_template(workspace: Path) -> None:
             f"run_log_path={latest_run_log_path(started_at)}; "
             f"stderr_tail={_redact_diagnostic(stderr_text)}; "
             f"last_run_error_event={last_error_event}"
-        ))
+        ), exit_code=return_code, stderr_tail=_redact_diagnostic(stderr_text),
+            run_log_path=latest_run_log_path(started_at),
+            last_run_error_event=last_error_event)
 
     retry_real_model_check("U22 Office DOCX tool creation", instruction, run_attempt)
     print(
