@@ -6,6 +6,16 @@ type IdleTask = { id: string; prompt: string; workspace: string; position: numbe
 type MailRule = { sender: string; subject: string; keyword: string; template: string };
 type MailConfig = { enabled: boolean; server: string; username: string; interval_seconds: number; rules: MailRule[] };
 
+function normalizeMail(value: Partial<MailConfig>): MailConfig {
+  return {
+    enabled: value.enabled === true,
+    server: typeof value.server === 'string' ? value.server : '',
+    username: typeof value.username === 'string' ? value.username : '',
+    interval_seconds: Number.isFinite(value.interval_seconds) ? Number(value.interval_seconds) : 300,
+    rules: Array.isArray(value.rules) ? value.rules.filter((rule): rule is MailRule => !!rule && typeof rule === 'object') : [],
+  };
+}
+
 export default function BackgroundTasksPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [tasks, setTasks] = useState<IdleTask[]>([]);
   const [mail, setMail] = useState<MailConfig>({ enabled: false, server: '', username: '', interval_seconds: 300, rules: [] });
@@ -16,7 +26,7 @@ export default function BackgroundTasksPanel({ apiBaseUrl }: { apiBaseUrl: strin
   const reload = async () => setTasks((await api<{ tasks: IdleTask[] }>(apiBaseUrl, '/api/idle-tasks')).tasks);
   useEffect(() => { void Promise.all([
     api<{ tasks: IdleTask[] }>(apiBaseUrl, '/api/idle-tasks'), api<MailConfig>(apiBaseUrl, '/api/mail-trigger'),
-  ]).then(([queue, config]) => { setTasks(queue.tasks); setMail(config); }).catch((cause) => setError(String(cause))); }, [apiBaseUrl]);
+  ]).then(([queue, config]) => { setTasks(Array.isArray(queue.tasks) ? queue.tasks : []); setMail(normalizeMail(config)); }).catch((cause) => setError(String(cause))); }, [apiBaseUrl]);
   const addTask = async (event: FormEvent) => {
     event.preventDefault();
     try { await api(apiBaseUrl, '/api/idle-tasks', { method: 'POST', json: { prompt, workspace } }); setPrompt(''); await reload(); }
@@ -33,7 +43,7 @@ export default function BackgroundTasksPanel({ apiBaseUrl }: { apiBaseUrl: strin
   const saveMail = async (event: FormEvent) => {
     event.preventDefault();
     try {
-      setMail(await api<MailConfig>(apiBaseUrl, '/api/mail-trigger', { method: 'PUT', json: { ...mail, password: password || undefined } }));
+      setMail(normalizeMail(await api<MailConfig>(apiBaseUrl, '/api/mail-trigger', { method: 'PUT', json: { ...mail, password: password || undefined } })));
       setPassword(''); setError('');
     } catch (cause) { setError(String(cause)); }
   };
@@ -62,7 +72,7 @@ export default function BackgroundTasksPanel({ apiBaseUrl }: { apiBaseUrl: strin
         <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="授权码（留空保持已保存值）" className="h-8 rounded-md border border-line bg-surface px-2 text-[12px]" />
         <input type="number" min={30} max={86400} value={mail.interval_seconds} onChange={(event) => setMail({ ...mail, interval_seconds: Number(event.target.value) })} aria-label="轮询间隔秒" className="h-8 rounded-md border border-line bg-surface px-2 text-[12px]" />
       </div>
-      {mail.rules.map((rule, index) => <div key={index} className="grid gap-2 rounded-lg bg-sunken p-2 sm:grid-cols-2">
+      {(mail.rules ?? []).map((rule, index) => <div key={index} className="grid gap-2 rounded-lg bg-sunken p-2 sm:grid-cols-2">
         {(['sender', 'subject', 'keyword', 'template'] as const).map((field) => <input key={field} value={rule[field]} onChange={(event) => setMail({ ...mail, rules: mail.rules.map((item, i) => i === index ? { ...item, [field]: event.target.value } : item) })} placeholder={{ sender: '发件人包含', subject: '主题包含', keyword: '正文或主题关键字', template: '任务模板：{subject} {sender} {body_summary}' }[field]} className="h-8 rounded-md border border-line bg-surface px-2 text-[12px]" />)}
       </div>)}
       <div className="flex gap-2"><button type="button" className="btn ghost" onClick={addRule}><Plus size={14} />添加规则</button><button className="btn primary">保存 IMAP 设置</button></div>

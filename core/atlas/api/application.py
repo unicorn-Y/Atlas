@@ -45,6 +45,7 @@ from atlas.api.recipes_router import router as recipe_templates_router
 from atlas.api.extension_packages_router import router as extension_packages_router
 from atlas.api.settings_export_router import router as settings_export_router
 from atlas.api.diagnostics_router import router as diagnostics_router
+from atlas.api.dns_router import router as dns_router
 from atlas.api.maintenance_router import router as maintenance_router
 from atlas.api.external_history_router import router as external_history_router
 from atlas.api.workspace_trust_settings_router import router as workspace_trust_settings_router
@@ -152,6 +153,7 @@ def create_app(
         extension_packages_router,
         settings_export_router,
         diagnostics_router,
+        dns_router,
         maintenance_router,
         external_history_router,
         workspace_trust_settings_router,

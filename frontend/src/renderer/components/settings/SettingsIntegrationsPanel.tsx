@@ -1,6 +1,7 @@
 import { ExternalLink, GitPullRequest, MessageCircle, Timer, XCircle } from 'lucide-react';
 import RemoteAccessPanel from './RemoteAccessPanel';
 import RemoteTasksPanel from './RemoteTasksPanel';
+import DnsDomainPanel from './DnsDomainPanel';
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 
@@ -92,6 +93,7 @@ export default function SettingsIntegrationsPanel({ onOpenCode, onOpenChannels, 
     </p>
     <RemoteAccessPanel apiBaseUrl={apiBaseUrl} onToast={onToast} />
     <RemoteTasksPanel apiBaseUrl={apiBaseUrl} onToast={onToast} />
+    <DnsDomainPanel apiBaseUrl={apiBaseUrl} />
     <article className="grid gap-3 rounded-xl border border-line p-4">
       <div><h3 className="m-0 text-[13.5px] font-medium text-heading">Google Drive 与 Gmail（只读）</h3><p className="mb-0 mt-1 text-[12px] text-fg-3">登录后搜索文件或邮件，并由你逐条选择导入当前对话。OAuth refresh token 加密范围仅为本机数据目录；应用申请 Drive readonly 与 Gmail readonly 权限。</p></div>
       {!google.connected ? <><p className="m-0 text-[11px] leading-relaxed text-fg-3">首次使用：在 Google Cloud Console 启用 Drive API 与 Gmail API，创建 OAuth 客户端 ID（桌面应用），将 Client ID 粘贴到此处，并确保测试用户包含你的 Google 账号。Atlas 使用 PKCE loopback 登录，不需要输入或保存 client secret。</p><div className="flex flex-wrap gap-2"><input aria-label="Google OAuth Client ID" value={clientId} onChange={(event) => setClientId(event.target.value)} placeholder="Google 桌面应用 OAuth Client ID" className="min-w-[280px] flex-1 rounded-lg border border-line bg-sunken px-3 py-2 text-[12px] text-fg" /><button type="button" disabled={busy || google.authorizing || !clientId.trim()} onClick={() => void connectGoogle()} className="rounded-lg bg-brand px-3 py-2 text-[12px] font-medium text-white disabled:opacity-50">{busy ? '正在打开登录…' : google.authorizing ? '等待浏览器授权…' : '保存并登录 Google'}</button></div></>
