@@ -6,6 +6,7 @@ import { useAtlasStore } from '../store/useAtlasStore';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
 import TakeoverSection from './devices/TakeoverSection';
+import ClusterControlPage from './ClusterControlPage';
 import { field } from './agents/shared';
 
 interface NodeCapabilityState {
@@ -34,6 +35,7 @@ export default function DevicesPage({ onToast }: { onToast: (text: string) => vo
   const removeDevice = useAtlasStore((state) => state.removeDevice);
   const registerDevice = useAtlasStore((state) => state.registerDevice);
   const apiBaseUrl = useAtlasStore((state) => state.apiBaseUrl);
+  const [clusterView, setClusterView] = useState(false);
 
   const [form, setForm] = useState({ device_id: '', display_name: '', kind: 'phone', os: '', notes: '' });
   const [busy, setBusy] = useState(false);
@@ -286,10 +288,13 @@ export default function DevicesPage({ onToast }: { onToast: (text: string) => vo
     setTransferBusy('');
   };
 
+  if (clusterView) return <ClusterControlPage apiBaseUrl={apiBaseUrl} onBack={() => setClusterView(false)} onToast={onToast} />;
+
   return <div className="screen page"><div className="page-inner">
     <header className="page-head">
       <div><h1>设备</h1><p>管理本机和可信配对设备；在线节点经能力声明和逐项批准后，可由 Agent 调用设备状态、通知、相机、定位与媒体控制。</p></div>
       <div className="btns">
+        <button className="btn secondary" onClick={() => setClusterView(true)} aria-label="打开 Atlas 多机集群">Atlas 多机集群</button>
         <button className="btn ghost" onClick={() => void loadDevices()} disabled={loading} aria-label="刷新设备">{loading ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />}</button>
       </div>
     </header>

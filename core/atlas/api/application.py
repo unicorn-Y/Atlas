@@ -20,6 +20,7 @@ from atlas.api.workflow_router import router as workflow_router
 from atlas.api.browser_router import router as browser_router
 from atlas.api.pets_router import router as pets_router
 from atlas.api.mobile_preview_router import router as mobile_preview_router
+from atlas.api.cluster_router import router as cluster_router
 from atlas.api.channel_router import router as channel_router
 from atlas.api.conversations_router import router as conversations_router
 from atlas.api.quick_write_router import router as quick_write_router
@@ -130,6 +131,7 @@ def create_app(
         browser_router,
         pets_router,
         mobile_preview_router,
+        cluster_router,
         skills_market_router,
         evolution_router,
         upstream_router,
