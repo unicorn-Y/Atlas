@@ -1,4 +1,4 @@
-import { lazy, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
   AudioLines, Bell, BookMarked, Brain, Copy, Cpu, Keyboard, Monitor, Radio, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Settings,
@@ -15,6 +15,7 @@ import KeymapDialog from './components/KeymapDialog';
 import { resolveMessageSkillReferences } from './components/skillMentions';
 import { cancelRoutedSpeech, speakRouted } from './services/speechPlayback';
 import { getSelectedInputStream } from './services/audioDevices';
+import { hasFileDropPayload, isBlockedFileDropTarget, readDroppedItems } from './services/fileDrop';
 const MessageThread = lazy(() => import('./components/MessageThread'));
 const TodoPanel = lazy(() => import('./components/TodoPanel'));
 const ProgressCapsule = lazy(() => import('./components/ProgressCapsule'));
@@ -237,6 +238,7 @@ export default function App() {
   const [startupProgress, setStartupProgress] = useState<BackendStartupProgress | null>(null);
   const [pendingComponents, setPendingComponents] = useState<string[]>([]);
   const [view, setView] = useState<View>('home');
+  const [windowFileDrop, setWindowFileDrop] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(() => pref('canvas') === 'true');
   const [focusMode, setFocusMode] = useState(() => pref('focus-mode') === 'true');
   const [tuiFullscreen, setTuiFullscreen] = useState(() => pref('tui-fullscreen') === 'true');
@@ -1067,7 +1069,7 @@ export default function App() {
     });
   };
   /** Images go to the model as pictures; every other file rides along as a document. */
-  const addFiles = (picked: FileList | null) => {
+  const addFiles = (picked: FileList | File[] | null) => {
     if (!picked?.length) return;
     const all = Array.from(picked);
     const imageTypes = ['image/png', 'image/jpeg', 'image/webp'];
@@ -1085,6 +1087,24 @@ export default function App() {
     });
     setFiles((current) => [...current, ...references]);
     setToast(`已加入 ${folders.length} 个文件夹引用；只发送路径和文件数`);
+  };
+  const isWindowFileDrop = (event: ReactDragEvent<HTMLElement>) =>
+    (view === 'chat' || view === 'home') && hasFileDropPayload(event.dataTransfer)
+      && !isBlockedFileDropTarget(event.target);
+  const onWindowDragOver = (event: ReactDragEvent<HTMLElement>) => {
+    if (!isWindowFileDrop(event)) return;
+    event.preventDefault();
+    setWindowFileDrop(true);
+  };
+  const onWindowDrop = (event: ReactDragEvent<HTMLElement>) => {
+    if (!isWindowFileDrop(event)) { setWindowFileDrop(false); return; }
+    event.preventDefault();
+    event.stopPropagation();
+    setWindowFileDrop(false);
+    void readDroppedItems(event.dataTransfer).then(({ files: droppedFiles, folders }) => {
+      if (folders.length) addFolderReferences(folders);
+      if (droppedFiles.length) addFiles(droppedFiles);
+    }).catch((error: unknown) => setToast(`读取拖入内容失败：${error instanceof Error ? error.message : String(error)}`));
   };
   const addDocuments = (picked: File[]) => {
     if (!picked.length) return;
@@ -2705,7 +2725,13 @@ export default function App() {
         onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}
         onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} onOpenBeside={setBesideId} onOpenInWindow={(id) => window.atlasDesktop?.openConversationWindow?.(id)} />}
 
-      <main className={cn('sheet relative flex min-w-0 flex-1 flex-col overflow-hidden', focusedLayout ? 'm-0 rounded-none' : 'my-1.5 mr-1.5 rounded-[12px]')}>
+      <main className={cn('sheet relative flex min-w-0 flex-1 flex-col overflow-hidden', focusedLayout ? 'm-0 rounded-none' : 'my-1.5 mr-1.5 rounded-[12px]')}
+        onDragOver={onWindowDragOver} onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setWindowFileDrop(false);
+        }} onDrop={onWindowDrop}>
+        {windowFileDrop && <div role="status" aria-label="窗口文件拖放目标" className="pointer-events-none absolute inset-0 z-[70] grid place-items-center bg-brand/10 text-[15px] font-semibold text-brand backdrop-blur-[1px]">
+          松开即可添加到当前会话草稿（文件与文件夹）
+        </div>}
         <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
           {tuiFullscreen ? <div className="flex min-w-0 flex-1 items-center gap-3"><span className="text-[12px] text-fg-3">全屏渲染</span><span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{activeConversation?.title ?? '当前对话'}</span><button type="button" className="no-drag rounded-lg px-3 py-1.5 text-[12px] text-fg-2 hover:bg-hover" onClick={() => setTuiFullscreenMode(false)}>退出全屏 · Esc</button></div> : focusMode ? <div className="flex min-w-0 flex-1 items-center gap-3"><span className="text-[12px] text-fg-3">专注视图</span><span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{activeConversation?.title ?? '当前对话'}</span><button type="button" className="no-drag rounded-lg px-3 py-1.5 text-[12px] text-fg-2 hover:bg-hover" onClick={() => { setFocusMode(false); setPref('focus-mode', 'false'); }}>退出专注视图 · Ctrl+Shift+O</button></div> : <>
           <div className={cn('flex min-w-0 items-center gap-3', showTabs && 'flex-1')}>

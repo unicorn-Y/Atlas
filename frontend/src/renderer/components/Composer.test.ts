@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyRewrittenDraft, matchCommands, mentionAt, type SlashCommand } from './Composer';
+import { applyRewrittenDraft, matchCommands, matchSkillSuggestions, mentionAt, selectedSkillCalls, type SlashCommand } from './Composer';
 
 const commands: SlashCommand[] = [
   { id: 'new', label: '/new', run: vi.fn() },
@@ -32,6 +32,27 @@ describe('mentionAt', () => {
     expect(mentionAt('mail me@example.com')).toBeNull();
     expect(mentionAt('@file done ')).toBeNull();
     expect(mentionAt('issue#12')).toBeNull();
+  });
+});
+
+describe('skill mention picker', () => {
+  const skillCommands: SlashCommand[] = [
+    { id: 'skill-review', label: '/review', hint: 'Review a pull request', source: 'Workspace skill', run: vi.fn() },
+    { id: 'skill-plan', label: '/plan', hint: 'Create an implementation plan', source: 'Built-in', run: vi.fn() },
+  ];
+
+  it('filters skills by the typed query and preserves description/source for the picker', () => {
+    expect(matchSkillSuggestions('rev', skillCommands)).toEqual([expect.objectContaining({
+      id: 'skill-review', label: '$review', hint: 'Review a pull request', source: 'Workspace skill',
+    })]);
+  });
+
+  it('previews the explicit skill invocations in the current message', () => {
+    expect(selectedSkillCalls('Please $review this change and $plan the follow-up', skillCommands)).toEqual([
+      { name: 'review', description: 'Review a pull request', source: 'Workspace skill' },
+      { name: 'plan', description: 'Create an implementation plan', source: 'Built-in' },
+    ]);
+    expect(selectedSkillCalls('ordinary text', skillCommands)).toEqual([]);
   });
 });
 

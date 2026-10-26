@@ -1,8 +1,10 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { Accessibility, ArrowLeft, ArrowRight, ArrowUp, AtSign, Camera, ChevronDown, Code2, ExternalLink, File as FileIcon, Film, Hash, ImagePlus, Image as ImageIcon, Keyboard, MessageCircle, Mic, Paperclip, Repeat, Search, SlidersHorizontal, Sparkles, RotateCcw, Save, Trash2, X, type LucideIcon } from 'lucide-react';
 import type { ModelInfo } from '@atlas/backend-adapter';
 import { fuzzyScore } from '../services/fuzzy';
+import { hasFileDropPayload, readDroppedItems } from '../services/fileDrop';
 import { matchSlashCommands, registerSlashCommands, resolveSlashAvailability, type SlashCommand } from '../services/slashCommands';
+import { resolveMessageSkillReferences } from './skillMentions';
 import { cn } from '../ui/cn';
 import { ContextUsageControl } from './TokenUsage';
 import type { UsageSummary } from './runInsights';
@@ -81,7 +83,7 @@ export function matchCommands(value: string, commands: SlashCommand[]): SlashCom
   return matchSlashCommands(value, commands);
 }
 
-function matchSkillSuggestions(query: string, commands: readonly SlashCommand[]): SkillSuggestion[] {
+export function matchSkillSuggestions(query: string, commands: readonly SlashCommand[]): SkillSuggestion[] {
   return commands
     .filter((command) => command.id.startsWith('skill-'))
     .map((command, index) => {
@@ -101,9 +103,20 @@ function matchSkillSuggestions(query: string, commands: readonly SlashCommand[])
       skillName,
       label: `$${skillName}`,
       hint: command.hint,
-      group: '消息提及（作为文本发送）',
+      group: '本轮技能调用预览',
       source: command.source ?? '技能',
     }));
+}
+
+export function selectedSkillCalls(value: string, commands: readonly SlashCommand[]): Array<{
+  name: string; description: string; source: string;
+}> {
+  const skills = commands.filter((command) => command.id.startsWith('skill-'));
+  const names = resolveMessageSkillReferences(value, skills.map((command) => command.label.replace(/^\/+/, '')));
+  return names.map((name) => {
+    const command = skills.find((item) => item.label.replace(/^\/+/, '').toLocaleLowerCase() === name.toLocaleLowerCase());
+    return { name, description: command?.hint || '该技能没有提供说明。', source: command?.source || '技能' };
+  });
 }
 
 /** 已发送消息的召回历史（像终端的 ↑ 一样）；全局共用一份，localStorage 持久化最近 50 条。 */
@@ -151,7 +164,7 @@ interface ComposerProps {
   placeholder: string;
   attachments: string[];
   onRemoveAttachment: (index: number) => void;
-  onPickImages: (files: FileList | null) => void;
+  onPickImages: (files: FileList | File[] | null) => void;
   onPickFolders?: (folders: Array<{ name: string; path: string; count: number }>) => void;
   listening: boolean;
   onToggleMic: () => void;
@@ -377,6 +390,10 @@ export default function Composer(props: ComposerProps) {
   const skillMatches = useMemo(
     () => mention?.trigger === '$' ? matchSkillSuggestions(mention.query, props.commands ?? []) : [],
     [mention?.query, mention?.trigger, props.commands],
+  );
+  const skillCallPreview = useMemo(
+    () => selectedSkillCalls(props.value, props.commands ?? []),
+    [props.value, props.commands],
   );
   const mentionKey = mention ? `${mention.trigger}${mention.query}` : '';
   useEffect(() => {
@@ -682,24 +699,17 @@ export default function Composer(props: ComposerProps) {
     if (event.key === 'Enter' && !event.nativeEvent.isComposing
       && ((enterToSend && !event.shiftKey) || (!enterToSend && event.ctrlKey))) { event.preventDefault(); submit(); }
   };
-  const hasFiles = (event: DragEvent<HTMLFormElement>) => Array.from(event.dataTransfer.types).includes('Files');
-  const droppedFolders = async (event: DragEvent<HTMLFormElement>) => {
-    const folders: Array<{ name: string; path: string; count: number }> = [];
-    for (const item of Array.from(event.dataTransfer.items)) {
-      const entry = (item as DataTransferItem & { webkitGetAsEntry?: () => FileSystemEntry | null }).webkitGetAsEntry?.();
-      if (entry?.isDirectory) {
-        const droppedFile = item.getAsFile() as (File & { path?: string }) | null;
-        folders.push({ name: entry.name, path: droppedFile?.path || entry.fullPath || entry.name, count: await countDroppedFiles(entry as FileSystemDirectoryEntry) });
-      }
-    }
-    if (folders.length) props.onPickFolders?.(folders);
-    else props.onPickImages(event.dataTransfer.files);
+  const droppedItems = async (dataTransfer: DataTransfer) => {
+    const result = await readDroppedItems(dataTransfer);
+    if (result.folders.length) props.onPickFolders?.(result.folders);
+    if (result.files.length) props.onPickImages(result.files);
   };
 
   return <form onSubmit={submit} data-expert={expert || undefined}
-    onDragOver={(event) => { if (!hasFiles(event)) return; event.preventDefault(); setDragging(true); }}
+    data-atlas-file-drop-zone="true"
+    onDragOver={(event) => { if (!hasFileDropPayload(event.dataTransfer)) return; event.preventDefault(); setDragging(true); }}
     onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
-    onDrop={(event) => { if (!hasFiles(event)) return; event.preventDefault(); setDragging(false); void droppedFolders(event); }}
+    onDrop={(event) => { if (!hasFileDropPayload(event.dataTransfer)) return; event.preventDefault(); event.stopPropagation(); setDragging(false); void droppedItems(event.dataTransfer); }}
     className={cn('raised relative rounded-[22px] transition-shadow focus-within:shadow-[0_0_0_1px_var(--line-strong),0_1px_2px_rgba(0,0,0,.04),0_6px_20px_-6px_rgba(0,0,0,.12)]',
       hero ? 'px-4 pt-4 pb-2.5' : 'px-3.5 pt-3 pb-2',
       expert && 'shadow-[var(--shadow-raised),0_0_0_1.5px_var(--brand-soft)]',
@@ -747,6 +757,13 @@ export default function Composer(props: ComposerProps) {
     <span id={`${textareaId}-status`} role={screenReaderMode ? undefined : 'status'} aria-live={screenReaderMode ? undefined : 'polite'}
       aria-atomic={screenReaderMode ? undefined : 'true'} aria-hidden={screenReaderMode || undefined}
       className={enhanceStatus ? 'mt-1 block text-[11.5px] text-fg-3' : 'sr-only'}>{enhanceStatus}</span>
+    {skillCallPreview.length > 0 && <div role="status" aria-label="技能调用预览" className="mt-2 flex flex-wrap items-center gap-1.5 rounded-lg bg-brand-soft/50 px-2.5 py-1.5 text-[11.5px] text-fg-2">
+      <Sparkles size={13} className="shrink-0 text-brand" />
+      <span className="shrink-0 font-medium">本条消息将调用（仅本轮）：</span>
+      {skillCallPreview.map((skill) => <span key={skill.name} title={`${skill.description} · ${skill.source}`} className="max-w-[320px] truncate rounded bg-surface px-1.5 py-0.5">
+        <b className="font-mono">${skill.name}</b>{skill.description ? ` · ${skill.description}` : ''}
+      </span>)}
+    </div>}
     {screenReaderMode && <>
       <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">{screenReaderModeNotice}</span>
       <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">{hint}</span>
@@ -944,20 +961,4 @@ export default function Composer(props: ComposerProps) {
       <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setRecentPickerOpen(false)} className="rounded-lg px-3 py-2 text-[12px] text-fg-3 hover:bg-hover">取消</button><button type="button" disabled={!selectedRecentIds.length} onClick={() => { props.onPickRecentScreenshots?.((props.recentScreenshots ?? []).filter((item) => selectedRecentIds.includes(item.id))); setRecentPickerOpen(false); }} className="rounded-lg bg-brand px-3 py-2 text-[12px] text-white disabled:opacity-50">添加所选（{selectedRecentIds.length}）</button></div>
     </Dialog>
   </form>;
-}
-
-function countDroppedFiles(directory: FileSystemDirectoryEntry): Promise<number> {
-  return new Promise((resolve) => {
-    let count = 0;
-    const reader = directory.createReader();
-    const read = () => reader.readEntries(async (entries) => {
-      if (!entries.length) { resolve(count); return; }
-      const nestedCounts = await Promise.all(entries.map((entry) => entry.isFile ? Promise.resolve(1)
-        : entry.isDirectory ? countDroppedFiles(entry as FileSystemDirectoryEntry) : Promise.resolve(0)));
-      count += nestedCounts.reduce((sum, value) => sum + value, 0);
-      // DirectoryReader may return at most one batch at a time.
-      window.setTimeout(read, 0);
-    }, () => resolve(count));
-    read();
-  });
 }
