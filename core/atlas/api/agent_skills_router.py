@@ -158,6 +158,15 @@ async def list_agent_skills(agent_id: str) -> dict[str, Any]:
         raise _http_error(exc) from None
 
 
+@router.delete("/api/agents/{agent_id}/skills/{skill_name}", dependencies=[Depends(_require_trusted_origin)])
+async def remove_agent_skill(agent_id: str, skill_name: str) -> dict[str, Any]:
+    try:
+        return {"removed": get_collections().remove_agent_skill(agent_id, skill_name),
+                "agent_id": agent_id, "skill_name": skill_name}
+    except (CollectionError, ValueError) as exc:
+        raise _http_error(exc) from None
+
+
 @router.put(
     "/api/agents/{agent_id}/skills",
     dependencies=[Depends(_require_trusted_origin)],
@@ -294,6 +303,27 @@ async def skill_usage(skill_name: str) -> dict[str, Any]:
         return get_collections().usage_stats(skill_name)
     except (CollectionError, ValueError) as exc:
         raise _http_error(exc) from None
+
+
+@router.get("/api/skills/usage-overview", dependencies=[Depends(_require_trusted_origin)])
+async def skill_usage_overview() -> dict[str, Any]:
+    """Usage and prompt cost estimate for installed skills, including unused ones."""
+    from pathlib import Path
+    from atlas.skills import SkillManager
+
+    manager = SkillManager()
+    await manager.scan_skills()
+    collections = get_collections()
+    items: list[dict[str, Any]] = []
+    for skill in manager.list_skills():
+        try:
+            text = Path(skill.path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        usage = collections.usage_stats(skill.name)
+        items.append({**usage, "description": skill.description, "source": skill.source,
+                      "estimated_chars": len(text), "estimated_tokens": (len(text) + 3) // 4})
+    return {"skills": items, "estimated_token_method": "SKILL.md characters / 4; approximate"}
 
 
 __all__ = [

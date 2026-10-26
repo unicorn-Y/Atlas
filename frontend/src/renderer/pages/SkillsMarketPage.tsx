@@ -3,6 +3,7 @@ import { LoaderCircle, RefreshCw, Search, X } from 'lucide-react';
 import {
   listInstalledSkills, searchMarket, setSkillEnabled, SOURCE_KIND_LABEL,
   uninstallMarketSkill, type InstalledSkillRecord, type MarketSearchHit, type MarketTap,
+  getSkillUsageOverview, removeSkillFromAgent,
 } from '../services/skillsMarketApi';
 import SkillCard from '../components/skills/SkillCard';
 import SkillDetail from '../components/skills/SkillDetail';
@@ -12,16 +13,17 @@ import SourcesManager from '../components/skills/SourcesManager';
 import SkillDiscoveryPage from './SkillDiscoveryPage';
 import { useAtlasStore } from '../store/useAtlasStore';
 
-export type SkillsTabId = 'market' | 'installed' | 'updates' | 'discovery';
+export type SkillsTabId = 'market' | 'installed' | 'updates' | 'discovery' | 'doctor';
 
 const TABS: Array<{ id: SkillsTabId; label: string }> = [
   { id: 'market', label: '市场' },
   { id: 'installed', label: '已安装' },
   { id: 'updates', label: '更新' },
   { id: 'discovery', label: '安全发现' },
+  { id: 'doctor', label: '使用体检' },
 ];
 
-const isTab = (value: unknown): value is SkillsTabId => value === 'market' || value === 'installed' || value === 'updates' || value === 'discovery';
+const isTab = (value: unknown): value is SkillsTabId => value === 'market' || value === 'installed' || value === 'updates' || value === 'discovery' || value === 'doctor';
 
 /** 侧栏「技能」入口的主页面：市场 / 已安装 / 更新 三个标签页。 */
 export default function SkillsMarketPage({ apiBaseUrl, onToast, onTryInConversation, initialTab = 'market' }: {
@@ -43,6 +45,13 @@ export default function SkillsMarketPage({ apiBaseUrl, onToast, onTryInConversat
   const [installedLoading, setInstalledLoading] = useState(false);
   const [installedError, setInstalledError] = useState('');
   const [busyName, setBusyName] = useState('');
+  const [usageRows, setUsageRows] = useState<Awaited<ReturnType<typeof getSkillUsageOverview>>['skills']>([]);
+  const [usageError, setUsageError] = useState('');
+  const [usageFilter, setUsageFilter] = useState<'all' | 'unused' | 'stale'>('all');
+  const loadUsage = useCallback(async () => {
+    try { setUsageError(''); setUsageRows((await getSkillUsageOverview(apiBaseUrl)).skills); }
+    catch (error) { setUsageError(error instanceof Error ? error.message : '技能使用数据读取失败'); }
+  }, [apiBaseUrl]);
 
   const loadMarket = useCallback(async (q: string, source: string) => {
     setMarketLoading(true);
@@ -201,6 +210,17 @@ export default function SkillsMarketPage({ apiBaseUrl, onToast, onTryInConversat
     </section>}
 
     {tab === 'updates' && <UpdatesTab apiBaseUrl={apiBaseUrl} onDone={onToast} />}
+    {tab === 'doctor' && <section aria-label="技能使用体检" className="grid gap-3">
+      <div className="flex flex-wrap items-center gap-2"><p className="m-0 flex-1 text-[12.5px] text-fg-3">按 Agent 查看使用次数、最后使用时间和 SKILL.md 上下文估算。</p>
+        <select className="input h-9" aria-label="技能使用筛选" value={usageFilter} onChange={(event) => setUsageFilter(event.target.value as typeof usageFilter)}><option value="all">全部</option><option value="unused">从未使用</option><option value="stale">久未使用（30 天）</option></select>
+        <button className="btn ghost" onClick={() => void loadUsage()}>检查使用情况</button></div>
+      {usageError && <div role="alert" className="error-note">{usageError}</div>}
+      {usageRows.filter((row) => usageFilter === 'all' || (usageFilter === 'unused' ? row.total_use_count === 0 : !row.last_used_at || Date.now() - Date.parse(row.last_used_at) > 30 * 86400000)).map((row) => <article key={row.skill_name} className="card-surface rounded-xl p-4">
+        <div className="flex flex-wrap items-center gap-3"><b className="text-heading">{row.skill_name}</b><span className="text-[12px] text-fg-3">使用 {row.total_use_count} 次 · 约 {row.estimated_tokens} tokens</span><span className="text-[12px] text-fg-3">最后使用：{row.last_used_at ? new Date(row.last_used_at).toLocaleString() : '从未使用'}</span></div>
+        <div className="mt-2 grid gap-1 text-[12px] text-fg-2">{row.agents.map((agent) => <div key={agent.agent_id} className="flex items-center gap-2"><span className="flex-1">{agent.agent_id} · {agent.use_count} 次 · {agent.last_used_at ? new Date(agent.last_used_at).toLocaleString() : '未记录'}</span><button className="btn ghost" onClick={async () => { await removeSkillFromAgent(apiBaseUrl, agent.agent_id, row.skill_name); await loadUsage(); onToast?.(`已从 ${agent.agent_id} 移除 ${row.skill_name}`); }}>从 Agent 移除</button></div>)}</div>
+      </article>)}
+      {!usageRows.length && !usageError && <div className="card-surface rounded-xl p-4 text-[12.5px] text-fg-3">点击“检查使用情况”加载技能体检数据。</div>}
+    </section>}
     {tab === 'discovery' && <section aria-label="技能安全发现与信任审查">
       <div className="mb-3 rounded-xl border border-line bg-sunken px-3 py-2 text-[12.5px] leading-relaxed text-fg-2">
         外部来源的技能会先经过内容与依赖审查；风险项需要明确确认，信任、固定版本和回滚操作会留下审计记录。

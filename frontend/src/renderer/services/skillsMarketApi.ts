@@ -108,6 +108,14 @@ async function request<T>(apiBaseUrl: string, path: string, init?: RequestInit &
   return response.json() as Promise<T>;
 }
 
+export async function getSkillUsageOverview(apiBaseUrl: string): Promise<{ skills: Array<{ skill_name: string; total_use_count: number; last_used_at: string | null; agents: Array<{ agent_id: string; use_count: number; last_used_at: string | null }>; estimated_tokens: number; estimated_chars: number; description: string; source: string }>; estimated_token_method: string }> {
+  return request(apiBaseUrl, '/api/skills/usage-overview');
+}
+
+export async function removeSkillFromAgent(apiBaseUrl: string, agentId: string, skillName: string): Promise<void> {
+  await request(apiBaseUrl, `/api/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(skillName)}`, { method: 'DELETE' });
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const str = (value: unknown, fallback = ''): string => typeof value === 'string' ? value : fallback;
 const num = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
