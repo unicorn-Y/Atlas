@@ -113,6 +113,7 @@ const LinearIntegrationPanel = lazy(() => import('./components/settings/LinearIn
 const ConnectorDirectory = lazy(() => import('./components/settings/ConnectorDirectory'));
 const OPEN_EXPERT_SETTINGS = 'atlas:open-expert-settings';
 import Sidebar, { MORE_NAV, NAV, type View } from './shell/Sidebar';
+import UserSidebarPage, { readUserSidebarPages, USER_SIDEBAR_PAGES_KEY, type UserSidebarPageDefinition } from './pages/UserSidebarPage';
 import HomeView, { type Suggestion } from './shell/HomeView';
 import type { InspectorTab } from './shell/Inspector';
 import type { PickedElement } from './shell/panels/BrowserPanel';
@@ -252,6 +253,9 @@ export default function App() {
   const [startupProgress, setStartupProgress] = useState<BackendStartupProgress | null>(null);
   const [pendingComponents, setPendingComponents] = useState<string[]>([]);
   const [view, setView] = useState<View>('home');
+  const [userSidebarPages, setUserSidebarPages] = useState<UserSidebarPageDefinition[]>(readUserSidebarPages);
+  const [selectedUserSidebarPageId, setSelectedUserSidebarPageId] = useState('');
+  useEffect(() => { try { localStorage.setItem(USER_SIDEBAR_PAGES_KEY, JSON.stringify(userSidebarPages)); } catch { /* local page storage unavailable */ } }, [userSidebarPages]);
   const [windowFileDrop, setWindowFileDrop] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(() => pref('canvas') === 'true');
   const [focusMode, setFocusMode] = useState(() => pref('focus-mode') === 'true');
@@ -1606,6 +1610,29 @@ export default function App() {
   const chooseTheme = (next: Theme) => { clearCustomTheme(); setTheme(next); setPref('appearance', next); setPref('theme-mode', 'manual'); };
   const toggleTheme = () => { const next = nextTheme(theme); chooseTheme(next); setToast(`已切换到${themeInfo(next).label}`); };
   const toggleMini = () => setSideMini((current) => { setPref('sidebar-mini', String(!current)); return !current; });
+  const createUserSidebarPage = (pageTitle: string) => {
+    const title = pageTitle.trim();
+    if (!title) return;
+    const page = { id: `page-${crypto.randomUUID()}`, title: title.slice(0, 80), description: '', content: '' };
+    setUserSidebarPages((pages) => [...pages, page]); setSelectedUserSidebarPageId(page.id); go('user-page');
+  };
+  const renameUserSidebarPage = (id: string, pageTitle: string) => {
+    const title = pageTitle.trim();
+    if (title) setUserSidebarPages((pages) => pages.map((page) => page.id === id ? { ...page, title: title.slice(0, 80) } : page));
+  };
+  const deleteUserSidebarPage = (id: string) => {
+    const page = userSidebarPages.find((item) => item.id === id);
+    if (!page) return;
+    const remaining = userSidebarPages.filter((item) => item.id !== id);
+    setUserSidebarPages(remaining);
+    if (selectedUserSidebarPageId === id) { setSelectedUserSidebarPageId(remaining[0]?.id ?? ''); if (!remaining.length) go('home'); }
+  };
+  const moveUserSidebarPage = (id: string, direction: -1 | 1) => setUserSidebarPages((pages) => {
+    const index = pages.findIndex((page) => page.id === id); const target = index + direction;
+    if (index < 0 || target < 0 || target >= pages.length) return pages;
+    const next = [...pages]; [next[index], next[target]] = [next[target], next[index]]; return next;
+  });
+  const updateUserSidebarPage = (updated: UserSidebarPageDefinition) => setUserSidebarPages((pages) => pages.map((page) => page.id === updated.id ? updated : page));
   const toggleInspector = (open?: boolean) => setInspectorOpen((current) => { const next = open ?? !current; setPref('canvas', String(next)); return next; });
   const showInspectorTab = (tab: InspectorTab) => { setInspectorTab(tab); toggleInspector(true); };
   useEffect(() => {
@@ -3172,6 +3199,8 @@ export default function App() {
     <MarkDefs />
     <div className="flex h-full">
       {!focusedLayout && <Sidebar view={view} onGo={go} mini={sideMini || narrow} onToggleMini={toggleMini}
+        userPages={userSidebarPages} selectedUserPageId={selectedUserSidebarPageId} onSelectUserPage={(id) => { setSelectedUserSidebarPageId(id); go('user-page'); }}
+        onCreateUserPage={createUserSidebarPage} onRenameUserPage={renameUserSidebarPage} onDeleteUserPage={deleteUserSidebarPage} onMoveUserPage={moveUserSidebarPage}
         conversations={store.conversations} conversationsLoading={store.conversationsLoading}
         activeConversationId={store.activeConversationId} loadingConversationId={store.loadingMessagesConversationId}
         onOpenConversation={openConversation} onNewTask={newTask} creating={store.creatingConversation} onSearch={() => setPaletteOpen(true)}
@@ -3365,6 +3394,9 @@ export default function App() {
         {view === 'auto' && <AutomationPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} onOpenConversation={(id) => { const target = useAtlasStore.getState().conversations.find((item) => item.id === id); if (target) { go('chat'); void openConversation(target); } else notify('关联会话已不存在'); }} />}
         {view === 'memory' && <MemoryPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'evolution' && <EvolutionPage apiBaseUrl={store.apiBaseUrl} onToast={notify} />}
+        {view === 'user-page' && (userSidebarPages.find((page) => page.id === selectedUserSidebarPageId)
+          ? <UserSidebarPage page={userSidebarPages.find((page) => page.id === selectedUserSidebarPageId)!} onChange={updateUserSidebarPage} />
+          : <section className="mx-auto grid h-full max-w-3xl place-content-center p-8 text-center"><h1 className="text-xl font-semibold text-heading">选择或创建自定义页面</h1><p className="text-sm text-fg-3">页面会保存在本机，并显示在侧栏“我的页面”区域。</p></section>)}
         </Suspense>
       </main>
     </div>

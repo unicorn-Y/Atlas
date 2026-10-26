@@ -20,8 +20,9 @@ import { cn } from '../ui/cn';
 import { nextTheme, themeInfo, type Theme } from './themes';
 import { cleanSearchSnippet, rankSearchHits, searchHitRoleLabel } from '../services/searchHits';
 import TriageBoardDialog from '../components/TriageBoardDialog';
+import type { UserSidebarPageDefinition } from '../pages/UserSidebarPage';
 
-export type View = 'home' | 'chat' | 'groups' | 'agents' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills' | 'devices' | 'evolution' | 'workbench' | 'library';
+export type View = 'home' | 'chat' | 'groups' | 'agents' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills' | 'devices' | 'evolution' | 'workbench' | 'library' | 'user-page';
 
 export const NAV: Array<{ view: View; label: string; icon: LucideIcon }> = [
   { view: 'chat', label: '聊天', icon: MessageSquare },
@@ -124,6 +125,8 @@ function groupByDay(conversations: ConversationSummary[]): Section[] {
 
 interface SidebarProps {
   view: View; onGo: (view: View) => void; mini: boolean; onToggleMini: () => void;
+  userPages: UserSidebarPageDefinition[]; selectedUserPageId: string; onSelectUserPage: (id: string) => void;
+  onCreateUserPage: (title: string) => void; onRenameUserPage: (id: string, title: string) => void; onDeleteUserPage: (id: string) => void; onMoveUserPage: (id: string, direction: -1 | 1) => void;
   conversations: ConversationSummary[]; conversationsLoading: boolean;
   runs?: AgentRun[];
   onPauseRun?: (runId: string) => void;
@@ -189,6 +192,8 @@ export default function Sidebar(props: SidebarProps) {
   const [confirmProjectArchive, setConfirmProjectArchive] = useState('');
   const [details, setDetails] = useState<ConversationSummary | null>(null);
   const [groupEditor, setGroupEditor] = useState<{ id: string | null; name: string } | null>(null);
+  const [userPageEditor, setUserPageEditor] = useState<{ id: string | null; title: string } | null>(null);
+  const [userPageDelete, setUserPageDelete] = useState<UserSidebarPageDefinition | null>(null);
   const [menuOpenKey, setMenuOpenKey] = useState('');
   const [contextAnchor, setContextAnchor] = useState<{ key: string; x: number; y: number } | null>(null);
   const [feedback, setFeedback] = useState('');
@@ -938,6 +943,16 @@ export default function Sidebar(props: SidebarProps) {
       </Menu>
     </div>
     <button onClick={() => setTriageOpen(true)} aria-label="跨会话收件箱与工作板" className="mt-1 flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[12.5px] text-fg-2 hover:bg-hover"><ListTodo size={15} className="text-brand"/><span>分诊与工作板</span></button>
+    <section aria-label="自定义页面" className="mt-2 border-b border-line pb-2">
+      <div className="flex h-7 items-center px-2.5"><span className="text-[11px] text-fg-3">我的页面</span><button type="button" aria-label="新建自定义页面" title="新建页面" onClick={() => setUserPageEditor({ id: null, title: '' })} className="ml-auto grid size-6 place-items-center rounded text-fg-3 hover:bg-hover hover:text-fg"><Plus size={14} /></button></div>
+      {props.userPages.map((page, index) => <div key={page.id} className={cn('group flex h-7 items-center rounded-md px-1', props.view === 'user-page' && props.selectedUserPageId === page.id ? 'bg-selected text-fg' : 'text-fg-2 hover:bg-hover')}>
+        <button type="button" onClick={() => props.onSelectUserPage(page.id)} aria-current={props.view === 'user-page' && props.selectedUserPageId === page.id ? 'page' : undefined} className="min-w-0 flex-1 truncate px-1.5 text-left text-[12px]" title={page.title}>{page.title}</button>
+        <Menu><MenuTrigger asChild><button type="button" aria-label={`${page.title} 页面选项`} className="grid size-6 shrink-0 place-items-center rounded text-fg-3 opacity-0 hover:bg-surface hover:text-fg group-hover:opacity-100 focus:opacity-100"><MoreHorizontal size={13} /></button></MenuTrigger>
+          <MenuContent align="end"><MenuLabel>{page.title}</MenuLabel><MenuItem disabled={index === 0} onSelect={() => props.onMoveUserPage(page.id, -1)}><ChevronLeft />上移</MenuItem><MenuItem disabled={index === props.userPages.length - 1} onSelect={() => props.onMoveUserPage(page.id, 1)}><ChevronRight />下移</MenuItem><MenuSeparator /><MenuItem onSelect={() => setUserPageEditor({ id: page.id, title: page.title })}><Pencil />重命名</MenuItem><MenuItem onSelect={() => setUserPageDelete(page)}><Trash2 />删除页面</MenuItem></MenuContent>
+        </Menu>
+      </div>)}
+      {!props.userPages.length && <p className="m-0 px-2.5 py-1 text-[10.5px] text-fg-3">创建页面以保存个人说明和清单。</p>}
+    </section>
     <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="历史会话">
       <div className="mb-1.5 flex items-center gap-1 px-1">
         <label className="relative min-w-0 flex-1">
@@ -1104,6 +1119,17 @@ export default function Sidebar(props: SidebarProps) {
           <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-[12px] font-medium text-on-primary">{groupEditor?.id ? '保存' : '创建分组'}</button>
         </div>
       </form>
+    </Dialog>
+    <Dialog open={Boolean(userPageEditor)} onOpenChange={(open) => { if (!open) setUserPageEditor(null); }} label={userPageEditor?.id ? '重命名自定义页面' : '新建自定义页面'} className="w-[min(380px,calc(100vw-28px))] border border-line bg-overlay p-5 shadow-2xl">
+      <form onSubmit={(event) => { event.preventDefault(); const editor = userPageEditor; const title = editor?.title.trim(); if (!editor || !title) return; if (editor.id) props.onRenameUserPage(editor.id, title); else props.onCreateUserPage(title); setUserPageEditor(null); }}>
+        <h2 className="m-0 text-[16px] font-semibold text-heading">{userPageEditor?.id ? '重命名页面' : '创建侧栏页面'}</h2>
+        <label className="mt-4 grid gap-1.5 text-[12px] text-fg-2">页面名称<input autoFocus required maxLength={80} value={userPageEditor?.title ?? ''} onChange={(event) => setUserPageEditor((current) => current ? { ...current, title: event.target.value } : current)} className="h-9 rounded-lg bg-sunken px-3 text-[13px] text-fg outline-none focus:ring-1 focus:ring-brand" /></label>
+        <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setUserPageEditor(null)} className="rounded-lg px-3 py-2 text-[12px] text-fg-2 hover:bg-hover">取消</button><button type="submit" className="rounded-lg bg-brand px-3 py-2 text-[12px] font-medium text-on-primary">{userPageEditor?.id ? '保存名称' : '创建页面'}</button></div>
+      </form>
+    </Dialog>
+    <Dialog open={Boolean(userPageDelete)} onOpenChange={(open) => { if (!open) setUserPageDelete(null); }} label="删除自定义页面" className="w-[min(420px,calc(100vw-28px))] border border-line bg-overlay p-5 shadow-2xl">
+      <h2 className="m-0 text-[16px] font-semibold text-heading">删除“{userPageDelete?.title}”？</h2><p className="mt-2 text-[12px] leading-relaxed text-fg-2">页面内容会从本机移除。此操作无法撤回。</p>
+      <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setUserPageDelete(null)} className="rounded-lg px-3 py-2 text-[12px] text-fg-2 hover:bg-hover">取消</button><button type="button" onClick={() => { if (userPageDelete) props.onDeleteUserPage(userPageDelete.id); setUserPageDelete(null); }} className="rounded-lg bg-danger px-3 py-2 text-[12px] font-medium text-white">删除页面</button></div>
     </Dialog>
   </aside>;
 }
