@@ -12,7 +12,7 @@ _DEFAULT = {"schema_version": 1, "create": {"bundled": True, "local": True, "mar
 
 
 def _path() -> Path:
-    return DATA_ROOT / "skill-source-policy.json"
+    return DATA_ROOT / "data" / "skill-source-policy.json"
 
 
 def get_policy() -> dict[str, Any]:
