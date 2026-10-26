@@ -15,6 +15,8 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from atlas.api.network_retry import retry_external_request
+
 router = APIRouter(prefix="/api/integrations/linear", tags=["linear"])
 
 GRAPHQL_ENDPOINT = "https://api.linear.app/graphql"
@@ -115,10 +117,12 @@ async def _graphql(token: str, query: str, variables: dict[str, Any] | None = No
     """Send one fixed-host GraphQL request and reject HTTP or GraphQL errors."""
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=False) as client:
-            response = await client.post(
-                GRAPHQL_ENDPOINT,
-                headers={"Authorization": token, "Content-Type": "application/json"},
-                json={"query": query, "variables": variables or {}},
+            response = await retry_external_request(
+                lambda: client.post(
+                    GRAPHQL_ENDPOINT,
+                    headers={"Authorization": token, "Content-Type": "application/json"},
+                    json={"query": query, "variables": variables or {}},
+                ), service="Linear API",
             )
     except httpx.TimeoutException as exc:
         raise LinearAPIError(504, "Linear API 请求超时。") from exc

@@ -16,6 +16,8 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 
+from atlas.api.network_retry import retry_external_request
+
 from atlas.config import DATA_ROOT, load_user_settings, save_user_settings
 
 router = APIRouter()
@@ -64,10 +66,10 @@ async def _access_token() -> str:
     if not refresh_token or not client_id:
         raise HTTPException(status_code=401, detail="Google Drive/Gmail 尚未连接，请先完成本机 OAuth 登录。")
     async with httpx.AsyncClient(timeout=20) as client:
-        response = await client.post("https://oauth2.googleapis.com/token", data={
+        response = await retry_external_request(lambda: client.post("https://oauth2.googleapis.com/token", data={
             "client_id": client_id, "refresh_token": refresh_token,
             "grant_type": "refresh_token",
-        })
+        }), service="Google OAuth")
     if response.is_error:
         raise HTTPException(status_code=401, detail="Google OAuth 刷新失败；请断开后重新连接。")
     result = response.json()
@@ -145,14 +147,17 @@ async def google_authorize() -> dict[str, str]:
                 _auth_progress["error"] = "Google 登录未完成或授权被拒绝。"
                 return
             async with httpx.AsyncClient(timeout=20) as client:
-                response = await client.post("https://oauth2.googleapis.com/token", data={
+                response = await retry_external_request(lambda: client.post("https://oauth2.googleapis.com/token", data={
                     "code": code, "client_id": client_id, "redirect_uri": redirect_uri,
                     "code_verifier": verifier, "grant_type": "authorization_code",
-                })
+                }), service="Google OAuth")
                 response.raise_for_status()
                 token_data = response.json()
-                profile = await client.get("https://gmail.googleapis.com/gmail/v1/users/me/profile",
-                                          headers={"Authorization": f"Bearer {token_data['access_token']}"})
+                profile = await retry_external_request(
+                    lambda: client.get("https://gmail.googleapis.com/gmail/v1/users/me/profile",
+                                       headers={"Authorization": f"Bearer {token_data['access_token']}"}),
+                    service="Google Gmail API",
+                )
                 email = str(profile.json().get("emailAddress") or "") if profile.is_success else ""
             await _write_tokens({"access_token": token_data["access_token"],
                                  "refresh_token": token_data.get("refresh_token") or _read_tokens().get("refresh_token", ""),
@@ -190,19 +195,27 @@ async def google_items(source: str = Query("drive", pattern="^(drive|gmail)$"),
             query = "trashed = false"
             if q.strip():
                 query += " and name contains '" + q.replace("\\", "\\\\").replace("'", "\\'") + "'"
-            response = await client.get("https://www.googleapis.com/drive/v3/files", params={
+            response = await retry_external_request(lambda: client.get("https://www.googleapis.com/drive/v3/files", params={
                 "q": query, "pageSize": 50, "orderBy": "modifiedTime desc",
                 "fields": "files(id,name,mimeType,modifiedTime,webViewLink,size)",
-            })
+            }), service="Google Drive API")
             response.raise_for_status()
             return {"source": source, "items": response.json().get("files", [])}
         search = f"{q} " if q.strip() else ""
-        response = await client.get("https://gmail.googleapis.com/gmail/v1/users/me/messages", params={"q": search + "newer_than:1y", "maxResults": 30})
+        response = await retry_external_request(
+            lambda: client.get("https://gmail.googleapis.com/gmail/v1/users/me/messages",
+                               params={"q": search + "newer_than:1y", "maxResults": 30}),
+            service="Google Gmail API",
+        )
         response.raise_for_status()
         messages = response.json().get("messages", [])
         items = []
         for message in messages:
-            details = await client.get(f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message['id']}", params={"format": "metadata", "metadataHeaders": ["Subject", "From", "Date"]})
+            details = await retry_external_request(
+                lambda: client.get(f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message['id']}",
+                                   params={"format": "metadata", "metadataHeaders": ["Subject", "From", "Date"]}),
+                service="Google Gmail API",
+            )
             details.raise_for_status()
             payload = details.json()
             headers = {header["name"].lower(): header["value"] for header in payload.get("payload", {}).get("headers", [])}
@@ -230,14 +243,24 @@ async def import_google_item(source: str, item_id: str) -> dict[str, str]:
     headers = {"Authorization": f"Bearer {token}"}
     async with httpx.AsyncClient(timeout=30, headers=headers) as client:
         if source == "drive":
-            metadata_response = await client.get(f"https://www.googleapis.com/drive/v3/files/{item_id}", params={"fields": "id,name,mimeType,webViewLink"})
+            metadata_response = await retry_external_request(
+                lambda: client.get(f"https://www.googleapis.com/drive/v3/files/{item_id}",
+                                   params={"fields": "id,name,mimeType,webViewLink"}),
+                service="Google Drive API",
+            )
             metadata_response.raise_for_status()
             metadata = metadata_response.json()
             mime = str(metadata.get("mimeType", ""))
             if mime == "application/vnd.google-apps.document":
-                response = await client.get(f"https://www.googleapis.com/drive/v3/files/{item_id}/export", params={"mimeType": "text/plain"})
+                response = await retry_external_request(
+                    lambda: client.get(f"https://www.googleapis.com/drive/v3/files/{item_id}/export",
+                                       params={"mimeType": "text/plain"}), service="Google Drive API",
+                )
             elif mime.startswith("text/") or mime in {"application/json", "application/xml"}:
-                response = await client.get(f"https://www.googleapis.com/drive/v3/files/{item_id}", params={"alt": "media"})
+                response = await retry_external_request(
+                    lambda: client.get(f"https://www.googleapis.com/drive/v3/files/{item_id}",
+                                       params={"alt": "media"}), service="Google Drive API",
+                )
             else:
                 raise HTTPException(status_code=415, detail="当前仅支持导入 Google 文档和纯文本文件；不会将二进制内容伪装成文本。")
             response.raise_for_status()
@@ -245,7 +268,10 @@ async def import_google_item(source: str, item_id: str) -> dict[str, str]:
             name = str(metadata.get("name") or "Google Drive 文档")
             url = str(metadata.get("webViewLink") or f"https://drive.google.com/open?id={item_id}")
         else:
-            response = await client.get(f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{item_id}", params={"format": "full"})
+            response = await retry_external_request(
+                lambda: client.get(f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{item_id}",
+                                   params={"format": "full"}), service="Google Gmail API",
+            )
             response.raise_for_status()
             message = response.json()
             headers_list = message.get("payload", {}).get("headers", [])

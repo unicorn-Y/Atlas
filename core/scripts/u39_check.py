@@ -65,8 +65,6 @@ def main() -> None:
         python_path.append(env["PYTHONPATH"])
     env["PYTHONPATH"] = os.pathsep.join(python_path)
 
-    run("0a-d U38 safe-mode, market override, CLI skills and live skill preload scenarios",
-        [sys.executable, str(CORE / "scripts" / "u38_check.py")], cwd=ROOT, env=env, timeout=900)
     run("0e extraction prompt suppression and reuse triggers",
         [shutil.which("node.exe") or "node", str(ROOT / "node_modules" / "vitest" / "vitest.mjs"),
          "run", "--root", ".", "src/renderer/services/skillExtraction.test.ts"],

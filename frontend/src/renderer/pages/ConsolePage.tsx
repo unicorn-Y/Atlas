@@ -233,6 +233,7 @@ interface Plugin {
   enabled: boolean;
   loaded: boolean;
   update_available?: boolean;
+  update_error?: string;
   skills?: string[];
   commands?: string[];
   agents?: string[];
@@ -443,6 +444,11 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
   return <section className={styles.settingsCard} aria-label="插件管理">
     <header className={styles.settingsCardHeading}>
       <h2>插件</h2>
+      <button className={styles.quietButton} onClick={() => void act(`${apiBaseUrl}/api/plugins/check-updates`, { method: 'POST' }, (body) => {
+        const updates = body.updates && typeof body.updates === 'object' ? Object.values(body.updates as Record<string, unknown>).filter((value) => value === true).length : 0;
+        const failed = Array.isArray(body.plugins) ? body.plugins.filter((plugin) => Boolean((plugin as Plugin)?.update_error)).length : 0;
+        return failed ? `${failed} 个 Git 来源检查失败；已重试 2 次，请查看插件错误详情` : `插件更新检查完成；${updates} 个插件有更新`;
+      })} disabled={busy}>检查 Git 来源更新</button>
       <button className={styles.quietButton} onClick={() => void refresh()} disabled={busy}><RefreshCw size={14} className={busy ? styles.settingsSpinner : undefined} /> 刷新</button>
     </header>
     {error && <p className={styles.settingsError} role="alert">{error}</p>}
@@ -497,6 +503,7 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
             <span style={{ flex: '1 1 240px', minWidth: 0 }}>
               <strong>{plugin.display_name || plugin.name}</strong> <small>v{plugin.version} · {SOURCE_LABEL[plugin.source ?? ''] ?? plugin.source ?? '本地'}{plugin.marketplace ? ` · ${plugin.marketplace}` : ''} · {plugin.enabled ? '已启用' : '已停用'} · {plugin.loaded ? '已加载' : '未加载'}{plugin.update_available ? ' · 有更新' : ''}</small>
               {plugin.description && <div><small>{plugin.description}</small></div>}
+              {plugin.update_error && <div role="alert" style={{ color: 'var(--danger)' }}><small>{plugin.update_error}</small></div>}
               <div><small>技能 {plugin.skills?.length ?? 0} · 命令 {plugin.commands?.length ?? 0} · Agent {plugin.agents?.length ?? 0} · Hook {plugin.hooks ?? 0} · MCP {plugin.mcp_servers?.length ?? 0}</small></div>
             </span>
             <button className={styles.quietButton} onClick={() => plugin.enabled

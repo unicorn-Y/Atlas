@@ -47,6 +47,21 @@ async def list_plugins(
     return {"plugins": plugin_runtime.discover()}
 
 
+@router.post("/api/plugins/check-updates")
+async def check_plugin_updates(
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    """Refresh remote Git source state and return any retryable network failures."""
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    try:
+        updates = await asyncio.to_thread(plugin_runtime.check_updates)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        raise HTTPException(status_code=502, detail=f"插件来源检查失败：{exc}") from exc
+    return {"updates": updates, "plugins": plugin_runtime.discover()}
+
+
 @router.post("/api/plugins/validate")
 async def validate_plugin_manifest(
     services: Annotated[AppServices, Depends(get_app_services)], req: dict[str, Any],

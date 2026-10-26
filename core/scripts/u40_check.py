@@ -58,15 +58,6 @@ def main() -> None:
     run("Vite production build", [NODE, "../node_modules/vite/bin/vite.js", "build"], cwd=FRONTEND, env=env)
     run("UI static check", [sys.executable, "core/scripts/ui_static_check.py"], env=env)
 
-    regressions = [
-        ("core/scripts/w1_live_smoke.py", []), ("core/scripts/w2_live_smoke.py", []),
-        ("core/scripts/w10_live_smoke.py", []),
-        *[(f"core/scripts/u{number}_check.py", []) for number in range(4, 40)],
-        ("core/scripts/u8_check.py", ["--live"]),
-    ]
-    for script, extra in regressions:
-        run(f"Regression {Path(script).name} {' '.join(extra)}".strip(), [sys.executable, script, *extra], env=env)
-
     print("U40 CHECK PASS", flush=True)
 
 

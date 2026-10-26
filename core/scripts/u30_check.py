@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import runpy
 import tempfile
 from pathlib import Path
 import sys
@@ -77,9 +76,28 @@ async def check_sites() -> None:
 
 
 async def main() -> None:
-    # Reuse the previous wave's actual component protocol fixture for item 0.
-    old_check = runpy.run_path(str(ROOT / "core/scripts/u29_check.py"))
-    await old_check["check_structured_component_delivery"]()
+    # Exercise the component protocol locally; do not invoke another batch check.
+    from atlas.tools.structured_components import queue_component_event
+
+    cases = [
+        ("progress", {"steps": [{"label": "构建", "status": "active"}]}),
+        ("table", {"columns": ["名称"], "rows": [["Atlas"]]}),
+        ("metrics", {"metrics": [{"label": "完成率", "value": "80%"}]}),
+        ("buttons", {"buttons": [{"label": "继续", "value": "continue"}]}),
+    ]
+    queue: asyncio.Queue[dict] = asyncio.Queue()
+    for kind, data in cases:
+        await queue_component_event({"title": kind, "kind": kind, "data": data}, "u30-run", queue)
+    delivered = [await queue.get() for _ in cases]
+    assert [event["type"] for event in delivered] == ["component.push"] * len(cases)
+    assert [event["data"]["kind"] for event in delivered] == [item[0] for item in cases]
+    try:
+        await queue_component_event({"title": "bad", "kind": "buttons", "data": {"buttons": [{"label": "缺值"}]}}, "u30-run", queue)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("malformed interactive component was accepted")
+    print("U30 item 0: structured component delivery and malformed-event rejection PASS")
     require("core/atlas/api/run_drive.py", 'event in {"component.push", "canvas.update"}', '"display_kind": "structured_component"')
     require("frontend/src/renderer/components/MessageThread.tsx", "structured_component", "component.push")
     print("U30 item 0: queued component protocol and persisted transcript reconstruction PASS")

@@ -9,6 +9,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ from atlas.agent.enrichment import HOOK_POINTS
 
 MANIFEST_NAMES = (".claude-plugin/plugin.json", "plugin.json")
 MARKETPLACE_NAMES = (".claude-plugin/marketplace.json", "marketplace.json")
+_GIT_RETRY_DELAYS = (0.25, 0.6)
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -166,6 +168,7 @@ class PluginRuntime:
                 "enabled": self._enabled.get(name, manifest.get("defaultEnabled", True)) is not False,
                 "loaded": name in self._loaded,
                 "update_available": bool(source.get("update_available", False)) if isinstance(source, dict) else False,
+                "update_error": str(source.get("update_error") or "") if isinstance(source, dict) else "",
             }
         return list(plugins.values())
 
@@ -623,13 +626,28 @@ class PluginRuntime:
         incoming.replace(target)
 
     @staticmethod
+    def _run_git_with_retry(args: list[str], *, timeout: int = 60) -> subprocess.CompletedProcess[str]:
+        """Retry transient remote Git operations twice without echoing credentialed URLs."""
+        for attempt in range(len(_GIT_RETRY_DELAYS) + 1):
+            try:
+                return subprocess.run(args, check=True, capture_output=True, text=True,
+                                      encoding="utf-8", errors="replace", timeout=timeout)
+            except (OSError, subprocess.SubprocessError) as exc:
+                if attempt == len(_GIT_RETRY_DELAYS):
+                    raise ValueError(
+                        f"Git 来源访问失败（已重试 2 次，{type(exc).__name__}）。请检查网络、代理或仓库权限。"
+                    ) from exc
+                time.sleep(_GIT_RETRY_DELAYS[attempt])
+        raise AssertionError("unreachable")
+
+    @staticmethod
     def _git_clone(url: str, target: Path, ref: str | None = None) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         args = ["git", "clone", "--depth", "1"]
         if ref:
             args.extend(["--branch", ref])
         args.extend([url, str(target)])
-        subprocess.run(args, check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        PluginRuntime._run_git_with_retry(args, timeout=180)
 
     def install_local(self, source: str | Path) -> dict[str, Any]:
         source_root = self._plugin_root(Path(source))
@@ -812,10 +830,18 @@ class PluginRuntime:
         if repo is None:
             return False
         try:
-            subprocess.run(["git", "-C", str(repo), "fetch", "--quiet"], check=True, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+            self._run_git_with_retry(["git", "-C", str(repo), "fetch", "--quiet"])
             head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
             upstream = subprocess.run(["git", "-C", str(repo), "rev-parse", "@{upstream}"], check=True, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
-        except (OSError, subprocess.SubprocessError):
+            for source in self._state.get("sources", {}).values():
+                if isinstance(source, dict) and source.get("checkout") and Path(source["checkout"]) == path:
+                    source.pop("update_error", None)
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            source_error = (f"Git 来源更新检查失败（已重试 2 次）：{exc}" if isinstance(exc, ValueError)
+                            else "Git 来源更新检查失败：本地仓库状态无法读取。")
+            for source in self._state.get("sources", {}).values():
+                if isinstance(source, dict) and source.get("checkout") and Path(source["checkout"]) == path:
+                    source["update_error"] = source_error
             return False
         return bool(head) and bool(upstream) and head != upstream
 
@@ -856,7 +882,7 @@ class PluginRuntime:
         repo = self._git_repo(Path(record["path"]))
         if repo is None:
             raise ValueError(f"marketplace checkout is not a git repository: {name}")
-        subprocess.run(["git", "-C", str(repo), "pull", "--ff-only"], check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        self._run_git_with_retry(["git", "-C", str(repo), "pull", "--ff-only"])
         record["path"] = str(self._marketplace_root(repo) or repo)
         self._save_state()
         return {"name": name, "updated": True}
@@ -877,7 +903,7 @@ class PluginRuntime:
             return result
         if source.get("source") == "git":
             checkout = Path(source["checkout"])
-            subprocess.run(["git", "-C", str(checkout), "pull", "--ff-only"], check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            self._run_git_with_retry(["git", "-C", str(checkout), "pull", "--ff-only"])
             root = self._plugin_root(checkout / source["subdir"] if source.get("subdir") else checkout)
             if root is None:
                 raise ValueError(f"plugin components missing after update: {name}")

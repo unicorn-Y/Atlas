@@ -797,8 +797,13 @@ _POOL_LAST_USE: dict[tuple[Any, ...], float] = {}
 _POOLS_LOCK = threading.Lock()
 # Below common server idle limits (nginx 60-75s), so a pooled socket is rarely stale.
 _POOL_KEEPALIVE_S = 50.0
-# Pooled sockets the server already closed fail on send; one immediate resend covers that.
-_STALE_SOCKET_ERRORS = (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)
+# A model relay may reset a socket during TLS setup or close an idle pooled socket.
+# Retry only transient transport failures and server errors, with two bounded retries.
+_TRANSIENT_MODEL_ERRORS = (
+    httpx.ConnectError, httpx.ConnectTimeout, httpx.RemoteProtocolError,
+    httpx.ReadError, httpx.WriteError, httpx.ReadTimeout, httpx.WriteTimeout,
+)
+_MODEL_RETRY_DELAYS = (0.25, 0.6)
 
 
 def _pool_key(route: RouteSpec, network: ModelNetworkSettings) -> tuple[Any, ...]:
@@ -839,7 +844,7 @@ class _PooledClient:
         self._timeout = timeout
 
     def _rebuild_after_stale_socket(self) -> None:
-        """Evict a failed keep-alive pool before the one permitted retry."""
+        """Evict a failed keep-alive pool before retrying the request."""
         with _POOLS_LOCK:
             stale = _POOLS.get(self._key)
             if stale is self._client:
@@ -859,20 +864,38 @@ class _PooledClient:
 
     def post(self, url: str, **kwargs: Any) -> httpx.Response:
         kwargs.setdefault("timeout", self._timeout)
-        try:
-            return self._client.post(url, **kwargs)
-        except _STALE_SOCKET_ERRORS:
-            self._rebuild_after_stale_socket()
-            return self._client.post(url, **kwargs)
+        for attempt in range(len(_MODEL_RETRY_DELAYS) + 1):
+            try:
+                response = self._client.post(url, **kwargs)
+            except _TRANSIENT_MODEL_ERRORS:
+                if attempt == len(_MODEL_RETRY_DELAYS):
+                    raise
+                self._rebuild_after_stale_socket()
+            else:
+                if response.status_code < 500 or attempt == len(_MODEL_RETRY_DELAYS):
+                    return response
+                response.close()
+            time.sleep(_MODEL_RETRY_DELAYS[attempt])
+        raise AssertionError("unreachable")
 
     def open_stream(self, url: str, **kwargs: Any) -> httpx.Response:
         request = self._client.build_request("POST", url, timeout=self._timeout, **kwargs)
-        try:
-            response = self._client.send(request, stream=True)
-        except _STALE_SOCKET_ERRORS:
-            self._rebuild_after_stale_socket()
+        response: httpx.Response | None = None
+        for attempt in range(len(_MODEL_RETRY_DELAYS) + 1):
+            try:
+                response = self._client.send(request, stream=True)
+            except _TRANSIENT_MODEL_ERRORS:
+                if attempt == len(_MODEL_RETRY_DELAYS):
+                    raise
+                self._rebuild_after_stale_socket()
+            else:
+                if response.status_code < 500 or attempt == len(_MODEL_RETRY_DELAYS):
+                    break
+                response.read()
+                response.close()
+            time.sleep(_MODEL_RETRY_DELAYS[attempt])
             request = self._client.build_request("POST", url, timeout=self._timeout, **kwargs)
-            response = self._client.send(request, stream=True)
+        assert response is not None
         if response.is_error:
             # Read the body so error classification (context length, quota...) sees it.
             try:

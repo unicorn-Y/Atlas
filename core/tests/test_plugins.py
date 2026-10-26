@@ -217,17 +217,19 @@ def _unlock(path: Path) -> None:
 
 
 def test_git_source_update_available(tmp_path: Path) -> None:
-    origin = tmp_path / "origin-repo"
-    origin.mkdir()
+    working = tmp_path / "origin-working"
+    working.mkdir()
+    origin = tmp_path / "origin.git"
     try:
-        (origin / "plugin.json").write_text(
+        (working / "plugin.json").write_text(
             json.dumps({"name": "gitsrc", "version": "1.0.0"}), encoding="utf-8",
         )
-        _git("init", cwd=origin)
-        _git("config", "user.email", "test@example.com", cwd=origin)
-        _git("config", "user.name", "Test", cwd=origin)
-        _git("add", "-A", cwd=origin)
-        _git("-c", "commit.gpgsign=false", "commit", "-m", "v1", cwd=origin)
+        _git("init", cwd=working)
+        _git("config", "user.email", "test@example.com", cwd=working)
+        _git("config", "user.name", "Test", cwd=working)
+        _git("add", "-A", cwd=working)
+        _git("-c", "commit.gpgsign=false", "commit", "-m", "v1", cwd=working)
+        _git("clone", "--bare", str(working), str(origin), cwd=tmp_path)
 
         user_dir = tmp_path / "user-plugins"
         user_dir.mkdir()
@@ -237,11 +239,12 @@ def test_git_source_update_available(tmp_path: Path) -> None:
         assert runtime.check_updates() == {"gitsrc": False}
         assert runtime.discover()[0]["update_available"] is False
 
-        (origin / "plugin.json").write_text(
+        (working / "plugin.json").write_text(
             json.dumps({"name": "gitsrc", "version": "1.1.0"}), encoding="utf-8",
         )
-        _git("add", "-A", cwd=origin)
-        _git("-c", "commit.gpgsign=false", "commit", "-m", "v2", cwd=origin)
+        _git("add", "-A", cwd=working)
+        _git("-c", "commit.gpgsign=false", "commit", "-m", "v2", cwd=working)
+        _git("push", str(origin), "HEAD", cwd=working)
 
         assert runtime.check_updates() == {"gitsrc": True}
         assert runtime.discover()[0]["update_available"] is True

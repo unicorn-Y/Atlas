@@ -84,7 +84,9 @@ def test_gateway_and_unconfigured_provider_are_reported_unsupported() -> None:
 
 
 def test_gateway_provider_outside_catalog_is_explicitly_unsupported() -> None:
-    with make_client(FakeModelManager()) as client:
+    # This route iterates configured providers even when the requested id is unknown.
+    # Keep this scenario offline so it never probes api.deepseek.com by accident.
+    with make_client(FakeModelManager(key=None)) as client:
         response = client.get("/api/providers/account-usage?provider_id=private-gateway")
     assert response.status_code == 200
     account = next(row for row in response.json()["providers"] if row["provider_id"] == "private-gateway")

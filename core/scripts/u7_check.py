@@ -305,7 +305,8 @@ def main() -> None:
                 break
             time.sleep(0.25)
         check(bool(extension_id), "Chrome for Testing did not load browser-extension service worker")
-        new_target(extension_port, "data:text/html,<title>U7 extension</title><button id='go' onclick=\"document.body.dataset.clicked='yes'\">click me</button>")
+        test_page = new_target(extension_port, "data:text/html,<title>U7 extension</title><button id='go' onclick=\"document.body.dataset.clicked='yes'\">click me</button>")
+        wait_title(test_page, "U7 extension")
         new_target(extension_port, f"chrome-extension://{extension_id}/popup.html")
         popup_page = target_for(extension_port, f"chrome-extension://{extension_id}/popup.html")
         page_ready = time.monotonic() + 10
@@ -316,12 +317,18 @@ def main() -> None:
         else:
             raise AssertionError("Chrome did not load the Atlas extension popup page")
         cdp_call(popup_page["webSocketDebuggerUrl"], "Runtime.evaluate", {"expression": f"document.querySelector('#bridge').value='{info['url']}';document.querySelector('#code').value='{info['pairing_code']}';document.querySelector('#pair').click()"})
-        time.sleep(1.2)
+        time.sleep(0.4)
         if not connection_info()["connected"]:
             popup_state = evaluate(popup_page, "document.querySelector('#state')?.textContent")
             pairing_storage = evaluate(popup_page, "chrome.storage.local.get(['token','paired']).then(x=>({hasToken:!!x.token,paired:x.paired}))")
             raise AssertionError(f"Extension popup pairing did not connect: {popup_state}; storage={pairing_storage}")
-        options = evaluate(popup_page, "Array.from(document.querySelector('#tabs').options).map(o=>({value:o.value,label:o.textContent}))")
+        tabs_deadline = time.monotonic() + 10
+        options = []
+        while time.monotonic() < tabs_deadline:
+            options = evaluate(popup_page, "Array.from(document.querySelector('#tabs').options).map(o=>({value:o.value,label:o.textContent}))")
+            if any("U7 extension" in item["label"] for item in options):
+                break
+            time.sleep(0.25)
         page_option = next((item for item in options if "U7 extension" in item["label"]), None)
         check(page_option is not None, f"extension popup did not list the test page: {options}")
         cdp_call(popup_page["webSocketDebuggerUrl"], "Runtime.evaluate", {"expression": f"document.querySelector('#tabs').value='{page_option['value']}';document.querySelector('#attach').click()"})

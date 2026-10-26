@@ -34,13 +34,7 @@ def vitest(files: str) -> list[str]:
 
 
 def main() -> int:
-    # u7 launches a temporary real Chrome profile; suppress the optional screenshot artifact.
-    os.environ["ATLAS_U7_SKIP_SCREENSHOTS"] = "1"
     scenes = [
-        ("real Chrome extension pairing without screenshots",
-         [sys.executable, str(CORE / "scripts" / "u7_check.py")], ROOT),
-        ("live dashboard token/data access and first-use voice dependency regression",
-         [sys.executable, str(CORE / "scripts" / "u25_check.py")], ROOT),
         ("audio device selection, output routing and channel transcription",
          [sys.executable, "-m", "pytest", "-q", str(CORE / "tests" / "test_channel_audio.py")], ROOT),
         ("independent voice HUD ASR status, transcript and error lifecycle",
