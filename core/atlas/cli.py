@@ -938,12 +938,14 @@ def notify_command(mode: str | None, command_args: tuple[str, ...], clear_comman
               help="Apply a strict temporary JSON config override for this run only")
 @click.option("--ignore-project-config", is_flag=True, help="Ignore the selected project's saved config for this run")
 @click.option("--ignore-workspace-rules", is_flag=True, help="Skip AGENTS.md / CLAUDE.md workspace instructions for this run")
+@click.option("--skills", "preload_skills", multiple=True, help="Preload one or more named skills for this run (repeatable or comma-separated)")
+@click.option("--skills-file", type=click.Path(dir_okay=False, path_type=Path), default=None, help="Read preloaded skill names from a UTF-8 text file (one name per line)")
 def exec_command(
     prompt: str | None, model: str | None, images: tuple[Path, ...], workspace: Path,
     conversation_id: str | None, output_format: str, notify_mode: str | None, json_output: bool,
     output_schema: Path | None, output_last_message: Path | None, approve_writes: bool,
     project_id: str | None, config_override: Path | None, ignore_project_config: bool,
-    ignore_workspace_rules: bool,
+    ignore_workspace_rules: bool, preload_skills: tuple[str, ...], skills_file: Path | None,
 ) -> None:
     """Run one non-interactive agent turn; PROMPT may also come from stdin."""
     if json_output:
@@ -1001,6 +1003,14 @@ def exec_command(
             temporary_config = validate_config_override(raw_override)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             raise click.BadParameter(f"invalid temporary config override: {exc}", param_hint="--config-override") from exc
+    requested_skills = [name.strip() for value in preload_skills for name in value.split(",") if name.strip()]
+    if skills_file:
+        try:
+            requested_skills.extend(line.strip() for line in skills_file.read_text(encoding="utf-8").splitlines()
+                                    if line.strip() and not line.lstrip().startswith("#"))
+        except OSError as exc:
+            raise click.BadParameter(f"cannot read skills file: {exc}", param_hint="--skills-file") from exc
+    requested_skills = list(dict.fromkeys(requested_skills))
     schema: dict[str, Any] | None = None
     if output_schema:
         try:
@@ -1023,6 +1033,22 @@ def exec_command(
             conv_id = conversation_id or (jsonl_stream.session_id if jsonl_stream else str(__import__("uuid").uuid4()))
             await memory.save_conversation_metadata(conv_id, title_hint=user_prompt)
             orchestrator = AgentOrchestrator(model_mgr=model_mgr, memory=memory)
+            active_skill_instructions: list[dict[str, str]] = []
+            if requested_skills:
+                from atlas.skills import SkillManager
+                skill_manager = SkillManager()
+                await skill_manager.scan_skills()
+                unknown = [name for name in requested_skills if skill_manager.get_skill(name) is None]
+                if unknown:
+                    raise click.BadParameter(f"unknown skill(s): {', '.join(unknown)}", param_hint="--skills")
+                for name in requested_skills:
+                    info = skill_manager.get_skill(name)
+                    content = await skill_manager.activate(name)
+                    if not content:
+                        raise click.ClickException(f"skill could not be loaded: {name}")
+                    active_skill_instructions.append({"name": name, "path": info.path, "content": str(content)})
+                if output_format != "jsonl":
+                    print(f"Preloaded skills: {', '.join(requested_skills)}", file=sys.stderr)
             async def approve_once(event_id: str, tool_name: str, arguments: dict[str, Any]) -> str:
                 return "allow" if approve_writes else "deny"
 
@@ -1071,6 +1097,7 @@ def exec_command(
                     project_id=project_id,
                     ignore_workspace_rules=ignore_workspace_rules,
                     approval_callback=approve_once if approve_writes else None,
+                    active_skill_instructions=active_skill_instructions or None,
                 )
                 async for event in project_scoped_events(
                     project_id, run_events, config_override=temporary_config,
