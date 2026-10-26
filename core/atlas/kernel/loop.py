@@ -2267,11 +2267,15 @@ class AtlasKernel:
                 })
             except Exception:
                 log.exception("kernel.stop_failure_hook_failed", extra={"run_id": run_id})
+            if isinstance(exc, ModelCallError) and exc.category == "upstream_rejection":
+                failure = f"中转拒绝了这次请求（HTTP 403）：{failure}"
             log_detail = f"{failure} (run log: {log_path})" if log_path else failure
             error_data = {
                 "category": exc.category if isinstance(exc, ModelCallError) else "runtime",
                 "detail": log_detail, "log_path": str(log_path or ""),
             }
+            if isinstance(exc, ModelCallError) and exc.category == "upstream_rejection":
+                error_data["reason"] = "中转拒绝了这次请求"
             if isinstance(exc, ModelCallError) and exc.category in {"rate_limit", "billing"}:
                 limit_event = _normalized_limit_event(exc)
                 retry_after = limit_event["retry_after_seconds"]

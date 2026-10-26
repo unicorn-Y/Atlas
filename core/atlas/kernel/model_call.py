@@ -278,6 +278,13 @@ def classify_error(exc: BaseException) -> tuple[str, bool, int | None]:
         "content policy", "moderation_blocked", "blocked by policy",
     )):
         return "content_filter", True, status
+    if status == 403 and any(marker in text for marker in (
+        "request illegal", "bad_response_status_code",
+    )):
+        # Some relays reject an individual request with 403 even though the
+        # account/key is valid. Keep this narrow so ordinary 403 and every 401
+        # retain the non-retryable authentication behavior.
+        return "upstream_rejection", True, status
     if status == 402 or any(marker in text for marker in (
         "insufficient_quota", "credit_balance_exhausted", "spend_limit_exceeded",
         "usage_limit_reached", "billing_error", "billing limit", "spend limit",
@@ -1120,7 +1127,8 @@ async def complete_stream(
                 server_retry_override = retry_directive in {"true", "1", "yes"}
                 server_no_retry = retry_directive in {"false", "0", "no"}
                 auth_rotation = False
-                if status in {401, 403} and route.credential_pool is not None and auth_rotation_count < 5:
+                if (status in {401, 403} and error.category != "upstream_rejection"
+                        and route.credential_pool is not None and auth_rotation_count < 5):
                     refresh = getattr(route.credential_pool, "try_refresh_matching", None)
                     refreshed = refresh(api_key_hint=route.key) if callable(refresh) else None
                     if refreshed is not None:
@@ -1155,14 +1163,20 @@ async def complete_stream(
                 )
                 is_529 = status == 529 or error.category == "overloaded"
                 retry_529 = is_529 and retry_source in foreground_retry_sources and overloaded_retry_count < 3
-                persistent_retry = unattended_retry and error.retryable and not is_529
-                will_retry = auth_rotation or connection_retry or watchdog_capacity_retry or retry_529 or persistent_retry or bool(
+                persistent_retry = (unattended_retry and error.retryable and not is_529
+                                    and error.category != "upstream_rejection")
+                upstream_retry = error.category == "upstream_rejection" and retry_index == 0
+                will_retry = upstream_retry or auth_rotation or connection_retry or watchdog_capacity_retry or retry_529 or persistent_retry or bool(
                     error.retryable and retry_index < max_retries and not is_529
                 )
                 if server_retry_override and not server_no_retry and not is_529:
                     will_retry = True
                 if server_no_retry:
                     will_retry = False
+                if error.category == "upstream_rejection":
+                    # Exactly one immediate retry on this same route, then let
+                    # the outer candidate loop advance to the configured fallback.
+                    will_retry = upstream_retry
                 if task_retry_count >= retry_budget_attempts:
                     will_retry = False
                 if watchdog_capacity_retry and retry_watchdog_max_wait_s is not None:
@@ -1190,6 +1204,7 @@ async def complete_stream(
                     else:
                         delay = min(delay if delay is not None else 0.0, remaining_task_wait)
                 retry_kind = (
+                    "upstream_rejection" if upstream_retry and will_retry else
                     "auth_rotation" if auth_rotation else
                     "persistent" if persistent_retry and not retry_529 and not connection_retry else
                     "connection" if connection_retry else

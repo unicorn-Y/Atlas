@@ -77,21 +77,40 @@ def main() -> None:
     cli_usage_terminal_scenarios()
     print("U39 scenario PASS: 1 failed/cancelled versioned usage files and unwritable-path error", flush=True)
 
-    with tempfile.TemporaryDirectory(prefix="atlas-u39-usage-") as temp:
-        usage_path = Path(temp) / "usage.json"
-        output = run("1 real deepseek-v4.1-flash CLI usage-file completion", [
-            sys.executable, "-m", "atlas.cli", "exec", "--model", "deepseek-v4.1-flash",
-            "--usage-file", str(usage_path), "--json", "只回复 U39_USAGE_OK",
-        ], cwd=CORE, env=env, timeout=300)
-        record = json.loads(usage_path.read_text(encoding="utf-8"))
-        usage = record.get("usage") or {}
-        if (record.get("schema_version") != 1 or record.get("status") != "completed"
-                or not record.get("run_id") or record.get("model") != "deepseek-v4.1-flash"
-                or not isinstance(usage.get("unavailable"), dict)):
-            raise AssertionError("usage file missing versioned run/model/token availability fields")
-        if "U39_USAGE_OK" not in output:
-            raise AssertionError("real provider did not return the requested marker")
-    print("U39 scenario PASS: 1 real deepseek-v4.1-flash CLI usage-file completion", flush=True)
+    from real_model_check import AttemptResult, retry_real_model_check
+
+    def live_usage_attempt(prompt: str, attempt_number: int) -> AttemptResult:
+        with tempfile.TemporaryDirectory(prefix=f"atlas-u39-usage-{attempt_number}-") as temp:
+            usage_path = Path(temp) / "usage.json"
+            result = subprocess.run([
+                sys.executable, "-m", "atlas.cli", "exec", "--model", "deepseek-v4.1-flash",
+                "--usage-file", str(usage_path), "--json", prompt,
+            ], cwd=CORE, env=env, capture_output=True, text=True,
+               encoding="utf-8", errors="replace", timeout=300)
+            answer = result.stdout or ""
+            if result.returncode:
+                return AttemptResult(False, answer=answer,
+                                     detail=f"CLI exit {result.returncode}: {(result.stderr or '')[-1200:]}")
+            try:
+                record = json.loads(usage_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                return AttemptResult(False, answer=answer, detail=f"usage record unavailable: {exc}")
+            usage = record.get("usage") or {}
+            valid_record = (record.get("schema_version") == 1 and record.get("status") == "completed"
+                            and bool(record.get("run_id")) and record.get("model") == "deepseek-v4.1-flash"
+                            and isinstance(usage.get("unavailable"), dict))
+            passed = valid_record and "U39_USAGE_OK" in answer
+            return AttemptResult(
+                passed, answer=answer,
+                detail="usage schema or requested marker missing" if not passed else "",
+                value=record,
+            )
+
+    retry_real_model_check(
+        "U39 real CLI usage-file completion",
+        "Complete one minimal Atlas run and reply with exactly U39_USAGE_OK.",
+        live_usage_attempt,
+    )
 
     pytest("2 complete branch tree and checkpoint fork workspace restore", [
         "tests/test_u39_checkpoint_fork.py",

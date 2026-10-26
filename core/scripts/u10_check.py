@@ -31,22 +31,47 @@ async def workflow_scenario(root: Path) -> None:
     from atlas.models import ModelManager
     from atlas.task_artifacts import TomlRecordStore
     from atlas.workflow import NodeResult, WorkflowJournal, plan_workflow, run_workflow
+    from real_model_check import AttemptResult, retry_real_model_check_async
     from atlas.api import workflow_router
 
     journal = WorkflowJournal(root / "workflow.db")
     model_router = ModelManager().model_router
+
+    planner_answers: list[str] = []
 
     async def call_planner(*, prompt: str, model: str | None) -> str:
         response = await model_router.complete_for(
             model or "deepseek-v4.1-flash", "workflow_planner",
             [{"role": "user", "content": prompt}], max_tokens=1600, temperature=0,
         )
+        planner_answers.append(str(response.text or ""))
         print("Workflow planner: configured deepseek-v4.1-flash request completed", flush=True)
         return response.text
 
-    graph = await plan_workflow(
+    async def plan_with_retry(goal: str, label: str):
+        async def attempt(attempt_goal: str, attempt_number: int) -> AttemptResult:
+            del attempt_number
+            planner_answers.clear()
+            try:
+                planned = await plan_workflow(
+                    attempt_goal, workspace=str(root), call_model=call_planner,
+                    model="deepseek-v4.1-flash",
+                )
+            except Exception as exc:
+                return AttemptResult(False, answer=planner_answers[-1] if planner_answers else "",
+                                     detail=f"planner validation failed: {type(exc).__name__}: {exc}")
+            preview = "; ".join(node.title for node in planned.nodes[:5])
+            return AttemptResult(
+                bool(planned.nodes), answer=preview,
+                detail="workflow planner returned no nodes", value=planned,
+            )
+
+        checked = await retry_real_model_check_async(label, goal, attempt)
+        return checked.value
+
+    graph = await plan_with_retry(
         "为一个小型 Python 工具规划：检查入口与依赖，随后产出验证报告。",
-        workspace=str(root), call_model=call_planner, model="deepseek-v4.1-flash",
+        "U10 dynamic workflow planner",
     )
     graph.workflow_id = "u10-dynamic-workflow"
 
@@ -73,8 +98,7 @@ async def workflow_scenario(root: Path) -> None:
         template["id"], {"name": "报告模板（更新）", "goal": "检查入口、测试并输出报告"},
     ))["template"]
     assert edited["goal"].startswith("检查入口") and (await workflow_router.list_templates())["templates"]
-    rerun_graph = await plan_workflow(edited["goal"], workspace=str(root), call_model=call_planner,
-                                      model="deepseek-v4.1-flash")
+    rerun_graph = await plan_with_retry(edited["goal"], "U10 saved workflow template planner")
     rerun_graph.workflow_id = "u10-saved-template-rerun"
     rerun = await run_workflow(rerun_graph, Runner(), max_parallel=3,
                                on_event=lambda _event: None, journal=journal)

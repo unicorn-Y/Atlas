@@ -94,54 +94,57 @@ def check_office_generation(workspace: Path) -> None:
 
 def check_live_model_template(workspace: Path) -> None:
     """Exercise the real configured model and the same create_document tool used by the UI."""
+    from real_model_check import AttemptResult, retry_real_model_check
+
+    instruction = (
+        "Use create_document to create u22-live-template.docx in the current workspace. "
+        "Make a concise project decision brief with a title, executive summary, assumptions, "
+        "risks, and three owner/action rows. Use concrete sample wording and no placeholders. "
+        "After creating the file, reply with a short confirmation."
+    )
     command = [
         sys.executable, "-m", "atlas.cli", "exec", "--model", "deepseek-v4.1-flash",
         "--workspace", str(workspace), "--approve-writes",
-        "Use create_document to create u22-live-template.docx in the current workspace. "
-        "Make a concise project decision brief with a title, executive summary, assumptions, "
-        "risks, and three owner/action rows. Use concrete sample wording and no placeholders.",
     ]
     environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
         part for part in (str(CORE), os.environ.get("PYTHONPATH", "")) if part
     )}
     target = workspace / "u22-live-template.docx"
-    reasons: list[str] = []
-    diagnostics: list[str] = []
-    # The live relay intermittently fails a turn (503/timeout) or the model skips the tool once;
-    # allow one retry so the check measures the feature, and report only a reason category.
-    for _attempt in range(2):
+
+    def run_attempt(prompt: str, attempt_number: int) -> AttemptResult:
+        del attempt_number
+        target.unlink(missing_ok=True)
         started_at = time.time()
         try:
             result = subprocess.run(
-                command, cwd=ROOT, env=environment, capture_output=True,
+                [*command, prompt], cwd=ROOT, env=environment, capture_output=True,
                 encoding="utf-8", errors="replace", timeout=300, check=False,
             )
             return_code = result.returncode
             stderr_text = result.stderr or ""
+            answer = result.stdout or ""
         except subprocess.TimeoutExpired as exc:
             return_code = "timeout"
             raw_stderr = exc.stderr or ""
             stderr_text = raw_stderr.decode("utf-8", errors="replace") if isinstance(raw_stderr, bytes) else str(raw_stderr)
+            raw_stdout = exc.stdout or ""
+            answer = raw_stdout.decode("utf-8", errors="replace") if isinstance(raw_stdout, bytes) else str(raw_stdout)
         except OSError as exc:
             return_code = "spawn-error"
             stderr_text = str(exc)
+            answer = ""
         if return_code == 0 and target.is_file() and target.stat().st_size > 0:
-            break
+            return AttemptResult(True, answer=answer, value=target)
         stderr = stderr_text.lower()
         category = next((label for needle, label in (("503", "upstream 503"), ("429", "rate limited"), ("timeout", "timeout"),
                                                      ("timed out", "timeout"), ("401", "auth"), ("create_document", "tool error"))
                          if needle in stderr), "model did not create the file" if return_code == 0 else "run failed")
-        reasons.append(f"exit {return_code}: {category}")
-        diagnostics.append(
-            f"attempt={_attempt + 1} exit_code={return_code}; stderr_tail={_redact_diagnostic(stderr_text)}; "
+        return AttemptResult(False, answer=answer, detail=(
+            f"exit {return_code}: {category}; stderr_tail={_redact_diagnostic(stderr_text)}; "
             f"last_run_error_event={_last_run_error_event(started_at)}"
-        )
-    else:
-        # Emit narrow, redacted diagnostics: exit code, stderr tail, last run error event.
-        for diagnostic in diagnostics:
-            print("U22 live-model diagnostic: " + diagnostic, file=sys.stderr)
-        raise RuntimeError("real deepseek-v4.1-flash Office scenario failed: " + "; ".join(reasons))
-    print("PASS Office live-model scene: deepseek-v4.1-flash created a DOCX through create_document")
+        ))
+
+    retry_real_model_check("U22 Office DOCX tool creation", instruction, run_attempt)
 
 
 def check_ide_fallback(workspace: Path) -> None:

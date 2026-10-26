@@ -128,7 +128,16 @@ async def check_ide(temp: Path) -> None:
 
 async def check_acp_live() -> None:
     await check_acp_fake_client_fs()
-    await _check_acp_filesystem_live(ROOT)
+    from real_model_check import AttemptResult, retry_real_model_check_async
+
+    async def attempt(prompt: str, attempt_number: int) -> AttemptResult:
+        return await _check_acp_filesystem_live(ROOT, prompt=prompt, attempt_number=attempt_number)
+
+    await retry_real_model_check_async(
+        "U8 ACP model tool-call and cancellation flow",
+        f"You must invoke the glob tool with pattern=README.md and path={ROOT}. Do not answer without calling the tool.",
+        attempt,
+    )
 
 
 async def check_acp_fake_client_fs() -> None:
@@ -187,7 +196,9 @@ async def check_ultraplan_live() -> None:
         raise TimeoutError("ultraplan live workflow did not finish research and planning within 15 minutes")
 
 
-async def _check_acp_filesystem_live(workspace: Path) -> None:
+async def _check_acp_filesystem_live(workspace: Path, *, prompt: str, attempt_number: int):
+    from real_model_check import AttemptResult
+
     process = await asyncio.create_subprocess_exec(sys.executable, "-m", "atlas.cli", "acp", "--workspace", str(workspace),
         cwd=ROOT, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
     assert process.stdin and process.stdout
@@ -204,11 +215,12 @@ async def _check_acp_filesystem_live(workspace: Path) -> None:
         if event.get("id") == 2: session_id = str(event["result"]["sessionId"])
     send({"jsonrpc": "2.0", "id": 3, "method": "session/prompt", "params": {
         "sessionId": session_id,
-        "prompt": f"You must invoke the glob tool with pattern=README.md and path={workspace}. Do not answer without calling the tool.",
+        "prompt": prompt,
     }})
     await process.stdin.drain()
     got_text = False; got_tool = False; sent_cancel = False; got_response = False
     rpc_error = False
+    answer_events: list[str] = []
     deadline = asyncio.get_running_loop().time() + 240
     while asyncio.get_running_loop().time() < deadline and not got_response:
         try: line = await asyncio.wait_for(process.stdout.readline(), timeout=30)
@@ -220,6 +232,8 @@ async def _check_acp_filesystem_live(workspace: Path) -> None:
             rpc_error = "error" in event or (event.get("result", {}).get("stopReason") == "error")
         update = event.get("params", {}).get("update", {})
         got_text |= update.get("sessionUpdate") == "agent_message_chunk"
+        if update.get("sessionUpdate") == "agent_message_chunk":
+            answer_events.append(str(update.get("content") or update.get("text") or update))
         got_tool |= update.get("sessionUpdate") in {"tool_call", "tool_call_update"}
         if got_tool and not sent_cancel:
             send({"jsonrpc": "2.0", "method": "session/cancel", "params": {"sessionId": session_id}})
@@ -227,26 +241,41 @@ async def _check_acp_filesystem_live(workspace: Path) -> None:
     process.stdin.close()
     try: await asyncio.wait_for(process.wait(), timeout=15)
     except asyncio.TimeoutError: process.kill(); await process.wait()
-    assert got_tool and sent_cancel and not rpc_error, (
-        f"ACP live session missed text/tool/cancel updates (text={got_text}, tool={got_tool}, "
-        f"cancel={sent_cancel}, rpc_error={rpc_error})"
+    passed = got_tool and sent_cancel and not rpc_error
+    return AttemptResult(
+        passed,
+        answer="".join(answer_events),
+        detail=("ACP session missed required text/tool/cancel event "
+                f"(text={got_text}, tool={got_tool}, cancel={sent_cancel}, rpc_error={rpc_error}; "
+                f"attempt={attempt_number})"),
     )
 
 
 def check_exec_and_sdk_live() -> None:
+    from real_model_check import AttemptResult, retry_real_model_check
+
     schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"], "additionalProperties": False}
     with tempfile.TemporaryDirectory(prefix="atlas-u8-live-") as directory:
         schema_path = Path(directory) / "schema.json"; schema_path.write_text(json.dumps(schema), encoding="utf-8")
         output_path = Path(directory) / "last.txt"
         import subprocess
-        result = subprocess.run([sys.executable, "-m", "atlas.cli", "exec", "--json", "--cwd", str(ROOT),
-            "--output-schema", str(schema_path), "--output-last-message", str(output_path),
-            "Return exactly a JSON object with ok set to true."], cwd=ROOT, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=240)
-        if result.returncode: raise RuntimeError("atlas exec live check failed")
-        events = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
-        assert any(item.get("type") == "start" for item in events) and any(item.get("type") == "end" for item in events)
-        assert json.loads(output_path.read_text(encoding="utf-8"))["ok"] is True
+        def exec_attempt(prompt: str, attempt_number: int) -> AttemptResult:
+            del attempt_number
+            result = subprocess.run([sys.executable, "-m", "atlas.cli", "exec", "--json", "--cwd", str(ROOT),
+                "--output-schema", str(schema_path), "--output-last-message", str(output_path), prompt],
+                cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=240)
+            events = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+            valid = (result.returncode == 0 and any(item.get("type") == "start" for item in events)
+                     and any(item.get("type") == "end" for item in events)
+                     and output_path.is_file()
+                     and json.loads(output_path.read_text(encoding="utf-8")).get("ok") is True)
+            return AttemptResult(valid, answer=result.stdout,
+                                 detail=f"CLI exit={result.returncode}; structured result missing")
+
+        retry_real_model_check(
+            "U8 CLI exec structured output",
+            "Return exactly a JSON object with ok set to true.", exec_attempt,
+        )
 
         sys.path.insert(0, str(ROOT / "sdk" / "python"))
         from atlas_sdk import Atlas
@@ -259,9 +288,17 @@ def check_exec_and_sdk_live() -> None:
             if command and command[0] == sys.executable:
                 command = [sys.executable, "-m", "atlas.cli", *command[1:]]
             return real_popen(command, **kwargs)
-        with patch("subprocess.Popen", side_effect=module_popen):
-            sdk_result = sdk.run("Return JSON with ok true.", cwd=ROOT, output_schema=schema)
-        assert sdk_result.structured == {"ok": True} and sdk_result.session_id
+        def sdk_attempt(prompt: str, attempt_number: int) -> AttemptResult:
+            del attempt_number
+            with patch("subprocess.Popen", side_effect=module_popen):
+                sdk_result = sdk.run(prompt, cwd=ROOT, output_schema=schema)
+            answer = str(getattr(sdk_result, "stdout", "") or "")
+            valid = sdk_result.structured == {"ok": True} and bool(sdk_result.session_id)
+            return AttemptResult(valid, answer=answer, detail="SDK structured result or session id missing",
+                                 value=sdk_result)
+
+        retry_real_model_check("U8 Python SDK structured output",
+                               "Return JSON with ok true.", sdk_attempt)
 
         plan_schema = {"type": "object", "properties": {
             "goal": {"type": "string"}, "background": {"type": "string"},
@@ -275,15 +312,28 @@ def check_exec_and_sdk_live() -> None:
         plan_schema_path = Path(directory) / "plan-schema.json"
         plan_schema_path.write_text(json.dumps(plan_schema), encoding="utf-8")
         plan_output_path = Path(directory) / "plan.json"
-        plan = subprocess.run([sys.executable, "-m", "atlas.cli", "exec", "--cwd", str(ROOT),
-            "--model", "deepseek-v4.1-flash", "--output-schema", str(plan_schema_path),
-            "--output-last-message", str(plan_output_path),
-            "为新增问候接口创建结构化实现计划。返回 schema 要求的 JSON。"],
-            cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=240)
-        if plan.returncode:
-            raise RuntimeError(f"structured plan live check failed: {plan.stderr[-2000:]}")
         from atlas.ultraplan import validate_plan
-        assert validate_plan(json.loads(plan_output_path.read_text(encoding="utf-8")))["steps"]
+        def plan_attempt(prompt: str, attempt_number: int) -> AttemptResult:
+            del attempt_number
+            plan = subprocess.run([sys.executable, "-m", "atlas.cli", "exec", "--cwd", str(ROOT),
+                "--model", "deepseek-v4.1-flash", "--output-schema", str(plan_schema_path),
+                "--output-last-message", str(plan_output_path), prompt],
+                cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=240)
+            answer = plan.stdout or ""
+            if plan.returncode:
+                return AttemptResult(False, answer=answer, detail=f"CLI exit {plan.returncode}: {plan.stderr[-1200:]}")
+            try:
+                validated = validate_plan(json.loads(plan_output_path.read_text(encoding="utf-8")))
+            except Exception as exc:
+                return AttemptResult(False, answer=answer, detail=f"plan validation failed: {exc}")
+            return AttemptResult(bool(validated["steps"]), answer=answer, detail="plan has no steps",
+                                 value=validated)
+
+        retry_real_model_check(
+            "U8 structured implementation plan",
+            "为新增问候接口创建结构化实现计划。返回 schema 要求的 JSON，并包含至少一个可验证步骤。",
+            plan_attempt,
+        )
 
 
 def main() -> None:

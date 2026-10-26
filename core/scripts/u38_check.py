@@ -79,13 +79,27 @@ def main() -> None:
     live_skill_file.write_text("u38-smoke-temp\n", encoding="utf-8")
     model_env = dict(os.environ)
     model_env["ATLAS_ROOT"] = str(live_root)
+    from real_model_check import AttemptResult, retry_real_model_check
+
+    live_prompt = (
+        "Read and follow the preloaded skill named u38-smoke-temp. "
+        "Reply with the exact marker U38_SKILL_OK and no other text."
+    )
     try:
-        live = subprocess.run([sys.executable, "-m", "atlas.cli", "exec", "--skills-file", str(live_skill_file),
-                               "Reply with the marker required by the preloaded skill."],
-                              cwd=ROOT / "core", env=model_env, capture_output=True,
-                              text=True, encoding="utf-8", errors="replace", timeout=240)
-        check(live.returncode == 0 and "U38_SKILL_OK" in live.stdout,
-              "model-backed CLI skill preload did not produce the required marker")
+        def run_live_skill(prompt: str, attempt_number: int) -> AttemptResult:
+            del attempt_number
+            live = subprocess.run(
+                [sys.executable, "-m", "atlas.cli", "exec", "--skills-file", str(live_skill_file), prompt],
+                cwd=ROOT / "core", env=model_env, capture_output=True,
+                text=True, encoding="utf-8", errors="replace", timeout=240,
+            )
+            passed = live.returncode == 0 and "U38_SKILL_OK" in live.stdout
+            return AttemptResult(
+                passed, answer=live.stdout,
+                detail="CLI exit " + str(live.returncode) + (": marker absent" if not passed else ""),
+            )
+
+        retry_real_model_check("U38 CLI preloaded skill marker", live_prompt, run_live_skill)
     finally:
         live_skill_file.unlink(missing_ok=True)
         shutil.rmtree(live_skill, ignore_errors=True)

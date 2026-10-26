@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 def check_repository_review(base: Path) -> None:
     from atlas.review.engine import collect_repository_context, merge_layer_findings, register_review_routes, run_repository_review_sync
+    from real_model_check import AttemptResult, retry_real_model_check
     from fastapi import FastAPI
     from atlas.cli import main
     from click.testing import CliRunner
@@ -39,9 +40,23 @@ def check_repository_review(base: Path) -> None:
     })
     assert len(merged) == 1 and set(merged[0]["review_layers"]) == {"correctness", "security"}
     model = os.environ.get("U20_REVIEW_MODEL", "deepseek-v4.1-flash")
-    report = run_repository_review_sync(str(repo), model=model)
-    assert len(report["review_layers"]) == 3, f"parallel review layers failed: {report['layer_errors']}"
-    assert report["scope"] == "repository" and isinstance(report["findings"], list)
+    def review_attempt(_prompt: str, attempt_number: int) -> AttemptResult:
+        del attempt_number
+        report = run_repository_review_sync(str(repo), model=model)
+        answer = "; ".join(str(item.get("title") or "") for item in report.get("findings", [])[:5])
+        passed = (len(report.get("review_layers", [])) == 3 and report.get("scope") == "repository"
+                  and isinstance(report.get("findings"), list))
+        return AttemptResult(
+            passed, answer=answer,
+            detail=f"review layers={len(report.get('review_layers', []))}/3; errors={report.get('layer_errors')!r}",
+            value=report,
+        )
+
+    report = retry_real_model_check(
+        "U20 repository review across all layers",
+        "Review the fixture repository and return findings from correctness, security, and architecture layers.",
+        review_attempt,
+    ).value
     print(f"repository review: live {model}, {len(report['review_layers'])}/3 layers, {len(report['findings'])} findings")
     cli_report = {"scope": "repository", "file_count": 4, "review_layers": ["correctness", "security", "architecture"], "findings": [], "layer_errors": {}}
     with patch("atlas.review.engine.run_repository_review_sync", return_value=cli_report):

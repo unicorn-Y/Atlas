@@ -157,12 +157,22 @@ def check_egress_probe() -> None:
 async def check_live_model() -> None:
     """Exercise the configured real model route without printing or inspecting credentials."""
     from atlas.models import ModelManager
+    from real_model_check import AttemptResult, retry_real_model_check_async
 
-    response = await ModelManager().model_router.complete_for(
-        "deepseek-v4.1-flash", "advisor", [{"role": "user", "content": "Reply with exactly: U16 model reachable"}],
-        max_tokens=40, temperature=0,
+    async def attempt(prompt: str, attempt_number: int) -> AttemptResult:
+        del attempt_number
+        response = await ModelManager().model_router.complete_for(
+            "deepseek-v4.1-flash", "advisor", [{"role": "user", "content": prompt}],
+            max_tokens=40, temperature=0,
+        )
+        answer = str(response.text or "")
+        return AttemptResult(bool(answer.strip()), answer=answer, detail="empty model answer")
+
+    await retry_real_model_check_async(
+        "U16 configured model route",
+        "Reply with exactly: U16 model reachable",
+        attempt,
     )
-    assert response.text.strip(), "live model returned an empty answer"
 
 
 async def main() -> None:

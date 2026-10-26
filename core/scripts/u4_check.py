@@ -105,17 +105,22 @@ async def check_service_contracts() -> None:
 
 async def check_live_advisor() -> None:
     from atlas.models import ModelManager
+    from real_model_check import AttemptResult, retry_real_model_check_async
 
     router = ModelManager().model_router
-    try:
+
+    async def attempt(prompt: str, attempt_number: int) -> AttemptResult:
+        del attempt_number
         response = await router.complete_for(
-            "deepseek-v4.1-flash", "advisor", [{
-                "role": "user", "content": "Reply with exactly: U4 advisor reachable",
-            }], max_tokens=40, temperature=0,
+            "deepseek-v4.1-flash", "advisor", [{"role": "user", "content": prompt}],
+            max_tokens=40, temperature=0,
         )
-    except Exception as exc:
-        raise RuntimeError(f"advisor live request failed ({type(exc).__name__})") from None
-    assert response.text.strip(), "advisor returned an empty response"
+        answer = str(response.text or "")
+        return AttemptResult(bool(answer.strip()), answer=answer, detail="advisor returned an empty answer")
+
+    await retry_real_model_check_async(
+        "U4 advisor route", "Reply with exactly: U4 advisor reachable", attempt,
+    )
 
 
 async def main() -> None:

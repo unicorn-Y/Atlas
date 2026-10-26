@@ -166,9 +166,21 @@ async def check_lsp_surface_and_handoff() -> None:
         assert limit == 1000
         return [{"id": "m1", "role": "user", "content": "first requirement api_key=sk-live-secret-value"},
                 {"id": "m2", "role": "assistant", "content": "last decision: use merge"}]
-    with patch("atlas.engine.session_sync.read_session_messages", side_effect=fake_read):
-        summary = await create_handoff_summary(services, "source-1")
-    assert summary["model"] == "deepseek-v4.1-flash" and len(summary["text"]) > 40
+    from real_model_check import AttemptResult, retry_real_model_check_async
+
+    async def summarize(_prompt: str, attempt_number: int) -> AttemptResult:
+        del attempt_number
+        with patch("atlas.engine.session_sync.read_session_messages", side_effect=fake_read):
+            summary = await create_handoff_summary(services, "source-1")
+        valid = summary["model"] == "deepseek-v4.1-flash" and len(summary["text"]) > 40
+        return AttemptResult(valid, answer=summary.get("text", ""),
+                             detail="handoff summary was empty or used wrong model", value=summary)
+
+    await retry_real_model_check_async(
+        "U17 live handoff summary",
+        "Summarize the conversation goal, requirements, final decision, and current worktree state.",
+        summarize,
+    )
 
 
 def check_pane_and_source_contracts() -> None:

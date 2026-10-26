@@ -233,7 +233,10 @@ def check_item_5() -> None:
         page.current.append(entry)
         library.store.write(page)
         library.index.sync()
-        prompt = "I told you before about U27 cobalt lantern personal fact. What exact object and color did I tell you?"
+        prompt = (
+            "Use the stored memory about U27 cobalt lantern personal fact. State the exact object and its color "
+            "and cite the memory source in the Atlas memory-citation format. Do not guess."
+        )
         recalled = library.recall(prompt)
         assert citation_ref in recalled["refs"], "isolated fixture was not recalled for the real model turn"
         if library.index._db is not None:
@@ -249,59 +252,54 @@ def check_item_5() -> None:
         env["ATLAS_PREFLIGHT_CONTEXT_TIMEOUT_SECONDS"] = "10"
         env["ATLAS_TEST_DISABLE_MEMORY_EMBEDDINGS"] = "1"
         env["ATLAS_DEBUG_MEMORY_CITATIONS"] = "1"
-        with tempfile.TemporaryDirectory(prefix="atlas-u27-workspace-") as workspace:
-            run = subprocess.run(
-                [sys.executable, "-m", "atlas.cli", "run", "--print", prompt,
-                 "--workspace", workspace,
-                 "--model", "deepseek-v4.1-flash", "--permission-mode", "read_only",
-                 "--output-format", "json", "--timeout", "240"],
-                cwd=CORE, env=env, capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=270,
+        from real_model_check import AttemptResult, retry_real_model_check
+
+        def run_live_citation(attempt_prompt: str, attempt_number: int) -> AttemptResult:
+            with tempfile.TemporaryDirectory(prefix=f"atlas-u27-workspace-{attempt_number}-") as workspace:
+                run = subprocess.run(
+                    [sys.executable, "-m", "atlas.cli", "run", "--print", attempt_prompt,
+                     "--workspace", workspace,
+                     "--model", "deepseek-v4.1-flash", "--permission-mode", "read_only",
+                     "--output-format", "json", "--timeout", "240"],
+                    cwd=CORE, env=env, capture_output=True, text=True,
+                    encoding="utf-8", errors="replace", timeout=270,
+                )
+            if run.returncode:
+                diagnostics = "\n".join(
+                    part.strip()[-2400:] for part in (run.stdout, run.stderr) if part.strip()
+                ) or "(child process produced no output)"
+                return AttemptResult(False, answer=run.stdout, detail=f"CLI exit {run.returncode}: {diagnostics}")
+            conversation = str(json.loads(run.stdout).get("conversation_id") or "")
+            citation_logs = [
+                json.loads(line) for line in run.stderr.splitlines()
+                if line.startswith("{") and '"event": "agent.memory_citation_fallback"' in line
+            ]
+            assistant_messages = [row for row in read_session_messages(
+                data_root / "engine", conversation,
+            ) if row.get("role") == "assistant"]
+            final_text = str(assistant_messages[-1].get("content", "")) if assistant_messages else ""
+            citations = (assistant_messages[-1].get("metadata", {}).get("memory_citations", [])
+                         if assistant_messages else [])
+            recall_loaded = any(row.get("recall_loaded") and row.get("allowed_ref_count", 0) > 0
+                                for row in citation_logs)
+            passed = citation_ref in citations and recall_loaded
+            details = ("memory source not adopted" if citation_ref not in citations else "memory recall not loaded")
+            return AttemptResult(
+                passed, answer=final_text,
+                detail="; ".join((details, f"persisted_refs={citations!r}",
+                                  f"citation_diagnostics={citation_logs!r}")),
+                value={"citation_logs": citation_logs, "answer": final_text},
             )
-        if run.returncode:
-            diagnostics = "\n".join(
-                part.strip()[-6000:] for part in (run.stdout, run.stderr) if part.strip()
-            ) or "(child process produced no output)"
-            raise AssertionError(
-                f"real citation run failed with exit {run.returncode}; child diagnostics:\n{diagnostics}"
-            )
-        conversation = str(json.loads(run.stdout).get("conversation_id") or "")
-        citation_logs = [
-            json.loads(line) for line in run.stderr.splitlines()
-            if line.startswith("{") and '"event": "agent.memory_citation_fallback"' in line
-        ]
-        if not any(row.get("recall_loaded") and row.get("allowed_ref_count", 0) > 0 for row in citation_logs):
-            citation_trace = "\n".join(
-                line for line in run.stderr.splitlines() if "agent.memory_citation_" in line
-            )
-            raise AssertionError(
-                "isolated real-model workspace did not load library refs; "
-                f"citation_diagnostics={citation_logs!r}; trace={citation_trace or '(empty)'}"
-            )
-        assistant_messages = [row for row in read_session_messages(
-            data_root / "engine", conversation,
-        ) if row.get("role") == "assistant"]
-        citations = (assistant_messages[-1].get("metadata", {}).get("memory_citations", [])
-                     if assistant_messages else [])
-        if citation_ref not in citations:
-            final_text = str(assistant_messages[-1].get("content", ""))[-1200:] if assistant_messages else "(no assistant message)"
-            citation_diagnostics = "\n".join(
-                line for line in run.stderr.splitlines()
-                if "agent.memory_citation_fallback" in line
-            )
-            raise AssertionError(
-                "real answer did not persist the adopted memory source ref; "
-                f"persisted_refs={citations!r}; final_text_tail={final_text!r}; "
-                f"fallback_diagnostics={citation_diagnostics or '(not emitted)'}"
-            )
+
+        checked = retry_real_model_check(
+            "U27 real-model memory citation", prompt, run_live_citation,
+        )
+        citation_logs = checked.value["citation_logs"] if checked.value else []
         fallback_rows = [row for row in citation_logs if row.get("event") == "agent.memory_citation_fallback"]
         latest_fallback = fallback_rows[-1] if fallback_rows else {}
-        print(
-            "Real model citation persisted: memory refs loaded="
-            f"{latest_fallback.get('allowed_ref_count', 0)}, inferred refs="
-            f"{latest_fallback.get('inferred_ref_count', 0)}.",
-            flush=True,
-        )
+        print("Real model citation persisted: memory refs loaded="
+              f"{latest_fallback.get('allowed_ref_count', 0)}, inferred refs="
+              f"{latest_fallback.get('inferred_ref_count', 0)}.", flush=True)
     finally:
         library.index.sync()
         if library.index._db is not None:
