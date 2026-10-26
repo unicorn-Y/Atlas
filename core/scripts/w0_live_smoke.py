@@ -1,8 +1,10 @@
 """Run a read-only, live-provider smoke test through Atlas's W0 chat path.
 
-Run from the repository root with its normal Python environment, for example:
+Run from the repository root with the Python interpreter containing Atlas dependencies, for example:
 
-    uv run --project core python core/scripts/w0_live_smoke.py --data-dir C:/AtlasData
+    python core/scripts/w0_live_smoke.py --data-dir C:/AtlasData
+
+The checker invokes child Python processes with this same interpreter.
 
 This script reads Atlas configuration and credentials but never persists settings,
 conversation history, or route-probe results.

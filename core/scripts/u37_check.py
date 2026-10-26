@@ -28,7 +28,10 @@ def scenario(name: str, command: list[str], *, cwd: Path = ROOT) -> None:
 
 
 def pytest_scenario(name: str, *nodeids: str) -> None:
-    scenario(name, ["uv", "run", "--project", "core", "python", "-m", "pytest", *nodeids, "-q"])
+    import sys
+
+    normalized = [nodeid.removeprefix("core/") for nodeid in nodeids]
+    scenario(name, [sys.executable, "-m", "pytest", *normalized, "-q"], cwd=ROOT / "core")
 
 
 def main() -> int:

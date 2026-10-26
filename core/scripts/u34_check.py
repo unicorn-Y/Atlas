@@ -34,8 +34,8 @@ def run(title: str, command: list[str], cwd: Path = ROOT) -> None:
 
 
 def pytest(*files: str, croniter: bool = False) -> list[str]:
-    # Run pytest with this checker's interpreter. A nested ``uv run pytest`` may
-    # create a fresh project environment in a worktree where the pytest entry
+    # Run pytest with this checker's interpreter. A separately resolved pytest
+    # may create a fresh project environment in a worktree where the entry point
     # point is not installed, even though the parent interpreter has pytest.
     if croniter and importlib.util.find_spec("croniter") is None:
         raise RuntimeError("croniter is required; invoke this checker with an interpreter that includes croniter")
