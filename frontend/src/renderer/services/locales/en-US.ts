@@ -7597,4 +7597,5 @@ export const messages: Record<string, string> = {
   ,"底部状态栏已隐藏": "Footer status bar hidden"
   ,"状态栏已启用 · 无状态项": "Status bar enabled · no status items"
   ,"显示整行状态栏": "Show the full status bar"
+  ,"远程任务": "Remote task"
 };
