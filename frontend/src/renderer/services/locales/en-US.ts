@@ -7592,4 +7592,9 @@ export const messages: Record<string, string> = {
   ,"返回对应任务": "Return to task"
   ,"隐藏任务悬浮窗": "Hide task HUD"
   ,"关闭任务悬浮窗": "Close task HUD"
+  ,"切换会话底部状态栏显隐；逐项状态偏好会保留": "Toggle the conversation footer status bar; individual status preferences are preserved"
+  ,"底部状态栏已显示": "Footer status bar shown"
+  ,"底部状态栏已隐藏": "Footer status bar hidden"
+  ,"状态栏已启用 · 无状态项": "Status bar enabled · no status items"
+  ,"显示整行状态栏": "Show the full status bar"
 };
