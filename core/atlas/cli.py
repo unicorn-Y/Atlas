@@ -285,6 +285,38 @@ def terminal_doctor() -> None:
         click.echo("当前终端已提供 TERM；若方向键或颜色异常，请核对终端的 ANSI/256 色配置。")
 
 
+@main.command("terminal-setup")
+@click.option("--remove", "remove", is_flag=True, help="Remove the managed integration block from the detected shell profile.")
+@click.option("--status", "status_only", is_flag=True, help="Show the detected shell and whether integration is installed.")
+@click.option("--profile", "profile_override", type=click.Path(path_type=Path), default=None,
+              help="Use a specific profile path (for testing or a non-default shell profile).")
+def terminal_setup_command(remove: bool, status_only: bool, profile_override: Path | None) -> None:
+    """Configure reversible shell prompt integration and Shift+Enter line continuation."""
+    from atlas.terminal_setup import detect_shell, install_integration, integration_installed, profile_path, remove_integration
+
+    if remove and status_only:
+        raise click.ClickException("--remove and --status cannot be used together")
+    shell = detect_shell()
+    if shell not in {"powershell", "bash", "zsh", "fish"}:
+        raise click.ClickException(
+            f"未能识别受支持的 shell（检测结果：{shell}）；请从 PowerShell、bash、zsh 或 fish 运行 atlas terminal-setup。"
+        )
+    target = profile_override or profile_path(shell)
+    try:
+        if status_only:
+            click.echo(f"shell={shell}; profile={target}; installed={'yes' if integration_installed(target) else 'no'}")
+            return
+        if remove:
+            changed = remove_integration(target)
+            click.echo(f"{'已移除' if changed else '未找到'} Atlas shell integration：{target}")
+            return
+        changed = install_integration(target, shell)
+    except OSError as exc:
+        raise click.ClickException(f"无法更新 shell profile {target}: {exc}") from exc
+    click.echo(f"{'已配置' if changed else '已是最新'} {shell} shell integration 和 Shift+Enter 续行：{target}")
+    click.echo("重新打开 shell 后生效；运行 atlas terminal-setup --remove 可撤销 Atlas 管理区块。")
+
+
 @main.command("bug")
 @click.option("--output", type=click.Path(dir_okay=False, path_type=Path), default=None,
               help="Write the local, redacted bundle to this file instead of prompting for a path.")

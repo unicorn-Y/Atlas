@@ -3,6 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 from types import SimpleNamespace
 from typing import Any
 
@@ -131,11 +135,47 @@ async def check_real_provider() -> None:
 
 
 def main() -> None:
-    import sys
     sys.path.insert(0, str(CORE))
     asyncio.run(check_upstream_retry_policy())
     asyncio.run(check_real_provider())
+    check_terminal_setup()
     print("U44 CHECK PASS")
+
+
+def check_terminal_setup() -> None:
+    from atlas.terminal_setup import detect_shell, integration_installed
+    from atlas.cli import main as atlas_cli
+    from click.testing import CliRunner
+
+    assert detect_shell({"ATLAS_TERMINAL_SHELL": "bash"}) == "bash"
+    with tempfile.TemporaryDirectory(prefix="atlas-u44-terminal-") as temp:
+        profile = Path(temp) / ".bashrc"
+        profile.write_text("# user profile\n", encoding="utf-8")
+        runner = CliRunner()
+        environment = {**os.environ, "ATLAS_TERMINAL_SHELL": "bash"}
+        installed = runner.invoke(atlas_cli, ["terminal-setup", "--profile", str(profile)], env=environment)
+        assert installed.exit_code == 0 and "已配置 bash" in installed.output, installed.output
+        original_plus_block = profile.read_text(encoding="utf-8")
+        assert "# user profile" in original_plus_block
+        assert "ATLAS_SHELL_INTEGRATION=1" in original_plus_block
+        assert "13;2u" in original_plus_block and integration_installed(profile)
+        again = runner.invoke(atlas_cli, ["terminal-setup", "--profile", str(profile)], env=environment)
+        assert again.exit_code == 0 and "已是最新" in again.output
+        status = runner.invoke(atlas_cli, ["terminal-setup", "--status", "--profile", str(profile)], env=environment)
+        assert status.exit_code == 0 and "installed=yes" in status.output
+        removed = runner.invoke(atlas_cli, ["terminal-setup", "--remove", "--profile", str(profile)], env=environment)
+        assert removed.exit_code == 0 and "已移除" in removed.output
+        assert profile.read_text(encoding="utf-8").strip() == "# user profile"
+        assert not integration_installed(profile)
+        absent = runner.invoke(atlas_cli, ["terminal-setup", "--remove", "--profile", str(profile)], env=environment)
+        assert absent.exit_code == 0 and "未找到" in absent.output
+        bash = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Git" / "bin" / "bash.exe"
+        if bash:
+            checked = subprocess.run([str(bash), "-n"], input=original_plus_block, capture_output=True,
+                                     text=True, encoding="utf-8", errors="replace", timeout=10)
+            if bash.is_file():
+                assert checked.returncode == 0, checked.stderr
+    print("U44 item 4 PASS: shell detection, idempotent profile install, Shift+Enter binding, and exact managed-block removal")
 
 
 if __name__ == "__main__":
