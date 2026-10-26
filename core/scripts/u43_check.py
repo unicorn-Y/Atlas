@@ -20,6 +20,7 @@ import uvicorn
 import atlas.cluster_control as cluster_control
 from atlas.api import cluster_router
 from atlas.api import workflow_router
+from atlas.api import tool_search_settings_router
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 from atlas.api.runtime import RunState
@@ -123,6 +124,56 @@ def check_workflow_blueprints() -> None:
             assert "cannot be deleted" in str(exc)
         else:
             raise AssertionError("built-in blueprint deletion was accepted")
+
+
+def check_tool_search_modes() -> None:
+    from atlas import config as config_module
+    from atlas.cli import _resolve_tool_search_mode
+    from atlas.library.runtime import loaded_tools, partition_tools
+
+    core = Path(__file__).resolve().parents[1]
+    app_source = (core.parent / "frontend/src/renderer/App.tsx").read_text(encoding="utf-8")
+    panel_source = (core.parent / "frontend/src/renderer/components/settings/ToolSearchModePanel.tsx").read_text(encoding="utf-8")
+    cli_source = (core / "atlas/cli.py").read_text(encoding="utf-8")
+    loop_source = (core / "atlas/kernel/loop.py").read_text(encoding="utf-8")
+    assert "id: 'toolsearch-mode'" in app_source and "/api/settings/tool-search-mode" in panel_source
+    assert "--toolsearch-mode" in cli_source and "Tool search mode:" in cli_source
+    assert 'library_config["tool_search_mode"]' in loop_source
+    bridge = {"type": "function", "function": {"name": "tool_search", "description": "Find tool", "parameters": {"type": "object"}}}
+    candidates = [bridge, *[
+        {"type": "function", "function": {"name": f"mobile_action_{index}",
+         "description": "unique target mobile task", "parameters": {"type": "object"}}}
+        for index in range(40)
+    ]]
+    all_mode, note = partition_tools(candidates, session_id="u43-mode-all", query="mobile", config={"library": {"tool_search_mode": "all"}})
+    assert len(all_mode) == len(candidates) and note is None
+    loaded, note = partition_tools(candidates, session_id="u43-mode-on-demand", query="unique target", config={
+        "library": {"tool_search_mode": "on-demand", "auto_load_min_score": 0.0, "auto_load": 3},
+    })
+    loaded_names = {item["function"]["name"] for item in loaded}
+    assert "tool_search" in loaded_names and len(loaded) < len(candidates) and note and "Deferred tools:" in note
+    assert any(name.startswith("mobile_action_") for name in loaded_tools("u43-mode-on-demand"))
+    with tempfile.TemporaryDirectory(prefix="u43-toolmode-") as directory:
+        original_path = config_module.USER_SETTINGS_PATH
+        config_module.USER_SETTINGS_PATH = Path(directory) / "user-settings.json"
+        try:
+            first = asyncio.run(tool_search_settings_router.get_tool_search_mode())
+            assert first["mode"] in {"all", "on-demand"}
+            saved = asyncio.run(tool_search_settings_router.set_tool_search_mode(
+                tool_search_settings_router.ToolSearchModeBody(mode="all")))
+            assert saved == {"mode": "all", "source": "user-settings.json"}
+            assert tool_search_settings_router.load_user_settings()["tool_search_mode"] == "all"
+            assert _resolve_tool_search_mode() == "all"
+            assert _resolve_tool_search_mode("on-demand") == "on-demand"
+            assert _run_cli_mode_check(core) == 0
+        finally:
+            config_module.USER_SETTINGS_PATH = original_path
+
+
+def _run_cli_mode_check(core: Path) -> int:
+    result = subprocess.run([sys.executable, "-m", "atlas.cli", "exec", "--help"], cwd=core,
+                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+    return result.returncode if "--toolsearch-mode" in result.stdout else 2
 
 
 def check_isolated_preview() -> None:
@@ -307,6 +358,7 @@ def main() -> None:
     check_cluster_control()
     check_interactive_cli_and_private_bug_bundle()
     check_workflow_blueprints()
+    check_tool_search_modes()
     print("U43 CHECK PASS")
 
 

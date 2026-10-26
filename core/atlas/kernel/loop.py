@@ -476,6 +476,14 @@ class AtlasKernel:
 
         app_config = get_config()
         raw_config = dict(getattr(app_config, "raw", {}) or request.runtime_config)
+        library_config = dict(raw_config.get("library", {}) or {})
+        configured_tool_search_mode = str(app_config.get("library.tool_search_mode", "") or "").strip().lower()
+        if configured_tool_search_mode not in {"all", "on-demand"}:
+            configured_tool_search_mode = str(load_user_settings().get("tool_search_mode") or "").strip().lower()
+        if configured_tool_search_mode not in {"all", "on-demand"}:
+            configured_tool_search_mode = "on-demand" if library_config.get("defer_tools", True) else "all"
+        library_config["tool_search_mode"] = configured_tool_search_mode
+        raw_config["library"] = library_config
         engine_config = dict(raw_config.get("engine", {}))
         configured_retries = engine_config.get("model_retries")
         model_retries = int(configured_retries) if configured_retries is not None else None
@@ -1477,7 +1485,7 @@ class AtlasKernel:
                         log.warning("kernel.tool_deferral_failed", exc_info=True)
                 if turn_index == 0:
                     prep_mark("tools")
-                record("tool_offer", offered=len(available_tools), deferred=bool(deferred_note),
+                record("tool_offer", mode=configured_tool_search_mode, offered=len(available_tools), deferred=bool(deferred_note),
                        **({"prep_ms": dict(prep_ms)} if turn_index == 0 else {}),
                        schema_chars_before=schema_chars_before,
                        schema_chars=len(json.dumps(available_tools, ensure_ascii=False, default=str)))

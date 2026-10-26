@@ -22,6 +22,7 @@ const ProgressCapsule = lazy(() => import('./components/ProgressCapsule'));
 const ConversationQueuePanel = lazy(() => import('./components/ConversationQueuePanel'));
 const RecipesDialog = lazy(() => import('./components/RecipesDialog'));
 const WorkflowManagerDialog = lazy(() => import('./components/WorkflowManagerDialog'));
+const ToolSearchModePanel = lazy(() => import('./components/settings/ToolSearchModePanel'));
 const SideChat = lazy(() => import('./components/SideChat'));
 const PaneWorkspace = lazy(() => import('./components/PaneWorkspace'));
 const UltraplanPanel = lazy(() => import('./components/UltraplanPanel'));
@@ -1899,6 +1900,13 @@ export default function App() {
   };
   const slashCommands: SlashCommand[] = [
     { id: 'mobile', label: '/mobile', hint: '打开移动 Web 二维码和 Telegram 接入说明', run: () => setSheet('mobile') },
+    { id: 'toolsearch-mode', label: '/toolsearch-mode', hint: '查看或设置工具全部注入/按需检索模式', takesArgument: true, run: (value: string) => {
+      const mode = value.trim().toLowerCase();
+      if (mode && mode !== 'all' && mode !== 'on-demand' && mode !== 'reset') { setToast('用法：/toolsearch-mode [all|on-demand|reset]'); return; }
+      void api<{ mode: string; source: string }>(store.apiBaseUrl, '/api/settings/tool-search-mode', mode === 'reset'
+        ? { method: 'DELETE' } : mode ? { method: 'PUT', json: { mode } } : undefined).then((result) => setToast(`工具检索模式：${result.mode} · ${result.source}`))
+        .catch((error) => setToast(`工具检索模式读取失败：${error instanceof Error ? error.message : String(error)}`));
+    } },
     { id: 'indicator', label: '/indicator', hint: '选择任务运行指示器样式：static、spin 或 subtle', takesArgument: true, run: (value: string) => {
       const styles = ['static', 'spin', 'subtle'];
       const next = value.trim().toLowerCase();
@@ -3236,7 +3244,7 @@ export default function App() {
         </section>}
         {sheet === 'profiles' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">角色</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">把指令、模型、技能、工具和模式打包成一个角色，在输入框里一键切换。</p>
           <div className="grid gap-8"><ProfilesPanel profiles={store.profiles} models={store.models} skills={store.skills} onChanged={() => void store.reloadProfiles()} /><OutputStyleSettingsPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
-        {sheet === 'tools' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">脚本工具</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">用一个小脚本给 Atlas 加新能力。</p><ScriptToolsPanel /></section>}
+        {sheet === 'tools' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">脚本工具</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">用一个小脚本给 Atlas 加新能力。</p><div className="mb-5"><Suspense fallback={<div className="text-[11px] text-fg-3">正在加载工具策略…</div>}><ToolSearchModePanel apiBaseUrl={store.apiBaseUrl} /></Suspense></div><ScriptToolsPanel /></section>}
         {sheet === 'telegram' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">手机远程（Telegram）</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">不在电脑前时，用手机给 Atlas 布置任务、看结果、批准操作。</p><TelegramPanel /></section>}
         {sheet === 'mobile' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">移动入口</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">使用 Atlas 移动 Web 或 Telegram。Atlas 原生 App 尚无已发布安装包。</p><MobileEntryPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} onOpenTelegram={() => setSheet('telegram')} /></section>}
         {sheet === 'channels' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Gateway 与渠道账号</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">配置当前已注册渠道的账号和密钥；消息进来后交给哪个 Agent，在 Agents → Channels 里绑定。</p><ChannelsSettings apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}

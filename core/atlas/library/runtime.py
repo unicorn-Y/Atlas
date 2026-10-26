@@ -454,7 +454,12 @@ def partition_tools(tools: Sequence[dict[str, Any]], *, session_id: str, query: 
     it stays byte-stable across turns and does not break the prompt cache.
     """
     cfg = dict(config.get("library", {}) or {})
-    if not cfg.get("defer_tools", True) or len(tools) <= int(cfg.get("defer_min_tools", 30)):
+    mode = str(cfg.get("tool_search_mode") or "").strip().lower()
+    if mode == "all":
+        return list(tools), None
+    defer_tools = mode == "on-demand" or cfg.get("defer_tools", True)
+    minimum = 0 if mode == "on-demand" else int(cfg.get("defer_min_tools", 30))
+    if not defer_tools or len(tools) <= minimum:
         return list(tools), None
     core = {str(name) for name in cfg.get("core_tools", []) or []}
     deferrable = [t for t in tools if _deferrable(str(_function(t).get("name") or ""), core)]

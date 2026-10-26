@@ -45,6 +45,21 @@ _CLI_IMAGE_MAX_BYTES = 4 * 1024 * 1024
 _CLI_IMAGES_MAX_BYTES = 8 * 1024 * 1024
 
 
+def _resolve_tool_search_mode(requested: str | None = None) -> str:
+    """CLI override wins; otherwise use the local user preference and config default."""
+    if requested in {"all", "on-demand"}:
+        return requested
+    from atlas.config import get_config, load_user_settings
+
+    saved = str(load_user_settings().get("tool_search_mode") or "").strip().lower()
+    if saved in {"all", "on-demand"}:
+        return saved
+    configured = str(get_config().get("library.tool_search_mode", "") or "").strip().lower()
+    if configured in {"all", "on-demand"}:
+        return configured
+    return "on-demand" if get_config().get("library.defer_tools", True) else "all"
+
+
 def _write_cli_usage_file(path: Path, record: dict[str, Any]) -> None:
     """Atomically replace a CLI usage result; never leave a partial JSON file."""
     target = path.expanduser().resolve()
@@ -1045,13 +1060,16 @@ def daemon_disable_startup() -> None:
 @click.option("--model", "-m", default=None, help="Model to use")
 @click.option("--resume", "resume_id", default=None, help="Continue an existing conversation by id")
 @click.option("--safe-mode", is_flag=True, help="Start with only Atlas core chat capabilities; skip plugin and extension startup")
-def chat(model: str | None, resume_id: str | None, safe_mode: bool) -> None:
+@click.option("--toolsearch-mode", type=click.Choice(["all", "on-demand"]), default=None,
+              help="Override the saved tool definition loading mode for this chat")
+def chat(model: str | None, resume_id: str | None, safe_mode: bool, toolsearch_mode: str | None) -> None:
     """Start an interactive chat session in the terminal."""
     from atlas.agent import AgentOrchestrator
     from atlas.memory import MemoryStore
     from atlas.models import ModelManager
 
     async def _chat() -> None:
+        effective_tool_mode = _resolve_tool_search_mode(toolsearch_mode)
         model_mgr = ModelManager()
         if model:
             model_mgr.select(model)
@@ -1079,6 +1097,7 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool) -> None:
             structlog.get_logger().info("cli.safe_mode.enabled", command="chat", skipped="plugins,extensions,market_skills")
             console.print("[yellow]安全模式已启用：本次 CLI 会话不启动插件/扩展服务；输入 quit/exit 退出，重新运行 atlas chat 可恢复正常模式。[/yellow]")
         console.print(f"Conversation: [cyan]{conv_id}[/cyan] (resume with atlas chat --resume {conv_id})")
+        console.print(f"Tool search mode: [cyan]{effective_tool_mode}[/cyan] (override with --toolsearch-mode)")
         console.print("Type [bold]/quit[/bold], [bold]quit[/bold], or [bold]exit[/bold] to leave. "
                       "[bold]/model <id>[/bold] to switch model; [bold]/daybreak [on|off|status][/bold] controls long-task mode.\n")
         if ide_context:
@@ -1149,7 +1168,10 @@ def chat(model: str | None, resume_id: str | None, safe_mode: bool) -> None:
             run_kwargs: dict[str, Any] = {}
             if ide_context and ide_context.get("workspace"):
                 run_kwargs = {"workspace": str(ide_context["workspace"]), "workspace_trusted": True}
-            async for event in orch.run(user_input, conv_id, **run_kwargs):
+            from atlas.project_context import project_scoped_events
+            events = orch.run(user_input, conv_id, **run_kwargs)
+            async for event in project_scoped_events(None, events,
+                    config_override={"library": {"tool_search_mode": effective_tool_mode}}, session_id=conv_id):
                 if event["type"] == "chunk":
                     print(event["content"], end="", flush=True)
                     full += event["content"]
@@ -1247,6 +1269,8 @@ def notify_command(mode: str | None, command_args: tuple[str, ...], clear_comman
 @click.option("--agent-id", default=None, help="Include this agent's enabled skill collection")
 @click.option("--config-override", type=click.Path(dir_okay=False, path_type=Path), default=None,
               help="Apply a strict temporary JSON config override for this run only")
+@click.option("--toolsearch-mode", type=click.Choice(["all", "on-demand"]), default=None,
+              help="Override the saved tool definition loading mode for this run")
 @click.option("--ignore-project-config", is_flag=True, help="Ignore the selected project's saved config for this run")
 @click.option("--ignore-workspace-rules", is_flag=True, help="Skip AGENTS.md / CLAUDE.md workspace instructions for this run")
 @click.option("--skills", "preload_skills", multiple=True, help="Preload one or more named skills for this run (repeatable or comma-separated)")
@@ -1257,6 +1281,7 @@ def exec_command(
     output_schema: Path | None, output_last_message: Path | None, usage_file: Path | None, approve_writes: bool,
     project_id: str | None, agent_id: str | None, config_override: Path | None, ignore_project_config: bool,
     ignore_workspace_rules: bool, preload_skills: tuple[str, ...], skills_file: Path | None,
+    toolsearch_mode: str | None,
 ) -> None:
     """Run one non-interactive agent turn; PROMPT may also come from stdin."""
     if json_output:
@@ -1317,6 +1342,14 @@ def exec_command(
             temporary_config = validate_config_override(raw_override)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             raise click.BadParameter(f"invalid temporary config override: {exc}", param_hint="--config-override") from exc
+    override_mode = (temporary_config or {}).get("library", {}).get("tool_search_mode") if isinstance((temporary_config or {}).get("library", {}), dict) else None
+    effective_tool_mode = _resolve_tool_search_mode(toolsearch_mode or (str(override_mode) if override_mode else None))
+    tool_config = dict(temporary_config or {})
+    library_override = dict(tool_config.get("library", {}) or {})
+    library_override["tool_search_mode"] = effective_tool_mode
+    tool_config["library"] = library_override
+    temporary_config = tool_config
+    print(f"Tool search mode: {effective_tool_mode} (override with --toolsearch-mode)", file=sys.stderr)
     requested_skills = [name.strip() for value in preload_skills for name in value.split(",") if name.strip()]
     if skills_file:
         try:
