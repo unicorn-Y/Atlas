@@ -2011,6 +2011,7 @@ export default function App() {
   };
   const slashCommands: SlashCommand[] = [
     { id: 'window-title', label: '/window-title', hint: '选择窗口标题显示的会话、模型、工作目录和运行状态', run: () => setWindowTitleOpen(true) },
+    { id: 'treemap', label: '/treemap', hint: '按文件大小查看当前工作区的仓库树图', run: () => showInspectorTab('treemap') },
     { id: 'scroll-speed', label: '/scroll-speed', hint: '调整对话滚轮速度并即时预览', run: () => setScrollSpeedOpen(true) },
     ...(activeConversation ? [{ id: 'break-cache', label: '/break-cache', hint: '下一轮插入唯一提示前缀以避开提示缓存；status 显示真实服务商命中数据', takesArgument: true, run: (raw: string) => {
       const key = 'cache-bypass-next-conversation';
@@ -3341,7 +3342,7 @@ export default function App() {
           {inspectorOpen && !focusedLayout && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => { setFullScreenDiff(false); toggleInspector(false); }} fullScreenDiff={fullScreenDiff} onFullScreenDiffChange={setFullScreenDiff} run={activeRun} canvasEvents={canvasEvents} artifacts={activeArtifacts}
             conversationTitle={activeConversation?.title} modelName={modelName} tools={store.tools} skills={store.skills} activeSkills={store.activeSkills} capabilities={store.capabilities}
             apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
-            workspace={typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : null} onChooseWorkspace={() => void chooseWorkspace()}
+            workspace={workspacePath || null} onChooseWorkspace={() => void chooseWorkspace()}
             browserUrl={browserUrl} onBrowserUrl={setBrowserUrl} browserSuggestions={localUrls} onPick={pickElement}
             onPreview={(url) => { setBrowserUrl(url); showInspectorTab('browser'); }} previewPath={previewFile} conversationId={store.activeConversationId}
             worktree={activeConversation?.worktree_path ? { path: String(activeConversation.worktree_path), branch: String(activeConversation.worktree_branch ?? ''), base: String(activeConversation.base_branch ?? '') } : null}

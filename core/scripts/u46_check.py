@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+from urllib.parse import urlencode
 
 import websockets
 
@@ -53,6 +54,27 @@ def check_shell_aliases() -> None:
             content = profile.read_text(encoding="utf-8")
             assert "# >>> atlas alias: atlas_work >>>" not in content and content.strip() == "# User-owned line"
     print("PASS shell-aliases: add/list/update/revoke for PowerShell, Bash, and Zsh profiles")
+
+
+def check_workspace_treemap_api() -> None:
+    """Exercise the live workspace scanner, size totals, ignores, and small-repo output."""
+    with tempfile.TemporaryDirectory(prefix="atlas-u46-treemap-") as temp_dir:
+        root = Path(temp_dir)
+        (root / "src").mkdir()
+        (root / "docs").mkdir()
+        (root / "node_modules" / "ignored").mkdir(parents=True)
+        (root / ".git").mkdir()
+        (root / "src" / "main.py").write_bytes(b"print('atlas')\n")
+        (root / "docs" / "readme.md").write_bytes(b"hello treemap\n")
+        (root / "node_modules" / "ignored" / "package.json").write_bytes(b"must not appear")
+        (root / ".git" / "config").write_bytes(b"must not appear")
+        url = "http://127.0.0.1:8765/api/workspace/treemap?" + urlencode({"root": str(root)})
+        result = json.load(urllib.request.urlopen(url, timeout=10))
+        by_path = {item["path"]: item["size"] for item in result["files"]}
+        expected = {"src/main.py": len(b"print('atlas')\n"), "docs/readme.md": len(b"hello treemap\n")}
+        assert by_path == expected, f"tree scan paths/sizes mismatch: {by_path}"
+        assert result["file_count"] == 2 and result["total_bytes"] == sum(expected.values()) and not result["truncated"], result
+    print("PASS workspace-treemap: live API reports exact sizes and excludes .git/node_modules")
 
 
 def _create_automation_probe(arguments: tuple[str, str]) -> bool:
@@ -180,11 +202,65 @@ async def check_window_title() -> None:
             await _cdp_eval(ws, 10, "(()=>{const l=[...document.querySelectorAll('[role=dialog] label')].find(x=>x.innerText.includes('当前模型'));if(l){const checked=l.querySelector('input')?.checked;const wanted=" + json.dumps("model" in original) + ";if(checked!==wanted)l.querySelector('input')?.click()}const pref=" + json.dumps(before) + ";if(pref===null)localStorage.removeItem('atlas.preference.window-title-fields');else localStorage.setItem('atlas.preference.window-title-fields',pref);const d=document.querySelector('[role=dialog]');if(d)[...d.querySelectorAll('button')].find(b=>b.innerText.includes('完成'))?.click()})()")
 
 
+async def check_workspace_treemap_ui() -> None:
+    """Open the actual Inspector tree-map tab, zoom a directory, and open a selected file in Files."""
+    target = next((item for item in json.load(urllib.request.urlopen("http://127.0.0.1:9336/json/list"))
+                   if item.get("type") == "page" and "127.0.0.1:5173" in item.get("url", "")), None)
+    assert target, "Atlas renderer is not attached to CDP port 9336"
+    async with websockets.connect(target["webSocketDebuggerUrl"]) as ws:
+        draft_workspace = await _cdp_eval(ws, 100, "localStorage.getItem('atlas.conversations.draft-workspace')")
+        default_workspace = await _cdp_eval(ws, 103, "localStorage.getItem('atlas.preference.default-workspace')")
+        try:
+            await _cdp_eval(ws, 110, "document.querySelector('button[aria-label=\\\"新建对话\\\"]')?.click()")
+            await asyncio.sleep(1.0)
+            await _cdp_eval(ws, 101, "(()=>{const d=document.querySelector('[role=dialog]');if(d)[...d.querySelectorAll('button')].find(b=>b.innerText.includes('完成'))?.click();const e=document.querySelector('textarea[aria-label=\\\"消息内容\\\"]');if(e){e.focus();e.value='';e.dispatchEvent(new Event('input',{bubbles:true}))}})()")
+            await _cdp_command(ws, 102, "Input.insertText", {"text": "/treemap"})
+            await _cdp_command(ws, 104, "Input.dispatchKeyEvent", {"type": "keyDown", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
+            await _cdp_command(ws, 105, "Input.dispatchKeyEvent", {"type": "keyUp", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
+            await asyncio.sleep(0.5)
+            initial = {}
+            for attempt in range(20):
+                await asyncio.sleep(0.5)
+                initial = await _cdp_eval(ws, 5 + attempt, "({panel:!!document.querySelector('[data-repo-treemap]'),title:document.querySelector('[data-repo-treemap] h2')?.innerText,workspace:document.querySelector('[data-repo-treemap] header p')?.innerText,summary:document.querySelector('[data-repo-treemap] p')?.innerText,loading:!![...document.querySelectorAll('[data-repo-treemap] [role=status]')].find(x=>x.innerText.includes('正在统计')),error:document.querySelector('[data-repo-treemap] [role=alert]')?.innerText,tree:document.querySelector('[aria-label=\\\"文件矩形树图\\\"]')?.innerText,dirs:[...document.querySelectorAll('[data-repo-treemap] button[aria-label^=\\\"打开目录 \\\"]')].map(b=>b.getAttribute('aria-label')).slice(0,5),input:document.querySelector('textarea[aria-label=\\\"消息内容\\\"]')?.value,inspector:document.querySelector('button[aria-label=\\\"切换任务面板\\\"]')?.getAttribute('aria-pressed'),tail:document.body.innerText.slice(-250)})")
+                if initial.get("panel") and not initial.get("loading"):
+                    break
+            assert initial["panel"] and initial["title"] == "仓库文件树图", initial
+            if initial.get("workspace") == "请选择本地工作区":
+                await _cdp_eval(ws, 106, "Object.defineProperty(window.atlasDesktop,'selectDirectory',{configurable:true,value:async()=> 'C:\\\\engine-reg'})")
+                await _cdp_eval(ws, 107, "[...document.querySelectorAll('[data-repo-treemap] button')].find(b=>b.innerText.includes('选择工作区'))?.click()")
+                await asyncio.sleep(0.8)
+                for attempt in range(20):
+                    await asyncio.sleep(0.5)
+                    initial = await _cdp_eval(ws, 108 + attempt, "({workspace:document.querySelector('[data-repo-treemap] header p')?.innerText,loading:!![...document.querySelectorAll('[data-repo-treemap] [role=status]')].find(x=>x.innerText.includes('正在统计')),dirs:[...document.querySelectorAll('[data-repo-treemap] button[aria-label^=\\\"打开目录 \\\"]')].map(b=>b.getAttribute('aria-label')).slice(0,5),error:document.querySelector('[data-repo-treemap] [role=alert]')?.innerText})")
+                    if initial.get("workspace") != "请选择本地工作区" and not initial.get("loading"):
+                        break
+            assert initial["dirs"], f"current Atlas workspace has no directory tiles: {initial}"
+            directory_button = "[data-repo-treemap] button[aria-label^=\"" + initial["dirs"][0].split("，")[0] + "\"]"
+            await _cdp_eval(ws, 6, "document.querySelector(" + json.dumps(directory_button) + ")?.click()")
+            zoom = await _cdp_eval(ws, 7, "document.querySelector('[aria-label=\\\"树图缩放层级\\\"]')?.innerText")
+            assert zoom and zoom.count("/") >= 1, f"directory zoom did not update breadcrumbs: {zoom}"
+            file_button = await _cdp_eval(ws, 8, "document.querySelector('[data-repo-treemap] button[aria-label^=\\\"打开文件 \\\"]')?.getAttribute('aria-label')")
+            assert file_button, "zoomed directory has no file tile"
+            file_path = file_button.removeprefix("打开文件 ").split("，")[0]
+            file_prefix = file_button.split("，")[0]
+            await _cdp_eval(ws, 9, "(()=>{const prefix=" + json.dumps(file_prefix) + ";[...document.querySelectorAll('[data-repo-treemap] button')].find(b=>b.getAttribute('aria-label')?.startsWith(prefix))?.click()})()")
+            await asyncio.sleep(0.7)
+            opened = await _cdp_eval(ws, 10, "({active:[...document.querySelectorAll('[role=tab][aria-selected=true]')].map(x=>x.innerText),fileRequest:document.body.innerText.includes(" + json.dumps(Path(file_path).name) + ")})")
+            assert any("文件" in item for item in opened["active"]) and opened["fileRequest"], {"file": file_path, **opened}
+            print(f"PASS workspace-treemap UI: root → {zoom} → FilesPanel opened {file_path}")
+        finally:
+            await _cdp_eval(ws, 11, "(()=>{const key='atlas.conversations.draft-workspace';const value=" + json.dumps(draft_workspace) + ";if(value===null)localStorage.removeItem(key);else localStorage.setItem(key,value);const pref=" + json.dumps(default_workspace) + ";if(pref===null)localStorage.removeItem('atlas.preference.default-workspace');else localStorage.setItem('atlas.preference.default-workspace',pref)})()")
+            await _cdp_command(ws, 108, "Page.reload", {"ignoreCache": True})
+            await asyncio.sleep(2)
+
+
 async def main() -> None:
     check_shell_aliases()
     check_automation_cap()
+    check_workspace_treemap_api()
     await check_scroll_speed()
     await check_window_title()
+    await check_workspace_treemap_ui()
     print("U46 CHECK PASS")
 
 

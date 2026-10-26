@@ -1,5 +1,5 @@
 import { mockConversations, mockModels, mockProviders, mockReasoningStages, mockTools, streamMockRun } from './mock';
-import type { UsageGroup, UsageReport, AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomModelUpdateRequest, CustomTool, CustomCommandInfo, CommandRenderResult, ExternalAgentInfo, ExternalImportScan, ExternalImportResult, InitApplyResult, InitProposal, KeySlotInfo, LspStatus, ModelInfo, ModelTestResponse, ProjectSource, ProjectSources, ProviderState, ReasoningStagesConfig, RewindResult, RunDiagnostics, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, HookLog, MarketplaceInfo, MarketplacePluginEntry, PluginActionResult, PluginInfo, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile } from './types';
+import type { UsageGroup, UsageReport, AgentCapabilityInfo, ApprovalResponse, ConfigurationResponse, ConnectionTestResponse, ConversationCreateRequest, ConversationMessage, ConversationSummary, ConversationUpdate, CustomModelRequest, CustomModelUpdateRequest, CustomTool, CustomCommandInfo, CommandRenderResult, ExternalAgentInfo, ExternalImportScan, ExternalImportResult, InitApplyResult, InitProposal, KeySlotInfo, LspStatus, ModelInfo, ModelTestResponse, ProjectSource, ProjectSources, ProviderState, ReasoningStagesConfig, RewindResult, RunDiagnostics, SandboxStatus, TelegramSettings, WorkspaceVersion, KnowledgeEntry, MCPServerAddRequest, MCPServerInfo, MCPServerListResponse, ModelListResponse, AgentProfile, HookConfig, HookLog, MarketplaceInfo, MarketplacePluginEntry, PluginActionResult, PluginInfo, ProcessInfo, PullRequestInfo, Recipe, ResumeRequest, WorktreeInfo, RunChangeFile, RunStartRequest, RuntimeEventEnvelope, RuntimeStreamEvent, SkillInfo, ToolListResponse, WorkspaceEntry, WorkspaceFile, WorkspaceTreemapResult } from './types';
 
 export interface BackendAdapterOptions {
   baseUrl: string;
@@ -245,6 +245,9 @@ export class BackendAdapter {
 
   async getWorkspaceTree(root: string, path = ''): Promise<WorkspaceEntry[]> {
     return (await this.request<{ entries: WorkspaceEntry[] }>(`/api/workspace/tree?${new URLSearchParams({ root, path })}`)).entries;
+  }
+  async getWorkspaceTreemap(root: string, maxFiles = 12000): Promise<WorkspaceTreemapResult> {
+    return this.request(`/api/workspace/treemap?${new URLSearchParams({ root, max_files: String(maxFiles) })}`);
   }
   async getWorkspaceFile(root: string, path: string): Promise<WorkspaceFile> {
     return this.request(`/api/workspace/file?${new URLSearchParams({ root, path })}`);

@@ -437,6 +437,15 @@ export interface WorkspaceEntry {
   git?: string | null;
 }
 
+export interface WorkspaceTreemapResult {
+  root: string;
+  files: Array<{ path: string; size: number }>;
+  file_count: number;
+  total_bytes: number;
+  truncated: boolean;
+  max_files: number;
+}
+
 export interface WorkspaceFile {
   path: string;
   content: string;

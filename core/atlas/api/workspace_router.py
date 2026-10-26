@@ -465,6 +465,55 @@ async def workspace_tree(
             "entries": entries}
 
 
+def _scan_workspace_treemap(base: Path, ignores: set[str], max_files: int) -> dict[str, Any]:
+    """Collect regular local files for the size treemap without following symlinks."""
+    files: list[dict[str, Any]] = []
+    stack = [base]
+    total_bytes = 0
+    truncated = False
+    while stack:
+        directory = stack.pop()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if entry.name in ignores or entry.is_symlink():
+                        continue
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            stack.append(Path(entry.path))
+                        elif entry.is_file(follow_symlinks=False):
+                            if len(files) >= max_files:
+                                truncated = True
+                                break
+                            size = entry.stat(follow_symlinks=False).st_size
+                            relative = Path(entry.path).relative_to(base).as_posix()
+                            files.append({"path": relative, "size": size})
+                            total_bytes += size
+                    except OSError:
+                        continue
+            if truncated:
+                break
+        except OSError:
+            continue
+    files.sort(key=lambda item: (-item["size"], item["path"].casefold()))
+    return {"files": files, "file_count": len(files), "total_bytes": total_bytes,
+            "truncated": truncated, "max_files": max_files}
+
+
+@router.get("/api/workspace/treemap")
+async def workspace_treemap(
+    root: str, max_files: int = Query(default=12000, ge=100, le=50000),
+) -> dict[str, Any]:
+    """Summarize local workspace file sizes for a bounded interactive treemap."""
+    if root.startswith("ssh://"):
+        raise HTTPException(status_code=400, detail="文件树图目前只支持本地工作区")
+    base, _ = _server()._workspace_path(root, "")
+    if not base.is_dir():
+        raise HTTPException(status_code=404, detail="Workspace directory not found")
+    result = await asyncio.to_thread(_scan_workspace_treemap, base, set(_server()._WORKSPACE_IGNORES), max_files)
+    return {"root": str(base), **result}
+
+
 @router.get("/api/workspace/file")
 async def workspace_file(
     services: Annotated[AppServices, Depends(get_app_services)],
