@@ -43,7 +43,10 @@ async def list_templates() -> dict[str, Any]:
 @router.post("/templates", status_code=201)
 async def create_template(body: dict[str, Any]) -> dict[str, Any]:
     try:
-        return {"template": _templates().put(_validate_blueprint(body))}
+        # Preserve the original name/goal-only API contract for older clients.
+        # New callers can provide the full DAG; legacy callers get an editable
+        # single-step blueprint just like templates persisted before this schema.
+        return {"template": _templates().put(_validate_blueprint(_upgrade_blueprint(body)))}
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

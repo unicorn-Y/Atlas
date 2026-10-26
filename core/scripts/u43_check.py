@@ -102,6 +102,9 @@ def check_workflow_blueprints() -> None:
         workflow_router._templates = lambda: __import__("atlas.task_artifacts", fromlist=["TomlRecordStore"]).TomlRecordStore(Path(directory), "templates")
         builtins = asyncio.run(workflow_router.list_templates())["templates"]
         assert len([item for item in builtins if item["builtin"]]) >= 2
+        legacy = asyncio.run(workflow_router.create_template(
+            {"name": "Legacy template", "goal": "preserve API compatibility"}))['template']
+        assert len(legacy["steps"]) == 1 and legacy["steps"][0]["goal"] == "preserve API compatibility"
         created = asyncio.run(workflow_router.create_template({"name": "Test DAG", "goal": "verify", "steps": [
             {"id": "inspect", "title": "Inspect", "goal": "inspect code", "depends_on": [], "acceptance": ["evidence"]},
             {"id": "fix", "title": "Fix", "goal": "fix root", "depends_on": ["inspect"], "acceptance": ["passes"]},
