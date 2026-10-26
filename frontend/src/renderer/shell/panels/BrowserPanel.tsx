@@ -69,6 +69,9 @@ interface WebviewElement extends HTMLElement {
   getURL(): string;
   loadURL(url: string): Promise<void>;
   openDevTools(): void;
+  getZoomFactor(): number;
+  getWebContentsId(): number;
+  setZoomFactor(factor: number): void;
   executeJavaScript<T>(code: string): Promise<T>;
   capturePage(): Promise<{ toDataURL(): string }>;
   findInPage(text: string, options?: { forward?: boolean; findNext?: boolean; matchCase?: boolean }): number;
@@ -84,6 +87,7 @@ interface BrowserTab {
   /** Address-bar text is stored per tab so an unfinished edit survives tab switches. */
   address: string;
   title: string;
+  zoom: number;
 }
 
 function tabTitle(url: string): string {
@@ -225,7 +229,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   runId?: string;
   events?: AgentEvent[];
 }) {
-  const [tabs, setTabs] = useState<BrowserTab[]>(() => [{ id: 0, initialUrl: url, url, address: url, title: tabTitle(url) }]);
+  const [tabs, setTabs] = useState<BrowserTab[]>(() => [{ id: 0, initialUrl: url, url, address: url, title: tabTitle(url), zoom: 1 }]);
   const [activeTabId, setActiveTabId] = useState(0);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const [loadingTabs, setLoadingTabs] = useState<Set<number>>(() => new Set());
@@ -252,6 +256,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   const nextTabIdRef = useRef(1);
   const viewRefs = useRef(new Map<number, WebviewElement>());
   const boundViewRefs = useRef(new Map<number, { view: WebviewElement; listeners: Array<[string, EventListener]> }>());
+  const zoomGestureRef = useRef<(id: number, event: Event) => void>(() => undefined);
   const webviewRefCallbacks = useRef(new Map<number, (node: Element | null) => void>());
   const tabButtonRefs = useRef(new Map<number, HTMLButtonElement>());
   const tabButtonRefCallbacks = useRef(new Map<number, (node: HTMLButtonElement | null) => void>());
@@ -286,6 +291,8 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
     };
     const stop = () => {
       setLoadingTabs((previous) => { const next = new Set(previous); next.delete(id); return next; });
+      const current = tabsRef.current.find((tab) => tab.id === id);
+      if (current) view.setZoomFactor(current.zoom);
       sync();
     };
     const failed = (event: Event) => {
@@ -304,9 +311,11 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
       const result = (event as Event & { result?: { activeMatchOrdinal: number; matches: number } }).result;
       if (result && activeTabIdRef.current === id) setFindCount(result);
     };
+    const zoomGesture = (event: Event) => zoomGestureRef.current(id, event);
     const listeners: Array<[string, EventListener]> = [
       ['did-start-loading', start], ['did-stop-loading', stop], ['did-navigate', sync],
       ['did-navigate-in-page', sync], ['did-fail-load', failed], ['page-title-updated', title], ['found-in-page', found],
+      ['keydown', zoomGesture],
     ];
     for (const [name, listener] of listeners) view.addEventListener(name, listener);
     boundViewRefs.current.set(id, { view, listeners });
@@ -336,6 +345,8 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   const [recordedUserSteps, setRecordedUserSteps] = useState<BrowserStepView[]>([]);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [stage, setStage] = useState({ width: 0, height: 0 });
+  const [zoomBannerTab, setZoomBannerTab] = useState<number | null>(null);
+  const zoomBannerTimerRef = useRef<number | null>(null);
   useEffect(() => {
     const node = stageRef.current;
     if (!node) return;
@@ -521,7 +532,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   };
   const addTab = () => {
     const id = nextTabIdRef.current++;
-    const tab: BrowserTab = { id, initialUrl: '', url: '', address: '', title: '新标签页' };
+    const tab: BrowserTab = { id, initialUrl: '', url: '', address: '', title: '新标签页', zoom: 1 };
     const next = [...tabsRef.current, tab];
     tabsRef.current = next;
     activeTabIdRef.current = id;
@@ -538,11 +549,14 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
     const current = tabsRef.current;
     const index = current.findIndex((tab) => tab.id === id);
     if (index < 0) return;
+    viewRefs.current.get(id)?.setZoomFactor(1);
+    if (zoomBannerTimerRef.current !== null) window.clearTimeout(zoomBannerTimerRef.current);
+    setZoomBannerTab((currentId) => currentId === id ? null : currentId);
     const closingActive = id === activeTabIdRef.current;
     let next = current.filter((tab) => tab.id !== id);
     if (!next.length) {
       const blankId = nextTabIdRef.current++;
-      next = [{ id: blankId, initialUrl: '', url: '', address: '', title: '新标签页' }];
+      next = [{ id: blankId, initialUrl: '', url: '', address: '', title: '新标签页', zoom: 1 }];
     }
     tabsRef.current = next;
     setTabs(next);
@@ -614,6 +628,78 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
   const activeView = activeTab ? viewRefs.current.get(activeTab.id) : undefined;
   const activeLoadError = activeTab ? loadErrors[activeTab.id] : undefined;
   const loading = loadingTabs.has(activeTabId);
+  useEffect(() => {
+    const view = viewRefs.current.get(activeTabId);
+    if (view && activeTab) view.setZoomFactor(activeTab.zoom);
+  }, [activeTabId, activeTab?.zoom]);
+  const updateZoom = (id: number, next: number) => {
+    const factor = Math.max(0.5, Math.min(2, Math.round(next * 100) / 100));
+    setTabs((previous) => previous.map((tab) => tab.id === id ? { ...tab, zoom: factor } : tab));
+    tabsRef.current = tabsRef.current.map((tab) => tab.id === id ? { ...tab, zoom: factor } : tab);
+    viewRefs.current.get(id)?.setZoomFactor(factor);
+    setZoomBannerTab(id);
+    if (zoomBannerTimerRef.current !== null) window.clearTimeout(zoomBannerTimerRef.current);
+    zoomBannerTimerRef.current = window.setTimeout(() => setZoomBannerTab((current) => current === id ? null : current), 2200);
+  };
+  useEffect(() => {
+    const unsubscribe = window.atlasDesktop?.onBrowserZoom?.(({ webContentsId, action, factor: actualFactor }) => {
+      const entry = [...viewRefs.current.entries()].find(([, view]) => view.getWebContentsId() === webContentsId);
+      if (!entry) return;
+      const current = tabsRef.current.find((tab) => tab.id === entry[0])?.zoom ?? 1;
+      const factor = action === 'sync' ? Number(actualFactor) : action === 'in' ? current + 0.1 : action === 'out' ? current - 0.1 : 1;
+      updateZoom(entry[0], Number.isFinite(factor) ? factor : current);
+    });
+    return () => unsubscribe?.();
+  }, [activeTabId, activeTab?.zoom]);
+  zoomGestureRef.current = (id, event) => {
+    if (event.defaultPrevented) return;
+    if (event instanceof WheelEvent && event.ctrlKey) {
+      event.preventDefault();
+      const current = tabsRef.current.find((tab) => tab.id === id)?.zoom ?? 1;
+      updateZoom(id, current + (event.deltaY < 0 ? 0.1 : -0.1));
+      return;
+    }
+    if (!(event instanceof KeyboardEvent) || !(event.ctrlKey || event.metaKey)) return;
+    const key = event.key.toLowerCase();
+    const current = tabsRef.current.find((tab) => tab.id === id)?.zoom ?? 1;
+    if (key === '+' || key === '=' || key === 'add') updateZoom(id, current + 0.1);
+    else if (key === '-' || key === '_' || key === 'subtract') updateZoom(id, current - 0.1);
+    else if (key === '0') updateZoom(id, 1);
+    else return;
+    event.preventDefault();
+  };
+  useEffect(() => {
+    const view = viewRefs.current.get(activeTabId);
+    if (view && activeTab) view.setZoomFactor(activeTab.zoom);
+  }, [activeTabId, activeTab?.zoom]);
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || !activeTab) return;
+      const key = event.key.toLowerCase();
+      if (key === '+' || key === '=' || key === 'add') {
+        event.preventDefault(); updateZoom(activeTabIdRef.current, (tabsRef.current.find((tab) => tab.id === activeTabIdRef.current)?.zoom ?? 1) + 0.1);
+      } else if (key === '-' || key === '_' || key === 'subtract') {
+        event.preventDefault(); updateZoom(activeTabIdRef.current, (tabsRef.current.find((tab) => tab.id === activeTabIdRef.current)?.zoom ?? 1) - 0.1);
+      } else if (key === '0') {
+        event.preventDefault(); updateZoom(activeTabIdRef.current, 1);
+      }
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey || !activeTab) return;
+      if (event.target instanceof Element && event.target.closest('webview')) return;
+      event.preventDefault();
+      const current = tabsRef.current.find((tab) => tab.id === activeTabIdRef.current)?.zoom ?? 1;
+      updateZoom(activeTabIdRef.current, current + (event.deltaY < 0 ? 0.1 : -0.1));
+    };
+    document.addEventListener('keydown', onKey, true);
+    const stage = stageRef.current;
+    stage?.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      stage?.removeEventListener('wheel', onWheel);
+      if (zoomBannerTimerRef.current !== null) window.clearTimeout(zoomBannerTimerRef.current);
+    };
+  }, [activeTabId, activeTab?.id]);
   return <div className="flex h-full min-h-0 flex-col gap-2">
     <div className="flex min-w-0 items-center gap-1 border-b border-line" aria-label="浏览器标签">
       <div role="tablist" aria-label="浏览器标签页" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1">
@@ -699,6 +785,13 @@ ${current}`);
       </section>
       : null}
     <div ref={stageRef} role="tabpanel" id="browser-tabpanel" aria-labelledby={`browser-tab-${activeTabId}`} tabIndex={0} className={cn('relative flex min-h-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand', localFile && 'hidden', size && 'items-start justify-center overflow-hidden')}>
+      {zoomBannerTab === activeTabId && activeTab?.initialUrl && <div role="group" aria-label="网页缩放" className="absolute right-3 top-3 z-40 flex items-center gap-1 rounded-xl border border-line bg-panel/95 p-1.5 text-fg shadow-xl backdrop-blur">
+        <button type="button" aria-label="缩小网页" title="缩小网页（Ctrl 加减号）" onClick={() => updateZoom(activeTabId, activeTab.zoom - 0.1)} className="grid size-7 place-items-center rounded-lg text-fg-2 hover:bg-hover"><span aria-hidden="true">−</span></button>
+        <span className="min-w-12 text-center font-mono text-[11px] tabular-nums" aria-live="polite">{Math.round(activeTab.zoom * 100)}%</span>
+        <button type="button" aria-label="放大网页" title="放大网页（Ctrl 加加号）" onClick={() => updateZoom(activeTabId, activeTab.zoom + 0.1)} className="grid size-7 place-items-center rounded-lg text-fg-2 hover:bg-hover"><span aria-hidden="true">+</span></button>
+        <span aria-hidden="true" className="mx-0.5 h-5 w-px bg-line" />
+        <button type="button" aria-label="重置网页缩放" title="重置网页缩放（Ctrl+0）" onClick={() => updateZoom(activeTabId, 1)} className="rounded-lg px-2 py-1 text-[10.5px] text-fg-2 hover:bg-hover">重置</button>
+      </div>}
         {activeLoadError && <section role="alert" aria-label="浏览器加载失败指引" className="absolute inset-x-3 top-3 z-30 max-h-[75%] overflow-auto rounded-xl border border-danger/30 bg-panel p-4 shadow-xl">
           <div className="flex items-start gap-2"><span className="min-w-0 flex-1"><b className="text-[14px] text-danger">{BROWSER_FAILURE_GUIDE[activeLoadError.kind].title}</b><small className="mt-1 block break-all font-mono text-[11px] text-fg-3">{activeLoadError.description} · Chromium {activeLoadError.code}</small></span><button type="button" aria-label="关闭错误指引" onClick={() => setLoadErrors((previous) => { const next = { ...previous }; delete next[activeTabId]; return next; })} className="rounded px-2 text-fg-3 hover:bg-hover">×</button></div>
           <ul className="my-2 grid list-disc gap-1 pl-5 text-[12.5px] text-fg-2">{BROWSER_FAILURE_GUIDE[activeLoadError.kind].checks.map((check) => <li key={check}>{check}</li>)}</ul>

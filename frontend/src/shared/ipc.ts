@@ -158,4 +158,6 @@ export interface AtlasDesktopApi {
   onBackendStartupProgress(callback: (progress: BackendStartupProgress) => void): () => void;
   /** Receive Ctrl+F from a focused embedded page (its keyboard events do not bubble to React). */
   onBrowserFind?(callback: () => void): () => void;
+  /** Zoom shortcuts and Ctrl+wheel originating inside a focused embedded webview. */
+  onBrowserZoom?(callback: (detail: { webContentsId: number; action: 'in' | 'out' | 'reset' | 'sync'; factor?: number }) => void): () => void;
 }

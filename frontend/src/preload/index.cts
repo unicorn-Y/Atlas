@@ -145,6 +145,11 @@ const desktopApi: AtlasDesktopApi = {
     ipcRenderer.on('browser:find', listener);
     return () => ipcRenderer.removeListener('browser:find', listener);
   },
+  onBrowserZoom: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, detail: { webContentsId: number; action: 'in' | 'out' | 'reset' | 'sync'; factor?: number }) => callback(detail);
+    ipcRenderer.on('browser:zoom', listener);
+    return () => ipcRenderer.removeListener('browser:zoom', listener);
+  },
 };
 
 contextBridge.exposeInMainWorld('atlasDesktop', desktopApi);

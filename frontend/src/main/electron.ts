@@ -934,11 +934,31 @@ function lockDownWebviews() {
       if (params.src && !/^(https?:|file:|about:blank)/i.test(params.src)) event.preventDefault();
     });
     if (contents.getType() === 'webview') {
+      contents.setZoomMode('manual');
       contents.on('before-input-event', (event, input) => {
         if ((input.control || input.meta) && input.key.toLowerCase() === 'f') {
           event.preventDefault();
           if (windowRef && !windowRef.isDestroyed()) windowRef.webContents.send('browser:find');
+          return;
         }
+        if (input.type === 'keyDown' && (input.control || input.meta)) {
+          const key = input.key.toLowerCase();
+          const action = key === '+' || key === '=' || key === 'add' ? 'in'
+            : key === '-' || key === '_' || key === 'subtract' ? 'out'
+              : key === '0' ? 'reset' : null;
+          if (action) {
+            event.preventDefault();
+            if (windowRef && !windowRef.isDestroyed()) windowRef.webContents.send('browser:zoom', {
+              webContentsId: contents.id, action,
+            });
+          }
+        }
+      });
+      contents.on('zoom-changed', (event, direction) => {
+        event.preventDefault();
+        if (windowRef && !windowRef.isDestroyed()) windowRef.webContents.send('browser:zoom', {
+          webContentsId: contents.id, action: direction === 'in' ? 'in' : 'out',
+        });
       });
       // Links that would open a new window stay in the panel instead.
       contents.setWindowOpenHandler(({ url }) => {

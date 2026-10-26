@@ -206,6 +206,20 @@ def check_git_graph() -> None:
     print("U44 item 6 PASS: parsed real merge graph lanes, complete commit metadata/diff, and parent links")
 
 
+def check_browser_zoom() -> None:
+    script = Path(__file__).with_name("u44_check_browser_zoom.mjs")
+    result = subprocess.run(
+        ["node", str(script)], capture_output=True,
+        text=True, encoding="utf-8", errors="replace", timeout=120,
+    )
+    if result.returncode:
+        raise AssertionError(result.stderr.strip() or result.stdout.strip() or "Atlas webview zoom check failed")
+    if result.stdout.strip():
+        print(result.stdout.strip())
+    if result.stderr.strip():
+        print(result.stderr.strip())
+
+
 async def check_real_provider() -> None:
     from atlas.models import ModelManager
     from real_model_check import AttemptResult, retry_real_model_check_async
@@ -233,6 +247,7 @@ def main() -> None:
     check_git_graph()
     asyncio.run(check_real_provider())
     check_terminal_setup()
+    check_browser_zoom()
     print("U44 CHECK PASS")
 
 
