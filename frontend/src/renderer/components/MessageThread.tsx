@@ -181,6 +181,12 @@ export default function MessageThread({ history, componentSelections = {}, usern
   const loadEarlier = useAtlasStore((state) => state.loadEarlier);
 
   const [scrollParent, setScrollParent] = useState<HTMLDivElement | null>(null);
+  const [scrollSpeed, setScrollSpeed] = useState(() => {
+    try {
+      const value = Number(localStorage.getItem('atlas.preference.scroll-speed'));
+      return Number.isFinite(value) && value >= 0.25 && value <= 3 ? value : 1;
+    } catch { return 1; }
+  });
   const [presentation, setPresentation] = useThreadPresentationSettings();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -199,6 +205,29 @@ export default function MessageThread({ history, componentSelections = {}, usern
   const [screenReaderAnnouncement, setScreenReaderAnnouncement] = useState('');
   scrollStateKeyRef.current = scrollStateKey;
   const previousHistory = useRef({ conversationId: '', length: 0 });
+
+  useEffect(() => {
+    const onSpeed = (event: Event) => {
+      const value = (event as CustomEvent<unknown>).detail;
+      if (typeof value === 'number' && Number.isFinite(value)) setScrollSpeed(Math.min(3, Math.max(0.25, value)));
+    };
+    window.addEventListener('atlas:scroll-speed', onSpeed);
+    return () => window.removeEventListener('atlas:scroll-speed', onSpeed);
+  }, []);
+
+  useEffect(() => {
+    if (!scrollParent || scrollSpeed === 1) return;
+    const onWheel = (event: WheelEvent) => {
+      // Keep browser zoom and horizontal/modified gestures native; normalize legacy line/page wheels.
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.deltaY === 0) return;
+      const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? scrollParent.clientHeight : 1;
+      event.preventDefault();
+      scrollParent.scrollBy({ top: event.deltaY * unit * scrollSpeed, behavior: 'auto' });
+    };
+    scrollParent.addEventListener('wheel', onWheel, { passive: false });
+    return () => scrollParent.removeEventListener('wheel', onWheel);
+  }, [scrollParent, scrollSpeed]);
 
   useEffect(() => {
     const onJump = (event: Event) => {

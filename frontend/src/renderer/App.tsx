@@ -251,6 +251,11 @@ export default function App() {
     const nextMode = pref('tui-mode-next');
     return nextMode ? nextMode === 'compact' : pref('tui-fullscreen') === 'true';
   });
+  const [scrollSpeedOpen, setScrollSpeedOpen] = useState(false);
+  const [scrollSpeed, setScrollSpeed] = useState(() => {
+    const value = Number(pref('scroll-speed'));
+    return Number.isFinite(value) && value >= 0.25 && value <= 3 ? value : 1;
+  });
   const [daybreakEnabled, setDaybreakEnabled] = useState(() => pref('daybreak') === 'true');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('artifacts');
   const [previewFile, setPreviewFile] = useState('');
@@ -1981,6 +1986,7 @@ export default function App() {
     } catch (error) { setToast(`创建交接会话失败：${error instanceof Error ? error.message : String(error)}`); }
   };
   const slashCommands: SlashCommand[] = [
+    { id: 'scroll-speed', label: '/scroll-speed', hint: '调整对话滚轮速度并即时预览', run: () => setScrollSpeedOpen(true) },
     ...(activeConversation ? [{ id: 'break-cache', label: '/break-cache', hint: '下一轮插入唯一提示前缀以避开提示缓存；status 显示真实服务商命中数据', takesArgument: true, run: (raw: string) => {
       const key = 'cache-bypass-next-conversation';
       const action = raw.trim().toLowerCase();
@@ -3606,6 +3612,19 @@ export default function App() {
       conversationId={ultraplan.conversationId} model={store.model} onClose={() => setUltraplan(null)} onToast={notify}
       onOpenArtifact={(path, title) => { setUltraplanArtifact({ id: `ultraplan-${path}`, runId: '', type: 'file', name: `高级计划：${ultraplan.title}`, path, summary: title, createdAt: new Date().toISOString() }); setInspectorOpen(true); setInspectorTab('artifacts'); }} /></Suspense>}
 
+    <Dialog open={scrollSpeedOpen} onOpenChange={setScrollSpeedOpen} label="滚轮速度调节" className="w-[min(480px,92vw)] bg-panel p-5 shadow-xl">
+      <h2 className="m-0 text-[16px] font-semibold text-heading">对话滚轮速度</h2>
+      <p className="mt-2 text-[12.5px] text-fg-3">只影响会话对话区域。拖动滑块时可立即滚动对话预览；触控板和水平滚动保持原有手感。</p>
+      <label className="grid gap-2 text-[12px] text-fg-2">速度：{scrollSpeed.toFixed(2)}×
+        <input aria-label="对话滚轮速度" type="range" min="0.25" max="3" step="0.05" value={scrollSpeed} onChange={(event) => {
+          const value = Number(event.target.value); setScrollSpeed(value); setPref('scroll-speed', String(value));
+          window.dispatchEvent(new CustomEvent('atlas:scroll-speed', { detail: value }));
+        }} />
+      </label>
+      <div className="mt-4 flex justify-between gap-2"><Button variant="ghost" onClick={() => {
+        setScrollSpeed(1); setPref('scroll-speed', '1'); window.dispatchEvent(new CustomEvent('atlas:scroll-speed', { detail: 1 }));
+      }}>恢复默认</Button><Button variant="primary" onClick={() => setScrollSpeedOpen(false)}>完成</Button></div>
+    </Dialog>
     {recapViewerOpen && <div role="dialog" aria-modal="true" aria-label="最近自动回顾" className="fixed inset-0 z-[90] grid place-items-center bg-black/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setRecapViewerOpen(false); }}><section className="card-surface flex max-h-[75vh] w-full max-w-2xl flex-col gap-3 rounded-2xl p-5 shadow-xl"><header className="flex items-center gap-2"><h2 className="m-0 flex-1 text-[16px] font-semibold text-heading">最近自动回顾 · {activeConversation?.title ?? '当前会话'}</h2><button type="button" aria-label="关闭最近回顾" className="btn ghost" onClick={() => setRecapViewerOpen(false)}>关闭</button></header><div className="min-h-0 flex-1 space-y-3 overflow-auto">{recentRecaps.map((recap) => <article key={recap.run_id} className="rounded-xl border border-line bg-sunken p-3"><div className="mb-2 flex items-center gap-2 text-[11px] text-fg-3"><span>运行 {recap.run_id.slice(0, 8)}</span><time>{new Date(recap.created_at).toLocaleString()}</time></div><div className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-fg-2">{recap.summary}</div></article>)}{!recentRecaps.length && <p role="status" className="m-0 p-6 text-center text-[12px] text-fg-3">这个会话还没有自动回顾。可在外观与语音设置中开启“每轮自动回顾”。</p>}</div></section></div>}
 
     {view !== 'chat' && view !== 'home' && <Suspense fallback={null}><ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} /></Suspense>}
