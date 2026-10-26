@@ -1856,7 +1856,8 @@ export default function App() {
       { id: 'undo', label: '/undo', hint: '撤回最近一条用户消息及其之后内容', run: () => { const last = [...messages].reverse().find((item) => item.role === 'user'); if (last) void rewind(last.id, false); else setToast('当前对话没有可撤回的用户消息'); } },
       { id: 'redo', label: '/redo', hint: '恢复刚刚撤回的内容', run: () => { if (rewound) void store.redoRewind(rewound.conversationId, rewound.rewindId).then((ok) => { if (ok) { setRewound(null); setToast('已重做'); } }); else setToast('当前没有可重做的撤回'); } },
       { id: 'approve', label: '/approve', hint: '打开当前对话的审批与活动', run: () => showInspectorTab('activity') },
-      { id: 'side', label: '/side', hint: '在侧聊中追问，不打断主对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) },
+      { id: 'side', label: '/side', hint: '打开临时旁聊，不打断主对话也不落历史', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) },
+      { id: 'temporary-chat', label: '/temp', hint: '开启不落历史的临时聊天', run: () => setSide({ open: true }) },
       { id: 'worktree', label: '/worktree', hint: '查看当前对话的独立工作树', run: () => showInspectorTab('context') },
       { id: 'dashboard', label: '/dashboard', hint: '打开当前对话的持久工作面板', run: () => showInspectorTab('dashboard') },
       { id: 'overview', label: '/overview', hint: '汇总当前任务计划、来源、生成文件和会话摘要', run: () => showInspectorTab('overview') },
@@ -2003,7 +2004,7 @@ export default function App() {
       setFocusMode((value) => { const next = !value; setPref('focus-mode', String(next)); return next; });
     } },
     { id: 'dwf', label: '/dwf', hint: '查看工作流运行、节点输出、错误、产物并管理已保存定义', run: () => setWorkflowManagerOpen(true) },
-    ...(activeConversation ? [{ id: 'btw', label: '/btw', hint: '旁问：不打断正在做的事，也不存进对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) }] : []),
+    ...(activeConversation ? [{ id: 'btw', label: '/btw', hint: '打开临时旁聊：不打断正在做的事，不写入对话', takesArgument: true, run: (question: string) => setSide({ open: true, question: question.trim() || undefined }) }, { id: 'temp', label: '/temp', hint: '开启不落历史的临时聊天', run: () => setSide({ open: true }) }] : []),
     { id: 'open', label: '/open', hint: '在浏览器面板打开网址，如 /open localhost:5173', takesArgument: true, run: (target: string) => { if (target.trim()) setBrowserUrl(/^\w+:/.test(target.trim()) ? target.trim() : `http://${target.trim()}`); showInspectorTab('browser'); } },
     ...(activeConversation ? [{ id: 'compact', label: '/compact', hint: '压缩上下文，可附说明让摘要优先保留相关事项', takesArgument: true, run: (note: string) => void store.compactConversation(activeConversation.id, note).then((text) => { if (text) setToast(text); }) }] : []),
     { id: 'voice', label: '/voice', hint: '切换语音通话；再次执行可结束', run: startVoice },

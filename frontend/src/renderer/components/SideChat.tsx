@@ -29,7 +29,9 @@ export default function SideChat({ open, onClose, conversationId, model, initial
     setTurns((current) => [...current, { question: content, answer: '', state: 'running' }]);
     const update = (patch: Partial<Turn> | ((turn: Turn) => Partial<Turn>)) => setTurns((current) => current.map((turn, index) =>
       index === current.length - 1 ? { ...turn, ...(typeof patch === 'function' ? patch(turn) : patch) } : turn));
-    void backend.startRun({ type: 'run.start', run_id: runId, content, conversation_id: conversationId, model, ephemeral: true }, (envelope) => {
+    const priorContext = turns.filter((turn) => turn.state === 'done' && turn.answer).map((turn) => `用户：${turn.question}\n旁聊助手：${turn.answer}`).join('\n\n');
+    const runContent = priorContext ? `临时旁聊此前内容（仅用于本次回答）：\n${priorContext}\n\n当前问题：${content}` : content;
+    void backend.startRun({ type: 'run.start', run_id: runId, content: runContent, conversation_id: conversationId, model, ephemeral: true }, (envelope) => {
       if (envelope.event === 'message.delta') update((turn) => ({ answer: turn.answer + String(envelope.data?.content ?? '') }));
       else if (envelope.event === 'message.completed' && envelope.data?.content) update({ answer: String(envelope.data.content) });
       else if (envelope.event === 'run.completed') update({ state: 'done' });
@@ -73,11 +75,11 @@ export default function SideChat({ open, onClose, conversationId, model, initial
   };
   const running = turns.at(-1)?.state === 'running';
 
-  return <Dialog open={open} onOpenChange={(next) => { if (!next) { stop(); setTurns([]); onClose(); } }} label="旁问" className="flex h-[min(620px,calc(100vh-48px))] w-[min(680px,calc(100vw-32px))] flex-col">
+  return <Dialog open={open} onOpenChange={(next) => { if (!next) { if (turns.length && !window.confirm('关闭临时旁聊？未保存的旁聊内容将清除。')) return; stop(); setTurns([]); onClose(); } }} label="临时旁聊" className="flex h-[min(620px,calc(100vh-48px))] w-[min(680px,calc(100vw-32px))] flex-col">
     <header className="flex items-center gap-2 px-5 pt-4 pb-3 shadow-[inset_0_-1px_0_var(--line)]">
       <MessagesSquare size={17} className="text-brand" />
-      <b className="text-[15px] font-semibold text-heading">旁问</b>
-      <span className="text-[12.5px] text-fg-3">借用这个对话的上下文，不打断正在做的事，也不会存进对话</span>
+      <b className="text-[15px] font-semibold text-heading">临时旁聊</b>
+      <span className="text-[12.5px] text-fg-3">内容仅保留在此窗口；关闭后清除，不进入历史、搜索或同步</span>
     </header>
     <div className="min-h-0 flex-1 overflow-auto px-5">
       {turns.map((turn, index) => <div key={index}>
