@@ -238,7 +238,6 @@ async def check_office_addin() -> None:
         raise AssertionError("Office accepted an incorrect pairing code")
     paired = await pair_office_addin(services, {"pairing_code": invitation["pairing_code"]})
     token = paired["session_token"]
-    headers = {"x_atlas_office_token": token}
     try:
         await send_office_context(services, {"host": "Word", "selection": "real selected text"}, "invalid")
     except HTTPException as exc:
