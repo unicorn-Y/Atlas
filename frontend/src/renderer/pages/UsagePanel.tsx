@@ -30,6 +30,14 @@ interface ConversationStats {
   cache_hit_rate: number | null; est_cost: number | null; duration_seconds: number | null;
   message_count: number; user_turns: number; runs: number; started_at: string | null; last_activity_at: string | null;
 }
+interface ProviderAccountBalance {
+  currency?: string; total_balance?: string; granted_balance?: string; topped_up_balance?: string;
+}
+interface ProviderAccountUsage {
+  provider_id: string; label: string; status: 'available' | 'unsupported' | 'unavailable' | 'error';
+  status_text: string; account_url: string; balances: ProviderAccountBalance[];
+  is_available: boolean | null; reset_at: string | null; checked_at: string | null;
+}
 
 function readLocalProfile(): { name: string; about: string } {
   try {
@@ -41,6 +49,7 @@ function readLocalProfile(): { name: string; about: string } {
 /** Token usage and cost from the backend ledger: totals, a per-day bar chart, and the table behind it. */
 export default function UsagePanel({ username, onSaveUsername, apiBaseUrl = '', conversationId, onOpenModels }: UsagePanelProps = {}) {
   const conversations = useAtlasStore((state) => state.conversations);
+  const currentModel = useAtlasStore((state) => state.models.find((item) => item.id === state.model));
   const [savedProfile] = useState(readLocalProfile);
   const [displayName, setDisplayName] = useState(username ?? savedProfile.name ?? '');
   const [about, setAbout] = useState(savedProfile.about);
@@ -51,6 +60,23 @@ export default function UsagePanel({ username, onSaveUsername, apiBaseUrl = '', 
   const [report, setReport] = useState<UsageReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sessionStats, setSessionStats] = useState<ConversationStats | null>(null);
+  const [providerAccounts, setProviderAccounts] = useState<ProviderAccountUsage[]>([]);
+  const [providerAccountLoading, setProviderAccountLoading] = useState(false);
+  const [providerAccountError, setProviderAccountError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!apiBaseUrl) return;
+    let live = true;
+    setProviderAccountLoading(true);
+    setProviderAccountError(null);
+    const providerId = currentModel?.hermes_provider || currentModel?.provider || '';
+    void api<{ providers: ProviderAccountUsage[] }>(apiBaseUrl,
+      `/api/providers/account-usage${providerId ? `?provider_id=${encodeURIComponent(providerId)}` : ''}`)
+      .then((value) => { if (live) setProviderAccounts(value.providers ?? []); })
+      .catch((exc: unknown) => { if (live) setProviderAccountError(exc instanceof Error ? exc.message : String(exc)); })
+      .finally(() => { if (live) setProviderAccountLoading(false); });
+    return () => { live = false; };
+  }, [apiBaseUrl, currentModel?.provider, currentModel?.hermes_provider]);
 
   useEffect(() => {
     let live = true;
@@ -103,6 +129,26 @@ export default function UsagePanel({ username, onSaveUsername, apiBaseUrl = '', 
 
   const pill = 'h-8 rounded-lg px-3 text-[12.5px] transition-colors';
   return <div className="grid max-w-[720px] gap-5 text-[13px] text-fg-2">
+    <section aria-label="供应商账户用量" className="rounded-xl card-surface p-4">
+      <div className="flex flex-wrap items-center gap-2"><h4 className="m-0 text-[13.5px] font-medium text-heading">供应商账户订阅与余额</h4><span className="rounded-full bg-sunken px-2 py-0.5 text-[10.5px] text-fg-3">只读 · 不会充值</span></div>
+      <p className="mb-0 mt-1 text-[11.5px] leading-[1.6] text-fg-3">以下是服务商账户数据，与 Atlas 本机调用量分开统计。Atlas 只在服务商提供官方接口且本机密钥可用时读取；不支持的账户状态会明确标出，周期额度和重置时间没有真实数据时不会推算。</p>
+      {providerAccountLoading && <p role="status" className="mb-0 mt-3 text-[12px] text-fg-3">正在读取服务商账户信息…</p>}
+      {providerAccountError && <p role="alert" className="mb-0 mt-3 text-[12px] text-danger">账户信息暂时无法读取：{providerAccountError}</p>}
+      {!providerAccountLoading && !providerAccountError && providerAccounts.length === 0 && <p className="mb-0 mt-3 text-[12px] text-fg-3">没有检测到已配置的服务商账号；当前用量仅来自下方 Atlas 本机账本。</p>}
+      <div className="mt-3 grid gap-2">
+        {providerAccounts.map((account) => <article key={account.provider_id} className="rounded-lg border border-line px-3 py-2.5">
+          <div className="flex flex-wrap items-center gap-2"><b className="text-[12.5px] font-medium text-fg">{account.label}</b><span className={cn('rounded-full px-2 py-0.5 text-[10.5px]', account.status === 'available' ? 'bg-ok/10 text-ok' : 'bg-sunken text-fg-3')}>{account.status === 'available' ? '已读取官方账户余额' : account.status === 'error' ? '读取失败' : account.status === 'unavailable' ? '缺少可用密钥' : '暂不支持 API 查询'}</span><span className="flex-1" />{account.account_url ? <a href={account.account_url} target="_blank" rel="noopener noreferrer" className="text-[11.5px] text-brand underline">打开服务商用量 / 账单</a> : <button type="button" onClick={onOpenModels} className="text-[11.5px] text-brand underline">查看模型端点设置</button>}</div>
+          <p className="mb-0 mt-1 text-[11.5px] leading-[1.55] text-fg-3">{account.status_text}</p>
+          {account.balances.map((balance, index) => <div key={`${balance.currency}-${index}`} className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11.5px] sm:grid-cols-4">
+            <span>可用余额：<b className="text-fg">{balance.total_balance ?? '未知'} {balance.currency ?? ''}</b></span>
+            <span>赠送余额：{balance.granted_balance ?? '未知'} {balance.currency ?? ''}</span>
+            <span>充值余额：{balance.topped_up_balance ?? '未知'} {balance.currency ?? ''}</span>
+            <span>周期重置：{account.reset_at ? new Date(account.reset_at).toLocaleString() : '官方未提供'}</span>
+          </div>)}
+          {account.checked_at && <p className="mb-0 mt-1 text-[10.5px] text-fg-3">官方接口读取时间：{new Date(account.checked_at).toLocaleString()} · 可继续在服务商页面管理订阅或充值。</p>}
+        </article>)}
+      </div>
+    </section>
     {conversationId && <section aria-label="本会话用量" className="rounded-xl card-surface p-4">
       <h4 className="m-0 text-[13.5px] font-medium text-heading">本会话</h4>
       {sessionStats ? <><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-7">
@@ -144,11 +190,11 @@ export default function UsagePanel({ username, onSaveUsername, apiBaseUrl = '', 
 
     {error && <p role="alert" className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-danger">没能读取用量：{error}</p>}
 
-    {totals && <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+    {totals && <><h4 className="m-0 text-[13.5px] font-medium text-heading">Atlas 本机调用量</h4><div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
       <Tile label="当前范围任务轮次" value={String(totals.runs)} hint="按上方选择的时间范围统计" />
       <Tile label="每轮平均 Token" value={tokens(averageTokens)} hint="当前范围输入与输出 Token 总量除以任务轮次" />
       <Tile label="个人资料范围" value="本机" hint="资料保存在当前设备浏览器存储中" />
-    </div>}
+    </div></>}
 
     {totals && <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <Tile label="输入" value={tokens(totals.input_tokens)} />
