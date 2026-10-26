@@ -435,6 +435,13 @@ export default function Sidebar(props: SidebarProps) {
       setFeedback(label + '已复制');
     } catch { setFeedback('复制失败，请检查剪贴板权限'); }
   };
+  const copyConversationDeepLink = (conversationId: string) => {
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(conversationId)) {
+      setFeedback('此会话 ID 不符合 Atlas 深层链接格式');
+      return;
+    }
+    void copyText(`atlas://conversation/${encodeURIComponent(conversationId)}`, 'Atlas 深层链接');
+  };
   const detachFromProject = async (projectId: string, conversationId: string) => {
     try {
       await api(backend.apiBaseUrl, '/api/projects/' + encodeURIComponent(projectId) + '/conversations/' + encodeURIComponent(conversationId), { method: 'DELETE' });
@@ -717,6 +724,7 @@ export default function Sidebar(props: SidebarProps) {
             }}>+</button>
           </div>
           <MenuItem onSelect={() => void copyText(conversation.id, '会话 ID')}><Copy />复制会话 ID</MenuItem>
+          <MenuItem onSelect={() => copyConversationDeepLink(conversation.id)}><Copy />复制 Atlas 深层链接</MenuItem>
           <MenuItem onSelect={() => void copyLogLocation(conversation.id)}><Copy />复制会话日志数据库路径</MenuItem>
           <MenuItem disabled={!workspace} onSelect={() => void copyText(workspace, '工作区路径')}><Copy />复制工作区路径</MenuItem>
           <MenuItem disabled={!window.atlasDesktop?.openPath || !workspace || workspace.startsWith('ssh://')} onSelect={() => void openWorkspace(conversation)}><Folder />在资源管理器打开工作区</MenuItem>
