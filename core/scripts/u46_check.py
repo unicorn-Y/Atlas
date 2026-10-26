@@ -6,12 +6,53 @@ from concurrent.futures import ProcessPoolExecutor
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import urllib.request
 
 import websockets
 
 ROOT = Path(__file__).resolve().parents[2]
+CORE = ROOT / "core"
+
+
+def _run_cli(*arguments: str) -> str:
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(CORE) + (os.pathsep + environment["PYTHONPATH"] if environment.get("PYTHONPATH") else "")
+    result = subprocess.run([sys.executable, "-m", "atlas.cli", *arguments], cwd=CORE, env=environment,
+                            text=True, encoding="utf-8", errors="replace", capture_output=True, check=False)
+    if result.returncode:
+        raise AssertionError(f"CLI failed ({result.returncode}): {result.stderr[-1200:]}")
+    return result.stdout
+
+
+def check_shell_aliases() -> None:
+    """Create, list, update, and revoke aliases in disposable PowerShell/POSIX profiles."""
+    with tempfile.TemporaryDirectory(prefix="atlas-u46-alias-") as temp_dir:
+        root = Path(temp_dir)
+        workspace = root / "workspace with spaces"
+        workspace.mkdir()
+        for shell in ("powershell", "bash", "zsh"):
+            profile = root / f"{shell}.profile"
+            profile.write_text("# User-owned line\n", encoding="utf-8")
+            args = ("--argument=--model", "--argument=deepseek-v4.1-flash", "--argument=--safe-mode")
+            _run_cli("alias", "add", "atlas_work", "--shell", shell, "--workspace", str(workspace), "--profile", str(profile), *args)
+            _run_cli("alias", "add", "atlas_work", "--shell", shell, "--workspace", str(workspace), "--profile", str(profile), *args)
+            content = profile.read_text(encoding="utf-8")
+            assert content.count("# >>> atlas alias: atlas_work >>>") == 1, f"{shell} duplicate markers"
+            assert "# User-owned line" in content and str(workspace) in content
+            if shell == "powershell":
+                assert "Push-Location -LiteralPath" in content and "finally { Pop-Location }" in content and "@args" in content
+            else:
+                assert "(cd -- " in content and '"$@"' in content and "--safe-mode" in content
+            listed = _run_cli("alias", "list", "--shell", shell, "--profile", str(profile))
+            assert "atlas_work" in listed
+            removed = _run_cli("alias", "remove", "atlas_work", "--shell", shell, "--profile", str(profile))
+            assert "已撤销" in removed
+            content = profile.read_text(encoding="utf-8")
+            assert "# >>> atlas alias: atlas_work >>>" not in content and content.strip() == "# User-owned line"
+    print("PASS shell-aliases: add/list/update/revoke for PowerShell, Bash, and Zsh profiles")
 
 
 def _create_automation_probe(arguments: tuple[str, str]) -> bool:
@@ -114,6 +155,7 @@ async def check_scroll_speed() -> None:
 
 
 async def main() -> None:
+    check_shell_aliases()
     check_automation_cap()
     await check_scroll_speed()
     print("U46 CHECK PASS")

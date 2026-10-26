@@ -547,6 +547,61 @@ def desktop_command() -> None:
 main.add_command(desktop_command, "gui")
 
 
+@main.group("alias")
+def alias_group() -> None:
+    """Create, inspect, and remove per-user shell shortcuts for Atlas chat."""
+
+
+@alias_group.command("add")
+@click.argument("name")
+@click.option("--shell", "shell_name", type=click.Choice(["powershell", "bash", "zsh"], case_sensitive=False), required=True)
+@click.option("--workspace", type=click.Path(exists=True, file_okay=False, path_type=Path), required=True, help="Atlas chat 默认工作区。")
+@click.option("--argument", "arguments", multiple=True, help="固定传给 `atlas chat` 的一个参数；可重复指定。")
+@click.option("--profile", type=click.Path(dir_okay=False, path_type=Path), default=None, help="覆盖 shell 启动文件路径（适合测试或自定义 profile）。")
+def alias_add(name: str, shell_name: str, workspace: Path, arguments: tuple[str, ...], profile: Path | None) -> None:
+    """Add or replace a shell function (for example, atlas alias add work)."""
+    from atlas.shell_aliases import add_alias
+
+    try:
+        target = add_alias(name, shell_name.lower(), workspace, arguments, profile)
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"已写入 Atlas shell 别名 {name} → {target}；重新打开 {shell_name} 后可用。")
+
+
+@alias_group.command("remove")
+@click.argument("name")
+@click.option("--shell", "shell_name", type=click.Choice(["powershell", "bash", "zsh"], case_sensitive=False), required=True)
+@click.option("--profile", type=click.Path(dir_okay=False, path_type=Path), default=None)
+def alias_remove(name: str, shell_name: str, profile: Path | None) -> None:
+    """Remove only the selected Atlas-generated profile block."""
+    from atlas.shell_aliases import remove_alias
+
+    try:
+        target, removed = remove_alias(name, shell_name.lower(), profile)
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"{'已撤销' if removed else '未找到'} Atlas shell 别名 {name}：{target}")
+
+
+@alias_group.command("list")
+@click.option("--shell", "shell_name", type=click.Choice(["powershell", "bash", "zsh"], case_sensitive=False), required=True)
+@click.option("--profile", type=click.Path(dir_okay=False, path_type=Path), default=None)
+def alias_list(shell_name: str, profile: Path | None) -> None:
+    """List generated Atlas aliases in one shell profile."""
+    from atlas.shell_aliases import list_aliases
+
+    try:
+        names = list_aliases(shell_name.lower(), profile)
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    if names:
+        for name in names:
+            click.echo(name)
+    else:
+        click.echo(f"{shell_name} profile 中没有 Atlas shell 别名。")
+
+
 @main.command("memory-bench")
 @click.option("--dataset", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None,
               help="Versioned benchmark dataset JSON; defaults to the bundled v1 corpus.")
