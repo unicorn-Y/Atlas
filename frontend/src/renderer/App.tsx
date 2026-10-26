@@ -1839,19 +1839,27 @@ export default function App() {
       { id: 'fork', label: '/fork', hint: '从最近消息或指定检查点分叉', takesArgument: true, run: (target: string) => {
         const requested = target.trim();
         if (!requested) { const last = [...messages].reverse().find((item) => item.role === 'user'); if (last) void store.forkFrom(last.id); else setToast('当前对话还没有用户消息'); return; }
-        const workspace = typeof activeConversation.workspace === 'string' ? activeConversation.workspace : '';
-        void api<Array<{ id: string; created_at: string }>>(store.apiBaseUrl, `/api/checkpoints${workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''}`).then((checkpoints) => {
-          const checkpoint = requested.toLowerCase() === 'latest' ? checkpoints[0] : checkpoints.find((item) => item.id === requested);
+        const workspace = typeof activeConversation.worktree_path === 'string' && activeConversation.worktree_path
+          ? activeConversation.worktree_path : typeof activeConversation.workspace === 'string' ? activeConversation.workspace : '';
+        void api<Array<{ id: string; created_at: string }>>(store.apiBaseUrl, `/api/checkpoints${workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''}`).then(async (checkpoints) => {
+          const ordered = [...checkpoints].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+          const checkpoint = requested.toLowerCase() === 'latest' ? ordered[0] : checkpoints.find((item) => item.id === requested);
           if (!checkpoint) { setToast('没有找到这个工作区检查点'); return; }
-          const pointTime = Date.parse(checkpoint.created_at);
-          const message = [...messages].reverse().find((item) => item.role === 'user' && (!Number.isFinite(pointTime) || Date.parse(item.created_at ?? '') <= pointTime));
-          if (message) void store.forkFrom(message.id, true); else setToast('检查点之前没有可分叉的用户消息');
+          try {
+            const forked = await api<NonNullable<typeof activeConversation>>(store.apiBaseUrl,
+              `/api/conversations/${encodeURIComponent(activeConversation.id)}/fork-checkpoint`,
+              { method: 'POST', json: { checkpoint_id: checkpoint.id } });
+            await store.refreshConversations();
+            openConversation(forked);
+            setToast(`已从检查点 ${checkpoint.id.slice(0, 8)} 分叉，工作区状态已复制到独立目录`);
+          } catch (error) { setToast(`从检查点分叉失败：${error instanceof Error ? error.message : String(error)}`); }
         }).catch((error) => setToast(`检查点读取失败：${error instanceof Error ? error.message : String(error)}`));
       } },
       { id: 'rewind', label: '/rewind', hint: '查看或恢复当前工作区检查点', takesArgument: true, run: (target: string) => {
         showInspectorTab('changes');
         const requested = target.trim(); if (!requested) return;
-        const workspace = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : '';
+        const workspace = typeof activeConversation?.worktree_path === 'string' && activeConversation.worktree_path
+          ? activeConversation.worktree_path : typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : '';
         void api<Array<{ id: string; files?: Array<string | { path?: string; exists?: boolean }> }>>(store.apiBaseUrl, `/api/checkpoints${workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''}`).then(async (checkpoints) => {
           const checkpoint = requested.toLowerCase() === 'latest' ? checkpoints[0] : checkpoints.find((item) => item.id === requested);
           if (!checkpoint) { setToast('没有找到这个工作区检查点'); return; }

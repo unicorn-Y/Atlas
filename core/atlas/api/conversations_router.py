@@ -1528,6 +1528,124 @@ async def fork_conversation(
     return result
 
 
+@router.post("/api/conversations/{conversation_id}/fork-checkpoint", status_code=201)
+async def fork_conversation_from_checkpoint(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str, req: dict[str, Any],
+) -> dict[str, Any]:
+    """Fork transcript and workspace state at one checkpoint into an independent workspace."""
+    memory = services.memory
+    if memory is None:
+        memory = _server().memory
+    orchestrator = services.orchestrator or _server().orchestrator
+    if memory is None or orchestrator is None:
+        raise HTTPException(status_code=503, detail="会话或检查点服务尚未就绪。")
+    checkpoint_id = str(req.get("checkpoint_id") or "")
+    if not checkpoint_id:
+        raise HTTPException(status_code=422, detail="必须指定检查点 ID。")
+    store = getattr(orchestrator, "checkpoints", None)
+    manifest_path = store.manifest_path(checkpoint_id) if store is not None else None
+    if manifest_path is None:
+        raise HTTPException(status_code=404, detail="没有找到这个检查点。")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=f"检查点清单无法读取：{exc}") from exc
+    if not isinstance(manifest, dict) or not manifest.get("workspace"):
+        raise HTTPException(status_code=409, detail="检查点清单缺少原始工作区。")
+    if str(manifest.get("conversation_id") or "") != conversation_id:
+        raise HTTPException(status_code=409, detail="检查点不属于当前会话，无法从此处分叉。")
+    if not isinstance(manifest.get("files"), list) or not isinstance(manifest.get("scopes"), list):
+        raise HTTPException(status_code=409, detail="检查点清单缺少可恢复的文件快照。")
+    source = await memory.get_conversation(conversation_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="找不到这段对话。")
+    checkpoint_root = Path(str(manifest.get("workspace") or "")).expanduser().resolve()
+    source_root_value = source.get("worktree_path") or source.get("workspace")
+    if not source_root_value:
+        raise HTTPException(status_code=409, detail="当前会话没有可关联的工作区。")
+    source_root = Path(str(source_root_value)).expanduser().resolve()
+    if source_root != checkpoint_root:
+        raise HTTPException(status_code=409, detail="检查点工作区与当前会话工作区不一致。")
+    if not checkpoint_root.is_dir():
+        raise HTTPException(status_code=409, detail="检查点对应的工作区已不存在。")
+
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import atlas_turn_ordinal, fork_session_through_turn, read_session_all_messages
+
+    messages = await asyncio.to_thread(read_session_all_messages, DATA_ROOT / "engine", conversation_id)
+    try:
+        checkpoint_time = datetime.fromisoformat(str(manifest.get("created_at") or "").replace("Z", "+00:00"))
+        if checkpoint_time.tzinfo is None:
+            checkpoint_time = checkpoint_time.replace(tzinfo=UTC)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail="检查点没有有效的创建时间，无法确定会话分叉边界。") from exc
+    candidates = []
+    for item in messages:
+        if item.get("role") != "user":
+            continue
+        try:
+            message_time = datetime.fromisoformat(str(item.get("created_at") or "").replace("Z", "+00:00"))
+            if message_time.tzinfo is None:
+                message_time = message_time.replace(tzinfo=UTC)
+            if message_time > checkpoint_time:
+                continue
+        except (TypeError, ValueError):
+            continue
+        candidates.append(item)
+    fork_message_id = str(candidates[-1].get("id")) if candidates else None
+    user_turns = atlas_turn_ordinal(messages, fork_message_id, through_target=True) if fork_message_id else 0
+    result = await memory.fork_conversation_metadata(conversation_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="找不到这段对话。")
+    fork_id = str(result["id"])
+    worktree: dict[str, str] | None = None
+    copied_workspace: Path | None = None
+    try:
+        await asyncio.to_thread(
+            fork_session_through_turn, DATA_ROOT / "engine", conversation_id, fork_id,
+            int(user_turns or 0), branch_message_id=fork_message_id,
+        )
+        workspace_updates: dict[str, Any] = {}
+        if (checkpoint_root / ".git").exists():
+            worktree = await asyncio.to_thread(
+                _server()._worktrees().create, checkpoint_root, fork_id,
+            )
+            target_workspace = Path(worktree["worktree_path"])
+            workspace_updates.update(worktree)
+            workspace_updates["workspace"] = str(checkpoint_root)
+        else:
+            import shutil
+
+            copied_workspace = (DATA_ROOT / "data" / "checkpoint-forks" / fork_id).resolve()
+            copied_workspace.parent.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(
+                shutil.copytree, checkpoint_root, copied_workspace,
+                ignore=shutil.ignore_patterns(".git", "node_modules", "__pycache__", ".venv", "venv"),
+            )
+            target_workspace = copied_workspace
+            workspace_updates = {"workspace": str(copied_workspace)}
+        await asyncio.to_thread(store.restore_checkpoint, checkpoint_id, target_workspace)
+        await memory.update_conversation(
+            fork_id, parent_conversation_id=conversation_id, fork_message_id=fork_message_id,
+            **workspace_updates,
+        )
+    except Exception as exc:
+        await memory.delete_conversation(fork_id)
+        if worktree:
+            with suppress(Exception):
+                await asyncio.to_thread(
+                    _server()._worktrees().remove, checkpoint_root, Path(worktree["worktree_path"]),
+                    worktree["worktree_branch"], True,
+                )
+        if copied_workspace:
+            import shutil
+
+            await asyncio.to_thread(shutil.rmtree, copied_workspace, True)
+        raise HTTPException(status_code=409, detail=f"从检查点分叉失败：{exc}") from exc
+    return await memory.get_conversation(fork_id) or result
+
+
 @router.post("/api/conversations/{conversation_id}/duplicate", status_code=201)
 async def duplicate_conversation(
     services: Annotated[AppServices, Depends(get_app_services)],

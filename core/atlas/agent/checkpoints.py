@@ -171,13 +171,15 @@ class ShadowGitCheckpointStore:
                               "file_count": sum(not i.get("directory") for i in manifest["files"])})
         return items
 
-    def restore_checkpoint(self, checkpoint_id: str) -> dict[str, Any]:
+    def restore_checkpoint(
+        self, checkpoint_id: str, workspace: str | Path | None = None,
+    ) -> dict[str, Any]:
         snapshot = self.storage_dir / checkpoint_id
         manifest_path = snapshot / "manifest.json"
         if not manifest_path.is_file() or Path(checkpoint_id).name != checkpoint_id:
             raise KeyError(checkpoint_id)
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        root = Path(manifest["workspace"]).resolve()
+        root = Path(workspace or manifest["workspace"]).resolve()
         restored: list[str] = []
         saved_files = {item["path"] for item in manifest["files"] if item["exists"]}
         for scope in manifest.get("scopes", []):
