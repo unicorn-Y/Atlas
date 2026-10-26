@@ -6,10 +6,58 @@ import base64
 import html
 import io
 import mimetypes
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
 MAX_PREVIEW_BYTES = 10 * 1024 * 1024
+
+
+def _preview_worker_env(temp_root: Path) -> dict[str, str]:
+    """Give the renderer only the OS variables it needs, never Atlas config or credentials."""
+    allowed = ("SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT")
+    env = {key: os.environ[key] for key in allowed if os.environ.get(key)}
+    env.update({"TEMP": str(temp_root), "TMP": str(temp_root), "TMPDIR": str(temp_root), "PYTHONIOENCODING": "utf-8"})
+    return env
+
+
+def render_isolated_preview(raw: bytes, suffix: str) -> tuple[str, str]:
+    """Render untrusted Office/PDF input in a credential-free child and discard its temp tree."""
+    normalized = suffix.casefold()
+    if normalized not in {".docx", ".xlsx", ".pptx", ".pdf"}:
+        raise ValueError("Only Office documents and PDF files can use this preview")
+    if len(raw) > MAX_PREVIEW_BYTES:
+        raise ValueError("Document preview is limited to 10 MB")
+    worker = Path(__file__).resolve().parents[1] / "scripts" / "isolated_preview_worker.py"
+    with tempfile.TemporaryDirectory(prefix="atlas-preview-") as temporary:
+        root = Path(temporary)
+        source = root / ("input" + normalized)
+        source.write_bytes(raw)
+        renderer = shutil.which("pdftoppm") if normalized == ".pdf" else None
+        try:
+            result = subprocess.run(
+                [sys.executable, "-I", str(worker), str(source), normalized, renderer or ""],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=45, check=False, env=_preview_worker_env(root), cwd=root,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError("隔离渲染超时；可尝试纯文本提取或用外部程序打开。") from exc
+        if result.returncode != 0:
+            try:
+                detail = json.loads(result.stdout).get("error", "")
+            except (ValueError, AttributeError):
+                detail = ""
+            raise ValueError(str(detail or "隔离渲染失败；可尝试纯文本提取或用外部程序打开。"))
+        try:
+            payload = json.loads(result.stdout)
+            return str(payload["html"]), str(payload.get("mode", "isolated"))
+        except (ValueError, KeyError, TypeError) as exc:
+            raise ValueError("隔离渲染返回了无效结果；可尝试纯文本提取。") from exc
 
 
 def _target(root: str, value: str) -> Path:

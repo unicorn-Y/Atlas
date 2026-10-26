@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import json
 import os
+import shutil
 import structlog
 import fnmatch
 import mimetypes
@@ -17,23 +18,27 @@ import re
 import shlex
 import subprocess
 import tempfile
+import sysconfig
+import sys
 import uuid
 from contextlib import suppress
 from pathlib import Path, PurePosixPath
 from typing import Annotated, Any
+from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from atlas.config import DATA_ROOT, get_config
-from atlas.office import MAX_PREVIEW_BYTES, render_office
+from atlas.office import MAX_PREVIEW_BYTES, render_isolated_preview
 from atlas.ssh import ssh_workspaces
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 
 router = APIRouter()
+_sandbox_previews: dict[str, tuple[Path, float]] = {}
 
 
 @router.get("/api/ide/status")
@@ -594,8 +599,8 @@ async def workspace_preview(
     root: str, path: str,
 ) -> Response:
     suffix = Path(path).suffix.casefold()
-    if suffix not in {".docx", ".xlsx", ".pptx"}:
-        raise HTTPException(status_code=415, detail="Only Office documents can use this preview")
+    if suffix not in {".docx", ".xlsx", ".pptx", ".pdf"}:
+        raise HTTPException(status_code=415, detail="Only Office documents and PDF files can use this preview")
     try:
         if root.startswith("ssh://"):
             host, remote_root = ssh_workspaces.parse_workspace(root)
@@ -609,16 +614,124 @@ async def workspace_preview(
             if not target.is_file():
                 raise HTTPException(status_code=404, detail="Workspace file not found")
             if target.stat().st_size > MAX_PREVIEW_BYTES:
-                raise HTTPException(status_code=413, detail="Office preview is limited to 10 MB")
+                raise HTTPException(status_code=413, detail="Document preview is limited to 10 MB")
             raw = await asyncio.to_thread(target.read_bytes)
-        rendered = await asyncio.to_thread(render_office, raw, suffix)
+        rendered, render_mode = await asyncio.to_thread(render_isolated_preview, raw, suffix)
     except HTTPException:
         raise
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=404, detail="Office file could not be read") from exc
-    return Response(rendered, media_type="text/html", headers=_OFFICE_SANDBOX_HEADERS)
+    headers = {**_OFFICE_SANDBOX_HEADERS, "X-Atlas-Preview-Mode": render_mode, "X-Atlas-Preview-Isolated": "true"}
+    return Response(rendered, media_type="text/html", headers=headers)
+
+
+@router.get("/api/workspace/sandbox/status")
+async def workspace_sandbox_status() -> dict[str, Any]:
+    """Report whether the optional Windows Sandbox feature is enabled; never enable it."""
+    if os.name != "nt":
+        return {"supported": False, "enabled": False, "message": "Windows Sandbox 仅适用于 Windows。"}
+    try:
+        result = await asyncio.to_thread(
+            subprocess.run,
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+             "(Get-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM).State"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15, check=False,
+        )
+        state = result.stdout.strip().casefold()
+        enabled = result.returncode == 0 and state == "enabled"
+        return {"supported": True, "enabled": enabled, "state": state or "unknown",
+                "message": "Windows Sandbox 已启用。" if enabled else
+                "如需虚拟机级隔离，请以管理员运行：Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM"}
+    except (OSError, subprocess.SubprocessError):
+        return {"supported": True, "enabled": False, "state": "unknown",
+                "message": "无法读取 Windows Sandbox 状态；如需虚拟机级隔离，请以管理员运行：Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM"}
+
+
+@router.post("/api/workspace/sandbox/preview")
+async def start_workspace_sandbox_preview(
+    services: Annotated[AppServices, Depends(get_app_services)], request: Request,
+) -> dict[str, Any]:
+    """Launch an offline Windows Sandbox rendering job with read-only source/runtime mounts."""
+    status = await workspace_sandbox_status()
+    if not status.get("enabled"):
+        raise HTTPException(status_code=409, detail=status.get("message", "Windows Sandbox is not enabled"))
+    payload = await request.json()
+    root = str(payload.get("root") or "")
+    relative = str(payload.get("path") or "")
+    suffix = Path(relative).suffix.casefold()
+    if suffix not in {".docx", ".xlsx", ".pptx", ".pdf"}:
+        raise HTTPException(status_code=415, detail="Only Office documents and PDF files can use this preview")
+    if root.startswith("ssh://"):
+        raise HTTPException(status_code=400, detail="Windows Sandbox requires a local workspace file")
+    _base, source = _server()._workspace_path(root, relative)
+    if not source.is_file():
+        raise HTTPException(status_code=404, detail="Workspace file not found")
+    if source.stat().st_size > MAX_PREVIEW_BYTES:
+        raise HTTPException(status_code=413, detail="Document preview is limited to 10 MB")
+    sandbox_exe = shutil.which("WindowsSandbox.exe")
+    if not sandbox_exe:
+        raise HTTPException(status_code=503, detail="Windows Sandbox executable was not found")
+    job_id = uuid.uuid4().hex
+    job_root = Path(tempfile.mkdtemp(prefix=f"atlas-vm-preview-{job_id[:8]}-"))
+    input_root = job_root / "input"
+    output_root = job_root / "output"
+    input_root.mkdir(); output_root.mkdir()
+    (input_root / ("input" + suffix)).write_bytes(source.read_bytes())
+    python_root = Path(sys.base_prefix).resolve()
+    python_exe = python_root / "python.exe"
+    if not python_exe.is_file():
+        python_exe = Path(sys.executable).resolve()
+        python_root = python_exe.parent
+    package_root = Path(sysconfig.get_paths()["purelib"]).resolve()
+    core_root = Path(__file__).resolve().parents[2]
+    command = ("$env:PATH='C:\\AtlasRuntime;' + $env:PATH; & 'C:\\AtlasRuntime\\" + python_exe.name +
+               "' -I 'C:\\AtlasCore\\scripts\\isolated_preview_worker.py' 'C:\\AtlasInput\\input" + suffix +
+               "' '" + suffix + "' '' 'C:\\AtlasOutput\\result.json' 'C:\\AtlasPackages'; exit $LASTEXITCODE")
+    # XML escaping prevents a local workspace path from changing the sandbox command.
+    wsb = job_root / "preview.wsb"
+    wsb.write_text(
+        "<Configuration><Networking>Disable</Networking><MappedFolders>" +
+        "<MappedFolder><HostFolder>" + xml_escape(str(input_root)) + "</HostFolder><SandboxFolder>C:\\AtlasInput</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>" +
+        "<MappedFolder><HostFolder>" + xml_escape(str(output_root)) + "</HostFolder><SandboxFolder>C:\\AtlasOutput</SandboxFolder></MappedFolder>" +
+        "<MappedFolder><HostFolder>" + xml_escape(str(python_root)) + "</HostFolder><SandboxFolder>C:\\AtlasRuntime</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>" +
+        "<MappedFolder><HostFolder>" + xml_escape(str(package_root)) + "</HostFolder><SandboxFolder>C:\\AtlasPackages</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>" +
+        "<MappedFolder><HostFolder>" + xml_escape(str(core_root)) + "</HostFolder><SandboxFolder>C:\\AtlasCore</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>" +
+        "</MappedFolders><LogonCommand><Command>powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command &quot;" +
+        xml_escape(command) + "&quot;</Command></LogonCommand></Configuration>", encoding="utf-8",
+    )
+    try:
+        subprocess.Popen([sandbox_exe, str(wsb)], cwd=str(job_root), env={k: os.environ[k] for k in ("SYSTEMROOT", "WINDIR", "PATH") if os.environ.get(k)},
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as exc:
+        shutil.rmtree(job_root, ignore_errors=True)
+        raise HTTPException(status_code=503, detail=f"无法启动 Windows Sandbox：{exc}") from exc
+    _sandbox_previews[job_id] = (job_root, asyncio.get_running_loop().time())
+    return {"id": job_id, "status": "running", "message": "Windows Sandbox 已启动；渲染输出会在虚拟机内完成后回传。"}
+
+
+@router.get("/api/workspace/sandbox/preview/{job_id}")
+async def get_workspace_sandbox_preview(job_id: str) -> dict[str, Any]:
+    record = _sandbox_previews.get(job_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Windows Sandbox preview job not found")
+    job_root, started = record
+    if asyncio.get_running_loop().time() - started > 180:
+        _sandbox_previews.pop(job_id, None); shutil.rmtree(job_root, ignore_errors=True)
+        raise HTTPException(status_code=504, detail="Windows Sandbox preview timed out; isolated child-process preview remains available")
+    output = job_root / "output" / "result.json"
+    if not output.is_file():
+        return {"id": job_id, "status": "running"}
+    try:
+        result = json.loads(output.read_text(encoding="utf-8"))
+        if result.get("error"):
+            raise HTTPException(status_code=422, detail=str(result["error"]))
+        return {"id": job_id, "status": "complete", "html": result["html"], "mode": result.get("mode", "sandbox")}
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=f"Windows Sandbox returned an unreadable result: {exc}") from exc
+    finally:
+        _sandbox_previews.pop(job_id, None); shutil.rmtree(job_root, ignore_errors=True)
 
 
 def _history_checkpoint_manifest(store: Any, checkpoint_id: str) -> tuple[dict[str, Any], Path]:

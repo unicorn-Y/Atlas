@@ -138,8 +138,6 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
   const [showVersionDiff, setShowVersionDiff] = useState(false);
   const [lightbox, setLightbox] = useState(false);
   const [imageZoom, setImageZoom] = useState(100);
-  const [pdfPage, setPdfPage] = useState(1);
-  const [pdfZoom, setPdfZoom] = useState(100);
   const [pdfError, setPdfError] = useState('');
   const [sheets, setSheets] = useState<WorkbookSheet[]>([]);
   const [sheetIndex, setSheetIndex] = useState(0);
@@ -147,6 +145,10 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
   const [workbookLoading, setWorkbookLoading] = useState(false);
   const [slides, setSlides] = useState<PresentationSlide[]>([]);
   const [presentationError, setPresentationError] = useState('');
+  const [sandboxStatus, setSandboxStatus] = useState('');
+  const [sandboxEnabled, setSandboxEnabled] = useState(false);
+  const [sandboxBusy, setSandboxBusy] = useState(false);
+  const [sandboxResult, setSandboxResult] = useState('');
   const [presentationLoading, setPresentationLoading] = useState(false);
   // C6R: 订阅内部「打开文件」请求；定位行列并滚动到对应代码位置。
   const openRequest = useAtlasStore((state) => state.fileOpenRequest);
@@ -176,7 +178,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
   useEffect(() => {
     setExpanded([]); setSelected(''); setFile(null); setDraft(''); setEditing(false); setSaveConflict(false); setTabs([]); setRecentlyClosed([]); setShowClosedTabs(false); setPreviewHistory([]); setPreviewHistoryIndex(-1);
     setFileQuery(''); setSearchResults([]); setSearchError('');
-    setContextMenu(null); setLightbox(false); setPdfPage(1); setPdfZoom(100); setPdfError('');
+    setContextMenu(null); setLightbox(false); setPdfError('');
   }, [workspace]);
   // 手动浏览选中（树节点、关闭）时重置显示方式/版本/行定位；「打开文件」请求不经过这里，
   // 否则它触发的 selected 变化会在下一个 commit 把刚设置的定位清掉。
@@ -194,7 +196,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
       }
     }
     setFile((current) => current?.path === path ? current : null);
-    setMode('preview'); setVersion(null); setShowVersionDiff(false); setHighlightLine(null); setHighlightColumn(null); setPdfPage(1); setPdfZoom(100); setPdfError(''); setLightbox(false); setError('');
+    setMode('preview'); setVersion(null); setShowVersionDiff(false); setHighlightLine(null); setHighlightColumn(null); setPdfError(''); setLightbox(false); setError('');
   };
   const movePreviewHistory = (direction: -1 | 1) => {
     const nextIndex = previewHistoryIndex + direction;
@@ -354,6 +356,36 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     contextMenuRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
     return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', keydown); };
   }, [contextMenu]);
+
+  useEffect(() => {
+    let stale = false;
+    fetch(`${backend.apiBaseUrl}/api/workspace/sandbox/status`).then((response) => response.json()).then((result: { message?: string; enabled?: boolean }) => {
+      if (!stale) { setSandboxStatus(result.message ?? '无法读取 Windows Sandbox 状态。'); setSandboxEnabled(Boolean(result.enabled)); }
+    }).catch(() => { if (!stale) setSandboxStatus('无法读取 Windows Sandbox 状态。'); });
+    return () => { stale = true; };
+  }, []);
+
+  const runSandboxPreview = async () => {
+    if (!file || !sandboxEnabled) return;
+    setSandboxBusy(true); setError('');
+    try {
+      const started = await fetch(`${backend.apiBaseUrl}/api/workspace/sandbox/preview`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ root: workspace, path: file.path }),
+      });
+      const job = await started.json() as { id?: string; detail?: string };
+      if (!started.ok || !job.id) throw new Error(job.detail ?? '无法启动 Windows Sandbox。');
+      const deadline = Date.now() + 180_000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        const response = await fetch(`${backend.apiBaseUrl}/api/workspace/sandbox/preview/${encodeURIComponent(job.id)}`);
+        const result = await response.json() as { status?: string; html?: string; detail?: string };
+        if (!response.ok) throw new Error(result.detail ?? 'Windows Sandbox 渲染失败。');
+        if (result.status === 'complete' && result.html) { setSandboxResult(result.html); return; }
+      }
+      throw new Error('Windows Sandbox 渲染超时；可继续使用独立子进程预览。');
+    } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
+    finally { setSandboxBusy(false); }
+  };
 
   useEffect(() => {
     if (!workspace || !selected || !XLSX.test(selected) || mode !== 'preview' || version) {
@@ -561,6 +593,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
         {previewOnly && <><button type="button" aria-label="返回上一个预览文件" title="上一个文件" disabled={previewHistoryIndex <= 0} onClick={() => movePreviewHistory(-1)} className="rounded px-1.5 py-1 text-fg-3 hover:bg-hover disabled:opacity-40"><ChevronLeft size={14} /></button><button type="button" aria-label="前进到下一个预览文件" title="下一个文件" disabled={previewHistoryIndex >= previewHistory.length - 1} onClick={() => movePreviewHistory(1)} className="rounded px-1.5 py-1 text-fg-3 hover:bg-hover disabled:opacity-40"><ChevronRight size={14} /></button></>}
         <File size={13} className="shrink-0 text-fg-3" /><code className="min-w-0 flex-1 truncate font-mono">{file.path}</code>
         {previewOnly && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('atlas:reveal-file-in-tree', { detail: { path: file.path } }))} className="shrink-0 text-[11.5px] text-brand hover:underline">在文件树中定位</button>}
+        {sandboxEnabled && OFFICE.test(file.path) || (sandboxEnabled && PDF.test(file.path)) ? <button type="button" disabled={sandboxBusy} onClick={() => void runSandboxPreview()} className="shrink-0 text-[11.5px] text-brand hover:underline disabled:opacity-50">{sandboxBusy ? 'Windows Sandbox 渲染中…' : '虚拟机隔离预览'}</button> : null}
         <FileHistoryMenu workspace={workspace} path={file.path} onView={setVersion} onRestore={(item) => void restoreHistoryVersion(item.id)} onError={setError} />
         {canPreview(file.path) && <div className="flex shrink-0 rounded-md bg-sunken p-0.5" role="group" aria-label="显示方式">
           {(['preview', 'code'] as const).map((value) => <button key={value} onClick={() => setMode(value)} aria-pressed={mode === value} title={value === 'preview' ? '预览' : '源码'}
@@ -626,33 +659,22 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
                       </section>)}</div>}
                 </div>
                 // Non-interactive office formats are rendered in a sandboxed document.
-                : <iframe title={`预览 ${file.path}`} src={backend.officePreviewUrl(workspace, file.path)} onError={() => setError('办公文档预览加载失败；可以用外部程序打开。')} sandbox="" className="min-h-0 w-full flex-1 border-0 bg-white" />
+                : <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  <p role="status" className="m-0 shrink-0 border-b border-line bg-sunken px-3 py-1.5 text-[11px] text-fg-3">独立子进程隔离渲染 · 禁用宏 · 临时文件会在结束后清理{sandboxStatus && <> · {sandboxStatus}</>}</p>
+                  <iframe title={`隔离预览 ${file.path}`} src={backend.officePreviewUrl(workspace, file.path)} onError={() => setError('隔离预览失败；可查看错误提示中的纯文本降级信息，或用外部程序打开。')} sandbox="" className="min-h-0 w-full flex-1 border-0 bg-white" />
+                </div>
           : PDF.test(file.path) && !version
             ? <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="flex shrink-0 items-center gap-1.5 border-b border-line px-2 py-1" role="group" aria-label="PDF 页面与缩放">
-                <button type="button" aria-label="上一页" title="上一页" disabled={pdfPage <= 1} onClick={() => { setPdfPage((page) => Math.max(1, page - 1)); setPdfError(''); }}
-                  className="grid size-7 place-items-center rounded-md text-fg-2 hover:bg-hover disabled:opacity-40"><ChevronLeft size={14} /></button>
-                <label className="flex items-center gap-1 text-[11.5px] text-fg-3">页码
-                  <input type="number" min={1} value={pdfPage} onChange={(event) => { setPdfPage(Math.max(1, Number(event.target.value) || 1)); setPdfError(''); }}
-                    aria-label="PDF 页码" className="w-14 rounded border border-line bg-sunken px-1.5 py-1 text-center text-fg" />
-                </label>
-                <button type="button" aria-label="下一页" title="下一页" onClick={() => { setPdfPage((page) => page + 1); setPdfError(''); }}
-                  className="grid size-7 place-items-center rounded-md text-fg-2 hover:bg-hover"><ChevronRight size={14} /></button>
-                <span className="mx-1 h-4 border-l border-line" />
-                <button type="button" aria-label="缩小 PDF" title="缩小" disabled={pdfZoom <= 50} onClick={() => setPdfZoom((zoom) => Math.max(50, zoom - 25))}
-                  className="grid size-7 place-items-center rounded-md text-fg-2 hover:bg-hover disabled:opacity-40"><ZoomOut size={14} /></button>
-                <span aria-live="polite" className="min-w-10 text-center text-[11.5px] text-fg-3">{pdfZoom}%</span>
-                <button type="button" aria-label="放大 PDF" title="放大" disabled={pdfZoom >= 300} onClick={() => setPdfZoom((zoom) => Math.min(300, zoom + 25))}
-                  className="grid size-7 place-items-center rounded-md text-fg-2 hover:bg-hover disabled:opacity-40"><ZoomIn size={14} /></button>
-                <span className="min-w-0 flex-1" />
+              <div className="flex shrink-0 items-center gap-1.5 border-b border-line px-3 py-1.5">
+                <span className="min-w-0 flex-1 text-[11px] text-fg-3">独立子进程隔离渲染 · 禁用宏 · 临时文件会在结束后清理{sandboxStatus && <> · {sandboxStatus}</>}</span>
                 <button type="button" onClick={() => downloadFile(file.path)} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] text-fg-2 hover:bg-hover"><Download size={12} />下载</button>
               </div>
               {pdfError && <div role="alert" className="flex items-center gap-2 px-3 py-2 text-[12px] text-danger">{pdfError}
                 <button type="button" onClick={() => void openExternal(file.path)} className="shrink-0 underline">用外部程序打开</button>
               </div>}
-              <iframe key={`${file.path}:${pdfPage}:${pdfZoom}`} title={`PDF 预览 ${file.path}，第 ${pdfPage} 页`} src={`${backend.rawFileUrl(workspace, file.path)}#page=${pdfPage}&zoom=${pdfZoom}`}
-                onError={() => setPdfError('内置 PDF 查看器无法打开此文件。')}
-                onLoad={() => setPdfError('')} sandbox="allow-scripts" className="min-h-0 w-full flex-1 border-0 bg-white" />
+              <iframe key={file.path} title={`隔离 PDF 预览 ${file.path}`} src={backend.officePreviewUrl(workspace, file.path)}
+                onError={() => setPdfError('隔离 PDF 渲染失败；服务会尝试纯文本提取作为降级。')}
+                onLoad={() => setPdfError('')} sandbox="" className="min-h-0 w-full flex-1 border-0 bg-white" />
             </div>
           : IMAGE.test(file.path)
             ? <button type="button" onClick={() => { setImageZoom(100); setLightbox(true); }} aria-label={`放大预览图片 ${file.path}`}
@@ -722,6 +744,10 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
           style={{ transform: `scale(${imageZoom / 100})`, transformOrigin: 'center center' }} className="max-h-[82vh] max-w-[90vw] object-contain" />
       </div>
       <p className="m-0 shrink-0 text-center text-[11px] text-white/70">按 Esc 关闭；可用缩放按钮放大和缩小。</p>
+    </div>}
+    {sandboxResult && <div role="dialog" aria-modal="true" aria-label="Windows Sandbox 隔离预览结果" className="fixed inset-6 z-[95] flex flex-col overflow-hidden rounded-xl border border-line bg-overlay shadow-2xl">
+      <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2"><b className="min-w-0 flex-1 truncate text-[12.5px]">Windows Sandbox · {file?.path}</b><button type="button" onClick={() => setSandboxResult('')} className="rounded px-2 py-1 text-[12px] hover:bg-hover">关闭</button></div>
+      <iframe title="Windows Sandbox 渲染结果" sandbox="" srcDoc={sandboxResult} className="min-h-0 flex-1 border-0 bg-white" />
     </div>}
   </div>;
 }
