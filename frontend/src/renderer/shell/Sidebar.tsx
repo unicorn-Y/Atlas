@@ -129,7 +129,7 @@ interface SidebarProps {
   queued?: Record<string, number>;
   onRename: (id: string, title: string) => void; onDelete: (id: string) => void;
   onTogglePinned: (id: string) => void; onToggleArchived: (id: string) => void;
-  onExport: (id: string, format: 'json' | 'md') => void; onDuplicate: (id: string) => void;
+  onExport: (id: string, format: 'json' | 'jsonl' | 'html' | 'md', open?: boolean) => void; onDuplicate: (id: string) => void;
   onOpenBeside?: (id: string) => void;
   onOpenInWindow?: (id: string) => void;
   onSetUnread?: (id: string, unread: boolean) => void;
@@ -731,6 +731,9 @@ export default function Sidebar(props: SidebarProps) {
           <MenuItem onSelect={() => props.onDuplicate(conversation.id)}><CopyPlus />复制一份</MenuItem>
           <MenuItem onSelect={() => props.onExport(conversation.id, 'md')}><Download />导出为 Markdown</MenuItem>
           <MenuItem onSelect={() => props.onExport(conversation.id, 'json')}><Download />导出为 JSON</MenuItem>
+          <MenuItem onSelect={() => props.onExport(conversation.id, 'jsonl')}><Download />导出为 JSONL</MenuItem>
+          <MenuItem onSelect={() => props.onExport(conversation.id, 'html')}><Download />导出为 HTML</MenuItem>
+          <MenuItem onSelect={() => props.onExport(conversation.id, 'jsonl', true)}><Download />导出并用编辑器打开（JSONL）</MenuItem>
           <MenuSeparator />
           <MenuItem onSelect={(event) => {
             if (confirmDelete === key) { props.onDelete(conversation.id); setConfirmDelete(''); return; }

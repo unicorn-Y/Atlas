@@ -179,7 +179,7 @@ interface AtlasState extends PersistentSlice {
   togglePinned: (id: string) => void;
   toggleArchived: (id: string) => void;
   setConversationUnread: (id: string, unread: boolean) => void;
-  exportConversation: (id: string, format?: 'json' | 'md') => Promise<void>;
+  exportConversation: (id: string, format?: 'json' | 'jsonl' | 'html' | 'md', open?: boolean) => Promise<void>;
   setWorkspace: (conversationId: string, workspace: string | null) => void;
   editMessage: (messageId: string, content: string) => Promise<void>;
   /** Drop a message and everything after it; with `files`, also undo what those runs changed. Returns the rewind to redo. */
@@ -991,7 +991,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         ? state.unread.includes(id) ? state.unread : [...state.unread, id]
         : state.unread.filter((item) => item !== id),
     })),
-    exportConversation: async (id, format = 'json') => {
+    exportConversation: async (id, format = 'json', open = false) => {
       const conversation = get().conversations.find((item) => item.id === id);
       try {
         // 导出要完整历史：按 before_id 一页页往前翻到头（后端单页上限 1000）。
@@ -1006,14 +1006,27 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
         }
         const messages = batches.reverse().flat();
         const safeTitle = (conversation?.title ?? id).replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 60);
+        let payload: string;
+        let mime: string;
+        let extension = format;
         if (format === 'md') {
           const title = conversation?.title ?? '对话';
-          const body = messages.filter((message) => message.role === 'user' || message.role === 'assistant')
-            .map((message) => `## ${message.role === 'user' ? '我' : 'Atlas'}\n\n${message.content}`).join('\n\n');
-          download(`atlas-${safeTitle}.md`, `# ${title}\n\n> 从 Atlas 导出于 ${new Date().toLocaleString()}\n\n${body}\n`, 'text/markdown');
-          return;
+          const body = messages.map((message) => `## ${message.role}\n\n${message.content}${message.metadata ? `\n\n\`\`\`json\n${JSON.stringify(message.metadata, null, 2)}\n\`\`\`` : ''}`).join('\n\n');
+          payload = `# ${title}\n\n> Atlas transcript schema v1 · ${new Date().toISOString()}\n\n${body}\n`; mime = 'text/markdown';
+        } else if (format === 'jsonl') {
+          extension = 'jsonl'; mime = 'application/x-ndjson';
+          payload = [{ type: 'transcript.start', schema: 'atlas.transcript.v1', exported_at: new Date().toISOString(), conversation: conversation ?? { id } },
+            ...messages.map((message) => ({ type: 'message', ...message })),
+            { type: 'transcript.end', message_count: messages.length }].map((item) => JSON.stringify(item)).join('\n') + '\n';
+        } else if (format === 'html') {
+          extension = 'html'; mime = 'text/html';
+          const escape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
+          payload = `<!doctype html><meta charset="utf-8"><title>${escape(conversation?.title ?? id)}</title><style>body{font:15px/1.6 system-ui;max-width:900px;margin:40px auto;padding:0 20px;color:#222}article{border-bottom:1px solid #ddd;padding:16px 0}pre{white-space:pre-wrap;background:#f5f5f5;padding:12px}</style><h1>${escape(conversation?.title ?? 'Atlas 会话')}</h1><p>Atlas transcript schema v1 · ${new Date().toISOString()}</p>${messages.map((message) => `<article><b>${escape(message.role)}</b><pre>${escape(message.content)}</pre>${message.metadata ? `<details><summary>工具调用与事件元数据</summary><pre>${escape(JSON.stringify(message.metadata, null, 2))}</pre></details>` : ''}</article>`).join('')}`;
+        } else {
+          extension = 'json'; mime = 'application/json'; payload = JSON.stringify({ schema: 'atlas.transcript.v1', exported_at: new Date().toISOString(), conversation: conversation ?? { id }, messages }, null, 2);
         }
-        downloadJson(`atlas-${safeTitle}.json`, { exported_at: new Date().toISOString(), conversation: conversation ?? { id }, messages });
+        if (open && window.atlasDesktop?.openMessageEditor) await window.atlasDesktop.openMessageEditor(payload);
+        else download(`atlas-${safeTitle}.${extension}`, payload, mime);
       } catch (error) { set(errorPatch(error, '导出失败')); }
     },
     // The backend remembers the directory once a run uses it; until then it rides along with run.start.
@@ -1337,10 +1350,6 @@ function dispatchQueue(conversationId: string) {
   if (!next || get().queuePaused[conversationId] || activeRunFor(conversationId)) return;
   set((state) => ({ queue: { ...state.queue, [conversationId]: rest } }));
   void startRun(conversationId, next);
-}
-
-function downloadJson(filename: string, value: unknown) {
-  download(filename, JSON.stringify(value, null, 2), 'application/json');
 }
 
 function download(filename: string, text: string, type: string) {
