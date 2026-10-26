@@ -27,6 +27,14 @@ from atlas.scheduler import ScheduledTask
 router = APIRouter()
 
 
+async def google_connector_search(source: str, query: str) -> dict[str, Any]:
+    """Run the concrete read-only Google adapter used by the model-facing tool."""
+    from atlas.api.cloud_documents_router import google_items
+    if source not in {"drive", "gmail"} or len(query) > 500:
+        raise ValueError("Google connector 参数无效。")
+    return await google_items(source=source, q=query[:200])
+
+
 @router.get("/api/connectors")
 async def list_connectors() -> dict[str, Any]:
     """Return the user-facing connector catalog with live local authorization state."""

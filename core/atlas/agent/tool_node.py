@@ -1622,12 +1622,10 @@ async def execute_tools_node(
                               data, ensure_ascii=False,
                           )}], "is_error": False}
             elif fn_name == "connector_google_search":
-                from atlas.api.cloud_documents_router import google_items
+                from atlas.api.integrations_router import google_connector_search
                 source = str(fn_args.get("source") or "drive")
                 query = str(fn_args.get("query") or "")
-                if source not in {"drive", "gmail"} or len(query) > 500:
-                    raise ValueError("Google connector 参数无效。")
-                data = await google_items(source=source, q=query[:200])
+                data = await google_connector_search(source, query)
                 result = {"data": data, "content": [{"type": "text", "text": json.dumps(data, ensure_ascii=False)}], "is_error": False}
             elif fn_name.startswith("browser_"):
                 if getattr(ctx, "sandbox_enabled", False):
