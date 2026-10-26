@@ -8,7 +8,6 @@ does not schedule or automatically submit anything to Linear.
 
 from __future__ import annotations
 
-import importlib
 import re
 from typing import Any, NoReturn
 
@@ -21,6 +20,7 @@ router = APIRouter(prefix="/api/integrations/linear", tags=["linear"])
 GRAPHQL_ENDPOINT = "https://api.linear.app/graphql"
 KEYRING_SERVICE = "Atlas"
 KEYRING_ACCOUNT = "atlas.integration.linear.api_key"
+SECRET_NAME = "ATLAS_LINEAR_API_KEY"
 REQUEST_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 
 _IDENTITY_TEAMS_QUERY = """
@@ -66,33 +66,40 @@ class LinearAPIError(Exception):
         self.detail = detail
 
 
-def _keyring() -> Any:
-    try:
-        return importlib.import_module("keyring")
-    except ImportError as exc:
-        raise HTTPException(status_code=503, detail="当前 Python 环境没有安装系统凭据库支持。") from exc
-
-
 def _credential_store() -> Any:
+    from atlas import secrets_store
+    value = secrets_store.resolve_secret(SECRET_NAME)
+    if value:
+        return value
+    # One-time migration from the prior dedicated keyring slot.
     try:
-        return _keyring().get_password(KEYRING_SERVICE, KEYRING_ACCOUNT)
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="系统凭据库不可读取。") from exc
+        import keyring
+        legacy = keyring.get_password(KEYRING_SERVICE, KEYRING_ACCOUNT)
+    except Exception:
+        legacy = None
+    if legacy:
+        secrets_store.set_secret(SECRET_NAME, legacy, "Linear connector API key")
+        return legacy
+    return None
 
 
 def _store_credential(value: str) -> None:
     try:
-        _keyring().set_password(KEYRING_SERVICE, KEYRING_ACCOUNT, value)
+        from atlas import secrets_store
+        secrets_store.set_secret(SECRET_NAME, value, "Linear connector API key")
     except Exception as exc:
         raise HTTPException(status_code=503, detail="系统凭据库写入失败；Linear API key 未保存。") from exc
 
 
 def _delete_credential() -> None:
-    keyring = _keyring()
     try:
-        keyring.delete_password(KEYRING_SERVICE, KEYRING_ACCOUNT)
-    except keyring.errors.PasswordDeleteError:
-        return
+        from atlas import secrets_store
+        secrets_store.delete_secret(SECRET_NAME)
+        try:
+            import keyring
+            keyring.delete_password(KEYRING_SERVICE, KEYRING_ACCOUNT)
+        except Exception:
+            pass
     except Exception as exc:
         raise HTTPException(status_code=503, detail="系统凭据库删除失败。") from exc
 

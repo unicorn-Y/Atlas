@@ -27,6 +27,31 @@ from atlas.scheduler import ScheduledTask
 router = APIRouter()
 
 
+@router.get("/api/connectors")
+async def list_connectors() -> dict[str, Any]:
+    """Return the user-facing connector catalog with live local authorization state."""
+    from atlas.api.cloud_documents_router import google_status
+    google = await google_status()
+    try:
+        from atlas import secrets_store
+        linear_configured = secrets_store.resolve_secret("ATLAS_LINEAR_API_KEY") is not None
+    except Exception:
+        linear_configured = False
+    connectors = [
+        {"id": "google-workspace", "name": "Google Drive 与 Gmail", "version": "1",
+         "description": "本机 OAuth 授权；只读搜索并导入用户选中的内容。",
+         "authorization": "oauth-localhost", "installed": True,
+         "configured": bool(google["configured"]), "connected": bool(google["connected"]),
+         "account": google["account"], "capabilities": ["drive.search", "gmail.search"]},
+        {"id": "linear", "name": "Linear", "version": "1",
+         "description": "本机保存个人 API key；查看团队并管理 issue。",
+         "authorization": "secret-handle", "installed": True,
+         "configured": linear_configured, "connected": linear_configured,
+         "account": None, "capabilities": ["issues.list", "issues.create", "comments.create"]},
+    ]
+    return {"connectors": connectors, "count": len(connectors)}
+
+
 @router.get("/api/busy")
 async def get_busy_status() -> dict[str, Any]:
     from atlas.notifications.busy import status

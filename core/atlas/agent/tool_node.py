@@ -303,7 +303,7 @@ async def execute_tools_node(
                                 "subtask_message",
                                 # X2 computer surface (legacy alias names); observe is read-only.
                                 "computer_window", "computer_mouse", "computer_keyboard",
-                                "computer_clipboard"} | edit_tool_names)
+                                "computer_clipboard", "connector_google_search"} | edit_tool_names)
                     or (fn_name == "local_file" and fn_args.get("action") in {
                         "write", "append", "mkdir", "copy", "move", "delete",
                     })
@@ -1621,6 +1621,14 @@ async def execute_tools_node(
                           "content": [{"type": "text", "text": json.dumps(
                               data, ensure_ascii=False,
                           )}], "is_error": False}
+            elif fn_name == "connector_google_search":
+                from atlas.api.cloud_documents_router import google_items
+                source = str(fn_args.get("source") or "drive")
+                query = str(fn_args.get("query") or "")
+                if source not in {"drive", "gmail"} or len(query) > 500:
+                    raise ValueError("Google connector 参数无效。")
+                data = await google_items(source=source, q=query[:200])
+                result = {"data": data, "content": [{"type": "text", "text": json.dumps(data, ensure_ascii=False)}], "is_error": False}
             elif fn_name.startswith("browser_"):
                 if getattr(ctx, "sandbox_enabled", False):
                     raise PermissionError("Docker 沙箱模式下禁用 Web、浏览器、MCP 和电脑操作工具。")

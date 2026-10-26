@@ -33,6 +33,16 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
     """Assemble model-facing tool names for Atlas runtime telemetry."""
     tools = agent._mcp.get_tools_for_llm() if agent._mcp else []
     tools.extend([
+        {"type": "function", "function": {
+            "name": "connector_google_search",
+            "description": "Search the user's locally authorized Google Drive or Gmail connector. This external connector call is shown in Atlas's existing tool permission review.",
+            "parameters": {"type": "object", "properties": {
+                "source": {"type": "string", "enum": ["drive", "gmail"]},
+                "query": {"type": "string", "maxLength": 500},
+            }, "required": ["source", "query"], "additionalProperties": False},
+        }},
+    ])
+    tools.extend([
         {"type": "function", "function": {"name": "ide_get_selection",
          "description": "Read the current VS Code file, selection, and workspace from the connected IDE.",
          "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}},
