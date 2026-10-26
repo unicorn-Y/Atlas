@@ -105,10 +105,12 @@ class OriginGuard:
         # narrowly scoped routes validate a one-time code/proof or paired bearer.
         device_pairing_protocol = scope["type"] == "http" and (
             (method == "GET" and path == "/api/devices/pairing/enroll")
+            or (method == "GET" and path == "/api/devices/node-client.js")
             or
             (method == "POST" and path == "/api/devices/pairing/claim")
             or (method == "GET" and re.fullmatch(r"/api/devices/pairing/claim/[0-9a-f]{32}", path) is not None)
             or (method == "GET" and re.fullmatch(r"/api/devices/node/[A-Za-z0-9][A-Za-z0-9._-]{0,63}/commands", path) is not None)
+            or (method == "PUT" and re.fullmatch(r"/api/devices/node/[A-Za-z0-9][A-Za-z0-9._-]{0,63}/capabilities", path) is not None)
             or (method == "POST" and re.fullmatch(r"/api/devices/node/[A-Za-z0-9][A-Za-z0-9._-]{0,63}/presence", path) is not None)
             or (method == "POST" and re.fullmatch(r"/api/devices/node/[A-Za-z0-9][A-Za-z0-9._-]{0,63}/commands/[0-9a-f]{32}/result", path) is not None)
         )

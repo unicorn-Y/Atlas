@@ -172,6 +172,12 @@ def bind_x2_tools(
 
         x2computer.register_computer_tools(make_register(x2computer.call_tool))
         x2browser.register_browser_tools(make_register(x2browser.call_tool))
+        from atlas.tools.nodes import register_node_tools
+
+        register_node_tools(
+            lambda **kwargs: register(**kwargs), register_toolset_name, resolve, toolset,
+        )
+        names.extend(["node_status", "node_notify", "node_camera", "node_location", "node_media"])
         _X2_TOOL_NAMES[:] = names
         _REGISTERED = True
     return names

@@ -47,8 +47,8 @@ from typing import Annotated, Any
 from urllib.parse import quote, urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
-from starlette.responses import HTMLResponse, StreamingResponse
+from pydantic import BaseModel, Field, model_validator
+from starlette.responses import FileResponse, HTMLResponse, StreamingResponse
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
@@ -77,6 +77,13 @@ _registry: DeviceRegistry | None = None
 _takeover: TakeoverStateMachine | None = None
 _node_capability_lock = threading.RLock()
 _NODE_CAPABILITY_ID = re.compile(r"^[a-z][a-z0-9_.:-]{0,63}$")
+_NODE_COMMAND_CAPABILITIES = {
+    "notification": "notifications.send",
+    "camera": "camera.capture",
+    "location": "location.read",
+    "media": "media.control",
+    "status": "device.status",
+}
 _transfer_stores: dict[str, FileTransferStore] = {}
 _transfer_store_lock = threading.Lock()
 _pairing_stores: dict[str, PairingStore] = {}
@@ -239,11 +246,12 @@ def _node_entry_state(entry: Any, device: dict[str, Any]) -> dict[str, Any]:
         "approved": approved,
         "revoked": revoked,
         "updated_at": entry.get("updated_at"),
+        "execution_available": bool(device.get("trusted") and device.get("online") and approved),
     }
 
 
 def _require_node_device(registry: DeviceRegistry, device_id: str, *, mutable: bool) -> dict[str, Any]:
-    device = registry.get(device_id, project=False)
+    device = registry.get(device_id, project=True)
     if device is None:
         raise HTTPException(status_code=404, detail=f"没有 id 为 {device_id!r} 的设备")
     if mutable and (device_id == SELF_DEVICE_ID or device.get("kind") == "atlas-laptop"):
@@ -268,6 +276,20 @@ def _node_capability_snapshot(registry: DeviceRegistry, device_id: str) -> dict[
         device = _require_node_device(registry, device_id, mutable=False)
         store = _read_node_capability_store(registry)
         return _node_entry_state(store["devices"].get(device_id), device)
+
+
+def _require_device_capability(registry: DeviceRegistry, device_id: str, capability: str) -> dict[str, Any]:
+    device = registry.get(device_id, project=True)
+    if device is None:
+        raise HTTPException(status_code=404, detail="设备不存在")
+    if not device.get("trusted"):
+        raise HTTPException(status_code=403, detail="设备未完成配对")
+    if not device.get("online"):
+        raise HTTPException(status_code=409, detail="设备离线，无法执行节点能力")
+    state = _node_capability_snapshot(registry, device_id)
+    if capability not in state["approved"]:
+        raise HTTPException(status_code=403, detail=f"设备未声明并获批能力：{capability}")
+    return device
 
 
 def _save_node_capability_entry(
@@ -488,6 +510,38 @@ async def declare_node_capabilities(
     return await asyncio.to_thread(update)
 
 
+@router.put("/node/{device_id}/capabilities")
+async def declare_paired_node_capabilities(
+    device_id: str, req: NodeCapabilityDeclaration, request: Request,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    """Let a paired node publish the capabilities its local runtime can serve."""
+    registry = _registry_for(services)
+    _require_paired_device(request, _pairing_store(registry), device_id)
+    names = _validated_capability_names(req.capabilities)
+
+    def update() -> dict[str, Any]:
+        with _node_capability_lock:
+            device = _require_node_device(registry, device_id, mutable=True)
+            store = _read_node_capability_store(registry)
+            previous = _node_entry_state(store["devices"].get(device_id), device)
+            approved = sorted(set(previous["approved"]) & set(names))
+            revoked = sorted(set(previous["revoked"]) & set(names))
+            state = {
+                **previous, "declared": names, "approved": approved, "revoked": revoked,
+                "pending": sorted(set(names) - set(approved) - set(revoked)),
+            }
+            if set(previous["approved"]) - set(approved):
+                try:
+                    registry.bump_generation(device_id, reason="paired node withdrew an approved capability")
+                except DeviceError as exc:
+                    raise _device_error(exc) from exc
+                device = _require_node_device(registry, device_id, mutable=True)
+            return _save_node_capability_entry(registry, device, state)
+
+    return await asyncio.to_thread(update)
+
+
 @router.post("/{device_id}/node-capabilities/{capability}/approve", dependencies=[Depends(_require_trusted_origin)])
 async def approve_node_capability(
     device_id: str, capability: str,
@@ -573,11 +627,19 @@ class PairingDecision(BaseModel):
 
 
 class DeviceCommandRequest(BaseModel):
-    prompt: str = Field(min_length=1, max_length=8000)
+    prompt: str = Field(default="", max_length=8000)
+    kind: str = Field(default="prompt", max_length=32)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def prompt_commands_must_have_text(self) -> "DeviceCommandRequest":
+        if self.kind == "prompt" and not self.prompt.strip():
+            raise ValueError("prompt 指令不能为空")
+        return self
 
 
 class DeviceCommandResult(BaseModel):
-    result: str = Field(max_length=12000)
+    result: str = Field(max_length=8_000_000)
 
 
 def _bearer(request: Request) -> str:
@@ -616,11 +678,30 @@ async def pairing_enrollment_page(challenge_id: str = Query(min_length=32, max_l
 </style><main><section><h1>连接到 Atlas</h1><p>输入设备名称并提交配对申请。批准后，这个浏览器会在本机保存设备凭据并接收发给它的指令。</p><form id="pairForm"><label>设备标识<input id="deviceId" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,63}" autocomplete="username" placeholder="例如 phone-kitchen"></label><label>设备名称<input id="deviceName" required maxlength="120" placeholder="我的手机"></label><label>配对码<input id="pairCode" required minlength="8" maxlength="8" inputmode="numeric" autocomplete="one-time-code"></label><button>发送配对申请</button></form><div id="status" role="status"></div><div id="commands" class="hidden"><h2>设备收件箱</h2><div id="commandList"></div><button id="refresh" class="secondary" type="button">刷新指令</button><button id="disconnect" class="secondary" type="button">在此浏览器撤销登录</button></div><footer>设备凭据只保存在这个浏览器的本地存储；撤销设备配对后凭据立即失效。</footer></section></main><script>
 (()=>{const q=new URLSearchParams(location.search), challenge=q.get('challenge_id')||'', code=new URLSearchParams(location.hash.slice(1)).get('code')||'', $=id=>document.getElementById(id), status=$('status'), form=$('pairForm'), commands=$('commands'), headers=()=>({'Authorization':'Bearer '+localStorage.getItem('atlas-device-token')}); $('pairCode').value=code; $('deviceId').value=localStorage.getItem('atlas-device-id')||''; $('deviceName').value=localStorage.getItem('atlas-device-name')||''; let timer=0, seen=new Set(); const api=async(path,options={})=>{const response=await fetch(path,{...options,headers:{...(options.headers||{}),...(options.auth?headers():{})}});const body=await response.json().catch(()=>({detail:'Server returned an invalid response'}));if(!response.ok)throw new Error(body.detail||('HTTP '+response.status));return body}; const render=items=>{for(const item of items){if(seen.has(item.id))continue;seen.add(item.id);const article=document.createElement('article');article.className='row';const prompt=document.createElement('pre');prompt.textContent=item.prompt;const area=document.createElement('textarea');area.rows=3;area.placeholder='执行结果';const send=document.createElement('button');send.textContent='提交结果';send.onclick=async()=>{send.disabled=true;try{await api('/api/devices/node/'+encodeURIComponent(localStorage.getItem('atlas-device-id'))+'/commands/'+encodeURIComponent(item.id)+'/result',{method:'POST',auth:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({result:area.value})});article.remove();status.textContent='结果已送回 Atlas。'}catch(error){status.textContent=String(error);send.disabled=false}};article.append(prompt,area,send);$('commandList').prepend(article)}}; const poll=async()=>{try{await api('/api/devices/node/'+encodeURIComponent(localStorage.getItem('atlas-device-id'))+'/presence',{method:'POST',auth:true});const result=await api('/api/devices/node/'+encodeURIComponent(localStorage.getItem('atlas-device-id'))+'/commands',{auth:true});render(result.commands)}catch(error){status.textContent=String(error)}}; const start=()=>{form.classList.add('hidden');commands.classList.remove('hidden');status.textContent='已配对；此页会定时检查指令。';void poll();timer=window.setInterval(()=>void poll(),5000)}; const saved=localStorage.getItem('atlas-device-token'),savedId=localStorage.getItem('atlas-device-id');if(saved&&savedId)start();form.addEventListener('submit',async event=>{event.preventDefault();status.textContent='正在发送申请…';try{const result=await api('/api/devices/pairing/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({challenge_id:challenge,code:$('pairCode').value.trim(),device_id:$('deviceId').value.trim(),display_name:$('deviceName').value.trim(),os:navigator.userAgent.slice(0,120)})});status.textContent='等待本机管理员批准…';const deadline=Date.now()+600000;while(Date.now()<deadline){await new Promise(resolve=>setTimeout(resolve,2000));const state=await api('/api/devices/pairing/claim/'+encodeURIComponent(result.request_id)+'?proof='+encodeURIComponent(result.proof));if(state.credential){localStorage.setItem('atlas-device-token',state.credential);localStorage.setItem('atlas-device-id',state.device_id);localStorage.setItem('atlas-device-name',$('deviceName').value.trim());history.replaceState(null,'',location.pathname);start();return}if(['rejected','expired'].includes(state.status)){throw new Error('配对申请已'+state.status)}}throw new Error('配对申请超时，请重新生成二维码')}catch(error){status.textContent=String(error)}});$('refresh').onclick=()=>void poll();$('disconnect').onclick=()=>{clearInterval(timer);localStorage.removeItem('atlas-device-token');localStorage.removeItem('atlas-device-id');localStorage.removeItem('atlas-device-name');location.reload()}})();
 </script></html>'''
+    page = page.replace('</section></main><script>\n', '</section></main><script src="/api/devices/node-client.js"></script><script>\n', 1)
+    page = page.replace(
+        "const render=items=>{for(const item of items){if(seen.has(item.id))continue;",
+        "const render=items=>{for(const item of items){if(item.prompt.startsWith('{')){try{const task=JSON.parse(item.prompt);if(task.kind&&task.kind!=='prompt'){window.dispatchEvent(new CustomEvent('atlas-node-command',{detail:{item,task}}));continue}}catch{}}if(seen.has(item.id))continue;",
+        1,
+    )
+    page = page.replace(
+        "const start=()=>{form.classList.add('hidden');commands.classList.remove('hidden');status.textContent='已配对；此页会定时检查指令。';void poll();",
+        "const start=()=>{void api('/api/devices/node/'+encodeURIComponent(localStorage.getItem('atlas-device-id'))+'/capabilities',{method:'PUT',auth:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({capabilities:window.atlasNodeCapabilities||['device.status']})}).catch(error=>{status.textContent='能力声明未能同步：'+String(error)});form.classList.add('hidden');commands.classList.remove('hidden');status.textContent='已配对；此页会定时检查指令。';void poll();",
+        1,
+    )
     return HTMLResponse(page, headers={
         "Cache-Control": "no-store",
-        "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        "Content-Security-Policy": "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
         "X-Content-Type-Options": "nosniff",
     })
+
+
+@router.get("/node-client.js", include_in_schema=False)
+async def paired_node_client_script() -> FileResponse:
+    """Serve the browser capability runtime used by paired mobile/web nodes."""
+    from pathlib import Path
+
+    return FileResponse(Path(__file__).parents[1] / "devices" / "node_client.js", media_type="text/javascript")
 
 
 @router.post("/pairing/claim")
@@ -730,7 +811,13 @@ async def create_device_command(device_id: str, req: DeviceCommandRequest,
     pairing = _pairing_store(registry)
     if not await asyncio.to_thread(pairing.has_credential, device_id):
         raise HTTPException(status_code=409, detail="设备没有有效的安全配对凭据")
-    return await asyncio.to_thread(pairing.create_command, device_id, req.prompt)
+    if req.kind != "prompt":
+        capability = _NODE_COMMAND_CAPABILITIES.get(req.kind)
+        if capability is None:
+            raise HTTPException(status_code=422, detail="不支持的节点能力命令")
+        _require_device_capability(registry, device_id, capability)
+    payload = json.dumps({"kind": req.kind, "arguments": req.arguments}, ensure_ascii=False)
+    return await asyncio.to_thread(pairing.create_command, device_id, req.prompt or payload)
 
 
 @router.get("/node/{device_id}/commands")

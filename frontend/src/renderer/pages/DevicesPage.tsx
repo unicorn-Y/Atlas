@@ -16,7 +16,7 @@ interface NodeCapabilityState {
   revoked: string[];
   updated_at?: string | null;
   generation: number;
-  execution_available: false;
+  execution_available: boolean;
 }
 interface FileTransferRow { id: string; source_device: string; target_device: string; filename: string; expected_size: number; received_size: number; state: string; expected_sha256: string; expires_at: string; events: Array<{ event: string; actor_device: string; created_at: string }> }
 interface PairingChallenge { challenge_id: string; code: string; expires_at: number; qr_payload: string }
@@ -288,7 +288,7 @@ export default function DevicesPage({ onToast }: { onToast: (text: string) => vo
 
   return <div className="screen page"><div className="page-inner">
     <header className="page-head">
-      <div><h1>设备</h1><p>管理本机和可信配对设备；远程设备可按已批准能力接收文件传输，其他远程执行能力仍未开放。</p></div>
+      <div><h1>设备</h1><p>管理本机和可信配对设备；在线节点经能力声明和逐项批准后，可由 Agent 调用设备状态、通知、相机、定位与媒体控制。</p></div>
       <div className="btns">
         <button className="btn ghost" onClick={() => void loadDevices()} disabled={loading} aria-label="刷新设备">{loading ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />}</button>
       </div>
@@ -354,16 +354,16 @@ export default function DevicesPage({ onToast }: { onToast: (text: string) => vo
               <div className="flex items-center gap-2 text-[12.5px]">
                 <b className="font-medium text-fg">节点能力声明</b>
                 <span className="flex-1" />
-                {nodeStates[device.id] && <span className="text-fg-3">generation {nodeStates[device.id].generation}</span>}
+                {nodeStates[device.id] && <><span className={cn('rounded-full px-2 py-0.5 text-[10.5px]', nodeStates[device.id].execution_available ? 'bg-ok/10 text-ok' : 'bg-sunken text-fg-3')}>{nodeStates[device.id].execution_available ? '能力可调用' : '等待在线与批准'}</span><span className="text-fg-3">generation {nodeStates[device.id].generation}</span></>}
               </div>
-              <p className="mb-2 mt-1 text-[11.5px] leading-[1.5] text-fg-3">能力声明是待审的登记信息；批准 files.send / files.receive 后，可信节点才可参与配对文件传输。其他能力当前仍没有远程节点执行 runtime。</p>
+              <p className="mb-2 mt-1 text-[11.5px] leading-[1.5] text-fg-3">在线配对浏览器节点可执行 <code>device.status</code>、<code>notifications.send</code>、<code>camera.capture</code>、<code>location.read</code> 与 <code>media.control</code>。节点会报告浏览器实际支持的能力；在这里批准后，Agent 工具才可调用。摄像头、定位与通知使用设备浏览器自己的权限提示；相机帧和定位坐标会作为工具结果返回当前 Agent 运行。媒体播放需在节点页面点“启用本机媒体播放”。</p>
               {nodeErrors[device.id]
                 ? <p role="alert" className="m-0 text-[12px] text-danger">无法读取节点能力：{nodeErrors[device.id]}</p>
                 : <>
                   <label className="grid gap-1 text-[11.5px] text-fg-3">每行一个能力标识
                     <textarea rows={2} value={nodeDrafts[device.id] ?? ''}
                       onChange={(event) => setNodeDrafts((current) => ({ ...current, [device.id]: event.target.value }))}
-                      placeholder={'files.send\nfiles.receive'} className={cn(field, 'min-h-14 resize-y font-mono text-[12px]')} />
+                      placeholder={'device.status\nnotifications.send\ncamera.capture\nlocation.read\nmedia.control\nfiles.send\nfiles.receive'} className={cn(field, 'min-h-20 resize-y font-mono text-[12px]')} />
                   </label>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <Button size="sm" variant="secondary" disabled={nodeBusy === device.id}
