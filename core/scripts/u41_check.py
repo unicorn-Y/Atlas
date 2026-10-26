@@ -84,7 +84,11 @@ def main() -> None:
         ("core/scripts/u8_check.py", ["--live"]),
     ]
     for script, extra in regressions:
-        run(f"Regression {Path(script).name} {' '.join(extra)}".strip(), [sys.executable, script, *extra], env=env)
+        timeout = 3600 if Path(script).name == "u40_check.py" else 1800 if script == "core/scripts/u8_check.py" and extra else 900
+        run(
+            f"Regression {Path(script).name} {' '.join(extra)}".strip(),
+            [sys.executable, script, *extra], env=env, timeout=timeout,
+        )
 
     print("U41 CHECK PASS", flush=True)
 
