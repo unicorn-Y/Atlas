@@ -224,6 +224,26 @@ class PluginRuntime:
                 add("error", "invalid_component_declaration", f"{key} 必须是路径、路径数组或命令映射。", key)
             if isinstance(value, list) and any(not isinstance(item, str) for item in value):
                 add("error", "invalid_component_declaration", f"{key} 数组成员必须是路径文本。", key)
+            if key in {"skills", "agents"} and isinstance(value, dict):
+                add("error", "invalid_component_declaration", f"{key} 只接受路径或路径数组。", key)
+        commands_declared = manifest.get("commands")
+        if isinstance(commands_declared, dict):
+            for command_name, spec in commands_declared.items():
+                if not isinstance(command_name, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", command_name):
+                    add("error", "command_name_invalid", f"命令名 {command_name!r} 无效。", "commands")
+                if not isinstance(spec, dict) or not (isinstance(spec.get("source"), str) or isinstance(spec.get("content"), str)):
+                    add("error", "command_definition_invalid", f"命令 {command_name} 必须提供 source 路径或 content 文本。", "commands")
+        hooks_declared = manifest.get("hooks")
+        if hooks_declared is not None:
+            hook_values = hooks_declared if isinstance(hooks_declared, list) else [hooks_declared]
+            if not isinstance(hooks_declared, (str, list, dict)) or any(not isinstance(item, (str, dict)) for item in hook_values):
+                add("error", "hooks_declaration_invalid", "hooks 必须是配置路径、路径/配置数组或 Hook 对象。", "hooks")
+        mcp_declared = manifest.get("mcpServers")
+        if mcp_declared is not None and not isinstance(mcp_declared, (str, list, dict)):
+            add("error", "mcp_declaration_invalid", "mcpServers 必须是配置路径、路径数组或服务映射。", "mcpServers")
+        for key, expected in (("keywords", list), ("metadata", dict), ("author", (str, dict)), ("defaultEnabled", bool)):
+            if key in manifest and not isinstance(manifest[key], expected):
+                add("error", "invalid_field_type", f"{key} 类型不符合 manifest schema。", key)
 
         for field in ("skills", "agents", "commands"):
             value = manifest.get(field)
@@ -250,9 +270,56 @@ class PluginRuntime:
                 except (OSError, ValueError):
                     add("error", "mcp_path_escape", f"MCP 配置路径无效或越出插件目录：{ref}。", "mcpServers")
 
+        mcp_config_paths = [root / ".mcp.json"]
+        for ref in mcp_refs:
+            if isinstance(ref, str):
+                try:
+                    candidate = _inside(root, ref)
+                    if candidate.is_file():
+                        mcp_config_paths.append(candidate)
+                except (OSError, ValueError):
+                    pass
+        seen_mcp_names: set[str] = set()
+        for config_path in mcp_config_paths:
+            if not config_path.is_file():
+                continue
+            try:
+                config_data = json.loads(config_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                add("error", "mcp_config_parse", f"MCP 配置无法解析：{config_path.name}。", "mcpServers")
+                continue
+            servers = config_data.get("mcpServers") if isinstance(config_data, dict) else None
+            if not isinstance(servers, dict):
+                add("error", "mcp_config_schema", f"{config_path.name} 必须包含 mcpServers 对象。", "mcpServers")
+                continue
+            for server_name, spec in servers.items():
+                if server_name in seen_mcp_names:
+                    add("error", "mcp_duplicate_name", f"插件内 MCP 服务名 {server_name} 被重复定义。", "mcpServers")
+                seen_mcp_names.add(str(server_name))
+                if not isinstance(server_name, str) or not isinstance(spec, dict):
+                    add("error", "mcp_definition_invalid", f"MCP 服务 {server_name} 必须是名称到对象的映射。", "mcpServers")
+                    continue
+                has_command = isinstance(spec.get("command"), str) and bool(spec["command"].strip())
+                has_url = isinstance(spec.get("url"), str) and bool(spec["url"].strip())
+                if not (has_command or has_url):
+                    add("error", "mcp_transport_missing", f"MCP 服务 {server_name} 必须提供 command 或 url。", "mcpServers")
+                if "args" in spec and (not isinstance(spec["args"], list) or any(not isinstance(arg, str) for arg in spec["args"])):
+                    add("error", "mcp_args_invalid", f"MCP 服务 {server_name} 的 args 必须是字符串数组。", "mcpServers")
+
         command_names: list[str] = []
         try:
-            command_names = [item["name"] for item in self._commands(root, manifest)]
+            declared_commands = manifest.get("commands")
+            if isinstance(declared_commands, dict):
+                command_names = [str(name) for name in declared_commands]
+            else:
+                command_refs = _path_values(declared_commands) if declared_commands is not None else ["commands"]
+                for ref in command_refs:
+                    try:
+                        command_path = _inside(root, ref)
+                    except (OSError, ValueError):
+                        continue  # The path diagnostic above is more useful than aborting remaining checks.
+                    command_files = [command_path] if command_path.is_file() else sorted(command_path.glob("*.md")) if command_path.is_dir() else []
+                    command_names.extend(item.stem for item in command_files if item.is_file() and item.suffix.lower() == ".md")
             duplicates = sorted({item for item in command_names if command_names.count(item) > 1})
             for command in duplicates:
                 add("error", "duplicate_command", f"插件内部命令 {command} 重复定义。", "commands")
@@ -273,8 +340,18 @@ class PluginRuntime:
                 own_mcp = own_mcp.get("mcpServers", own_mcp)
             if isinstance(own_mcp, dict):
                 for server_name, spec in own_mcp.items():
+                    if server_name in seen_mcp_names:
+                        add("error", "mcp_duplicate_name", f"插件内 MCP 服务名 {server_name} 被重复定义。", "mcpServers")
+                    seen_mcp_names.add(str(server_name))
                     if not isinstance(spec, dict):
                         add("error", "mcp_definition_invalid", f"MCP 服务 {server_name} 必须是对象。", "mcpServers")
+                        continue
+                    has_command = isinstance(spec.get("command"), str) and bool(spec["command"].strip())
+                    has_url = isinstance(spec.get("url"), str) and bool(spec["url"].strip())
+                    if not (has_command or has_url):
+                        add("error", "mcp_transport_missing", f"MCP 服务 {server_name} 必须提供 command 或 url。", "mcpServers")
+                    if "args" in spec and (not isinstance(spec["args"], list) or any(not isinstance(arg, str) for arg in spec["args"])):
+                        add("error", "mcp_args_invalid", f"MCP 服务 {server_name} 的 args 必须是字符串数组。", "mcpServers")
             for plugin in self.discover():
                 if plugin["name"] == name:
                     continue
