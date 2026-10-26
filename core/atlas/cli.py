@@ -739,7 +739,8 @@ def daemon_disable_startup() -> None:
 @main.command()
 @click.option("--model", "-m", default=None, help="Model to use")
 @click.option("--resume", "resume_id", default=None, help="Continue an existing conversation by id")
-def chat(model: str | None, resume_id: str | None) -> None:
+@click.option("--safe-mode", is_flag=True, help="Start with only Atlas core chat capabilities; skip plugin and extension startup")
+def chat(model: str | None, resume_id: str | None, safe_mode: bool) -> None:
     """Start an interactive chat session in the terminal."""
     from atlas.agent import AgentOrchestrator
     from atlas.memory import MemoryStore
@@ -769,6 +770,8 @@ def chat(model: str | None, resume_id: str | None) -> None:
         daybreak = _daybreak_enabled()
 
         console.print(f"[bold]Atlas[/bold] v0.1.0 | Model: [cyan]{model_mgr.current_model}[/cyan]")
+        if safe_mode:
+            console.print("[yellow]安全模式已启用：本次 CLI 会话不启动插件/扩展服务；输入 quit/exit 退出，重新运行 atlas chat 可恢复正常模式。[/yellow]")
         console.print(f"Conversation: [cyan]{conv_id}[/cyan] (resume with atlas chat --resume {conv_id})")
         console.print("Type [bold]quit[/bold] or [bold]exit[/bold] to leave. "
                       "[bold]/model <id>[/bold] to switch model; [bold]/daybreak [on|off|status][/bold] controls long-task mode.\n")
