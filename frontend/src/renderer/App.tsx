@@ -1868,6 +1868,14 @@ export default function App() {
         void navigator.clipboard.writeText(`# ${activeConversation.title || 'Atlas 会话'}\n\n${transcript}${toolSummary ? `\n\n## 工具调用摘要\n\n${toolSummary}` : ''}`).then(() => setToast('会话 Markdown 已复制')).catch(() => setToast('剪贴板不可用'));
       } },
       { id: 'rename', label: '/rename', hint: '把后面的文字设为对话名称', takesArgument: true, run: (title: string) => { if (title.trim()) void store.renameConversation(activeConversation.id, title); else setToast('在 /rename 后面写上新名称'); } },
+      { id: 'title', label: '/title', hint: '根据首轮目标生成标题；确认后保存', run: () => {
+        void api<{ title: string }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(activeConversation.id)}/suggest-title`, { method: 'POST' })
+          .then(({ title }) => {
+            const confirmed = window.prompt('确认或编辑生成的会话标题', title);
+            if (confirmed?.trim()) void store.renameConversation(activeConversation.id, confirmed.trim());
+          })
+          .catch((error) => setToast(`生成标题失败，原标题保留：${error instanceof Error ? error.message : String(error)}`));
+      } },
       { id: 'resume', label: '/resume', hint: '继续打开最近对话，或按名称搜索', takesArgument: true, run: (query: string) => { const target = query.trim() ? store.conversations.find((item) => item.id === query.trim() || item.title.toLowerCase().includes(query.trim().toLowerCase())) : null; if (target) openConversation(target); else if (!query.trim()) setResumePickerOpen(true); else setToast('没有找到可恢复的对话'); } },
       { id: 'fork', label: '/fork', hint: '从最近消息或指定检查点分叉', takesArgument: true, run: (target: string) => {
         const requested = target.trim();
