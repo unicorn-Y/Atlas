@@ -915,6 +915,7 @@ class AgentOrchestrator:
         parent_process_event_callback: Callable[..., Any] | None = None,
         source: str = "foreground",
         ephemeral: bool = False,
+        bypass_prompt_cache: bool = False,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run the agent on a user message, yielding streaming events.
 
@@ -956,6 +957,7 @@ class AgentOrchestrator:
             memory_scope_id=memory_scope_id,
             session_env=dict(session_env or {}),
             ephemeral=ephemeral,
+            bypass_prompt_cache=bypass_prompt_cache,
         )
         callbacks = RunCallbacks(
             cancel_event=cancel_event, pause_event=pause_event,

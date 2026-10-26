@@ -1259,6 +1259,9 @@ async function startRun(conversationId: string, item: QueuedMessage) {
     }
   }
   const mode = get().nextRunMode;
+  const cacheBypassKey = 'atlas.preference.cache-bypass-next-conversation';
+  const bypassPromptCache = storageGet(cacheBypassKey) === conversationId;
+  if (bypassPromptCache) storageSet(cacheBypassKey, null);
   const overrides = get().pendingRunOverrides;
   const run = get().createRun(conversationId, conversation?.title ?? content.slice(0, 80));
   const interrupted = [...get().runs].reverse().find((candidate) =>
@@ -1270,6 +1273,12 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   const handleEvent = (envelope: RuntimeEventEnvelope) => {
     if (!isRuntimeEvent(envelope)) return;
     const event = normalizeRuntimeEvent(envelope);
+    if (event?.type === 'run.usage') {
+      const data = event.data as { atlas_cache_debug?: unknown } | undefined;
+      if (data?.atlas_cache_debug && typeof data.atlas_cache_debug === 'object') {
+        try { localStorage.setItem(`atlas.cache-debug.${conversationId}`, JSON.stringify(data.atlas_cache_debug)); } catch { /* diagnostics are best effort */ }
+      }
+    }
     if (event) buffer.push(event);
   };
   const workspace = typeof conversation?.workspace === 'string' && conversation.workspace ? conversation.workspace : undefined;
@@ -1301,6 +1310,7 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   const request = {
     type: 'run.start', run_id: run.id, content, conversation_id: run.conversationId, model: overrides?.model ?? state.conversationModels[run.conversationId] ?? state.model, attachments, active_skills: state.activeSkills,
     ...(storageGet('atlas.preference.daybreak') === 'true' ? { daybreak: true } : {}),
+    ...(bypassPromptCache ? { bypass_prompt_cache: true } : {}),
     ...(item.messageSkills?.length ? { message_skills: item.messageSkills } : {}),
     ...(files.length ? { files } : {}), ...(mode === 'plan' ? { mode } : {}), ...(workspace ? { workspace } : {}),
     ...((item.profileId ?? state.profileId) !== 'default' ? { profile_id: item.profileId ?? state.profileId } : {}),

@@ -47,6 +47,7 @@ class RunState:
         "end_conversation_callback",
         "config_override", "ignore_project_config", "ignore_workspace_rules",
         "resume_attempts", "resume_context", "background",
+        "bypass_prompt_cache",
     )
 
     def __init__(self, run_id: str, conversation_id: str, model: str) -> None:
@@ -81,6 +82,7 @@ class RunState:
         self.reasoning_effort: str | None = None
         self.reasoning_effort_applied: bool | None = None
         self.ephemeral = False
+        self.bypass_prompt_cache = False
         self.ephemeral_source: str | None = None
         self.tool_output_dir: Path | None = None
         self.subtasks: dict[str, dict[str, Any]] = {}

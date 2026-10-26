@@ -122,6 +122,7 @@ class KernelRequest:
     usage_budget: Any = None
     runtime_config: dict[str, Any] = field(default_factory=dict)
     ephemeral: bool = False
+    bypass_prompt_cache: bool = False
 
 
 def _message_text(message: dict[str, Any]) -> str:
@@ -989,7 +990,9 @@ class AtlasKernel:
                     cached_tokens = (details.get("cached_tokens", details.get("cache_read", 0))
                                      if isinstance(details, dict) else 0)
                     if cached_tokens == 0:
-                        cached_tokens = attempt_usage.get("cache_read_input_tokens", 0)
+                        cached_tokens = next((attempt_usage.get(key) for key in (
+                            "prompt_cache_hit_tokens", "cache_read_input_tokens", "cached_tokens", "cache_read",
+                        ) if attempt_usage.get(key) is not None), 0)
                     try:
                         input_count = max(0, int(input_tokens or 0))
                         output_count = max(0, int(output_tokens or 0))
@@ -1232,6 +1235,8 @@ class AtlasKernel:
                         retry_source=request.source,
                         on_attempt=on_summary_attempt,
                         usage_budget=usage_budget,
+                        bypass_prompt_cache=request.bypass_prompt_cache,
+                        cache_bypass_nonce=request.run_id,
                     )
                     return result.text
 
@@ -1661,6 +1666,8 @@ class AtlasKernel:
                         retry_source=request.source,
                         on_text=on_text, on_attempt=on_attempt, on_event=on_event,
                         usage_budget=usage_budget,
+                        bypass_prompt_cache=request.bypass_prompt_cache,
+                        cache_bypass_nonce=request.run_id,
                     ))
                     queue_get = asyncio.create_task(event_queue.get())
                     stream_error: ModelCallError | None = None

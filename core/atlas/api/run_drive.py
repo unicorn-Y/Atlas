@@ -1718,6 +1718,9 @@ async def _handle_run_start(
     run = preparation_run
     run.conversation_id = conv_id
     run.ephemeral = data.get("ephemeral") is True
+    if "bypass_prompt_cache" in data and not isinstance(data.get("bypass_prompt_cache"), bool):
+        raise HTTPException(status_code=400, detail="bypass_prompt_cache must be a boolean")
+    run.bypass_prompt_cache = data.get("bypass_prompt_cache") is True
     # RunState stores the selected model in ``model``; it is slotted and has no
     # separate model_id field. Keep the resolved project model on that field.
     run.model = model_id
@@ -3441,6 +3444,7 @@ async def _execute_run(
             subtask_group_completed=subtask_group_completed,
             force_plan=(mode == "plan"),
             ephemeral=run.ephemeral,
+            bypass_prompt_cache=run.bypass_prompt_cache,
         )
         from atlas.project_context import project_scoped_events
 

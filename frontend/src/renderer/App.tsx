@@ -1968,6 +1968,29 @@ export default function App() {
     } catch (error) { setToast(`创建交接会话失败：${error instanceof Error ? error.message : String(error)}`); }
   };
   const slashCommands: SlashCommand[] = [
+    ...(activeConversation ? [{ id: 'break-cache', label: '/break-cache', hint: '下一轮插入唯一提示前缀以避开提示缓存；status 显示真实服务商命中数据', takesArgument: true, run: (raw: string) => {
+      const key = 'cache-bypass-next-conversation';
+      const action = raw.trim().toLowerCase();
+      if (!action || action === 'on' || action === 'next') {
+        setPref(key, activeConversation.id);
+        setToast('下一轮提示缓存调试已启用：将改变系统提示前缀并记录服务商实际命中数据');
+        return;
+      }
+      if (action === 'off' || action === 'reset') {
+        try { localStorage.removeItem(`atlas.preference.${key}`); } catch { /* storage unavailable */ }
+        setToast('下一轮提示缓存调试已取消');
+        return;
+      }
+      if (action === 'status') {
+        let record: { strategy?: string; cache_hit_tokens?: number | null; cache_hit_reported?: boolean; cache_control_markers?: number } | null = null;
+        try { record = JSON.parse(localStorage.getItem(`atlas.cache-debug.${activeConversation.id}`) || 'null'); } catch { /* stale diagnostics are ignored */ }
+        setToast(record
+          ? `提示缓存诊断：${record.strategy || '策略未知'}；cache-control 标记 ${record.cache_control_markers ?? '未知'}；本轮命中 ${record.cache_hit_reported ? `${record.cache_hit_tokens ?? 0} tokens` : '服务商未报告'}`
+          : '尚无提示缓存诊断记录；运行 /break-cache 后再查看。');
+        return;
+      }
+      setToast('用法：/break-cache [next|off|status]');
+    } }] : []),
     { id: 'mobile', label: '/mobile', hint: '打开移动 Web 二维码和 Telegram 接入说明', run: () => setSheet('mobile') },
     { id: 'toolsearch-mode', label: '/toolsearch-mode', hint: '查看或设置工具全部注入/按需检索模式', takesArgument: true, run: (value: string) => {
       const mode = value.trim().toLowerCase();

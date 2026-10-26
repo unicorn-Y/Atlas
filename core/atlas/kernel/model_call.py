@@ -744,6 +744,8 @@ async def complete_stream(
     overloaded_retry_base_delay_s: float | None = None,
     retry_source: str | None = None,
     usage_budget: Any = None,
+    bypass_prompt_cache: bool = False,
+    cache_bypass_nonce: str | None = None,
 ) -> ModelCallResult:
     """Stream one model response through Atlas ModelRouter and HTTPX transport."""
     from atlas.agent.fallback_cooldown import is_cooling, record_failure, record_success
@@ -770,6 +772,15 @@ async def complete_stream(
         request_messages = normalize_tool_results(messages)
     except ValueError as exc:
         raise ModelCallError(str(exc), category="invalid_history", retryable=False) from exc
+    if bypass_prompt_cache:
+        # DeepSeek and some relays cache by exact prefix and ignore cache-control
+        # fields. A per-run system prefix makes the prior turn's prefix impossible
+        # to reuse while staying byte-stable across retries/fallbacks in this run.
+        nonce = str(cache_bypass_nonce or uuid.uuid4().hex)
+        request_messages.insert(0, {
+            "role": "system",
+            "content": f"[Atlas prompt-cache diagnostic nonce: {nonce}]",
+        })
     content_filter_guidance_added = False
     last_error: ModelCallError | None = None
     total_attempts = 0
@@ -851,7 +862,7 @@ async def complete_stream(
             try:
                 wire_messages = _wire_messages(request_messages)
                 wire_tools = _stable_tool_definitions(tools)
-                if route.api_mode == "anthropic_messages":
+                if route.api_mode == "anthropic_messages" and not bypass_prompt_cache:
                     from atlas.agent.prompt_cache_boundary import find_stable_prefix
                     from atlas.agent.prompt_caching import build_prompt_cache_plan
 
@@ -1037,11 +1048,33 @@ async def complete_stream(
                     finish_model_request(request_id, duration_ms=int((time.monotonic() - attempt_started) * 1000), status="ok")
                 except Exception:
                     logging.getLogger(__name__).debug("model request trace update failed", exc_info=True)
+                result_usage = dict(last_usage)
+                if bypass_prompt_cache:
+                    cache_hit_value = next((last_usage.get(key) for key in (
+                        "prompt_cache_hit_tokens", "cache_read_input_tokens", "cached_tokens", "cache_read",
+                    ) if last_usage.get(key) is not None), None)
+                    if cache_hit_value is None:
+                        details = last_usage.get("prompt_tokens_details") or last_usage.get("input_tokens_details") or {}
+                        if isinstance(details, dict):
+                            cache_hit_value = next((details.get(key) for key in (
+                                "cached_tokens", "cache_read", "cache_read_input_tokens",
+                            ) if details.get(key) is not None), None)
+                    try:
+                        cache_hit_tokens = max(0, int(cache_hit_value)) if cache_hit_value is not None else None
+                    except (TypeError, ValueError):
+                        cache_hit_tokens = None
+                    result_usage["atlas_cache_debug"] = {
+                        "bypass_requested": True,
+                        "strategy": "unique-system-prefix; cache-control markers omitted",
+                        "cache_control_markers": 0,
+                        "cache_hit_tokens": cache_hit_tokens,
+                        "cache_hit_reported": cache_hit_tokens is not None,
+                    }
                 result = ModelCallResult(
                     combined_text,
                     _tool_calls(attempt_tools, truncated=finish_reason in {"length", "max_tokens"},
                                 finish_reason=finish_reason, endpoint=_endpoint(route.base_url)),
-                    last_usage, total_attempts, duration_ms, route.model_id or candidate,
+                    result_usage, total_attempts, duration_ms, route.model_id or candidate,
                     route.provider, combined_reasoning, attempt_reasoning_details,
                     finish_reason,
                 )
@@ -1074,7 +1107,7 @@ async def complete_stream(
                              "duration_ms": int((time.monotonic() - attempt_started) * 1000),
                              "first_token_ms": first_token_ms,
                              "reasoning_chars": len(attempt_reasoning),
-                             "usage": last_usage}
+                             "usage": result_usage}
                     published = on_attempt(event)
                     if asyncio.iscoroutine(published):
                         await published

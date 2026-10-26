@@ -852,6 +852,7 @@ class HermesRuntime:
         plan_state: dict[str, Any] | None = None,
         plan_update_callback: Callable[[dict[str, Any]], Any] | None = None,
         ephemeral: bool = False,
+        bypass_prompt_cache: bool = False,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute one Hermes turn on a worker thread and yield callback events."""
         from atlas.config import get_config
@@ -990,6 +991,7 @@ class HermesRuntime:
                 initial_usage_rows=moa_usage_rows, usage_budget=usage_budget,
                 runtime_config=atlas_config.raw,
                 ephemeral=ephemeral,
+                bypass_prompt_cache=bypass_prompt_cache,
             )
             # The title depends only on the user's message: generate it alongside the model
             # call instead of after the reply (it used to hold run.completed for up to 5s).

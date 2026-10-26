@@ -285,6 +285,7 @@ class RunRequest:
     memory_scope_id: str = ""
     session_env: dict[str, str] = field(default_factory=dict)
     ephemeral: bool = False
+    bypass_prompt_cache: bool = False
 
 
 @dataclass
@@ -1231,6 +1232,7 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
             plan_state=state.plan.to_dict() if state.plan is not None else None,
             plan_update_callback=update_kernel_plan if callbacks.plan_update_callback else None,
             ephemeral=request.ephemeral,
+            bypass_prompt_cache=request.bypass_prompt_cache,
             lifecycle_hook_callback=(
                 lifecycle_hook if callbacks.user_hook_callback else None
             ),

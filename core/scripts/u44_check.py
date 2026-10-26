@@ -41,18 +41,21 @@ def _text_chunks() -> list[dict[str, Any]]:
 
 
 class _Router:
-    def __init__(self, scripts: dict[str, list[str]]) -> None:
+    def __init__(self, scripts: dict[str, list[str]], *, api_mode: str = "openai_compatible") -> None:
         self.scripts = scripts
         self.calls: dict[str, int] = {}
+        self.api_mode = api_mode
+        self.messages: list[list[dict[str, Any]]] = []
 
     async def resolve(self, model: str, _purpose: str) -> Any:
         return SimpleNamespace(
             model=model, model_id=model, wire_model=model, provider="fixture-relay",
-            base_url="http://127.0.0.1/fixture", api_mode="openai_compatible",
+            base_url="http://127.0.0.1/fixture", api_mode=self.api_mode,
             credential_pool=None, key="fixture-only",
         )
 
-    def stream(self, route: Any, _messages: Any, **_kwargs: Any) -> Any:
+    def stream(self, route: Any, messages: Any, **_kwargs: Any) -> Any:
+        self.messages.append(messages)
         model = route.model_id
         index = self.calls.get(model, 0)
         self.calls[model] = index + 1
@@ -114,6 +117,38 @@ async def check_upstream_retry_policy() -> None:
     print("U44 item 0 PASS: relay 403 retries once on the same model then uses fallback; 401 is not retried")
 
 
+async def check_prompt_cache_diagnostics() -> None:
+    from atlas.kernel.model_call import complete_stream
+
+    router = _Router({"primary": ["ok"]}, api_mode="anthropic_messages")
+
+    def stream(route: Any, messages: Any, **_kwargs: Any) -> Any:
+        router.messages.append(messages)
+        return [
+            {"choices": [{"delta": {"content": "cache-debug-ok"}, "finish_reason": None}]},
+            {"choices": [{"delta": {}, "finish_reason": "stop"}],
+             "usage": {"prompt_tokens": 9, "completion_tokens": 1, "prompt_cache_hit_tokens": 7}},
+        ]
+
+    router.stream = stream
+    attempts: list[dict[str, Any]] = []
+    result = await complete_stream(
+        SimpleNamespace(_model_router=router, source="foreground"), "primary",
+        [{"role": "system", "content": "stable system"}, {"role": "user", "content": "probe"}],
+        [], bypass_prompt_cache=True, cache_bypass_nonce="u44-fixed-run-id",
+        on_attempt=attempts.append,
+    )
+    system = [item for item in router.messages[0] if item.get("role") == "system"]
+    assert system[0]["content"].startswith("[Atlas prompt-cache diagnostic nonce: u44-fixed-run-id]")
+    assert not any("cache_control" in str(item) for item in router.messages[0])
+    debug = result.usage.get("atlas_cache_debug", {})
+    assert debug.get("bypass_requested") is True
+    assert debug.get("cache_control_markers") == 0
+    assert debug.get("cache_hit_reported") is True and debug.get("cache_hit_tokens") == 7, debug
+    assert attempts[0]["usage"]["atlas_cache_debug"] == debug
+    print("U44 item 5 PASS: unique stable run prefix, omitted Anthropic cache markers, and provider cache-hit reporting")
+
+
 async def check_real_provider() -> None:
     from atlas.models import ModelManager
     from real_model_check import AttemptResult, retry_real_model_check_async
@@ -137,6 +172,7 @@ async def check_real_provider() -> None:
 def main() -> None:
     sys.path.insert(0, str(CORE))
     asyncio.run(check_upstream_retry_policy())
+    asyncio.run(check_prompt_cache_diagnostics())
     asyncio.run(check_real_provider())
     check_terminal_setup()
     print("U44 CHECK PASS")
