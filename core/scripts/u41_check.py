@@ -1,6 +1,7 @@
 """U41 acceptance scenarios and the complete cumulative regression suite."""
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 import subprocess
@@ -52,9 +53,22 @@ def run(
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--resume-u8-live", action="store_true",
+        help="Retry only the final U8 live scenario after all earlier U41 stages passed.",
+    )
+    args = parser.parse_args()
     env = os.environ.copy()
     env["ATLAS_ROOT"] = r"C:\engine-reg\_atlasroot"
     env["PYTHONPATH"] = str(ROOT / "core") + os.pathsep + env.get("PYTHONPATH", "")
+
+    if args.resume_u8_live:
+        run("Resumed final regression u8_check.py --live", [
+            sys.executable, "core/scripts/u8_check.py", "--live",
+        ], env=env, timeout=1800)
+        print("U41 CHECK PASS", flush=True)
+        return
 
     run("U41 real scenarios: node RPC, provider account API, pet packages and desktop CLI", [
         sys.executable, "-m", "pytest", "-q",
