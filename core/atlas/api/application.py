@@ -18,6 +18,7 @@ from atlas.api.automation_router import automation_router
 from atlas.api.standing_orders_router import router as standing_orders_router
 from atlas.api.workflow_router import router as workflow_router
 from atlas.api.browser_router import router as browser_router
+from atlas.api.pets_router import router as pets_router
 from atlas.api.mobile_preview_router import router as mobile_preview_router
 from atlas.api.channel_router import router as channel_router
 from atlas.api.conversations_router import router as conversations_router
@@ -125,6 +126,7 @@ def create_app(
         computer_router,
         secrets_router,
         browser_router,
+        pets_router,
         mobile_preview_router,
         skills_market_router,
         evolution_router,

@@ -37,6 +37,7 @@ function themeIcon(theme: string): Electron.NativeImage | undefined {
   return image.isEmpty() ? undefined : image;
 }
 let windowRef: BrowserWindow | null = null;
+let petOverlayWindow: BrowserWindow | null = null;
 let floatingComposerWindow: BrowserWindow | null = null;
 let voiceHudWindow: BrowserWindow | null = null;
 const pendingVoiceHudResults: string[] = [];
@@ -253,6 +254,7 @@ function createTray(): void {
 
 function updateRuntimeState(state: 'running' | 'waiting' | 'idle'): void {
   runtimeState = state;
+  if (petOverlayWindow && !petOverlayWindow.isDestroyed()) petOverlayWindow.webContents.send('pet-overlay:state', state);
   const running = state === 'running' && keepAwakeEnabled;
   if (running && (keepAwakeBlockerId === null || !powerSaveBlocker.isStarted(keepAwakeBlockerId))) {
     keepAwakeBlockerId = powerSaveBlocker.start('prevent-app-suspension');
@@ -394,6 +396,49 @@ function focusAtlasWindow(): void {
   if (windowRef.isMinimized()) windowRef.restore();
   windowRef.show();
   windowRef.focus();
+}
+
+function togglePetOverlay(): boolean {
+  if (petOverlayWindow && !petOverlayWindow.isDestroyed()) {
+    petOverlayWindow.close();
+    return false;
+  }
+  const area = screen.getPrimaryDisplay().workArea;
+  const devUrl = process.env.VITE_DEV_SERVER_URL;
+  const win = new BrowserWindow({
+    x: area.x + area.width - 164,
+    y: area.y + area.height - 190,
+    width: 148,
+    height: 180,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: true,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: false,
+    webPreferences: {
+      preload: path.join(here, '../preload/index.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  petOverlayWindow = win;
+  const overlayUrl = devUrl
+    ? new URL('pet-overlay.html', devUrl.endsWith('/') ? devUrl : `${devUrl}/`).href
+    : pathToFileURL(path.resolve(here, '../../dist/pet-overlay.html')).href;
+  const allowed = (target: string) => devUrl
+    ? (() => { try { const url = new URL(target); return url.origin === new URL(devUrl).origin && url.pathname.endsWith('/pet-overlay.html'); } catch { return false; } })()
+    : target.split('#')[0] === overlayUrl;
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (event, target) => { if (!allowed(target)) event.preventDefault(); });
+  win.webContents.on('did-finish-load', () => win.webContents.send('pet-overlay:state', runtimeState));
+  win.once('ready-to-show', () => win.show());
+  win.on('closed', () => { if (petOverlayWindow === win) petOverlayWindow = null; });
+  void win.loadURL(overlayUrl);
+  return true;
 }
 
 function showFloatingComposer(context?: { selectedText?: string; conversationId?: string }): void {
@@ -1038,6 +1083,10 @@ ipcMain.handle('conversation:open-window', (event, conversationId?: unknown, new
   assertTrustedAppSender(event);
   if (conversationId !== undefined && typeof conversationId !== 'string') throw new Error('无效的会话 ID。');
   openConversationWindow(conversationId as string | undefined, newSession === true);
+});
+ipcMain.handle('pet-overlay:toggle', (event) => {
+  assertTrustedAppSender(event);
+  return togglePetOverlay();
 });
 ipcMain.handle('side-chat:open-window', (event, conversationId: unknown, initialQuestion?: unknown) => {
   assertTrustedAppSender(event);

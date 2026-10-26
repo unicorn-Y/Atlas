@@ -68,6 +68,12 @@ const desktopApi: AtlasDesktopApi = {
   openSystemPrivacySettings: () => ipcRenderer.invoke('platform:open-system-privacy-settings'),
   setKeepAwake: (enabled) => ipcRenderer.invoke('platform:set-keep-awake', enabled) as Promise<void>,
   setRuntimeState: (state) => ipcRenderer.send('runtime:set-state', state),
+  togglePetOverlay: () => ipcRenderer.invoke('pet-overlay:toggle') as Promise<boolean>,
+  onPetOverlayStateChange: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: 'running' | 'waiting' | 'idle') => callback(state);
+    ipcRenderer.on('pet-overlay:state', listener);
+    return () => ipcRenderer.removeListener('pet-overlay:state', listener);
+  },
   openWorkspaceInEditor: (editor: PlatformEditorId, workspacePath: string) =>
     ipcRenderer.invoke('platform:open-workspace-in-editor', editor, workspacePath),
   showFloatingComposer: (context) => ipcRenderer.invoke('floating-composer:show', context),

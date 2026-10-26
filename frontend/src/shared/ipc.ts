@@ -121,6 +121,8 @@ export interface AtlasDesktopApi {
   openSystemPrivacySettings?(section?: 'screen' | 'accessibility'): Promise<void>;
   setKeepAwake?(enabled: boolean): Promise<void>;
   setRuntimeState?(state: 'running' | 'waiting' | 'idle'): void;
+  togglePetOverlay?(): Promise<boolean>;
+  onPetOverlayStateChange?(callback: (state: 'running' | 'waiting' | 'idle') => void): () => void;
   /** Open an existing local workspace with a fixed allowlisted IDE CLI (never through a shell). */
   openWorkspaceInEditor?(editor: PlatformEditorId, workspacePath: string): Promise<void>;
   /** Open the small native floating composer. The desktop shell forwards submitted text to the main UI. */

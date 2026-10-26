@@ -53,6 +53,7 @@ const ShortcutsPanel = lazy(() => import('./pages/ShortcutsPanel'));
 const ScriptToolsPanel = lazy(() => import('./pages/ScriptToolsPanel'));
 const TelegramPanel = lazy(() => import('./pages/TelegramPanel'));
 const UsagePanel = lazy(() => import('./pages/UsagePanel'));
+const PetsPanel = lazy(() => import('./pages/PetsPanel'));
 const SkillsMarketPage = lazy(() => import('./pages/SkillsMarketPage'));
 const LibraryPage = lazy(() => import('./pages/LibraryPage'));
 const EvolutionPage = lazy(() => import('./pages/EvolutionPage'));
@@ -131,7 +132,7 @@ import { cleanSearchSnippet, rankSearchHits, searchHitRoleLabel } from './servic
 import ComputerLivePreview from './components/x2/ComputerLivePreview';
 const ScreenRecorderDialog = lazy(() => import('./components/ScreenRecorderDialog'));
 
-type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage' | 'memories' | 'teach' | 'secrets';
+type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage' | 'memories' | 'teach' | 'secrets' | 'pets';
 type MemoryMarkerDraft = { text: string; path: string; session?: string; ref?: string };
 
 const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
@@ -154,6 +155,7 @@ const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['tools', '脚本工具', Wrench, 'script tool 工具'],
   ['telegram', '手机远程', Smartphone, 'telegram remote 手机 远程'],
   ['devices', '设备', Monitor, 'device remote pairing 设备 配对 二维码 扫码 注册 可信 在线 凭据 token 轮换 撤销 DM 私信 审批 指令 结果'],
+  ['pets', '桌宠与宠物', Sparkles, 'pet 桌宠 overlay hatch 孵化 宠物市场 安装 切换 移除'],
   ['shortcuts', '快捷键', Keyboard, 'shortcut keybinding 快捷键 按键 全局快捷键 语音快捷键 截图 按住说话'],
   ['appearance', '外观、字号、语音与通知', Sun, 'appearance theme font font size typography notification desktop toast quiet hours sound voice language UI language interface size font family monospace Vim theme color dark light system screenshot notifications sound focus mode quiet hours quiet start quiet end notification permission pinned summary sidebar read aloud voice rate microphone wake word auto send 外观 主题 字体 字号 界面语言 界面字号 界面字体 等宽字体 Vim 配色 深色 浅色 跟随系统 通知 桌面通知 系统提示音 专注模式 静默时段 静默开始时间 静默结束时间 权限 置顶任务摘要 侧边栏 自动朗读 语速 麦克风 唤醒词 自动发送'],
   ['plugins', '插件与导入', Puzzle, 'plugin import 插件 导入 Claude Codex'],
@@ -2174,6 +2176,11 @@ export default function App() {
     } },
     { id: 'reasoning', label: '/reasoning', hint: '打开模型选择，查看当前可用的推理强度', run: () => setSheet('models') },
     { id: 'usage', label: '/usage', hint: '查看用量和费用', run: () => setSheet('usage') },
+    { id: 'pet', label: '/pet', hint: '打开或隐藏桌面浮动宠物', run: () => {
+      if (!window.atlasDesktop?.togglePetOverlay) { setSheet('pets'); setToast('当前是浏览器模式；桌宠浮动窗口需要 Atlas 桌面端'); return; }
+      void window.atlasDesktop.togglePetOverlay().catch((error) => setToast(`桌宠窗口打开失败：${error instanceof Error ? error.message : String(error)}`));
+    } },
+    { id: 'hatch', label: '/hatch', hint: '打开宠物市场并孵化一只本地宠物', run: () => setSheet('pets') },
     { id: 'session', label: '/session', hint: '直达当前会话统计（消息数、运行次数、Token、费用与耗时）', run: () => {
       if (!activeConversation) { setToast('先打开一个会话再查看 /session'); return; }
       setSheet('usage');
@@ -3061,6 +3068,7 @@ export default function App() {
           setSheet(null); go('chat'); notify(`已应用会话预设「${preset.label}」`);
         }} /></section>}
         {sheet === 'usage' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">用量</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">每次任务用了多少 token、缓存帮你省了多少、大概花了多少钱。</p><UsagePanel username={username} onSaveUsername={saveUsername} apiBaseUrl={store.apiBaseUrl} conversationId={activeConversation?.id ?? null} onOpenModels={() => setSheet('models')} /></section>}
+        {sheet === 'pets' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">桌宠与宠物市场</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理 Atlas 桌面伙伴、孵化宠物并导入本地宠物包。</p><PetsPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} hatchOnOpen /></section>}
         {sheet === 'plugins' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">插件与扩展</h3>
           <p className="mt-1 mb-5 text-[13px] text-fg-3">给 Atlas 增加新的工具和能力，也可以把 Claude Code / Codex 里已有的配置搬进来。</p>

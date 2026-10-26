@@ -5,6 +5,9 @@ import base64
 import json
 import mimetypes
 import os
+import shutil
+import socket
+import subprocess
 import sys
 import time
 import uuid
@@ -162,6 +165,89 @@ console = _LazyConsole()
 def main() -> None:
     """Atlas — All-in-one AI Personal Assistant."""
     pass
+
+
+def _desktop_dev_command(repo_root: Path) -> tuple[list[str], Path] | None:
+    """Resolve a built checkout's Electron executable and main bundle."""
+    frontend = repo_root / "frontend"
+    main_bundle = frontend / "dist-electron" / "main" / "electron.js"
+    if not main_bundle.is_file() or not (frontend / "dist" / "index.html").is_file():
+        return None
+    candidates = [
+        frontend / "node_modules" / "electron" / "dist" / ("electron.exe" if os.name == "nt" else "electron"),
+        repo_root / "node_modules" / "electron" / "dist" / ("electron.exe" if os.name == "nt" else "electron"),
+    ]
+    executable = next((path for path in candidates if path.is_file()), None)
+    if executable is None:
+        found = shutil.which("electron")
+        executable = Path(found) if found else None
+    return ([str(executable), str(main_bundle)], frontend) if executable else None
+
+
+def _packaged_desktop_executable() -> Path | None:
+    configured = os.environ.get("ATLAS_DESKTOP_EXECUTABLE", "").strip()
+    if configured and Path(configured).is_file():
+        return Path(configured)
+    on_path = shutil.which("Atlas") or shutil.which("atlas")
+    if on_path:
+        return Path(on_path)
+    if os.name == "nt":
+        roots = [Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Atlas" / "Atlas.exe"]
+        program_files = os.environ.get("ProgramFiles")
+        if program_files:
+            roots.append(Path(program_files) / "Atlas" / "Atlas.exe")
+        return next((path for path in roots if path.is_file()), None)
+    if sys.platform == "darwin":
+        candidates = [Path("/Applications/Atlas.app/Contents/MacOS/Atlas"), Path.home() / "Applications/Atlas.app/Contents/MacOS/Atlas"]
+    else:
+        candidates = [Path("/usr/bin/atlas"), Path("/opt/Atlas/atlas"), Path("/opt/atlas/atlas")]
+    return next((path for path in candidates if path.is_file()), None)
+
+
+def _vite_is_listening() -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", 5173), timeout=0.25):
+            return True
+    except OSError:
+        return False
+
+
+@main.command("desktop")
+def desktop_command() -> None:
+    """Start or focus the Atlas desktop application."""
+    repo_root = Path(__file__).resolve().parents[2]
+    dev = _desktop_dev_command(repo_root)
+    executable = _packaged_desktop_executable()
+    if dev is not None:
+        command, cwd = dev
+    elif executable is not None:
+        command, cwd = [str(executable)], executable.parent
+    else:
+        frontend = repo_root / "frontend"
+        if frontend.is_dir():
+            detail = "Electron/renderer 构建不完整；请先在 frontend 目录运行 npm install 和 npm run build。"
+        else:
+            detail = "没有找到已安装的 Atlas 桌面应用。请设置 ATLAS_DESKTOP_EXECUTABLE，或安装桌面版后重试。"
+        raise click.ClickException(f"无法启动 Atlas 桌面端：{detail}")
+    environment = os.environ.copy()
+    if dev is not None:
+        if _vite_is_listening():
+            environment["VITE_DEV_SERVER_URL"] = "http://127.0.0.1:5173"
+        else:
+            environment.pop("VITE_DEV_SERVER_URL", None)
+    try:
+        options: dict[str, Any] = {"cwd": str(cwd), "env": environment, "close_fds": True}
+        if os.name == "nt":
+            options["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            options["start_new_session"] = True
+        subprocess.Popen(command, **options)
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(f"启动 Electron 失败（命令：{command[0]}）：{exc}") from exc
+    click.echo("已请求启动 Atlas 桌面端；若已有实例运行，Electron 会聚焦现有窗口。")
+
+
+main.add_command(desktop_command, "gui")
 
 
 @main.command("memory-bench")
