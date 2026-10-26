@@ -1,0 +1,10 @@
+{
+  "name": "@atlas/office-addin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "icons": "node generate-icons.mjs"
+  }
+}

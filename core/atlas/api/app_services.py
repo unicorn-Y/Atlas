@@ -66,3 +66,7 @@ class AppServices:
     # /api/health and used by S3's bounded wait_ready gates on request paths.
     startup: Any = None
     cli_handoffs: Any = None
+    office_pairing: Any = None
+    office_sessions: Any = None
+    office_handoffs: Any = None
+    office_writebacks: Any = None

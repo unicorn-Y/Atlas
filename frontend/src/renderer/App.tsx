@@ -864,6 +864,37 @@ export default function App() {
     void poll();
     return () => { active = false; window.clearInterval(timer); };
   }, [go, store.apiBaseUrl, store.connected]);
+  useEffect(() => {
+    if (!window.atlasDesktop || !store.connected) return;
+    let active = true;
+    let busy = false;
+    const poll = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const result = await api<{ handoff: { conversation_id: string; host: string; document_name: string; address: string; selection: string } | null }>(
+          store.apiBaseUrl, '/api/office/handoffs/next',
+        );
+        const handoff = result.handoff;
+        if (!active || !handoff) return;
+        const current = useAtlasStore.getState();
+        await current.refreshConversations();
+        const target = useAtlasStore.getState().conversations.find((item) => item.id === handoff.conversation_id);
+        if (!target) { setToast('Office 选区已收到，但关联的 Atlas 会话不存在。'); return; }
+        setSheet(null); go('chat');
+        if (target.id !== useAtlasStore.getState().activeConversationId) skipDraftRestoreRef.current = true;
+        await useAtlasStore.getState().openConversation(target);
+        const draft = `请协助处理来自 Microsoft ${handoff.host} 的活动文档选区。下面是用户从 Office 加载项明确发送的内容；请给出修改后的完整文本，便于写回。\n\n文档：${handoff.document_name || '未命名文档'}\n位置：${handoff.address || '当前选区'}\n\n选区内容：\n${handoff.selection}\n\n完成后可用 /office writeback <文本> 将修改结果发送回 Office 加载项。`;
+        writeDraft(target.id, draft); setInput(draft);
+        window.atlasDesktop?.focusApp?.();
+        setToast(`已将 ${handoff.host} 选区载入当前会话草稿；检查后手动发送。`);
+      } catch { /* no pending Office selection */ }
+      finally { busy = false; }
+    };
+    const timer = window.setInterval(() => void poll(), 700);
+    void poll();
+    return () => { active = false; window.clearInterval(timer); };
+  }, [go, store.apiBaseUrl, store.connected]);
   // H8 §10.3/§10.4: the backend boots in parallel with the window; startup progress
   // drives the「启动中」surfaces and re-reads real data once the backend is ready.
   useEffect(() => window.atlasDesktop?.onBackendStartupProgress((progress) => {
@@ -2224,6 +2255,25 @@ export default function App() {
       const details = `${hasDraft ? '未发送草稿会保存在本机。' : ''}${isRunning ? '未完成运行会继续在后台执行。' : ''}`;
       if (window.confirm(`结束当前会话并返回首页？对话记录仍会保留。${details ? `\n${details}` : ''}`)) closeTab(activeConversation.id, true);
     } },
+    { id: 'office', label: '/office', hint: '连接 Word/Excel 加载项，传入当前选区或将文本写回选区', takesArgument: true, run: (argument: string) => {
+      const value = argument.trim();
+      if (value.toLowerCase() === 'writeback' || value.toLowerCase().startsWith('writeback ')) {
+        if (!activeConversation) { setToast('先打开要写回的 Atlas 会话'); return; }
+        const text = value.slice('writeback'.length).trim();
+        if (!text) { setToast('用法：/office writeback <要写入当前 Word/Excel 选区的文本>'); return; }
+        void api<{ queued: number }>(store.apiBaseUrl, '/api/office/writebacks', {
+          method: 'POST', json: { conversation_id: activeConversation.id, text },
+        }).then(({ queued }) => setToast(`已将修改结果发送到 ${queued} 个配对的 Office 加载项；在 Word/Excel 面板中点“写入选区”。`))
+          .catch((error) => setToast(`Office 写回失败：${error instanceof Error ? error.message : String(error)}`));
+        return;
+      }
+      if (value) { setToast('用法：/office 生成配对码；/office writeback <文本> 将结果发送到 Word/Excel。'); return; }
+      if (!activeConversation) { setToast('先打开要连接的 Atlas 会话，再运行 /office'); return; }
+      void api<{ pairing_code: string; expires_in: number }>(store.apiBaseUrl, '/api/office/pairings', {
+        method: 'POST', json: { conversation_id: activeConversation.id },
+      }).then(({ pairing_code, expires_in }) => setToast(`Office 配对码 ${pairing_code} · ${expires_in} 秒内在 Word/Excel 的 Atlas 加载项中输入。`))
+        .catch((error) => setToast(`Office 配对码生成失败：${error instanceof Error ? error.message : String(error)}`));
+    } },
     { id: 'pwd', label: '/pwd', hint: '显示当前对话的工作目录', run: () => {
       const path = activeConversation
         ? (typeof activeConversation.workspace === 'string' ? activeConversation.workspace : '')
@@ -2505,7 +2555,7 @@ export default function App() {
   slashCommands.forEach((command) => {
     command.group ??= command.id.startsWith('skill-') ? '技能'
       : ['new', 'clear', 'resume', 'fork', 'undo', 'redo', 'rename', 'exit', 'export', 'handoff', 'preset', 'import-chatgpt', 'bg'].includes(command.id) ? '会话'
-        : ['folder', 'pwd', 'cd', 'init', 'ide', 'worktree', 'open'].includes(command.id) ? '工作区'
+        : ['folder', 'pwd', 'cd', 'init', 'ide', 'worktree', 'open', 'office'].includes(command.id) ? '工作区'
           : ['model', 'reasoning', 'usage', 'cost', 'advisor'].includes(command.id) ? '模型'
             : ['doctor', 'config', 'release-notes', 'about', 'help', 'version', 'insights', 'session'].includes(command.id) ? '诊断'
               : command.id.startsWith('skill-') ? '技能' : '工具';

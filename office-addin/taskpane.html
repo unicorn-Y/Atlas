@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Atlas for Office</title>
+  <link rel="stylesheet" href="taskpane.css">
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script defer src="taskpane.js"></script>
+</head>
+<body>
+  <header><div class="mark">A</div><div><h1>Atlas</h1><p>Word · Excel</p></div><span id="connection" role="status">未配对</span></header>
+  <main>
+    <section id="pairing" class="card">
+      <h2>连接 Atlas 会话</h2>
+      <p>在 Atlas 当前会话运行 <code>/office</code>，将 8 位配对码输入下方。配对码 5 分钟后失效。</p>
+      <label for="pairCode">配对码</label>
+      <div class="row"><input id="pairCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="00000000"><button id="pairButton" type="button">连接</button></div>
+      <p id="pairMessage" class="message" aria-live="polite"></p>
+    </section>
+
+    <section id="connected" class="hidden">
+      <section class="card">
+        <div class="section-heading"><div><h2>活动文档选区</h2><p id="documentInfo">等待 Office…</p></div><button id="refreshSelection" class="secondary" type="button">刷新</button></div>
+        <label for="selection">选区预览</label>
+        <textarea id="selection" rows="7" readonly placeholder="在文档中选中文字或单元格，再点刷新。"></textarea>
+        <button id="sendSelection" class="primary" type="button">发送选区到当前 Atlas 会话</button>
+        <p id="selectionMessage" class="message" aria-live="polite"></p>
+      </section>
+      <section class="card">
+        <div class="section-heading"><div><h2>待写回内容</h2><p>Atlas 中运行 /office writeback &lt;文本&gt; 后会显示在这里。</p></div><span id="pendingCount" class="count">0</span></div>
+        <div id="writebacks" class="writebacks"><p class="empty">尚无待写回内容。</p></div>
+      </section>
+      <button id="unpairButton" class="link" type="button">断开此 Office 会话</button>
+    </section>
+  </main>
+  <footer>选区只在点击“发送选区”后传入当前 Atlas 会话。写入文档由你在此面板点击确认。</footer>
+</body>
+</html>

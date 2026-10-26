@@ -59,6 +59,7 @@ from atlas.api.cloud_documents_router import router as cloud_documents_router
 from atlas.api.mcp_resources_lazy_router import router as mcp_resources_router
 from atlas.api.model_catalog_preferences_router import router as model_catalog_preferences_router
 from atlas.api.output_style_settings_router import router as output_style_settings_router
+from atlas.api.office_router import router as office_router
 from atlas.api.wsl_policy_router import router as wsl_policy_router
 from atlas.api.tool_search_settings_router import router as tool_search_settings_router
 from atlas.api.personal_todos_router import router as personal_todos_router
@@ -143,6 +144,7 @@ def create_app(
         local_models_router,
         agent_skills_router,
         conversations_router,
+        office_router,
         quick_write_router,
         shares_router,
         conversation_activity_router,
