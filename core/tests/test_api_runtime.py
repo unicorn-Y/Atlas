@@ -80,6 +80,32 @@ async def test_native_subtask_recovery_point_survives_runtime_restart(tmp_path) 
 
 
 @pytest.mark.asyncio
+async def test_online_subtask_query_spans_parent_runs_and_excludes_terminal_children(tmp_path) -> None:
+    from httpx import ASGITransport, AsyncClient
+
+    manager = RuntimeManager(tmp_path / "runtime.sqlite3")
+    await manager.init()
+    for run_id, child_id, status in (
+        ("run-a", "child-a", "running"), ("run-b", "child-b", "closing"),
+        ("run-c", "child-c", "completed"),
+    ):
+        await manager.save_subtask({
+            "parent_run_id": run_id, "subtask_id": child_id, "status": status,
+            "goal": child_id, "backend": "atlas", "session_id": f"session-{child_id}",
+        })
+    app = FastAPI()
+    app.state.services = AppServices(runtime_mgr=manager)
+    app.include_router(runtime_router)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/subtasks/online")
+    assert response.status_code == 200
+    assert {(item["parent_run_id"], item["subtask_id"], item["status"]) for item in response.json()["items"]} == {
+        ("run-a", "child-a", "running"), ("run-b", "child-b", "closing"),
+    }
+    await manager.close()
+
+
+@pytest.mark.asyncio
 async def test_native_subtask_close_route_persists_closed_state(tmp_path) -> None:
     from httpx import ASGITransport, AsyncClient
 

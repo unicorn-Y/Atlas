@@ -14,6 +14,14 @@ from atlas.api.dependencies import get_app_services
 router = APIRouter()
 
 
+@router.get("/api/subtasks/online")
+async def list_online_subtasks(
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    """List live child agents across all parent runs, not just the open session."""
+    return {"items": await services.runtime_mgr.list_online_subtasks()}
+
+
 @router.get("/api/runs/{run_id}/subtasks")
 async def list_subtasks(
     run_id: str,

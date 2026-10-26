@@ -19,8 +19,16 @@ export default function AgentsOverview({ runs, conversations, apiBaseUrl, onOpen
 }) {
   const [tab, setTab] = useState<'overview' | 'roster'>('overview');
   const [subtasks, setSubtasks] = useState<Record<string, PersistedSubtask[]>>({});
+  const [onlineSubtasks, setOnlineSubtasks] = useState<PersistedSubtask[]>([]);
   const [notice, setNotice] = useState('');
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'waiting' | 'ended'>('all');
+  const [page, setPage] = useState(0);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState('');
+  const [pickerIndex, setPickerIndex] = useState(0);
   const runByConversation = new Map(runs.map((run) => [run.conversationId, run]));
+  const runIds = runs.map((run) => run.id).join('|');
   useEffect(() => {
     let current = true;
     void Promise.all(runs.map(async (run) => {
@@ -30,8 +38,27 @@ export default function AgentsOverview({ runs, conversations, apiBaseUrl, onOpen
       } catch { return [run.id, []] as const; }
     })).then((rows) => { if (current) setSubtasks(Object.fromEntries(rows)); });
     return () => { current = false; };
-  }, [runs, apiBaseUrl]);
-  const recent = useMemo(() => [...conversations].sort((a, b) => Date.parse(b.updated_at ?? '') - Date.parse(a.updated_at ?? '')).slice(0, 40), [conversations]);
+  }, [runIds, apiBaseUrl]);
+  useEffect(() => {
+    let current = true;
+    const refresh = () => void api<{ items: PersistedSubtask[] }>(apiBaseUrl, '/api/subtasks/online')
+      .then((result) => { if (current) setOnlineSubtasks(result.items); })
+      .catch(() => { if (current) setOnlineSubtasks([]); });
+    refresh();
+    const timer = window.setInterval(refresh, 3000);
+    return () => { current = false; window.clearInterval(timer); };
+  }, [apiBaseUrl]);
+  useEffect(() => {
+    const open = () => { setPickerOpen(true); setPickerQuery(''); setPickerIndex(0); };
+    const keydown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'a' && !event.altKey) {
+        event.preventDefault(); open();
+      }
+    };
+    window.addEventListener('atlas:open-agent-picker', open);
+    window.addEventListener('keydown', keydown);
+    return () => { window.removeEventListener('atlas:open-agent-picker', open); window.removeEventListener('keydown', keydown); };
+  }, []);
   const refreshSubtasks = async (runId: string) => { const result = await api<{ items: PersistedSubtask[] }>(apiBaseUrl, `/api/runs/${encodeURIComponent(runId)}/subtasks`); setSubtasks((current) => ({ ...current, [runId]: result.items })); };
   const resumeChild = async (runId: string, childId: string) => {
     try { await api(apiBaseUrl, `/api/runs/${encodeURIComponent(runId)}/subtasks/${encodeURIComponent(childId)}/resume`, { method: 'POST' }); await refreshSubtasks(runId); setNotice('已从原生子会话恢复任务'); }
@@ -41,17 +68,65 @@ export default function AgentsOverview({ runs, conversations, apiBaseUrl, onOpen
     try { await api(apiBaseUrl, `/api/runs/${encodeURIComponent(runId)}/subtasks/${encodeURIComponent(childId)}/close`, { method: 'POST' }); await refreshSubtasks(runId); setNotice('原生子 Agent 已关闭；会话记录已保留'); }
     catch (error) { setNotice(error instanceof Error ? error.message : '关闭失败'); }
   };
+  const ordered = useMemo(() => [...conversations].sort((a, b) => Date.parse(b.updated_at ?? '') - Date.parse(a.updated_at ?? '')), [conversations]);
+  const matching = ordered.filter((conversation) => {
+    const run = runByConversation.get(conversation.id);
+    const active = Boolean(run && RUNNING.has(run.status));
+    const waiting = run?.status === 'waiting';
+    if (statusFilter === 'active' && !active) return false;
+    if (statusFilter === 'waiting' && !waiting) return false;
+    if (statusFilter === 'ended' && active) return false;
+    const needle = query.trim().toLocaleLowerCase();
+    if (!needle) return true;
+    const children = run ? mergePersistedChildRows(childRows(run.events), [...(subtasks[run.id] ?? []), ...onlineSubtasks.filter((item) => item.parent_run_id === run.id)]) : [];
+    return `${conversation.title} ${conversation.id} ${conversation.workspace ?? ''} ${children.map((item) => item.name).join(' ')}`.toLocaleLowerCase().includes(needle);
+  });
+  const pageSize = 20;
+  const pageCount = Math.max(1, Math.ceil(matching.length / pageSize));
+  const visible = matching.slice(page * pageSize, (page + 1) * pageSize);
+  const pickerItems = useMemo(() => {
+    const sessions = conversations.map((conversation) => ({ conversation, label: conversation.title || '新对话', detail: conversation.workspace || conversation.id }));
+    const children = onlineSubtasks.filter((child) => child.session_id).map((child) => ({
+      conversation: conversations.find((item) => item.id === child.session_id) ?? { id: child.session_id!, title: child.goal || `子 Agent ${child.subtask_id.slice(0, 8)}`, workspace: child.workspace },
+      label: `子 Agent · ${child.goal || child.subtask_id}`, detail: `${child.status} · ${child.parent_run_id}`,
+    }));
+    const byId = new Map([...sessions, ...children].map((item) => [item.conversation.id, item]));
+    const needle = pickerQuery.trim().toLocaleLowerCase();
+    return [...byId.values()].filter((item) => !needle || `${item.label} ${item.conversation.id} ${item.detail}`.toLocaleLowerCase().includes(needle));
+  }, [conversations, onlineSubtasks, pickerQuery]);
+  const selectPickerItem = (index: number) => {
+    const item = pickerItems[index];
+    if (!item) return;
+    onOpen(item.conversation);
+    setPickerOpen(false);
+  };
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        setPickerIndex((index) => Math.max(0, Math.min(pickerItems.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1))));
+      } else if (event.key === 'Enter') {
+        event.preventDefault(); selectPickerItem(pickerIndex);
+      } else if (event.key === 'Escape') setPickerOpen(false);
+    };
+    window.addEventListener('keydown', keydown);
+    return () => window.removeEventListener('keydown', keydown);
+  }, [pickerOpen, pickerIndex, pickerItems]);
+  useEffect(() => { setPage(0); }, [query, statusFilter]);
   if (tab === 'roster') return <div className="flex h-full min-h-0 flex-col"><Header tab={tab} setTab={setTab} />{roster}</div>;
   return <div className="flex h-full min-h-0 flex-col overflow-auto bg-panel p-5 text-fg">
     <Header tab={tab} setTab={setTab} />
     <div className="mx-auto w-full max-w-5xl py-5">
-      <h1 className="m-0 text-[20px] font-semibold text-heading">会话与 Agent 总览</h1><p className="mt-1 text-[12.5px] text-fg-3">运行中、等待确认和最近更新的会话；活动会话约每次运行事件刷新。</p>
+      <div className="flex flex-wrap items-start gap-3"><div className="min-w-0 flex-1"><h1 className="m-0 text-[20px] font-semibold text-heading">会话与 Agent 总览</h1><p className="mt-1 text-[12.5px] text-fg-3">全部 {conversations.length} 个会话 · {onlineSubtasks.length} 个在线子 Agent；用 Ctrl+Shift+A 打开快捷导航。</p></div><button type="button" onClick={() => { setPickerOpen(true); setPickerQuery(''); setPickerIndex(0); }} className="btn ghost">Agent 快捷导航</button></div>
       {notice && <p role="status" className="rounded-lg bg-sunken px-3 py-2 text-[12px] text-fg-2">{notice}</p>}
-      <div className="grid gap-2">{recent.map((conversation) => {
+      <div className="my-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、会话 ID、工作区或子 Agent" aria-label="搜索会话总览" className="input h-9" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} aria-label="按运行状态筛选会话" className="input h-9"><option value="all">全部状态</option><option value="active">活动中</option><option value="waiting">等待确认</option><option value="ended">已结束</option></select></div>
+      {onlineSubtasks.length > 0 && <section aria-label="全部在线子 Agent" className="mb-3 rounded-xl border border-line bg-surface p-3"><h2 className="m-0 mb-2 text-[12px] font-medium text-heading">在线子 Agent（{onlineSubtasks.length}）</h2><div className="grid gap-1 sm:grid-cols-2">{onlineSubtasks.map((child) => { const childSession = child.session_id ? conversations.find((item) => item.id === child.session_id) ?? { id: child.session_id, title: child.goal || `子 Agent ${child.subtask_id.slice(0, 8)}`, workspace: child.workspace } : null; return <div key={`${child.parent_run_id}:${child.subtask_id}`} className="flex items-center gap-2 rounded-lg bg-sunken px-2.5 py-2 text-[11.5px]"><span className="size-2 shrink-0 animate-pulse rounded-full bg-brand" /><span className="min-w-0 flex-1 truncate text-fg">{child.goal || child.subtask_id}</span><span className="shrink-0 text-fg-3">{child.status === 'closing' ? '正在关闭' : '运行中'}</span>{childSession && <button type="button" onClick={() => onOpen(childSession)} className="shrink-0 rounded px-2 py-1 text-brand hover:bg-hover">打开</button>}</div>; })}</div></section>}
+      <div className="grid gap-2">{visible.map((conversation) => {
         const run = runByConversation.get(conversation.id);
         const active = run && RUNNING.has(run.status);
         const usage = run ? usageSummary(run.events) : null;
-        const children = run ? mergePersistedChildRows(childRows(run.events), subtasks[run.id] ?? []) : [];
+        const children = run ? mergePersistedChildRows(childRows(run.events), [...(subtasks[run.id] ?? []), ...onlineSubtasks.filter((item) => item.parent_run_id === run.id)]) : [];
         return <section key={conversation.id} className="rounded-xl border border-line bg-surface p-3">
           <div className="flex items-center gap-2"><span className={`size-2 rounded-full ${active ? 'bg-brand' : run?.status === 'failed' ? 'bg-danger' : 'bg-ok'}`} /><button type="button" onClick={() => onOpen(conversation)} className="min-w-0 flex-1 truncate text-left text-[13px] font-medium text-fg hover:underline">{conversation.title || '新对话'}</button><span className="text-[11px] text-fg-3">{run ? (RUN_STATUS_LABELS[run.status] ?? run.status) : '最近会话'}{run && active ? ` · ${elapsed(run.startedAt)}` : ''}</span>{run && active && <button type="button" onClick={() => onStop(run.id)} className="rounded-md px-2 py-1 text-[11px] text-danger hover:bg-danger/10">中断</button>}</div>
           {usage && <p className="mb-0 mt-1 text-[11px] text-fg-3">Token：输入 {usage.input.toLocaleString()} · 输出 {usage.output.toLocaleString()}</p>}
@@ -65,8 +140,10 @@ export default function AgentsOverview({ runs, conversations, apiBaseUrl, onOpen
             {child.backend !== 'atlas' && <span title="当前执行后端未提供原生子会话生命周期接口。" className="text-fg-3">此后端不支持关闭/恢复</span>}
           </div>)}</div>}
         </section>;
-      })}</div>
+      })}{!visible.length && <p role="status" className="rounded-lg bg-sunken p-4 text-center text-[12px] text-fg-3">没有符合筛选条件的会话。</p>}</div>
+      <div className="mt-3 flex items-center justify-center gap-3 text-[12px] text-fg-3"><button type="button" className="btn ghost" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}>上一页</button><span>第 {page + 1} / {pageCount} 页 · {matching.length} 个会话</span><button type="button" className="btn ghost" disabled={page + 1 >= pageCount} onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}>下一页</button></div>
     </div>
+    {pickerOpen && <div role="dialog" aria-modal="true" aria-label="Agent 快捷导航" className="fixed inset-0 z-[70] grid place-items-start justify-center bg-black/40 p-4 pt-[12vh]" onMouseDown={(event) => { if (event.target === event.currentTarget) setPickerOpen(false); }}><section className="card-surface flex max-h-[72vh] w-full max-w-xl flex-col gap-2 rounded-2xl p-4 shadow-xl"><header className="flex items-center gap-2"><h2 className="m-0 flex-1 text-[15px] font-semibold text-heading">Agent 快捷导航</h2><span className="text-[11px] text-fg-3">↑ ↓ 选择 · Enter 打开 · Esc 关闭</span></header><input autoFocus value={pickerQuery} onChange={(event) => { setPickerQuery(event.target.value); setPickerIndex(0); }} placeholder="搜索会话或在线子 Agent" aria-label="搜索 Agent 导航项" className="input h-9" /><div role="listbox" className="min-h-0 overflow-auto rounded-lg bg-sunken p-1">{pickerItems.map((item, index) => <button key={item.conversation.id} type="button" role="option" aria-selected={index === pickerIndex} onMouseEnter={() => setPickerIndex(index)} onClick={() => selectPickerItem(index)} className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left ${index === pickerIndex ? 'bg-brand-soft' : 'hover:bg-hover'}`}><span className="min-w-0 flex-1 truncate text-[12.5px] text-fg">{item.label}</span><span className="max-w-[45%] truncate text-[10.5px] text-fg-3">{item.detail}</span></button>)}{!pickerItems.length && <p role="status" className="m-0 p-4 text-center text-[12px] text-fg-3">没有匹配项目。</p>}</div></section></div>}
   </div>;
 }
 
@@ -75,7 +152,7 @@ function Header({ tab, setTab }: { tab: 'overview' | 'roster'; setTab: (tab: 'ov
 }
 
 type ChildRow = { id: string; name: string; progress: string; duration: string; tokens: number; status: string; backend: string; sessionId?: string; started: string };
-type PersistedSubtask = { subtask_id: string; status: string; goal: string; backend: string; session_id?: string; workspace?: string };
+type PersistedSubtask = { subtask_id: string; parent_run_id?: string; status: string; goal: string; backend: string; session_id?: string; workspace?: string };
 
 function mergePersistedChildRows(rows: ChildRow[], saved: PersistedSubtask[]): ChildRow[] {
   const merged = new Map(rows.map((row) => [row.id, row]));

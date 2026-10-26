@@ -557,6 +557,20 @@ class RuntimeManager:
             item["recovery_point"] = json.loads(item["recovery_point"] or "{}")
         return items
 
+    async def list_online_subtasks(self) -> list[dict[str, Any]]:
+        """Return every child session whose worker is currently live."""
+        if self._db is None:
+            return []
+        async with self._persist_lock:
+            async with self._db.execute(
+                "SELECT * FROM runtime_subtasks WHERE status IN ('running', 'closing') ORDER BY updated_at DESC",
+            ) as cursor:
+                rows = await cursor.fetchall()
+        items = [dict(row) for row in rows]
+        for item in items:
+            item["recovery_point"] = json.loads(item["recovery_point"] or "{}")
+        return items
+
     async def connect(self, ws: WebSocket, conn_id: str) -> None:
         await ws.accept()
         self.connections[conn_id] = ws
