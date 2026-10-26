@@ -685,6 +685,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         services.agent_conversation_lookup = _conversation_summary
         services.group_service = group_service
         services.group_orchestrator = group_orchestrator
+        # Office live-control state belongs to this app lifespan and must be
+        # available before the first task-pane request arrives.
+        services.office_live_sessions = {}
         manager.services = services
 
         # At this point config/model managers, the orchestrator, and built-in
