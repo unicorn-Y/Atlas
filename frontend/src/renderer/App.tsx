@@ -2602,7 +2602,7 @@ export default function App() {
     const commandIndex = [...groups].map(([category, commands]) =>
       `## ${category}\n${commands.map((command) => { const resolved = resolveSlashAvailability(command, { hasConversation: Boolean(activeConversation), busy: store.busy }); return `${slashCommandUsage(resolved)} — ${resolved.disabledReason ? `不可用：${resolved.disabledReason}；` : ''}${resolved.hint ?? ''}`; }).join('\n')}`,
     ).join('\n\n');
-    setRawText(`${commandIndex}\n\n## 快捷键\n- Ctrl / ⌘ + K：搜索会话和命令\n- Ctrl / ⌘ + ,：打开设置\n- Enter：发送；Shift + Enter：换行\n- Esc：关闭当前弹层\n\n更多快捷键可在「设置 → 快捷键」查看和自定义。`);
+    setRawText(`${commandIndex}\n\n## 快捷键\n- Ctrl / ⌘ + K：搜索会话和命令\n- Ctrl / ⌘ + ,：打开设置\n- 浏览器面板内 Ctrl + L / ⌘ + L：聚焦地址栏并全选地址；该快捷键覆盖网页本身的 Ctrl/Meta+L 行为\n- Enter：发送；Shift + Enter：换行\n- Esc：关闭当前弹层\n\n更多快捷键可在「设置 → 快捷键」查看和自定义。`);
   }
   slashCommands.forEach((command) => {
     command.group ??= command.id.startsWith('skill-') ? '技能'

@@ -676,6 +676,10 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
     const onKey = (event: globalThis.KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || !activeTab) return;
       const key = event.key.toLowerCase();
+      if (key === 'l') {
+        event.preventDefault(); event.stopPropagation();
+        addressInputRef.current?.focus(); addressInputRef.current?.select(); return;
+      }
       if (key === '+' || key === '=' || key === 'add') {
         event.preventDefault(); updateZoom(activeTabIdRef.current, (tabsRef.current.find((tab) => tab.id === activeTabIdRef.current)?.zoom ?? 1) + 0.1);
       } else if (key === '-' || key === '_' || key === 'subtract') {
@@ -723,7 +727,7 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
       <button type="button" aria-label="后退" disabled={!nav.back || Boolean(localFile)} onClick={() => activeView?.goBack()} className={button}><ArrowLeft size={15} /></button>
       <button type="button" aria-label="前进" disabled={!nav.forward || Boolean(localFile)} onClick={() => activeView?.goForward()} className={button}><ArrowRight size={15} /></button>
       <button type="button" aria-label={loading ? '停止加载' : '刷新'} disabled={!activeTab?.url || Boolean(localFile)} onClick={() => loading ? activeView?.stop() : activeView?.reload()} className={button}>{loading ? <X size={15} /> : <RotateCw size={14} />}</button>
-      <input ref={addressInputRef} value={activeTab?.address ?? ''} onChange={(event) => {
+      <input ref={addressInputRef} aria-keyshortcuts="Control+L Meta+L" title="聚焦并全选地址（Ctrl+L / ⌘+L；浏览器面板内覆盖页面快捷键）" value={activeTab?.address ?? ''} onChange={(event) => {
         const value = event.target.value;
         if (activeTab) setTabs((previous) => previous.map((tab) => tab.id === activeTab.id ? { ...tab, address: value } : tab));
       }} onFocus={(event) => event.target.select()} placeholder="输入网址、localhost:端口，或搜索" aria-label="地址"
