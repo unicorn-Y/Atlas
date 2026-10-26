@@ -159,6 +159,8 @@ const desktopApi: AtlasDesktopApi = {
     ipcRenderer.on('browser:zoom', listener);
     return () => ipcRenderer.removeListener('browser:zoom', listener);
   },
+  setBrowserAddressShortcutWebContents: (webContentsId) => ipcRenderer.send('browser:address-shortcut-target', webContentsId),
+  onBrowserAddressShortcut: (callback) => { const listener = () => callback(); ipcRenderer.on('browser:focus-address', listener); return () => ipcRenderer.removeListener('browser:focus-address', listener); },
 };
 
 contextBridge.exposeInMainWorld('atlasDesktop', desktopApi);

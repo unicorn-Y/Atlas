@@ -704,6 +704,16 @@ export default function BrowserPanel({ url, onUrl, suggestions, onPick, onToast,
       if (zoomBannerTimerRef.current !== null) window.clearTimeout(zoomBannerTimerRef.current);
     };
   }, [activeTabId, activeTab?.id]);
+  useEffect(() => {
+    const view = viewRefs.current.get(activeTabId);
+    let contentsId: number | null = null;
+    try { contentsId = view?.getWebContentsId() ?? null; } catch { contentsId = null; }
+    window.atlasDesktop?.setBrowserAddressShortcutWebContents?.(contentsId);
+    const unsubscribe = window.atlasDesktop?.onBrowserAddressShortcut?.(() => {
+      addressInputRef.current?.focus(); addressInputRef.current?.select();
+    });
+    return () => { unsubscribe?.(); window.atlasDesktop?.setBrowserAddressShortcutWebContents?.(null); };
+  }, [activeTabId, activeTab?.id]);
   return <div className="flex h-full min-h-0 flex-col gap-2">
     <div className="flex min-w-0 items-center gap-1 border-b border-line" aria-label="浏览器标签">
       <div role="tablist" aria-label="浏览器标签页" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1">

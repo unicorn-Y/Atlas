@@ -1,5 +1,5 @@
 import './stdoutSafety.js';
-import { app, BrowserWindow, contentTracing, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerSaveBlocker, screen, session, shell, systemPreferences, Tray } from 'electron';
+import { app, BrowserWindow, contentTracing, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerSaveBlocker, screen, session, shell, systemPreferences, Tray, webContents } from 'electron';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -58,6 +58,8 @@ let keepAwakeBlockerId: number | null = null;
 let performanceTraceActive = false;
 let runtimeState: 'running' | 'waiting' | 'idle' = 'idle';
 let quitActivitySummary = { runningTasks: 0, scheduledTasks: 0 };
+let browserAddressShortcutTarget: Electron.WebContents | null = null;
+let browserAddressShortcutListener: ((event: Electron.Event, input: Electron.Input) => void) | null = null;
 let closePromptOpen = false;
 let pendingDeepLinks: AtlasDeepLink[] = [];
 let deepLinkSubscriber: Electron.WebContents | null = null;
@@ -1307,6 +1309,21 @@ ipcMain.on('runtime:set-state', (event, state: unknown) => {
   if (state === 'running' || state === 'waiting' || state === 'idle') updateRuntimeState(state);
 });
 ipcMain.handle('task-hud:toggle', (event) => { assertTrustedAppSender(event); return toggleTaskHud(); });
+ipcMain.on('browser:address-shortcut-target', (event, rawId: unknown) => {
+  assertTrustedAppSender(event);
+  if (browserAddressShortcutTarget && browserAddressShortcutListener) browserAddressShortcutTarget.removeListener('before-input-event', browserAddressShortcutListener);
+  browserAddressShortcutTarget = null; browserAddressShortcutListener = null;
+  if (typeof rawId !== 'number' || !Number.isInteger(rawId)) return;
+  const guest = webContents.fromId(rawId);
+  if (!guest || guest.isDestroyed()) return;
+  browserAddressShortcutTarget = guest;
+  browserAddressShortcutListener = (inputEvent, input) => {
+    if (input.type !== 'keyDown' || !(input.control || input.meta) || input.key.toLowerCase() !== 'l') return;
+    inputEvent.preventDefault();
+    if (windowRef && !windowRef.isDestroyed()) windowRef.webContents.send('browser:focus-address');
+  };
+  guest.on('before-input-event', browserAddressShortcutListener);
+});
 ipcMain.on('task-hud:update', (event, raw: unknown) => {
   assertTrustedAppSender(event);
   if (!raw || typeof raw !== 'object') return;

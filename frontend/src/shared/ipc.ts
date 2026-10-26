@@ -168,4 +168,6 @@ export interface AtlasDesktopApi {
   onBrowserFind?(callback: () => void): () => void;
   /** Zoom shortcuts and Ctrl+wheel originating inside a focused embedded webview. */
   onBrowserZoom?(callback: (detail: { webContentsId: number; action: 'in' | 'out' | 'reset' | 'sync'; factor?: number }) => void): () => void;
+  setBrowserAddressShortcutWebContents?(webContentsId: number | null): void;
+  onBrowserAddressShortcut?(callback: () => void): () => void;
 }
