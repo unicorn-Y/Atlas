@@ -79,6 +79,7 @@ const desktopApi: AtlasDesktopApi = {
   updateTaskHud: (data) => ipcRenderer.send('task-hud:update', data),
   setTaskHudClickThrough: (enabled) => ipcRenderer.send('task-hud:click-through', enabled),
   onTaskHudData: (callback) => { const listener = (_event: Electron.IpcRendererEvent, data: { state: 'running' | 'waiting' | 'idle'; summary: string }) => callback(data); ipcRenderer.on('task-hud:data', listener); return () => ipcRenderer.removeListener('task-hud:data', listener); },
+  onTaskHudClickThroughState: (callback) => { const listener = (_event: Electron.IpcRendererEvent, enabled: boolean) => callback(enabled); ipcRenderer.on('task-hud:click-through-state', listener); return () => ipcRenderer.removeListener('task-hud:click-through-state', listener); },
   onTaskHudReturn: (callback) => { const listener = (_event: Electron.IpcRendererEvent, conversationId: string) => callback(conversationId); ipcRenderer.on('task-hud:return', listener); return () => ipcRenderer.removeListener('task-hud:return', listener); },
   taskHudReturn: () => ipcRenderer.send('task-hud:return'),
   hideTaskHud: () => ipcRenderer.send('task-hud:hide'),

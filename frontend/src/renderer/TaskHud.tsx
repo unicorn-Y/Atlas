@@ -7,7 +7,11 @@ type HudData = { state: 'running' | 'waiting' | 'idle'; summary: string };
 function TaskHud() {
   const [data, setData] = useState<HudData>({ state: 'idle', summary: '空闲' });
   const [through, setThrough] = useState(false);
-  useEffect(() => window.atlasDesktop?.onTaskHudData?.(setData), []);
+  useEffect(() => {
+    const offData = window.atlasDesktop?.onTaskHudData?.(setData);
+    const offClickThrough = window.atlasDesktop?.onTaskHudClickThroughState?.(setThrough);
+    return () => { offData?.(); offClickThrough?.(); };
+  }, []);
   const setClickThrough = (value: boolean) => { setThrough(value); window.atlasDesktop?.setTaskHudClickThrough?.(value); };
   return <main className="task-hud" aria-label="Atlas 系统任务悬浮状态窗">
     <div className="task-hud-card">

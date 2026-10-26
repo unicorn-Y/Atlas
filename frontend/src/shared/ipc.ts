@@ -132,6 +132,7 @@ export interface AtlasDesktopApi {
   setTaskHudClickThrough?(enabled: boolean): void;
   onTaskHudData?(callback: (data: { state: 'running' | 'waiting' | 'idle'; summary: string }) => void): () => void;
   onTaskHudReturn?(callback: (conversationId: string) => void): () => void;
+  onTaskHudClickThroughState?(callback: (enabled: boolean) => void): () => void;
   taskHudReturn?(): void;
   hideTaskHud?(): void;
   closeTaskHud?(): void;

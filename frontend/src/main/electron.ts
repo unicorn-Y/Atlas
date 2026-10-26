@@ -283,6 +283,8 @@ function updateRuntimeState(state: 'running' | 'waiting' | 'idle'): void {
 
 function toggleTaskHud(): boolean {
   if (taskHudWindow && !taskHudWindow.isDestroyed()) {
+    taskHudWindow.setIgnoreMouseEvents(false);
+    taskHudWindow.webContents.send('task-hud:click-through-state', false);
     if (taskHudWindow.isVisible()) taskHudWindow.hide(); else taskHudWindow.showInactive();
     return taskHudWindow.isVisible();
   }
