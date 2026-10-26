@@ -40,6 +40,8 @@ let windowRef: BrowserWindow | null = null;
 let petOverlayWindow: BrowserWindow | null = null;
 let floatingComposerWindow: BrowserWindow | null = null;
 let voiceHudWindow: BrowserWindow | null = null;
+let taskHudWindow: BrowserWindow | null = null;
+let taskHudData = { state: 'idle' as 'running' | 'waiting' | 'idle', summary: '空闲', conversationId: '' };
 const pendingVoiceHudResults: string[] = [];
 const conversationWindows = new Map<string, BrowserWindow>();
 type WindowBounds = { x: number; y: number; width: number; height: number };
@@ -257,6 +259,8 @@ function createTray(): void {
 
 function updateRuntimeState(state: 'running' | 'waiting' | 'idle'): void {
   runtimeState = state;
+  taskHudData = { ...taskHudData, state, summary: state === 'running' ? (taskHudData.summary || '任务运行中') : state === 'waiting' ? '等待输入' : '空闲' };
+  if (taskHudWindow && !taskHudWindow.isDestroyed()) taskHudWindow.webContents.send('task-hud:data', taskHudData);
   if (petOverlayWindow && !petOverlayWindow.isDestroyed()) petOverlayWindow.webContents.send('pet-overlay:state', state);
   const running = state === 'running' && keepAwakeEnabled;
   if (running && (keepAwakeBlockerId === null || !powerSaveBlocker.isStarted(keepAwakeBlockerId))) {
@@ -273,6 +277,30 @@ function updateRuntimeState(state: 'running' | 'waiting' | 'idle'): void {
     trayRef.setToolTip(`Atlas · ${label}`);
   }
   buildTrayMenu();
+}
+
+function toggleTaskHud(): boolean {
+  if (taskHudWindow && !taskHudWindow.isDestroyed()) {
+    if (taskHudWindow.isVisible()) taskHudWindow.hide(); else taskHudWindow.showInactive();
+    return taskHudWindow.isVisible();
+  }
+  const { workArea } = screen.getPrimaryDisplay();
+  const win = new BrowserWindow({
+    x: Math.max(workArea.x, workArea.x + workArea.width - 500), y: workArea.y + 24,
+    width: 460, height: 92, show: false, frame: false, transparent: true,
+    resizable: false, movable: true, focusable: true, skipTaskbar: true,
+    alwaysOnTop: true, hasShadow: true,
+    webPreferences: { preload: path.join(here, '../preload/index.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  taskHudWindow = win;
+  win.setAlwaysOnTop(true, 'floating');
+  win.on('closed', () => { if (taskHudWindow === win) taskHudWindow = null; });
+  win.webContents.on('did-finish-load', () => win.webContents.send('task-hud:data', taskHudData));
+  const devUrl = process.env.VITE_DEV_SERVER_URL;
+  if (devUrl) void win.loadURL(new URL('/task-hud.html', devUrl).href);
+  else void win.loadFile(path.join(here, '../../dist/task-hud.html'));
+  win.showInactive();
+  return true;
 }
 
 function activityDetail(): string {
@@ -1278,6 +1306,25 @@ ipcMain.on('runtime:set-state', (event, state: unknown) => {
   assertTrustedAppSender(event);
   if (state === 'running' || state === 'waiting' || state === 'idle') updateRuntimeState(state);
 });
+ipcMain.handle('task-hud:toggle', (event) => { assertTrustedAppSender(event); return toggleTaskHud(); });
+ipcMain.on('task-hud:update', (event, raw: unknown) => {
+  assertTrustedAppSender(event);
+  if (!raw || typeof raw !== 'object') return;
+  const data = raw as Record<string, unknown>;
+  if (data.state !== 'running' && data.state !== 'waiting' && data.state !== 'idle') return;
+  taskHudData = { state: data.state, summary: typeof data.summary === 'string' ? data.summary.slice(0, 180) : '任务状态', conversationId: typeof data.conversationId === 'string' ? data.conversationId.slice(0, 128) : '' };
+  if (taskHudWindow && !taskHudWindow.isDestroyed()) taskHudWindow.webContents.send('task-hud:data', taskHudData);
+});
+ipcMain.on('task-hud:click-through', (event, enabled: unknown) => {
+  if (event.sender !== taskHudWindow?.webContents || event.senderFrame !== event.sender.mainFrame) return;
+  taskHudWindow.setIgnoreMouseEvents(enabled === true, { forward: true });
+});
+ipcMain.on('task-hud:return', (event) => {
+  if (event.sender !== taskHudWindow?.webContents || event.senderFrame !== event.sender.mainFrame) return;
+  if (windowRef && !windowRef.isDestroyed()) { windowRef.show(); windowRef.focus(); windowRef.webContents.send('task-hud:return', taskHudData.conversationId); }
+});
+ipcMain.on('task-hud:hide', (event) => { if (event.sender === taskHudWindow?.webContents) taskHudWindow.hide(); });
+ipcMain.on('task-hud:close', (event) => { if (event.sender === taskHudWindow?.webContents) taskHudWindow.close(); });
 ipcMain.on('app:set-quit-activity', (event, summary: unknown) => {
   assertTrustedAppSender(event);
   if (!summary || typeof summary !== 'object') return;

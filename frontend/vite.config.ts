@@ -16,6 +16,7 @@ export default defineConfig({
       input: {
         app: resolve(import.meta.dirname, 'index.html'),
         'voice-hud': resolve(import.meta.dirname, 'voice-hud.html'),
+        'task-hud': resolve(import.meta.dirname, 'task-hud.html'),
         'floating-composer': resolve(import.meta.dirname, 'floating-composer.html'),
         dashboard: resolve(import.meta.dirname, 'dashboard.html'),
         'pet-overlay': resolve(import.meta.dirname, 'pet-overlay.html'),

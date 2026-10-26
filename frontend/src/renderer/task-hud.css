@@ -1,0 +1,18 @@
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+body { color: #f6f2ea; font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif; }
+.task-hud { width: 100%; height: 100%; padding: 5px; }
+.task-hud-card { display: flex; width: 100%; height: 100%; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid rgba(238,210,164,.32); border-radius: 16px; background: rgba(24,27,37,.96); box-shadow: 0 12px 38px #0008; -webkit-app-region: drag; }
+.task-hud-indicator { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; background: #8d929f; }
+.task-hud-indicator.running { background: #d9a75e; box-shadow: 0 0 10px #d9a75e; animation: pulse 1s infinite alternate; }
+.task-hud-indicator.waiting { background: #75a5df; }
+.task-hud-info { display: grid; min-width: 120px; max-width: 195px; gap: 4px; flex: 1; }
+.task-hud-info strong { font-size: 11px; }
+.task-hud-info span { overflow: hidden; color: #b4b7c1; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.task-hud-wave { display: flex; width: 52px; height: 28px; align-items: center; justify-content: center; gap: 2px; }
+.task-hud-wave i { width: 3px; height: 4px; border-radius: 4px; background: #bd8745; }
+.task-hud-wave.active i { animation: wave .7s ease-in-out infinite alternate; animation-delay: calc(var(--n) * -70ms); }
+.task-hud button { z-index: 1; display: grid; width: 26px; height: 26px; flex: 0 0 26px; place-items: center; border: 1px solid #ffffff20; border-radius: 50%; color: #eee; background: #ffffff0c; cursor: pointer; -webkit-app-region: no-drag; }
+.task-hud button:hover { background: #ffffff25; }
+@keyframes pulse { to { opacity: .5; } }
+@keyframes wave { to { height: 22px; } }

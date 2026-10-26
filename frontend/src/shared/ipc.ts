@@ -127,6 +127,14 @@ export interface AtlasDesktopApi {
   openSystemPrivacySettings?(section?: 'screen' | 'accessibility'): Promise<void>;
   setKeepAwake?(enabled: boolean): Promise<void>;
   setRuntimeState?(state: 'running' | 'waiting' | 'idle'): void;
+  toggleTaskHud?(): Promise<boolean>;
+  updateTaskHud?(data: { state: 'running' | 'waiting' | 'idle'; summary: string; conversationId?: string }): void;
+  setTaskHudClickThrough?(enabled: boolean): void;
+  onTaskHudData?(callback: (data: { state: 'running' | 'waiting' | 'idle'; summary: string }) => void): () => void;
+  onTaskHudReturn?(callback: (conversationId: string) => void): () => void;
+  taskHudReturn?(): void;
+  hideTaskHud?(): void;
+  closeTaskHud?(): void;
   togglePetOverlay?(): Promise<boolean>;
   onPetOverlayStateChange?(callback: (state: 'running' | 'waiting' | 'idle') => void): () => void;
   /** Open an existing local workspace with a fixed allowlisted IDE CLI (never through a shell). */

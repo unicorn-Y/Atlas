@@ -75,6 +75,14 @@ const desktopApi: AtlasDesktopApi = {
   openSystemPrivacySettings: () => ipcRenderer.invoke('platform:open-system-privacy-settings'),
   setKeepAwake: (enabled) => ipcRenderer.invoke('platform:set-keep-awake', enabled) as Promise<void>,
   setRuntimeState: (state) => ipcRenderer.send('runtime:set-state', state),
+  toggleTaskHud: () => ipcRenderer.invoke('task-hud:toggle') as Promise<boolean>,
+  updateTaskHud: (data) => ipcRenderer.send('task-hud:update', data),
+  setTaskHudClickThrough: (enabled) => ipcRenderer.send('task-hud:click-through', enabled),
+  onTaskHudData: (callback) => { const listener = (_event: Electron.IpcRendererEvent, data: { state: 'running' | 'waiting' | 'idle'; summary: string }) => callback(data); ipcRenderer.on('task-hud:data', listener); return () => ipcRenderer.removeListener('task-hud:data', listener); },
+  onTaskHudReturn: (callback) => { const listener = (_event: Electron.IpcRendererEvent, conversationId: string) => callback(conversationId); ipcRenderer.on('task-hud:return', listener); return () => ipcRenderer.removeListener('task-hud:return', listener); },
+  taskHudReturn: () => ipcRenderer.send('task-hud:return'),
+  hideTaskHud: () => ipcRenderer.send('task-hud:hide'),
+  closeTaskHud: () => ipcRenderer.send('task-hud:close'),
   togglePetOverlay: () => ipcRenderer.invoke('pet-overlay:toggle') as Promise<boolean>,
   onPetOverlayStateChange: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, state: 'running' | 'waiting' | 'idle') => callback(state);

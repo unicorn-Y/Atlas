@@ -552,6 +552,18 @@ export default function App() {
     if (recentWorkspace) { setPref('default-workspace', recentWorkspace); setDefaultWorkspace(recentWorkspace); }
   }, [defaultWorkspace, store.conversations, store.conversationsLoading]);
   const activeRun = store.runs.find((run) => run.id === store.activeRunId);
+  useEffect(() => {
+    const state = activeRun?.status === 'running' ? 'running' : activeRun ? 'waiting' : 'idle';
+    const summary = activeRun
+      ? (store.runPrompts[activeRun.id]?.content || activeConversation?.title || '远程任务').replace(/\s+/g, ' ').slice(0, 160)
+      : activeConversation?.title || '空闲';
+    window.atlasDesktop?.updateTaskHud?.({ state, summary, conversationId: activeConversation?.id });
+  }, [activeRun?.id, activeRun?.status, activeConversation?.id, activeConversation?.title, store.runPrompts]);
+  useEffect(() => window.atlasDesktop?.onTaskHudReturn?.((conversationId) => {
+    const target = useAtlasStore.getState().conversations.find((item) => item.id === conversationId);
+    if (!target) { setToast('悬浮窗关联的任务会话已不存在。'); return; }
+    setView('chat'); void useAtlasStore.getState().openConversation(target);
+  }), []);
   const [skillExtracting, setSkillExtracting] = useState(false);
   const quitScheduledCount = useRef(0);
   useEffect(() => { if (pref('keep-awake') === 'true') void window.atlasDesktop?.setKeepAwake?.(true); }, []);
@@ -2080,6 +2092,9 @@ export default function App() {
       const requestQuit = window.atlasDesktop?.requestQuit;
       if (!requestQuit) { setToast('退出 Atlas 需要桌面版。'); return; }
       void requestQuit().then((closed) => { if (!closed) setToast('已取消退出。'); }).catch((error) => setToast(`退出确认失败：${error instanceof Error ? error.message : String(error)}`));
+    } },
+    { id: 'hud', label: '/hud', hint: '显示或隐藏系统级任务悬浮状态窗', run: () => {
+      void window.atlasDesktop?.toggleTaskHud?.().then((visible) => setToast(visible ? '任务悬浮窗已显示' : '任务悬浮窗已隐藏')).catch((error) => setToast(`任务悬浮窗操作失败：${String(error)}`));
     } },
     { id: 'footer', label: '/footer', hint: '切换会话底部状态栏显隐；逐项状态偏好会保留', run: () => {
       setStatusBarVisible((visible) => { const next = !visible; setPref('statusbar-visible', String(next)); setToast(next ? '底部状态栏已显示' : '底部状态栏已隐藏'); return next; });
