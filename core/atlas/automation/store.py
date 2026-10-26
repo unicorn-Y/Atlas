@@ -448,7 +448,7 @@ class AutomationStore:
         """Create or update one automation (normalize + validate + persist)."""
         normalized = normalize_record(record)
         validate_record(normalized)
-        with self._lock:
+        with self._lock, _exclusive_store_file(self.path):
             records = self._read()
             existing = records.get(normalized["id"])
             maximum = self.max_automations()
@@ -465,7 +465,7 @@ class AutomationStore:
 
     def update_state(self, automation_id: str, **fields: Any) -> dict[str, Any] | None:
         """Merge a partial ``state`` projection (last_run_at / errors / paused_reason...)."""
-        with self._lock:
+        with self._lock, _exclusive_store_file(self.path):
             records = self._read()
             raw = records.get(automation_id)
             if raw is None:
@@ -479,7 +479,7 @@ class AutomationStore:
             return record
 
     def delete(self, automation_id: str) -> bool:
-        with self._lock:
+        with self._lock, _exclusive_store_file(self.path):
             records = self._read()
             if automation_id not in records:
                 return False
