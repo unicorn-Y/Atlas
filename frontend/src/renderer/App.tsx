@@ -45,6 +45,7 @@ import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } fr
 import Mark, { MarkDefs } from './components/Mark';
 import type { PaletteItem } from './components/Palette';
 import PersonalTodos from './components/PersonalTodos';
+import MobileEntryPanel from './components/settings/MobileEntryPanel';
 import type { StatusBarPreferences } from './pages/SettingsPage';
 import type { RecipeLaunchRequest } from './components/settings/RecipeManagerPanel';
 // Each navigation destination is its own renderer chunk. The initial conversation
@@ -132,7 +133,7 @@ import { cleanSearchSnippet, rankSearchHits, searchHitRoleLabel } from './servic
 import ComputerLivePreview from './components/x2/ComputerLivePreview';
 const ScreenRecorderDialog = lazy(() => import('./components/ScreenRecorderDialog'));
 
-type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage' | 'memories' | 'teach' | 'secrets' | 'pets';
+type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'mobile' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage' | 'memories' | 'teach' | 'secrets' | 'pets';
 type MemoryMarkerDraft = { text: string; path: string; session?: string; ref?: string };
 
 const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
@@ -1847,6 +1848,7 @@ export default function App() {
     } catch (error) { setToast(`创建交接会话失败：${error instanceof Error ? error.message : String(error)}`); }
   };
   const slashCommands: SlashCommand[] = [
+    { id: 'mobile', label: '/mobile', hint: '打开移动 Web 二维码和 Telegram 接入说明', run: () => setSheet('mobile') },
     { id: 'tui', label: '/tui', hint: '切换会话全屏渲染；支持翻页、选区复制和 Escape 退出', takesArgument: true, run: (value: string) => {
       const arg = value.trim().toLowerCase();
       if (arg && !['fullscreen', 'full-screen', 'normal', 'windowed', 'status'].includes(arg)) { setToast('用法：/tui [fullscreen|normal|status]'); return; }
@@ -3081,6 +3083,7 @@ export default function App() {
           <div className="grid gap-8"><ProfilesPanel profiles={store.profiles} models={store.models} skills={store.skills} onChanged={() => void store.reloadProfiles()} /><OutputStyleSettingsPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
         {sheet === 'tools' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">脚本工具</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">用一个小脚本给 Atlas 加新能力。</p><ScriptToolsPanel /></section>}
         {sheet === 'telegram' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">手机远程（Telegram）</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">不在电脑前时，用手机给 Atlas 布置任务、看结果、批准操作。</p><TelegramPanel /></section>}
+        {sheet === 'mobile' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">移动入口</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">使用 Atlas 移动 Web 或 Telegram。Atlas 原生 App 尚无已发布安装包。</p><MobileEntryPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} onOpenTelegram={() => setSheet('telegram')} /></section>}
         {sheet === 'channels' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Gateway 与渠道账号</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">配置当前已注册渠道的账号和密钥；消息进来后交给哪个 Agent，在 Agents → Channels 里绑定。</p><ChannelsSettings apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'devices' && <div className="-mx-2 -mt-1"><DevicesPage onToast={notify} /></div>}
         {sheet === 'localModels' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">本地模型</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理本机 GGUF 模型；Ollama 模型在 loopback 上独立发现、下载并注册到 Atlas。</p><div className="grid gap-8"><LocalModelsSettings apiBaseUrl={store.apiBaseUrl} onToast={notify} /><LocalModelsPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
