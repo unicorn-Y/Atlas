@@ -2993,6 +2993,10 @@ export default function App() {
         waiting={waitingConversations} onSetUnread={store.setConversationUnread}
         onSetWorkspace={(id, workspace) => store.setWorkspace(id, workspace)}
         onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}
+        onDeleteMany={async (ids) => (await api<{ results: Array<{ conversation_id: string; status: 'deleted' | 'failed'; reason: string }> }>(
+          store.apiBaseUrl, '/api/conversations/delete-archived', { method: 'POST', json: { conversation_ids: ids } },
+        )).results}
+        onDeletedMany={(ids) => store.removeDeletedConversations(ids)}
         onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} onOpenBeside={setBesideId} onOpenInWindow={(id) => window.atlasDesktop?.openConversationWindow?.(id)} />}
 
       <main className={cn('sheet relative flex min-w-0 flex-1 flex-col overflow-hidden', focusedLayout ? 'm-0 rounded-none' : 'my-1.5 mr-1.5 rounded-[12px]')}

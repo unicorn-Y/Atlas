@@ -176,6 +176,7 @@ interface AtlasState extends PersistentSlice {
   retryRun: (runId: string) => void;
   renameConversation: (id: string, title: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
+  removeDeletedConversations: (ids: string[]) => void;
   togglePinned: (id: string) => void;
   toggleArchived: (id: string) => void;
   setConversationUnread: (id: string, unread: boolean) => void;
@@ -973,6 +974,29 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
           };
         });
       } catch (error) { set(errorPatch(error, '删除对话失败')); }
+    },
+    removeDeletedConversations: (ids) => {
+      const removed = new Set(ids);
+      for (const id of removed) {
+        const cacheAt = messageCacheOrder.indexOf(id);
+        if (cacheAt >= 0) messageCacheOrder.splice(cacheAt, 1);
+      }
+      set((state) => {
+        const conversationMessages = { ...state.conversationMessages };
+        const queue = { ...state.queue };
+        const subtaskUnread = { ...state.subtaskUnread };
+        for (const id of removed) {
+          delete conversationMessages[id]; delete queue[id]; delete subtaskUnread[id];
+        }
+        storageSet(SUBTASK_UNREAD_KEY, JSON.stringify(subtaskUnread));
+        const conversations = state.conversations.filter((item) => !removed.has(item.id));
+        return {
+          conversations, ...flags(conversations), conversationMessages, queue,
+          unread: state.unread.filter((id) => !removed.has(id)), subtaskUnread,
+          activeConversationId: removed.has(state.activeConversationId) ? '' : state.activeConversationId,
+          activeRunId: removed.has(state.activeConversationId) ? null : state.activeRunId,
+        };
+      });
     },
     togglePinned: (id) => {
       const pinned = !get().conversations.find((item) => item.id === id)?.pinned;

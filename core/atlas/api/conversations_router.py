@@ -1917,3 +1917,43 @@ async def delete_conversation(
     }, cwd=conv.get("workspace") if conv else None)
     hook_store.stop_file_watcher(conversation_id)
     return {"status": "ok", "conversation_id": conversation_id}
+
+
+@router.post("/api/conversations/delete-archived")
+async def delete_archived_conversations(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    body: dict[str, Any],
+) -> dict[str, Any]:
+    """Delete archived conversations independently and report every outcome."""
+    memory = services.memory
+    if memory is None:
+        from atlas import server as _atlas_server
+
+        memory = _atlas_server.memory
+    assert memory is not None
+    ids = body.get("conversation_ids")
+    if not isinstance(ids, list):
+        raise HTTPException(status_code=422, detail="conversation_ids must be a list")
+    results: list[dict[str, str]] = []
+    hook_store = _server()._hook_store()
+    for raw_id in dict.fromkeys(item for item in ids if isinstance(item, str) and item):
+        conversation_id = raw_id
+        try:
+            conv = await memory.get_conversation(conversation_id)
+            if conv is None:
+                results.append({"conversation_id": conversation_id, "status": "failed", "reason": "Conversation not found"})
+                continue
+            if not conv.get("archived") or conv.get("pinned"):
+                results.append({"conversation_id": conversation_id, "status": "failed", "reason": "Conversation is not archived or is pinned"})
+                continue
+            if not await memory.delete_conversation(conversation_id):
+                results.append({"conversation_id": conversation_id, "status": "failed", "reason": "Conversation could not be deleted"})
+                continue
+            await hook_store.execute("SessionEnd", {
+                "conversation_id": conversation_id, "reason": "delete",
+            }, cwd=conv.get("workspace"))
+            hook_store.stop_file_watcher(conversation_id)
+            results.append({"conversation_id": conversation_id, "status": "deleted", "reason": ""})
+        except Exception as exc:
+            results.append({"conversation_id": conversation_id, "status": "failed", "reason": str(exc) or type(exc).__name__})
+    return {"results": results}

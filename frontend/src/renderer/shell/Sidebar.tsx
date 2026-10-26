@@ -134,6 +134,8 @@ interface SidebarProps {
   pinned: string[]; archived: string[]; unread: string[]; running: string[]; subtaskUnreadCounts?: Record<string, number>;
   queued?: Record<string, number>;
   onRename: (id: string, title: string) => void; onDelete: (id: string) => void;
+  onDeleteMany: (ids: string[]) => Promise<Array<{ conversation_id: string; status: 'deleted' | 'failed'; reason: string }>>;
+  onDeletedMany: (ids: string[]) => void;
   onTogglePinned: (id: string) => void; onToggleArchived: (id: string) => void;
   onExport: (id: string, format: 'json' | 'jsonl' | 'html' | 'md', open?: boolean) => void; onDuplicate: (id: string) => void;
   onOpenBeside?: (id: string) => void;
@@ -182,6 +184,8 @@ export default function Sidebar(props: SidebarProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [confirmBulkArchive, setConfirmBulkArchive] = useState(false);
+  const [confirmClearArchived, setConfirmClearArchived] = useState(false);
+  const [clearingArchived, setClearingArchived] = useState(false);
   const [confirmProjectArchive, setConfirmProjectArchive] = useState('');
   const [details, setDetails] = useState<ConversationSummary | null>(null);
   const [groupEditor, setGroupEditor] = useState<{ id: string | null; name: string } | null>(null);
@@ -336,6 +340,7 @@ export default function Sidebar(props: SidebarProps) {
   const allMatched = props.conversations.filter(matches);
   const pinnedItems = sortedItems(allMatched.filter((item) => props.pinned.includes(item.id) && !props.archived.includes(item.id)));
   const archivedItems = sortedItems(allMatched.filter((item) => props.archived.includes(item.id)));
+  const allArchivedIds = props.conversations.filter((item) => props.archived.includes(item.id) && !props.pinned.includes(item.id)).map((item) => item.id);
   const activeItems = sortedItems(allMatched.filter((item) => !props.pinned.includes(item.id) && !props.archived.includes(item.id)));
   const activeProjects = projects.filter((project) => project.status !== 'archived').sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
   const projectIds = new Set(activeProjects.flatMap((project) => project.conversation_ids ?? []));
@@ -607,6 +612,22 @@ export default function Sidebar(props: SidebarProps) {
     }
     if (action === 'export-md') targets.forEach((id) => props.onExport(id, 'md'));
     if (action === 'export-json') targets.forEach((id) => props.onExport(id, 'json'));
+  };
+  const clearArchived = async () => {
+    if (!confirmClearArchived) { setConfirmClearArchived(true); return; }
+    const targets = allArchivedIds;
+    setClearingArchived(true);
+    try {
+      const results = await props.onDeleteMany(targets);
+      const deleted = results.filter((item) => item.status === 'deleted').map((item) => item.conversation_id);
+      props.onDeletedMany(deleted);
+      const failed = results.filter((item) => item.status === 'failed');
+      setFeedback(failed.length ? `已删除 ${deleted.length} 项；${failed.length} 项失败：${failed.map((item) => `${item.conversation_id}：${item.reason}`).join('；')}` : `已删除全部 ${deleted.length} 个归档会话。`);
+    } catch (error) {
+      setFeedback(`清理归档失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setClearingArchived(false); setConfirmClearArchived(false);
+    }
   };
   const createCustomGroup = () => {
     const editor = groupEditor;
@@ -990,6 +1011,13 @@ export default function Sidebar(props: SidebarProps) {
             <ChevronRight size={13} className={cn('transition-transform', (showArchived || statusFilter === 'archived') && 'rotate-90')} />已归档 {archivedItems.length}
           </button>
           {(showArchived || statusFilter === 'archived') && archivedItems.map((item) => row(item, 'archived'))}
+          {(showArchived || statusFilter === 'archived') && archivedItems.length > 0 && <div className="flex items-center justify-between gap-2 px-2.5 pt-1">
+            <span className="text-[10.5px] text-fg-3">可删除 {allArchivedIds.length} 个</span>
+            <button type="button" disabled={clearingArchived} aria-label={`${confirmClearArchived ? '确认删除全部归档' : '删除全部归档'}，${allArchivedIds.length} 个会话`}
+              onClick={() => void clearArchived()} className="rounded px-2 py-1 text-[10.5px] text-danger hover:bg-danger/10 disabled:opacity-50">
+              {clearingArchived ? '正在删除…' : confirmClearArchived ? `确认删除 ${allArchivedIds.length} 个` : `删除全部归档 (${allArchivedIds.length})`}
+            </button>
+          </div>}
           {!archivedItems.length && <p className="m-0 px-2.5 py-1 text-[11px] text-fg-3">拖到这里归档</p>}
         </section>}
         {!allMatched.length && <p className="px-2.5 text-[12.5px] text-fg-3">{props.conversationsLoading ? '正在加载…' : filterText || statusFilter !== 'all' ? '没有符合条件的会话。' : '还没有任务。点「新任务」开始。'}</p>}
