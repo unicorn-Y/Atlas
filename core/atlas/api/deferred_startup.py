@@ -508,7 +508,9 @@ async def _register_extensions(app: Any) -> None:
     try:
         # MCP's SDK import graph is large; load its resource routes after the
         # core API has started answering requests.
-        from atlas.api import mcp_resources_router as _mcp_resources_router  # noqa: F401
+        from atlas.api import mcp_resources_router
+        if not all(hasattr(mcp_resources_router, name) for name in ("list_mcp_resources", "read_mcp_resource")):
+            raise ImportError("MCP resource handlers are unavailable")
     except Exception:  # noqa: BLE001 — an optional integration must not gate chat
         log.exception("startup.mcp_resource_routes_failed")
         errors.append("MCP resource route implementation failed")
