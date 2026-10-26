@@ -25,11 +25,19 @@ type DiagnosticReport = {
 };
 
 function saveReport(report: DiagnosticReport) {
-  const blob = new Blob([`${JSON.stringify(report, null, 2)}\n`], { type: 'application/json' });
+  const bundle = {
+    schema_version: 1,
+    kind: 'atlas-local-bug-bundle',
+    created_at: new Date().toISOString(),
+    app: { user_agent: navigator.userAgent, locale: navigator.language },
+    diagnostics: report,
+    privacy: '本地生成；不含模型凭据、配置内容或本机路径；由用户选择是否分享。',
+  };
+  const blob = new Blob([`${JSON.stringify(bundle, null, 2)}\n`], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `atlas-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+  anchor.download = `atlas-bug-bundle-${new Date().toISOString().slice(0, 10)}.json`;
   anchor.click();
   URL.revokeObjectURL(url);
 }
@@ -47,6 +55,8 @@ export default function DiagnosticsPanel({ apiBaseUrl, workspacePath = '' }: { a
   const [safeMode, setSafeMode] = useState(false);
   const [rememberSafeMode, setRememberSafeMode] = useState(false);
   const [restartingSafeMode, setRestartingSafeMode] = useState(false);
+  const [traceActive, setTraceActive] = useState(false);
+  const [nativeAction, setNativeAction] = useState('');
 
   useEffect(() => {
     void Promise.all([window.atlasDesktop?.getSafeMode?.(), window.atlasDesktop?.getSafeModePreference?.()])
@@ -108,6 +118,20 @@ export default function DiagnosticsPanel({ apiBaseUrl, workspacePath = '' }: { a
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally { setOpeningDashboard(false); }
   };
+  const captureHeap = async () => {
+    setError(null); setNativeAction('heap');
+    try { const saved = await window.atlasDesktop?.captureHeapSnapshot?.(); setMessage(saved ? `Heap Snapshot 已保存：${saved}` : '已取消导出。'); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setNativeAction(''); }
+  };
+  const toggleTrace = async () => {
+    setError(null); setNativeAction('trace');
+    try {
+      if (!traceActive) { await window.atlasDesktop?.startPerformanceTrace?.(); setTraceActive(true); setMessage('性能追踪已开始；复现问题后停止并导出。'); }
+      else { const saved = await window.atlasDesktop?.stopPerformanceTrace?.(); setTraceActive(false); setMessage(saved ? `性能追踪已保存：${saved}` : '性能追踪已停止，未保存文件。'); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setNativeAction(''); }
+  };
   const advice = (check: DiagnosticCheck) => {
     if (check.status === 'ok') return '';
     if (check.id === 'backend') return '建议重启 Atlas 后端并查看启动日志。';
@@ -154,7 +178,9 @@ export default function DiagnosticsPanel({ apiBaseUrl, workspacePath = '' }: { a
       <div className="my-3 flex flex-wrap gap-2">
         <button className={styles.settingsActionSecondary} type="button" disabled={probingModel} onClick={() => void probeModel()}>{probingModel ? '测试模型连接中…' : '测试模型连通性'}</button>
         <button className={styles.settingsActionSecondary} type="button" onClick={() => void copyReport()}>复制 JSON</button>
-        <button className={styles.settingsActionSecondary} type="button" onClick={() => saveReport(report)}>导出 JSON</button>
+        <button className={styles.settingsActionSecondary} type="button" onClick={() => saveReport(report)}>导出脱敏 Bug Bundle</button>
+        <button className={styles.settingsActionSecondary} type="button" disabled={nativeAction !== ''} onClick={() => void captureHeap()}>{nativeAction === 'heap' ? '正在采集…' : '导出 Heap Snapshot'}</button>
+        <button className={styles.settingsActionSecondary} type="button" disabled={nativeAction !== ''} onClick={() => void toggleTrace()}>{nativeAction === 'trace' ? '正在处理…' : traceActive ? '停止并导出性能追踪' : '开始性能追踪'}</button>
       </div>
       {modelProbe && <p role={modelProbe.ok ? 'status' : 'alert'} className={modelProbe.ok ? styles.settingsSuccess : styles.settingsError}>{modelProbe.ok ? '模型连通性通过。' : `模型连通性失败：${modelProbe.message}`}</p>}
       <label>可复制的诊断报告

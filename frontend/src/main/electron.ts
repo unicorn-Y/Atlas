@@ -1,5 +1,5 @@
 import './stdoutSafety.js';
-import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerSaveBlocker, screen, session, shell, systemPreferences, Tray } from 'electron';
+import { app, BrowserWindow, contentTracing, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, powerSaveBlocker, screen, session, shell, systemPreferences, Tray } from 'electron';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -53,6 +53,7 @@ let floatingComposerContext: { selectedText: string; conversationId?: string } =
 const recentScreenshots: RecentScreenshot[] = [];
 let keepAwakeEnabled = false;
 let keepAwakeBlockerId: number | null = null;
+let performanceTraceActive = false;
 let runtimeState: 'running' | 'waiting' | 'idle' = 'idle';
 let pendingDeepLinks: AtlasDeepLink[] = [];
 let deepLinkSubscriber: Electron.WebContents | null = null;
@@ -1400,6 +1401,51 @@ ipcMain.handle('dialog:open-directory', async (event, defaultPath?: unknown) => 
 // compromised page run programs, so they are shown in Explorer instead.
 const RUNNABLE = /\.(exe|com|bat|cmd|ps1|psm1|vbs|vbe|js|jse|wsf|wsh|msi|msp|scr|lnk|url|hta|cpl|jar|reg|appref-ms)$/i;
 const savedScreenRecordings = new Set<string>();
+ipcMain.handle('diagnostics:heap-snapshot', async (event) => {
+  assertTrustedAppSender(event);
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  const defaultPath = path.join(app.getPath('downloads'), `atlas-heap-${new Date().toISOString().replace(/[:.]/g, '-')}.heapsnapshot`);
+  const options = { title: '导出 JavaScript Heap Snapshot', defaultPath, filters: [{ name: 'Heap Snapshot', extensions: ['heapsnapshot'] }] };
+  const result = owner ? await dialog.showSaveDialog(owner, options) : await dialog.showSaveDialog(options);
+  if (result.canceled || !result.filePath) return null;
+  const contents = event.sender;
+  if (contents.isDestroyed()) throw new Error('Atlas 窗口已关闭。');
+  await contents.takeHeapSnapshot(result.filePath);
+  return result.filePath;
+});
+ipcMain.handle('diagnostics:trace-start', async (event) => {
+  assertTrustedAppSender(event);
+  if (performanceTraceActive) throw new Error('性能追踪已经在运行。');
+  await contentTracing.startRecording({
+    recording_mode: 'record-continuously',
+    included_categories: ['-*', 'v8.execute', 'blink.user_timing', 'disabled-by-default-v8.cpu_profiler', 'disabled-by-default-devtools.timeline'],
+  });
+  performanceTraceActive = true;
+});
+ipcMain.handle('diagnostics:trace-stop', async (event) => {
+  assertTrustedAppSender(event);
+  if (!performanceTraceActive) throw new Error('当前没有运行中的性能追踪。');
+  const temporaryDirectory = mkdtempSync(path.join(app.getPath('temp'), 'atlas-trace-'));
+  const temporaryPath = path.join(temporaryDirectory, 'trace.json');
+  try {
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const defaultPath = path.join(app.getPath('downloads'), `atlas-perf-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+    const options = { title: '保存性能追踪', defaultPath, filters: [{ name: 'Chrome Trace', extensions: ['json'] }] };
+    const result = owner ? await dialog.showSaveDialog(owner, options) : await dialog.showSaveDialog(options);
+    await contentTracing.stopRecording(temporaryPath);
+    performanceTraceActive = false;
+    if (result.canceled || !result.filePath) return null;
+    const { copyFileSync } = await import('node:fs');
+    copyFileSync(temporaryPath, result.filePath);
+    return result.filePath;
+  } finally {
+    if (performanceTraceActive) {
+      try { await contentTracing.stopRecording(temporaryPath); } catch { /* best-effort trace cleanup */ }
+      performanceTraceActive = false;
+    }
+    rmSync(temporaryDirectory, { recursive: true, force: true });
+  }
+});
 ipcMain.handle('screen-recording:save', async (event, dataBase64: unknown, fileName: unknown) => {
   if (event.sender !== windowRef?.webContents || event.senderFrame !== event.sender.mainFrame || typeof dataBase64 !== 'string' || typeof fileName !== 'string') throw new Error('屏幕录制只能从 Atlas 主窗口保存');
   if (dataBase64.length > 14 * 1024 * 1024 || !/^[A-Za-z0-9+/]*={0,2}$/.test(dataBase64)) throw new Error('录制视频数据格式无效或超过 10 MiB');

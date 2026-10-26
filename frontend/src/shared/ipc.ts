@@ -70,6 +70,9 @@ export interface AtlasDesktopApi {
   getSafeModePreference?(): Promise<boolean>;
   setSafeModePreference?(enabled: boolean): Promise<void>;
   openBackendLog?(): Promise<void>;
+  captureHeapSnapshot?(): Promise<string | null>;
+  startPerformanceTrace?(): Promise<void>;
+  stopPerformanceTrace?(): Promise<string | null>;
   getSkillCenterToken(): Promise<string | undefined>;
   /** Native folder picker; resolves to the chosen absolute path, or null when cancelled. */
   selectDirectory(defaultPath?: string): Promise<string | null>;

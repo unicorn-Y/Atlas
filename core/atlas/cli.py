@@ -3,6 +3,8 @@
 import asyncio
 import base64
 import json
+import importlib.metadata
+import importlib.util
 import mimetypes
 import os
 import shutil
@@ -165,6 +167,44 @@ console = _LazyConsole()
 def main() -> None:
     """Atlas — All-in-one AI Personal Assistant."""
     pass
+
+
+@main.command("verify")
+def verify_command() -> None:
+    """Check that the Atlas Python installation and version metadata agree."""
+    from atlas import __version__
+
+    checks: list[tuple[str, bool, str]] = []
+    checks.append(("atlas package", importlib.util.find_spec("atlas") is not None,
+                   str(importlib.util.find_spec("atlas").origin if importlib.util.find_spec("atlas") else "not importable")))
+    checks.append(("version metadata", True, f"source={__version__}"))
+    try:
+        installed_version = importlib.metadata.version("atlas-core")
+    except importlib.metadata.PackageNotFoundError:
+        checks.append(("installed distribution", False, "package metadata is missing; run from an installed Atlas environment"))
+    else:
+        matches = installed_version == __version__
+        checks.append(("installed distribution", matches, f"installed={installed_version}; source={__version__}"))
+    for name, ok, detail in checks:
+        click.echo(f"{'OK' if ok else 'FAIL'} {name}: {detail}")
+    if not all(ok for _, ok, _ in checks):
+        raise click.ClickException("Atlas installation verification failed")
+    click.echo("Atlas installation is internally consistent.")
+
+
+@main.command("completion")
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish"], case_sensitive=False))
+def completion_command(shell: str) -> None:
+    """Print a shell completion script for bash, zsh, or fish."""
+    from click.shell_completion import get_completion_class
+
+    completion_type = get_completion_class(shell.lower())
+    if completion_type is None:
+        raise click.ClickException(f"Click does not provide completion for {shell}")
+    completion = completion_type(main, {}, "atlas", "_ATLAS_COMPLETE")
+    # Generate from Click's maintained template directly. Click's BashComplete.source()
+    # probes `bash --version`, which breaks when Atlas runs under a Windows Python.
+    click.echo(completion.source_template % completion.source_vars())
 
 
 def _desktop_dev_command(repo_root: Path) -> tuple[list[str], Path] | None:
