@@ -6,13 +6,20 @@ import { api } from '../../services/api';
 interface GitStatusEntry { path: string; code: string }
 interface GitWorkspace { current: string | null; branches: string[]; status: GitStatusEntry[] }
 interface GitCommit { hash: string; parents: string[]; subject: string; author: string; date: string }
-interface GitHistory { graph: string[]; commits: GitCommit[] }
+interface GitGraphNode extends GitCommit { row: number; column: number; topology: string }
+interface GitHistory { graph: string[]; commits: GitCommit[]; nodes: GitGraphNode[] }
+interface GitCommitDetail extends GitCommit {
+  author_email: string; committer: string; committer_email: string; author_date: string;
+  commit_date: string; decorations: string; body: string; changes: string; changes_truncated: boolean;
+}
 
 /** Branch controls, selected-path commit/push actions, and the repository's real commit graph. */
 export default function GitWorkspacePanel({ root, conversationId, refreshKey, onChanged, onToast }: { root: string; conversationId?: string; refreshKey?: string; onChanged?: () => void; onToast?: (text: string) => void }) {
   const apiBaseUrl = useAtlasStore((state) => state.apiBaseUrl);
   const [workspace, setWorkspace] = useState<GitWorkspace | null>(null);
   const [history, setHistory] = useState<GitHistory | null>(null);
+  const [selectedCommit, setSelectedCommit] = useState<GitCommitDetail | null>(null);
+  const [commitLoading, setCommitLoading] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [branchName, setBranchName] = useState('');
   const [message, setMessage] = useState('');
@@ -36,6 +43,7 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
       ]);
       setWorkspace(nextWorkspace);
       setHistory(nextHistory);
+      setSelectedCommit(null);
       setSelected((current) => current.filter((path) => nextWorkspace.status.some((item) => item.path === path)));
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : String(exc));
@@ -86,6 +94,25 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
   }, [paths]);
   const allSelected = paths.length > 0 && paths.every((path) => selected.includes(path));
   const selectedLabel = `${selected.length} 个文件`;
+  const openCommit = async (hash: string) => {
+    setCommitLoading(true);
+    setError('');
+    try {
+      const detail = await api<GitCommitDetail>(apiBaseUrl,
+        `/api/git/commit/${encodeURIComponent(hash)}?${new URLSearchParams({ root })}`);
+      setSelectedCommit(detail);
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : String(exc));
+    } finally {
+      setCommitLoading(false);
+    }
+  };
+  const graphNodes = history?.nodes ?? [];
+  const children = selectedCommit
+    ? graphNodes.filter((node) => node.parents.includes(selectedCommit.hash))
+    : [];
+  const graphWidth = Math.max(300, ...graphNodes.map((node) => 28 + node.column * 22));
+  const graphHeight = graphNodes.length * 34 + 18;
 
   const runBranch = async (name: string, create: boolean) => {
     const value = name.trim();
@@ -270,16 +297,47 @@ export default function GitWorkspacePanel({ root, conversationId, refreshKey, on
       <h4 className="m-0 mb-1.5 flex items-center gap-1.5 text-[11.5px] font-semibold text-fg-2"><GitCommitHorizontal size={12} />提交历史（最近最多 200 条）</h4>
       {history?.commits.length
         ? <>
-          <pre aria-label="提交历史拓扑" className="m-0 max-h-44 overflow-auto rounded-lg bg-sunken px-2 py-1.5 whitespace-pre font-mono text-[10px] leading-[1.45] text-brand">{history.graph.join('\n')}</pre>
-          <ol className="m-0 mt-1 grid max-h-44 list-none gap-0 overflow-auto p-0">
-          {history.commits.map((commit, index) => <li key={`${commit.hash}-${index}`} className="min-w-0 border-l border-line pl-2 py-1">
-            <div className="min-w-0">
-              <p className="m-0 truncate text-[11px] font-medium text-fg" title={commit.subject}>{commit.subject}</p>
-              <p className="m-0 mt-0.5 truncate font-mono text-[9.5px] text-fg-3" title={commit.hash}>{commit.hash.slice(0, 10)}{commit.parents.length ? ` ← ${commit.parents.map((hash) => hash.slice(0, 7)).join(', ')}` : ' · 根提交'}</p>
-              <p className="m-0 truncate text-[10px] text-fg-3">{commit.author}{commit.date ? ` · ${new Date(commit.date).toLocaleString()}` : ''}</p>
+          <div aria-label="可交互提交图谱" className="max-h-64 overflow-auto rounded-lg bg-sunken p-2" role="tree">
+            <div className="relative min-w-full" style={{ width: graphWidth, height: graphHeight }}>
+              <svg aria-hidden="true" className="absolute inset-0" width={graphWidth} height={graphHeight}>
+                {graphNodes.flatMap((node) => node.parents.flatMap((parentHash) => {
+                  const parent = graphNodes.find((candidate) => candidate.hash === parentHash);
+                  if (!parent) return [];
+                  const startX = 12 + node.column * 22;
+                  const startY = 17 + node.row * 34;
+                  const endX = 12 + parent.column * 22;
+                  const endY = 17 + parent.row * 34;
+                  const bendY = Math.min(endY, startY + 14);
+                  return [<path key={`${node.hash}-${parentHash}`} d={`M ${startX} ${startY} L ${startX} ${bendY} L ${endX} ${endY}`} fill="none" stroke="var(--brand)" strokeOpacity=".48" strokeWidth="2" />];
+                }))}
+              </svg>
+              <ol className="relative m-0 grid list-none gap-0 p-0">
+                {graphNodes.map((node) => <li key={node.hash} role="treeitem" aria-selected={selectedCommit?.hash === node.hash} className="flex h-[34px] min-w-0 items-center" style={{ paddingLeft: node.column * 22 }}>
+                  <button type="button" onClick={() => void openCommit(node.hash)} aria-label={`查看提交 ${node.subject}`} aria-pressed={selectedCommit?.hash === node.hash} title={node.topology} className={`relative z-10 inline-flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-left text-[10.5px] hover:bg-hover ${selectedCommit?.hash === node.hash ? 'bg-brand-soft text-brand' : 'text-fg-2'}`}>
+                    <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full border-2 border-brand bg-sunken" />
+                    <code className="shrink-0 font-mono text-[9.5px]">{node.hash.slice(0, 8)}</code>
+                    <span className="max-w-[260px] truncate">{node.subject}</span>
+                  </button>
+                </li>)}
+              </ol>
             </div>
-          </li>)}
-          </ol>
+          </div>
+          {commitLoading && <p role="status" className="m-0 text-[10.5px] text-fg-3">正在读取提交详情…</p>}
+          {selectedCommit && <section aria-label="提交详情" className="grid gap-2 rounded-xl border border-line bg-sunken p-2.5">
+            <div className="flex min-w-0 items-start justify-between gap-2"><div className="min-w-0"><h5 className="m-0 break-words text-[11.5px] font-semibold text-fg">{selectedCommit.subject}</h5><code className="mt-1 block break-all text-[9.5px] text-fg-3">{selectedCommit.hash}</code></div><button type="button" onClick={() => setSelectedCommit(null)} aria-label="关闭提交详情" className="shrink-0 rounded-md px-2 py-1 text-[10px] text-fg-3 hover:bg-hover">关闭</button></div>
+            <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 text-[10px]">
+              <dt className="text-fg-3">作者</dt><dd className="m-0 break-words text-fg-2">{selectedCommit.author} &lt;{selectedCommit.author_email}&gt;</dd>
+              <dt className="text-fg-3">提交者</dt><dd className="m-0 break-words text-fg-2">{selectedCommit.committer} &lt;{selectedCommit.committer_email}&gt;</dd>
+              <dt className="text-fg-3">作者时间</dt><dd className="m-0 break-words text-fg-2">{selectedCommit.author_date}</dd>
+              <dt className="text-fg-3">提交时间</dt><dd className="m-0 break-words text-fg-2">{selectedCommit.commit_date}</dd>
+              <dt className="text-fg-3">引用</dt><dd className="m-0 break-words text-fg-2">{selectedCommit.decorations || '无'}</dd>
+              <dt className="text-fg-3">父提交</dt><dd className="m-0 flex flex-wrap gap-1">{selectedCommit.parents.length ? selectedCommit.parents.map((hash) => <button type="button" key={hash} onClick={() => void openCommit(hash)} className="font-mono text-brand hover:underline">{hash.slice(0, 10)}</button>) : '根提交'}</dd>
+              <dt className="text-fg-3">子提交</dt><dd className="m-0 flex flex-wrap gap-1">{children.length ? children.map((node) => <button type="button" key={node.hash} onClick={() => void openCommit(node.hash)} className="font-mono text-brand hover:underline">{node.hash.slice(0, 10)}</button>) : '当前图谱中没有子提交'}</dd>
+              <dt className="text-fg-3">说明</dt><dd className="m-0 whitespace-pre-wrap break-words text-fg-2">{selectedCommit.body || '无'}</dd>
+            </dl>
+            <pre aria-label="提交改动" className="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-canvas p-2 font-mono text-[9.5px] leading-relaxed text-fg-2">{selectedCommit.changes || '此提交没有文件改动。'}</pre>
+            {selectedCommit.changes_truncated && <p role="status" className="m-0 text-[10px] text-fg-3">改动过大，详情截断于 200,000 个字符。</p>}
+          </section>}
         </>
         : <p className="m-0 text-[11px] text-fg-3">{history ? '还没有提交历史。' : loading ? '正在读取提交历史…' : '提交历史暂不可用。'}</p>}
     </div>

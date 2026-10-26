@@ -1404,7 +1404,74 @@ async def get_git_history(
         fields = line.split("\x1f", 4)
         if len(fields) == 5:
             commits.append({"hash": fields[0], "parents": fields[1].split(), "subject": fields[2], "author": fields[3], "date": fields[4]})
-    return {"graph": graph.splitlines(), "commits": commits}
+    nodes = _parse_git_graph(graph.splitlines(), commits)
+    return {"graph": graph.splitlines(), "commits": commits, "nodes": nodes}
+
+
+def _parse_git_graph(lines: list[str], commits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Map git's ASCII graph lanes to full commit records for clickable nodes."""
+    import re
+
+    by_prefix = {str(item["hash"])[:12]: item for item in commits if item.get("hash")}
+    nodes: list[dict[str, Any]] = []
+    pattern = re.compile(r"^([ |/\\*]+?)\s+([0-9a-f]{7,40})\s+(.*)$")
+    for line in lines:
+        match = pattern.match(line)
+        if not match:
+            continue
+        short_hash = match.group(2)
+        commit = next((item for prefix, item in by_prefix.items() if prefix.startswith(short_hash)), None)
+        if commit is None:
+            continue
+        graph_prefix = match.group(1)
+        nodes.append({
+            "hash": str(commit["hash"]),
+            "parents": list(commit.get("parents") or []),
+            "subject": str(commit.get("subject") or match.group(3)),
+            "author": str(commit.get("author") or ""),
+            "date": str(commit.get("date") or ""),
+            "row": len(nodes),
+            "column": graph_prefix.rindex("*"),
+            "topology": line,
+        })
+    return nodes
+
+
+@router.get("/api/git/commit/{commit_hash}")
+async def get_git_commit_detail(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    commit_hash: str,
+    root: str = Query(),
+) -> dict[str, Any]:
+    return _git_commit_detail(_git_workspace(root), commit_hash)
+
+
+def _git_commit_detail(base: Path, commit_hash: str) -> dict[str, Any]:
+    import re
+
+    if not re.fullmatch(r"[0-9a-fA-F]{7,40}", commit_hash):
+        raise HTTPException(status_code=400, detail="invalid commit hash")
+    resolved = _git_run(base, "rev-parse", "--verify", f"{commit_hash}^{{commit}}")
+    raw = _git_run(
+        base, "show", "-s", "--date=iso-strict",
+        "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%ad%x1f%cI%x1f%D%x1f%s%x1f%b%x1fU44END",
+        resolved,
+    )
+    fields = raw.split("\x1f", 11)
+    if len(fields) != 12 or fields[11] != "U44END":
+        raise HTTPException(status_code=502, detail="git returned incomplete commit metadata")
+    patch = _git_run(base, "show", "-m", "--format=", "--stat", "--patch", "--no-ext-diff", resolved, timeout=60)
+    truncated = len(patch) > 200_000
+    if truncated:
+        patch = patch[:200_000] + "\n\n[diff truncated at 200,000 characters]"
+    return {
+        "hash": fields[0], "parents": fields[1].split(),
+        "author": fields[2], "author_email": fields[3],
+        "committer": fields[4], "committer_email": fields[5],
+        "author_date": fields[6], "commit_date": fields[7],
+        "decorations": fields[8], "subject": fields[9], "body": fields[10],
+        "changes": patch, "changes_truncated": truncated,
+    }
 
 
 def _pr_timeline(base: Path) -> list[dict[str, str]]:

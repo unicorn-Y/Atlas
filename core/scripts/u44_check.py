@@ -149,6 +149,63 @@ async def check_prompt_cache_diagnostics() -> None:
     print("U44 item 5 PASS: unique stable run prefix, omitted Anthropic cache markers, and provider cache-hit reporting")
 
 
+def check_git_graph() -> None:
+    from fastapi import HTTPException
+    from atlas.api.workspace_router import _git_commit_detail, _git_run, _parse_git_graph
+
+    with tempfile.TemporaryDirectory(prefix="atlas-u44-git-graph-") as temp:
+        repo = Path(temp)
+
+        def git(*args: str) -> str:
+            result = subprocess.run(
+                ["git", "-C", str(repo), *args], check=True,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20,
+            )
+            return result.stdout.strip()
+
+        git("init", "-b", "main")
+        git("config", "user.name", "U44 Graph Fixture")
+        git("config", "user.email", "u44@example.test")
+        (repo / "base.txt").write_text("base\n", encoding="utf-8")
+        git("add", "base.txt")
+        git("commit", "-m", "base commit")
+        git("switch", "-c", "side")
+        (repo / "side.txt").write_text("side\n", encoding="utf-8")
+        git("add", "side.txt")
+        git("commit", "-m", "side branch commit")
+        side_hash = git("rev-parse", "HEAD")
+        git("switch", "main")
+        (repo / "main.txt").write_text("main\n", encoding="utf-8")
+        git("add", "main.txt")
+        git("commit", "-m", "main branch commit")
+        git("merge", "--no-ff", "side", "-m", "merge side branch")
+
+        graph = _git_run(repo, "log", "--graph", "--decorate", "--all", "--date-order", "--oneline", "-n200")
+        formatted = _git_run(repo, "log", "--all", "--date-order", "--format=%H%x1f%P%x1f%s%x1f%an%x1f%ad", "--date=short", "-n200")
+        commits = []
+        for line in formatted.splitlines():
+            fields = line.split("\x1f", 4)
+            if len(fields) == 5:
+                commits.append({"hash": fields[0], "parents": fields[1].split(), "subject": fields[2], "author": fields[3], "date": fields[4]})
+        nodes = _parse_git_graph(graph.splitlines(), commits)
+        assert len(nodes) == 4, (graph, nodes)
+        assert any(node["column"] > 0 for node in nodes), (graph, nodes)
+        merge = next(node for node in nodes if node["subject"] == "merge side branch")
+        assert len(merge["parents"]) == 2
+        detail = _git_commit_detail(repo, merge["hash"])
+        assert detail["subject"] == "merge side branch"
+        assert len(detail["parents"]) == 2 and detail["author_email"] == "u44@example.test"
+        assert "base.txt" in detail["changes"] or "side.txt" in detail["changes"]
+        assert any(node["hash"] == side_hash for node in nodes)
+        try:
+            _git_commit_detail(repo, "../../HEAD")
+        except HTTPException as exc:
+            assert exc.status_code == 400
+        else:
+            raise AssertionError("unsafe commit selector was accepted")
+    print("U44 item 6 PASS: parsed real merge graph lanes, complete commit metadata/diff, and parent links")
+
+
 async def check_real_provider() -> None:
     from atlas.models import ModelManager
     from real_model_check import AttemptResult, retry_real_model_check_async
@@ -173,6 +230,7 @@ def main() -> None:
     sys.path.insert(0, str(CORE))
     asyncio.run(check_upstream_retry_policy())
     asyncio.run(check_prompt_cache_diagnostics())
+    check_git_graph()
     asyncio.run(check_real_provider())
     check_terminal_setup()
     print("U44 CHECK PASS")
