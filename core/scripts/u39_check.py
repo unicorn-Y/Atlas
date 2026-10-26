@@ -32,6 +32,31 @@ def pytest(label: str, selectors: list[str], env: dict[str, str]) -> None:
     run(label, [sys.executable, "-m", "pytest", *selectors, "-q"], cwd=CORE, env=env)
 
 
+def cli_usage_terminal_scenarios() -> None:
+    from atlas.cli import _cli_usage_record, _write_cli_usage_file
+
+    with tempfile.TemporaryDirectory(prefix="atlas-u39-usage-terminal-") as temp:
+        root = Path(temp)
+        for status in ("failed", "cancelled"):
+            target = root / f"{status}.json"
+            record = _cli_usage_record(
+                run_id=f"run-{status}", session_id=f"session-{status}", status=status,
+                model="deepseek-v4.1-flash", rows=[],
+            )
+            _write_cli_usage_file(target, record)
+            written = json.loads(target.read_text(encoding="utf-8"))
+            if written.get("status") != status or written.get("schema_version") != 1:
+                raise AssertionError(f"usage file did not preserve {status} terminal state")
+        blocked = root / "not-a-file"
+        blocked.mkdir()
+        try:
+            _write_cli_usage_file(blocked, record)
+        except OSError:
+            pass
+        else:
+            raise AssertionError("usage-file write failure was silently accepted")
+
+
 def main() -> None:
     env = dict(os.environ)
     env["ATLAS_ROOT"] = r"C:\engine-reg\_atlasroot"
@@ -50,6 +75,9 @@ def main() -> None:
         "tests/test_backend_parity_wave2.py::test_ephemeral_run_does_not_change_source_conversation",
         "tests/test_api_runtime.py::test_ephemeral_runs_are_not_written_to_runtime_database",
     ], env)
+
+    cli_usage_terminal_scenarios()
+    print("U39 scenario PASS: 1 failed/cancelled versioned usage files and unwritable-path error", flush=True)
 
     with tempfile.TemporaryDirectory(prefix="atlas-u39-usage-") as temp:
         usage_path = Path(temp) / "usage.json"
