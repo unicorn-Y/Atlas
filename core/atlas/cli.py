@@ -7,6 +7,7 @@ import mimetypes
 import os
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -36,6 +37,68 @@ _CLI_ATTACH_MAX_BYTES = 5 * 1024 * 1024
 _CLI_IMAGE_MAX_COUNT = 4
 _CLI_IMAGE_MAX_BYTES = 4 * 1024 * 1024
 _CLI_IMAGES_MAX_BYTES = 8 * 1024 * 1024
+
+
+def _write_cli_usage_file(path: Path, record: dict[str, Any]) -> None:
+    """Atomically replace a CLI usage result; never leave a partial JSON file."""
+    target = path.expanduser().resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(target)
+    except OSError:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
+def _cli_usage_record(
+    *, run_id: str, session_id: str, status: str, model: str | None,
+    rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    from atlas.usage import aggregate_run_usage
+    from atlas.usage_pricing import estimate_cost
+
+    aggregate = aggregate_run_usage(rows)
+    resolved_model = str(aggregate.get("model") or model or "") or None
+    input_tokens = aggregate.get("input_tokens")
+    output_tokens = aggregate.get("output_tokens")
+    cached_input_tokens = aggregate.get("cached_input_tokens")
+    cache_write_tokens = aggregate.get("cache_write_tokens")
+    valid_tokens = all(isinstance(value, int) and not isinstance(value, bool)
+                       for value in (input_tokens, output_tokens, cached_input_tokens))
+    cost = estimate_cost(
+        resolved_model or "", input_tokens=input_tokens, output_tokens=output_tokens,
+        cached_input_tokens=cached_input_tokens,
+        cache_write_tokens=cache_write_tokens if isinstance(cache_write_tokens, int) else 0,
+    ) if valid_tokens else None
+    usage_available = bool(rows) and aggregate.get("usage_available") is not False
+    return {
+        "schema_version": 1,
+        "run_id": run_id,
+        "session_id": session_id,
+        "status": status,
+        "model": resolved_model,
+        "usage": {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cached_input_tokens": cached_input_tokens,
+            "cache_write_tokens": cache_write_tokens,
+            "estimated_cost_usd": str(cost) if cost is not None else None,
+            "request_count": aggregate.get("request_count", 0),
+            "usage_available": usage_available,
+            "unavailable": {
+                "input_tokens": not isinstance(input_tokens, int),
+                "output_tokens": not isinstance(output_tokens, int),
+                "cached_input_tokens": not isinstance(cached_input_tokens, int),
+                "cache_write_tokens": not isinstance(cache_write_tokens, int),
+                "estimated_cost_usd": cost is None,
+            },
+        },
+    }
 
 
 def _prepare_exec_images(paths: tuple[Path, ...]) -> tuple[list[str], list[dict[str, Any]]]:
@@ -936,6 +999,8 @@ def notify_command(mode: str | None, command_args: tuple[str, ...], clear_comman
               help="Require the final response to match this JSON Schema file")
 @click.option("--output-last-message", type=click.Path(dir_okay=False, path_type=Path), default=None,
               help="Write the final assistant response to this file")
+@click.option("--usage-file", type=click.Path(dir_okay=False, path_type=Path), default=None,
+              help="Atomically write versioned token and estimated-cost usage JSON")
 @click.option("--approve-writes", is_flag=True,
               help="Approve write-capable tool calls for this non-interactive run")
 @click.option("--project-id", default=None, help="Run within one Atlas project configuration/credential scope")
@@ -949,18 +1014,21 @@ def notify_command(mode: str | None, command_args: tuple[str, ...], clear_comman
 def exec_command(
     prompt: str | None, model: str | None, images: tuple[Path, ...], workspace: Path,
     conversation_id: str | None, output_format: str, notify_mode: str | None, json_output: bool,
-    output_schema: Path | None, output_last_message: Path | None, approve_writes: bool,
+    output_schema: Path | None, output_last_message: Path | None, usage_file: Path | None, approve_writes: bool,
     project_id: str | None, agent_id: str | None, config_override: Path | None, ignore_project_config: bool,
     ignore_workspace_rules: bool, preload_skills: tuple[str, ...], skills_file: Path | None,
 ) -> None:
     """Run one non-interactive agent turn; PROMPT may also come from stdin."""
     if json_output:
         output_format = "jsonl"
+    exec_run_id = str(uuid.uuid4())
+    usage_rows: list[dict[str, Any]] = []
     jsonl_stream = None
     if output_format == "jsonl":
         from atlas.cli_events import ExecJSONLStream
 
-        jsonl_stream = ExecJSONLStream(conversation_id or str(__import__("uuid").uuid4()))
+        jsonl_stream = ExecJSONLStream(conversation_id or str(uuid.uuid4()))
+    exec_session_id = conversation_id or (jsonl_stream.session_id if jsonl_stream else str(uuid.uuid4()))
     from atlas.agent import AgentOrchestrator
     from atlas.config import DATA_ROOT
     from atlas.cli_notifications import emit_cli_notification, notification_config
@@ -1036,7 +1104,7 @@ def exec_command(
             migration = await migrate_legacy_sessions(DATA_ROOT / "engine", memory)
             if migration.status != "ready":
                 raise RuntimeError(migration.error or "历史会话尚未完成安全迁移")
-            conv_id = conversation_id or (jsonl_stream.session_id if jsonl_stream else str(__import__("uuid").uuid4()))
+            conv_id = conversation_id or (jsonl_stream.session_id if jsonl_stream else exec_session_id)
             await memory.save_conversation_metadata(conv_id, title_hint=user_prompt)
             orchestrator = AgentOrchestrator(model_mgr=model_mgr, memory=memory)
             active_skill_instructions: list[dict[str, str]] = []
@@ -1078,13 +1146,6 @@ def exec_command(
                     active_skill_instructions.append({"name": name, "path": info.path, "content": str(content)})
                 if output_format != "jsonl":
                     print(f"Preloaded skills: {', '.join(effective_preload)}", file=sys.stderr)
-            if output_format == "jsonl":
-                assert jsonl_stream is not None
-                jsonl_stream.emit("skills.preloaded", skills=[{
-                    "name": item["name"], "path": item.get("path", ""),
-                    "source": getattr(skill_manager.get_skill(str(item["name"])), "source", "unknown") if effective_preload else "unknown",
-                    "scope": "agent_or_project" if str(item["name"]) in agent_skills else "explicit",
-                } for item in active_skill_instructions])
             async def approve_once(event_id: str, tool_name: str, arguments: dict[str, Any]) -> str:
                 return "allow" if approve_writes else "deny"
 
@@ -1094,6 +1155,11 @@ def exec_command(
                 assert jsonl_stream is not None
                 jsonl_stream.emit("start")
                 jsonl_stream.emit("turn.started", status="running")
+                jsonl_stream.emit("skills.preloaded", skills=[{
+                    "name": item["name"], "path": item.get("path", ""),
+                    "source": getattr(skill_manager.get_skill(str(item["name"])), "source", "unknown") if effective_preload else "unknown",
+                    "scope": "agent_or_project" if str(item["name"]) in agent_skills else "explicit",
+                } for item in active_skill_instructions])
                 user_item_id = jsonl_stream.start_item("user_message", text=user_prompt, images=image_manifest)
                 input_event: dict[str, Any] = {"type": "input", "session_id": conv_id, "text": user_prompt}
                 if image_manifest:
@@ -1128,6 +1194,7 @@ def exec_command(
                         run_prompt += f"\nYour previous response failed schema validation: {validation_error}. Rewrite it now."
                 run_events = orchestrator.run(
                     run_prompt, conv_id, workspace=str(root), workspace_trusted=True,
+                    run_id=exec_run_id,
                     image_attachments=image_data_urls or None,
                     permission_mode="ask_writes",
                     project_id=project_id,
@@ -1152,7 +1219,13 @@ def exec_command(
                             jsonl_stream.emit("text_delta", item_id=assistant_item_id, text=part)
                         else:
                             print(part, end="", flush=True)
-                    elif output_format == "jsonl" and kind in {"tool_call", "tool_result", "usage"}:
+                    elif kind in {"run_usage", "usage"}:
+                        usage = event.get("usage")
+                        usage_rows.append(dict(usage) if isinstance(usage, dict) else dict(event))
+                        if output_format == "jsonl":
+                            assert jsonl_stream is not None
+                            jsonl_stream.emit_legacy(event)
+                    elif output_format == "jsonl" and kind in {"tool_call", "tool_result"}:
                         assert jsonl_stream is not None
                         if kind == "tool_call":
                             if assistant_item_id is not None:
@@ -1244,9 +1317,23 @@ def exec_command(
 
     saved_mode, notify_argv = notification_config()
     effective_notify_mode = notify_mode or saved_mode
+    def persist_usage(status: str) -> None:
+        if usage_file is None:
+            return
+        from atlas.config import get_config
+        selected_model = model or get_config().default_model
+        try:
+            _write_cli_usage_file(usage_file, _cli_usage_record(
+                run_id=exec_run_id, session_id=exec_session_id, status=status,
+                model=selected_model, rows=usage_rows,
+            ))
+        except OSError as exc:
+            raise click.ClickException(f"cannot write usage file {usage_file}: {exc}") from exc
+
     try:
         completion_status = asyncio.run(_run_once())
     except KeyboardInterrupt:
+        persist_usage("cancelled")
         if output_format == "jsonl":
             assert jsonl_stream is not None
             jsonl_stream.complete_open_items(reason="user_cancelled")
@@ -1255,6 +1342,7 @@ def exec_command(
         emit_cli_notification("cancelled", mode=effective_notify_mode, command=notify_argv)
         sys.exit(130)
     except (OSError, RuntimeError, ValueError) as exc:
+        persist_usage("failed")
         if output_format == "jsonl":
             assert jsonl_stream is not None
             jsonl_stream.complete_open_items(reason="run_failed")
@@ -1264,6 +1352,11 @@ def exec_command(
             jsonl_stream.emit("end", status="failed")
         emit_cli_notification("failed", mode=effective_notify_mode, command=notify_argv)
         raise click.ClickException(str(exc)) from exc
+    except Exception as exc:
+        persist_usage("failed")
+        emit_cli_notification("failed", mode=effective_notify_mode, command=notify_argv)
+        raise click.ClickException(str(exc)) from exc
+    persist_usage(completion_status)
     emit_cli_notification(completion_status, mode=effective_notify_mode, command=notify_argv)
     if completion_status == "failed":
         sys.exit(EXIT_RUN_FAILED)
