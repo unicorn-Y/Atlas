@@ -338,6 +338,10 @@ export default function App() {
   const [input, setInput] = useState('');
   const [pendingProjectId, setPendingProjectId] = useState('');
   const [summaryEnabled, setSummaryEnabled] = useState(() => pref('pinned-summary') !== 'false');
+  const [autoRecapEnabled, setAutoRecapEnabled] = useState(() => pref('auto_recap') === 'true');
+  const [recapViewerOpen, setRecapViewerOpen] = useState(false);
+  const [recentRecaps, setRecentRecaps] = useState<Array<{ run_id: string; summary: string; created_at: string }>>([]);
+  const autoRecapSeenRef = useRef(new Set<string>());
   const [proactiveEnabled, setProactiveEnabled] = useState(() => pref('suggestions') !== 'false');
   const [wakeEnabled, setWakeEnabled] = useState(() => pref('wake-enabled') === 'true');
   const [wakeWord, setWakeWord] = useState(() => pref('wake-word') || '你好 Atlas');
@@ -550,6 +554,34 @@ export default function App() {
   const activeArtifacts = [...store.artifacts.filter((artifact) => artifact.runId === store.activeRunId),
     ...(ultraplanArtifact && ultraplanArtifact.name === `高级计划：${activeConversation?.title ?? ''}` ? [ultraplanArtifact] : [])];
   const activeEvents = activeRun?.events ?? [];
+  const openRecentRecaps = async () => {
+    if (!activeConversation) { setToast('先打开一个对话再查看最近回顾'); return; }
+    try {
+      const result = await api<{ items: typeof recentRecaps }>(store.apiBaseUrl, `/api/conversations/${encodeURIComponent(activeConversation.id)}/recaps`);
+      setRecentRecaps(result.items);
+      setRecapViewerOpen(true);
+    } catch (error) { setToast(`读取最近回顾失败：${error instanceof Error ? error.message : String(error)}`); }
+  };
+  useEffect(() => {
+    const completed = store.runs.filter((run) => run.status === 'completed');
+    if (!autoRecapEnabled || !store.connected) {
+      for (const run of completed) autoRecapSeenRef.current.add(run.id);
+      return;
+    }
+    for (const run of completed) {
+      if (autoRecapSeenRef.current.has(run.id)) continue;
+      autoRecapSeenRef.current.add(run.id);
+      void api<{ run_id: string; summary: string; created_at: string }>(store.apiBaseUrl,
+        `/api/conversations/${encodeURIComponent(run.conversationId)}/recaps`,
+        { method: 'POST', json: { run_id: run.id } },
+      ).then((recap) => {
+        if (store.activeConversationId === run.conversationId) {
+          setRecentRecaps((current) => [recap, ...current.filter((item) => item.run_id !== recap.run_id)].slice(0, 5));
+          if (recapViewerOpen) void store.openConversation(store.conversations.find((item) => item.id === run.conversationId) ?? { id: run.conversationId, title: run.title });
+        }
+      }).catch((error) => setToast(`自动回顾失败：${error instanceof Error ? error.message : String(error)}`));
+    }
+  }, [store.runs, store.connected, store.apiBaseUrl, store.activeConversationId, store.conversations, autoRecapEnabled, recapViewerOpen]);
   const lastCanvasEventRef = useRef('');
   const runDone = Boolean(activeRun && TERMINAL.includes(activeRun.status));
   const currentPlan = [...activeEvents].reverse().find((event) => event.type === 'run.plan.updated')?.data.plan as { subtasks?: unknown[] } | undefined;
@@ -1975,7 +2007,8 @@ export default function App() {
     } },
     { id: 'init', label: '/init', hint: '扫描工作区，生成或更新 AGENTS.md', run: () => { if (typeof activeConversation?.workspace !== 'string' || !activeConversation.workspace) { setToast('请先选择工作目录'); return; } void store.runInit(); } },
       { id: 'ide', label: '/ide', hint: '查看 IDE 插件版本、心跳和工作区；重连、配置或运行诊断', run: () => setIdeManagerOpen(true) },
-      { id: 'recap', label: '/recap', hint: '用当前对话生成压缩回顾（Atlas 通过 /compact 保存回顾）', run: () => {
+      { id: 'recap', label: '/recap', hint: '生成当前回顾，或用 /recap recent 查看最近自动回顾', takesArgument: true, run: (target: string) => {
+        if (target.trim().toLowerCase() === 'recent') { void openRecentRecaps(); return; }
         if (!activeConversation) { setToast('先打开一个对话再生成回顾'); return; }
         void store.compactConversation(activeConversation.id, '生成当前对话的简短回顾，保留目标、关键决策、完成进度、未解决问题和下一步。').then((text) => { if (text) setToast(`对话回顾已更新：${text}`); });
       } },
@@ -2765,6 +2798,7 @@ export default function App() {
               ? <Suspense fallback={null}><TabStrip tabs={tabs} conversations={store.conversations} activeId={store.activeConversationId} running={runningConversations} onSelect={openConversation} onClose={closeTab} /></Suspense>
               : pageTitle && <span className="truncate text-[13.5px] text-fg-2">{pageTitle}</span>}
             {view === 'chat' && <Suspense fallback={null}><ForkTree conversations={store.conversations} activeId={store.activeConversationId} onOpen={openConversation} running={runningConversations} waiting={waitingConversations} /></Suspense>}
+            {view === 'chat' && activeConversation && <Tip label="查看本会话最近自动回顾"><button type="button" aria-label="查看最近回顾" onClick={() => void openRecentRecaps()} className="no-drag rounded-md px-1.5 py-0.5 text-[11.5px] text-fg-3 hover:bg-hover hover:text-fg">最近回顾</button></Tip>}
             {connection}
           </div>
           {/* With tabs the left group already fills the bar; its empty part still drags the window. */}
@@ -2966,6 +3000,7 @@ export default function App() {
           <div className="mt-7"><NotificationsPanel apiBaseUrl={store.apiBaseUrl} /></div>
           <div className="set-list">
             <div className="set-row"><div>置顶任务摘要<small>在长对话顶部显示首条目标和最近进度</small></div><button className="switch" role="switch" aria-label="置顶任务摘要" aria-checked={summaryEnabled} onClick={() => { const next = !summaryEnabled; setSummaryEnabled(next); setPref('pinned-summary', String(next)); }} /></div>
+            <div className="set-row"><div>每轮自动回顾<small>成功回复后生成短摘要并加入恢复上下文；会消耗少量模型用量</small></div><button className="switch" role="switch" aria-label="每轮自动回顾" aria-checked={autoRecapEnabled} onClick={() => { const next = !autoRecapEnabled; setAutoRecapEnabled(next); setPref('auto_recap', String(next)); }} /></div>
             <div className="set-row"><div>显示消息时间戳<small>在对话中的每条消息旁显示本地时间</small></div><button className="switch" role="switch" aria-label="显示消息时间戳" aria-checked={messageTimestampsEnabled} onClick={() => { const next = !messageTimestampsEnabled; setMessageTimestampsEnabled(next); setPref('message-timestamps', String(next)); window.dispatchEvent(new Event('atlas:message-timestamps-changed')); }} /></div>
             <div className="set-row"><div>收起侧边栏<small>只显示图标，给内容更多空间</small></div><button className="switch" role="switch" aria-label="收起侧边栏" aria-checked={sideMini} onClick={toggleMini} /></div>
             <div className="set-row"><div>自动朗读新回复<small>用本机语音逐句读出 Atlas 的回答</small></div><button className="switch" role="switch" aria-label="自动朗读新回复" aria-checked={voiceOutput} onClick={toggleVoiceOutput} /></div>
@@ -3151,6 +3186,8 @@ export default function App() {
       apiBaseUrl={store.apiBaseUrl} workspace={ultraplan.workspace}
       conversationId={ultraplan.conversationId} model={store.model} onClose={() => setUltraplan(null)} onToast={notify}
       onOpenArtifact={(path, title) => { setUltraplanArtifact({ id: `ultraplan-${path}`, runId: '', type: 'file', name: `高级计划：${ultraplan.title}`, path, summary: title, createdAt: new Date().toISOString() }); setInspectorOpen(true); setInspectorTab('artifacts'); }} /></Suspense>}
+
+    {recapViewerOpen && <div role="dialog" aria-modal="true" aria-label="最近自动回顾" className="fixed inset-0 z-[90] grid place-items-center bg-black/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setRecapViewerOpen(false); }}><section className="card-surface flex max-h-[75vh] w-full max-w-2xl flex-col gap-3 rounded-2xl p-5 shadow-xl"><header className="flex items-center gap-2"><h2 className="m-0 flex-1 text-[16px] font-semibold text-heading">最近自动回顾 · {activeConversation?.title ?? '当前会话'}</h2><button type="button" aria-label="关闭最近回顾" className="btn ghost" onClick={() => setRecapViewerOpen(false)}>关闭</button></header><div className="min-h-0 flex-1 space-y-3 overflow-auto">{recentRecaps.map((recap) => <article key={recap.run_id} className="rounded-xl border border-line bg-sunken p-3"><div className="mb-2 flex items-center gap-2 text-[11px] text-fg-3"><span>运行 {recap.run_id.slice(0, 8)}</span><time>{new Date(recap.created_at).toLocaleString()}</time></div><div className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-fg-2">{recap.summary}</div></article>)}{!recentRecaps.length && <p role="status" className="m-0 p-6 text-center text-[12px] text-fg-3">这个会话还没有自动回顾。可在外观与语音设置中开启“每轮自动回顾”。</p>}</div></section></div>}
 
     {view !== 'chat' && view !== 'home' && <Suspense fallback={null}><ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} /></Suspense>}
     <Suspense fallback={null}><SettingsProposalCards apiBaseUrl={store.apiBaseUrl} onModel={(model) => void store.selectModel(model)} onToast={notify} currentModel={store.model} modelName={(id) => store.models.find((model) => model.id === id)?.name ?? id} /></Suspense>

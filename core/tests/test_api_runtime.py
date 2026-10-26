@@ -106,6 +106,82 @@ async def test_online_subtask_query_spans_parent_runs_and_excludes_terminal_chil
 
 
 @pytest.mark.asyncio
+async def test_auto_recaps_are_durable_and_listed_per_conversation(tmp_path) -> None:
+    db_path = tmp_path / "runtime.sqlite3"
+    manager = RuntimeManager(db_path)
+    await manager.init()
+    await manager.save_auto_recap({
+        "run_id": "run-1", "conversation_id": "conversation-1", "summary": "Completed the migration.",
+        "message_id": "message-1", "created_at": "2026-10-25T12:00:00+00:00",
+    })
+    await manager.close()
+    restarted = RuntimeManager(db_path)
+    await restarted.init()
+    try:
+        assert (await restarted.get_auto_recap("run-1"))["summary"] == "Completed the migration."
+        assert [item["run_id"] for item in await restarted.list_auto_recaps("conversation-1")] == ["run-1"]
+        assert await restarted.list_auto_recaps("another-conversation") == []
+    finally:
+        await restarted.close()
+
+
+@pytest.mark.asyncio
+async def test_auto_recap_route_only_summarizes_a_completed_nonempty_turn(tmp_path, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from httpx import ASGITransport, AsyncClient
+
+    from atlas.api.conversations_router import router as conversations_router
+    from atlas.engine.session_sync import append_session_message, read_session_all_messages
+    from atlas.api.runtime import RunState
+    import atlas.config
+
+    data_root = tmp_path / "atlas-data"
+    (data_root / "engine").mkdir(parents=True)
+    monkeypatch.setattr(atlas.config, "DATA_ROOT", data_root)
+    append_session_message(data_root / "engine", "conversation-1", "user", "Finish the small migration")
+    append_session_message(data_root / "engine", "conversation-1", "assistant", "The migration is complete.")
+
+    class Memory:
+        async def get_conversation(self, conversation_id):
+            return {"id": conversation_id, "title": "Migration"} if conversation_id == "conversation-1" else None
+
+    class ModelRouter:
+        async def resolve(self, selected, purpose):
+            assert selected == "test-model" and purpose == "prompt_enhance"
+            return object()
+
+        async def complete(self, route, **kwargs):
+            assert "The migration is complete." in kwargs["messages"][-1]["content"]
+            return SimpleNamespace(text="- Migration completed.\n- No follow-up remains.")
+
+    class ModelManager:
+        current_model = "test-model"
+        model_router = ModelRouter()
+
+    manager = RuntimeManager(tmp_path / "runtime.sqlite3")
+    await manager.init()
+    run = RunState("run-1", "conversation-1", "test-model")
+    run.status = "completed"
+    run.events = [{"event": "run.completed"}]
+    manager.runs[run.run_id] = run
+    app = FastAPI()
+    app.state.services = AppServices(memory=Memory(), runtime_mgr=manager, model_mgr=ModelManager())
+    app.include_router(conversations_router)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        created = await client.post("/api/conversations/conversation-1/recaps", json={"run_id": "run-1"})
+        listed = await client.get("/api/conversations/conversation-1/recaps")
+        assert created.status_code == listed.status_code == 200
+        assert created.json()["summary"].startswith("- Migration completed")
+        assert listed.json()["items"][0]["run_id"] == "run-1"
+        assert (await client.post("/api/conversations/conversation-1/recaps", json={"run_id": "run-1"})).json() == created.json()
+    recap_message = read_session_all_messages(data_root / "engine", "conversation-1")[-1]
+    assert recap_message["role"] == "system"
+    assert recap_message["content"] == created.json()["summary"]
+    await manager.close()
+
+
+@pytest.mark.asyncio
 async def test_native_subtask_close_route_persists_closed_state(tmp_path) -> None:
     from httpx import ASGITransport, AsyncClient
 

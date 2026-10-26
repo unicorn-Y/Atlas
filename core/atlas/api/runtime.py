@@ -258,6 +258,15 @@ class RuntimeManager:
                 PRIMARY KEY (parent_run_id, subtask_id)
             )
         """)
+        await self._db.execute("""
+            CREATE TABLE IF NOT EXISTS runtime_auto_recaps (
+                run_id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                message_id TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
         # Workers cannot survive a process restart. Keep their transcripts and
         # expose an interrupted worker as closed so an operator can resume it.
         await self._db.execute(
@@ -570,6 +579,47 @@ class RuntimeManager:
         for item in items:
             item["recovery_point"] = json.loads(item["recovery_point"] or "{}")
         return items
+
+    async def get_auto_recap(self, run_id: str) -> dict[str, Any] | None:
+        if self._db is None:
+            return None
+        async with self._persist_lock:
+            async with self._db.execute(
+                "SELECT * FROM runtime_auto_recaps WHERE run_id=?", (run_id,),
+            ) as cursor:
+                row = await cursor.fetchone()
+        return dict(row) if row is not None else None
+
+    async def list_auto_recaps(self, conversation_id: str, limit: int = 5) -> list[dict[str, Any]]:
+        if self._db is None:
+            return []
+        async with self._persist_lock:
+            async with self._db.execute(
+                "SELECT * FROM runtime_auto_recaps WHERE conversation_id=? ORDER BY created_at DESC LIMIT ?",
+                (conversation_id, max(1, min(20, int(limit)))),
+            ) as cursor:
+                rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    async def save_auto_recap(self, record: dict[str, Any]) -> dict[str, Any]:
+        if self._db is None:
+            raise RuntimeError("Runtime recap store is not initialized")
+        values = {
+            "run_id": str(record["run_id"]), "conversation_id": str(record["conversation_id"]),
+            "summary": str(record["summary"]), "message_id": str(record["message_id"]),
+            "created_at": str(record["created_at"]),
+        }
+        async with self._persist_lock:
+            await self._db.execute(
+                "INSERT OR IGNORE INTO runtime_auto_recaps(run_id, conversation_id, summary, message_id, created_at) VALUES (?, ?, ?, ?, ?)",
+                tuple(values[key] for key in ("run_id", "conversation_id", "summary", "message_id", "created_at")),
+            )
+            await self._db.commit()
+            async with self._db.execute(
+                "SELECT * FROM runtime_auto_recaps WHERE run_id=?", (values["run_id"],),
+            ) as cursor:
+                row = await cursor.fetchone()
+        return dict(row)
 
     async def connect(self, ws: WebSocket, conn_id: str) -> None:
         await ws.accept()

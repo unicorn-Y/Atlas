@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type MutableRefObject } from 'react';
 import { Virtuoso, type StateSnapshot, type VirtuosoHandle } from 'react-virtuoso';
-import { History, ListChecks } from 'lucide-react';
+import { BookOpenText, History, ListChecks } from 'lucide-react';
 import type { ConversationMessage as ConversationMessageData } from '@atlas/backend-adapter';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { TimelineRow } from './ConversationActivity';
@@ -31,6 +31,7 @@ type ThreadRow =
   | { kind: 'truncated'; id: string; count: number }
   | { kind: 'history'; id: string; message: ConversationMessageData; continued?: boolean }
   | { kind: 'subtask'; id: string; activity: Record<string, unknown> }
+  | { kind: 'recap'; id: string; summary: string; createdAt: string }
   | { kind: 'empty'; id: string }
   | { kind: 'timeline'; id: string; item: TimelineItem; firstInTurn: boolean; last: boolean };
 
@@ -264,6 +265,12 @@ export default function MessageThread({ history, componentSelections = {}, usern
           rows.push({ kind: 'subtask', id, activity: activity as Record<string, unknown> });
           historyHeaded = true;
         }
+        continue;
+      }
+      if (message.role === 'system' && metadata.display_kind === 'auto_recap') {
+        flushSteps();
+        rows.push({ kind: 'recap', id: message.id, summary: message.content, createdAt });
+        historyHeaded = true;
         continue;
       }
       if (message.role === 'system' && metadata.display_kind === 'structured_component') {
@@ -531,6 +538,7 @@ export default function MessageThread({ history, componentSelections = {}, usern
         const memoryCitations = Array.isArray(metadata.memory_citations) ? metadata.memory_citations.filter((ref): ref is string => typeof ref === 'string') : [];
         return <ConversationMessage id={String(row.message.id)} role={row.message.role === 'user' ? 'user' : 'assistant'} content={row.message.content} username={username} continued={row.continued} actions={historyActions(row.message)} memoryCitations={memoryCitations} createdAt={row.message.created_at} />;
       case 'subtask': return <SubtaskActivityCard activity={row.activity} />;
+      case 'recap': return <article className="my-3 rounded-xl border border-brand/20 bg-brand-soft/50 px-3.5 py-3" aria-label="自动回顾"><div className="flex items-center gap-2 text-[11px] font-medium text-brand"><BookOpenText size={13} />本轮自动回顾{row.createdAt ? ` · ${new Date(row.createdAt).toLocaleString()}` : ''}</div><div className="mt-2 whitespace-pre-wrap text-[12.5px] leading-relaxed text-fg-2">{row.summary}</div></article>;
       case 'empty':
         return emptyState;
       case 'timeline':
