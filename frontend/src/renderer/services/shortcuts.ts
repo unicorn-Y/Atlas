@@ -13,7 +13,7 @@ export type ShortcutAction =
   | 'tab1' | 'tab2' | 'tab3' | 'tab4' | 'tab5' | 'tab6' | 'tab7' | 'tab8' | 'tab9'
   | 'toggleSidebar' | 'toggleInspector' | 'focusComposer' | 'stopRun'
   | 'sidebarSearch' | 'sidebarProjectPicker' | 'sidebarNextGroup' | 'sidebarPreviousGroup' | 'sendNow' | 'stashInput'
-  | 'focusNextPane' | 'focusPreviousPane' | 'openDiff' | 'diffPreviousHunk' | 'diffNextHunk'
+  | 'focusNextPane' | 'focusPreviousPane' | 'openSideChat' | 'openDiff' | 'diffPreviousHunk' | 'diffNextHunk'
   | 'diffCollapseHunks' | 'diffExpandHunks' | 'toggleFocus';
 
 export type ShortcutBindings = Record<ShortcutAction, string[]>;
@@ -41,6 +41,7 @@ export const SHORTCUTS: Array<{ action: ShortcutAction; label: string; hint?: st
   { action: 'sidebarPreviousGroup', label: '切换到上一个会话组', combo: 'Ctrl+Alt+K' },
   { action: 'focusNextPane', label: '聚焦下一个分屏', combo: 'Ctrl+Alt+ArrowRight' },
   { action: 'focusPreviousPane', label: '聚焦上一个分屏', combo: 'Ctrl+Alt+ArrowLeft' },
+  { action: 'openSideChat', label: '打开独立旁聊窗口', combo: 'Ctrl+;' },
   { action: 'openDiff', label: '打开全屏差异查看器', combo: 'Ctrl+Alt+D' },
   { action: 'diffPreviousHunk', label: '上一个差异块', combo: 'Ctrl+Alt+ArrowUp' },
   { action: 'diffNextHunk', label: '下一个差异块', combo: 'Ctrl+Alt+ArrowDown' },

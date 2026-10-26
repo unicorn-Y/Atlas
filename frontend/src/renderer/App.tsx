@@ -388,6 +388,9 @@ export default function App() {
   const [workflowManagerOpen, setWorkflowManagerOpen] = useState(false);
   const [ideManagerOpen, setIdeManagerOpen] = useState(false);
   const [side, setSide] = useState<{ open: boolean; question?: string }>({ open: false });
+  const sideChatParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const sideChatWindow = sideChatParams.get('sideChat') === '1';
+  const sideChatQuestion = sideChatParams.get('question') || undefined;
   const [schedulePromptOpen, setSchedulePromptOpen] = useState(false);
   const scheduleBypass = useRef(false);
   // 发起时就固定目标/会话/工作区：面板不随当前会话切换而重发调研或被卸载。
@@ -1401,11 +1404,11 @@ export default function App() {
   useEffect(() => {
     const onSelectionForSideChat = (event: Event) => {
       const text = (event as CustomEvent<{ text?: unknown }>).detail?.text;
-      if (typeof text === 'string' && text.trim()) setSide({ open: true, question: `请围绕这段选中文本追问：\n\n> ${text.trim()}` });
+      if (typeof text === 'string' && text.trim() && store.activeConversationId) window.atlasDesktop?.openSideChatWindow?.(store.activeConversationId, `请围绕这段选中文本追问：\n\n> ${text.trim()}`);
     };
     window.addEventListener('atlas:side-chat-selection', onSelectionForSideChat);
     return () => window.removeEventListener('atlas:side-chat-selection', onSelectionForSideChat);
-  }, []);
+  }, [store.activeConversationId]);
   useEffect(() => {
     const onChartSelection = (event: Event) => {
       const detail = (event as CustomEvent<{ node?: unknown; source?: unknown }>).detail;
@@ -1629,6 +1632,7 @@ export default function App() {
         case 'sidebarPreviousGroup': window.dispatchEvent(new CustomEvent('atlas:sidebar-shortcut', { detail: { action: 'sidebar.previous-group' } })); break;
         case 'focusNextPane': window.dispatchEvent(new CustomEvent('atlas:focus-pane', { detail: { step: 1 } })); break;
         case 'focusPreviousPane': window.dispatchEvent(new CustomEvent('atlas:focus-pane', { detail: { step: -1 } })); break;
+        case 'openSideChat': if (store.activeConversationId) window.atlasDesktop?.openSideChatWindow?.(store.activeConversationId); break;
         case 'openDiff': if (view === 'chat') { setInspectorTab('changes'); setInspectorOpen(true); setPref('canvas', 'true'); setFullScreenDiff(true); } break;
         case 'diffPreviousHunk': if (fullScreenDiff) window.dispatchEvent(new CustomEvent('atlas:diff-action', { detail: { action: 'previous' } })); break;
         case 'diffNextHunk': if (fullScreenDiff) window.dispatchEvent(new CustomEvent('atlas:diff-action', { detail: { action: 'next' } })); break;
@@ -3110,7 +3114,7 @@ export default function App() {
       <p className="mt-3 mb-0 text-[11px] text-fg-3">语法：单行 `# 记忆内容` 或 `#记住：记忆内容`；后续非空行属于同一条，空行开始新段。代码围栏中的 # 不触发；行首写 `\#` 表示普通文本。</p>
       <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" disabled={memoryMarkerSaving} onClick={dismissMemoryMarkerReview}>仅发送，不保存</Button><Button variant="primary" disabled={memoryMarkerSaving || !memoryMarkerDrafts?.length || memoryMarkerDrafts.some((item) => !item.text.trim())} onClick={() => void saveMemoryMarkerDrafts()}>{memoryMarkerSaving ? '正在保存…' : '确认保存记忆'}</Button></div>
     </Dialog>
-    {activeConversation && <Suspense fallback={null}><SideChat open={side.open} onClose={() => setSide({ open: false })} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question} /></Suspense>}
+    {activeConversation && <Suspense fallback={null}><SideChat open={side.open || sideChatWindow} onClose={() => { setSide({ open: false }); if (sideChatWindow) window.close(); }} conversationId={activeConversation.id} model={store.model} initialQuestion={side.question || sideChatQuestion} /></Suspense>}
     <Dialog open={schedulePromptOpen} onOpenChange={setSchedulePromptOpen} label="安排插话" className="w-[min(480px,92vw)] bg-panel p-5 shadow-xl">
       <h2 className="m-0 text-[16px] font-semibold text-heading">这条消息怎么交给正在运行的任务？</h2>
       <p className="mt-2 mb-4 text-[13px] text-fg-3">Atlas 会按文本初步识别意图；请确认执行时机。{/(刚才|上一步|改成|修改|更正|补充|不要|改为)/.test(input) ? '这句话看起来像对当前任务的修正。' : '这句话看起来可能是一个后续任务。'}</p>

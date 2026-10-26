@@ -123,6 +123,7 @@ export interface AtlasDesktopApi {
   showFloatingComposer?(context?: { selectedText?: string; conversationId?: string }): void;
   /** Open the selected conversation in a separate synchronized desktop window. */
   openConversationWindow?(conversationId: string): void;
+  openSideChatWindow?(conversationId: string, initialQuestion?: string): void;
   openNewWindow?(): void;
   openNewSessionWindow?(): void;
   listCaptureWindows?(): Promise<CaptureWindowOption[]>;

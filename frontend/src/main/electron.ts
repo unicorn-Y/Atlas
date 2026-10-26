@@ -480,6 +480,20 @@ function openConversationWindow(conversationId?: string, newSession = false): vo
   win.on('closed', () => { if (conversationId && conversationWindows.get(conversationId) === win) conversationWindows.delete(conversationId); });
 }
 
+function openSideChatWindow(conversationId: string, initialQuestion?: string): void {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(conversationId)) throw new Error('无效的会话 ID。');
+  const devUrl = process.env.VITE_DEV_SERVER_URL;
+  const win = new BrowserWindow({
+    width: 720, height: 680, minWidth: 480, minHeight: 420,
+    title: 'Atlas · 旁聊', backgroundColor: '#faf9f6', show: false,
+    webPreferences: { preload: path.join(here, '../preload/index.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webviewTag: true },
+  });
+  const query = `sideChat=1&conversationId=${encodeURIComponent(conversationId)}${initialQuestion ? `&question=${encodeURIComponent(initialQuestion.slice(0, 12000))}` : ''}`;
+  const url = devUrl ? `${devUrl}/?${query}` : `file://${path.join(here, '../renderer/index.html')}?${query}`;
+  void win.loadURL(url);
+  win.once('ready-to-show', () => { win.show(); win.focus(); });
+}
+
 function createApplicationMenu(): void {
   const mac = process.platform === 'darwin';
   const menu = Menu.buildFromTemplate([
@@ -1018,6 +1032,12 @@ ipcMain.handle('conversation:open-window', (event, conversationId?: unknown, new
   assertTrustedAppSender(event);
   if (conversationId !== undefined && typeof conversationId !== 'string') throw new Error('无效的会话 ID。');
   openConversationWindow(conversationId as string | undefined, newSession === true);
+});
+ipcMain.handle('side-chat:open-window', (event, conversationId: unknown, initialQuestion?: unknown) => {
+  assertTrustedAppSender(event);
+  if (typeof conversationId !== 'string') throw new Error('无效的会话 ID。');
+  if (initialQuestion !== undefined && typeof initialQuestion !== 'string') throw new Error('无效的旁聊问题。');
+  openSideChatWindow(conversationId, initialQuestion as string | undefined);
 });
 ipcMain.handle('screenshot:list-windows', async (event): Promise<CaptureWindowOption[]> => {
   assertTrustedAppSender(event);
