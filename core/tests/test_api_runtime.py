@@ -279,6 +279,9 @@ _LIFESPAN_LEGACY_SINGLETON_FIELDS = frozenset({
     "sandbox_manager", "skill_catalog_provider", "agent_skill_collections",
     "skill_proposals", "vault_store_factory", "local_runtime_adapter",
     "skills_market_supplier",
+    # These bounded, app-local handoff queues are initialized lazily by their routes.
+    "cli_handoffs", "office_pairing", "office_sessions", "office_handoffs",
+    "office_writebacks",
 })
 
 
