@@ -325,9 +325,28 @@ export interface PluginInfo {
   agents?: string[];
   hooks?: number;
   mcp_servers?: string[];
+  capability_groups?: PluginCapabilityGroup[];
   enabled: boolean;
   loaded: boolean;
   update_available?: boolean;
+}
+export interface PluginCapabilityItem {
+  kind: string;
+  name: string;
+  description: string;
+  source: string;
+  source_type: string;
+  loaded: boolean;
+  execution: 'runtime' | 'metadata-only';
+  requested_tools: string[];
+  network_access: string;
+  approval: string;
+}
+export interface PluginCapabilityGroup {
+  kind: string;
+  label: string;
+  count: number;
+  items: PluginCapabilityItem[];
 }
 /** `report` summarises what a reload of every plugin contributed. */
 export interface PluginReloadReport { loaded: string[]; skipped: Array<{ name?: string; reason?: string }>; errors: Record<string, string> }

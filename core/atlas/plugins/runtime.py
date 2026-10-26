@@ -12,6 +12,7 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from atlas.agent.enrichment import HOOK_POINTS
 
@@ -34,6 +35,45 @@ def _manifest(root: Path) -> tuple[Path | None, dict[str, Any]]:
         if path.is_file():
             return path, _read_json(path)
     return None, {}
+
+
+def _markdown_description(path: Path | None) -> str:
+    """Read only a frontmatter description for plugin inventory; never execute content."""
+    if path is None:
+        return ""
+    try:
+        content = path.read_text(encoding="utf-8")[:16_384]
+    except (OSError, UnicodeError):
+        return ""
+    match = re.match(r"\s*---\s*\r?\n(.*?)\r?\n---(?:\r?\n|$)", content, re.DOTALL)
+    if not match:
+        return ""
+    field = re.search(r"^description\s*:\s*(.*?)\s*$", match.group(1), re.MULTILINE)
+    if not field:
+        return ""
+    value = field.group(1).strip().strip("'\"")
+    return value[:500]
+
+
+def _string_list(value: Any) -> list[str]:
+    """Normalize declared capability names without exposing arbitrary config objects."""
+    if isinstance(value, str):
+        return [value.strip()] if value.strip() else []
+    if isinstance(value, list):
+        return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+    return []
+
+
+def _named_declarations(value: Any, prefix: str) -> list[tuple[str, dict[str, Any]]]:
+    """Project named manifest declarations without copying executable configuration."""
+    if isinstance(value, dict):
+        return [(str(name), spec if isinstance(spec, dict) else {}) for name, spec in value.items()]
+    if isinstance(value, list):
+        return [(str(item.get("name") or f"{prefix}-{index + 1}"), item) if isinstance(item, dict)
+                else (str(item), {}) for index, item in enumerate(value)]
+    if isinstance(value, str) and value.strip():
+        return [(Path(value).stem or value, {"source": value})]
+    return []
 
 
 def _path_values(value: Any) -> list[str | Path]:
@@ -142,7 +182,9 @@ class PluginRuntime:
                 name = _plugin_name(source.get("plugin_name") or manifest.get("name") or root.name)
             except ValueError:
                 continue  # unaddressable directory; never fail the whole listing
-            plugins[name] = {
+            enabled = self._enabled.get(name, manifest.get("defaultEnabled", True)) is not False
+            loaded = name in self._loaded
+            plugin_info = {
                 "name": name,
                 "display_name": str(manifest.get("displayName") or name),
                 "version": str(manifest.get("version", "0.0.0")),
@@ -165,12 +207,127 @@ class PluginRuntime:
                     if str(spec.get("point", "")) in HOOK_POINTS
                 ]),
                 "mcp_servers": sorted(self._mcp_configs(root, manifest)),
-                "enabled": self._enabled.get(name, manifest.get("defaultEnabled", True)) is not False,
-                "loaded": name in self._loaded,
+                "enabled": enabled,
+                "loaded": loaded,
                 "update_available": bool(source.get("update_available", False)) if isinstance(source, dict) else False,
                 "update_error": str(source.get("update_error") or "") if isinstance(source, dict) else "",
             }
+            plugin_info["capability_groups"] = self._capability_projection(
+                root, manifest, loaded_state=self._loaded.get(name) if enabled else None,
+                plugin_source=plugin_info["source"],
+            )
+            plugins[name] = plugin_info
         return list(plugins.values())
+
+    def _capability_projection(
+        self, root: Path, manifest: dict[str, Any], *, loaded_state: Any, plugin_source: str,
+    ) -> list[dict[str, Any]]:
+        """Describe installed contributions and risk without loading or executing them."""
+        permissions = manifest.get("permissions") if isinstance(manifest.get("permissions"), dict) else {}
+        requested_tools = _string_list(permissions.get("tools"))
+        network_declared = permissions.get("network")
+        package_loaded = loaded_state is not None
+        if network_declared is False or network_declared is None:
+            network_label = "未声明"
+        elif network_declared is True:
+            network_label = "声明可联网（范围未限定）"
+        else:
+            scopes = []
+            for scope in _string_list(network_declared):
+                host = urlsplit(scope).hostname if "://" in scope else None
+                scopes.append(host or scope[:100])
+            network_label = "声明范围：" + ("、".join(scopes) if scopes else "已声明")
+
+        def capability(kind: str, name: str, description: str, source_path: str | Path | None,
+                       *, execution: str = "runtime", network: str | None = None,
+                       tools: list[str] | None = None, item_loaded: bool | None = None) -> dict[str, Any]:
+            relative = "清单未提供来源路径"
+            if source_path:
+                try:
+                    relative = Path(source_path).resolve().relative_to(root.resolve()).as_posix()
+                except (OSError, ValueError):
+                    relative = "插件目录外来源"
+            return {
+                "kind": kind, "name": name[:160], "description": description[:500],
+                "source": relative, "source_type": str(plugin_source),
+                "loaded": (package_loaded if item_loaded is None else item_loaded) and execution == "runtime",
+                "execution": execution, "requested_tools": list(tools if tools is not None else requested_tools),
+                "network_access": network or network_label,
+                "approval": "无插件能力逐项审批；按 Atlas 当前运行策略执行",
+            }
+
+        groups: list[dict[str, Any]] = []
+        skills = self._component_paths(root, manifest, "skills", root / "skills", directories=True)
+        loaded_skills = set(loaded_state.get("skills", [])) if isinstance(loaded_state, dict) else set()
+        skill_items = [capability("skill", path.name, _markdown_description(path / "SKILL.md"), path / "SKILL.md",
+                                  item_loaded=path.name in loaded_skills) for path in skills]
+        groups.append({"kind": "skill", "label": "技能", "count": len(skill_items), "items": skill_items})
+
+        commands = self._commands(root, manifest)
+        command_items = [
+            capability("command", item["name"],
+                       str(item.get("metadata", {}).get("description") or _markdown_description(Path(item["path"]) if item.get("path") else None)),
+                       item.get("path"),
+                       item_loaded=isinstance(loaded_state, dict) and item["name"] in set(loaded_state.get("commands", [])))
+            for item in commands
+        ]
+        groups.append({"kind": "command", "label": "命令", "count": len(command_items), "items": command_items})
+
+        agents = self._component_paths(root, manifest, "agents", root / "agents", files=True)
+        agent_items = [capability("agent", path.stem, _markdown_description(path), path) for path in agents]
+        groups.append({"kind": "agent", "label": "Agent", "count": len(agent_items), "items": agent_items})
+
+        claude_hook_specs = self._claude_hook_specs(root, manifest)
+        legacy_hook_specs = [spec for spec in self._legacy_hook_specs(root) if str(spec.get("point", "")) in HOOK_POINTS]
+        hook_specs = [(spec, True) for spec in claude_hook_specs] + [(spec, False) for spec in legacy_hook_specs]
+        declared_hooks = manifest.get("hooks")
+        hook_source: str | Path = "hooks/hooks.json"
+        if isinstance(declared_hooks, str):
+            hook_source = declared_hooks
+        elif isinstance(declared_hooks, list):
+            hook_source = next((item for item in declared_hooks if isinstance(item, str)), ".claude-plugin/plugin.json")
+        elif isinstance(declared_hooks, dict):
+            hook_source = ".claude-plugin/plugin.json" if (root / ".claude-plugin/plugin.json").is_file() else "plugin.json"
+        hook_items = []
+        loaded_hook_count = int(loaded_state.get("hooks", 0)) if isinstance(loaded_state, dict) else 0
+        for index, (spec, claude_hook) in enumerate(hook_specs):
+            point = str(spec.get("point") or spec.get("event") or "Hook")
+            matcher = str(spec.get("matcher") or "")
+            name = f"{point}: {matcher}" if matcher else point
+            hook_items.append(capability("hook", f"{name} #{index + 1}", "插件 Hook 配置；触发时可运行插件命令。",
+                                         hook_source, network="运行命令的网络能力未静态限定",
+                                         item_loaded=package_loaded if claude_hook else index - len(claude_hook_specs) < loaded_hook_count))
+        groups.append({"kind": "hook", "label": "Hook", "count": len(hook_items), "items": hook_items})
+
+        servers = self._mcp_configs(root, manifest)
+        manifest_source = ".claude-plugin/plugin.json" if (root / ".claude-plugin/plugin.json").is_file() else "plugin.json"
+        mcp_source = ".mcp.json" if (root / ".mcp.json").is_file() else (
+            manifest_source
+        )
+        mcp_items = []
+        for server_name, spec in sorted(servers.items()):
+            endpoint = str(spec.get("url") or "")
+            host = urlsplit(endpoint).hostname if endpoint else None
+            network = f"远程端点 {host}" if host else "stdio 进程的网络能力未静态限定"
+            mcp_items.append(capability("mcp", server_name, str(spec.get("description") or "MCP server 提供运行时工具。"),
+                                        mcp_source, network=network,
+                                        tools=_string_list(spec.get("tools")) or ["MCP 工具由服务端运行时提供"],
+                                        item_loaded=server_name in (loaded_state.get("mcp", []) if isinstance(loaded_state, dict) else [])))
+        groups.append({"kind": "mcp", "label": "MCP", "count": len(mcp_items), "items": mcp_items})
+
+        tool_entries = _named_declarations(manifest.get("tools"), "tool")
+        tool_items = [capability("tool", name, str(spec.get("description") or "Atlas 当前不会执行插件 tools 声明。"),
+                                 spec.get("source") or manifest_source, execution="metadata-only",
+                                 tools=_string_list(spec.get("tools"))) for name, spec in tool_entries]
+        groups.append({"kind": "tool", "label": "工具声明", "count": len(tool_items), "items": tool_items})
+
+        for field, kind, label in (("outputStyles", "output-style", "输出样式"), ("lspServers", "lsp-server", "语言服务")):
+            declarations = _named_declarations(manifest.get(field), kind)
+            items = [capability(kind, name, str(spec.get("description") or f"Atlas 当前仅展示 {label} 声明，不会从插件目录启动它。"),
+                                spec.get("source") or manifest_source, execution="metadata-only",
+                                tools=_string_list(spec.get("tools"))) for name, spec in declarations]
+            groups.append({"kind": kind, "label": label, "count": len(items), "items": items})
+        return groups
 
     def validate(self, source: str | Path) -> dict[str, Any]:
         """Validate a plugin manifest and explain path, contribution and name conflicts."""
@@ -215,7 +372,7 @@ class PluginRuntime:
 
         allowed = {"name", "version", "description", "displayName", "author", "homepage", "repository",
                    "license", "keywords", "metadata", "defaultEnabled", "skills", "commands", "agents",
-                   "hooks", "mcpServers", "outputStyles", "lspServers"}
+                   "hooks", "mcpServers", "tools", "permissions", "outputStyles", "lspServers"}
         for key in sorted(set(manifest) - allowed):
             add("warning", "unknown_field", f"字段 {key} 不在 Atlas 支持清单中，会被忽略。", key)
         for key in ("description", "displayName", "homepage", "repository", "license"):
@@ -247,6 +404,10 @@ class PluginRuntime:
         for key, expected in (("keywords", list), ("metadata", dict), ("author", (str, dict)), ("defaultEnabled", bool)):
             if key in manifest and not isinstance(manifest[key], expected):
                 add("error", "invalid_field_type", f"{key} 类型不符合 manifest schema。", key)
+        if "tools" in manifest and not isinstance(manifest["tools"], (str, list, dict)):
+            add("error", "invalid_component_declaration", "tools 必须是名称、数组或映射；Atlas 目前只显示该声明，不会执行插件工具。", "tools")
+        if "permissions" in manifest and not isinstance(manifest["permissions"], dict):
+            add("error", "invalid_field_type", "permissions 必须是对象；其中工具/网络声明用于风险投影。", "permissions")
 
         for field in ("skills", "agents", "commands"):
             value = manifest.get(field)
@@ -554,7 +715,8 @@ class PluginRuntime:
         if not isinstance(source, dict) or not isinstance(source.get("entry"), dict):
             return result
         entry = source["entry"]
-        for field in ("displayName", "description", "author", "homepage", "repository", "license", "keywords"):
+        for field in ("displayName", "description", "author", "homepage", "repository", "license", "keywords",
+                      "tools", "permissions", "outputStyles", "lspServers"):
             if field in entry:
                 result[field] = entry[field]
         if entry.get("strict") is False:

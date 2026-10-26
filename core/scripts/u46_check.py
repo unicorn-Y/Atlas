@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import websockets
 
@@ -75,6 +75,103 @@ def check_workspace_treemap_api() -> None:
         assert by_path == expected, f"tree scan paths/sizes mismatch: {by_path}"
         assert result["file_count"] == 2 and result["total_bytes"] == sum(expected.values()) and not result["truncated"], result
     print("PASS workspace-treemap: live API reports exact sizes and excludes .git/node_modules")
+
+
+def _api_json(path: str, *, method: str = "GET", payload: dict | None = None) -> dict:
+    body = json.dumps(payload).encode("utf-8") if payload is not None else None
+    request = urllib.request.Request(
+        f"http://127.0.0.1:8765{path}", data=body, method=method,
+        headers={"Content-Type": "application/json"} if body is not None else {},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        raise AssertionError(f"Atlas API {method} {path} returned HTTP {error.code}: {detail[:1200]}") from error
+
+
+async def check_plugin_capability_projection() -> None:
+    """Install a disabled, inert local fixture and inspect its real Settings projection."""
+    name = "u46-capability-probe"
+    existing = await asyncio.to_thread(_api_json, "/api/plugins")
+    assert all(plugin.get("name") != name for plugin in existing.get("plugins", [])), f"reserved probe already exists: {name}"
+    with tempfile.TemporaryDirectory(prefix="atlas-u46-plugin-") as temp_dir:
+        root = Path(temp_dir) / name
+        (root / "skills" / "daily").mkdir(parents=True)
+        (root / "commands").mkdir()
+        (root / "agents").mkdir()
+        (root / "hooks").mkdir()
+        (root / "output-styles").mkdir()
+        (root / "skills" / "daily" / "SKILL.md").write_text(
+            "---\nname: daily\ndescription: Summarize a day's work.\n---\nPrompt body.", encoding="utf-8")
+        (root / "commands" / "ship.md").write_text(
+            "---\nname: ship\ndescription: Prepare a release.\n---\nPrompt body.", encoding="utf-8")
+        (root / "agents" / "reviewer.md").write_text(
+            "---\nname: reviewer\ndescription: Reviews a change set.\n---\nAgent body.", encoding="utf-8")
+        (root / "hooks" / "hooks.json").write_text(json.dumps({"hooks": {
+            "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo inert-u46"}]}],
+        }}), encoding="utf-8")
+        (root / "output-styles" / "brief.md").write_text("brief style", encoding="utf-8")
+        (root / ".mcp.json").write_text(json.dumps({"mcpServers": {
+            "remote-docs": {"url": "https://u46-secret:never-display@mcp.example.invalid/rpc", "description": "Remote docs server"},
+        }}), encoding="utf-8")
+        manifest = {
+            "name": name, "version": "1.0.0", "description": "U46 capability projection fixture",
+            "defaultEnabled": False, "skills": "./skills", "commands": "./commands",
+            "agents": "./agents", "hooks": "./hooks/hooks.json",
+            "tools": {"file-reader": {"description": "Metadata-only file reader declaration", "tools": ["local_file.read"]}},
+            "permissions": {"tools": ["local_file.read", "shell.run"], "network": ["https://docs.example.invalid"]},
+            "outputStyles": ["./output-styles/brief.md"],
+            "lspServers": {"sample-lsp": {"description": "Metadata-only language server declaration"}},
+        }
+        (root / "plugin.json").write_text(json.dumps(manifest), encoding="utf-8")
+        installed = False
+        try:
+            result = await asyncio.to_thread(_api_json, "/api/plugins/install-local", method="POST", payload={"path": str(root)})
+            installed = True
+            assert result.get("name") == name, result
+            body = await asyncio.to_thread(_api_json, "/api/plugins")
+            plugin = next((item for item in body.get("plugins", []) if item.get("name") == name), None)
+            assert plugin, body
+            groups = {group["kind"]: group for group in plugin.get("capability_groups", [])}
+            expected = {"skill", "command", "agent", "hook", "mcp", "tool", "output-style", "lsp-server"}
+            assert set(groups) == expected, groups
+            assert groups["skill"]["items"][0]["description"] == "Summarize a day's work."
+            assert groups["command"]["items"][0]["loaded"] is False
+            assert groups["tool"]["items"][0]["execution"] == "metadata-only"
+            assert groups["output-style"]["items"][0]["execution"] == "metadata-only"
+            assert groups["lsp-server"]["items"][0]["execution"] == "metadata-only"
+            assert groups["mcp"]["items"][0]["network_access"] == "远程端点 mcp.example.invalid"
+            assert "u46-secret" not in json.dumps(plugin, ensure_ascii=False)
+
+            target = next((item for item in json.load(urllib.request.urlopen("http://127.0.0.1:9336/json/list"))
+                           if item.get("type") == "page" and "127.0.0.1:5173" in item.get("url", "")), None)
+            assert target, "Atlas renderer is not attached to CDP port 9336"
+            async with websockets.connect(target["webSocketDebuggerUrl"]) as ws:
+                await _cdp_eval(ws, 200, "document.querySelector('button[aria-label=\\\"设置\\\"]')?.click()")
+                await asyncio.sleep(0.4)
+                await _cdp_eval(ws, 201, "(()=>{const item=[...document.querySelectorAll('[aria-label=\\\"设置分类\\\"] button')].find(b=>b.innerText.includes('插件与导入'));if(!item)throw Error('设置里找不到插件与导入');item.click()})()")
+                row_found = False
+                for attempt in range(20):
+                    await asyncio.sleep(0.5)
+                    row_found = await _cdp_eval(ws, 202 + attempt, "[...document.querySelectorAll('[aria-label=\\\"插件管理\\\"] li')].some(li=>li.querySelector('strong')?.innerText==='" + name + "')")
+                    if row_found:
+                        break
+                assert row_found, f"UI did not load installed fixture {name}"
+                shown = await _cdp_eval(ws, 230, "(()=>{const li=[...document.querySelectorAll('[aria-label=\\\"插件管理\\\"] li')].find(row=>row.querySelector('strong')?.innerText==='" + name + "');li?.querySelector('details summary')?.click();return {groups:[...li.querySelectorAll('[aria-label$=\\\"贡献\\\"]')].map(x=>x.innerText),text:li?.innerText,body:document.body.innerText}})()")
+                for label in ("技能", "命令", "Agent", "Hook", "MCP", "工具声明", "输出样式", "语言服务"):
+                    assert any(group.startswith(label) for group in shown["groups"]), {"missing": label, **shown}
+                assert "Metadata-only file reader declaration" in shown["text"]
+                assert "metadata-only · 不执行" in shown["text"]
+                assert "local_file.read" in shown["text"] and "docs.example.invalid" in shown["text"]
+                assert "审批要求" in shown["text"] and "未加载" in shown["text"]
+                assert "u46-secret" not in shown["body"]
+                await _cdp_eval(ws, 231, "document.querySelector('button[aria-label=\\\"关闭设置\\\"]')?.click()")
+            print("PASS plugin-capabilities: normalized 8 groups, sources/descriptions/load state/risk shown; metadata-only and MCP URL credentials stay inert/private")
+        finally:
+            if installed:
+                await asyncio.to_thread(_api_json, f"/api/plugins/{quote(name)}", method="DELETE")
 
 
 def _create_automation_probe(arguments: tuple[str, str]) -> bool:
@@ -261,6 +358,7 @@ async def main() -> None:
     await check_scroll_speed()
     await check_window_title()
     await check_workspace_treemap_ui()
+    await check_plugin_capability_projection()
     print("U46 CHECK PASS")
 
 

@@ -239,6 +239,27 @@ interface Plugin {
   agents?: string[];
   hooks?: number;
   mcp_servers?: string[];
+  capability_groups?: PluginCapabilityGroup[];
+}
+
+interface PluginCapabilityItem {
+  kind: string;
+  name: string;
+  description: string;
+  source: string;
+  source_type: string;
+  loaded: boolean;
+  execution: 'runtime' | 'metadata-only';
+  requested_tools: string[];
+  network_access: string;
+  approval: string;
+}
+
+interface PluginCapabilityGroup {
+  kind: string;
+  label: string;
+  count: number;
+  items: PluginCapabilityItem[];
 }
 
 interface PluginMarketplace {
@@ -534,6 +555,26 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
               {plugin.commands?.length ? <div>命令：{plugin.commands.join('、')}</div> : null}
               {plugin.agents?.length ? <div>Agent：{plugin.agents.join('、')}</div> : null}
               {plugin.mcp_servers?.length ? <div>MCP：{plugin.mcp_servers.join('、')}</div> : null}
+              <section aria-label="插件能力分组" style={{ display: 'grid', gap: 10, marginTop: 8 }}>
+                <strong>能力分组与风险投影</strong>
+                {plugin.capability_groups?.map((group) => <section key={group.kind} aria-label={`${group.label}贡献`} style={{ borderTop: '1px solid var(--line)', paddingTop: 7 }}>
+                  <div style={{ fontWeight: 600 }}>{group.label} · {group.count} 项</div>
+                  {group.items.length > 0 && <ul style={{ display: 'grid', gap: 6, margin: '5px 0 0', padding: 0, listStyle: 'none' }}>
+                    {group.items.map((item) => <li key={`${group.kind}:${item.name}`} style={{ borderRadius: 7, background: 'var(--surface-2, var(--surface))', padding: '6px 8px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'baseline' }}>
+                        <code>{item.name}</code><small>{item.loaded ? '已加载' : '未加载'}</small>
+                        {item.execution === 'metadata-only' && <small>metadata-only · 不执行</small>}
+                      </div>
+                      {item.description && <div style={{ marginTop: 2 }}>{item.description}</div>}
+                      <div><small>来源：{item.source_type} · {item.source}</small></div>
+                      <div><small>请求工具：{item.requested_tools.length ? item.requested_tools.join('、') : '未声明'}</small></div>
+                      <div><small>网络能力：{item.network_access}</small></div>
+                      <div><small>审批要求：{item.approval}</small></div>
+                    </li>)}
+                  </ul>}
+                </section>)}
+                {!plugin.capability_groups && <small>当前后端尚未提供能力投影。</small>}
+              </section>
               {plugin.metadata && Object.keys(plugin.metadata).length > 0 && <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>插件元数据：{JSON.stringify(plugin.metadata, null, 2)}</pre>}
             </div>
           </details>
