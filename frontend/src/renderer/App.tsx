@@ -506,6 +506,7 @@ export default function App() {
   }, [store.connected, store.apiBaseUrl]);
   const [username, setUsername] = useState(() => pref('username')?.trim() || 'User');
   const [statusBar, setStatusBar] = useState(readStatusBarPreferences);
+  const [statusBarVisible, setStatusBarVisible] = useState(() => pref('statusbar-visible') !== 'false');
   const [maximized, setMaximized] = useState(false);
   const [conversationGoal, setConversationGoal] = useState<{ text: string; status: string; turns_used: number; max_turns: number; subgoals: string[]; completed_subgoals?: number[] } | null>(null);
   const updateStatusBar = (key: keyof StatusBarPreferences, visible: boolean) => setStatusBar((current) => {
@@ -2080,6 +2081,9 @@ export default function App() {
       if (!requestQuit) { setToast('退出 Atlas 需要桌面版。'); return; }
       void requestQuit().then((closed) => { if (!closed) setToast('已取消退出。'); }).catch((error) => setToast(`退出确认失败：${error instanceof Error ? error.message : String(error)}`));
     } },
+    { id: 'footer', label: '/footer', hint: '切换会话底部状态栏显隐；逐项状态偏好会保留', run: () => {
+      setStatusBarVisible((visible) => { const next = !visible; setPref('statusbar-visible', String(next)); setToast(next ? '底部状态栏已显示' : '底部状态栏已隐藏'); return next; });
+    } },
     { id: 'bug', label: '/bug', hint: '生成本地脱敏缺陷包；检查后由你自行选择分享', run: () => {
       void (async () => {
         try {
@@ -3254,10 +3258,11 @@ export default function App() {
                   {activeRun && /^\s*\/review\b/i.test(store.runPrompts[activeRun.id]?.content ?? '') ? 'Reviewing · 正在审查' : '运行中 · 新消息可排队或转为优先任务'}
                 </div>}
                 <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={focusedLayout ? null : <>{extractSkillBanner}{suggestionHeader}{editBanner}{goalHeader}{recoveryHeader}{runHeader}{rewindBanner}</>} />
-                <div className={cn('mt-1 flex min-w-0 items-center gap-1 px-1 text-[11.5px] text-fg-3', focusedLayout && 'hidden')}>
+                {statusBarVisible && <div className={cn('mt-1 flex min-w-0 items-center gap-1 px-1 text-[11.5px] text-fg-3', focusedLayout && 'hidden')}>
                   <div className="flex min-w-0 shrink items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div>
                   <span className="flex-1" />
                 <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-1" aria-label="运行状态">
+                  {!STATUS_BAR_KEYS.some((key) => statusBar[key]) && <span>状态栏已启用 · 无状态项</span>}
                   {statusBar.model && <span className="max-w-36 truncate" title={modelName}>{modelName}</span>}{statusBar.reasoning && <span>推理 {store.reasoningEffort ? EFFORT_LABEL[store.reasoningEffort] : '默认'}</span>}
                   {statusBar.context && contextUse !== null && <Tip label={contextUse >= 80 ? '上下文达到 80% 预警阈值，可用 /compact 压缩' : '上下文占用比例'}><span className={contextUse >= 80 ? 'text-danger' : ''}>上下文 {contextUse}% 已用 · {100 - contextUse}% 剩余</span></Tip>}
                   {batteryStatus && <Tip label="本机电池状态；使用 /battery 查看详情"><span aria-label="电池状态">{batteryStatus.level === null ? (batteryStatus.charging ? '接通电源' : '电池供电') : `电池 ${batteryStatus.level}%${batteryStatus.charging ? ' · 充电' : ''}`}</span></Tip>}
@@ -3268,6 +3273,7 @@ export default function App() {
                   {statusBar.processes && processCount !== null && <button onClick={() => showInspectorTab('processes')} className="hover:text-fg">后台进程 {processCount}</button>}
                 </div>
                 </div>
+                }
                 </div>
               </div>
             </div>
@@ -3333,7 +3339,7 @@ export default function App() {
       </nav>
       <div ref={settingsContentRef} className="relative min-h-0 overflow-auto px-8 pt-7 pb-8">
         <button aria-label="关闭设置" onClick={() => { setSheet(null); setSettingsQuery(''); }} className="absolute top-4 right-4 grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={17} /></button>
-        {sheet === 'models' && <><div className="mb-4 flex items-center justify-between rounded-xl border border-edge bg-sunken px-3 py-2"><span className="text-[12px] text-fg-2">主模型失败后，按备用链顺序继续本轮</span><Button size="sm" variant="secondary" onClick={() => setFallbackOpen(true)}>备用模型链</Button></div><SettingsPage username={username} onSaveUsername={saveUsername} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} errorDetail={store.errorDetail} models={store.models} selectedModel={store.model} subagentsEnabled={store.subagentsEnabled} subagentDefaultModel={store.subagentDefaultModel} subagentMaxConcurrent={store.subagentMaxConcurrent} onSaveSubagentSettings={(enabled, model, maxConcurrent) => store.saveSubagentSettings(enabled, model, maxConcurrent)} providers={store.providers} reasoningStages={store.reasoningStages} onBack={() => setSheet(null)} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} statusBar={statusBar} onStatusBarChange={updateStatusBar} onLoadProviders={store.loadProviders} onSaveProviderConfig={store.saveProviderConfig} onAddProviderKey={(providerId, secret, label) => store.addProviderKey(providerId, secret, label)} onRemoveProviderKey={(providerId, keyId) => void store.removeProviderKey(providerId, keyId)} onUpdateModel={(modelId, patch) => store.updateCustomModel(modelId, patch)} onDeleteModel={(modelId) => store.deleteCustomModel(modelId)} onSaveReasoningStages={(config) => store.saveReasoningStages(config)} /></>}
+        {sheet === 'models' && <><div className="mb-4 flex items-center justify-between rounded-xl border border-edge bg-sunken px-3 py-2"><span className="text-[12px] text-fg-2">主模型失败后，按备用链顺序继续本轮</span><Button size="sm" variant="secondary" onClick={() => setFallbackOpen(true)}>备用模型链</Button></div><SettingsPage username={username} onSaveUsername={saveUsername} apiBaseUrl={store.apiBaseUrl} providerBaseUrl={store.providerBaseUrl} connected={store.connected} apiKeyConfigured={store.apiKeyConfigured} busy={store.settingsBusy} connectionTest={store.connectionTest} error={store.error} errorDetail={store.errorDetail} models={store.models} selectedModel={store.model} subagentsEnabled={store.subagentsEnabled} subagentDefaultModel={store.subagentDefaultModel} subagentMaxConcurrent={store.subagentMaxConcurrent} onSaveSubagentSettings={(enabled, model, maxConcurrent) => store.saveSubagentSettings(enabled, model, maxConcurrent)} providers={store.providers} reasoningStages={store.reasoningStages} onBack={() => setSheet(null)} onSelectModel={(model) => void store.selectModel(model)} onSaveProvider={(baseUrl, apiKey) => store.saveProviderSettings(baseUrl, apiKey)} onAddModel={(model) => store.addCustomModel(model)} onTestConnection={(model) => void store.testModelConnection(model)} statusBar={statusBar} onStatusBarChange={updateStatusBar} statusBarVisible={statusBarVisible} onStatusBarVisibleChange={(visible) => { setStatusBarVisible(visible); setPref('statusbar-visible', String(visible)); }} onLoadProviders={store.loadProviders} onSaveProviderConfig={store.saveProviderConfig} onAddProviderKey={(providerId, secret, label) => store.addProviderKey(providerId, secret, label)} onRemoveProviderKey={(providerId, keyId) => void store.removeProviderKey(providerId, keyId)} onUpdateModel={(modelId, patch) => store.updateCustomModel(modelId, patch)} onDeleteModel={(modelId) => store.deleteCustomModel(modelId)} onSaveReasoningStages={(config) => store.saveReasoningStages(config)} /></>}
         {sheet === 'advanced' && <section>
           <h3 className="m-0 text-[17px] font-semibold text-heading">高级设置</h3>
           <p className="mt-1 mb-5 text-[13px] text-fg-3">配置会话压缩使用的辅助模型。</p>

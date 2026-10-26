@@ -162,6 +162,7 @@ describe('settings configuration', () => {
       onRemoveProviderKey: () => undefined, onUpdateModel: async () => true, onDeleteModel: async () => true, onSaveReasoningStages: () => undefined,
       statusBar: { model: false, reasoning: false, context: false, tokens: false, cost: false, git: false, permission: false, processes: false },
       onStatusBarChange: () => undefined,
+      statusBarVisible: true, onStatusBarVisibleChange: () => undefined,
     }));
     const enabledMarkup = renderSettings(true);
     expect(enabledMarkup).toMatch(/<input type="checkbox" checked=""\/>启用子 Agent/);

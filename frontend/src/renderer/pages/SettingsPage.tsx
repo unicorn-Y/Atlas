@@ -69,6 +69,8 @@ interface SettingsPageProps {
   onTestConnection: (model: string) => void;
   statusBar: StatusBarPreferences;
   onStatusBarChange: (key: keyof StatusBarPreferences, visible: boolean) => void;
+  statusBarVisible: boolean;
+  onStatusBarVisibleChange: (visible: boolean) => void;
   onLoadProviders: () => void;
   onSaveProviderConfig: (providerId: string, baseUrl: string | null) => Promise<boolean>;
   onAddProviderKey: (providerId: string, secret: string, label: string) => Promise<boolean>;
@@ -279,6 +281,7 @@ export default function SettingsPage(props: SettingsPageProps) {
       <h2>状态栏</h2>
       <p>选择对话底部显示的状态信息。新安装时默认全部显示。</p>
       <div className={styles.settingsForm}>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={props.statusBarVisible} onChange={(event) => props.onStatusBarVisibleChange(event.target.checked)} />显示整行状态栏</label>
         {STATUS_BAR_ITEMS.map(([key, label]) => <label key={key} className="flex items-center gap-2">
           <input type="checkbox" checked={props.statusBar[key]} onChange={(event) => props.onStatusBarChange(key, event.target.checked)} />{label}
         </label>)}
