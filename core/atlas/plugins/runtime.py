@@ -628,10 +628,17 @@ class PluginRuntime:
     @staticmethod
     def _run_git_with_retry(args: list[str], *, timeout: int = 60) -> subprocess.CompletedProcess[str]:
         """Retry transient remote Git operations twice without echoing credentialed URLs."""
+        # Git for Windows parses file:///C:/... as /C:/... when launched from a
+        # Git Bash process that exports MSYS_NO_PATHCONV=1. That switch is for
+        # MSYS argument rewriting, not for native git.exe; inheriting it breaks
+        # local plugin sources while ordinary path arguments still appear valid.
+        git_env = os.environ.copy()
+        git_env.pop("MSYS_NO_PATHCONV", None)
         for attempt in range(len(_GIT_RETRY_DELAYS) + 1):
             try:
                 return subprocess.run(args, check=True, capture_output=True, text=True,
-                                      encoding="utf-8", errors="replace", timeout=timeout)
+                                      encoding="utf-8", errors="replace", timeout=timeout,
+                                      env=git_env)
             except (OSError, subprocess.SubprocessError) as exc:
                 if attempt == len(_GIT_RETRY_DELAYS):
                     raise ValueError(

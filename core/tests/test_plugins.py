@@ -216,7 +216,10 @@ def _unlock(path: Path) -> None:
             item.chmod(stat.S_IWRITE)
 
 
-def test_git_source_update_available(tmp_path: Path) -> None:
+def test_git_source_update_available(tmp_path: Path, monkeypatch) -> None:
+    # The full acceptance harness runs under Git Bash with this variable set.
+    # Native git.exe must still resolve Windows file:// URLs for local sources.
+    monkeypatch.setenv("MSYS_NO_PATHCONV", "1")
     working = tmp_path / "origin-working"
     working.mkdir()
     origin = tmp_path / "origin.git"
