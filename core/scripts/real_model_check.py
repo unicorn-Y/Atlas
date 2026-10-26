@@ -33,6 +33,26 @@ def redact_diagnostic(value: str) -> str:
     return value[-1600:]
 
 
+def _attempt_prompt(prompt: str, attempt_number: int) -> str:
+    if attempt_number == 1:
+        return prompt
+    return (
+        f"{prompt}\n\nValidation retry: the previous answer did not satisfy this check. "
+        "Follow the requested operation and output marker exactly, verify that the requested "
+        "result was produced, and do not add unrelated text."
+    )
+
+
+def _report_failure(name: str, attempt_number: int, result: AttemptResult) -> None:
+    answer_tail = redact_diagnostic(result.answer)
+    reason = redact_diagnostic(result.detail or "assertion did not match")
+    print(
+        f"Real-model check {name} attempt {attempt_number}/2 failed: {reason}; "
+        f"actual answer tail (redacted): {answer_tail or '(empty/unavailable)'}",
+        flush=True,
+    )
+
+
 async def retry_real_model_check_async(
     name: str,
     prompt: str,
@@ -45,13 +65,8 @@ async def retry_real_model_check_async(
     """
     last = AttemptResult(False, detail="no attempt completed")
     for attempt_number in (1, 2):
-        attempt_prompt = prompt if attempt_number == 1 else (
-            f"{prompt}\n\nValidation retry: the previous answer did not satisfy this check. "
-            "Follow the requested operation and output marker exactly, verify that the requested "
-            "result was produced, and do not add unrelated text."
-        )
         try:
-            outcome = attempt(attempt_prompt, attempt_number)
+            outcome = attempt(_attempt_prompt(prompt, attempt_number), attempt_number)
             if inspect.isawaitable(outcome):
                 outcome = await outcome
             if not isinstance(outcome, AttemptResult):
@@ -62,13 +77,7 @@ async def retry_real_model_check_async(
         if last.passed:
             print(f"PASS real-model check: {name} (attempt {attempt_number})", flush=True)
             return last
-        answer_tail = redact_diagnostic(last.answer)
-        reason = redact_diagnostic(last.detail or "assertion did not match")
-        print(
-            f"Real-model check {name} attempt {attempt_number}/2 failed: {reason}; "
-            f"actual answer tail (redacted): {answer_tail or '(empty/unavailable)'}",
-            flush=True,
-        )
+        _report_failure(name, attempt_number, last)
     raise AssertionError(
         f"real-model check failed after one retry: {name}; "
         f"last answer tail (redacted): {redact_diagnostic(last.answer) or '(empty/unavailable)'}"
@@ -80,5 +89,23 @@ def retry_real_model_check(
     prompt: str,
     attempt: Callable[[str, int], Any],
 ) -> AttemptResult:
-    """Synchronous entry point used by standalone acceptance scripts."""
-    return asyncio.run(retry_real_model_check_async(name, prompt, attempt))
+    """Synchronous entry point that does not wrap sync callbacks in an event loop."""
+    last = AttemptResult(False, detail="no attempt completed")
+    for attempt_number in (1, 2):
+        try:
+            outcome = attempt(_attempt_prompt(prompt, attempt_number), attempt_number)
+            if inspect.isawaitable(outcome):
+                outcome = asyncio.run(outcome)
+            if not isinstance(outcome, AttemptResult):
+                raise TypeError("attempt callback must return AttemptResult")
+            last = outcome
+        except Exception as exc:  # provider transport failures are part of the live check
+            last = AttemptResult(False, detail=f"{type(exc).__name__}: {exc}")
+        if last.passed:
+            print(f"PASS real-model check: {name} (attempt {attempt_number})", flush=True)
+            return last
+        _report_failure(name, attempt_number, last)
+    raise AssertionError(
+        f"real-model check failed after one retry: {name}; "
+        f"last answer tail (redacted): {redact_diagnostic(last.answer) or '(empty/unavailable)'}"
+    )

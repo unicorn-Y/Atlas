@@ -1236,7 +1236,7 @@ class AtlasKernel:
                         on_attempt=on_summary_attempt,
                         usage_budget=usage_budget,
                         bypass_prompt_cache=request.bypass_prompt_cache,
-                        cache_bypass_nonce=request.run_id,
+                        cache_bypass_nonce=run_id,
                     )
                     return result.text
 
@@ -1667,7 +1667,7 @@ class AtlasKernel:
                         on_text=on_text, on_attempt=on_attempt, on_event=on_event,
                         usage_budget=usage_budget,
                         bypass_prompt_cache=request.bypass_prompt_cache,
-                        cache_bypass_nonce=request.run_id,
+                        cache_bypass_nonce=run_id,
                     ))
                     queue_get = asyncio.create_task(event_queue.get())
                     stream_error: ModelCallError | None = None
