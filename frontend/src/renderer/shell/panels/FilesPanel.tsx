@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import { ChevronLeft, ChevronRight, Code2, Copy, Download, Eye, ExternalLink, File, Folder, FolderOpen, History, LoaderCircle, RefreshCw, RotateCcw, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { WorkspaceEntry, WorkspaceFile } from '@atlas/backend-adapter';
+import type { WorkspaceEntry, WorkspaceFile, WorkspaceVersion } from '@atlas/backend-adapter';
 import type { PlatformEditorId } from '../../../shared/ipc';
 import type { AgentEvent } from '../../../types/runtime';
 import { backend, useAtlasStore } from '../../store/useAtlasStore';
@@ -32,6 +32,25 @@ const absoluteWorkspacePath = (root: string, relative: string): string | null =>
   const clean = relative.split(/[\\/]/).filter((part) => part && part !== '.').join(separator);
   return `${root.replace(/[\\/]+$/, '')}${separator}${clean}`;
 };
+type DiffLine = { kind: 'same' | 'add' | 'remove'; text: string };
+function diffLines(before: string, after: string): { lines: DiffLine[]; truncated: boolean } {
+  const oldLines = before.split('\n'); const newLines = after.split('\n');
+  const truncated = oldLines.length > 600 || newLines.length > 600;
+  const a = oldLines.slice(0, 600); const b = newLines.slice(0, 600);
+  const width = b.length + 1; const table = new Uint16Array((a.length + 1) * width);
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) {
+    table[i * width + j] = a[i] === b[j] ? table[(i + 1) * width + j + 1] + 1 : Math.max(table[(i + 1) * width + j], table[i * width + j + 1]);
+  }
+  const lines: DiffLine[] = []; let i = 0; let j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { lines.push({ kind: 'same', text: a[i++] }); j++; }
+    else if (table[(i + 1) * width + j] >= table[i * width + j + 1]) lines.push({ kind: 'remove', text: a[i++] });
+    else lines.push({ kind: 'add', text: b[j++] });
+  }
+  while (i < a.length) lines.push({ kind: 'remove', text: a[i++] });
+  while (j < b.length) lines.push({ kind: 'add', text: b[j++] });
+  return { lines, truncated };
+}
 
 interface WorkbookSheet { name: string; html: string }
 interface PresentationShape { id: string; name: string; text: string }
@@ -114,6 +133,9 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
   const [recentlyClosed, setRecentlyClosed] = useState<string[]>([]);
   const [showClosedTabs, setShowClosedTabs] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path: string; directory: boolean } | null>(null);
+  const [historyDialogPath, setHistoryDialogPath] = useState<string | null>(null);
+  const [historyVersions, setHistoryVersions] = useState<WorkspaceVersion[] | null>(null);
+  const [showVersionDiff, setShowVersionDiff] = useState(false);
   const [lightbox, setLightbox] = useState(false);
   const [imageZoom, setImageZoom] = useState(100);
   const [pdfPage, setPdfPage] = useState(1);
@@ -172,7 +194,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
       }
     }
     setFile((current) => current?.path === path ? current : null);
-    setMode('preview'); setVersion(null); setHighlightLine(null); setHighlightColumn(null); setPdfPage(1); setPdfZoom(100); setPdfError(''); setLightbox(false); setError('');
+    setMode('preview'); setVersion(null); setShowVersionDiff(false); setHighlightLine(null); setHighlightColumn(null); setPdfPage(1); setPdfZoom(100); setPdfError(''); setLightbox(false); setError('');
   };
   const movePreviewHistory = (direction: -1 | 1) => {
     const nextIndex = previewHistoryIndex + direction;
@@ -428,6 +450,23 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
     try { await backend.restoreVersion(workspace, file.path, versionId); setVersion(null); setReloads((value) => value + 1); setError('已还原；当前内容的快照已保存，可在历史版本中撤销'); }
     catch (exc) { setError(`还原失败：${exc instanceof Error ? exc.message : String(exc)}`); }
   };
+  const openTreeHistory = async (path: string) => {
+    setHistoryDialogPath(path); setHistoryVersions(null); setContextMenu(null);
+    try { setHistoryVersions(await backend.getFileHistory(workspace, path)); }
+    catch (exc) { setHistoryVersions([]); setError(`读取 ${path} 的历史版本失败：${exc instanceof Error ? exc.message : String(exc)}`); }
+  };
+  const viewTreeVersion = async (path: string, item: WorkspaceVersion) => {
+    try {
+      const [oldFile, currentFile] = await Promise.all([backend.getVersionContent(workspace, path, item.id), backend.getWorkspaceFile(workspace, path)]);
+      setSelected(path); setFile(currentFile); setDraft(currentFile.content); setEditing(false); setMode('code');
+      setVersion({ id: item.id, label: `${new Date(item.created_at).toLocaleString('zh-CN')} ${item.source === 'git' ? '的提交' : '改动前'}`, file: oldFile });
+      setShowVersionDiff(true); setHistoryDialogPath(null); setError('');
+    } catch (exc) { setError(`读取历史版本失败：${exc instanceof Error ? exc.message : String(exc)}`); }
+  };
+  const restoreTreeVersion = async (path: string, item: WorkspaceVersion) => {
+    try { await backend.restoreVersion(workspace, path, item.id); setHistoryDialogPath(null); setVersion(null); setReloads((value) => value + 1); setError('已还原；恢复前内容已另存为历史版本'); }
+    catch (exc) { setError(`恢复文件失败：${exc instanceof Error ? exc.message : String(exc)}`); }
+  };
   // An earlier version only has its text; previews that load the file by URL would show the current one.
   const shown = version?.file ?? file;
   const previewing = Boolean(shown && canPreview(shown.path) && mode === 'preview' && (!version || MARKDOWN.test(shown.path)));
@@ -549,14 +588,16 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
       </div>
       {version && <div className="flex items-center gap-2 bg-brand-soft px-3 py-1.5 text-[12px] text-fg">
         <span className="min-w-0 flex-1 truncate">正在看 {version.label} 的版本</span>
+        <button type="button" aria-pressed={showVersionDiff} onClick={() => setShowVersionDiff((value) => !value)} className="shrink-0 rounded px-2 py-1 hover:bg-hover">{showVersionDiff ? '只看此版本' : '查看版本差异'}</button>
         <button onClick={() => void restore()} className="inline-flex shrink-0 items-center gap-1 font-medium hover:underline"><RotateCcw size={12} />恢复这个版本</button>
-        <button onClick={() => setVersion(null)} className="shrink-0 text-fg-2 hover:text-fg">回到当前</button>
+      <button onClick={() => { setVersion(null); setShowVersionDiff(false); }} className="shrink-0 text-fg-2 hover:text-fg">回到当前</button>
       </div>}
       {saveConflict && <div role="alert" className="flex items-center gap-2 bg-danger-soft px-3 py-2 text-[12px] text-danger">
         <span className="min-w-0 flex-1">文件已在磁盘上更改。你的编辑仍保留；重新加载会丢弃本地草稿。</span>
         <button type="button" onClick={() => void reloadAfterConflict()} className="shrink-0 underline">加载磁盘版本</button>
       </div>}
-      {shown && previewing
+      {showVersionDiff && version && file ? (() => { const diff = diffLines(version.file.content, file.content); return <pre aria-label="当前文件与选中历史版本的差异" className="m-0 min-h-0 flex-1 overflow-auto bg-code p-3 font-mono text-[12px] leading-[1.6]">{diff.truncated && <span className="block text-fg-3">只比较前 600 行；文件后续内容未显示。</span>}{diff.lines.map((line, index) => <span key={index} className={`block whitespace-pre-wrap break-all ${line.kind === 'add' ? 'bg-ok-soft text-fg' : line.kind === 'remove' ? 'bg-danger-soft text-fg' : 'text-fg-2'}`}>{line.kind === 'add' ? '+ ' : line.kind === 'remove' ? '− ' : '  '}{line.text || ' '}</span>)}</pre>; })()
+        : shown && previewing
         ? MARKDOWN.test(shown.path)
           ? <div className="prose-atlas min-h-0 flex-1 overflow-auto px-4 py-3 text-[13.5px]"><ReactMarkdown remarkPlugins={[remarkGfm]}>{shown.content}</ReactMarkdown></div>
           : OFFICE.test(file.path)
@@ -645,6 +686,8 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
         className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">加入消息上下文</button>}
       {!contextMenu.directory && <button type="button" role="menuitem" onClick={() => { void copyFileContent(contextMenu.path); setContextMenu(null); }}
         className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">复制文件内容</button>}
+      {!contextMenu.directory && <button type="button" role="menuitem" onClick={() => void openTreeHistory(contextMenu.path)}
+        className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">历史版本与差异…</button>}
       {!contextMenu.directory && window.atlasDesktop?.openPath && !workspace.startsWith('ssh://') && <button type="button" role="menuitem" onClick={() => { void openExternal(contextMenu.path); setContextMenu(null); }}
         className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">在外部程序中打开</button>}
       {!contextMenu.directory && window.atlasDesktop?.openFileInEditor && !workspace.startsWith('ssh://') && (['vscode', 'cursor', 'zed', 'idea', 'pycharm'] as const).map((editor) => <button key={editor} type="button" role="menuitem" onClick={() => { void openInEditor(contextMenu.path, editor); setContextMenu(null); }}
@@ -655,6 +698,11 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
         className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">复制相对路径</button>
       {!workspace.startsWith('ssh://') && <button type="button" role="menuitem" onClick={() => { void copyPath(contextMenu.path, true); setContextMenu(null); }}
         className="block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-fg-2 hover:bg-hover hover:text-fg">复制绝对路径</button>}
+    </div>}
+    {historyDialogPath && <div role="dialog" aria-modal="true" aria-label={`${historyDialogPath} 历史版本`} className="fixed inset-0 z-[85] grid place-items-center bg-black/35 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setHistoryDialogPath(null); }}>
+      <section className="flex max-h-[80vh] w-[min(620px,92vw)] flex-col rounded-xl border border-line bg-panel p-4 shadow-xl"><div className="flex items-center gap-2"><h2 className="m-0 min-w-0 flex-1 truncate text-[15px] font-semibold">历史版本 · {historyDialogPath}</h2><button aria-label="关闭历史版本" onClick={() => setHistoryDialogPath(null)} className="grid size-7 place-items-center rounded hover:bg-hover"><X size={15} /></button></div>
+        {historyVersions === null ? <p role="status" className="m-0 py-6 text-center text-[12px] text-fg-3">正在读取文件快照与 Git 提交…</p> : !historyVersions.length ? <p className="m-0 py-6 text-center text-[12px] text-fg-3">还没有可用的历史版本。Atlas 修改文件前会保存快照。</p> : <ul className="m-0 mt-3 grid gap-2 overflow-auto p-0">{historyVersions.map((item) => <li key={item.id} className="flex items-center gap-2 rounded-lg border border-line p-2.5"><span className="min-w-0 flex-1"><b className="block text-[12.5px]">{new Date(item.created_at).toLocaleString('zh-CN')} · {item.source === 'git' ? 'Git 提交' : 'Atlas 快照'}</b><small className="font-mono text-[10.5px] text-fg-3">{item.id} · {item.bytes} B</small></span><button type="button" onClick={() => void viewTreeVersion(historyDialogPath, item)} className="rounded-md border border-line px-2 py-1 text-[11.5px] hover:bg-hover">查看差异</button><button type="button" onClick={() => void restoreTreeVersion(historyDialogPath, item)} className="rounded-md border border-line px-2 py-1 text-[11.5px] hover:bg-hover">恢复</button></li>)}</ul>}
+      </section>
     </div>}
     {lightbox && file && IMAGE.test(file.path) && <div role="dialog" aria-modal="true" aria-label={`图片预览 ${file.path}`}
       onMouseDown={(event) => { if (event.target === event.currentTarget) setLightbox(false); }}

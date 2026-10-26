@@ -2013,10 +2013,21 @@ export default function App() {
         if (!activeConversation) { setToast('先打开一个对话再生成回顾'); return; }
         void store.compactConversation(activeConversation.id, '生成当前对话的简短回顾，保留目标、关键决策、完成进度、未解决问题和下一步。').then((text) => { if (text) setToast(`对话回顾已更新：${text}`); });
       } },
-      { id: 'raw', label: '/raw', hint: '查看最近一条 Atlas 回复的原始文本并复制', run: () => {
-        const latest = [...messages].reverse().find((item) => item.role === 'assistant')?.content || reply;
-        if (!latest) { setToast('当前还没有可查看的回复'); return; }
-        setRawTextTitle('最近回复的原始文本'); setRawText(latest);
+      { id: 'raw', label: '/raw', hint: '打开当前会话原始滚动缓冲：完整消息与工具输出，可选择和复制', run: () => {
+        if (!activeConversation) { setToast('先打开一个对话再查看原始输出'); return; }
+        const rawMessages = store.conversationMessages[activeConversation.id] ?? [];
+        const messageText = rawMessages.map((item) => {
+          const metadata = item.metadata ? `\n元数据：\n${JSON.stringify(item.metadata, null, 2)}` : '';
+          return `===== ${String(item.role).toUpperCase()} =====\n${item.content ?? ''}${metadata}`;
+        });
+        const toolText = store.runs.filter((run) => run.conversationId === activeConversation.id)
+          .flatMap((run) => (run.events ?? []).filter((event) => /tool\.(completed|result)/.test(event.type))
+            .map((event) => `===== 工具输出 · ${run.id} · ${event.type} =====\n${JSON.stringify(event.data, null, 2)}`));
+        const transcript = [...messageText, ...toolText].join('\n\n');
+        const latest = [...rawMessages].reverse().find((item) => item.role === 'assistant')?.content || reply;
+        const value = transcript || latest;
+        if (!value) { setToast('当前还没有可查看的原始输出'); return; }
+        setRawTextTitle(`原始滚动缓冲 · ${rawMessages.length} 条消息 / ${toolText.length} 条工具输出`); setRawText(value);
       } },
       { id: 'auto-review', label: '/auto-review', hint: '审查当前未提交改动', run: () => { void store.sendMessage('/review'); } },
       { id: 'ask-selection', label: '/ask-selection', hint: '把当前选中的文字放进消息草稿', run: askSelectedText },
