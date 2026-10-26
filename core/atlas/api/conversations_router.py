@@ -12,6 +12,8 @@ import json
 import logging
 import re
 import subprocess
+import sqlite3
+from contextlib import closing
 import uuid
 from contextlib import suppress
 from datetime import UTC, datetime
@@ -100,27 +102,80 @@ def _ui_metadata_path() -> Path:
     return path
 
 
+def _ui_metadata_db() -> sqlite3.Connection:
+    from atlas.config import DATA_ROOT
+    path = DATA_ROOT / "data" / "conversation-metadata.sqlite3"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(path, timeout=10)
+    db.execute("PRAGMA journal_mode=WAL")
+    db.execute("CREATE TABLE IF NOT EXISTS ui_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    db.execute("""CREATE TABLE IF NOT EXISTS conversation_ui_metadata (
+        conversation_id TEXT PRIMARY KEY, labels_json TEXT NOT NULL DEFAULT '[]',
+        unread INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+    return db
+
+
+def _read_ui_metadata() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    with closing(_ui_metadata_db()) as db:
+        state = db.execute("SELECT value FROM ui_state WHERE key='sidebar'").fetchone()
+        rows = db.execute("SELECT conversation_id, labels_json, unread FROM conversation_ui_metadata").fetchall()
+    metadata = json.loads(state[0]) if state else {}
+    sessions = {str(cid): {"labels": json.loads(labels), "unread": bool(unread)} for cid, labels, unread in rows}
+    return metadata if isinstance(metadata, dict) else {}, sessions
+
+
 @router.get("/api/ui/conversation-metadata")
 async def get_conversation_ui_metadata() -> dict[str, Any]:
-    path = _ui_metadata_path()
     try:
-        value = await asyncio.to_thread(path.read_text, encoding="utf-8")
-        parsed = json.loads(value)
-        return parsed if isinstance(parsed, dict) else {"metadata": {}}
-    except FileNotFoundError:
+        metadata, conversations = await asyncio.to_thread(_read_ui_metadata)
+        if not metadata and not conversations:
+            # Migrate pre-database state exactly once, keeping the legacy file intact.
+            path = _ui_metadata_path()
+            try:
+                parsed = json.loads(await asyncio.to_thread(path.read_text, encoding="utf-8"))
+                legacy = parsed.get("metadata", {}) if isinstance(parsed, dict) else {}
+                if isinstance(legacy, dict) and legacy:
+                    await asyncio.to_thread(_write_ui_metadata, legacy)
+                    metadata, conversations = await asyncio.to_thread(_read_ui_metadata)
+            except (OSError, json.JSONDecodeError):
+                pass
+        return {"metadata": metadata, "conversations": conversations}
+    except (OSError, sqlite3.Error, json.JSONDecodeError):
         return {"metadata": {}}
-    except (OSError, json.JSONDecodeError):
-        return {"metadata": {}}
+
+
+def _write_ui_metadata(metadata: dict[str, Any]) -> None:
+    labels = metadata.get("atlas.sidebar.labels", {})
+    unread = metadata.get("atlas.sidebar.unread", [])
+    if not isinstance(labels, dict): labels = {}
+    if not isinstance(unread, list): unread = []
+    with closing(_ui_metadata_db()) as db, db:
+        db.execute("INSERT INTO ui_state(key,value) VALUES('sidebar',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                   (json.dumps(metadata, ensure_ascii=False),))
+        existing = {str(row[0]) for row in db.execute("SELECT conversation_id FROM conversation_ui_metadata")}
+        ids = existing | set(str(key) for key in labels) | set(str(value) for value in unread)
+        for conversation_id in ids:
+            raw_labels = labels.get(conversation_id, [])
+            if isinstance(raw_labels, str): raw_labels = [raw_labels]
+            if not isinstance(raw_labels, list): raw_labels = []
+            db.execute("""INSERT INTO conversation_ui_metadata(conversation_id,labels_json,unread,updated_at)
+                VALUES(?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(conversation_id) DO UPDATE SET
+                labels_json=excluded.labels_json, unread=excluded.unread, updated_at=CURRENT_TIMESTAMP""",
+                (conversation_id, json.dumps([str(item) for item in raw_labels]), int(conversation_id in unread)))
+
+
+@router.get("/api/conversations/metadata")
+async def query_conversation_metadata(label: str | None = Query(None, max_length=80), unread: bool | None = Query(None)) -> dict[str, Any]:
+    _metadata, conversations = await asyncio.to_thread(_read_ui_metadata)
+    result = {key: value for key, value in conversations.items()
+              if (label is None or label in value["labels"]) and (unread is None or value["unread"] is unread)}
+    return {"conversations": result, "count": len(result)}
 
 
 @router.put("/api/ui/conversation-metadata")
 async def put_conversation_ui_metadata(request: ConversationUiMetadataRequest) -> dict[str, bool]:
-    path = _ui_metadata_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".json.tmp")
-    payload = json.dumps({"metadata": request.metadata}, ensure_ascii=False, indent=2)
-    await asyncio.to_thread(temporary.write_text, payload, encoding="utf-8")
-    await asyncio.to_thread(temporary.replace, path)
+    await asyncio.to_thread(_write_ui_metadata, request.metadata)
     return {"saved": True}
 
 

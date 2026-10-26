@@ -49,6 +49,12 @@ const LABELS = [
   { id: 'red', name: '红', color: '#e5484d' }, { id: 'orange', name: '橙', color: '#f76b15' }, { id: 'yellow', name: '黄', color: '#e2a336' },
   { id: 'green', name: '绿', color: '#30a46c' }, { id: 'blue', name: '蓝', color: '#3e63dd' }, { id: 'purple', name: '紫', color: '#8e4ec6' },
 ] as const;
+type LabelDefinition = { id: string; name: string; color: string };
+const normalizeLabels = (value: unknown): Record<string, string[]> => Object.fromEntries(Object.entries((value && typeof value === 'object' ? value : {}) as Record<string, unknown>).map(([id, raw]) => [id, Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string') : typeof raw === 'string' && raw ? [raw] : []]));
+const normalizeDefinitions = (value: unknown): LabelDefinition[] => {
+  const items = Array.isArray(value) ? value : LABELS.map((item) => ({ ...item }));
+  return items.flatMap((item) => item && typeof item === 'object' && typeof (item as LabelDefinition).id === 'string' && typeof (item as LabelDefinition).name === 'string' && /^#[0-9a-f]{6}$/i.test((item as LabelDefinition).color) ? [item as LabelDefinition] : []);
+};
 type Arrange = 'time' | 'project' | 'workspace' | 'custom' | 'label' | 'name';
 type StatusFilter = 'all' | 'running' | 'waiting' | 'completed' | 'failed' | 'unread' | 'archived' | 'worktree';
 type CustomGroup = { id: string; name: string };
@@ -68,7 +74,7 @@ const STATUS_FILTERS: Record<StatusFilter, string> = {
   unread: '未读', archived: '已归档', worktree: '工作树',
 };
 const STORE_KEYS = {
-  labels: 'atlas.sidebar.labels', arrange: 'atlas.sidebar.arrange', manualOrder: 'atlas.sidebar.order',
+  labels: 'atlas.sidebar.labels', labelDefs: 'atlas.sidebar.label-definitions', arrange: 'atlas.sidebar.arrange', manualOrder: 'atlas.sidebar.order',
   sectionOrder: 'atlas.sidebar.section-order', groups: 'atlas.sidebar.custom-groups',
   members: 'atlas.sidebar.custom-members', collapsed: 'atlas.sidebar.collapsed', unread: 'atlas.sidebar.unread',
 };
@@ -146,7 +152,8 @@ export default function Sidebar(props: SidebarProps) {
   const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState('');
   const [confirmArchive, setConfirmArchive] = useState('');
-  const [labels, setLabels] = useState<Record<string, string>>(() => readJson(STORE_KEYS.labels, {}));
+  const [labels, setLabels] = useState<Record<string, string[]>>(() => normalizeLabels(readJson(STORE_KEYS.labels, {})));
+  const [labelDefs, setLabelDefs] = useState<LabelDefinition[]>(() => normalizeDefinitions(readJson(STORE_KEYS.labelDefs, LABELS)));
   const [manualUnread, setManualUnread] = useState<string[]>(() => readJson(STORE_KEYS.unread, []));
   const [metadataReady, setMetadataReady] = useState(false);
   const [mode, setMode] = useState<Arrange>(() => readJson<Arrange>(STORE_KEYS.arrange, 'time'));
@@ -163,6 +170,7 @@ export default function Sidebar(props: SidebarProps) {
   const [contentMatches, setContentMatches] = useState<string[] | null>(null);
   const [contentHits, setContentHits] = useState<Array<{ id: string | number; conversation_id: string; content: string; snippet?: string; title?: string; role?: string }>>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [labelFilter, setLabelFilter] = useState('');
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [projectPickerQuery, setProjectPickerQuery] = useState('');
   const [focusSearchRequested, setFocusSearchRequested] = useState(false);
@@ -192,17 +200,19 @@ export default function Sidebar(props: SidebarProps) {
     void api<{ metadata?: Record<string, unknown> }>(backend.apiBaseUrl, '/api/ui/conversation-metadata').then(async (result) => {
       if (stale) return;
       const remote = result.metadata ?? {};
-      const keys = [STORE_KEYS.labels, STORE_KEYS.unread, STORE_KEYS.arrange, STORE_KEYS.manualOrder, STORE_KEYS.sectionOrder, STORE_KEYS.groups, STORE_KEYS.members];
+      const keys = [STORE_KEYS.labels, STORE_KEYS.labelDefs, STORE_KEYS.unread, STORE_KEYS.arrange, STORE_KEYS.manualOrder, STORE_KEYS.sectionOrder, STORE_KEYS.groups, STORE_KEYS.members];
       const local = Object.fromEntries(keys.map((key) => [key, readJson(key, undefined)]));
       const migrated = !Object.keys(remote).length;
       const value = (key: string) => remote[key] ?? (migrated ? local[key] : undefined);
-      if (value(STORE_KEYS.labels)) setLabels(value(STORE_KEYS.labels) as Record<string, string>);
+      if (value(STORE_KEYS.labels)) setLabels(normalizeLabels(value(STORE_KEYS.labels)));
+      if (value(STORE_KEYS.labelDefs)) setLabelDefs(normalizeDefinitions(value(STORE_KEYS.labelDefs)));
       if (value(STORE_KEYS.unread)) setManualUnread(value(STORE_KEYS.unread) as string[]);
       if (value(STORE_KEYS.arrange)) setMode(value(STORE_KEYS.arrange) as Arrange);
       if (value(STORE_KEYS.manualOrder)) setManualOrder(value(STORE_KEYS.manualOrder) as string[]);
       if (value(STORE_KEYS.sectionOrder)) setSectionOrder(value(STORE_KEYS.sectionOrder) as string[]);
       if (value(STORE_KEYS.groups)) setCustomGroups(value(STORE_KEYS.groups) as CustomGroup[]);
       if (value(STORE_KEYS.members)) setCustomMembers(value(STORE_KEYS.members) as Record<string, string>);
+      if (remote['atlas.sidebar.label-filter']) setLabelFilter(String(remote['atlas.sidebar.label-filter']));
       setMetadataReady(true);
       if (migrated) await api(backend.apiBaseUrl, '/api/ui/conversation-metadata', { method: 'PUT', json: { metadata: Object.fromEntries(keys.map((key) => [key, local[key]]).filter(([, item]) => item !== undefined)) } });
     }).catch(() => { if (!stale) setMetadataReady(true); });
@@ -210,12 +220,12 @@ export default function Sidebar(props: SidebarProps) {
   }, []);
   useEffect(() => {
     if (!metadataReady) return;
-    const metadata = { [STORE_KEYS.labels]: labels, [STORE_KEYS.unread]: manualUnread, [STORE_KEYS.arrange]: mode,
+    const metadata = { [STORE_KEYS.labels]: labels, [STORE_KEYS.labelDefs]: labelDefs, [STORE_KEYS.unread]: manualUnread, 'atlas.sidebar.label-filter': labelFilter, [STORE_KEYS.arrange]: mode,
       [STORE_KEYS.manualOrder]: manualOrder, [STORE_KEYS.sectionOrder]: sectionOrder,
       [STORE_KEYS.groups]: customGroups, [STORE_KEYS.members]: customMembers };
     const timer = window.setTimeout(() => { void api(backend.apiBaseUrl, '/api/ui/conversation-metadata', { method: 'PUT', json: { metadata } }).catch(() => undefined); }, 250);
     return () => window.clearTimeout(timer);
-  }, [metadataReady, labels, manualUnread, mode, manualOrder, sectionOrder, customGroups, customMembers]);
+  }, [metadataReady, labels, labelDefs, manualUnread, labelFilter, mode, manualOrder, sectionOrder, customGroups, customMembers]);
   useEffect(() => writeJson(STORE_KEYS.collapsed, collapsed), [collapsed]);
   useEffect(() => {
     if (props.activeConversationId) {
@@ -280,8 +290,9 @@ export default function Sidebar(props: SidebarProps) {
 
   const setLabel = (id: string, label: string | null) => setLabels((current) => {
     const next = { ...current };
-    if (label && current[id] !== label) next[id] = label;
-    else delete next[id];
+    const selected = new Set(current[id] ?? []);
+    if (label && !selected.has(label)) selected.add(label); else if (label) selected.delete(label);
+    if (selected.size) next[id] = [...selected]; else delete next[id];
     return next;
   });
   const toggleSelected = (id: string) => setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
@@ -295,8 +306,9 @@ export default function Sidebar(props: SidebarProps) {
   const query = filterText.trim().toLocaleLowerCase();
   const matches = (conversation: ConversationSummary) => {
     const relatedProjects = projects.filter((project) => (project.conversation_ids ?? []).includes(conversation.id)).map((project) => project.name);
-    const selectedLabel = labels[conversation.id];
-    const text = [conversation.title, conversation.id, pathOf(conversation), conversation.worktree_branch, conversation.base_branch, selectedLabel, LABELS.find((label) => label.id === selectedLabel)?.name, ...relatedProjects].join(' ').toLocaleLowerCase();
+    const selectedLabels = labels[conversation.id] ?? [];
+    const labelNames = selectedLabels.map((id) => labelDefs.find((label) => label.id === id)?.name ?? id);
+    const text = [conversation.title, conversation.id, pathOf(conversation), conversation.worktree_branch, conversation.base_branch, ...selectedLabels, ...labelNames, ...relatedProjects].join(' ').toLocaleLowerCase();
     const titleMatch = !query || text.includes(query);
     const contentMatch = !query || (contentMatches?.includes(conversation.id) ?? false);
     if (query && !titleMatch && !contentMatch) return false;
@@ -309,7 +321,7 @@ export default function Sidebar(props: SidebarProps) {
     if (statusFilter === 'completed') return ['completed', 'succeeded', 'success'].includes(activityStatus(conversation.id));
     if (statusFilter === 'failed') return ['failed', 'error'].includes(activityStatus(conversation.id));
     if (statusFilter === 'worktree') return Boolean(conversation.worktree_path || conversation.worktree_branch || conversation.base_branch);
-    return true;
+    return !labelFilter || (labels[conversation.id] ?? []).includes(labelFilter);
   };
   const sortedItems = (items: ConversationSummary[]) => {
     const rank = new Map(manualOrder.map((id, index) => [id, index]));
@@ -331,8 +343,8 @@ export default function Sidebar(props: SidebarProps) {
   if (mode === 'time') groups = groupByDay(activeItems);
   else if (mode === 'name') groups = activeItems.length ? [{ id: 'name:all', label: '全部', items: [...activeItems].sort((a, b) => (a.title || '').localeCompare(b.title || '', 'zh-CN')) }] : [];
   else if (mode === 'label') {
-    groups = LABELS.map((label) => ({ id: 'label:' + label.id, label: label.name + '色', items: activeItems.filter((item) => labels[item.id] === label.id) }))
-      .concat([{ id: 'label:none', label: '未标记', items: activeItems.filter((item) => !labels[item.id]) }]);
+    groups = labelDefs.map((label) => ({ id: 'label:' + label.id, label: label.name, items: activeItems.filter((item) => labels[item.id]?.includes(label.id)) }))
+      .concat([{ id: 'label:none', label: '未标记', items: activeItems.filter((item) => !labels[item.id]?.length) }]);
   } else if (mode === 'project') {
     groups = activeProjects.map((project) => ({
       id: 'project:' + project.project_id, label: project.name || '未命名项目',
@@ -558,7 +570,7 @@ export default function Sidebar(props: SidebarProps) {
     if (mode === 'label' && targetGroup.startsWith('label:')) setLabels((current) => {
       const next = { ...current };
       if (targetGroup === 'label:none') delete next[source.id];
-      else next[source.id] = targetGroup.slice('label:'.length);
+      else next[source.id] = [...new Set([...(next[source.id] ?? []), targetGroup.slice('label:'.length)])];
       return next;
     });
     if (mode === 'workspace' && targetGroup.startsWith('workspace:')) props.onSetWorkspace?.(source.id, targetGroup.slice('workspace:'.length));
@@ -658,7 +670,7 @@ export default function Sidebar(props: SidebarProps) {
                 ? <Check size={12} className="shrink-0 text-ok" aria-label="已完成" />
                 : unread
               ? <i className="size-1.5 shrink-0 rounded-full bg-ok" aria-label="有新结果" />
-              : labels[conversation.id] ? <i className="size-2 shrink-0 rounded-[3px]" style={{ background: LABELS.find((label) => label.id === labels[conversation.id])?.color }} aria-label={(LABELS.find((label) => label.id === labels[conversation.id])?.name || '') + '色标签'} />
+              : labels[conversation.id]?.length ? <span className="flex shrink-0 gap-0.5" aria-label={labels[conversation.id].map((id) => labelDefs.find((label) => label.id === id)?.name ?? id).join('、')}>{labels[conversation.id].slice(0, 3).map((id) => <i key={id} className="size-2 rounded-[3px]" style={{ background: labelDefs.find((label) => label.id === id)?.color }} />)}</span>
                 : null}
         <span className="truncate">{displayTitle(conversation.title)}</span>
         {background && run && !mini && <span className="shrink-0 rounded bg-brand/10 px-1.5 py-0.5 text-[10px] text-brand">后台 · {run.status === 'waiting' ? '等待你' : run.status === 'paused' ? '已暂停' : run.phase === 'verification' ? '验证' : run.phase === 'execution' ? '执行' : '规划'}</span>}
@@ -692,10 +704,17 @@ export default function Sidebar(props: SidebarProps) {
           <MenuItem onSelect={() => setEditing({ id: conversation.id, title: conversation.title })}><Pencil />重命名</MenuItem>
           <MenuItem onSelect={() => setManualOrder((current) => [conversation.id, ...current.filter((id) => id !== conversation.id)])}><ArrowUpDown />移到顶部</MenuItem>
           <div className="flex items-center gap-1.5 px-2.5 py-1.5" role="group" aria-label="颜色标签">
-            {LABELS.map((label) => <button key={label.id} type="button" aria-label={label.name + '色'} aria-pressed={labels[conversation.id] === label.id}
+            {labelDefs.map((label) => <button key={label.id} type="button" aria-label={label.name + '标签'} aria-pressed={labels[conversation.id]?.includes(label.id) ?? false}
               onClick={() => setLabel(conversation.id, label.id)}
               className="grid size-5 place-items-center rounded-full outline-none ring-offset-1 ring-offset-[var(--overlay)] hover:ring-2 hover:ring-line-strong focus-visible:ring-2 focus-visible:ring-brand"
-              style={{ background: label.color }}>{labels[conversation.id] === label.id && <Check size={11} className="text-white" strokeWidth={3} />}</button>)}
+              style={{ background: label.color }}>{labels[conversation.id]?.includes(label.id) && <Check size={11} className="text-white" strokeWidth={3} />}</button>)}
+            <button type="button" aria-label="创建自定义标签" title="创建标签（名称和颜色）" className="grid size-5 place-items-center rounded-full border border-line text-fg-2 hover:bg-hover" onClick={() => {
+              const name = window.prompt('新标签名称'); if (!name?.trim()) return;
+              const color = window.prompt('标签颜色（十六进制，例如 #3e63dd）', '#3e63dd')?.trim() ?? '';
+              if (!/^#[0-9a-f]{6}$/i.test(color)) { setFeedback('标签颜色需要是 #RRGGBB 格式'); return; }
+              const definition = { id: `custom-${crypto.randomUUID()}`, name: name.trim().slice(0, 32), color };
+              setLabelDefs((current) => [...current, definition]); setLabels((current) => ({ ...current, [conversation.id]: [...(current[conversation.id] ?? []), definition.id] }));
+            }}>+</button>
           </div>
           <MenuItem onSelect={() => void copyText(conversation.id, '会话 ID')}><Copy />复制会话 ID</MenuItem>
           <MenuItem onSelect={() => void copyLogLocation(conversation.id)}><Copy />复制会话日志数据库路径</MenuItem>
@@ -903,6 +922,9 @@ export default function Sidebar(props: SidebarProps) {
             className={cn('grid size-7 shrink-0 place-items-center rounded-md hover:bg-hover hover:text-fg', statusFilter !== 'all' || selectionMode ? 'text-brand' : 'text-fg-3')}><ArrowUpDown size={13} /></button></MenuTrigger>
           <MenuContent align="end"><MenuLabel>显示</MenuLabel>
             {(Object.keys(STATUS_FILTERS) as StatusFilter[]).map((filter) => <MenuItem key={filter} checked={statusFilter === filter} onSelect={() => setStatusFilter(filter)}>{STATUS_FILTERS[filter]}</MenuItem>)}
+            <MenuSeparator /><MenuLabel>按标签过滤</MenuLabel>
+            <MenuItem checked={!labelFilter} onSelect={() => setLabelFilter('')}>全部标签</MenuItem>
+            {labelDefs.map((label) => <MenuItem key={label.id} checked={labelFilter === label.id} onSelect={() => setLabelFilter(label.id)}>{label.name}</MenuItem>)}
             <MenuSeparator /><MenuLabel>分组方式</MenuLabel>
             {(Object.keys(ARRANGE) as Arrange[]).map((key) => <MenuItem key={key} checked={mode === key} onSelect={() => {
               setMode(key);
