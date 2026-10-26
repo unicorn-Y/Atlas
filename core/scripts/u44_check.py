@@ -149,6 +149,124 @@ async def check_prompt_cache_diagnostics() -> None:
     print("U44 item 5 PASS: unique stable run prefix, omitted Anthropic cache markers, and provider cache-hit reporting")
 
 
+async def check_archive_bulk_delete() -> None:
+    from atlas.api import conversations_router
+    from atlas.api.app_services import AppServices
+
+    class Memory:
+        items = {
+            "archived": {"archived": True, "pinned": False, "workspace": None},
+            "pinned": {"archived": True, "pinned": True, "workspace": None},
+            "active": {"archived": False, "pinned": False, "workspace": None},
+        }
+
+        async def get_conversation(self, conversation_id: str) -> Any:
+            return self.items.get(conversation_id)
+
+        async def delete_conversation(self, conversation_id: str) -> bool:
+            return self.items.pop(conversation_id, None) is not None
+
+    class Hooks:
+        def __init__(self) -> None:
+            self.ended: list[str] = []
+
+        async def execute(self, _name: str, payload: dict[str, str], cwd: str | None = None) -> None:
+            del cwd
+            self.ended.append(payload["conversation_id"])
+
+        def stop_file_watcher(self, _conversation_id: str) -> None:
+            return
+
+    memory, hooks = Memory(), Hooks()
+    original_server = conversations_router._server
+    conversations_router._server = lambda: SimpleNamespace(_hook_store=lambda: hooks)
+    try:
+        result = await conversations_router.delete_archived_conversations(
+            AppServices(memory=memory),
+            {"conversation_ids": ["archived", "pinned", "active", "missing", "archived"]},
+        )
+    finally:
+        conversations_router._server = original_server
+    outcomes = {item["conversation_id"]: item["status"] for item in result["results"]}
+    assert outcomes == {"archived": "deleted", "pinned": "failed", "active": "failed", "missing": "failed"}, outcomes
+    assert "archived" not in memory.items and "pinned" in memory.items and "active" in memory.items
+    assert hooks.ended == ["archived"]
+    print("U44 item 1 PASS: bulk archive delete is idempotent, reports each failure, preserves pinned/active, and emits one SessionEnd")
+
+
+async def check_cli_desktop_handoff() -> None:
+    from atlas.api.app_services import AppServices
+    from atlas.api.conversations_router import queue_cli_desktop_handoff, take_cli_desktop_handoff
+
+    class Memory:
+        async def get_conversation(self, conversation_id: str) -> Any:
+            return {"id": conversation_id} if conversation_id == "u44-cli-session" else None
+
+    services = AppServices(memory=Memory())
+    queued = await queue_cli_desktop_handoff(
+        services, {"conversation_id": "u44-cli-session", "draft": "unsubmitted U44 draft"},
+    )
+    handoff = await take_cli_desktop_handoff(services)
+    empty = await take_cli_desktop_handoff(services)
+    assert queued == {"queued": True}
+    assert handoff == {"handoff": {"conversation_id": "u44-cli-session", "draft": "unsubmitted U44 draft"}}
+    assert empty == {"handoff": None}
+    print("U44 item 2 PASS: CLI-to-desktop handoff resolves an existing session, preserves draft, and consumes once")
+
+
+async def check_office_addin() -> None:
+    from fastapi import HTTPException
+    from atlas.api.app_services import AppServices
+    from atlas.api.office_router import (
+        create_office_pairing, pair_office_addin, send_office_context,
+        take_office_context, queue_office_writeback, take_office_writeback,
+        unpair_office_addin,
+    )
+
+    class Memory:
+        async def get_conversation(self, conversation_id: str) -> Any:
+            return {"id": conversation_id} if conversation_id == "u44-office-session" else None
+
+    services = AppServices(memory=Memory())
+    invitation = await create_office_pairing(services, {"conversation_id": "u44-office-session"})
+    assert len(invitation["pairing_code"]) == 8 and invitation["expires_in"] == 300
+    try:
+        await pair_office_addin(services, {"pairing_code": "00000000"})
+    except HTTPException as exc:
+        assert exc.status_code == 400
+    else:
+        raise AssertionError("Office accepted an incorrect pairing code")
+    paired = await pair_office_addin(services, {"pairing_code": invitation["pairing_code"]})
+    token = paired["session_token"]
+    headers = {"x_atlas_office_token": token}
+    try:
+        await send_office_context(services, {"host": "Word", "selection": "real selected text"}, "invalid")
+    except HTTPException as exc:
+        assert exc.status_code == 401
+    else:
+        raise AssertionError("Office context endpoint accepted an unpaired token")
+    await send_office_context(services, {
+        "host": "Excel", "document_name": "Budget.xlsx", "address": "Sheet1!A1:B2",
+        "selection": "Q1\t100\nQ2\t200",
+    }, token)
+    context = await take_office_context(services)
+    assert context["handoff"]["conversation_id"] == "u44-office-session"
+    assert context["handoff"]["address"] == "Sheet1!A1:B2" and "Q2" in context["handoff"]["selection"]
+    result = await queue_office_writeback(services, {
+        "conversation_id": "u44-office-session", "text": "Reviewed Atlas result",
+    })
+    writeback = await take_office_writeback(services, token)
+    assert result == {"queued": 1} and writeback["writeback"]["text"] == "Reviewed Atlas result"
+    assert await unpair_office_addin(services, token) == {"unpaired": True}
+    try:
+        await take_office_writeback(services, token)
+    except HTTPException as exc:
+        assert exc.status_code == 401
+    else:
+        raise AssertionError("Office token remained active after unpair")
+    print("U44 item 3 PASS: one-time Office pairing, scoped selection handoff/writeback, and token revocation")
+
+
 def check_git_graph() -> None:
     from fastapi import HTTPException
     from atlas.api.workspace_router import _git_commit_detail, _git_run, _parse_git_graph
@@ -243,6 +361,9 @@ async def check_real_provider() -> None:
 def main() -> None:
     sys.path.insert(0, str(CORE))
     asyncio.run(check_upstream_retry_policy())
+    asyncio.run(check_archive_bulk_delete())
+    asyncio.run(check_cli_desktop_handoff())
+    asyncio.run(check_office_addin())
     asyncio.run(check_prompt_cache_diagnostics())
     check_git_graph()
     asyncio.run(check_real_provider())
