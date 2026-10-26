@@ -30,6 +30,18 @@ def _sessions(services: AppServices) -> dict[str, str]:
     return services.office_sessions
 
 
+def _live_sessions(services: AppServices) -> dict[str, dict[str, Any]]:
+    sessions = getattr(services, "office_live_sessions", None)
+    if sessions is None:
+        sessions = {}
+        setattr(services, "office_live_sessions", sessions)
+    return sessions
+
+
+def _content_revision(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
 def _office_token(services: AppServices, token: str | None) -> tuple[str, str]:
     if not token:
         raise HTTPException(status_code=401, detail="Office add-in is not paired; enter the code from /office first")
@@ -88,6 +100,7 @@ async def unpair_office_addin(
 ) -> dict[str, bool]:
     digest, _ = _office_token(services, x_atlas_office_token)
     _sessions(services).pop(digest, None)
+    _live_sessions(services).pop(digest, None)
     if services.office_writebacks is not None:
         services.office_writebacks = deque(
             (item for item in services.office_writebacks if item.get("session_id") != digest), maxlen=64,
@@ -104,6 +117,88 @@ async def office_status(
     return {"paired": True, "conversation_id": conversation_id, "pending_writebacks": sum(
         1 for item in services.office_writebacks or () if item.get("session_id") == digest
     )}
+
+
+@router.post("/live/start")
+async def start_office_live_control(
+    services: Annotated[AppServices, Depends(get_app_services)], body: dict[str, Any],
+    x_atlas_office_token: Annotated[str | None, Header(alias="X-Atlas-Office-Token")] = None,
+) -> dict[str, Any]:
+    digest, conversation_id = _office_token(services, x_atlas_office_token)
+    host, name, address, content = (body.get(key) for key in ("host", "document_name", "address", "content"))
+    if host not in {"Word", "PowerPoint"} or not all(isinstance(value, str) for value in (name, address, content)):
+        raise HTTPException(status_code=422, detail="Word/PowerPoint host and document snapshot are required")
+    if len(name) > 300 or len(address) > 300 or not content.strip() or len(content) > _MAX_CONTEXT_CHARS:
+        raise HTTPException(status_code=422, detail="Document snapshot is empty or exceeds the 50,000 character limit")
+    revision = _content_revision(content)
+    row = {"state": "live", "host": host, "document_name": name, "address": address,
+           "content": content, "revision": revision, "conversation_id": conversation_id,
+           "started_at": time.time(), "updated_at": time.time()}
+    _live_sessions(services)[digest] = row
+    return {"state": row["state"], "revision": revision, "updated_at": row["updated_at"]}
+
+
+@router.post("/live/sync")
+async def sync_office_live_control(
+    services: Annotated[AppServices, Depends(get_app_services)], body: dict[str, Any],
+    x_atlas_office_token: Annotated[str | None, Header(alias="X-Atlas-Office-Token")] = None,
+) -> dict[str, Any]:
+    digest, _ = _office_token(services, x_atlas_office_token)
+    row = _live_sessions(services).get(digest)
+    content = body.get("content")
+    if not row or row.get("state") != "live":
+        raise HTTPException(status_code=409, detail="No active Office live-control session")
+    if not isinstance(content, str) or not content.strip() or len(content) > _MAX_CONTEXT_CHARS:
+        raise HTTPException(status_code=422, detail="Document snapshot is invalid")
+    previous = row["revision"]
+    revision = _content_revision(content)
+    row.update({"content": content, "revision": revision, "address": str(body.get("address") or row["address"]), "updated_at": time.time()})
+    return {"revision": revision, "previous_revision": previous, "changed": revision != previous, "updated_at": row["updated_at"]}
+
+
+@router.get("/live/status")
+async def office_live_status(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    x_atlas_office_token: Annotated[str | None, Header(alias="X-Atlas-Office-Token")] = None,
+) -> dict[str, Any]:
+    digest, _ = _office_token(services, x_atlas_office_token)
+    row = _live_sessions(services).get(digest)
+    return {"session": dict(row) if row else None}
+
+
+@router.post("/live/stop")
+async def stop_office_live_control(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    x_atlas_office_token: Annotated[str | None, Header(alias="X-Atlas-Office-Token")] = None,
+) -> dict[str, Any]:
+    digest, _ = _office_token(services, x_atlas_office_token)
+    row = _live_sessions(services).get(digest)
+    if row:
+        row.update({"state": "stopped", "updated_at": time.time()})
+    return {"state": "stopped", "updated_at": time.time()}
+
+
+@router.get("/live/conversations/{conversation_id}")
+async def office_live_conversation_status(
+    conversation_id: str,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    rows = [{key: value for key, value in row.items() if key != "content"}
+            for row in _live_sessions(services).values() if row.get("conversation_id") == conversation_id]
+    return {"sessions": rows}
+
+
+@router.post("/live/conversations/{conversation_id}/stop")
+async def stop_office_conversation_sessions(
+    conversation_id: str,
+    services: Annotated[AppServices, Depends(get_app_services)],
+) -> dict[str, Any]:
+    stopped = 0
+    for row in _live_sessions(services).values():
+        if row.get("conversation_id") == conversation_id and row.get("state") == "live":
+            row.update({"state": "stopped", "updated_at": time.time()})
+            stopped += 1
+    return {"state": "stopped", "count": stopped}
 
 
 @router.post("/context")
@@ -156,7 +251,9 @@ async def queue_office_writeback(
     if services.office_writebacks is None:
         services.office_writebacks = deque(maxlen=64)
     for session_id in sessions:
-        services.office_writebacks.append({"id": str(uuid.uuid4()), "session_id": session_id, "text": text})
+        live = _live_sessions(services).get(session_id)
+        services.office_writebacks.append({"id": str(uuid.uuid4()), "session_id": session_id, "text": text,
+                                           "base_revision": live.get("revision") if live and live.get("state") == "live" else None})
     return {"queued": len(sessions)}
 
 
@@ -172,5 +269,5 @@ async def take_office_writeback(
     for index, item in enumerate(queue):
         if item.get("session_id") == digest:
             del queue[index]
-            return {"writeback": {"id": item["id"], "text": item["text"]}}
+            return {"writeback": {"id": item["id"], "text": item["text"], "base_revision": item.get("base_revision")}}
     return {"writeback": None}

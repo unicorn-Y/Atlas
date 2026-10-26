@@ -2299,21 +2299,35 @@ export default function App() {
     } },
     { id: 'office', label: '/office', hint: '连接 Word/Excel 加载项，传入当前选区或将文本写回选区', takesArgument: true, run: (argument: string) => {
       const value = argument.trim();
+      if (/^live(?:\s|$)/i.test(value)) {
+        if (!activeConversation) { setToast('先打开实时控制关联的会话'); return; }
+        const action = value.slice(4).trim().toLowerCase() || 'status';
+        if (action === 'stop') {
+          void api<{ count: number }>(store.apiBaseUrl, `/api/office/live/conversations/${encodeURIComponent(activeConversation.id)}/stop`, { method: 'POST' })
+            .then(({ count }) => setToast(`已停止 ${count} 个 Office 实时控制会话`)).catch((error) => setToast(`停止实时控制失败：${String(error)}`));
+          return;
+        }
+        if (action !== 'status') { setToast('用法：/office live [status|stop]；在 Office 加载项中点“开始实时控制”开始会话'); return; }
+        void api<{ sessions: Array<{ state: string; host: string; document_name: string; address: string; revision: string; updated_at: number }> }>(store.apiBaseUrl, `/api/office/live/conversations/${encodeURIComponent(activeConversation.id)}`)
+          .then(({ sessions }) => { setRawTextTitle('Office 实时控制状态'); setRawText(sessions.length ? sessions.map((session) => `${session.state === 'live' ? '实时控制中' : '已停止'} · ${session.host} · ${session.document_name || '未命名'} · ${session.address}\n版本 ${session.revision.slice(0, 12)} · 更新 ${new Date(session.updated_at * 1000).toLocaleString()}`).join('\n\n') : '当前会话没有 Office 实时控制会话。'); })
+          .catch((error) => setToast(`读取 Office 实时状态失败：${String(error)}`));
+        return;
+      }
       if (value.toLowerCase() === 'writeback' || value.toLowerCase().startsWith('writeback ')) {
         if (!activeConversation) { setToast('先打开要写回的 Atlas 会话'); return; }
         const text = value.slice('writeback'.length).trim();
-        if (!text) { setToast('用法：/office writeback <要写入当前 Word/Excel 选区的文本>'); return; }
+        if (!text) { setToast('用法：/office writeback <要写入当前 Word/PowerPoint 选区的文本>'); return; }
         void api<{ queued: number }>(store.apiBaseUrl, '/api/office/writebacks', {
           method: 'POST', json: { conversation_id: activeConversation.id, text },
-        }).then(({ queued }) => setToast(`已将修改结果发送到 ${queued} 个配对的 Office 加载项；在 Word/Excel 面板中点“写入选区”。`))
+        }).then(({ queued }) => setToast(`已将修改结果发送到 ${queued} 个配对的 Office 加载项；版本校验后在 Office 面板中写回。`))
           .catch((error) => setToast(`Office 写回失败：${error instanceof Error ? error.message : String(error)}`));
         return;
       }
-      if (value) { setToast('用法：/office 生成配对码；/office writeback <文本> 将结果发送到 Word/Excel。'); return; }
+      if (value) { setToast('用法：/office 生成配对码；/office live status|stop 查看或停止实时控制；/office writeback <文本> 写回 Word/PowerPoint。'); return; }
       if (!activeConversation) { setToast('先打开要连接的 Atlas 会话，再运行 /office'); return; }
       void api<{ pairing_code: string; expires_in: number }>(store.apiBaseUrl, '/api/office/pairings', {
         method: 'POST', json: { conversation_id: activeConversation.id },
-      }).then(({ pairing_code, expires_in }) => setToast(`Office 配对码 ${pairing_code} · ${expires_in} 秒内在 Word/Excel 的 Atlas 加载项中输入。`))
+      }).then(({ pairing_code, expires_in }) => setToast(`Office 配对码 ${pairing_code} · ${expires_in} 秒内在 Word/PowerPoint 的 Atlas 加载项中输入。`))
         .catch((error) => setToast(`Office 配对码生成失败：${error instanceof Error ? error.message : String(error)}`));
     } },
     { id: 'pwd', label: '/pwd', hint: '显示当前对话的工作目录', run: () => {

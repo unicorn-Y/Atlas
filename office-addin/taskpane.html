@@ -9,7 +9,7 @@
   <script defer src="taskpane.js"></script>
 </head>
 <body>
-  <header><div class="mark">A</div><div><h1>Atlas</h1><p>Word · Excel</p></div><span id="connection" role="status">未配对</span></header>
+  <header><div class="mark">A</div><div><h1>Atlas</h1><p>Word · PowerPoint</p></div><span id="connection" role="status">未配对</span></header>
   <main>
     <section id="pairing" class="card">
       <h2>连接 Atlas 会话</h2>
@@ -25,6 +25,8 @@
         <label for="selection">选区预览</label>
         <textarea id="selection" rows="7" readonly placeholder="在文档中选中文字或单元格，再点刷新。"></textarea>
         <button id="sendSelection" class="primary" type="button">发送选区到当前 Atlas 会话</button>
+        <button id="liveControlButton" class="secondary" type="button">开始实时控制</button>
+        <p id="liveStatus" class="message" aria-live="polite">未启动实时控制</p>
         <p id="selectionMessage" class="message" aria-live="polite"></p>
       </section>
       <section class="card">
@@ -34,6 +36,6 @@
       <button id="unpairButton" class="link" type="button">断开此 Office 会话</button>
     </section>
   </main>
-  <footer>选区只在点击“发送选区”后传入当前 Atlas 会话。写入文档由你在此面板点击确认。</footer>
+  <footer>选区只在点击发送或启动实时控制后同步到本机会话。写回前会比对文档版本以发现协作冲突。</footer>
 </body>
 </html>

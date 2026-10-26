@@ -10,10 +10,14 @@
   const selectionMessage = document.querySelector('#selectionMessage');
   const writebacks = document.querySelector('#writebacks');
   const pendingCount = document.querySelector('#pendingCount');
+  const liveControlButton = document.querySelector('#liveControlButton');
+  const liveStatus = document.querySelector('#liveStatus');
   let officeHost = '';
   let documentName = '';
   let documentAddress = '';
   let pollTimer = 0;
+  let liveTimer = 0;
+  let liveControl = false;
   const pending = [];
 
   async function api(path, options = {}) {
@@ -53,7 +57,7 @@
   }
 
   async function getSelection() {
-    if (!window.Office || !Office.context) throw new Error('请从 Word 或 Excel 桌面加载项中打开本面板。');
+    if (!window.Office || !Office.context) throw new Error('请从 Word 或 PowerPoint 桌面加载项中打开本面板。');
     if (officeHost === 'Excel' && window.Excel?.run) {
       return Excel.run(async (context) => {
         const range = context.workbook.getSelectedRange();
@@ -91,10 +95,43 @@
 
   async function refreshDocumentInfo() {
     if (!window.Office?.context) return;
-    officeHost = Office.context.host === Office.HostType.Word ? 'Word' : Office.context.host === Office.HostType.Excel ? 'Excel' : String(Office.context.host || 'Office');
+    officeHost = Office.context.host === Office.HostType.Word ? 'Word' : Office.context.host === Office.HostType.PowerPoint ? 'PowerPoint' : Office.context.host === Office.HostType.Excel ? 'Excel' : String(Office.context.host || 'Office');
     const url = Office.context.document.url || '';
     try { documentName = url ? decodeURIComponent(new URL(url).pathname.split('/').pop() || '') : ''; } catch { documentName = ''; }
     documentInfo.textContent = `${officeHost}${documentName ? ` · ${documentName}` : ' · 未命名文档'}`;
+  }
+
+  async function hashText(text) {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function syncLiveControl() {
+    if (!liveControl) return;
+    try {
+      const snapshot = await getSelection();
+      if (!snapshot.text.trim()) return;
+      const result = await api('/api/office/live/sync', { method: 'POST', body: JSON.stringify({ content: snapshot.text, address: snapshot.address }) });
+      liveStatus.textContent = `实时控制中 · ${documentName || officeHost} · 同步于 ${new Date(result.updated_at * 1000).toLocaleTimeString()}`;
+    } catch (error) { setError(liveStatus, error); }
+  }
+
+  async function toggleLiveControl() {
+    liveControlButton.disabled = true;
+    try {
+      if (liveControl) {
+        await api('/api/office/live/stop', { method: 'POST' });
+        liveControl = false; clearInterval(liveTimer); liveTimer = 0;
+        liveStatus.textContent = '实时控制已停止'; liveControlButton.textContent = '开始实时控制'; return;
+      }
+      const snapshot = await getSelection();
+      if (!snapshot.text.trim()) throw new Error('请先在 Word/PowerPoint 中选中要实时控制的文字。');
+      await api('/api/office/live/start', { method: 'POST', body: JSON.stringify({ host: officeHost, document_name: documentName, address: snapshot.address, content: snapshot.text }) });
+      liveControl = true; liveControlButton.textContent = '停止实时控制';
+      liveStatus.textContent = '实时控制已启动；正在同步活动选区。';
+      liveTimer = window.setInterval(() => void syncLiveControl(), 1800);
+    } catch (error) { setError(liveStatus, error); }
+    finally { liveControlButton.disabled = false; }
   }
 
   function renderWritebacks() {
@@ -103,9 +140,11 @@
     writebacks.replaceChildren(...pending.map((item) => {
       const card = document.createElement('article'); card.className = 'writeback';
       const preview = document.createElement('pre'); preview.textContent = item.text;
-      const button = document.createElement('button'); button.type = 'button'; button.textContent = '写入当前选区';
-      button.addEventListener('click', () => writeback(item.id, item.text, button));
-      card.append(preview, button); return card;
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = item.conflict ? '版本冲突：仍然覆盖当前选区' : '写入当前选区';
+      button.addEventListener('click', () => void writeback(item, button));
+      const keep = document.createElement('button'); keep.type = 'button'; keep.textContent = '保留 Office 当前版本'; keep.className = 'secondary';
+      keep.addEventListener('click', () => { const index = pending.findIndex((row) => row.id === item.id); if (index >= 0) pending.splice(index, 1); renderWritebacks(); });
+      card.append(preview, button, keep); return card;
     }));
   }
 
@@ -116,11 +155,19 @@
     }));
   }
 
-  async function writeback(id, text, button) {
+  async function writeback(item, button) {
     button.disabled = true;
     try {
-      await setSelectedData(text);
-      const index = pending.findIndex((item) => item.id === id);
+      if (item.base_revision && !item.conflict) {
+        const current = await getSelection();
+        if (await hashText(current.text) !== item.base_revision) {
+          item.conflict = true; button.disabled = false; renderWritebacks();
+          liveStatus.textContent = '检测到 Office 文档在 Atlas 修改后发生变化。请选择覆盖或保留 Office 版本。';
+          return;
+        }
+      }
+      await setSelectedData(item.text);
+      const index = pending.findIndex((row) => row.id === item.id);
       if (index >= 0) pending.splice(index, 1);
       renderWritebacks();
     } catch (error) { button.disabled = false; button.textContent = error instanceof Error ? error.message : String(error); }
@@ -141,12 +188,20 @@
   }
 
   function startPolling() { stopPolling(); void poll(); pollTimer = window.setInterval(() => void poll(), 1500); }
-  function stopPolling() { if (pollTimer) window.clearInterval(pollTimer); pollTimer = 0; }
+  function stopPolling() { if (pollTimer) window.clearInterval(pollTimer); if (liveTimer) window.clearInterval(liveTimer); pollTimer = 0; liveTimer = 0; liveControl = false; }
 
   async function restorePairing() {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) return showConnected(false);
-    try { await api('/api/office/status'); await refreshDocumentInfo(); showConnected(true); }
+    try {
+      await api('/api/office/status'); await refreshDocumentInfo(); showConnected(true);
+      const live = await api('/api/office/live/status');
+      if (live.session?.state === 'live') {
+        liveControl = true; liveControlButton.textContent = '停止实时控制';
+        liveStatus.textContent = `已恢复实时控制 · ${live.session.document_name || officeHost}`;
+        liveTimer = window.setInterval(() => void syncLiveControl(), 1800);
+      }
+    }
     catch { localStorage.removeItem(TOKEN_KEY); showConnected(false); }
   }
 
@@ -154,6 +209,7 @@
   pairCode.addEventListener('keydown', (event) => { if (event.key === 'Enter') void pair(); });
   document.querySelector('#refreshSelection').addEventListener('click', () => void refreshSelection());
   document.querySelector('#sendSelection').addEventListener('click', () => void sendSelection());
+  liveControlButton.addEventListener('click', () => void toggleLiveControl());
   document.querySelector('#unpairButton').addEventListener('click', async () => {
     try { await api('/api/office/pair', { method: 'DELETE' }); } catch { /* local token is removed even if Atlas is offline */ }
     localStorage.removeItem(TOKEN_KEY); showConnected(false); pairMessage.textContent = '已在此 Office 配置文件断开配对。';

@@ -70,3 +70,4 @@ class AppServices:
     office_sessions: Any = None
     office_handoffs: Any = None
     office_writebacks: Any = None
+    office_live_sessions: Any = None
