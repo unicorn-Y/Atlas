@@ -63,6 +63,7 @@ const MemoryPage = lazy(() => import('./pages/MemoryPage'));
 const AutomationPage = lazy(() => import('./pages/AutomationPage'));
 const CodePage = lazy(() => import('./pages/CodePage'));
 const CreatePage = lazy(() => import('./pages/CreatePage'));
+const ThinkbackPage = lazy(() => import('./pages/ThinkbackPage'));
 const BoardPage = lazy(() => import('./pages/BoardPage'));
 const ProfilesPanel = lazy(() => import('./pages/ProfilesPanel'));
 const HooksPanel = lazy(() => import('./pages/HooksPanel'));
@@ -2578,6 +2579,7 @@ export default function App() {
         useAtlasStore.getState().setActiveRun(id); showInspectorTab('artifacts'); setToast('使用习惯报告已加入产物面板');
       }).catch((error) => setToast(`生成报告失败：${error instanceof Error ? error.message : String(error)}`));
     } },
+    { id: 'thinkback', label: '/thinkback', hint: '打开本机年度使用回顾；按月播放有记录的调用、Token 和估算费用', run: () => go('annual-review') },
     { id: 'advisor', label: '/advisor', hint: '查看或切换顾问模型', takesArgument: true, run: (model: string) => {
       if (model.trim()) void api(store.apiBaseUrl, '/api/u4/settings', { method: 'PUT', json: { advisor_model: model.trim() } }).then(() => setToast(`顾问模型已设为 ${model.trim()}`)).catch((error) => setToast(`设置顾问模型失败：${String(error)}`));
       else { setSheet('u4'); setToast('在「会话与顾问」里查看或切换顾问模型'); }
@@ -3399,6 +3401,7 @@ export default function App() {
         {view === 'auto' && <AutomationPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} onOpenConversation={(id) => { const target = useAtlasStore.getState().conversations.find((item) => item.id === id); if (target) { go('chat'); void openConversation(target); } else notify('关联会话已不存在'); }} />}
         {view === 'memory' && <MemoryPage apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify} />}
         {view === 'evolution' && <EvolutionPage apiBaseUrl={store.apiBaseUrl} onToast={notify} />}
+        {view === 'annual-review' && <ThinkbackPage apiBaseUrl={store.apiBaseUrl} />}
         {view === 'user-page' && (userSidebarPages.find((page) => page.id === selectedUserSidebarPageId)
           ? <UserSidebarPage page={userSidebarPages.find((page) => page.id === selectedUserSidebarPageId)!} onChange={updateUserSidebarPage} />
           : <section className="mx-auto grid h-full max-w-3xl place-content-center p-8 text-center"><h1 className="text-xl font-semibold text-heading">选择或创建自定义页面</h1><p className="text-sm text-fg-3">页面会保存在本机，并显示在侧栏“我的页面”区域。</p></section>)}

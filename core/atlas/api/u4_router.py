@@ -343,6 +343,72 @@ async def get_insights(
     }
 
 
+@router.get("/api/u4/thinkback")
+async def get_thinkback(
+    services: Annotated[AppServices, Depends(get_app_services)], year: int | None = None,
+) -> dict[str, Any]:
+    """Return a year of recorded local usage without filling gaps with invented zeroes."""
+    today = datetime.now(UTC).date()
+    selected_year = today.year if year is None else year
+    if selected_year < 2000 or selected_year > today.year:
+        raise HTTPException(status_code=422, detail=f"year must be between 2000 and {today.year}")
+    first_day = datetime(selected_year, 1, 1).date()
+    last_day = min(today, datetime(selected_year, 12, 31).date())
+    ledger = services.usage_ledger
+    daily = await ledger.query(
+        start=first_day.isoformat(), end=(last_day + timedelta(days=1)).isoformat(), group_by="day",
+    ) if ledger else {"rows": [], "totals": {}}
+    model_usage = await ledger.query(
+        start=first_day.isoformat(), end=(last_day + timedelta(days=1)).isoformat(), group_by="model",
+    ) if ledger else {"rows": []}
+    conversations = await ledger.query(
+        start=first_day.isoformat(), end=(last_day + timedelta(days=1)).isoformat(), group_by="conversation",
+    ) if ledger else {"rows": []}
+    day_rows = {str(row.get("key")): row for row in daily.get("rows", [])}
+    recorded_dates = sorted(day_rows)
+    coverage_start = recorded_dates[0] if recorded_dates else None
+    coverage_end = recorded_dates[-1] if recorded_dates else None
+    months: list[dict[str, Any]] = []
+    for month in range(1, 13):
+        month_start = datetime(selected_year, month, 1).date()
+        if month == 12:
+            month_end = datetime(selected_year + 1, 1, 1).date() - timedelta(days=1)
+        else:
+            month_end = datetime(selected_year, month + 1, 1).date() - timedelta(days=1)
+        covered_end = min(month_end, last_day)
+        entries = [row for date_key, row in day_rows.items() if month_start.isoformat() <= date_key <= covered_end.isoformat()]
+        has_records = bool(entries)
+        runs = sum(int(row.get("runs") or 0) for row in entries)
+        input_tokens = sum(int(row.get("input_tokens") or 0) for row in entries)
+        output_tokens = sum(int(row.get("output_tokens") or 0) for row in entries)
+        known_cost = sum(float(row.get("known_cost") or 0) for row in entries)
+        unpriced_records = sum(int(row.get("unpriced_records") or 0) for row in entries)
+        future = month_start > today
+        outside_coverage = not has_records and bool(coverage_start) and (
+            covered_end.isoformat() < str(coverage_start) or month_start.isoformat() > str(coverage_end)
+        )
+        months.append({
+            "month": month, "label": f"{month:02d} 月", "future": future,
+            "has_records": has_records, "outside_coverage": outside_coverage,
+            "recorded_days": len(entries), "runs": runs,
+            "input_tokens": input_tokens, "output_tokens": output_tokens,
+            "est_cost": known_cost if has_records and unpriced_records == 0 else None,
+            "known_cost": known_cost, "unpriced_records": unpriced_records,
+        })
+    totals = daily.get("totals", {})
+    busiest_month = max((item for item in months if item["has_records"]), key=lambda item: item["runs"], default=None)
+    models = sorted(model_usage.get("rows", []), key=lambda row: int(row.get("runs") or 0), reverse=True)
+    return {
+        "year": selected_year, "start_date": first_day.isoformat(), "end_date": last_day.isoformat(),
+        "coverage_start": coverage_start, "coverage_end": coverage_end,
+        "recorded_days": len(recorded_dates), "conversation_count": len(conversations.get("rows", [])),
+        "busiest_month": busiest_month["month"] if busiest_month else None,
+        "top_model": models[0].get("key") if models else None,
+        "months": months, "usage": totals,
+        "data_status": "available" if recorded_dates else "empty",
+    }
+
+
 @router.get("/api/u4/presets")
 async def get_presets(services: Annotated[AppServices, Depends(get_app_services)]) -> dict[str, Any]:
     del services

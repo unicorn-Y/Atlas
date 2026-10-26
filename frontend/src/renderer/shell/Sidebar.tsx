@@ -1,7 +1,7 @@
 // Ported from zai-org/ZCode@aac4755666d09fdcd70272fcf063c077a639015c: packages/ui/src/TaskListItemContextMenu.tsx, packages/ui/src/TaskActionMenuContent.tsx, packages/ui/src/workspace-grouped-tasks/task-context-menu-content.tsx, packages/ui/src/workspace-grouped-tasks/WorkspaceGroupedTasksSection.tsx (Apache-2.0)
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import {
-  Archive, ArchiveRestore, ArrowUpDown, AppWindow, Blocks, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
+  Archive, ArchiveRestore, ArrowUpDown, AppWindow, Blocks, BookOpen, Bot, CalendarDays, Check, ChevronLeft, ChevronRight, Code2, Columns2, Copy, CopyPlus, Download,
   Folder, FolderOpen, GitBranch, GripVertical, Home, Info, KanbanSquare, MessageSquare, MonitorSmartphone, Moon, MoreHorizontal, PanelLeft,
   Library, ListTodo, Pause, Pencil, Pin, PinOff, Play, Plus, Repeat, Search, Settings, Sparkles, Square, SquarePen, Sun, Trash2, Users, X, Wand2, ZoomIn, type LucideIcon,
 } from 'lucide-react';
@@ -22,7 +22,7 @@ import { cleanSearchSnippet, rankSearchHits, searchHitRoleLabel } from '../servi
 import TriageBoardDialog from '../components/TriageBoardDialog';
 import type { UserSidebarPageDefinition } from '../pages/UserSidebarPage';
 
-export type View = 'home' | 'chat' | 'groups' | 'agents' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills' | 'devices' | 'evolution' | 'workbench' | 'library' | 'user-page';
+export type View = 'home' | 'chat' | 'groups' | 'agents' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills' | 'devices' | 'evolution' | 'workbench' | 'library' | 'user-page' | 'annual-review';
 export type SidebarZoom = 'compact' | 'default' | 'wide';
 
 export const NAV: Array<{ view: View; label: string; icon: LucideIcon }> = [
@@ -42,6 +42,7 @@ export const MORE_NAV: Array<{ view: View; label: string; icon: LucideIcon }> = 
   { view: 'board', label: '看板', icon: KanbanSquare },
   { view: 'code', label: '项目', icon: Code2 },
   { view: 'create', label: '创作', icon: Wand2 },
+  { view: 'annual-review', label: '年度回顾', icon: CalendarDays },
 ];
 
 /** Untitled conversations show in Chinese whatever the backend default was. */
