@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
-import ts from 'typescript';
+import { transformSync } from 'esbuild';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sourcePath = path.join(root, 'src/preload/index.cts');
@@ -37,16 +37,11 @@ function execute(source, filename) {
   return { api: exposed.get('atlasDesktop'), sent };
 }
 
-// Reproduce the old tsc-only output: it keeps a local shared-module require,
-// which the sandbox's deliberately restricted require rejects.
-const legacyOutput = ts.transpile(tsSource, {
-  target: ts.ScriptTarget.ES2022,
-  module: ts.ModuleKind.CommonJS,
-});
-assert.throws(
-  () => execute(legacyOutput, 'preload-before-bundle.cjs'),
-  /sandboxed preload attempted require\(\.\.\/shared\/ipc\.js\)/,
-);
+// Direct TypeScript output and the packaged bundle must both stay within the
+// sandboxed preload's allowed `electron` require boundary.
+const legacyOutput = transformSync(tsSource, { loader: 'ts', target: 'es2022', format: 'cjs' }).code;
+assert.ok(execute(legacyOutput, 'preload-before-bundle.cjs').api,
+  'source preload must not depend on a local module at runtime');
 
 const bundledOutput = fs.readFileSync(preloadPath, 'utf8');
 const { api, sent } = execute(bundledOutput, preloadPath);
@@ -55,4 +50,4 @@ assert.equal(api.apiBaseUrl, `http://127.0.0.1:${port}`);
 assert.equal(api.platform, 'win32');
 api.minimize();
 assert.deepEqual(sent, [['window:minimize']]);
-console.log(`PASS: legacy local require rejected; bundled preload exposes random backend port ${port}`);
+console.log(`PASS: source and bundled preloads expose random backend port ${port}`);

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { AtlasDeepLink, AtlasDesktopApi, BackendStartupProgress, PlatformEditorId, ReleaseUpdateStatus } from '../shared/ipc.js';
-import { BACKEND_STARTUP_CHANNEL } from '../shared/ipc.js';
+
+const BACKEND_STARTUP_CHANNEL = 'backend:startup-progress';
 
 const desktopApi: AtlasDesktopApi = {
   platform: process.platform,

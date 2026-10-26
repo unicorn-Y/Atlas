@@ -36,6 +36,7 @@ const waitFor = async (predicate, label) => {
   throw new Error(`Timed out waiting for ${label}`);
 };
 const activeZoom = `(()=>[...document.querySelectorAll('webview')].find(v=>v.parentElement?.parentElement?.getAttribute('aria-hidden')==='false')?.getZoomFactor?.()??1)()`;
+const sendGuestKey = (keyCode) => evaluate(`(()=>{const v=[...document.querySelectorAll('webview')].find(x=>x.parentElement?.parentElement?.getAttribute('aria-hidden')==='false');v.focus();v.sendInputEvent({type:'keyDown',keyCode:${JSON.stringify(keyCode)},modifiers:['control']});v.sendInputEvent({type:'keyUp',keyCode:${JSON.stringify(keyCode)},modifiers:['control']});return true})()`);
 
 try {
   // Pick a clean, existing conversation; creating the panel does not send a message.
@@ -49,11 +50,19 @@ try {
   await waitFor(`Boolean([...document.querySelectorAll('button')].find(b=>b.innerText.trim()==='浏览器'))`, 'Inspector browser tab');
   await evaluate(`([...document.querySelectorAll('button')].find(b=>b.innerText.trim()==='浏览器'))?.click()`);
   await waitFor(`Boolean(document.querySelector('input[aria-label="地址"]'))`, 'browser address bar');
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const count = await evaluate(`document.querySelectorAll('[role="tablist"][aria-label="浏览器标签页"] [role="tab"]').length`);
+    if (count <= 1) break;
+    await evaluate(`(()=>{const tabs=[...document.querySelectorAll('[role="tablist"][aria-label="浏览器标签页"] [role="tab"]')];tabs.at(-1)?.parentElement?.querySelector('button[aria-label^="关闭标签："]')?.click();return true})()`);
+    await sleep(100);
+  }
+  await evaluate(`([...document.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='重置网页缩放'))?.click()`);
+  await waitFor(`Math.abs(${activeZoom}-1)<0.01`, 'clean browser zoom');
   await typeAddress('http://127.0.0.1:5173/');
   await waitFor(`Boolean(document.querySelector('webview')?.getURL?.().startsWith('http://127.0.0.1:5173'))`, 'webview navigation');
+  await evaluate(`document.querySelector('webview')?.focus()`);
 
-  await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: '+', code: 'Equal', modifiers: 2, windowsVirtualKeyCode: 187 });
-  await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: '+', code: 'Equal', modifiers: 2, windowsVirtualKeyCode: 187 });
+  await sendGuestKey('+');
   await waitFor(`Math.abs((document.querySelector('webview')?.getZoomFactor?.()||1)-1.1)<0.01`, 'Ctrl+plus zoom');
   const keyboardBanner = await evaluate(`document.querySelector('[aria-label="网页缩放"]')?.innerText`);
   if (!String(keyboardBanner).includes('110%')) throw new Error(`Zoom banner did not show 110%: ${keyboardBanner}`);
@@ -66,19 +75,18 @@ try {
   await waitFor(`Math.abs(${activeZoom}-1.1)<0.01`, 'restored zoom on first tab');
 
   // Reset to 100%, then use Ctrl+wheel to confirm wheel adjustment from the live page.
-  await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: '0', code: 'Digit0', modifiers: 2, windowsVirtualKeyCode: 48 });
-  await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: '0', code: 'Digit0', modifiers: 2, windowsVirtualKeyCode: 48 });
+  await sendGuestKey('0');
   await waitFor(`Math.abs(${activeZoom}-1)<0.01`, 'Ctrl+0 reset');
   await evaluate(`(()=>{const v=[...document.querySelectorAll('webview')].find(x=>x.parentElement?.parentElement?.getAttribute('aria-hidden')==='false');return v.sendInputEvent({type:'mouseWheel',x:100,y:100,wheelTicksY:1,wheelTicksX:0,deltaY:0,deltaX:0,modifiers:['ctrl']})})()`);
   await waitFor(`Math.abs(${activeZoom}-1.2)<0.01`, 'Ctrl+wheel zoom');
+  await waitFor(`String(document.querySelector('[aria-label="网页缩放"]')?.innerText||'').includes('120%')`, 'Ctrl+wheel zoom banner');
   const wheelBanner = await evaluate(`document.querySelector('[aria-label="网页缩放"]')?.innerText`);
   if (!String(wheelBanner).includes('120%')) throw new Error(`Ctrl+wheel banner did not show the current 120% zoom: ${wheelBanner}`);
 
   const currentTabId = await evaluate(`document.querySelector('[role="tablist"][aria-label="浏览器标签页"] [role="tab"][aria-selected="true"]')?.id`);
   await evaluate(`([...document.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='重置网页缩放'))?.click()`);
   await waitFor(`Math.abs(${activeZoom}-1)<0.01`, 'reset button');
-  await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: '+', code: 'Equal', modifiers: 2, windowsVirtualKeyCode: 187 });
-  await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: '+', code: 'Equal', modifiers: 2, windowsVirtualKeyCode: 187 });
+  await sendGuestKey('+');
   await waitFor(`Math.abs(${activeZoom}-1.1)<0.01`, 'zoom before closing tab');
   await evaluate(`document.getElementById(${JSON.stringify(currentTabId)})?.parentElement?.querySelector('button[aria-label^="关闭标签："]')?.click()`);
   await waitFor(`document.querySelectorAll('[role="tablist"][aria-label="浏览器标签页"] [role="tab"]').length===1`, 'close tab');
