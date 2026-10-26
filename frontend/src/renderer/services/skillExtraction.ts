@@ -10,7 +10,7 @@ export function shouldSuggestSkillExtraction(
   if (toolSteps.size >= 2) return true;
 
   const recent = userMessages.slice(-6);
-  if (recent.filter((message) => CORRECTION.test(message)).length >= 2 && toolSteps.size >= 1) return true;
+  if (recent.filter((message) => CORRECTION.test(message)).length >= 2) return true;
 
   return recent.slice(-3).some((message) => EXPLICIT_POSITIVE_FEEDBACK.test(message));
 }
