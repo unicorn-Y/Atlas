@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND = ROOT / "frontend"
+NODE = shutil.which("node") or "node"
 PYTHON_FILES = [
     "core/atlas/api/integrations_router.py",
     "core/atlas/api/linear_integration_router.py",
@@ -27,6 +29,7 @@ def run(label: str, args: list[str], *, cwd: Path = ROOT, env: dict[str, str] | 
 def main() -> None:
     env = os.environ.copy()
     env["ATLAS_ROOT"] = r"C:\engine-reg\_atlasroot"
+    env["ATLAS_U7_SKIP_SCREENSHOTS"] = "1"
     env["PYTHONPATH"] = str(ROOT / "core") + os.pathsep + env.get("PYTHONPATH", "")
 
     run("U40 real scenarios: connectors, metadata, title, workspace file history", [
@@ -40,9 +43,9 @@ def main() -> None:
     run("pyflakes changed Python", ["uvx", "pyflakes", *PYTHON_FILES], env=env)
     run("pylint changed Python", ["uvx", "--from", "pylint", "pylint", "--disable=all", "--enable=used-before-assignment,undefined-variable", *PYTHON_FILES], env=env)
 
-    run("renderer TypeScript", ["npx", "tsc", "-p", "tsconfig.renderer.json", "--noEmit"], cwd=FRONTEND, env=env)
-    run("Electron TypeScript", ["npx", "tsc", "-p", "tsconfig.electron.json"], cwd=FRONTEND, env=env)
-    run("Vite production build", ["npx", "vite", "build"], cwd=FRONTEND, env=env)
+    run("renderer TypeScript", [NODE, "../node_modules/typescript/bin/tsc", "-p", "tsconfig.renderer.json", "--noEmit"], cwd=FRONTEND, env=env)
+    run("Electron TypeScript", [NODE, "../node_modules/typescript/bin/tsc", "-p", "tsconfig.electron.json"], cwd=FRONTEND, env=env)
+    run("Vite production build", [NODE, "../node_modules/vite/bin/vite.js", "build"], cwd=FRONTEND, env=env)
     run("UI static check", [sys.executable, "core/scripts/ui_static_check.py"], env=env)
 
     regressions = [
