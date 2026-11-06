@@ -75,3 +75,12 @@
 .continuum-relations>button{display:flex;align-items:center;gap:8px;justify-content:space-between}
 .continuum-relations small,.continuum-relations span{color:var(--c-muted);font-size:11px}
 @media(max-width:720px){.continuum-rich-toolbar{padding:8px 12px;align-items:flex-start;flex-direction:column}.continuum-focus-panel-rich>.continuum-heading{margin:0 12px 8px}.continuum-focus-panel-rich>.continuum-back{margin-left:12px}}
+
+.continuum-run-history{padding:12px 24px;max-height:185px;overflow-y:auto;background:var(--c-card);border-bottom:1px solid var(--c-line);display:grid;gap:6px}
+.continuum-run-history>div{display:flex;gap:11px;align-items:center;font-size:11px;color:var(--c-muted)}
+.continuum-run-history>div:first-child{padding-bottom:7px;justify-content:space-between}
+.continuum-run-history strong{color:var(--c-fg);font-size:12px}
+.continuum-run-history code{color:var(--c-fg);font-size:10px}
+.continuum-run-history button{display:inline-flex;align-items:center;gap:4px;font-size:11px}
+.continuum-run-history p{font-size:11px;color:var(--c-muted)}
+@media(max-width:720px){.continuum-run-history{padding:10px 12px}.continuum-run-history>div{flex-wrap:wrap}}
