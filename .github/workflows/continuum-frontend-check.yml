@@ -1,9 +1,6 @@
 name: Continuum frontend verification
 
 on:
-  push:
-    branches:
-      - feature/continuum-native-v5-20261106
   pull_request:
     paths:
       - 'frontend/**'
@@ -24,3 +21,5 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Typecheck, bundle Electron preload and build renderer
         run: npm --prefix frontend run build
+      - name: Check modified backend route syntax
+        run: python -m compileall -q core/atlas/api/runtime_router.py core/atlas/api/runtime.py
