@@ -113,6 +113,25 @@ export default function ContinuumView({ onClassic, onSettings, onVoice, conversa
       void api<Fact[]>(apiBaseUrl, '/api/facts').then(setFacts).catch((error: unknown) => setLoadError(String(error)));
     }
   }, [mode, connected, apiBaseUrl]);
+  // Project associations are the explicit IDs returned by the backend.
+  useEffect(() => {
+    setProjectConversations(null);
+    if (!connected || mode !== 'focus' || focus?.kind !== 'project') return;
+    let alive = true;
+    void api<{ conversation_ids?: string[] }>(apiBaseUrl, `/api/projects/${encodeURIComponent(focus.id)}`)
+      .then((result) => { if (alive) setProjectConversations(result.conversation_ids ?? []); })
+      .catch(() => { if (alive) { setProjectConversations([]); setLoadError('读取项目关联失败'); } });
+    return () => { alive = false; };
+  }, [connected, mode, focus?.kind, focus?.id, apiBaseUrl]);
+  useEffect(() => {
+    setGoalTrace([]);
+    if (!connected || mode !== 'focus' || focus?.kind !== 'goal') return;
+    let alive = true;
+    void api<{ events: Array<{ event_id: string; timestamp: string; event: string; data?: Record<string, unknown> }> }>(apiBaseUrl, `/api/goals/${encodeURIComponent(focus.id)}/trace`)
+      .then((result) => { if (alive) setGoalTrace(result.events.slice(-40).reverse()); })
+      .catch(() => { if (alive) setLoadError('读取目标历史失败'); });
+    return () => { alive = false; };
+  }, [connected, mode, focus?.kind, focus?.id, apiBaseUrl]);
   useEffect(() => {
     try { if (focus) localStorage.setItem(FOCUS_STORAGE, JSON.stringify(focus)); else localStorage.removeItem(FOCUS_STORAGE); }
     catch { /* optional local preference */ }
@@ -288,7 +307,22 @@ export default function ContinuumView({ onClassic, onSettings, onVoice, conversa
             </div>
           </div>
           {conversationSurface}
-        </div> : <div className="continuum-object-details"><p>此对象是独立的 {focus ? KIND_LABEL[focus.kind] : '资源'}，并非 Run 的别名。关联会话和历史执行需要由后端明确给出 ID。</p><button onClick={() => onClassic(focus?.kind === 'project' ? 'code' : 'auto')}>打开现有管理界面 <ArrowRight size={16}/></button></div>}
+        </div> : <div className="continuum-object-details">
+          <p>此对象是独立的 {focus ? KIND_LABEL[focus.kind] : '资源'}，并非 Run 的别名。下列关联由后端明确提供。</p>
+          {focus?.kind === 'project' && <div className="continuum-relations">
+            <h3>关联会话</h3>
+            {projectConversations === null ? <span>正在读取项目关联…</span> : projectConversations.length === 0 ? <span>暂无可显示的关联会话。</span> : projectConversations.map((id) => {
+              const conversation = conversations.find((item) => item.id === id);
+              return <button key={id} disabled={!conversation} onClick={() => void openFocus({ kind: 'conversation', id })}>{conversation?.title ?? ('未载入会话 ' + id.slice(0, 8))} <ArrowRight size={14}/></button>;
+            })}
+          </div>}
+          {focus?.kind === 'goal' && <div className="continuum-relations">
+            <h3>目标事件</h3>
+            {goalRows.find((item) => item.id === focus.id)?.goal_session_id && <small>目标会话：{goalRows.find((item) => item.id === focus.id)?.goal_session_id}</small>}
+            {goalTrace.length ? goalTrace.map((item) => <div key={item.event_id}><span>{item.event}</span><small>{new Date(item.timestamp).toLocaleString()}</small></div>) : <span>暂无可显示的事件。</span>}
+          </div>}
+          <button onClick={() => onClassic(focus?.kind === 'project' ? 'code' : 'auto')}>打开原有管理界面 <ArrowRight size={16}/></button>
+        </div>}
       </section>}
 
       {mode === 'memory' && <section className="continuum-panel continuum-enter"><div className="continuum-heading"><div><span className="continuum-eyebrow">CONTINUITY</span><h1>记忆与知识</h1><p>仅展示后端提供的真实事实。来源和置信度缺失时不自行推断。</p></div><button onClick={() => onClassic('memory')}>完整记忆管理 <ArrowRight size={16}/></button></div><div className="continuum-memory-list">{facts.map((fact) => <div key={fact.key}><BookOpen size={17}/><span><strong>{fact.key}</strong><small>{fact.value}</small></span><em>{fact.category}</em></div>)}{!facts.length && <p className="continuum-empty">暂无可显示的记忆。</p>}</div></section>}
