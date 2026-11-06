@@ -47,6 +47,7 @@ import LocalModelsSettings from './pages/settings/LocalModelsSettings';
 import ImportPanel from './components/ImportPanel';
 import { NotificationsPanel, PluginsPanel } from './pages/ConsolePage';
 import Sidebar, { MORE_NAV, NAV, type View } from './shell/Sidebar';
+import ContinuumView from './continuum/ContinuumView';
 import HomeView, { type Suggestion } from './shell/HomeView';
 import Inspector, { type InspectorTab } from './shell/Inspector';
 import type { PickedElement } from './shell/panels/BrowserPanel';
@@ -925,7 +926,7 @@ export default function App() {
   return <TooltipProvider>
     <MarkDefs />
     <div className="flex h-full">
-      <Sidebar view={view} onGo={go} mini={sideMini || narrow} onToggleMini={toggleMini}
+      {view !== 'continuum' && <Sidebar view={view} onGo={go} mini={sideMini || narrow} onToggleMini={toggleMini}
         conversations={store.conversations} conversationsLoading={store.conversationsLoading}
         activeConversationId={store.activeConversationId} loadingConversationId={store.loadingMessagesConversationId}
         onOpenConversation={openConversation} onNewTask={newTask} creating={store.creatingConversation} onSearch={() => setPaletteOpen(true)}
@@ -934,10 +935,10 @@ export default function App() {
         pinned={store.pinned} archived={store.archived} unread={store.unread}
         running={runningConversations}
         onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}
-        onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} onOpenBeside={setBesideId} />
+        onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} onOpenBeside={setBesideId} />}
 
-      <main className="sheet relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[14px]">
-        <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
+      <main className={cn('sheet relative flex min-w-0 flex-1 flex-col overflow-hidden', view === 'continuum' ? 'm-0 rounded-none' : 'my-2 mr-2 rounded-[14px]')}>
+        {view !== 'continuum' && <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
           <div className={cn('flex min-w-0 items-center gap-3', showTabs && 'flex-1')}>
             {showTabs
               ? <TabStrip tabs={tabs} conversations={store.conversations} activeId={store.activeConversationId} running={runningConversations} onSelect={openConversation} onClose={closeTab} />
@@ -964,8 +965,9 @@ export default function App() {
               <button aria-label="关闭窗口" onClick={() => window.atlasDesktop?.close()} className="grid h-8 w-10 place-items-center rounded-lg text-fg-3 hover:bg-[#D2453E] hover:text-white"><X size={16} /></button>
             </div>}
           </div>
-        </header>
+        </header>}
 
+        {view === 'continuum' && <ContinuumView onClassic={go} onSettings={() => setSheet('models')} onVoice={startVoice} />}
         {view === 'home' && <HomeView username={username} notice={errorNote} recent={store.conversations.slice(0, 3)} onOpen={openConversation} onSuggest={suggest}
           composer={<Composer {...composerBase} variant="hero" onSubmit={() => void submit(true)}
             placeholder={homeMode === 'image' ? '描述你想要的画面，Atlas 会带你去图像工作台' : '描述一件事，Atlas 会把它做完'}
