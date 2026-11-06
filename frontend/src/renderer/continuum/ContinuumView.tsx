@@ -21,6 +21,7 @@ type Project = { project_id: string; name: string; current_goal?: string; status
 type Goal = { id: string; name: string; goal?: string; goal_status?: string; next_run_at?: string; goal_session_id?: string; goal_progress?: { subgoals?: unknown[]; turns_used?: number; max_turns?: number } };
 type Automation = { id: string; name: string; enabled?: boolean; status?: string; last_run_at?: string };
 type Fact = { key: string; value: string; category: string };
+type RunSummary = { run_id: string; conversation_id: string; model: string; status: string; sequence: number; live: boolean; event_count: number; interrupted_by_restart: boolean };
 type Row = { ref: FocusRef; title: string; detail: string; status: string; group: string; timestamp?: string };
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
@@ -85,19 +86,23 @@ export default function ContinuumView({ onClassic, onSettings, onVoice, conversa
   const [working, setWorking] = useState(false);
   const [projectConversations, setProjectConversations] = useState<string[] | null>(null);
   const [goalTrace, setGoalTrace] = useState<Array<{ event_id: string; timestamp: string; event: string; data?: Record<string, unknown> }>>([]);
+  const [savedRuns, setSavedRuns] = useState<RunSummary[]>([]);
+  const [runHistoryOpen, setRunHistoryOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!connected) return;
     setLoading(true);
-    const [projects, goals, automations] = await Promise.allSettled([
+    const [projects, goals, automations, runSummaries] = await Promise.allSettled([
       api<{ projects: Project[] }>(apiBaseUrl, '/api/projects'),
       api<{ goals: Goal[] }>(apiBaseUrl, '/api/goals'),
       api<{ automations: Automation[] }>(apiBaseUrl, '/api/automations'),
+      api<{ runs: RunSummary[] }>(apiBaseUrl, '/api/runtime/runs?limit=500'),
     ]);
     if (projects.status === 'fulfilled') setProjectRows(projects.value.projects);
     if (goals.status === 'fulfilled') setGoalRows(goals.value.goals);
     if (automations.status === 'fulfilled') setAutomationRows(automations.value.automations);
-    const failed = [projects, goals, automations].filter((result) => result.status === 'rejected');
+    if (runSummaries.status === 'fulfilled') setSavedRuns(runSummaries.value.runs);
+    const failed = [projects, goals, automations, runSummaries].filter((result) => result.status === 'rejected');
     setLoadError(failed.length ? `${failed.length} 个数据来源暂时不可用，已保留其他结果。` : '');
     setLoading(false);
   }, [connected, apiBaseUrl]);
@@ -177,6 +182,7 @@ export default function ContinuumView({ onClassic, onSettings, onVoice, conversa
   const current = focus && rows.find((item) => item.ref.kind === focus.kind && item.ref.id === focus.id);
   const selectedConversation = focus?.kind === 'conversation' ? conversations.find((item) => item.id === focus.id) : null;
   const selectedRun = selectedConversation ? latest.get(selectedConversation.id) : undefined;
+  const persistedForConversation = selectedConversation ? savedRuns.filter((run) => run.conversation_id === selectedConversation.id) : [];
   const selectedEvents = selectedRun?.events ?? [];
   const pending = [...selectedEvents].reverse().find((event) =>
     ['approval.required','input.required','run.plan.proposed','rules.trust_required'].includes(event.type) &&
@@ -188,6 +194,7 @@ export default function ContinuumView({ onClassic, onSettings, onVoice, conversa
   const openFocus = async (ref: FocusRef) => {
     setFocus(ref);
     setMode('focus');
+    setRunHistoryOpen(false);
     setSearchOpen(false);
     if (ref.kind === 'conversation') {
       const conversation = conversations.find((item) => item.id === ref.id);
@@ -303,9 +310,20 @@ export default function ContinuumView({ onClassic, onSettings, onVoice, conversa
             <div className="continuum-rich-controls">
               {selectedRun && ['running', 'paused'].includes(selectedRun.status) && <button disabled={activeConversationId !== selectedConversation.id} onClick={() => useAtlasStore.getState().togglePaused()}>{selectedRun.status === 'paused' ? <Play size={14}/> : <Pause size={14}/>} {selectedRun.status === 'paused' ? '恢复' : '暂停'}</button>}
               {selectedRun && !TERMINAL.has(selectedRun.status) && <button onClick={() => useAtlasStore.getState().stopRun(selectedRun.id)}><Square size={13}/>停止</button>}
+              <button onClick={() => setRunHistoryOpen((value) => !value)} aria-expanded={runHistoryOpen}><Clock3 size={15}/> 执行记录 {persistedForConversation.length}</button>
               <button onClick={onToggleInspector} aria-pressed={inspectorOpen}><PanelRight size={15}/> {inspectorOpen ? '收起详情' : '执行详情'}</button>
             </div>
           </div>
+          {runHistoryOpen && <div className="continuum-run-history">
+            <div><strong>后端运行记录</strong><span>保存的是运行状态和序号；历史工具事件未完整持久化。</span><button onClick={() => void refresh()}><RefreshCw size={13}/>刷新</button></div>
+            {persistedForConversation.slice(0,20).map((run) => <div key={run.run_id}>
+              <code>{run.run_id.slice(0, 12)}</code>
+              <span>{displayStatus(run.status)}</span>
+              <span>{run.live ? '后台仍在执行' : run.interrupted_by_restart ? '后端重启中断，需重新执行' : '无当前执行进程'}</span>
+              <span>{run.sequence} 条事件序号</span>
+            </div>)}
+            {!persistedForConversation.length && <p>没有已持久化的运行记录。</p>}
+          </div>}
           {conversationSurface}
         </div> : <div className="continuum-object-details">
           <p>此对象是独立的 {focus ? KIND_LABEL[focus.kind] : '资源'}，并非 Run 的别名。下列关联由后端明确提供。</p>
