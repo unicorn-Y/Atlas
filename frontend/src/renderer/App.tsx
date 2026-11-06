@@ -47,6 +47,7 @@ import LocalModelsSettings from './pages/settings/LocalModelsSettings';
 import ImportPanel from './components/ImportPanel';
 import { NotificationsPanel, PluginsPanel } from './pages/ConsolePage';
 import Sidebar, { MORE_NAV, NAV, type View } from './shell/Sidebar';
+import ContinuumView from './continuum/ContinuumView';
 import HomeView, { type Suggestion } from './shell/HomeView';
 import Inspector, { type InspectorTab } from './shell/Inspector';
 import type { PickedElement } from './shell/panels/BrowserPanel';
@@ -922,56 +923,10 @@ export default function App() {
       : <span className="inline-flex items-center gap-1.5 text-[12px] text-danger"><i className="size-1.5 rounded-full bg-danger" />后端没有连接</span>
     : null;
 
-  return <TooltipProvider>
-    <MarkDefs />
-    <div className="flex h-full">
-      <Sidebar view={view} onGo={go} mini={sideMini || narrow} onToggleMini={toggleMini}
-        conversations={store.conversations} conversationsLoading={store.conversationsLoading}
-        activeConversationId={store.activeConversationId} loadingConversationId={store.loadingMessagesConversationId}
-        onOpenConversation={openConversation} onNewTask={newTask} creating={store.creatingConversation} onSearch={() => setPaletteOpen(true)}
-        pendingMemories={pendingCount} username={username} subtitle={store.connected ? modelName : store.backendStarting ? '后端启动中…' : '后端没有连接'}
-        theme={theme} onToggleTheme={toggleTheme} onSettings={() => setSheet('models')}
-        pinned={store.pinned} archived={store.archived} unread={store.unread}
-        running={runningConversations}
-        onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}
-        onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} onOpenBeside={setBesideId} />
-
-      <main className="sheet relative my-2 mr-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[14px]">
-        <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
-          <div className={cn('flex min-w-0 items-center gap-3', showTabs && 'flex-1')}>
-            {showTabs
-              ? <TabStrip tabs={tabs} conversations={store.conversations} activeId={store.activeConversationId} running={runningConversations} onSelect={openConversation} onClose={closeTab} />
-              : pageTitle && <span className="truncate text-[13.5px] text-fg-2">{pageTitle}</span>}
-            {view === 'chat' && <ForkTree conversations={store.conversations} activeId={store.activeConversationId} onOpen={openConversation} />}
-            {connection}
-          </div>
-          {/* With tabs the left group already fills the bar; its empty part still drags the window. */}
-          {!showTabs && <span className="flex-1" />}
-          <div className="no-drag flex items-center gap-0.5">
-            {view === 'chat' && <Tip label="朗读最近的回复"><button aria-label="朗读最近的回复" onClick={readLastReply} className="grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Volume2 size={16} /></button></Tip>}
-            <Tip label={voiceOutput ? '自动朗读已开' : '自动朗读新回复'}>
-              <button aria-label="切换自动朗读" aria-pressed={voiceOutput} onClick={toggleVoiceOutput}
-                className={cn('grid size-8 place-items-center rounded-lg hover:bg-hover', voiceOutput ? 'text-brand' : 'text-fg-3 hover:text-fg')}>
-                {voiceOutput ? <Volume2 size={16} /> : <VolumeX size={16} />}
-              </button>
-            </Tip>
-            <Tip label="语音通话"><button aria-label="开始语音通话" onClick={startVoice} className="grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><AudioLines size={16} /></button></Tip>
-            {view === 'chat' && <Tip label="任务面板"><button aria-label="切换任务面板" aria-pressed={inspectorOpen} onClick={() => toggleInspector()}
-              className={cn('grid size-8 place-items-center rounded-lg hover:bg-hover', inspectorOpen ? 'text-fg' : 'text-fg-3 hover:text-fg')}><PanelRight size={16} /></button></Tip>}
-            {window.atlasDesktop && window.atlasDesktop.platform !== 'darwin' && <div className="ml-1.5 flex">
-              <button aria-label="最小化窗口" onClick={() => window.atlasDesktop?.minimize()} className="grid h-8 w-10 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Minus size={15} /></button>
-              <button aria-label="最大化窗口" onClick={() => window.atlasDesktop?.maximize()} className="grid h-8 w-10 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg">{maximized ? <Copy size={13} /> : <Square size={12} />}</button>
-              <button aria-label="关闭窗口" onClick={() => window.atlasDesktop?.close()} className="grid h-8 w-10 place-items-center rounded-lg text-fg-3 hover:bg-[#D2453E] hover:text-white"><X size={16} /></button>
-            </div>}
-          </div>
-        </header>
-
-        {view === 'home' && <HomeView username={username} notice={errorNote} recent={store.conversations.slice(0, 3)} onOpen={openConversation} onSuggest={suggest}
-          composer={<Composer {...composerBase} variant="hero" onSubmit={() => void submit(true)}
-            placeholder={homeMode === 'image' ? '描述你想要的画面，Atlas 会带你去图像工作台' : '描述一件事，Atlas 会把它做完'}
-            modes={{ value: homeMode, options: HOME_MODES, onChange: (id) => { if (id === 'voice') startVoice(); else setHomeMode(id); } }} />} />}
-
-        {view === 'chat' && <div className="flex min-h-0 flex-1">
+  // One native conversation surface shared by classic Chat and Continuum focus.
+  // This preserves MessageThread virtualization, Composer, Inspectors, approvals,
+  // attachments and the real Run stream instead of duplicating a reduced chat UI.
+  const chatSurface = <div className="flex min-h-0 flex-1">
           <div className="relative flex min-w-0 flex-1 flex-col">
             {foregroundEvent && <ComputerEdgeBar apiBaseUrl={store.apiBaseUrl} runId={foregroundEvent.runId} className="shrink-0" />}
             <TimelineNav threadRef={threadRef} resetKey={store.activeConversationId}
@@ -1016,7 +971,59 @@ export default function App() {
             onWorktreeChanged={() => void store.refreshConversations()}
             onAsk={(text) => void store.sendMessage(text)}
             terminalCommand={terminalCommand} onSendToAtlas={(text) => { setInput((current) => `${current.trim() ? `${current.trimEnd()}\n\n` : ''}终端输出：\n\`\`\`\n${text.trimEnd()}\n\`\`\`\n\n`); setToast('已把终端输出放进输入框'); }} />}
-        </div>}
+        </div>;
+
+  return <TooltipProvider>
+    <MarkDefs />
+    <div className="flex h-full">
+      {view !== 'continuum' && <Sidebar view={view} onGo={go} mini={sideMini || narrow} onToggleMini={toggleMini}
+        conversations={store.conversations} conversationsLoading={store.conversationsLoading}
+        activeConversationId={store.activeConversationId} loadingConversationId={store.loadingMessagesConversationId}
+        onOpenConversation={openConversation} onNewTask={newTask} creating={store.creatingConversation} onSearch={() => setPaletteOpen(true)}
+        pendingMemories={pendingCount} username={username} subtitle={store.connected ? modelName : store.backendStarting ? '后端启动中…' : '后端没有连接'}
+        theme={theme} onToggleTheme={toggleTheme} onSettings={() => setSheet('models')}
+        pinned={store.pinned} archived={store.archived} unread={store.unread}
+        running={runningConversations}
+        onRename={(id, title) => void store.renameConversation(id, title)} onDelete={(id) => void store.deleteConversation(id)}
+        onTogglePinned={store.togglePinned} onToggleArchived={store.toggleArchived} onExport={(id, format) => void store.exportConversation(id, format)} onDuplicate={(id) => void store.duplicateConversation(id)} onOpenBeside={setBesideId} />}
+
+      <main className={cn('sheet relative flex min-w-0 flex-1 flex-col overflow-hidden', view === 'continuum' ? 'm-0 rounded-none' : 'my-2 mr-2 rounded-[14px]')}>
+        {view !== 'continuum' && <header className="drag flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-5">
+          <div className={cn('flex min-w-0 items-center gap-3', showTabs && 'flex-1')}>
+            {showTabs
+              ? <TabStrip tabs={tabs} conversations={store.conversations} activeId={store.activeConversationId} running={runningConversations} onSelect={openConversation} onClose={closeTab} />
+              : pageTitle && <span className="truncate text-[13.5px] text-fg-2">{pageTitle}</span>}
+            {view === 'chat' && <ForkTree conversations={store.conversations} activeId={store.activeConversationId} onOpen={openConversation} />}
+            {connection}
+          </div>
+          {/* With tabs the left group already fills the bar; its empty part still drags the window. */}
+          {!showTabs && <span className="flex-1" />}
+          <div className="no-drag flex items-center gap-0.5">
+            {view === 'chat' && <Tip label="朗读最近的回复"><button aria-label="朗读最近的回复" onClick={readLastReply} className="grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Volume2 size={16} /></button></Tip>}
+            <Tip label={voiceOutput ? '自动朗读已开' : '自动朗读新回复'}>
+              <button aria-label="切换自动朗读" aria-pressed={voiceOutput} onClick={toggleVoiceOutput}
+                className={cn('grid size-8 place-items-center rounded-lg hover:bg-hover', voiceOutput ? 'text-brand' : 'text-fg-3 hover:text-fg')}>
+                {voiceOutput ? <Volume2 size={16} /> : <VolumeX size={16} />}
+              </button>
+            </Tip>
+            <Tip label="语音通话"><button aria-label="开始语音通话" onClick={startVoice} className="grid size-8 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><AudioLines size={16} /></button></Tip>
+            {view === 'chat' && <Tip label="任务面板"><button aria-label="切换任务面板" aria-pressed={inspectorOpen} onClick={() => toggleInspector()}
+              className={cn('grid size-8 place-items-center rounded-lg hover:bg-hover', inspectorOpen ? 'text-fg' : 'text-fg-3 hover:text-fg')}><PanelRight size={16} /></button></Tip>}
+            {window.atlasDesktop && window.atlasDesktop.platform !== 'darwin' && <div className="ml-1.5 flex">
+              <button aria-label="最小化窗口" onClick={() => window.atlasDesktop?.minimize()} className="grid h-8 w-10 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Minus size={15} /></button>
+              <button aria-label="最大化窗口" onClick={() => window.atlasDesktop?.maximize()} className="grid h-8 w-10 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg">{maximized ? <Copy size={13} /> : <Square size={12} />}</button>
+              <button aria-label="关闭窗口" onClick={() => window.atlasDesktop?.close()} className="grid h-8 w-10 place-items-center rounded-lg text-fg-3 hover:bg-[#D2453E] hover:text-white"><X size={16} /></button>
+            </div>}
+          </div>
+        </header>}
+
+        {view === 'continuum' && <ContinuumView onClassic={go} onSettings={() => setSheet('models')} onVoice={startVoice} conversationSurface={chatSurface} onToggleInspector={() => toggleInspector()} inspectorOpen={inspectorOpen} />}
+        {view === 'home' && <HomeView username={username} notice={errorNote} recent={store.conversations.slice(0, 3)} onOpen={openConversation} onSuggest={suggest}
+          composer={<Composer {...composerBase} variant="hero" onSubmit={() => void submit(true)}
+            placeholder={homeMode === 'image' ? '描述你想要的画面，Atlas 会带你去图像工作台' : '描述一件事，Atlas 会把它做完'}
+            modes={{ value: homeMode, options: HOME_MODES, onChange: (id) => { if (id === 'voice') startVoice(); else setHomeMode(id); } }} />} />}
+
+        {view === 'chat' && chatSurface}
 
     {view === 'board' && <BoardPage conversations={store.conversations} runs={store.runs} queue={store.queue} unread={store.unread} archived={store.archived}
       onOpen={openConversation} onStop={store.stopRun} onArchive={store.toggleArchived} />}

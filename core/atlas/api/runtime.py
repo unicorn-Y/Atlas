@@ -130,7 +130,7 @@ class RuntimeManager:
         if "plan_state" not in columns:
             await self._db.execute("ALTER TABLE runtime_runs ADD COLUMN plan_state TEXT")
         await self._db.commit()
-        async with self._db.execute("SELECT * FROM runtime_runs") as cursor:
+        async with self._db.execute("SELECT * FROM runtime_runs ORDER BY rowid ASC") as cursor:
             rows = await cursor.fetchall()
         for row in rows:
             run = RunState(row["run_id"], row["conversation_id"], row["model"])

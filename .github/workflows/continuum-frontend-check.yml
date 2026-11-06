@@ -1,0 +1,25 @@
+name: Continuum frontend verification
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'backend-adapter/**'
+      - '.github/workflows/continuum-frontend-check.yml'
+
+jobs:
+  renderer-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Typecheck, bundle Electron preload and build renderer
+        run: npm --prefix frontend run build
+      - name: Check modified backend route syntax
+        run: python -m compileall -q core/atlas/api/runtime_router.py core/atlas/api/runtime.py
