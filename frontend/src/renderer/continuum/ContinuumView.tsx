@@ -178,9 +178,10 @@ export default function ContinuumView({ onClassic, onSettings, onVoice }: Contin
     }
   };
   const createConversation = async () => {
+    const before = useAtlasStore.getState().activeConversationId;
     await useAtlasStore.getState().createConversation();
     const id = useAtlasStore.getState().activeConversationId;
-    if (id) { setFocus({ kind: 'conversation', id }); setMode('focus'); }
+    if (id && id !== before) { setFocus({ kind: 'conversation', id }); setMode('focus'); }
   };
   const send = async (event: FormEvent) => {
     event.preventDefault();
@@ -193,9 +194,10 @@ export default function ContinuumView({ onClassic, onSettings, onVoice }: Contin
     const text = draft.trim();
     try {
       if (mode !== 'focus' || !selectedConversation) {
+        const before = useAtlasStore.getState().activeConversationId;
         await useAtlasStore.getState().createConversation(text.slice(0, 40));
         const id = useAtlasStore.getState().activeConversationId;
-        if (!id) return;
+        if (!id || id === before) return;
         setFocus({ kind: 'conversation', id });
         setMode('focus');
       } else if (activeConversationId !== selectedConversation.id) {
@@ -203,7 +205,7 @@ export default function ContinuumView({ onClassic, onSettings, onVoice }: Contin
       }
       setDraft('');
       // Runtime stays owned by the existing store; do not hold the input busy for the entire Run.
-      void useAtlasStore.getState().sendMessage(text);
+      void useAtlasStore.getState().sendMessage(text).catch((error: unknown) => setLoadError(String(error)));
     } finally { setWorking(false); }
   };
   const takeoverAction = async (action: 'human_take' | 'agent_take' | 'release') => {
