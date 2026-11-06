@@ -3,11 +3,11 @@
  * Run lifecycle, approvals, task queues, and computer takeover remain owned by
  * useAtlasStore/backend-adapter. No second WebSocket or optimistic run state.
  */
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import {
   Activity, ArrowLeft, ArrowRight, BookOpen, Bot, ChevronRight,
   CircleAlert, Clock3, Command, Compass, Hand, Layers3,
-  LoaderCircle, Maximize2, MessageCircle, Mic, Monitor, Pause, Play,
+  LoaderCircle, Maximize2, MessageCircle, Mic, Monitor, PanelRight, Pause, Play,
   Plus, RefreshCw, Search, Send, Settings2, Square, X,
 } from 'lucide-react';
 import { useAtlasStore } from '../store/useAtlasStore';
@@ -18,7 +18,7 @@ type Mode = 'now' | 'overview' | 'focus' | 'memory' | 'environment';
 type Kind = 'conversation' | 'project' | 'goal' | 'automation';
 type FocusRef = { kind: Kind; id: string };
 type Project = { project_id: string; name: string; current_goal?: string; status?: string; updated_at?: string; workspace_path?: string };
-type Goal = { id: string; name: string; goal?: string; goal_status?: string; next_run_at?: string; goal_progress?: { subgoals?: unknown[]; turns_used?: number; max_turns?: number } };
+type Goal = { id: string; name: string; goal?: string; goal_status?: string; next_run_at?: string; goal_session_id?: string; goal_progress?: { subgoals?: unknown[]; turns_used?: number; max_turns?: number } };
 type Automation = { id: string; name: string; enabled?: boolean; status?: string; last_run_at?: string };
 type Fact = { key: string; value: string; category: string };
 type Row = { ref: FocusRef; title: string; detail: string; status: string; group: string; timestamp?: string };
@@ -45,21 +45,23 @@ const displayStatus = (status: string): string => ({
   running: '进行中', planning: '规划中', waiting: '等待处理', paused: '已暂停',
   completed: '已完成', failed: '失败', cancelled: '已取消',
   active: '持续进行', done: '已达成', blocked: '受阻', idle: '空闲',
-}[status] ?? status);
+} as Record<string, string>)[status] ?? status;
 
 export interface ContinuumViewProps {
   onClassic: (view: 'chat' | 'agents' | 'auto' | 'code' | 'memory') => void;
   onSettings: () => void;
   onVoice: () => void;
+  conversationSurface: ReactNode;
+  onToggleInspector: () => void;
+  inspectorOpen: boolean;
 }
 
-export default function ContinuumView({ onClassic, onSettings, onVoice }: ContinuumViewProps) {
+export default function ContinuumView({ onClassic, onSettings, onVoice, conversationSurface, onToggleInspector, inspectorOpen }: ContinuumViewProps) {
   const connected = useAtlasStore((s) => s.connected);
   const apiBaseUrl = useAtlasStore((s) => s.apiBaseUrl);
   const conversations = useAtlasStore((s) => s.conversations);
   const runs = useAtlasStore((s) => s.runs);
   const activeConversationId = useAtlasStore((s) => s.activeConversationId);
-  const messagesByConversation = useAtlasStore((s) => s.conversationMessages);
   const storeError = useAtlasStore((s) => s.error);
   const answers = useAtlasStore((s) => s.answers);
   const agents = useAtlasStore((s) => s.agents);
@@ -78,11 +80,11 @@ export default function ContinuumView({ onClassic, onSettings, onVoice }: Contin
   const [facts, setFacts] = useState<Fact[]>([]);
   const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [subtask, setSubtask] = useState('');
-  const [reply, setReply] = useState('');
   const [takeoverBusy, setTakeoverBusy] = useState(false);
   const [agentSelection, setAgentSelection] = useState('');
   const [working, setWorking] = useState(false);
+  const [projectConversations, setProjectConversations] = useState<string[] | null>(null);
+  const [goalTrace, setGoalTrace] = useState<Array<{ event_id: string; timestamp: string; event: string; data?: Record<string, unknown> }>>([]);
 
   const refresh = useCallback(async () => {
     if (!connected) return;
@@ -157,15 +159,11 @@ export default function ContinuumView({ onClassic, onSettings, onVoice }: Contin
   const selectedConversation = focus?.kind === 'conversation' ? conversations.find((item) => item.id === focus.id) : null;
   const selectedRun = selectedConversation ? latest.get(selectedConversation.id) : undefined;
   const selectedEvents = selectedRun?.events ?? [];
-  const selectedMessages = selectedConversation ? (messagesByConversation[selectedConversation.id] ?? []) : [];
-  const selectedReply = selectedEvents.filter((item) => item.type === 'message.delta').map((item) => String(item.data.content ?? '')).join('');
   const pending = [...selectedEvents].reverse().find((event) =>
     ['approval.required','input.required','run.plan.proposed','rules.trust_required'].includes(event.type) &&
     !answers[event.id] &&
     !selectedEvents.some((later) => later.sequence > event.sequence && ['approval.responded','run.resumed','tool.started','message.completed','run.completed'].includes(later.type))
   );
-  const subtasks = selectedEvents.filter((event) => event.type.startsWith('subtask.') && event.type !== 'subtask.output');
-  const events = selectedEvents.filter((event) => EVENT_LABEL[event.type]).slice(-80);
   const activeCount = activeRows.length;
 
   const openFocus = async (ref: FocusRef) => {
