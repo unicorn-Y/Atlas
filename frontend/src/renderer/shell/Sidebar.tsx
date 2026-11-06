@@ -8,10 +8,11 @@ import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } fr
 import { Tip } from '../ui/Tooltip';
 import { cn } from '../ui/cn';
 
-export type View = 'home' | 'chat' | 'groups' | 'agents' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills' | 'devices' | 'evolution';
+export type View = 'continuum' | 'home' | 'chat' | 'groups' | 'agents' | 'board' | 'code' | 'create' | 'auto' | 'memory' | 'skills' | 'devices' | 'evolution';
 
 /** P9 收口后的六个一级入口；旧入口不删，挂在「更多」菜单（MORE_NAV）。 */
 export const NAV: Array<{ view: View; label: string; icon: LucideIcon }> = [
+  { view: 'continuum', label: 'Atlas ONE', icon: Sparkles },
   { view: 'chat', label: '聊天', icon: MessageSquare },
   { view: 'agents', label: 'Agents', icon: Bot },
   { view: 'auto', label: '自动化', icon: Repeat },
