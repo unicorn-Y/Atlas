@@ -232,7 +232,7 @@ export default function ContinuumView({ onClassic, onSettings, onVoice, conversa
       </div>
     </header>
 
-    <div className="continuum-body">
+    <div className={`continuum-body ${mode === 'focus' && selectedConversation ? 'rich' : ''}`}>
       {!connected && <div className="continuum-banner"><CircleAlert size={17}/> Atlas 后端尚未连接。不会显示虚构的真实任务状态；连接后数据自动加载。<button onClick={onSettings}>打开设置</button></div>}
       {(loadError || storeError || deviceError) && <div className="continuum-banner issue"><CircleAlert size={17}/>{loadError || storeError || deviceError}<button onClick={() => setLoadError('')} aria-label="关闭提示"><X size={15}/></button></div>}
 
@@ -272,30 +272,22 @@ export default function ContinuumView({ onClassic, onSettings, onVoice, conversa
         </div>
       </section>}
 
-      {mode === 'focus' && <section className="continuum-panel continuum-enter">
+      {mode === 'focus' && <section className={`continuum-panel continuum-enter ${selectedConversation ? 'continuum-focus-panel-rich' : ''}`}>
         <button className="continuum-back" onClick={() => setMode('overview')}><ArrowLeft size={15}/> 全局关注</button>
         <div className="continuum-heading"><div><span className="continuum-eyebrow">{focus ? KIND_LABEL[focus.kind] : '当前关注'}</span><h1>{current?.title ?? '未找到这个对象'}</h1><p>{current?.detail ?? '对象可能已被删除或尚未加载。'}</p></div><div className="continuum-focus-actions">{selectedConversation && <button onClick={() => onClassic('chat')}><Maximize2 size={16}/>完整会话</button>}{focus?.kind === 'project' && <button onClick={() => onClassic('code')}>进入项目</button>}{(focus?.kind === 'goal' || focus?.kind === 'automation') && <button onClick={() => onClassic('auto')}>自动化详情</button>}</div></div>
-        {selectedConversation ? <div className="continuum-focus-grid">
-          <div className="continuum-workstream">
-            <div className="continuum-section-line"><span>对话与结果</span><small>{selectedMessages.length} 条已载入消息</small></div>
-            <div className="continuum-messages">
-              {selectedMessages.filter((item) => item.role === 'user' || item.role === 'assistant').slice(-80).map((item) => <article key={item.id} className={`continuum-msg ${item.role}`}><span>{item.role === 'user' ? '你' : 'Atlas'}</span><p>{item.content}</p></article>)}
-              {selectedReply && selectedRun && !TERMINAL.has(selectedRun.status) && <article className="continuum-msg assistant live"><span><LoaderCircle size={13} className="spin"/> Atlas · 正在生成</span><p>{selectedReply}</p></article>}
-              {!selectedMessages.length && !selectedEvents.length && <div className="continuum-empty">还没有消息。从下方开始对话，Atlas 会通过正式运行引擎执行。</div>}
+        {selectedConversation ? <div className="continuum-rich-chat">
+          <div className="continuum-rich-toolbar">
+            <div className="continuum-rich-indicators"><MessageCircle size={15}/><span>完整会话</span>
+              {selectedRun && <><span>Run {selectedRun.id.slice(0, 8)}</span><span>{displayStatus(selectedRun.status)}</span></>}
+              {pending && <span className="continuum-rich-attention"><CircleAlert size={13}/> {EVENT_LABEL[pending.type]}</span>}
+            </div>
+            <div className="continuum-rich-controls">
+              {selectedRun && ['running', 'paused'].includes(selectedRun.status) && <button disabled={activeConversationId !== selectedConversation.id} onClick={() => useAtlasStore.getState().togglePaused()}>{selectedRun.status === 'paused' ? <Play size={14}/> : <Pause size={14}/>} {selectedRun.status === 'paused' ? '恢复' : '暂停'}</button>}
+              {selectedRun && !TERMINAL.has(selectedRun.status) && <button onClick={() => useAtlasStore.getState().stopRun(selectedRun.id)}><Square size={13}/>停止</button>}
+              <button onClick={onToggleInspector} aria-pressed={inspectorOpen}><PanelRight size={15}/> {inspectorOpen ? '收起详情' : '执行详情'}</button>
             </div>
           </div>
-          <aside className="continuum-runtime">
-            <div className="continuum-section-line"><span>当前执行</span><small>{selectedRun ? displayStatus(selectedRun.status) : '尚未开始'}</small></div>
-            {selectedRun && <div className="continuum-run-controls"><span>Run <code>{selectedRun.id.slice(0,8)}</code></span>{['running','paused'].includes(selectedRun.status) && <button onClick={() => useAtlasStore.getState().togglePaused()}>{selectedRun.status === 'paused' ? <Play size={14}/> : <Pause size={14}/>} {selectedRun.status === 'paused' ? '恢复' : '暂停'}</button>}{!TERMINAL.has(selectedRun.status) && <button onClick={() => useAtlasStore.getState().stopRun(selectedRun.id)}><Square size={13}/>停止</button>}</div>}
-            {pending && selectedRun && <div className="continuum-decision"><strong><CircleAlert size={15}/> {EVENT_LABEL[pending.type]}</strong><p>{String(pending.data.question ?? pending.data.tool_name ?? pending.data.name ?? 'Atlas 需要你的决定。')}</p>
-              {pending.type === 'approval.required' && <div><button onClick={() => useAtlasStore.getState().approve(pending.id)}>允许</button><button onClick={() => useAtlasStore.getState().reject(pending.id)}>拒绝</button></div>}
-              {pending.type === 'run.plan.proposed' && <button onClick={() => useAtlasStore.getState().approvePlan(selectedRun.id,pending.id)}>批准计划</button>}
-              {pending.type === 'rules.trust_required' && <div><button onClick={() => useAtlasStore.getState().trustRules(selectedRun.id,pending.id,true)}>信任</button><button onClick={() => useAtlasStore.getState().trustRules(selectedRun.id,pending.id,false)}>不信任</button></div>}
-              {pending.type === 'input.required' && <form onSubmit={(e) => { e.preventDefault(); useAtlasStore.getState().answerInput(selectedRun.id,pending.id,reply); setReply(''); }}><input aria-label="补充信息" placeholder="输入回复" value={reply} onChange={(e)=>setReply(e.target.value)}/><button type="submit" disabled={!reply.trim()}>发送</button></form>}
-            </div>}
-            <div className="continuum-timeline">{events.slice(-32).reverse().map((event) => <div key={event.id} className="continuum-event"><i className={event.type.includes('failed') ? 'bad' : ''}/><span><strong>{EVENT_LABEL[event.type]}</strong><small>{event.type === 'tool.started' ? String(event.data.name ?? '') : event.type === 'subtask.started' ? String(event.data.name ?? event.data.title ?? '') : event.type === 'run.phase' ? String(event.data.phase ?? '') : ''}</small></span><time>{new Date(event.timestamp).toLocaleTimeString()}</time></div>)}{!events.length && <div className="continuum-empty">暂无执行事件。</div>}</div>
-            {subtasks.length > 0 && <><div className="continuum-section-line"><span>子 Agent / 子任务</span></div><div className="continuum-subtasks">{subtasks.slice(-15).map((event) => <button key={event.id} onClick={()=>setSubtask(subtask === event.id ? '' : event.id)}><Bot size={15}/><span>{String(event.data.title ?? event.data.name ?? event.data.subtask_id ?? event.type)}</span><small>{event.type.replace('subtask.','')}</small></button>)}{subtask && <pre>{JSON.stringify(subtasks.find((e)=>e.id===subtask)?.data ?? {},null,2)}</pre>}</div></>}
-          </aside>
+          {conversationSurface}
         </div> : <div className="continuum-object-details"><p>此对象是独立的 {focus ? KIND_LABEL[focus.kind] : '资源'}，并非 Run 的别名。关联会话和历史执行需要由后端明确给出 ID。</p><button onClick={() => onClassic(focus?.kind === 'project' ? 'code' : 'auto')}>打开现有管理界面 <ArrowRight size={16}/></button></div>}
       </section>}
 
@@ -306,9 +298,9 @@ export default function ContinuumView({ onClassic, onSettings, onVoice, conversa
 
     <footer className="continuum-footer">
       <div className="continuum-footer-quick"><button onClick={() => setMode('now')} className={mode==='now'?'current':''}><Compass size={15}/> 此刻</button><button onClick={() => setMode('overview')} className={mode==='overview'?'current':''}><Layers3 size={15}/> 全局关注</button><button onClick={() => setMode('memory')} className={mode==='memory'?'current':''}><BookOpen size={15}/> 记忆</button><button onClick={() => setMode('environment')} className={mode==='environment'?'current':''}><Monitor size={15}/> 环境</button><button onClick={() => void createConversation()}><Plus size={15}/>新对话</button></div>
-      <form className="continuum-composer" onSubmit={(event)=>void send(event)}><textarea value={draft} onChange={(e)=>setDraft(e.target.value)} placeholder={mode==='focus' && focus?.kind !== 'conversation' ? '切换到会话后可继续向 Atlas 下指令…' : '告诉 Atlas 你想做什么…'} rows={2} onKeyDown={(event)=>{ if(event.key==='Enter'&&!event.shiftKey){event.preventDefault(); event.currentTarget.form?.requestSubmit();}}}/><div><span>{selectedConversation && mode==='focus' ? `继续：${selectedConversation.title}` : '从当前意图开始'}</span><button type="submit" disabled={!connected || !draft.trim() || working || (mode==='focus' && focus?.kind !== 'conversation')} aria-label="发送指令">{working ? <LoaderCircle size={17} className="spin"/>:<Send size={17}/>}</button></div></form>
+      {!(mode === 'focus' && selectedConversation) && <form className="continuum-composer" onSubmit={(event)=>void send(event)}><textarea value={draft} onChange={(e)=>setDraft(e.target.value)} placeholder={mode==='focus' && focus?.kind !== 'conversation' ? '切换到会话后可继续向 Atlas 下指令…' : '告诉 Atlas 你想做什么…'} rows={2} onKeyDown={(event)=>{ if(event.key==='Enter'&&!event.shiftKey){event.preventDefault(); event.currentTarget.form?.requestSubmit();}}}/><div><span>{selectedConversation && mode==='focus' ? `继续：${selectedConversation.title}` : '从当前意图开始'}</span><button type="submit" disabled={!connected || !draft.trim() || working || (mode==='focus' && focus?.kind !== 'conversation')} aria-label="发送指令">{working ? <LoaderCircle size={17} className="spin"/>:<Send size={17}/>}</button></div></form>}
     </footer>
 
-    {searchOpen && <div className="continuum-search-scrim" onMouseDown={(e)=>{if(e.target===e.currentTarget)setSearchOpen(false);}} role="presentation"><div className="continuum-search-dialog" role="dialog" aria-label="搜索和切换关注对象"><div><Command size={18}/><input autoFocus placeholder="搜索目标、项目与会话…" value={search} onChange={(e)=>setSearch(e.target.value)}/><button onClick={()=>setSearchOpen(false)} aria-label="关闭搜索"><X size={17}/></button></div>{filtered.slice(0,12).map((row)=><button key={`${row.ref.kind}:${row.ref.id}`} onClick={()=>void openFocus(row.ref)}><span>{row.title}</span><small>{row.group}</small><ArrowRight size={15}/></button>)}{!filtered.length && <p>未找到结果</p>}</div></div>}
+    {searchOpen && <div className="continuum-search-scrim" onMouseDown={(e)=>{if(e.target===e.currentTarget)setSearchOpen(false);}} role="presentation"><div className="continuum-search-dialog" role="dialog" aria-label="搜索和切换关注对象"><div><Command size={18}/><input autoFocus placeholder="搜索目标、项目与会话…" value={search} onChange={(e)=>setSearch(e.target.value)}/><button onClick={()=>setSearchOpen(false)} aria-label="关闭搜索"><X size={17}/></button></div>{rows.filter((row) => `${row.title} ${row.detail} ${row.group}`.toLowerCase().includes(search.trim().toLowerCase())).slice(0,12).map((row)=><button key={`${row.ref.kind}:${row.ref.id}`} onClick={()=>void openFocus(row.ref)}><span>{row.title}</span><small>{row.group}</small><ArrowRight size={15}/></button>)}{!filtered.length && <p>未找到结果</p>}</div></div>}
   </div>;
 }
