@@ -17,6 +17,12 @@ AGENT_COMMANDS = {
 
 _STATUS_TTL = 60.0
 
+# ``<agent> --version`` on the frozen Windows bundles is not instant: Hermes took
+# 8.5 s here to print its banner, so a 5 s cap reported an installed CLI as
+# "found but cannot start". The probe is cached for 60 s, so a higher ceiling
+# costs at most one slow call per minute.
+_VERSION_TIMEOUT = 15.0
+
 
 def external_agent_status(
     cache: dict[str, Any], *, now: float | None = None,
@@ -37,7 +43,7 @@ def external_agent_status(
                 invocation = ["cmd", "/c", executable, *args]
             try:
                 result = subprocess.run(
-                    invocation, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5, check=False,
+                    invocation, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=_VERSION_TIMEOUT, check=False,
                 )
                 if result.returncode == 0:
                     version = (result.stdout or result.stderr).strip()[:300] or "已安装"

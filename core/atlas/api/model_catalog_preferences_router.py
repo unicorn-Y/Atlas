@@ -49,7 +49,7 @@ def _catalog_rows(source_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "name": str(item.get("name") or model_id),
             "provider": str(item.get("provider") or ""),
             "category": str(item.get("category") or ""),
-            "hermes_provider": str(item.get("hermes_provider") or ""),
+            "atlas_provider": str(item.get("atlas_provider") or ""),
             "custom": item.get("custom") is True,
             "selected": item.get("selected") is True,
         })
@@ -119,7 +119,7 @@ def _payload(
         if query:
             source = sources.get(item["id"], {})
             searchable = " ".join(str(source.get(key) or "") for key in (
-                "id", "name", "provider", "category", "hermes_provider", "native_model", "litellm_model",
+                "id", "name", "provider", "category", "atlas_provider", "native_model", "litellm_model",
             )).casefold()
             if query not in searchable:
                 continue

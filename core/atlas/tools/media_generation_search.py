@@ -148,14 +148,28 @@ def f1_d_tool_schemas() -> list[dict[str, Any]]:
         ),
         _schema(
             "text_to_speech",
-            "Create an MP3 speech file with the configured Atlas gateway/OpenAI provider or ElevenLabs. The selected provider credential must be configured; output is saved under workspace artifacts/atlas-media.",
+            "Create a speech audio file. provider=gateway (Atlas gateway/OpenAI) and provider=elevenlabs need credentials; provider=local synthesizes offline with sherpa-onnx Kokoro or Windows SAPI and never sends the text anywhere. Output is saved under workspace artifacts/atlas-media.",
             {
                 "text": {"type": "string", "minLength": 1, "maxLength": 12000},
-                "provider": {"type": "string", "enum": ["gateway", "elevenlabs"], "default": "gateway"},
+                "provider": {"type": "string", "enum": ["gateway", "elevenlabs", "local"], "default": "gateway"},
                 "voice": {"type": "string", "default": "alloy"},
                 "model": {"type": "string", "default": "gpt-4o-mini-tts"},
+                "speaker": {"type": "integer", "minimum": 0, "maximum": 100, "default": 0, "description": "Speaker id when provider=local."},
+                "speed": {"type": "number", "minimum": 0.5, "maximum": 2.0, "default": 1.0, "description": "Playback speed when provider=local."},
             },
             ["text"],
+        ),
+        _schema(
+            "tts_status",
+            "Report which offline speech engines are available on this machine (sherpa-onnx Kokoro model, or Windows SAPI) without synthesizing anything.",
+            {},
+            [],
+        ),
+        _schema(
+            "tts_download",
+            "Download the offline Kokoro speech model (~300 MB) so text_to_speech with provider=local works without network afterwards. Idempotent.",
+            {},
+            [],
         ),
         _schema(
             "music_generate",
@@ -204,6 +218,22 @@ async def f1_d_dispatch(
             return await video_job_status(args, model_mgr)
         if name == "text_to_speech":
             return await text_to_speech(args, model_mgr, runtime)
+        if name == "tts_status":
+            from atlas.tts_local import get_local_tts
+
+            local = get_local_tts().status()
+            data = {"local": local, "cloud_providers": ["gateway", "elevenlabs"]}
+            return _success(
+                data,
+                "Local speech ready." if local["ready"] else "No local speech engine yet.",
+            )
+        if name == "tts_download":
+            from atlas.tts_local import get_local_tts
+
+            result = await get_local_tts().download()
+            if not result.get("ok"):
+                return _error(str(result.get("error") or "download failed"))
+            return _success(get_local_tts().status(), "Local speech model is ready.")
         if name == "music_generate":
             return await music_generate(args, runtime, model_mgr)
         if name == "security_scan":
@@ -574,6 +604,41 @@ async def text_to_speech(args: dict[str, Any], model_mgr: Any, runtime: Any) -> 
     provider = str(args.get("provider") or "gateway")
     voice = str(args.get("voice") or ("alloy" if provider == "gateway" else "JBFqnCBsd6RMkjVDRZzb"))
     model = str(args.get("model") or "gpt-4o-mini-tts")
+    if provider == "local":
+        # Offline path: the text never leaves the machine. Falls back from the
+        # Kokoro model to Windows SAPI, so this succeeds on a fresh install with
+        # no download at all.
+        from atlas.tts_local import get_local_tts
+
+        engine = get_local_tts()
+        if not engine.status()["ready"]:
+            return _unavailable(
+                "No local speech engine. Run tts_download, or install pywin32 for SAPI."
+            )
+        try:
+            speaker = int(args.get("speaker") or 0)
+            speed = float(args.get("speed") or 1.0)
+        except (TypeError, ValueError):
+            return _error("speaker must be an integer and speed a number")
+        result = await engine.synthesize(text, speaker=speaker, speed=speed)
+        if not result.get("ok"):
+            return _error(str(result.get("error") or "Local synthesis failed"))
+        audio = result["data"]
+        content_type = result.get("mime") or "audio/wav"
+        saved = _save_audio(workspace, audio, content_type, "speech")
+        if isinstance(saved, str):
+            return _error(saved)
+        return _success(
+            {
+                "provider": f"local:{result.get('engine')}",
+                "status": "completed",
+                "file": str(saved),
+                "content_type": content_type,
+                "duration_s": result.get("duration_s"),
+                "offline": True,
+            },
+            f"Offline speech audio saved to {saved}.",
+        )
     if provider == "gateway":
         base_url, key = _image_api_credentials(model_mgr)
         if not base_url or not key:
@@ -611,7 +676,7 @@ async def text_to_speech(args: dict[str, Any], model_mgr: Any, runtime: Any) -> 
         audio = response.content
         content_type = response.headers.get("content-type", "")
     else:
-        return _error("provider must be gateway or elevenlabs")
+        return _error("provider must be gateway, elevenlabs or local")
     saved = _save_audio(workspace, audio, content_type, "speech")
     if isinstance(saved, str):
         return _error(saved)

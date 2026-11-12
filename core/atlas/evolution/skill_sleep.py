@@ -1,6 +1,6 @@
 """Nightly skill training for Atlas with microsoft/SkillOpt's SkillOpt-Sleep.
 
-One night = harvest Atlas' own chat sessions (the Hermes session store,
+One night = harvest Atlas' own chat sessions (the Atlas session store,
 ``engine/state.db``) → mine recurring tasks → replay them → propose bounded edits
 to one learned skill → keep an edit only if it scores better on held-out real
 tasks (SkillOpt's validation gate) → adopt it into

@@ -6,11 +6,11 @@ import pytest
 from atlas.agent import AgentOrchestrator
 from atlas.memory import MemoryStore
 from atlas.tools.local_execution import LocalExecutionRuntime
-from tests.fakes.fake_llm_provider import FakeLLMServer, Text, write_hermes_home
+from tests.fakes.fake_llm_provider import FakeLLMServer, Text, write_atlas_home
 
 
 @pytest.mark.asyncio
-async def test_durable_process_notice_is_visible_to_next_hermes_turn(tmp_path, monkeypatch):
+async def test_durable_process_notice_is_visible_to_next_atlas_turn(tmp_path, monkeypatch):
     from atlas.engine.notifications import consume_notifications, publish_notification
 
     with FakeLLMServer([Text("continued from notice")]) as fake:
@@ -19,7 +19,7 @@ async def test_durable_process_notice_is_visible_to_next_hermes_turn(tmp_path, m
 
         data_root = tmp_path / "atlas-data"
         home = data_root / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         monkeypatch.setattr("atlas.config.get_config", lambda: FixtureConfig({
             "tools.servers": {}, "tools.auto_start": [],

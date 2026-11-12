@@ -2,10 +2,10 @@ import os
 
 import pytest
 
-from atlas.engine.hermes_runtime import HermesRuntime
+from atlas.engine.atlas_runtime import AtlasRuntime
 
 
-def test_hermes_stdio_npx_uses_atlas_node_runtime(tmp_path, monkeypatch):
+def test_atlas_stdio_npx_uses_atlas_node_runtime(tmp_path, monkeypatch):
     runtime = tmp_path / "runtime"
     npm_bin = runtime / "npm" / "bin"
     npm_bin.mkdir(parents=True)
@@ -17,7 +17,7 @@ def test_hermes_stdio_npx_uses_atlas_node_runtime(tmp_path, monkeypatch):
     monkeypatch.setenv("ATLAS_NODE_RUNTIME_REQUIRED", "1")
     monkeypatch.setenv("PATH", "existing-path")
 
-    adapted = HermesRuntime._adapt_atlas_mcp_servers({
+    adapted = AtlasRuntime._adapt_atlas_mcp_servers({
         "filesystem": {
             "transport": "stdio",
             "command": "npx",
@@ -37,21 +37,21 @@ def test_hermes_stdio_npx_uses_atlas_node_runtime(tmp_path, monkeypatch):
     }
 
 
-def test_hermes_stdio_node_command_fails_closed_without_required_bundled_runtime(monkeypatch):
+def test_atlas_stdio_node_command_fails_closed_without_required_bundled_runtime(monkeypatch):
     monkeypatch.delenv("ATLAS_NODE_RUNTIME_DIR", raising=False)
     monkeypatch.setenv("ATLAS_NODE_RUNTIME_REQUIRED", "1")
 
     with pytest.raises(FileNotFoundError, match="Node-based MCP server requires"):
-        HermesRuntime._adapt_atlas_mcp_servers({
+        AtlasRuntime._adapt_atlas_mcp_servers({
             "filesystem": {"transport": "stdio", "command": "npx", "enabled": True},
         })
 
 
-def test_disabled_hermes_stdio_npx_does_not_resolve_missing_runtime(monkeypatch):
+def test_disabled_atlas_stdio_npx_does_not_resolve_missing_runtime(monkeypatch):
     monkeypatch.delenv("ATLAS_NODE_RUNTIME_DIR", raising=False)
     monkeypatch.setenv("ATLAS_NODE_RUNTIME_REQUIRED", "1")
 
-    adapted = HermesRuntime._adapt_atlas_mcp_servers({
+    adapted = AtlasRuntime._adapt_atlas_mcp_servers({
         "filesystem": {
             "transport": "stdio",
             "command": "npx",
@@ -70,8 +70,8 @@ def test_disabled_hermes_stdio_npx_does_not_resolve_missing_runtime(monkeypatch)
     assert adapted["remote"]["enabled"] is True
 
 
-def test_atlas_mcp_http_oauth_config_is_preserved_for_hermes():
-    adapted = HermesRuntime._adapt_atlas_mcp_servers({
+def test_atlas_mcp_http_oauth_config_is_preserved_for_atlas():
+    adapted = AtlasRuntime._adapt_atlas_mcp_servers({
         "remote": {
             "transport": "streamable-http",
             "url": "https://mcp.example.invalid/endpoint",
@@ -110,7 +110,7 @@ async def test_atlas_compression_model_setting_maps_to_bare_wire_id(monkeypatch)
         {"id": "cheap", "litellm_model": "openai/cheap-model", "api_key": "must-not-copy"},
     ])
 
-    await HermesRuntime._apply_compression_model_setting(agent, models)
+    await AtlasRuntime._apply_compression_model_setting(agent, models)
 
     assert compressor.summary_model == "cheap-model"
     assert "api_key" not in str(compressor.summary_model)
@@ -127,7 +127,7 @@ async def test_atlas_compression_model_setting_honors_native_model(monkeypatch):
          "native_model": "cheap-model-native"},
     ])
 
-    await HermesRuntime._apply_compression_model_setting(agent, models)
+    await AtlasRuntime._apply_compression_model_setting(agent, models)
 
     assert compressor.summary_model == "cheap-model-native"
 
@@ -151,7 +151,7 @@ async def test_atlas_compression_model_setting_uses_route_wire_model(monkeypatch
 
     models = SimpleNamespace(model_router=Router())
 
-    await HermesRuntime._apply_compression_model_setting(agent, models)
+    await AtlasRuntime._apply_compression_model_setting(agent, models)
 
     assert compressor.summary_model == "cheap-wire-model"
 
@@ -193,7 +193,7 @@ def test_compaction_agent_pins_bare_wire_id_from_host_shaped_config(tmp_path, mo
             {"id": "main", "litellm_model": "openai/deepseek-v4.1-flash"},
         ],
     )
-    runtime = HermesRuntime(
+    runtime = AtlasRuntime(
         data_dir=tmp_path, model_manager=models, agent_factory=fake_agent_factory,
     )
 
@@ -203,8 +203,8 @@ def test_compaction_agent_pins_bare_wire_id_from_host_shaped_config(tmp_path, mo
     assert result["compressed"] is False  # unchanged transcript: wiring-only probe
 
 
-def test_hermes_policy_recognizes_atlas_state_and_workspace_mutations():
-    from atlas.engine.hermes_policy import _write_tool
+def test_atlas_policy_recognizes_atlas_state_and_workspace_mutations():
+    from atlas.engine.atlas_policy import _write_tool
 
     assert _write_tool("project_note", {})
     assert _write_tool("create_document", {})
@@ -219,7 +219,7 @@ def test_hermes_policy_recognizes_atlas_state_and_workspace_mutations():
 def test_mcp_write_creates_one_workspace_checkpoint_before_dispatch(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    from atlas.engine import hermes_policy
+    from atlas.engine import atlas_policy
 
     snapshots = []
     agent = SimpleNamespace(
@@ -231,10 +231,10 @@ def test_mcp_write_creates_one_workspace_checkpoint_before_dispatch(tmp_path, mo
         permission_mode="full_access", mode="act", read_only=False,
     )
     loop = object()
-    monkeypatch.setattr(hermes_policy, "_active", lambda _session_id="": (agent, runtime, loop))
+    monkeypatch.setattr(atlas_policy, "_active", lambda _session_id="": (agent, runtime, loop))
 
-    assert hermes_policy._pre_tool_call("mcp__fixture__first", {"path": "written.txt"}) is None
-    assert hermes_policy._pre_tool_call("mcp__fixture__second", {}) is None
+    assert atlas_policy._pre_tool_call("mcp__fixture__first", {"path": "written.txt"}) is None
+    assert atlas_policy._pre_tool_call("mcp__fixture__second", {}) is None
 
     assert len(snapshots) == 1
     assert snapshots[0][0] == (str(tmp_path), ["."])
@@ -244,7 +244,7 @@ def test_mcp_write_creates_one_workspace_checkpoint_before_dispatch(tmp_path, mo
 def test_mcp_write_requires_checkpoint_and_approval_before_dispatch(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    from atlas.engine import hermes_policy
+    from atlas.engine import atlas_policy
 
     snapshots = []
     choices = []
@@ -257,9 +257,9 @@ def test_mcp_write_requires_checkpoint_and_approval_before_dispatch(tmp_path, mo
         permission_mode="ask_writes", mode="act", read_only=False,
         approval_callback=lambda *args: choices.append(args) or "deny",
     )
-    monkeypatch.setattr(hermes_policy, "_active", lambda _session_id="": (agent, runtime, object()))
+    monkeypatch.setattr(atlas_policy, "_active", lambda _session_id="": (agent, runtime, object()))
 
-    blocked = hermes_policy._pre_tool_call(
+    blocked = atlas_policy._pre_tool_call(
         "mcp__fixture__write", {"path": "written.txt"}, tool_call_id="call-1",
     )
     assert blocked["action"] == "block"
@@ -267,5 +267,5 @@ def test_mcp_write_requires_checkpoint_and_approval_before_dispatch(tmp_path, mo
     assert choices[0][0] == "approval:call-1"
 
     runtime.approval_callback = lambda *_args: "allow"
-    assert hermes_policy._pre_tool_call("mcp__fixture__write", {}) is None
+    assert atlas_policy._pre_tool_call("mcp__fixture__write", {}) is None
     assert len(snapshots) == 1

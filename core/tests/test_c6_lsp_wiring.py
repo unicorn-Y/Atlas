@@ -133,7 +133,7 @@ def test_lsp_applicable_rejects_only_ssh():
     assert lsp_bridge.lsp_applicable("ssh://build-host/srv/project") is False
 
 
-def test_hermes_lsp_tier_stays_dormant_in_atlas(monkeypatch, lsp_dir):
+def test_atlas_lsp_tier_stays_dormant_in_atlas(monkeypatch, lsp_dir):
     """venv 里的 hermes-agent 自带 agent.lsp(hermes 配置默认 enabled=True)在 Atlas
     进程内必须休眠：get_service 被桥替换为 None-returning,且从不创建自己的服务单例。"""
     import agent.lsp as hermes_lsp  # noqa: PLC0415 — 延迟导入,避免无关测试付出导入成本

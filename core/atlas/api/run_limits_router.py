@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from atlas.config import get_config, load_user_settings, save_user_settings
-from atlas.kernel.loop import DEFAULT_MAX_TURNS, MAX_TURNS_CAP
+from atlas.engine.kernel.loop import DEFAULT_MAX_TURNS, MAX_TURNS_CAP
 
 router = APIRouter(tags=["run-limits"])
 

@@ -20,7 +20,7 @@ from typing import Any
 import httpx
 import pytest_asyncio
 
-from tests.fakes.fake_llm_provider import FakeLLMServer, Text, write_hermes_home
+from tests.fakes.fake_llm_provider import FakeLLMServer, Text, write_atlas_home
 from tests.test_c1_websocket_acceptance import IsolatedBackend
 
 TOKEN = "c1-isolated-token"
@@ -128,7 +128,7 @@ class RestartableBackend(IsolatedBackend):
             '[agent]\nengine="hermes"\nverify_before_stop=false\n'
             '[tools]\nauto_start=[]\n[tools.servers]\n'
             '[scheduler]\nenabled=false\n', encoding="utf-8")
-        write_hermes_home(
+        write_atlas_home(
             data / "engine", fake.base_url,
             extra_config="auxiliary:\n  title_generation:\n    model_upgrade_enabled: false\n")
         env = dict(os.environ)

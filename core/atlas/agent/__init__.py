@@ -1,4 +1,4 @@
-"""Atlas Agent Orchestrator with Hermes runtime tool adapters."""
+"""Atlas Agent Orchestrator with engine tool adapters."""
 
 # W07 orchestration adapters are informed by NousResearch/hermes-agent at
 # 330d9d6df9c7bffe125ba0ae64a0abc488a7d2c3 (MIT): delegation context,
@@ -290,7 +290,7 @@ class AgentRunContext:
     permission_mode: str = "full_access"
     allowed_paths: list[str] = field(default_factory=list)
     session_env: dict[str, str] = field(default_factory=dict)
-    hermes_preapproved_writes: set[str] = field(default_factory=set)
+    atlas_preapproved_writes: set[str] = field(default_factory=set)
     process_notifications: asyncio.Queue[dict[str, Any]] = field(default_factory=asyncio.Queue)
     parent_process_event_callback: Callable[..., Any] | None = None
     user_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None
@@ -369,7 +369,7 @@ class ToolExecutionState(dict[str, Any]):
 # ---------------------------------------------------------------------------
 
 class AgentOrchestrator:
-    """Atlas policy, lifecycle, and tool adapters for Hermes runs."""
+    """Atlas policy, lifecycle, and tool adapters for Atlas engine runs."""
 
     # Tools that require explicit user approval before execution
     APPROVAL_REQUIRED_TOOLS: set[str] = {
@@ -420,7 +420,7 @@ class AgentOrchestrator:
         )
         self._subagent_manager = None
         if self._delegation is not None:
-            from atlas.kernel.subagents import SubagentManager
+            from atlas.engine.kernel.subagents import SubagentManager
 
             self._subagent_manager = SubagentManager(self._run_atlas_subtask)
             self._delegation.atlas_runner = self._subagent_manager.run
@@ -576,6 +576,12 @@ class AgentOrchestrator:
                 "content": [{"type": "text", "text": message}],
                 "is_error": True,
             }
+        try:  # telemetry: one tick per real load, never blocks the turn
+            from atlas.skills.agent_collections import record_skill_use
+
+            record_skill_use(name)
+        except Exception:  # noqa: BLE001 - record_skill_use is already non-raising
+            log.debug("agent.use_skill.usage_record_failed", name=name, exc_info=True)
         return {
             "data": {"skill": name, "loaded": True},
             "content": [{"type": "text", "text": str(content)}],

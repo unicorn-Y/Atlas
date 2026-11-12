@@ -100,7 +100,7 @@ def validate_profile_record(value: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("name is required")
     if value.get("mode", "act") not in {"act", "plan"}:
         raise ValueError("mode must be 'act' or 'plan'")
-    if value.get("reasoning_effort") not in {None, "minimal", "low", "medium", "high"}:
+    if value.get("reasoning_effort") not in {None, "off", "minimal", "low", "medium", "high"}:
         raise ValueError("invalid reasoning_effort")
     tools = value.get("tools", {"allow": None, "deny": []})
     tools_ok = isinstance(tools, dict) and (

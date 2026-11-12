@@ -33,7 +33,7 @@ from tests.fakes.fake_llm_provider import (
     FakeLLMServer,
     Text,
     ToolCall,
-    write_hermes_home,
+    write_atlas_home,
 )
 
 CORE_ROOT = Path(__file__).resolve().parents[1]
@@ -45,7 +45,7 @@ CLI_TIMEOUT = 240.0
 # ---------------------------------------------------------------------------
 
 
-def _hermes_root() -> Path:
+def _atlas_root() -> Path:
     import hermes_state
 
     return Path(hermes_state.__file__).resolve().parent
@@ -69,7 +69,7 @@ def _clean_child_env(root: Path, fake_url: str, **extra: str) -> dict[str, str]:
         '[scheduler]\nenabled=false\n',
         encoding="utf-8",
     )
-    write_hermes_home(
+    write_atlas_home(
         engine, fake_url,
         extra_config=(
             "tools:\n  tool_search:\n    enabled: off\n"

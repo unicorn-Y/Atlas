@@ -31,6 +31,8 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from atlas.api.app_services import AppServices
+from atlas.api.dependencies import get_optional_app_services
 from atlas.origin_guard import TOKEN_HEADER, is_trusted
 
 router = APIRouter(prefix="/api/browser", tags=["browser"])
@@ -47,10 +49,20 @@ def set_vault_store_factory(factory: Callable[[], Any] | None) -> None:
     _vault_store_factory = factory
 
 
-def _vault_store() -> Any:
+def _vault_store(services: Any = None) -> Any:
+    """The credential vault: container first, then module override, then default.
+
+    ``AppServices.vault_store_factory`` existed as a declared-but-never-read
+    field, so an application that wired a vault store there was silently served
+    the process default instead. Reading the container first makes the wiring
+    real; ``set_vault_store_factory`` stays for tests and standalone mounts.
+    """
+    supplier = getattr(services, "vault_store_factory", None)
+    if callable(supplier):
+        return supplier()
     if _vault_store_factory is not None:
         return _vault_store_factory()
-    from atlas.engine_core.agent.vault_store import get_vault_store
+    from atlas.engine.agent.vault_store import get_vault_store
 
     return get_vault_store()
 
@@ -107,7 +119,7 @@ class BrowserSettingsRequest(BaseModel):
 @router.get("/settings", dependencies=[Depends(_require_trusted_origin)])
 async def get_settings() -> dict[str, Any]:
     from atlas.tools.x2.browser import get_browser_settings
-    from atlas.engine_core.tools.browser_extension_bridge import connection_info
+    from atlas.engine.tools.browser_extension_bridge import connection_info
     from pathlib import Path
     extension = connection_info()
     manifest_path = Path(extension["extension_path"]) / "manifest.json"
@@ -136,14 +148,14 @@ async def save_settings(req: BrowserSettingsRequest) -> dict[str, Any]:
 
 @router.post("/extension/disconnect", dependencies=[Depends(_require_trusted_origin)])
 async def disconnect_extension() -> dict[str, Any]:
-    from atlas.engine_core.tools.browser_extension_bridge import disconnect
+    from atlas.engine.tools.browser_extension_bridge import disconnect
     disconnect()
     return {"connected": False}
 
 
 @router.post("/connection-check", dependencies=[Depends(_require_trusted_origin)])
 async def browser_connection_check() -> dict[str, Any]:
-    from atlas.engine_core.tools.browser_tool_real_profile import live_chrome_cdp
+    from atlas.engine.tools.browser_tool_real_profile import live_chrome_cdp
     endpoint, error = live_chrome_cdp()
     return {"connected": endpoint is not None, "endpoint": endpoint, "error": error}
 
@@ -300,21 +312,21 @@ def _vault_entry(meta: Any) -> dict[str, Any]:
 
 
 @router.get("/vault", dependencies=[Depends(_require_trusted_origin)])
-async def list_vault_entries() -> dict[str, Any]:
-    store = await asyncio.to_thread(_vault_store)
+async def list_vault_entries(services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
+    store = await asyncio.to_thread(_vault_store, services)
     metas = await asyncio.to_thread(store.list_items)
     return {"entries": [_vault_entry(meta) for meta in metas]}
 
 
 @router.post("/vault", dependencies=[Depends(_require_trusted_origin)])
-async def add_vault_entry(req: VaultNewEntry) -> dict[str, Any]:
+async def add_vault_entry(req: VaultNewEntry, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     if not req.label.strip():
         raise HTTPException(status_code=422, detail="label 不能为空")
     if not req.password:
         raise HTTPException(status_code=422, detail="password 不能为空")
     if not (req.url or "").strip():
         raise HTTPException(status_code=422, detail="网站 origin 不能为空，例如 https://example.com")
-    store = await asyncio.to_thread(_vault_store)
+    store = await asyncio.to_thread(_vault_store, services)
     try:
         meta = await asyncio.to_thread(
             store.add_item,
@@ -335,8 +347,8 @@ async def add_vault_entry(req: VaultNewEntry) -> dict[str, Any]:
 
 
 @router.delete("/vault/{item_id}", dependencies=[Depends(_require_trusted_origin)])
-async def delete_vault_entry(item_id: str) -> dict[str, Any]:
-    store = await asyncio.to_thread(_vault_store)
+async def delete_vault_entry(item_id: str, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
+    store = await asyncio.to_thread(_vault_store, services)
     removed = await asyncio.to_thread(store.remove_item, item_id)
     if not removed:
         raise HTTPException(status_code=404, detail=f"没有 id 为 {item_id!r} 的凭据条目")
@@ -350,7 +362,7 @@ class VaultRotateRequest(BaseModel):
 @router.get("/vault/import-candidates", dependencies=[Depends(_require_trusted_origin)])
 async def list_browser_password_candidates(browser: str = "chrome") -> dict[str, Any]:
     """List metadata from a local Chromium password manager; never return passwords."""
-    from atlas.engine_core.agent.browser_password_import import list_candidates, list_profiles
+    from atlas.engine.agent.browser_password_import import list_candidates, list_profiles
     try:
         profiles = await asyncio.to_thread(list_profiles, browser)
         candidates = await asyncio.to_thread(list_candidates, browser)
@@ -368,12 +380,12 @@ class VaultImportRequest(BaseModel):
 
 
 @router.post("/vault/import", dependencies=[Depends(_require_trusted_origin)])
-async def import_browser_passwords(req: VaultImportRequest) -> dict[str, Any]:
+async def import_browser_passwords(req: VaultImportRequest, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     """Import only explicitly selected browser rows into the encrypted local vault."""
     if len(req.selected_ids) > 500 or any(len(item) > 64 for item in req.selected_ids):
         raise HTTPException(status_code=422, detail="选择的条目数量或标识无效")
-    from atlas.engine_core.agent.browser_password_import import import_selected
-    store = await asyncio.to_thread(_vault_store)
+    from atlas.engine.agent.browser_password_import import import_selected
+    store = await asyncio.to_thread(_vault_store, services)
     existing: dict[str, str] = {}
     for meta in await asyncio.to_thread(store.list_items):
         data = meta.to_dict() if hasattr(meta, "to_dict") else meta
@@ -394,9 +406,9 @@ class VaultCsvPreviewRequest(BaseModel):
 
 
 @router.post("/vault/import-preview", dependencies=[Depends(_require_trusted_origin)])
-async def preview_browser_password_csv(req: VaultCsvPreviewRequest) -> dict[str, Any]:
+async def preview_browser_password_csv(req: VaultCsvPreviewRequest, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     """Keep an explicitly chosen password export in process memory for 15 minutes."""
-    from atlas.engine_core.agent.browser_password_csv import preview_csv
+    from atlas.engine.agent.browser_password_csv import preview_csv
     try:
         return await asyncio.to_thread(preview_csv, req.source, req.csv_text)
     except ValueError as exc:
@@ -404,11 +416,11 @@ async def preview_browser_password_csv(req: VaultCsvPreviewRequest) -> dict[str,
 
 
 @router.post("/vault/import-selected", dependencies=[Depends(_require_trusted_origin)])
-async def import_selected_browser_passwords(req: VaultImportRequest) -> dict[str, Any]:
+async def import_selected_browser_passwords(req: VaultImportRequest, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     if not req.import_token:
         raise HTTPException(status_code=422, detail="缺少导入预览标识")
-    from atlas.engine_core.agent.browser_password_csv import import_selected
-    store = await asyncio.to_thread(_vault_store)
+    from atlas.engine.agent.browser_password_csv import import_selected
+    store = await asyncio.to_thread(_vault_store, services)
     try:
         return await asyncio.to_thread(import_selected, req.import_token, req.selected_ids, store,
                                        overwrite_confirmed=req.overwrite_confirmed)
@@ -417,10 +429,10 @@ async def import_selected_browser_passwords(req: VaultImportRequest) -> dict[str
 
 
 @router.put("/vault/{item_id}/password", dependencies=[Depends(_require_trusted_origin)])
-async def rotate_vault_password(item_id: str, req: VaultRotateRequest) -> dict[str, bool]:
+async def rotate_vault_password(item_id: str, req: VaultRotateRequest, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, bool]:
     if not req.password:
         raise HTTPException(status_code=422, detail="password is required")
-    store = await asyncio.to_thread(_vault_store)
+    store = await asyncio.to_thread(_vault_store, services)
     try:
         updated = await asyncio.to_thread(store.rotate_login_password, item_id, req.password)
     except Exception as exc:  # noqa: BLE001 - vault errors contain metadata only

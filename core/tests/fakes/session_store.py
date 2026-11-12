@@ -8,7 +8,7 @@ from contextlib import closing
 from datetime import UTC, datetime
 from typing import Any
 
-from hermes_state import SessionDB
+from atlas.engine.state.atlas_state import SessionDB
 
 
 async def seed_session_messages(

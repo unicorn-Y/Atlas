@@ -18,7 +18,7 @@ import tomllib
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
-from atlas.kernel.hook_runtime import (
+from atlas.engine.kernel.hook_runtime import (
     hook_command_argv,
     hook_environment,
     prepare_hook_command,

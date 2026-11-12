@@ -28,7 +28,7 @@ from atlas.tools.x2.context import (
 
 log = logging.getLogger(__name__)
 
-# Mirrors the engine's tool-call deadline (hermes_policy._call_async): a bridge
+# Mirrors the engine's tool-call deadline (atlas_policy._call_async): a bridge
 # call stuck on a human card / desktop backend must not hang the tool thread.
 _TOOL_CALL_TIMEOUT_SECONDS = 310
 

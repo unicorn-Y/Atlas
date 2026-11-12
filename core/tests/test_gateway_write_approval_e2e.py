@@ -1,7 +1,7 @@
 """H7 end-to-end at the gateway level: a real FakeLLM write gated on the channel.
 
 No ``atlas.server`` import (the app factory belongs to another owner): the
-``ChannelManager`` + ``GatewayBridge`` pair is wired to a *real* HermesRuntime
+``ChannelManager`` + ``GatewayBridge`` pair is wired to a *real* AtlasRuntime
 turn through the same seam production uses — ``_handle_run_start``'s
 approval callback forwards into :meth:`GatewayBridge.request_approval` when
 ``bridge.owns_run(run_id)``. The model genuinely calls ``write_file`` under the
@@ -30,7 +30,7 @@ from atlas.channels import ChannelManager
 from atlas.channels.contract import ChannelAdapter, MessageEvent, SendResult
 from atlas.gateway_service import GatewayBridge
 from atlas.tools.local_execution import LocalExecutionRuntime
-from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_hermes_home
+from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_atlas_home
 
 pytest.importorskip("hermes_cli")
 
@@ -95,7 +95,7 @@ def sent_texts(adapter: FakeAdapter, needle: str) -> list[str]:
 
 
 class GatewayHarness:
-    """Manager + bridge + real HermesRuntime write turn, wired like production."""
+    """Manager + bridge + real AtlasRuntime write turn, wired like production."""
 
     def __init__(self, tmp_path: Path, fake: FakeLLMServer, *, timeout: float = 600.0,
                  default_permission_mode: str = "ask_writes") -> None:
@@ -144,10 +144,10 @@ class GatewayHarness:
                 return await bridge.request_approval(run, approval_id, description)
 
             async def execute() -> None:
-                from atlas.engine.hermes_runtime import HermesRuntime
+                from atlas.engine.atlas_runtime import AtlasRuntime
 
                 models = self.models
-                runtime = HermesRuntime(data_dir=self.tmp_path, model_manager=models)
+                runtime = AtlasRuntime(data_dir=self.tmp_path, model_manager=models)
                 events = [event async for event in runtime.run_turn(
                     message=str(data["content"]),
                     conversation_id=str(data["conversation_id"]),
@@ -189,12 +189,12 @@ class GatewayHarness:
 
 
 @pytest.fixture()
-def hermes_env(tmp_path, monkeypatch):
+def atlas_env(tmp_path, monkeypatch):
     """Each scenario gets an isolated engine home pinned to its FakeLLM."""
 
     def install(fake: FakeLLMServer) -> SimpleNamespace:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         monkeypatch.setattr("atlas.config.get_config",
                             lambda: {"tools.servers": {}, "tools.auto_start": []})

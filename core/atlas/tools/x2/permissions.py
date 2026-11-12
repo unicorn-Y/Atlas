@@ -1,6 +1,6 @@
 """Write classification for X2 tools (computer / browser).
 
-Imported lazily from ``atlas.engine.hermes_policy`` so ask_writes / auto_file /
+Imported lazily from ``atlas.engine.atlas_policy`` so ask_writes / auto_file /
 plan / read_only gates treat X2 tools like every other state-mutating tool:
 unknown defaults to read, and anything that drives the mouse, keyboard,
 clipboard, a browser page, or fills vault secrets counts as a write.

@@ -28,6 +28,27 @@ from atlas.agent.run_phases import (
 from atlas.models.router import CompletionResult
 
 
+def _stream_types(events: list[dict[str, Any]]) -> list[str]:
+    """Event types restricted to the conversation stream.
+
+    A run emits two kinds of event. *Stream* events are the conversation
+    protocol the UI renders turn by turn (``chunk``/``tool_call``/
+    ``tool_result``/``approval_required``/``error``/``done``/``cancelled``).
+    *Notification* events describe the run around that stream —
+    ``context_sources`` (what was injected, run_phases.py:1088),
+    ``run.recovery.notice``, ``plan_updated``, ``run_status``, ``run_usage``,
+    ``session.title``, ``goal_evaluated``, ``run_verify_nudge``.
+
+    The cancel tests below are about cancel semantics, so they assert on the
+    stream only. Pinning the full event list made them fail whenever a
+    notification was added — three separate times so far — which is noise, not
+    a regression. Stream ordering is still asserted exactly.
+    """
+    stream = {"chunk", "tool_call", "tool_result", "approval_required",
+              "error", "done", "cancelled"}
+    return [e["type"] for e in events if e["type"] in stream]
+
+
 def _memory_stub() -> AsyncMock:
     memory = AsyncMock()
     memory.get_conversation_messages.return_value = []
@@ -132,7 +153,7 @@ async def test_blocked_prompt_hook_persists_reason_and_stops_before_turn(
     def fail_turn(*_args, **_kwargs):
         raise AssertionError("engine turn must not start for a blocked prompt")
 
-    monkeypatch.setattr("atlas.agent.run_phases._hermes_turn", fail_turn)
+    monkeypatch.setattr("atlas.agent.run_phases._engine_turn", fail_turn)
 
     async def blocked_hook(_event, payload):
         return {"blocked": True, "reason": "不行"}
@@ -193,7 +214,7 @@ async def test_cancel_event_ends_run_promptly_without_polling(monkeypatch) -> No
         await asyncio.sleep(30)
         return {"messages": [], "pending_events": [], "runtime": _state.runtime}
 
-    monkeypatch.setattr("atlas.agent.run_phases._hermes_turn", slow_turn)
+    monkeypatch.setattr("atlas.agent.run_phases._engine_turn", slow_turn)
     cancel = asyncio.Event()
 
     watcher_waits: list[str] = []
@@ -249,7 +270,7 @@ async def test_cancel_event_ends_run_promptly_without_polling(monkeypatch) -> No
             run_task.cancel()
             await asyncio.gather(run_task, return_exceptions=True)
 
-    assert [event["type"] for event in events] == ["cancelled"]
+    assert _stream_types(events) == ["cancelled"]
     assert len(watcher_waits) == 1, (
         "cancel watcher re-entered Event.wait — it polls on a timer instead "
         "of sleeping on the event (retired 0.2s poll behavior)"
@@ -272,10 +293,10 @@ async def test_cancel_watcher_is_cleaned_up_after_done(monkeypatch) -> None:
         finally:
             state.runtime.event_queue.put_nowait(_EVENT_STREAM_DONE)
 
-    monkeypatch.setattr("atlas.agent.run_phases._hermes_turn", instant_turn)
+    monkeypatch.setattr("atlas.agent.run_phases._engine_turn", instant_turn)
     cancel = asyncio.Event()
     events = [event async for event in agent.run("hello", "conv-1", cancel_event=cancel)]
-    assert [event["type"] for event in events] == ["chunk", "done"]
+    assert _stream_types(events) == ["chunk", "done"]
     await asyncio.sleep(0)
     watchers = [task for task in asyncio.all_tasks()
                 if task.get_name().startswith("atlas-cancel-watcher")]
@@ -285,8 +306,8 @@ async def test_cancel_watcher_is_cleaned_up_after_done(monkeypatch) -> None:
 # -- H10.2-DEFECT-2: a terminal engine-turn failure is never a success --------
 
 
-class _ScriptedHermesRuntime:
-    """HermesRuntime double yielding pre-scripted events, incl. hermes.result."""
+class _ScriptedAtlasRuntime:
+    """AtlasRuntime double yielding pre-scripted events, incl. atlas.result."""
 
     result: dict[str, Any] = {}
 
@@ -295,13 +316,13 @@ class _ScriptedHermesRuntime:
 
     async def run_turn(self, **_kwargs):
         yield {"type": "run.recovery.notice", "data": {"message": "provider hard-failed"}}
-        yield {"type": "hermes.result", "result": dict(self.result)}
+        yield {"type": "atlas.result", "result": dict(self.result)}
 
 
 async def _events_for_scripted_result(monkeypatch, result: dict[str, Any]) -> list[dict]:
     monkeypatch.setattr(
-        "atlas.engine.HermesRuntime",
-        type("_Runtime", (_ScriptedHermesRuntime,), {"result": result}),
+        "atlas.engine.AtlasRuntime",
+        type("_Runtime", (_ScriptedAtlasRuntime,), {"result": result}),
     )
     agent = _orchestrator()
     return [event async for event in agent.run("hello", "conv-fail")]

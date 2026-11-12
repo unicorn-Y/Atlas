@@ -53,10 +53,10 @@ def test_mcp_server_with_empty_credential_is_not_auto_started(monkeypatch):
     monkeypatch.setenv("BRAVE_API_KEY", "from-env")
     assert missing_credentials({"BRAVE_API_KEY": ""}) == []
 
-    from atlas.engine.hermes_runtime import HermesRuntime
+    from atlas.engine.atlas_runtime import AtlasRuntime
 
     monkeypatch.delenv("BRAVE_API_KEY", raising=False)
-    servers = HermesRuntime._adapt_atlas_mcp_servers({
+    servers = AtlasRuntime._adapt_atlas_mcp_servers({
         "brave-search": {"command": "npx", "env": {"BRAVE_API_KEY": ""}},
         "git": {"command": "uvx", "env": {}},
     })
@@ -67,7 +67,7 @@ def test_mcp_server_with_empty_credential_is_not_auto_started(monkeypatch):
 def test_missing_cloud_sandbox_sdk_returns_an_install_hint(monkeypatch):
     import importlib.util
 
-    from atlas.engine_core.tools.environments.remote_common import ensure_lazy_dep
+    from atlas.engine.tools.environments.remote_common import ensure_lazy_dep
 
     monkeypatch.setattr(importlib.util, "find_spec", lambda _name: None)
     with pytest.raises(ImportError, match=r"optional Atlas dependency.*\[daytona\]"):
@@ -75,7 +75,7 @@ def test_missing_cloud_sandbox_sdk_returns_an_install_hint(monkeypatch):
 
 
 def test_browser_tool_uses_an_installed_browser(monkeypatch, tmp_path):
-    from atlas.engine_core.tools import browser_tool_install
+    from atlas.engine.tools import browser_tool_install
 
     browser = tmp_path / "msedge.exe"
     browser.write_bytes(b"")

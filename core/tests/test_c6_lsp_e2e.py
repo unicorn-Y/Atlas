@@ -28,7 +28,7 @@ import pytest
 import pytest_asyncio
 from websockets.asyncio.client import connect
 
-from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_hermes_home
+from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_atlas_home
 
 FAKE_SERVER = Path(__file__).resolve().parent / "fakes" / "fake_lsp_server.py"
 ATLAS_ROOT = Path(__file__).resolve().parents[2]  # git 仓库根（h1 工作区即 checkout 根）
@@ -80,7 +80,7 @@ class IsolatedBackend:
             '[lsp.servers.fake]\ncommand=' + lsp_command + '\nextensions=[".py"]\n',
             encoding="utf-8",
         )
-        write_hermes_home(data / "engine", fake.base_url,
+        write_atlas_home(data / "engine", fake.base_url,
                           extra_config="auxiliary:\n  title_generation:\n    model_upgrade_enabled: false\n")
         env = dict(os.environ)
         for key in list(env):

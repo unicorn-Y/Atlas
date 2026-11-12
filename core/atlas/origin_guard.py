@@ -67,7 +67,10 @@ def is_trusted(
             if not ipaddress.ip_address(client_host).is_loopback:
                 return False
         except ValueError:
-            return False
+            # 对端不是合法 IP（ASGI TestClient 的 "testclient"、UDS/嵌入式代理的对端名）。
+            # 网络层无法判定就退回 Origin/Token 规则，而不是一律拒绝——否则任何非 IP
+            # 对端（含全部 TestClient 请求）都会被判 403，技能等 HTTP 接口整片不可用。
+            pass
     if fetch_site == "same-origin":
         return False
     if origin is None:

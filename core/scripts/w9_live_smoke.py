@@ -35,7 +35,7 @@ def _timeout_and_shell_policy() -> None:
 
 
 def _child_environment_policy() -> None:
-    from atlas.engine_core.tools import child_process_env
+    from atlas.engine.tools import child_process_env
 
     policy = {
         "inherit": "all",

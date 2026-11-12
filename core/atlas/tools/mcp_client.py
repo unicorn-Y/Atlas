@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import os
 import re
 import shutil
@@ -244,7 +245,7 @@ class MCPServerHandle:
     """Runtime state for one connected MCP server."""
 
     name: str
-    transport: str  # "stdio" | "sse"
+    transport: str  # "stdio" | "sse" | "streamable_http"
     session: ClientSession | None = None
     tools: list[ToolInfo] = field(default_factory=list)
     instructions: str = ""
@@ -253,6 +254,9 @@ class MCPServerHandle:
     _owner_stop: asyncio.Event | None = None
     _oauth_context: Any = None
     consecutive_terminal_errors: int = 0
+    stateless: bool = False
+    tool_cache_until: float = 0.0
+    tool_cache_ttl: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -325,7 +329,9 @@ def _parse_server_configs() -> list[MCPServerConfig]:
             resolved_env, missing_env = resolve_mcp_env(env)
             sc = MCPServerConfig(
                 name=str(name),
-                transport=str(data.get("transport", "stdio")),
+                transport=str(data.get(
+                    "transport", "streamable_http" if data.get("url") else "stdio",
+                )),
                 command=str(data.get("command", "")),
                 args=[os.path.expanduser(os.path.expandvars(str(arg))) for arg in args],
                 env=resolved_env,
@@ -449,6 +455,7 @@ class MCPClient:
         self._session_recovery_locks: dict[str, asyncio.Lock] = {}
         self._reconnect_tasks: dict[str, asyncio.Task[Any]] = {}
         self._request_semaphores: dict[str, asyncio.Semaphore] = {}
+        self._tool_cache: dict[str, tuple[float, Any]] = {}
         # A broken optional server must not be spawned repeatedly by repeated
         # discovery/start requests. Keep the last failed config in memory so a
         # config edit bypasses the cooldown without persisting credentials.
@@ -577,17 +584,52 @@ class MCPClient:
                 raise ValueError(f"Unknown transport: {cfg.transport}")
 
             assert handle.session is not None
-            init_result = await asyncio.wait_for(
-                handle.session.initialize(), timeout=_MCP_REQUEST_TIMEOUT_SECONDS,
-            )
-            self._progress(cfg.name, "initializing", "连接已建立，正在初始化协议", cfg.transport)
-            handle.instructions = str(getattr(init_result, "instructions", "") or "")
-            log.info("mcp.server_initialized", server=cfg.name,
-                     protocol=init_result.protocol_version,
-                     server_info=str(init_result.server_info))
+            http_like = cfg.transport in {"streamable_http", "streamable-http", "http"}
+            modern = False
+            if http_like:
+                # Probe the modern stateless protocol first: `server/discover`
+                # is the call that makes the SDK stamp `_meta` and the
+                # `Mcp-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers on
+                # later requests. A server without it answers METHOD_NOT_FOUND
+                # and we fall through to the legacy handshake.
+                try:
+                    discover_result = await asyncio.wait_for(
+                        handle.session.discover(), timeout=_MCP_REQUEST_TIMEOUT_SECONDS,
+                    )
+                    modern = True
+                    handle.stateless = True
+                    log.info("mcp.server_stateless_discovered", server=cfg.name,
+                             versions=str(getattr(discover_result, "supported_versions", "")),
+                             ttl_ms=getattr(discover_result, "ttl_ms", None))
+                except Exception as exc:
+                    log.info("mcp.server_discover_unavailable", server=cfg.name,
+                             reason=type(exc).__name__)
+
+            if not modern:
+                try:
+                    init_result = await asyncio.wait_for(
+                        handle.session.initialize(), timeout=_MCP_REQUEST_TIMEOUT_SECONDS,
+                    )
+                    if not getattr(init_result, "protocol_version", None):
+                        raise ValueError("MCP initialize returned no protocol version")
+                    self._progress(cfg.name, "initializing", "连接已建立，正在初始化协议", cfg.transport)
+                    handle.instructions = str(getattr(init_result, "instructions", "") or "")
+                    log.info("mcp.server_initialized", server=cfg.name,
+                             protocol=init_result.protocol_version,
+                             server_info=str(init_result.server_info))
+                except Exception as exc:
+                    if not http_like:
+                        raise
+                    # Last-resort compatibility: a stateless server that also
+                    # rejects the legacy handshake stays usable, but without the
+                    # modern metadata stamp.
+                    handle.stateless = True
+                    log.info("mcp.server_stateless_fallback", server=cfg.name,
+                             reason=type(exc).__name__)
 
             tools_result = await asyncio.wait_for(
-                handle.session.list_tools(), timeout=_MCP_REQUEST_TIMEOUT_SECONDS,
+                self._list_tools_with_cache(cfg.name, handle),
+                timeout=_MCP_REQUEST_TIMEOUT_SECONDS,
             )
             self._progress(cfg.name, "discovering_tools", "正在读取工具目录", cfg.transport)
             for tool in tools_result.tools:
@@ -612,7 +654,9 @@ class MCPClient:
             self._servers[cfg.name] = handle
             self._server_configs[cfg.name] = cfg
             status.update({
-                "state": "connected", "connected": True,
+                "state": "connected_stateless" if handle.stateless else "connected",
+                "connection_state": "connected_stateless" if handle.stateless else "connected",
+                "connected": True,
                 "tool_discovery": "complete", "tool_count": len(handle.tools),
                 "blocking_reason": None,
             })
@@ -670,7 +714,7 @@ class MCPClient:
         """Set up stdio transport."""
         command, args = _resolve_stdio_command(cfg.command, cfg.args)
         basename = Path(cfg.command).name.lower().removesuffix(".cmd").removesuffix(".exe")
-        from atlas.engine_core.tools.child_process_env import mcp_child_process_env
+        from atlas.engine.tools.child_process_env import mcp_child_process_env
 
         env = mcp_child_process_env(cfg.env)
         runtime = resolve_node_runtime()
@@ -708,12 +752,53 @@ class MCPClient:
         """Set up MCP Streamable HTTP with configured custom or bearer headers."""
         if not cfg.url:
             raise ValueError("Streamable HTTP MCP server requires a URL")
-        from atlas.tools.mcp_oauth import oauth_streamable_transport
-
-        transport_cm = oauth_streamable_transport(
-            cfg.name, cfg.url, cfg.headers or None, scope=cfg.oauth_scope,
+        from contextlib import asynccontextmanager
+        from atlas.tools.mcp_oauth import oauth_provider
+        from mcp.client.streamable_http import (
+            create_mcp_http_client, streamable_http_client,
         )
+
+        # `MCP-Protocol-Version` is stamped per request by the SDK once an era is
+        # adopted: `_make_handshake_stamp` for the legacy handshake, and
+        # `_make_modern_stamp` (version + method + name) for the stateless path.
+        # Setting it here unconditionally would route the `initialize` probe
+        # itself into the modern era and make the fallback unreachable.
+        headers = dict(cfg.headers)
+
+        @asynccontextmanager
+        async def transport():
+            async with oauth_provider(cfg.name, cfg.url, scope=cfg.oauth_scope) as auth:
+                async with create_mcp_http_client(headers=headers, auth=auth) as http_client:
+                    async def cache_hint(response: Any) -> None:
+                        try:
+                            request = json.loads(response.request.content)
+                            if request.get("method") != "tools/list":
+                                return
+                            raw = response.headers.get("MCP-Tool-Cache", "")
+                            match = re.search(r"(?:ttlMs\s*[=:]\s*)?(\d+(?:\.\d+)?)", raw)
+                            handle.tool_cache_ttl = float(match.group(1)) / 1000 if match else 0.0
+                        except (TypeError, ValueError, json.JSONDecodeError):
+                            handle.tool_cache_ttl = 0.0
+
+                    http_client.event_hooks["response"].append(cache_hint)
+                    async with streamable_http_client(cfg.url, http_client=http_client) as streams:
+                        yield streams
+
+        transport_cm = transport()
         await self._start_transport_owner(handle, transport_cm)
+
+    async def _list_tools_with_cache(self, server_name: str,
+                                    handle: MCPServerHandle) -> Any:
+        """Use the advertised MCP-Tool-Cache ttlMs when a server supplies it."""
+        now = asyncio.get_running_loop().time()
+        cached = self._tool_cache.get(server_name)
+        if cached and cached[0] > now:
+            return cached[1]
+        result = await handle.session.list_tools()
+        ttl = max(0.0, handle.tool_cache_ttl)
+        if ttl:
+            self._tool_cache[server_name] = (now + ttl, result)
+        return result
 
     async def _monitor_connection(self, cfg: MCPServerConfig, handle: MCPServerHandle) -> None:
         """Reconnect a dropped connection with bounded exponential backoff."""
@@ -824,7 +909,8 @@ class MCPClient:
             if self._servers.get(server_name) is not handle or handle.session is None:
                 return
             try:
-                result = await handle.session.list_tools()
+                self._tool_cache.pop(server_name, None)
+                result = await self._list_tools_with_cache(server_name, handle)
                 refreshed: list[ToolInfo] = []
                 for tool in result.tools:
                     config = self._server_configs.get(server_name)
@@ -950,7 +1036,7 @@ class MCPClient:
             )
             handle.consecutive_terminal_errors = 0
 
-            from atlas.engine_core.tools.tool_output_limits import get_max_bytes
+            from atlas.engine.tools.tool_output_limits import get_max_bytes
 
             content_blocks = []
             remaining = max(1, get_max_bytes())
@@ -1166,7 +1252,7 @@ class MCPClient:
                     timeout=_MCP_REQUEST_TIMEOUT_SECONDS,
                 )
             contents = []
-            from atlas.engine_core.tools.tool_output_limits import get_max_bytes
+            from atlas.engine.tools.tool_output_limits import get_max_bytes
 
             remaining = max(1, get_max_bytes())
             for item in response.contents:

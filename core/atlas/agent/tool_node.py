@@ -1,4 +1,4 @@
-"""Atlas tool execution node for Hermes tool-call turns.
+"""Atlas tool execution node for Atlas engine tool-call turns.
 
 H2.2 module split: the tool-call execution loop used to live on
 ``AgentOrchestrator._execute_tools_node``; the orchestrator keeps a thin
@@ -18,6 +18,7 @@ import re
 import tempfile
 import time
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -32,6 +33,7 @@ from atlas.agent.results import (
 )
 from atlas.agent.verification_stop import is_verification_command, requires_verification
 from atlas.checks import parse_test_summary, run_checks
+from atlas import libreoffice
 from atlas.office import (
     create_document,
     create_presentation,
@@ -53,6 +55,58 @@ if TYPE_CHECKING:
     from atlas.agent import ToolExecutionState
 
 log = structlog.get_logger()
+
+
+def _record_tool_trace(ctx, tc_id: str, fn_name: str, fn_args: dict[str, Any],
+                       result: dict[str, Any], started_at: str,
+                       started_mono: float) -> None:
+    """Persist one tool-call trace row, attributed to this run.
+
+    ``run_id`` is the same key the model-request traces use, so a run can be
+    read back with its model requests and tool calls on one timeline. Only
+    observable facts are stored: which tool, how long, whether it errored, and
+    how many characters went in and out. Argument and result text is never
+    written here — that already lives in the run log, and traces must stay
+    cheap and free of anything a tool happened to touch.
+    """
+    from atlas import diagnostic_store
+
+    try:
+        arguments_chars = len(json.dumps(fn_args, ensure_ascii=False, default=str))
+    except Exception:  # noqa: BLE001 - exotic args must not break the trace
+        arguments_chars = 0
+    result_chars = 0
+    error_text = ""
+    content = result.get("content")
+    if isinstance(content, list):
+        for part in content:
+            if isinstance(part, dict):
+                text = str(part.get("text") or "")
+                result_chars += len(text)
+                if text:
+                    error_text = text
+    is_error = bool(result.get("is_error", False))
+    if not error_text and is_error:
+        error_text = str(result.get("data"))
+    tool_name = str(fn_name)
+    diagnostic_store.record_tool_call(
+        call_id=tc_id, run_id=str(getattr(ctx, "run_id", "") or ""),
+        tool_name=tool_name, family=_tool_family(tool_name),
+        tier=str(getattr(ctx, "tool_tier", "") or ""), started_at=started_at,
+        arguments_chars=arguments_chars,
+    )
+    diagnostic_store.finish_tool_call(
+        tc_id, duration_ms=int((time.monotonic() - started_mono) * 1000),
+        is_error=is_error, result_chars=result_chars,
+        error_detail=(error_text[:600] if is_error else None),
+    )
+
+
+def _tool_family(name: str) -> str:
+    """Coarse family label used for grouping traces (``local_*``, MCP server, ...)."""
+    if "__" in name:
+        return name.split("__", 1)[0][:80]
+    return name.split("_", 1)[0][:80] if "_" in name else name[:80]
 
 
 def _approval_denial_reason(choice: Any, fallback: str) -> str:
@@ -159,6 +213,8 @@ async def execute_tools_node(
         fn_name = tc["name"]
         fn_args = tc["args"]
         tc_id = tc["id"]
+        call_started_at = datetime.now(UTC).isoformat(timespec="milliseconds")
+        call_started_mono = time.monotonic()
         if ctx.cancel_event and ctx.cancel_event.is_set():
             # Every provider tool call must receive one result, even when the
             # user cancels between calls. Otherwise the next turn persists an
@@ -295,6 +351,8 @@ async def execute_tools_node(
         is_write = (fn_name in ({"TaskStop", "local_edit", "local_edit_batch", "local_shell", "local_exec", "execute_command",
                                 "run_script", "create_document", "create_spreadsheet",
                                 "create_presentation",
+                                # These write files next to the source document.
+                                "export_pdf", "office_recalculate", "office_render",
                                 # These run project scripts or hand work to sub-agents that can change files.
                                 "run_checks", "execute_code", "delegate_task", "delegate_parallel",
                                 "project_note", "create_checkpoint", "restore_checkpoint",
@@ -316,7 +374,7 @@ async def execute_tools_node(
                         "add", "commit", "pull", "fetch", "push",
                     }))
         # MCP tools are write-capable unless the server annotated them readOnlyHint=True
-        # (Hermes rule: unknown = may modify state), so ask_writes and the reviewer see them.
+        # (engine rule: unknown = may modify state), so ask_writes and the reviewer see them.
         mcp_info = agent._mcp.get_tool(fn_name) if agent._mcp else None
         is_mcp_write = mcp_info is not None and not getattr(mcp_info, "read_only", False)
         is_write = is_write or is_mcp_write
@@ -325,8 +383,8 @@ async def execute_tools_node(
             from atlas.engine.tool_registry import _approval_fingerprint
 
             fingerprint = _approval_fingerprint(fn_name, fn_args)
-            if fingerprint in getattr(ctx, "hermes_preapproved_writes", set()):
-                ctx.hermes_preapproved_writes.discard(fingerprint)
+            if fingerprint in getattr(ctx, "atlas_preapproved_writes", set()):
+                ctx.atlas_preapproved_writes.discard(fingerprint)
                 choice = "allow"
             else:
                 hook_permission = await run_user_hook(
@@ -1289,6 +1347,55 @@ async def execute_tools_node(
                     )}],
                     "is_error": False,
                 }
+            elif fn_name in {"export_pdf", "office_recalculate", "office_render"}:
+                # All three hand a real file to LibreOffice, so they need a local
+                # path; SSH workspaces would export on the remote host and the
+                # artifact would not land in this workspace.
+                if not workspace:
+                    raise ValueError("需要先为当前对话选择工作目录。")
+                if workspace.startswith("ssh://"):
+                    raise ValueError(
+                        "PDF 导出/重算/渲染需要本地工作目录；远程工作区请先同步文件。",
+                    )
+                target = Path(str(fn_args["path"]))
+                if not target.is_absolute():
+                    target = Path(workspace) / target
+                target = target.resolve()
+                if not target.is_file():
+                    raise ValueError(f"文件不存在：{target}")
+                out_dir = fn_args.get("out_dir")
+                out_path = str(Path(workspace) / str(out_dir)) if out_dir else None
+                if fn_name == "export_pdf":
+                    office_result = libreoffice.export_pdf(str(target), out_dir=out_path)
+                elif fn_name == "office_recalculate":
+                    office_result = libreoffice.recalculate(str(target), out_dir=out_path)
+                else:
+                    office_result = libreoffice.render(
+                        str(target), page=int(fn_args.get("page") or 1), out_dir=out_path,
+                    )
+                if not office_result.get("ok"):
+                    result = {
+                        "data": office_result,
+                        "content": [{"type": "text", "text": json.dumps(
+                            office_result, ensure_ascii=False,
+                        )}],
+                        "is_error": True,
+                    }
+                else:
+                    result = {
+                        "data": office_result,
+                        "content": [{"type": "text", "text": json.dumps(
+                            office_result, ensure_ascii=False,
+                        )}],
+                        "is_error": False,
+                    }
+                    if fn_name != "office_render":
+                        await ctx.event_queue.put({
+                            "type": "artifact_created",
+                            "path": str(office_result["path"]),
+                            "kind": "document",
+                            "tool": fn_name,
+                        })
             elif fn_name == "goal_subgoal":
                 conversation_id = str(getattr(ctx, "conversation_id", "") or "").strip()
                 if not conversation_id:
@@ -1670,6 +1777,15 @@ async def execute_tools_node(
                 "type": "text", "text": "" if content is None else str(content),
             }]
         result["is_error"] = bool(result.get("is_error", False))
+
+        # One tool-call trace row per dispatch, sharing ``run_id`` with the model
+        # request traces so a run reads back end to end. Best effort: tracing must
+        # never become a reason a tool call fails.
+        try:
+            _record_tool_trace(ctx, str(tc_id), fn_name, fn_args, result,
+                               call_started_at, call_started_mono)
+        except Exception:  # noqa: BLE001 - diagnostics are never load-bearing
+            log.debug("agent.tool_trace_failed", tool=fn_name, exc_info=True)
 
         if (fn_name == "local_file" and fn_args.get("action") == "read"
                 and not fn_args.get("binary") and isinstance(result.get("data"), dict)

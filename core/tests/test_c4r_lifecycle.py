@@ -24,8 +24,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from atlas import server
-from atlas.engine import HermesRuntime
-from atlas.engine.hermes_runtime import _fire_lifecycle_hook
+from atlas.engine import AtlasRuntime
+from atlas.engine.atlas_runtime import _fire_lifecycle_hook
 from atlas.memory import MemoryStore
 from atlas.runtime.hooks import HookStore
 
@@ -90,7 +90,7 @@ async def test_precompact_blocks_manual_compact_via_shared_store(tmp_path: Path)
     ))
     _write_project_hooks(tmp_path, "PreCompact", sys.executable, [str(script)])
     store = _store(tmp_path)
-    runtime = HermesRuntime(data_dir=tmp_path / "data", model_manager=MagicMock())
+    runtime = AtlasRuntime(data_dir=tmp_path / "data", model_manager=MagicMock())
 
     result = await runtime.compact_session(
         conversation_id="c1", workspace=str(tmp_path), hook_store=store,
@@ -107,7 +107,7 @@ async def test_precompact_blocks_manual_compact_via_shared_store(tmp_path: Path)
 async def test_manual_compact_fires_postcompact_with_payload(tmp_path: Path) -> None:
     script = _dump_payload_hook(tmp_path, "postcompact")
     _write_project_hooks(tmp_path, "PostCompact", sys.executable, [str(script)])
-    runtime = HermesRuntime(data_dir=tmp_path / "data", model_manager=MagicMock())
+    runtime = AtlasRuntime(data_dir=tmp_path / "data", model_manager=MagicMock())
     runtime._compact_session_sync = lambda *args, **kwargs: {  # type: ignore[method-assign]
         "compressed": True, "before_tokens": 100, "after_tokens": 40, "summary": "s",
     }
@@ -129,7 +129,7 @@ async def test_manual_compact_fires_postcompact_with_payload(tmp_path: Path) -> 
 async def test_manual_compact_empty_session_skips_postcompact(tmp_path: Path) -> None:
     script = _dump_payload_hook(tmp_path, "postcompact")
     _write_project_hooks(tmp_path, "PostCompact", sys.executable, [str(script)])
-    runtime = HermesRuntime(data_dir=tmp_path / "data", model_manager=MagicMock())
+    runtime = AtlasRuntime(data_dir=tmp_path / "data", model_manager=MagicMock())
     runtime._compact_session_sync = lambda *args, **kwargs: {  # type: ignore[method-assign]
         "compressed": False, "reason": "empty_session", "summary": "",
     }

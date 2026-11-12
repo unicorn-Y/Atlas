@@ -11,10 +11,10 @@ import zlib
 import pytest
 
 from atlas.agent import AgentOrchestrator
-from atlas.engine.hermes_runtime import HermesRuntime
+from atlas.engine.atlas_runtime import AtlasRuntime
 from atlas.memory import MemoryStore
 from atlas.tools.local_execution import LocalExecutionRuntime
-from tests.fakes.fake_llm_provider import Error, FakeLLMServer, StallMidStream, Text, write_hermes_home
+from tests.fakes.fake_llm_provider import Error, FakeLLMServer, StallMidStream, Text, write_atlas_home
 
 
 def _tiny_png_data_url():
@@ -44,13 +44,13 @@ def _models(fake, models, current="parent-model"):
 async def test_parallel_runs_keep_model_snapshots_without_changing_selection(tmp_path, monkeypatch):
     with FakeLLMServer(default_text="model response") as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         models = _models(fake, [
             {"id": "parent-model", "litellm_model": "openai/parent-model"},
             {"id": "worker-model", "litellm_model": "openai/worker-model"},
         ])
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models)
 
         async def run(model_id, conversation_id):
             return [event async for event in runtime.run_turn(
@@ -77,7 +77,7 @@ async def test_worker_done_event_reports_requested_model_without_mutating_select
 
         data_root = tmp_path / "atlas-data"
         home = data_root / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         monkeypatch.setattr("atlas.config.get_config", lambda: FixtureConfig({
             "tools.servers": {}, "tools.auto_start": [],
@@ -115,7 +115,7 @@ async def test_worker_done_event_reports_requested_model_without_mutating_select
 
 
 @pytest.mark.asyncio
-async def test_durable_process_notice_is_visible_to_next_hermes_turn(tmp_path, monkeypatch):
+async def test_durable_process_notice_is_visible_to_next_atlas_turn(tmp_path, monkeypatch):
     from atlas.engine.notifications import consume_notifications, publish_notification
 
     with FakeLLMServer([Text("continued from notice")]) as fake:
@@ -124,7 +124,7 @@ async def test_durable_process_notice_is_visible_to_next_hermes_turn(tmp_path, m
 
         data_root = tmp_path / "atlas-data"
         home = data_root / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         monkeypatch.setattr("atlas.config.get_config", lambda: FixtureConfig({
             "tools.servers": {}, "tools.auto_start": [],
@@ -173,11 +173,11 @@ async def test_durable_process_notice_is_visible_to_next_hermes_turn(tmp_path, m
 
 
 @pytest.mark.asyncio
-async def test_real_hermes_request_includes_transient_image_content(tmp_path, monkeypatch):
+async def test_real_atlas_request_includes_transient_image_content(tmp_path, monkeypatch):
     with FakeLLMServer([Text("image received")]) as fake:
         data_root = tmp_path / "atlas-data"
         home = data_root / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         config_path = home / "config.yaml"
         config = config_path.read_text(encoding="utf-8")
         config = config.replace("model:\n", "model:\n  supports_vision: true\n", 1)
@@ -220,7 +220,7 @@ async def test_real_hermes_request_includes_transient_image_content(tmp_path, mo
         local = LocalExecutionRuntime()
         agent = AgentOrchestrator(models, memory, mcp_client=mcp, local_execution=local)
         prepared = []
-        original_factory_method = HermesRuntime._agent_factory
+        original_factory_method = AtlasRuntime._agent_factory
 
         def capture_factory(runtime):
             base_factory = original_factory_method(runtime)
@@ -243,7 +243,7 @@ async def test_real_hermes_request_includes_transient_image_content(tmp_path, mo
 
             return construct
 
-        monkeypatch.setattr(HermesRuntime, "_agent_factory", capture_factory)
+        monkeypatch.setattr(AtlasRuntime, "_agent_factory", capture_factory)
         try:
             events = [event async for event in agent.run(
                 "What is in this image?", conversation_id,
@@ -274,12 +274,12 @@ async def test_real_hermes_request_includes_transient_image_content(tmp_path, mo
 async def test_real_sdk_stream_timeout_retries_through_fake_http_service(tmp_path, monkeypatch):
     with FakeLLMServer([StallMidStream(seconds=1.0)], default_text="recovered after timeout") as fake:
         home = tmp_path / "engine"
-        write_hermes_home(
+        write_atlas_home(
             home, fake.base_url,
             extra_config="providers:\n  openai:\n    request_timeout_seconds: 0.2\n",
         )
         monkeypatch.setenv("HERMES_HOME", str(home))
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=_models(fake, [
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=_models(fake, [
             {"id": "parent-model", "litellm_model": "openai/parent-model"},
         ]))
 
@@ -299,7 +299,7 @@ async def test_provider_context_overflow_recovers_and_continues(tmp_path, monkey
         Text("continued after provider overflow"),
     ]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(
+        write_atlas_home(
             home, fake.base_url, context_length=512,
             extra_config=(
                 "auxiliary:\n"
@@ -311,7 +311,7 @@ async def test_provider_context_overflow_recovers_and_continues(tmp_path, monkey
             ),
         )
         monkeypatch.setenv("HERMES_HOME", str(home))
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=_models(fake, [
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=_models(fake, [
             {"id": "parent-model", "litellm_model": "openai/parent-model"},
         ]))
 
@@ -336,9 +336,9 @@ async def test_fallback_request_uses_configured_model_identity(tmp_path, monkeyp
         Text("fallback model response"),
     ]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=_models(fake, [
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=_models(fake, [
             {
                 "id": "parent-model", "litellm_model": "openai/parent-model",
                 "fallback": [{

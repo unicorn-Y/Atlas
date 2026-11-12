@@ -87,7 +87,7 @@ def terminal_env(name: str, default: str = "") -> str:
 
 
 def build_profile_terminal_scope(
-    hermes_home: Any, *, env_overlay: Optional[dict[str, str]] = None) -> dict[str, str]:
+    atlas_home: Any, *, env_overlay: Optional[dict[str, str]] = None) -> dict[str, str]:
     """Build the COMPLETE effective ``TERMINAL_*`` policy for a profile home.
 
     Projection: ``DEFAULT_CONFIG['terminal']`` <- profile ``.env`` TERMINAL_* <- *env_overlay*
@@ -102,9 +102,9 @@ def build_profile_terminal_scope(
     closes. It sits where the process env sits in the standalone bridge — explicit YAML keys
     still win (``apply_terminal_config_to_env``).
     """
-    from atlas.engine_core.config import DEFAULT_CONFIG, TERMINAL_CONFIG_ENV_MAP, _terminal_env_value
+    from atlas.engine.config import DEFAULT_CONFIG, TERMINAL_CONFIG_ENV_MAP, _terminal_env_value
 
-    home = Path(hermes_home)
+    home = Path(atlas_home)
     scope: dict[str, str] = {}
 
     def _apply(mapping: dict[str, Any]) -> None:
@@ -129,7 +129,7 @@ def build_profile_terminal_scope(
             env_path.read_bytes()
         except Exception as exc:
             raise TerminalPolicyUnavailable(f"cannot read {env_path}: {exc}") from exc
-        from atlas.engine_core.agent.secret_scope import load_env_file
+        from atlas.engine.agent.secret_scope import load_env_file
 
         profile_env = load_env_file(env_path)
         scope.update((k, str(v)) for k, v in profile_env.items() if k.startswith("TERMINAL_"))
@@ -154,7 +154,7 @@ def build_profile_terminal_scope(
     except Exception as exc:
         raise TerminalPolicyUnavailable(f"cannot resolve terminal config in {home}: {exc}") from exc
     if config_exists:
-        from atlas.engine_core.utils import load_yaml_file_readonly
+        from atlas.engine.utils import load_yaml_file_readonly
 
         try:
             # Signature-cached: a scope is rebuilt per routed turn/poll, the file rarely changes.
@@ -195,19 +195,19 @@ def _resolve_scope_cwd_placeholder(scope: dict[str, str]) -> None:
 
 
 def install_profile_terminal_scope(
-    hermes_home: Any, *, env_overlay: Optional[dict[str, str]] = None) -> Token:
+    atlas_home: Any, *, env_overlay: Optional[dict[str, str]] = None) -> Token:
     """Build AND install a profile's policy; on failure install the refusal scope. Never raises."""
     try:
-        return set_terminal_scope(build_profile_terminal_scope(hermes_home, env_overlay=env_overlay))
+        return set_terminal_scope(build_profile_terminal_scope(atlas_home, env_overlay=env_overlay))
     except TerminalPolicyUnavailable as exc:
         logger.warning("terminal policy unavailable: %s", exc)
         return _terminal_scope_var.set(TerminalPolicyRefusal(str(exc)))
 
 
 @contextmanager
-def install_and_reset_profile_terminal_scope(hermes_home: Any) -> Iterator[None]:
+def install_and_reset_profile_terminal_scope(atlas_home: Any) -> Iterator[None]:
     """Install the profile's terminal policy for a bounded turn/fire. Never raises."""
-    token = install_profile_terminal_scope(hermes_home)
+    token = install_profile_terminal_scope(atlas_home)
     try:
         yield
     finally:

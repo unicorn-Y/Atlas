@@ -53,7 +53,7 @@ async def main() -> None:
         extension_dir = root / "browser-extension"
         extension_dir.mkdir()
         (extension_dir / "manifest.json").write_text(json.dumps({"manifest_version": 3, "version": "19.0.0"}), encoding="utf-8")
-        from atlas.engine_core.tools import browser_extension_bridge
+        from atlas.engine.tools import browser_extension_bridge
         from atlas.tools.x2 import browser as browser_settings
         with patch.object(browser_settings, "get_browser_settings", return_value={"mode": "extension"}), \
                 patch.object(browser_extension_bridge, "connection_info", return_value={

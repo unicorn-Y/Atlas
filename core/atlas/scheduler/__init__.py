@@ -182,7 +182,7 @@ def _load_tasks_from_toml(path: Path) -> dict[str, ScheduledTask]:
     tasks: dict[str, ScheduledTask] = {}
     for task_id, task_data in data.get("tasks", {}).items():
         task_data["id"] = task_id
-        # Keep only the minimum legacy state needed to import into Hermes once.
+        # Keep only the minimum legacy state needed to import into the engine once.
         task_data["legacy_goal_status"] = task_data.pop("goal_status", "")
         progress = task_data.pop("goal_progress", None)
         serialized_progress = task_data.pop("goal_progress_json", None)

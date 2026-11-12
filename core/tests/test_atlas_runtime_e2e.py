@@ -11,8 +11,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from tests.fakes.fake_llm_provider import Error, FakeLLMServer, Hang, Text, ToolCall, write_hermes_home
-from atlas.engine.hermes_runtime import HermesRuntime
+from tests.fakes.fake_llm_provider import Error, FakeLLMServer, Hang, Text, ToolCall, write_atlas_home
+from atlas.engine.atlas_runtime import AtlasRuntime
 from atlas.agent import AgentOrchestrator, AgentRunContext
 from atlas.models.router import ModelRouter
 from atlas.tools.local_execution import LocalExecutionRuntime
@@ -30,25 +30,25 @@ async def test_notification_read_failure_is_visible_and_does_not_stop_turn(
     tmp_path, monkeypatch, caplog,
 ):
     from atlas.engine import notifications
-    import atlas.engine.hermes_policy as hermes_policy
+    import atlas.engine.atlas_policy as atlas_policy
     import atlas.engine.tool_registry as tool_registry
 
     async def fail_read(_conversation_id):
         raise OSError("notification db unavailable")
 
     monkeypatch.setattr(notifications, "consume_notifications", fail_read)
-    monkeypatch.setattr(hermes_policy, "install_atlas_policy_plugin", lambda: None)
+    monkeypatch.setattr(atlas_policy, "install_atlas_policy_plugin", lambda: None)
     monkeypatch.setattr(tool_registry, "bind_atlas_tools", lambda *_args: None)
     with FakeLLMServer([Text("turn completed")]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         manager = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",
             gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
             list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
         monkeypatch.setattr(runtime, "_ensure_atlas_mcp_registered", lambda: [])
         events = [event async for event in runtime.run_turn(
             message="continue despite notification failure", conversation_id="notice-failure",
@@ -58,7 +58,7 @@ async def test_notification_read_failure_is_visible_and_does_not_stop_turn(
             ),
         )]
 
-    assert events[-1]["type"] == "hermes.result"
+    assert events[-1]["type"] == "atlas.result"
     notices = [event for event in events if event.get("type") == "run.recovery.notice"]
     assert any("通知读取失败" in event["data"]["message"] for event in notices)
     assert "notification db unavailable" in caplog.text
@@ -79,14 +79,14 @@ async def test_budget_hook_exception_blocks_provider_http(tmp_path, monkeypatch)
     monkeypatch.setattr(RunUsageBudget, "reserve", fail_reserve)
     with FakeLLMServer([Text("must not be requested")]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         manager = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",
             gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
             list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
         events = [event async for event in runtime.run_turn(
             message="reservation failure must stop before HTTP", conversation_id="budget-hook-error",
             workspace=str(tmp_path), history=[],
@@ -94,7 +94,7 @@ async def test_budget_hook_exception_blocks_provider_http(tmp_path, monkeypatch)
         await runtime.aclose()
 
     assert fake.main_requests() == []
-    assert events[-1]["type"] == "hermes.result"
+    assert events[-1]["type"] == "atlas.result"
 
 
 @pytest.mark.asyncio
@@ -105,14 +105,14 @@ async def test_budget_unknown_usage_disables_retries_and_audits_one_send(tmp_pat
     monkeypatch.setenv("ATLAS_RUN_USAGE_AUDIT_FILE", str(audit_path))
     with FakeLLMServer([Error(500, "scripted unknown usage")]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         manager = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",
             gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
             list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
         events = [event async for event in runtime.run_turn(
             message="provider error has unknown usage", conversation_id="budget-unknown",
             workspace=str(tmp_path), history=[],
@@ -126,7 +126,7 @@ async def test_budget_unknown_usage_disables_retries_and_audits_one_send(tmp_pat
     assert len(rows) == 1
     assert rows[0]["usage_available"] is False
     assert rows[0]["budget_usage_unknown"] is True
-    assert events[-1]["type"] == "hermes.result"
+    assert events[-1]["type"] == "atlas.result"
 
 
 @pytest.mark.asyncio
@@ -148,14 +148,14 @@ async def test_stream_fault_budget_disables_hidden_retry_only_when_opted_in(
     monkeypatch.setenv("HERMES_STREAM_RETRIES", "1")
     with FakeLLMServer([Hang(seconds=0.1), Text("retry reached")]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         manager = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",
             gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
             list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
         events = [event async for event in runtime.run_turn(
             message="exercise stream retry policy", conversation_id=f"stream-budget-{budgeted}",
             workspace=str(tmp_path), history=[],
@@ -163,7 +163,7 @@ async def test_stream_fault_budget_disables_hidden_retry_only_when_opted_in(
         await runtime.aclose()
 
     assert len(fake.main_requests()) == expected_requests
-    assert events[-1]["type"] == "hermes.result"
+    assert events[-1]["type"] == "atlas.result"
     if budgeted:
         import json
 
@@ -195,14 +195,14 @@ async def test_stream_options_compat_retry_is_budgeted_only_when_opted_in(
         Text("compatibility retry reached"),
     ]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         manager = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",
             gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
             list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
         events = [event async for event in runtime.run_turn(
             message="exercise stream_options compatibility retry",
             conversation_id=f"stream-options-budget-{budgeted}",
@@ -213,7 +213,7 @@ async def test_stream_options_compat_retry_is_budgeted_only_when_opted_in(
     requests = fake.main_requests()
     assert len(requests) == expected_requests
     assert "stream_options" in requests[0]
-    assert events[-1]["type"] == "hermes.result"
+    assert events[-1]["type"] == "atlas.result"
     if budgeted:
         import json
 
@@ -234,7 +234,7 @@ async def test_run_usage_reports_every_provider_request_without_accumulating_con
         Text("done", prompt_tokens=400, completion_tokens=30, cached_tokens=40),
     ]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url, extra_config=(
+        write_atlas_home(home, fake.base_url, extra_config=(
             "auxiliary:\n"
             "  title_generation:\n"
             "    enabled: false\n"
@@ -245,7 +245,7 @@ async def test_run_usage_reports_every_provider_request_without_accumulating_con
             gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
             list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models)
         events = []
         for message in ("run step one", "run step two"):
             events.extend([event async for event in runtime.run_turn(
@@ -279,7 +279,7 @@ async def test_run_usage_reports_every_provider_request_without_accumulating_con
 
 
 @pytest.mark.asyncio
-async def test_real_hermes_agent_uses_fake_service_and_sessiondb_across_turns(
+async def test_real_atlas_agent_uses_fake_service_and_sessiondb_across_turns(
     tmp_path, monkeypatch,
 ):
     with FakeLLMServer([
@@ -289,7 +289,7 @@ async def test_real_hermes_agent_uses_fake_service_and_sessiondb_across_turns(
     ]) as fake:
         home = tmp_path / "engine"
         (tmp_path / "fixture.txt").write_text("fake file content", encoding="utf-8")
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         models = SimpleNamespace(
             current_model="fake-model",
@@ -298,7 +298,7 @@ async def test_real_hermes_agent_uses_fake_service_and_sessiondb_across_turns(
             _api_key="sk-fake-e2e",
             list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models)
 
         first = [event async for event in runtime.run_turn(
             message="first question", conversation_id="e2e-session", workspace=str(tmp_path),
@@ -343,7 +343,7 @@ async def test_real_hermes_agent_uses_fake_service_and_sessiondb_across_turns(
 
 
 @pytest.mark.asyncio
-async def test_real_hermes_agent_completes_more_than_ten_tool_rounds(tmp_path, monkeypatch):
+async def test_real_atlas_agent_completes_more_than_ten_tool_rounds(tmp_path, monkeypatch):
     script = []
     for index in range(11):
         script.append(ToolCall("read_file", {"path": str(tmp_path / f"{index}.txt")}))
@@ -353,14 +353,14 @@ async def test_real_hermes_agent_completes_more_than_ten_tool_rounds(tmp_path, m
 
     with FakeLLMServer(script) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         models = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",
             gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
             list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models)
         events = [event async for event in runtime.run_turn(
             message="read all fixtures", conversation_id="many-tools", workspace=str(tmp_path),
             history=[], enabled_toolsets=["file"],
@@ -374,10 +374,10 @@ async def test_real_hermes_agent_completes_more_than_ten_tool_rounds(tmp_path, m
 
 
 @pytest.mark.asyncio
-async def test_real_manual_compression_uses_hermes_and_session_continues(tmp_path, monkeypatch):
+async def test_real_manual_compression_uses_atlas_and_session_continues(tmp_path, monkeypatch):
     with FakeLLMServer([Text("done")], default_text="continued after compaction") as fake:
         home = tmp_path / "engine"
-        write_hermes_home(
+        write_atlas_home(
             home, fake.base_url,
             extra_config=(
                 "auxiliary:\n"
@@ -395,7 +395,7 @@ async def test_real_manual_compression_uses_hermes_and_session_continues(tmp_pat
             gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
             list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models)
         conversation_id = "manual-compression"
         for index in range(24):
             [event async for event in runtime.run_turn(
@@ -424,7 +424,7 @@ async def test_manual_compression_uses_prefixed_routes_wire_models_without_gatew
     with FakeLLMServer([Text("done") for _ in range(24)], api_key="sk-main") as main_fake, \
             FakeLLMServer(api_key="sk-compression") as compression_fake:
         home = tmp_path / "engine"
-        write_hermes_home(
+        write_atlas_home(
             home, main_fake.base_url,
             extra_config=(
                 "auxiliary:\n"
@@ -451,7 +451,7 @@ async def test_manual_compression_uses_prefixed_routes_wire_models_without_gatew
         manager.resolve_api_key = lambda provider: "sk-compression" if provider == "compression-fixture" else "sk-main"
         manager.gateway_base_url = ""
         manager.gateway_api_key = ""
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
 
         conversation_id = "prefixed-independent-compression"
         for index in range(24):
@@ -500,13 +500,13 @@ async def test_manual_compression_succeeds_with_native_only_model_configuration(
         api_key="sk-native-secret", anthropic_messages=True,
     ) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         monkeypatch.setattr("atlas.config.load_user_settings", lambda: {})
         manager = _NativeAnthropicManager(fake.base_url)
         assert manager.gateway_base_url == ""
         manager.model_router = ModelRouter(manager)
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=manager)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=manager)
 
         conversation_id = "native-manual-compact"
         for index in range(24):
@@ -514,7 +514,7 @@ async def test_manual_compression_succeeds_with_native_only_model_configuration(
                 message=f"native item {index}: " + ("retain these details " * 600),
                 conversation_id=conversation_id, workspace=str(tmp_path), history=[],
             )]
-        assert events[-1]["type"] == "hermes.result"
+        assert events[-1]["type"] == "atlas.result"
         compressed = await runtime.compact_session(
             conversation_id=conversation_id, workspace=str(tmp_path),
         )
@@ -526,7 +526,7 @@ async def test_manual_compression_succeeds_with_native_only_model_configuration(
 
 
 def test_runtime_request_models_never_use_litellm_model_directly():
-    source = Path(HermesRuntime.__module__.replace(".", "/") + ".py")
+    source = Path(AtlasRuntime.__module__.replace(".", "/") + ".py")
     if not source.is_absolute():
         source = Path(__file__).resolve().parents[1] / "atlas" / "engine" / "hermes_runtime.py"
     tree = ast.parse(source.read_text(encoding="utf-8"))
@@ -563,7 +563,7 @@ async def test_small_context_auto_compresses_and_keeps_active_todo(tmp_path, mon
         prompt_tokens_fn=lambda body: len(json.dumps(body, ensure_ascii=False)) // 5,
     ) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(
+        write_atlas_home(
             home, fake.base_url,
             extra_config=(
                 "auxiliary:\n"
@@ -581,7 +581,7 @@ async def test_small_context_auto_compresses_and_keeps_active_todo(tmp_path, mon
             gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
             list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models)
         original_factory = runtime._agent_factory
 
         def agent_factory():
@@ -639,7 +639,7 @@ async def test_small_context_auto_compresses_and_keeps_active_todo(tmp_path, mon
 
 
 @pytest.mark.asyncio
-async def test_real_hermes_file_tools_preserve_lf_and_crlf(tmp_path, monkeypatch):
+async def test_real_atlas_file_tools_preserve_lf_and_crlf(tmp_path, monkeypatch):
     lf_path = tmp_path / "lf.txt"
     crlf_path = tmp_path / "crlf.txt"
     lf_path.write_bytes(b"one\ntwo\n")
@@ -653,14 +653,14 @@ async def test_real_hermes_file_tools_preserve_lf_and_crlf(tmp_path, monkeypatch
         Text("crlf edited"),
     ]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         models = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",
             gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
             list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models)
         for index, message in enumerate(("edit lf", "edit crlf")):
             events = [event async for event in runtime.run_turn(
                 message=message, conversation_id=f"line-endings-{index}",
@@ -672,7 +672,7 @@ async def test_real_hermes_file_tools_preserve_lf_and_crlf(tmp_path, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_hermes_policy_plugin_enforces_read_only_approval_and_workspace(tmp_path, monkeypatch):
+async def test_atlas_policy_plugin_enforces_read_only_approval_and_workspace(tmp_path, monkeypatch):
     _disable_external_mcp(monkeypatch)
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -694,7 +694,7 @@ async def test_hermes_policy_plugin_enforces_read_only_approval_and_workspace(tm
         ])
     with FakeLLMServer(script) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         models = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",
@@ -708,7 +708,7 @@ async def test_hermes_policy_plugin_enforces_read_only_approval_and_workspace(tm
         agent = AgentOrchestrator(
             models, MagicMock(), mcp_client=mcp, local_execution=LocalExecutionRuntime(),
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models)
         approval_calls = []
         hook_calls = []
 
@@ -737,7 +737,7 @@ async def test_hermes_policy_plugin_enforces_read_only_approval_and_workspace(tm
 
 
 @pytest.mark.asyncio
-async def test_write_snapshot_and_rewind_restore_file_and_hermes_session(tmp_path, monkeypatch):
+async def test_write_snapshot_and_rewind_restore_file_and_atlas_session(tmp_path, monkeypatch):
     _disable_external_mcp(monkeypatch)
     from atlas.engine.session_sync import rewind_user_turn
 
@@ -749,7 +749,7 @@ async def test_write_snapshot_and_rewind_restore_file_and_hermes_session(tmp_pat
         Text("file created"),
     ]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         models = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",
@@ -767,7 +767,7 @@ async def test_write_snapshot_and_rewind_restore_file_and_hermes_session(tmp_pat
             cancel_event=asyncio.Event(), run_id="rewind-run", conversation_id="rewind-session",
             workspace=str(workspace), permission_mode="full_access",
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models)
         events = [event async for event in runtime.run_turn(
             message="create the fixture", conversation_id="rewind-session",
             workspace=str(workspace), history=[], atlas_agent=agent, atlas_context=context,
@@ -792,7 +792,7 @@ async def test_write_snapshot_and_rewind_restore_file_and_hermes_session(tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_hermes_plan_mode_uses_plan_prompt_and_read_only_tools(tmp_path, monkeypatch):
+async def test_atlas_plan_mode_uses_plan_prompt_and_read_only_tools(tmp_path, monkeypatch):
     _disable_external_mcp(monkeypatch)
     target = tmp_path / "must-not-be-created.txt"
     with FakeLLMServer([
@@ -800,7 +800,7 @@ async def test_hermes_plan_mode_uses_plan_prompt_and_read_only_tools(tmp_path, m
         Text("plan finished"),
     ]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         models = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",
@@ -816,7 +816,7 @@ async def test_hermes_plan_mode_uses_plan_prompt_and_read_only_tools(tmp_path, m
             cancel_event=asyncio.Event(), run_id="plan-run", conversation_id="plan-session",
             workspace=str(tmp_path), mode="plan",
         )
-        events = [event async for event in HermesRuntime(
+        events = [event async for event in AtlasRuntime(
             data_dir=tmp_path, model_manager=models,
         ).run_turn(
             message="plan only", conversation_id="plan-session", workspace=str(tmp_path),
@@ -835,7 +835,7 @@ async def test_hermes_plan_mode_uses_plan_prompt_and_read_only_tools(tmp_path, m
 
 
 @pytest.mark.asyncio
-async def test_real_hermes_turn_delivers_queued_steer_after_tool_batch(tmp_path, monkeypatch):
+async def test_real_atlas_turn_delivers_queued_steer_after_tool_batch(tmp_path, monkeypatch):
     fixture = tmp_path / "steer-fixture.txt"
     fixture.write_text("read before the follow-up", encoding="utf-8")
     with FakeLLMServer([
@@ -843,7 +843,7 @@ async def test_real_hermes_turn_delivers_queued_steer_after_tool_batch(tmp_path,
         Text("finished after the queued correction"),
     ]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         models = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",
@@ -852,7 +852,7 @@ async def test_real_hermes_turn_delivers_queued_steer_after_tool_batch(tmp_path,
         )
         queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
         queue.put_nowait({"content": "switch to the saved plan", "event_id": "steer-e2e"})
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models)
         turn = asyncio.create_task(_collect_turn(runtime, tmp_path, queue))
         events = await turn
         assert any(item.get("type") == "run_steered" and item.get("event_id") == "steer-e2e"
@@ -868,10 +868,10 @@ async def _collect_turn(runtime, tmp_path, queue):
 
 
 @pytest.mark.asyncio
-async def test_real_hermes_turn_stops_when_atlas_cancel_is_set(tmp_path, monkeypatch):
+async def test_real_atlas_turn_stops_when_atlas_cancel_is_set(tmp_path, monkeypatch):
     with FakeLLMServer([Hang(seconds=8)]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         models = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",
@@ -879,14 +879,14 @@ async def test_real_hermes_turn_stops_when_atlas_cancel_is_set(tmp_path, monkeyp
             list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
         )
         cancel = asyncio.Event()
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models)
         started = asyncio.get_running_loop().time()
         turn = asyncio.create_task(_collect_cancelled_turn(runtime, tmp_path, cancel))
         await asyncio.sleep(0.15)
         cancel.set()
         events = await asyncio.wait_for(turn, timeout=3)
         assert asyncio.get_running_loop().time() - started < 3
-        assert events[-1].get("type") == "hermes.result"
+        assert events[-1].get("type") == "atlas.result"
 
 
 async def _collect_cancelled_turn(runtime, tmp_path, cancel):
@@ -897,7 +897,7 @@ async def _collect_cancelled_turn(runtime, tmp_path, cancel):
 
 
 @pytest.mark.asyncio
-async def test_hermes_mcp_client_calls_local_stdio_fake_server(tmp_path, monkeypatch):
+async def test_atlas_mcp_client_calls_local_stdio_fake_server(tmp_path, monkeypatch):
     from tools.mcp_tool_lifecycle import shutdown_mcp_servers
 
     server_path = Path(__file__).parent / "fakes" / "fake_mcp_server.py"
@@ -917,7 +917,7 @@ async def test_hermes_mcp_client_calls_local_stdio_fake_server(tmp_path, monkeyp
         Text("MCP replied pong"),
     ]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         models = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",
@@ -942,7 +942,7 @@ async def test_hermes_mcp_client_calls_local_stdio_fake_server(tmp_path, monkeyp
             user_hook_callback=lambda event, payload: hook_calls.append((event, payload)) or {},
         )
         try:
-            events = [event async for event in HermesRuntime(
+            events = [event async for event in AtlasRuntime(
                 data_dir=tmp_path, model_manager=models,
             ).run_turn(
                 message="call the MCP fixture", conversation_id="mcp-session",
@@ -975,7 +975,7 @@ async def test_hermes_mcp_client_calls_local_stdio_fake_server(tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_real_hermes_parallel_child_agents_use_fake_model(tmp_path, monkeypatch):
+async def test_real_atlas_parallel_child_agents_use_fake_model(tmp_path, monkeypatch):
     with FakeLLMServer() as fake:
         def responder(record):
             body = record["body"]
@@ -998,7 +998,7 @@ async def test_real_hermes_parallel_child_agents_use_fake_model(tmp_path, monkey
 
         fake._responder = responder
         home = tmp_path / "engine"
-        write_hermes_home(
+        write_atlas_home(
             home, fake.base_url,
             extra_config="delegation:\n  max_concurrent_children: 2\n  max_spawn_depth: 2\n",
         )
@@ -1008,7 +1008,7 @@ async def test_real_hermes_parallel_child_agents_use_fake_model(tmp_path, monkey
             gateway_base_url=fake.base_url, _api_key="sk-fake-e2e",
             list_models=lambda: [{"id": "fake-model", "max_output_tokens": 256}],
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models)
         events = [event async for event in runtime.run_turn(
             message="delegate both summaries", conversation_id="parallel-children",
             workspace=str(tmp_path), history=[], enabled_toolsets=["delegation"],
@@ -1047,7 +1047,7 @@ async def test_reasoning_stages_first_turn_planning_then_execution(tmp_path, mon
     """L8：stages enabled 时首轮走 planning 档、后续轮走 execution 档。"""
     with FakeLLMServer([Text("planned"), Text("done")]) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         monkeypatch.setattr(
             "atlas.models.reasoning_stages.load_user_settings", lambda: {
@@ -1074,7 +1074,7 @@ async def test_reasoning_stages_first_turn_planning_then_execution(tmp_path, mon
             agent._build_api_kwargs = spy
             return agent
 
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models,
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models,
                                 agent_factory=agent_factory)
         first = [event async for event in runtime.run_turn(
             message="plan this", conversation_id="stage-first", workspace=str(tmp_path),

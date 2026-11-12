@@ -10,7 +10,7 @@ from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-from atlas.kernel.loop import AtlasKernel
+from atlas.engine.kernel.loop import AtlasKernel
 from atlas.origin_guard import OriginGuard
 from atlas.runtime.external_process import ExternalProcessAdapter
 

@@ -8,9 +8,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from atlas.agent import AgentOrchestrator, AgentRunContext
-from atlas.engine.hermes_runtime import HermesRuntime
+from atlas.engine.atlas_runtime import AtlasRuntime
 from atlas.tools.local_execution import LocalExecutionRuntime
-from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_hermes_home
+from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_atlas_home
 
 
 async def run_script(tmp_path, monkeypatch, script, *, history=None, hermes_config="", configure_agent=None, **options):
@@ -20,7 +20,7 @@ async def run_script(tmp_path, monkeypatch, script, *, history=None, hermes_conf
         "tools.servers": {}, "tools.auto_start": [], "agent.verify_before_stop": True,
     }))
     with FakeLLMServer(script) as fake:
-        write_hermes_home(tmp_path / "engine", fake.base_url)
+        write_atlas_home(tmp_path / "engine", fake.base_url)
         if hermes_config:
             config_path = tmp_path / "engine/config.yaml"
             config_path.write_text(config_path.read_text().replace("api_max_retries: 1", hermes_config), encoding="utf-8")
@@ -41,7 +41,7 @@ async def run_script(tmp_path, monkeypatch, script, *, history=None, hermes_conf
         ctx = AgentRunContext(cancel_event=asyncio.Event(), run_id="review-run",
             conversation_id="review-session", workspace=str(tmp_path), **options)
         try:
-            events = [item async for item in HermesRuntime(data_dir=tmp_path, model_manager=models).run_turn(
+            events = [item async for item in AtlasRuntime(data_dir=tmp_path, model_manager=models).run_turn(
                 message="Perform the fixture task", conversation_id=ctx.conversation_id,
                 workspace=str(tmp_path), history=history or [], atlas_agent=agent, atlas_context=ctx,
             )]

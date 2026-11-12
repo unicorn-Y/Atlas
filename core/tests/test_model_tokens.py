@@ -55,7 +55,7 @@ def test_estimate_tokens_matches_tiktoken_for_request_sized_mixed_samples(sample
     assert estimate_tokens(sample) == len(tiktoken.get_encoding("cl100k_base").encode(sample))
 
 
-def test_estimate_tokens_falls_back_to_hermes_estimator_without_tiktoken(
+def test_estimate_tokens_falls_back_to_atlas_estimator_without_tiktoken(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setitem(__import__("sys").modules, "tiktoken", None)  # import raises ImportError

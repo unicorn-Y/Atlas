@@ -40,7 +40,7 @@ from typing import Any, Awaitable, Callable
 from atlas.config import get_config
 from atlas.tools.computer_use import COMPUTER_TOOLS
 from atlas.tools.x2.context import EVENT_COMPUTER_FRAME, EVENT_COMPUTER_STEP, X2Context, current_context
-from atlas.tools.x2.hermes_config_sync import sync_x2_config
+from atlas.tools.x2.atlas_config_sync import sync_x2_config
 
 log = logging.getLogger(__name__)
 
@@ -283,8 +283,8 @@ class X2ComputerRuntime:
         self._injected_backend = backend
         self._backend_injected = backend is not _UNSET
         self._injected_legacy = legacy
-        self._injected_hermes_tool = hermes_tool
-        self._hermes_tool_failed = hermes_tool is not None and hermes_tool is False
+        self._injected_engine_tool = hermes_tool
+        self._engine_tool_failed = hermes_tool is not None and hermes_tool is False
         self._legacy_runtime: Any = None
         self._action_lock = asyncio.Lock()
         self._config_lock = threading.Lock()
@@ -308,9 +308,9 @@ class X2ComputerRuntime:
         self.backend_name = "atlas-native" if os.name == "nt" else "unavailable"
         self.driver_binary = None
 
-    def _hermes_tool(self) -> Any:
-        if self._injected_hermes_tool is not None:
-            return self._injected_hermes_tool or None
+    def _engine_tool(self) -> Any:
+        if self._injected_engine_tool is not None:
+            return self._injected_engine_tool or None
         # Atlas owns the active desktop runtime. The injected tool remains as a test seam;
         # production uses ComputerUseRuntime below and never imports the former Hermes tool.
         return None
@@ -357,7 +357,7 @@ class X2ComputerRuntime:
             await _wait_if_paused(_run_key(ctx.run_id, ctx.session_id))
             translated = translate_legacy_tool(name, args)
             if translated is not None:
-                result = await self._call_hermes(translated[0], translated[1], legacy_name=name, ctx=ctx)
+                result = await self._call_legacy_cli(translated[0], translated[1], legacy_name=name, ctx=ctx)
                 if result is not None:
                     await self._emit_step(ctx, name, result)
                     return result
@@ -367,11 +367,11 @@ class X2ComputerRuntime:
             log.exception("x2.computer_call_failed", extra={"tool": name})
             return _error(f"{name} 执行失败：{exc}")
 
-    async def _call_hermes(
+    async def _call_legacy_cli(
         self, action: str, args: dict[str, Any], *, legacy_name: str, ctx: X2Context,
     ) -> dict[str, Any] | None:
         """Run one Hermes action; ``None`` = no Hermes backend, fall back to legacy."""
-        hermes_tool = self._hermes_tool()
+        hermes_tool = self._engine_tool()
         if hermes_tool is None:
             return None
         backend = await asyncio.to_thread(self._acquire_backend, hermes_tool)
@@ -503,7 +503,7 @@ class X2ComputerRuntime:
 
     async def shutdown(self) -> None:
         """Release the Hermes session backend and stop the legacy runtime, best-effort."""
-        hermes_tool = self._hermes_tool()
+        hermes_tool = self._engine_tool()
         if hermes_tool is not None and not self._backend_injected:
             try:
                 hermes_tool.release_computer_use_session("")
@@ -602,11 +602,11 @@ def get_runtime() -> X2ComputerRuntime:
             if os.environ.get("ATLAS_X2_COMPUTER_FAKE"):
                 from atlas.tools.x2.fake_computer import (
                     FakeComputerBackend,
-                    FakeHermesComputerTool,
+                    FakeAtlasComputerTool,
                 )
 
                 _runtime = X2ComputerRuntime(
-                    backend=FakeComputerBackend(), hermes_tool=FakeHermesComputerTool())
+                    backend=FakeComputerBackend(), hermes_tool=FakeAtlasComputerTool())
             else:
                 _runtime = X2ComputerRuntime()
         return _runtime

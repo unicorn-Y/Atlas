@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from atlas.engine.hermes_runtime import _model_family_guidance
+from atlas.engine.atlas_runtime import _model_family_guidance
 from atlas.engine.tool_registry import _append_repetition_reminder
 from atlas.engine.tool_registry import _multimodal_image_result
 

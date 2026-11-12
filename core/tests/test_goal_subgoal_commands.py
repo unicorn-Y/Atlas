@@ -1,5 +1,5 @@
-from atlas.engine_core.goal_command import dispatch_goal_command
-from atlas.engine_core.goals import GoalManager
+from atlas.engine.goal_command import dispatch_goal_command
+from atlas.engine.goals import GoalManager
 
 
 def test_subgoal_command_add_edit_remove_and_clear(tmp_path):

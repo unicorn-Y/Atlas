@@ -10,10 +10,10 @@ import zlib
 import pytest
 
 from atlas.agent import AgentOrchestrator
-from atlas.engine.hermes_runtime import HermesRuntime
+from atlas.engine.atlas_runtime import AtlasRuntime
 from atlas.memory import MemoryStore
 from atlas.tools.local_execution import LocalExecutionRuntime
-from tests.fakes.fake_llm_provider import FakeLLMServer, Text, write_hermes_home
+from tests.fakes.fake_llm_provider import FakeLLMServer, Text, write_atlas_home
 
 
 def _tiny_png_data_url():
@@ -29,11 +29,11 @@ def _tiny_png_data_url():
 
 
 @pytest.mark.asyncio
-async def test_real_hermes_request_includes_transient_image_content(tmp_path, monkeypatch):
+async def test_real_atlas_request_includes_transient_image_content(tmp_path, monkeypatch):
     with FakeLLMServer([Text("image received")]) as fake:
         data_root = tmp_path / "atlas-data"
         home = data_root / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         config_path = home / "config.yaml"
         config = config_path.read_text(encoding="utf-8")
         config = config.replace("model:\n", "model:\n  supports_vision: true\n", 1)
@@ -73,7 +73,7 @@ async def test_real_hermes_request_includes_transient_image_content(tmp_path, mo
         local = LocalExecutionRuntime()
         agent = AgentOrchestrator(models, memory, mcp_client=mcp, local_execution=local)
         prepared = []
-        original_factory_method = HermesRuntime._agent_factory
+        original_factory_method = AtlasRuntime._agent_factory
 
         def capture_factory(runtime):
             base_factory = original_factory_method(runtime)
@@ -96,7 +96,7 @@ async def test_real_hermes_request_includes_transient_image_content(tmp_path, mo
 
             return construct
 
-        monkeypatch.setattr(HermesRuntime, "_agent_factory", capture_factory)
+        monkeypatch.setattr(AtlasRuntime, "_agent_factory", capture_factory)
         try:
             events = [event async for event in agent.run(
                 "What is in this image?", conversation_id,

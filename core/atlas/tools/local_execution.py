@@ -79,7 +79,7 @@ class SearchCancelledError(Exception):
 
 def _git_child_environment() -> dict[str, str]:
     """Keep repo-selection variables from the parent from redirecting a local_git call."""
-    from atlas.engine_core.tools.child_process_env import child_process_env
+    from atlas.engine.tools.child_process_env import child_process_env
 
     environment = child_process_env()
     for name in tuple(environment):
@@ -827,7 +827,7 @@ class LocalExecutionRuntime:
     def _agent_cwd() -> Path:
         """Use the same configured/session cwd as Atlas's CLI and environment prompt."""
         try:
-            from atlas.engine_core.agent.runtime_cwd import resolve_agent_cwd
+            from atlas.engine.kernel.toolkit.runtime_cwd import resolve_agent_cwd
 
             return resolve_agent_cwd().expanduser().resolve()
         except ImportError:
@@ -1602,7 +1602,7 @@ class LocalExecutionRuntime:
         cwd = Path(os.path.expandvars(os.path.expanduser(str(cwd)))).resolve()
         if not cwd.is_dir():
             raise NotADirectoryError(f"Process working directory does not exist: {cwd}")
-        from atlas.engine_core.tools.child_process_env import child_process_env
+        from atlas.engine.tools.child_process_env import child_process_env
 
         process_env = child_process_env(env)
         prefixes = tuple(item.casefold() for item in clear_env_prefixes)
@@ -1868,7 +1868,7 @@ class LocalExecutionRuntime:
                 "content": [{"type": "text", "text": str(data)}],
                 "is_error": False,
             }
-        from atlas.kernel.exec import command_timeout
+        from atlas.engine.kernel.exec import command_timeout
 
         command = str(args.get("command") or args.get("executable") or "")
         timeout = command_timeout(command, args.get("timeout"))

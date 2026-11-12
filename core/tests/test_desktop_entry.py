@@ -13,7 +13,7 @@ import pytest
 from atlas import desktop_entry
 
 
-def test_backend_preloads_hermes_utils_before_importing_server(
+def test_backend_preloads_atlas_utils_before_importing_server(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     imported: list[str] = []

@@ -13,7 +13,7 @@ from tests.fakes.fake_llm_provider import DropMidStream, Error, Hang, Text
     Text("partial answer", finish_reason="length"),
     DropMidStream("broken stream to continue", after_chars=8),
 ])
-async def test_hermes_recovers_provider_fault_and_finishes(tmp_path, monkeypatch, fault):
+async def test_atlas_recovers_provider_fault_and_finishes(tmp_path, monkeypatch, fault):
     events, requests, _ = await run_script(tmp_path, monkeypatch, [fault, Text("recovered answer")], hermes_config="api_max_retries: 3")
     assert "recovered answer" in events[-1]["result"]["final_response"]
     assert len(requests) >= 2

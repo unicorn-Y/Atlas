@@ -19,7 +19,12 @@ from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 from atlas.api.u6_router import _data_paths, _size, clear_storage
 from atlas.config import DATA_ROOT
-from atlas.diagnostic_store import list_audit_events, list_model_requests, record_audit_event
+from atlas.diagnostic_store import (
+    list_audit_events,
+    list_model_requests,
+    list_tool_calls,
+    record_audit_event,
+)
 
 router = APIRouter()
 _MIGRATION_ROOTS = ("data", "config", "models", "artifacts", "cache", "logs", "exports", "checkpoints")
@@ -166,6 +171,17 @@ async def save_crash_report(request: dict[str, Any]) -> dict[str, Any]:
 @router.get("/api/maintenance/model-traces")
 async def get_model_traces(q: str = "", limit: int = 100) -> dict[str, Any]:
     return {"traces": list_model_requests(q, limit)}
+
+
+@router.get("/api/maintenance/tool-traces")
+async def get_tool_traces(q: str = "", limit: int = 100,
+                          run_id: str = "") -> dict[str, Any]:
+    """Tool-call traces, optionally narrowed to one run.
+
+    Shares ``run_id`` with ``/model-traces``, so passing the same ``run_id`` to
+    both reads one run's model requests and tool calls on a single timeline.
+    """
+    return {"traces": list_tool_calls(q, limit, run_id)}
 
 
 @router.get("/api/maintenance/audit")

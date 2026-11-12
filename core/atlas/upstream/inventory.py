@@ -39,7 +39,7 @@ log = structlog.get_logger()
 class Context:
     repo: Path
     python: str
-    hermes_dir: Path
+    atlas_dir: Path
     config_path: Path | None = None
     fetch: bool = True               # 允许 git fetch / 联网查询
     errors: list[str] = field(default_factory=list)
@@ -55,7 +55,7 @@ def default_context(fetch: bool = True) -> Context:
     from atlas.config import CONFIG_PATH, PROJECT_ROOT
 
     return Context(repo=PROJECT_ROOT, python=sys.executable,
-                   hermes_dir=PROJECT_ROOT,
+                   atlas_dir=PROJECT_ROOT,
                    config_path=CONFIG_PATH, fetch=fetch)
 
 

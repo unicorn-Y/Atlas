@@ -15,7 +15,7 @@ from atlas.api.runtime import RuntimeManager
 from atlas.api.runtime_router import router as runtime_router
 from atlas.channels.contract import MessageEvent
 from atlas.channels.routing import resolve_group_recipients, resolve_route
-from atlas.engine_core.goals import GoalManager
+from atlas.engine.goals import GoalManager
 from atlas.groups.store import GroupService, GroupStore
 from atlas import standing_orders
 from fastapi import FastAPI

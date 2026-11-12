@@ -1913,9 +1913,9 @@ async def compact_conversation(
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
     from atlas.config import DATA_ROOT
-    from atlas.engine import HermesRuntime
+    from atlas.engine import AtlasRuntime
 
-    return await HermesRuntime(
+    return await AtlasRuntime(
         data_dir=DATA_ROOT, model_manager=orchestrator._model_mgr,
     ).compact_session(
         conversation_id=conversation_id, workspace=conv.get("workspace"),

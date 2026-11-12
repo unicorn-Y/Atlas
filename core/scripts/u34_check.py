@@ -89,7 +89,7 @@ def main() -> int:
 
     # Item 4: persisted UI-only child activity, runtime wire events and unread dedupe.
     run("4 persisted child activity and context projection",
-        pytest("test_hermes_session_sync.py", "test_api_runtime.py"))
+        pytest("test_atlas_session_sync.py", "test_api_runtime.py"))
     run("4 renderer event normalization",
         vitest("src/renderer/services/runtimeEvents.test.ts"), FRONTEND)
     run("4 renderer unread dedupe",

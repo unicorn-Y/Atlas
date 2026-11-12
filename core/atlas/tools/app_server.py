@@ -57,7 +57,7 @@ async def serve_stdio(*, workspace: str | None = None,
     rpc_in, rpc_out = _claim_stdio_channel()
     from atlas.agent import AgentOrchestrator
     from atlas.config import DATA_ROOT
-    from atlas.kernel.tools import kernel_tool_schemas
+    from atlas.engine.kernel.tools import kernel_tool_schemas
     from atlas.memory import MemoryStore
     from atlas.models import ModelManager
 

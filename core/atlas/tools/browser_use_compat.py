@@ -104,8 +104,8 @@ def _descriptor(runtime: Any = None) -> dict[str, Any]:
     dialog_available = False
     if usable:
         try:
-            import atlas.engine_core.tools.browser_tool as browser_tool
-            from atlas.engine_core.tools.browser_supervisor import SUPERVISOR_REGISTRY
+            import atlas.engine.tools.browser_tool as browser_tool
+            from atlas.engine.tools.browser_supervisor import SUPERVISOR_REGISTRY
 
             from atlas.tools.x2.context import current_context
 
@@ -177,12 +177,12 @@ def _backend_context(runtime: Any, task_id: str):
     runtime.ensure_configured()
     backend = runtime.acquire_backend()
     if not isinstance(backend, HermesBrowserBackend):
-        raise _Unsupported("This Browser Use operation needs Atlas's Hermes agent-browser session.")
+        raise _Unsupported("This Browser Use operation needs Atlas's own agent-browser session.")
     try:
-        import atlas.engine_core.tools.browser_tool as browser_tool
-        from atlas.engine_core.tools import browser_tool_session
+        import atlas.engine.tools.browser_tool as browser_tool
+        from atlas.engine.tools import browser_tool_session
     except Exception as exc:  # noqa: BLE001 - optional runtime import
-        raise _Unsupported(f"Hermes browser command bridge is unavailable: {exc}") from exc
+        raise _Unsupported(f"Atlas browser command bridge is unavailable: {exc}") from exc
     if browser_tool._is_camofox_mode():
         raise _Unsupported("This operation is not available with the Camofox browser backend.")
     effective_id = browser_tool._last_session_key(task_id)
@@ -216,7 +216,7 @@ def _cli_call(browser_tool: Any, session_module: Any, session_id: str, command: 
 
 def _redact(value: Any) -> Any:
     try:
-        from atlas.engine_core.tools.browser_tool_snapshot import _redact_browser_output
+        from atlas.engine.tools.browser_tool_snapshot import _redact_browser_output
 
         return _redact_browser_output(value)
     except Exception:  # noqa: BLE001 - redaction helper is optional in embedded installs
@@ -278,9 +278,9 @@ async def _screenshot(browser_tool: Any, session_module: Any, session_id: str,
         except (TypeError, ValueError):
             return _error(blocked, "policy_denied")
     try:
-        from atlas.engine_core.hermes_constants import get_hermes_dir
+        from atlas.engine.atlas_constants import get_atlas_dir
 
-        output_dir = Path(get_hermes_dir("cache/screenshots", "browser_screenshots"))
+        output_dir = Path(get_atlas_dir("cache/screenshots", "browser_screenshots"))
         output_dir.mkdir(parents=True, exist_ok=True)
         path = output_dir / f"atlas-browser-use-{uuid.uuid4().hex}.png"
         remote_path = session_module.sandbox_screenshot_path(path)
@@ -686,7 +686,7 @@ async def _browser_use_call_impl(
             return _ok({"fields": results, "completed": len(results)})
         if op == "tab.frames":
             try:
-                from atlas.engine_core.tools.browser_supervisor import SUPERVISOR_REGISTRY
+                from atlas.engine.tools.browser_supervisor import SUPERVISOR_REGISTRY
 
                 supervisor = SUPERVISOR_REGISTRY.get(session_id)
                 snapshot = supervisor.snapshot() if supervisor is not None else None
@@ -746,7 +746,7 @@ async def _browser_use_call_impl(
             if not expression:
                 return _error("waitForFunction requires expression", "invalid_arguments")
             try:
-                import atlas.engine_core.tools.browser_tool_eval_policy as eval_policy
+                import atlas.engine.tools.browser_tool_eval_policy as eval_policy
 
                 policy_error = eval_policy._enforce_browser_eval_policy(expression)
                 if policy_error:
@@ -785,7 +785,7 @@ async def _browser_use_call_impl(
                 str(result.get("error") or "Could not resize viewport"))
         if op in {"tab.getjsdialog", "tab.get_js_dialog", "tab.respondjsdialog", "tab.respond_js_dialog"}:
             try:
-                from atlas.engine_core.tools.browser_supervisor import SUPERVISOR_REGISTRY
+                from atlas.engine.tools.browser_supervisor import SUPERVISOR_REGISTRY
 
                 supervisor = SUPERVISOR_REGISTRY.get(session_id)
             except Exception:

@@ -6,6 +6,7 @@ injection — never a module-level singleton — so two app instances stay isola
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -24,6 +25,10 @@ from atlas.runtime.external_agents import external_agent_status
 log = structlog.get_logger()
 
 router = APIRouter()
+
+# A healthy ACP handshake finishes in seconds. This bound only exists so a stuck
+# external CLI turns into a clear failure instead of an open request.
+_SESSION_START_TIMEOUT = 60.0
 
 
 class AgentSessionStartRequest(BaseModel):
@@ -127,9 +132,22 @@ async def start_agent_backend_session(
     if agent_backend_host is None:
         raise HTTPException(status_code=503, detail="Agent backend host is unavailable")
     try:
-        session = await agent_backend_host.start(name, req.cwd)
+        # An external CLI that never finishes its ACP handshake would otherwise hold
+        # the request open forever. A configured-but-unusable agent is a 504 with the
+        # reason, so the caller learns "this agent is stuck" instead of hanging.
+        session = await asyncio.wait_for(
+            agent_backend_host.start(name, req.cwd), timeout=_SESSION_START_TIMEOUT,
+        )
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Agent backend not found: {name}") from None
+    except TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                f"{name} did not finish its handshake within {_SESSION_START_TIMEOUT:.0f}s. "
+                "It is probably missing provider configuration or waiting on a prompt it cannot show."
+            ),
+        ) from None
     except (OSError, RuntimeError, TimeoutError, ValueError) as exc:
         raise HTTPException(
             status_code=503, detail=f"Agent backend failed to start: {type(exc).__name__}",

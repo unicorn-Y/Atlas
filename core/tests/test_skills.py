@@ -116,7 +116,7 @@ class TestFrontmatterConversion:
         fm = {"name": "no-desc"}
         assert _frontmatter_to_skill_info(fm, tmp_path / "SKILL.md") is None
 
-    def test_hermes_metadata_compat(self, tmp_path: Path) -> None:
+    def test_atlas_metadata_compat(self, tmp_path: Path) -> None:
         """Should extract tags/category from metadata.hermes.*."""
         fm = {
             "name": "hermes-skill",

@@ -3,7 +3,7 @@ import os
 import subprocess
 import sys
 
-from atlas.engine_core.tools.child_process_env import (
+from atlas.engine.tools.child_process_env import (
     child_process_env,
     mcp_child_process_env,
 )

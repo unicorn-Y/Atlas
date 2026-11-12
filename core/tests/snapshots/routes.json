@@ -1,7 +1,7 @@
 {
   "build": {
     "server_source": "atlas\\server.py",
-    "fastapi_version": "0.161.1"
+    "fastapi_version": "0.141.1"
   },
   "routes": [
     {
@@ -1054,6 +1054,60 @@
                   "schema": {
                     "additionalProperties": true,
                     "title": "Response Set Agent Skills Api Agents  Agent Id  Skills Put",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/agents/{agent_id}/skills/{skill_name}",
+      "operations": [
+        {
+          "method": "DELETE",
+          "operation_id": "remove_agent_skill_api_agents__agent_id__skills__skill_name__delete",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "agent_id",
+              "required": true,
+              "schema": {
+                "title": "Agent Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "skill_name",
+              "required": true,
+              "schema": {
+                "title": "Skill Name",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Remove Agent Skill Api Agents  Agent Id  Skills  Skill Name  Delete",
                     "type": "object"
                   }
                 }
@@ -3381,6 +3435,66 @@
       ]
     },
     {
+      "path": "/api/capabilities",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "capabilities_api_capabilities_get",
+          "parameters": [
+            {
+              "description": "Ignore the cached report and re-probe now.",
+              "in": "query",
+              "name": "refresh",
+              "required": false,
+              "schema": {
+                "default": false,
+                "description": "Ignore the cached report and re-probe now.",
+                "title": "Refresh",
+                "type": "boolean"
+              }
+            },
+            {
+              "description": "Also retest the chat model. Off by default because that spends a real (tiny) model request; omit it for ordinary refresh polling.",
+              "in": "query",
+              "name": "recheck_model",
+              "required": false,
+              "schema": {
+                "default": false,
+                "description": "Also retest the chat model. Off by default because that spends a real (tiny) model request; omit it for ordinary refresh polling.",
+                "title": "Recheck Model",
+                "type": "boolean"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Capabilities Api Capabilities Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/channels",
       "operations": [
         {
@@ -4707,6 +4821,825 @@
       ]
     },
     {
+      "path": "/api/cluster/audit",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "cluster_audit_api_cluster_audit_get",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Token"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Cluster Audit Api Cluster Audit Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/health",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "cluster_health_api_cluster_health_get",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Token"
+              }
+            },
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Node",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Node"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Cluster Health Api Cluster Health Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/identity",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "_cluster_identity_pair_api_cluster_identity_get",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Token"
+              }
+            },
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Node",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Node"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response  Cluster Identity Pair Api Cluster Identity Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/instances",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "cluster_instances_api_cluster_instances_get",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Token"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Cluster Instances Api Cluster Instances Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/nodes",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "cluster_nodes_api_cluster_nodes_get",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Token"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Cluster Nodes Api Cluster Nodes Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/nodes",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "cluster_add_node_api_cluster_nodes_post",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Cluster Add Node Api Cluster Nodes Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/nodes/{peer_id}",
+      "operations": [
+        {
+          "method": "DELETE",
+          "operation_id": "cluster_remove_node_api_cluster_nodes__peer_id__delete",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "peer_id",
+              "required": true,
+              "schema": {
+                "title": "Peer Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Cluster Remove Node Api Cluster Nodes  Peer Id  Delete",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/nodes/{peer_id}/runs/{run_id}/{action}",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "cluster_route_operation_api_cluster_nodes__peer_id__runs__run_id___action__post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "peer_id",
+              "required": true,
+              "schema": {
+                "title": "Peer Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "run_id",
+              "required": true,
+              "schema": {
+                "title": "Run Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "action",
+              "required": true,
+              "schema": {
+                "title": "Action",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Cluster Route Operation Api Cluster Nodes  Peer Id  Runs  Run Id   Action  Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/nodes/{peer_id}/tasks",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "cluster_route_task_api_cluster_nodes__peer_id__tasks_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "peer_id",
+              "required": true,
+              "schema": {
+                "title": "Peer Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Cluster Route Task Api Cluster Nodes  Peer Id  Tasks Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/operations",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "cluster_operation_api_cluster_operations_post",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Token"
+              }
+            },
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Node",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Node"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Cluster Operation Api Cluster Operations Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/revoke",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "cluster_revoke_inbound_api_cluster_revoke_post",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Token"
+              }
+            },
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Node",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Node"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Cluster Revoke Inbound Api Cluster Revoke Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/sessions",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "cluster_sessions_api_cluster_sessions_get",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Token"
+              }
+            },
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Node",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Node"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Cluster Sessions Api Cluster Sessions Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/settings",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "cluster_settings_api_cluster_settings_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Cluster Settings Api Cluster Settings Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/settings",
+      "operations": [
+        {
+          "method": "PUT",
+          "operation_id": "update_cluster_settings_api_cluster_settings_put",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Update Cluster Settings Api Cluster Settings Put",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/tasks",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "cluster_start_task_api_cluster_tasks_post",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Token"
+              }
+            },
+            {
+              "in": "header",
+              "name": "X-Atlas-Cluster-Node",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Cluster-Node"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Cluster Start Task Api Cluster Tasks Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/cluster/token/rotate",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "rotate_cluster_token_api_cluster_token_rotate_post",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "title": "Response Rotate Cluster Token Api Cluster Token Rotate Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/commands",
       "operations": [
         {
@@ -5624,6 +6557,31 @@
       ]
     },
     {
+      "path": "/api/connectors",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "list_connectors_api_connectors_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response List Connectors Api Connectors Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/conversation-activity",
       "operations": [
         {
@@ -5829,6 +6787,121 @@
                   "schema": {
                     "additionalProperties": true,
                     "title": "Response Create Conversation Api Conversations Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/conversations/delete-archived",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "delete_archived_conversations_api_conversations_delete_archived_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Body",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Delete Archived Conversations Api Conversations Delete Archived Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/conversations/metadata",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "query_conversation_metadata_api_conversations_metadata_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "label",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "maxLength": 80,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Label"
+              }
+            },
+            {
+              "in": "query",
+              "name": "unread",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Unread"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Query Conversation Metadata Api Conversations Metadata Get",
                     "type": "object"
                   }
                 }
@@ -6323,6 +7396,62 @@
                   "schema": {
                     "additionalProperties": true,
                     "title": "Response Fork Conversation Api Conversations  Conversation Id  Fork Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/conversations/{conversation_id}/fork-checkpoint",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "fork_conversation_from_checkpoint_api_conversations__conversation_id__fork_checkpoint_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "conversation_id",
+              "required": true,
+              "schema": {
+                "title": "Conversation Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Req",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "201": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Fork Conversation From Checkpoint Api Conversations  Conversation Id  Fork Checkpoint Post",
                     "type": "object"
                   }
                 }
@@ -6888,6 +8017,119 @@
                   "schema": {
                     "additionalProperties": true,
                     "title": "Response Link Conversation Pr Api Conversations  Conversation Id  Pr Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/conversations/{conversation_id}/recaps",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "list_conversation_recaps_api_conversations__conversation_id__recaps_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "conversation_id",
+              "required": true,
+              "schema": {
+                "title": "Conversation Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 5,
+                "maximum": 20,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response List Conversation Recaps Api Conversations  Conversation Id  Recaps Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/conversations/{conversation_id}/recaps",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "create_conversation_auto_recap_api_conversations__conversation_id__recaps_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "conversation_id",
+              "required": true,
+              "schema": {
+                "title": "Conversation Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Request",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Create Conversation Auto Recap Api Conversations  Conversation Id  Recaps Post",
                     "type": "object"
                   }
                 }
@@ -7480,6 +8722,53 @@
                   "schema": {
                     "additionalProperties": true,
                     "title": "Response Get Conversation Stats Api Conversations  Conversation Id  Stats Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/conversations/{conversation_id}/suggest-title",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "suggest_conversation_title_api_conversations__conversation_id__suggest_title_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "conversation_id",
+              "required": true,
+              "schema": {
+                "title": "Conversation Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "title": "Response Suggest Conversation Title Api Conversations  Conversation Id  Suggest Title Post",
                     "type": "object"
                   }
                 }
@@ -8203,6 +9492,79 @@
       ]
     },
     {
+      "path": "/api/desktop/handoffs",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "queue_cli_desktop_handoff_api_desktop_handoffs_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Body",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": {
+                      "type": "boolean"
+                    },
+                    "title": "Response Queue Cli Desktop Handoff Api Desktop Handoffs Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/desktop/handoffs/next",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "take_cli_desktop_handoff_api_desktop_handoffs_next_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Take Cli Desktop Handoff Api Desktop Handoffs Next Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/devices",
       "operations": [
         {
@@ -8767,6 +10129,72 @@
                   "schema": {
                     "additionalProperties": true,
                     "title": "Response Handoff Action Api Devices Handoff Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/devices/node-client.js",
+      "operations": [
+        {
+          "method": "GET",
+          "include_in_schema": false,
+          "parameters": [],
+          "request_body_model": null,
+          "response_model": null
+        }
+      ]
+    },
+    {
+      "path": "/api/devices/node/{device_id}/capabilities",
+      "operations": [
+        {
+          "method": "PUT",
+          "operation_id": "declare_paired_node_capabilities_api_devices_node__device_id__capabilities_put",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "device_id",
+              "required": true,
+              "schema": {
+                "title": "Device Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeCapabilityDeclaration"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Declare Paired Node Capabilities Api Devices Node  Device Id  Capabilities Put",
                     "type": "object"
                   }
                 }
@@ -10003,6 +11431,31 @@
       ]
     },
     {
+      "path": "/api/diagnostics/battery",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_battery_status_api_diagnostics_battery_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Battery Status Api Diagnostics Battery Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/diagnostics/config-sources",
       "operations": [
         {
@@ -10043,6 +11496,56 @@
                 }
               },
               "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/diagnostics/memory",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_memory_diagnostics_api_diagnostics_memory_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Memory Diagnostics Api Diagnostics Memory Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/diagnostics/memory/retry",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "retry_memory_diagnostics_api_diagnostics_memory_retry_post",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Retry Memory Diagnostics Api Diagnostics Memory Retry Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
             }
           }
         }
@@ -10098,6 +11601,94 @@
                   "schema": {
                     "additionalProperties": true,
                     "title": "Response Stop Diagnostic Task Api Diagnostics Tasks  Run Id  Stop Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/dns/plan",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "dns_record_plan_api_dns_plan_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Dns Record Plan Api Dns Plan Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/dns/verify",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "verify_dns_and_tls_api_dns_verify_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Verify Dns And Tls Api Dns Verify Post",
                     "type": "object"
                   }
                 }
@@ -11991,6 +13582,60 @@
                   "schema": {
                     "additionalProperties": true,
                     "title": "Response Commit Git Changes Api Git Commit Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/git/commit/{commit_hash}",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_git_commit_detail_api_git_commit__commit_hash__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "commit_hash",
+              "required": true,
+              "schema": {
+                "title": "Commit Hash",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "root",
+              "required": true,
+              "schema": {
+                "title": "Root",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Git Commit Detail Api Git Commit  Commit Hash  Get",
                     "type": "object"
                   }
                 }
@@ -15174,6 +16819,123 @@
       ]
     },
     {
+      "path": "/api/introspect/providers",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "list_providers_api_introspect_providers_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response List Providers Api Introspect Providers Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/introspect/providers/{provider_id}",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "describe_provider_api_introspect_providers__provider_id__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "provider_id",
+              "required": true,
+              "schema": {
+                "title": "Provider Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Describe Provider Api Introspect Providers  Provider Id  Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/introspect/query",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "run_query_api_introspect_query_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "description": "``{provider, method, input?}`` — ``input`` must satisfy the method's declared schema; unknown keys are rejected rather than ignored.",
+                  "title": "Payload",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Run Query Api Introspect Query Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/kanban/boards",
       "operations": [
         {
@@ -17551,6 +19313,31 @@
       ]
     },
     {
+      "path": "/api/maintenance/model-routes",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_model_routes_api_maintenance_model_routes_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Model Routes Api Maintenance Model Routes Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/maintenance/model-traces",
       "operations": [
         {
@@ -17586,6 +19373,50 @@
                   "schema": {
                     "additionalProperties": true,
                     "title": "Response Get Model Traces Api Maintenance Model Traces Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/maintenance/plan-simulate",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "simulate_plan_api_maintenance_plan_simulate_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulateBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Simulate Plan Api Maintenance Plan Simulate Post",
                     "type": "object"
                   }
                 }
@@ -17672,6 +19503,186 @@
                 }
               },
               "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/maintenance/tool-traces",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_tool_traces_api_maintenance_tool_traces_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "q",
+              "required": false,
+              "schema": {
+                "default": "",
+                "title": "Q",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 100,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            {
+              "in": "query",
+              "name": "run_id",
+              "required": false,
+              "schema": {
+                "default": "",
+                "title": "Run Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Tool Traces Api Maintenance Tool Traces Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/mcp/resource-templates",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "list_mcp_resource_templates_api_mcp_resource_templates_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "server_name",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Server Name"
+              }
+            },
+            {
+              "in": "query",
+              "name": "cursor",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "maxLength": 4096,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Cursor"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response List Mcp Resource Templates Api Mcp Resource Templates Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/mcp/resource-templates/read",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "read_mcp_resource_template_api_mcp_resource_templates_read_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceTemplateReadRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Read Mcp Resource Template Api Mcp Resource Templates Read Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
             }
           }
         }
@@ -18124,6 +20135,77 @@
       ]
     },
     {
+      "path": "/api/memlib/consolidate",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "consolidate_candidates_api_memlib_consolidate_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Consolidate Candidates Api Memlib Consolidate Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/memlib/consolidate",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "run_consolidation_now_api_memlib_consolidate_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsolidateBody",
+                  "default": {
+                    "apply": false
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Run Consolidation Now Api Memlib Consolidate Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/memlib/dream",
       "operations": [
         {
@@ -18143,6 +20225,58 @@
                 }
               },
               "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/memlib/effective",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "effective_api_memlib_effective_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "path",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Path"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Effective Api Memlib Effective Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
             }
           }
         }
@@ -18750,6 +20884,98 @@
       ]
     },
     {
+      "path": "/api/memlib/supersede",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "supersede_audit_api_memlib_supersede_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 200,
+                "maximum": 1000,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Supersede Audit Api Memlib Supersede Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/memlib/supersede",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "record_supersede_api_memlib_supersede_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Supersede"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Record Supersede Api Memlib Supersede Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/memlib/timeline",
       "operations": [
         {
@@ -18835,6 +21061,50 @@
                 }
               },
               "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/memlib/unsupersede",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "retract_supersede_api_memlib_unsupersede_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntryRef"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Retract Supersede Api Memlib Unsupersede Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
             }
           }
         }
@@ -19897,6 +22167,716 @@
       ]
     },
     {
+      "path": "/api/office/context",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "send_office_context_api_office_context_post",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Office-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Office-Token"
+              }
+            }
+          ],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Body",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": {
+                      "type": "boolean"
+                    },
+                    "title": "Response Send Office Context Api Office Context Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/office/handoffs/next",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "take_office_context_api_office_handoffs_next_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Take Office Context Api Office Handoffs Next Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/office/live/conversations/{conversation_id}",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "office_live_conversation_status_api_office_live_conversations__conversation_id__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "conversation_id",
+              "required": true,
+              "schema": {
+                "title": "Conversation Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Office Live Conversation Status Api Office Live Conversations  Conversation Id  Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/office/live/conversations/{conversation_id}/stop",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "stop_office_conversation_sessions_api_office_live_conversations__conversation_id__stop_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "conversation_id",
+              "required": true,
+              "schema": {
+                "title": "Conversation Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Stop Office Conversation Sessions Api Office Live Conversations  Conversation Id  Stop Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/office/live/start",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "start_office_live_control_api_office_live_start_post",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Office-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Office-Token"
+              }
+            }
+          ],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Body",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Start Office Live Control Api Office Live Start Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/office/live/status",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "office_live_status_api_office_live_status_get",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Office-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Office-Token"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Office Live Status Api Office Live Status Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/office/live/stop",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "stop_office_live_control_api_office_live_stop_post",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Office-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Office-Token"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Stop Office Live Control Api Office Live Stop Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/office/live/sync",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "sync_office_live_control_api_office_live_sync_post",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Office-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Office-Token"
+              }
+            }
+          ],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Body",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Sync Office Live Control Api Office Live Sync Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/office/pair",
+      "operations": [
+        {
+          "method": "DELETE",
+          "operation_id": "unpair_office_addin_api_office_pair_delete",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Office-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Office-Token"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": {
+                      "type": "boolean"
+                    },
+                    "title": "Response Unpair Office Addin Api Office Pair Delete",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/office/pair",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "pair_office_addin_api_office_pair_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Body",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "title": "Response Pair Office Addin Api Office Pair Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/office/pairings",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "create_office_pairing_api_office_pairings_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Body",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Create Office Pairing Api Office Pairings Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/office/status",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "office_status_api_office_status_get",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Office-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Office-Token"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Office Status Api Office Status Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/office/writebacks",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "queue_office_writeback_api_office_writebacks_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Body",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": {
+                      "type": "integer"
+                    },
+                    "title": "Response Queue Office Writeback Api Office Writebacks Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/office/writebacks/next",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "take_office_writeback_api_office_writebacks_next_get",
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-Atlas-Office-Token",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X-Atlas-Office-Token"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Take Office Writeback Api Office Writebacks Next Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/personal-todos",
       "operations": [
         {
@@ -19947,6 +22927,250 @@
                     "title": "Response Put Personal Todos Api Personal Todos Put",
                     "type": "object"
                   }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/pets",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "list_pets_api_pets_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response List Pets Api Pets Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/pets/hatch",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "hatch_pet_api_pets_hatch_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HatchRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Hatch Pet Api Pets Hatch Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/pets/install",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "install_pet_api_pets_install_post",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "multipart/form-data": {
+                "schema": {
+                  "$ref": "#/components/schemas/Body_install_pet_api_pets_install_post"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Install Pet Api Pets Install Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/pets/{pet_id}",
+      "operations": [
+        {
+          "method": "DELETE",
+          "operation_id": "remove_pet_api_pets__pet_id__delete",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "pet_id",
+              "required": true,
+              "schema": {
+                "title": "Pet Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Remove Pet Api Pets  Pet Id  Delete",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/pets/{pet_id}/active",
+      "operations": [
+        {
+          "method": "PUT",
+          "operation_id": "activate_pet_api_pets__pet_id__active_put",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "pet_id",
+              "required": true,
+              "schema": {
+                "title": "Pet Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Activate Pet Api Pets  Pet Id  Active Put",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/pets/{pet_id}/avatar",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "pet_avatar_api_pets__pet_id__avatar_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "pet_id",
+              "required": true,
+              "schema": {
+                "title": "Pet Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
                 }
               },
               "description": "Successful Response"
@@ -20208,6 +23432,31 @@
       ]
     },
     {
+      "path": "/api/plugins/check-updates",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "check_plugin_updates_api_plugins_check_updates_post",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Check Plugin Updates Api Plugins Check Updates Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/plugins/install",
       "operations": [
         {
@@ -20447,6 +23696,51 @@
       ]
     },
     {
+      "path": "/api/plugins/{name}/reload",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "reload_plugin_api_plugins__name__reload_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "name",
+              "required": true,
+              "schema": {
+                "title": "Name",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Reload Plugin Api Plugins  Name  Reload Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/plugins/{name}/update",
       "operations": [
         {
@@ -20486,6 +23780,102 @@
                 }
               },
               "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/portal/config",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_portal_config_api_portal_config_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Portal Config Api Portal Config Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/portal/config",
+      "operations": [
+        {
+          "method": "PUT",
+          "operation_id": "put_portal_config_api_portal_config_put",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Payload",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Put Portal Config Api Portal Config Put",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/portal/manifest",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "portal_manifest_api_portal_manifest_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Portal Manifest Api Portal Manifest Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
             }
           }
         }
@@ -22176,6 +25566,52 @@
       ]
     },
     {
+      "path": "/api/providers/account-usage",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "provider_account_usage_api_providers_account_usage_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "provider_id",
+              "required": false,
+              "schema": {
+                "default": "",
+                "title": "Provider Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Provider Account Usage Api Providers Account Usage Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/providers/{pid}/config",
       "operations": [
         {
@@ -23523,6 +26959,152 @@
       ]
     },
     {
+      "path": "/api/run-checkpoints",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "list_checkpointed_runs_api_run_checkpoints_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 50,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response List Checkpointed Runs Api Run Checkpoints Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/run-checkpoints/{run_id}",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_run_checkpoints_api_run_checkpoints__run_id__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "run_id",
+              "required": true,
+              "schema": {
+                "title": "Run Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 500,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Run Checkpoints Api Run Checkpoints  Run Id  Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/run-checkpoints/{run_id}/resume",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "resume_run_api_run_checkpoints__run_id__resume_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "run_id",
+              "required": true,
+              "schema": {
+                "title": "Run Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Resume Run Api Run Checkpoints  Run Id  Resume Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/run-limits",
       "operations": [
         {
@@ -23571,6 +27153,107 @@
                   "schema": {
                     "additionalProperties": true,
                     "title": "Response Update Run Limits Api Run Limits Put",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/run-replay",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "list_replay_runs_api_run_replay_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 50,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response List Replay Runs Api Run Replay Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/run-replay/{run_id}",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_run_replay_api_run_replay__run_id__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "run_id",
+              "required": true,
+              "schema": {
+                "title": "Run Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "timeline_limit",
+              "required": false,
+              "schema": {
+                "default": 500,
+                "title": "Timeline Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Run Replay Api Run Replay  Run Id  Get",
                     "type": "object"
                   }
                 }
@@ -25434,6 +29117,106 @@
                   "schema": {
                     "additionalProperties": true,
                     "title": "Response Test Connection Api Settings Test Connection Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/settings/tool-search-mode",
+      "operations": [
+        {
+          "method": "DELETE",
+          "operation_id": "reset_tool_search_mode_api_settings_tool_search_mode_delete",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "title": "Response Reset Tool Search Mode Api Settings Tool Search Mode Delete",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/settings/tool-search-mode",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_tool_search_mode_api_settings_tool_search_mode_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "title": "Response Get Tool Search Mode Api Settings Tool Search Mode Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/settings/tool-search-mode",
+      "operations": [
+        {
+          "method": "PUT",
+          "operation_id": "set_tool_search_mode_api_settings_tool_search_mode_put",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolSearchModeBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "title": "Response Set Tool Search Mode Api Settings Tool Search Mode Put",
                     "type": "object"
                   }
                 }
@@ -28215,6 +31998,77 @@
       ]
     },
     {
+      "path": "/api/skills/source-policy",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_skill_source_policy_api_skills_source_policy_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Skill Source Policy Api Skills Source Policy Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/skills/source-policy",
+      "operations": [
+        {
+          "method": "PUT",
+          "operation_id": "put_skill_source_policy_api_skills_source_policy_put",
+          "parameters": [],
+          "request_body": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Payload",
+                  "type": "object"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Put Skill Source Policy Api Skills Source Policy Put",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/skills/updates",
       "operations": [
         {
@@ -28261,6 +32115,31 @@
                 }
               },
               "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/skills/usage-overview",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "skill_usage_overview_api_skills_usage_overview_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Skill Usage Overview Api Skills Usage Overview Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
             }
           }
         }
@@ -28877,6 +32756,31 @@
       ]
     },
     {
+      "path": "/api/subtasks/online",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "list_online_subtasks_api_subtasks_online_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response List Online Subtasks Api Subtasks Online Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/terminal/buffer",
       "operations": [
         {
@@ -29079,6 +32983,22 @@
                 "default": 7,
                 "title": "Days",
                 "type": "integer"
+              }
+            },
+            {
+              "in": "query",
+              "name": "model",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Model"
               }
             }
           ],
@@ -29404,6 +33324,58 @@
                   "schema": {
                     "additionalProperties": true,
                     "title": "Response Put U4 Settings Api U4 Settings Put",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/u4/thinkback",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_thinkback_api_u4_thinkback_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "year",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Year"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Thinkback Api U4 Thinkback Get",
                     "type": "object"
                   }
                 }
@@ -30513,6 +34485,23 @@
                 "pattern": "^(day|conversation|model)$",
                 "title": "Group By",
                 "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "model",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Model"
               }
             }
           ],
@@ -32444,6 +36433,101 @@
       ]
     },
     {
+      "path": "/api/workspace/sandbox/preview",
+      "operations": [
+        {
+          "method": "POST",
+          "operation_id": "start_workspace_sandbox_preview_api_workspace_sandbox_preview_post",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Start Workspace Sandbox Preview Api Workspace Sandbox Preview Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/workspace/sandbox/preview/{job_id}",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "get_workspace_sandbox_preview_api_workspace_sandbox_preview__job_id__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "job_id",
+              "required": true,
+              "schema": {
+                "title": "Job Id",
+                "type": "string"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Get Workspace Sandbox Preview Api Workspace Sandbox Preview  Job Id  Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "/api/workspace/sandbox/status",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "workspace_sandbox_status_api_workspace_sandbox_status_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Workspace Sandbox Status Api Workspace Sandbox Status Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/workspace/search",
       "operations": [
         {
@@ -32653,6 +36737,63 @@
       ]
     },
     {
+      "path": "/api/workspace/treemap",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "workspace_treemap_api_workspace_treemap_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "root",
+              "required": true,
+              "schema": {
+                "title": "Root",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "max_files",
+              "required": false,
+              "schema": {
+                "default": 12000,
+                "maximum": 50000,
+                "minimum": 100,
+                "title": "Max Files",
+                "type": "integer"
+              }
+            }
+          ],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Workspace Treemap Api Workspace Treemap Get",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/api/workspace/trust",
       "operations": [
         {
@@ -32786,6 +36927,29 @@
       ]
     },
     {
+      "path": "/portal",
+      "operations": [
+        {
+          "method": "GET",
+          "operation_id": "capability_portal_portal_get",
+          "parameters": [],
+          "request_body": null,
+          "responses": {
+            "200": {
+              "content": {
+                "text/html": {
+                  "schema": {
+                    "type": "string"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          }
+        }
+      ]
+    },
+    {
       "path": "/remote",
       "operations": [
         {
@@ -32854,6 +37018,7 @@
             "approval.required",
             "approval.responded",
             "artifact.created",
+            "atlas.result",
             "before_compact",
             "canvas.update",
             "chapter.marked",
@@ -32868,7 +37033,6 @@
             "error",
             "goal.continuation",
             "goal.updated",
-            "hermes.result",
             "hook.ran",
             "input.required",
             "item.completed",
@@ -32911,6 +37075,7 @@
             "safety.reviewed",
             "session",
             "session.title",
+            "skills.preloaded",
             "start",
             "status",
             "subagent_end",
@@ -33062,6 +37227,11 @@
     },
     {
       "method": "GET",
+      "earlier": "/api/devices/node-client.js",
+      "later": "/api/devices/{device_id}"
+    },
+    {
+      "method": "GET",
       "earlier": "/api/devices/takeover",
       "later": "/api/devices/{device_id}"
     },
@@ -33084,6 +37254,21 @@
       "method": "GET",
       "earlier": "/api/skills/{skill_name}/usage",
       "later": "/api/skills/search/{query}"
+    },
+    {
+      "method": "GET",
+      "earlier": "/api/skills/usage-overview",
+      "later": "/api/skills/{name}"
+    },
+    {
+      "method": "GET",
+      "earlier": "/api/skills/source-policy",
+      "later": "/api/skills/{name}"
+    },
+    {
+      "method": "GET",
+      "earlier": "/api/conversations/metadata",
+      "later": "/api/conversations/{conversation_id}"
     },
     {
       "method": "GET",
@@ -33565,6 +37750,20 @@
         "title": "BoardUpdate",
         "type": "object"
       },
+      "Body_install_pet_api_pets_install_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_install_pet_api_pets_install_post",
+        "type": "object"
+      },
       "BrowserSettingsRequest": {
         "properties": {
           "cdp_url": {
@@ -33912,6 +38111,28 @@
         "title": "ConnectionTestRequest",
         "type": "object"
       },
+      "ConsolidateBody": {
+        "properties": {
+          "apply": {
+            "default": false,
+            "title": "Apply",
+            "type": "boolean"
+          },
+          "window_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Days"
+          }
+        },
+        "title": "ConsolidateBody",
+        "type": "object"
+      },
       "ConversationCandidateCreate": {
         "properties": {
           "conversation_id": {
@@ -34241,6 +38462,17 @@
       },
       "CustomModelUpdateRequest": {
         "properties": {
+          "atlas_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Atlas Provider"
+          },
           "base_url": {
             "anyOf": [
               {
@@ -34263,17 +38495,6 @@
               }
             ],
             "title": "Capabilities"
-          },
-          "hermes_provider": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hermes Provider"
           },
           "litellm_model": {
             "anyOf": [
@@ -34405,23 +38626,31 @@
       },
       "DeviceCommandRequest": {
         "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "kind": {
+            "default": "prompt",
+            "maxLength": 32,
+            "title": "Kind",
+            "type": "string"
+          },
           "prompt": {
+            "default": "",
             "maxLength": 8000,
-            "minLength": 1,
             "title": "Prompt",
             "type": "string"
           }
         },
-        "required": [
-          "prompt"
-        ],
         "title": "DeviceCommandRequest",
         "type": "object"
       },
       "DeviceCommandResult": {
         "properties": {
           "result": {
-            "maxLength": 12000,
+            "maxLength": 8000000,
             "title": "Result",
             "type": "string"
           }
@@ -34492,6 +38721,38 @@
           }
         },
         "title": "DevicePatch",
+        "type": "object"
+      },
+      "DomainRequest": {
+        "properties": {
+          "domain": {
+            "maxLength": 253,
+            "minLength": 3,
+            "title": "Domain",
+            "type": "string"
+          },
+          "provider": {
+            "default": "manual",
+            "title": "Provider",
+            "type": "string"
+          },
+          "record_type": {
+            "default": "A",
+            "title": "Record Type",
+            "type": "string"
+          },
+          "target": {
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "target"
+        ],
+        "title": "DomainRequest",
         "type": "object"
       },
       "DownloadBody": {
@@ -34821,6 +39082,33 @@
           "state"
         ],
         "title": "HandoffStatePayload",
+        "type": "object"
+      },
+      "HatchRequest": {
+        "properties": {
+          "color": {
+            "default": "#8277f4",
+            "maxLength": 7,
+            "title": "Color",
+            "type": "string"
+          },
+          "emoji": {
+            "default": "🐾",
+            "maxLength": 8,
+            "title": "Emoji",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "HatchRequest",
         "type": "object"
       },
       "HoldBody": {
@@ -36511,6 +40799,35 @@
         "title": "ResourceReadRequest",
         "type": "object"
       },
+      "ResourceTemplateReadRequest": {
+        "properties": {
+          "server_name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Server Name",
+            "type": "string"
+          },
+          "uri_template": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Uri Template",
+            "type": "string"
+          },
+          "variables": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Variables",
+            "type": "object"
+          }
+        },
+        "required": [
+          "server_name",
+          "uri_template"
+        ],
+        "title": "ResourceTemplateReadRequest",
+        "type": "object"
+      },
       "RestoreBody": {
         "properties": {
           "name": {
@@ -36974,6 +41291,40 @@
         "title": "SideloadBody",
         "type": "object"
       },
+      "SimulateBody": {
+        "properties": {
+          "budget": {
+            "default": 24,
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Budget",
+            "type": "integer"
+          },
+          "max_per_family": {
+            "default": 4,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Max Per Family",
+            "type": "integer"
+          },
+          "prompt": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "workspace": {
+            "default": "",
+            "title": "Workspace",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "title": "SimulateBody",
+        "type": "object"
+      },
       "SlackOAuthConfig": {
         "properties": {
           "client_id": {
@@ -37114,6 +41465,49 @@
           }
         },
         "title": "StartBody",
+        "type": "object"
+      },
+      "Supersede": {
+        "properties": {
+          "new_id": {
+            "default": "",
+            "title": "New Id",
+            "type": "string"
+          },
+          "new_text": {
+            "default": "",
+            "title": "New Text",
+            "type": "string"
+          },
+          "old_id": {
+            "title": "Old Id",
+            "type": "string"
+          },
+          "quote": {
+            "default": "",
+            "title": "Quote",
+            "type": "string"
+          },
+          "ref": {
+            "default": "",
+            "title": "Ref",
+            "type": "string"
+          },
+          "session": {
+            "default": "",
+            "title": "Session",
+            "type": "string"
+          },
+          "why": {
+            "default": "",
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "old_id"
+        ],
+        "title": "Supersede",
         "type": "object"
       },
       "SyncBody": {
@@ -37267,6 +41661,19 @@
           }
         },
         "title": "ToolInstallRequest",
+        "type": "object"
+      },
+      "ToolSearchModeBody": {
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "ToolSearchModeBody",
         "type": "object"
       },
       "TriggerSpec": {

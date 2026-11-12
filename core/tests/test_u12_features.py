@@ -7,8 +7,14 @@ import base64
 import sys
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
-from pptx import Presentation
+
+# python-pptx is optional (the `office` extra); without it the whole module would
+# fail to import and take the CLI attachment and stdin-card checks with it.
+Presentation = pytest.importorskip(
+    "pptx", reason="optional Office dependency, not installed in this environment"
+).Presentation
 
 from atlas import cli
 from atlas.office import render_office

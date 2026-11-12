@@ -177,6 +177,24 @@ def mirror(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst, symlinks=True)
 
 
+def is_link(path: Path) -> bool:
+    """True for a symlink *or* a Windows junction.
+
+    A junction is not a symlink — ``Path.is_symlink`` returns False for one — and
+    that difference is how ``mirror`` once walked through a node_modules workspace
+    link and deleted the source tree it pointed at.
+
+    ``Path.is_junction`` and ``os.path.isjunction`` both arrived in 3.12, while
+    Atlas runs on 3.11, so the reparse tag is read straight off ``lstat``.
+    """
+    if path.is_symlink():
+        return True
+    try:
+        return getattr(os.lstat(path), "st_reparse_tag", 0) == 0xA0000003
+    except OSError:
+        return False
+
+
 def drop_links(directory: Path) -> None:
     """删掉 directory（及其 @scope 子目录）里的目录链接本身，不碰链接目标。
 
@@ -184,12 +202,12 @@ def drop_links(directory: Path) -> None:
     指回仓库的 npm 工作区链接（@atlas/frontend → frontend）曾因此把副本里的
     frontend/ 源码整个删掉。镜像完成后由 relink_junctions 重建。
     """
-    if not directory.is_dir() or directory.is_junction() or directory.is_symlink():
+    if not directory.is_dir() or is_link(directory):
         return
     scopes = [p for p in directory.iterdir() if p.name.startswith("@") and p.is_dir()
-              and not (p.is_junction() or p.is_symlink())]
+              and not is_link(p)]
     for entry in [*directory.iterdir(), *(q for scope in scopes for q in scope.iterdir())]:
-        if entry.is_junction() or entry.is_symlink():
+        if is_link(entry):
             try:
                 entry.unlink()  # 只移除链接本身
             except OSError:
@@ -213,7 +231,7 @@ def relink_junctions(src_repo: Path, dst_repo: Path, rel: str) -> None:
     candidates = [p for p in src.iterdir() if p.name.startswith("@") and p.is_dir()]
     entries = [p for p in src.iterdir()] + [q for scope in candidates for q in scope.iterdir()]
     for entry in entries:
-        if not (entry.is_junction() or entry.is_symlink()):
+        if not is_link(entry):
             continue
         try:
             target = Path(os.readlink(entry))
@@ -227,7 +245,7 @@ def relink_junctions(src_repo: Path, dst_repo: Path, rel: str) -> None:
         except ValueError:
             continue
         link = dst / entry.relative_to(src)
-        if link.exists() or link.is_junction() or link.is_symlink():
+        if link.exists() or is_link(link):
             continue
         link.parent.mkdir(parents=True, exist_ok=True)
         new_target = dst_repo / relative
@@ -629,7 +647,7 @@ class Runner:
         self.components = {item["id"]: item for item in components}
         self.push_enabled = push_enabled
         self.ctx = inventory.Context(repo=ws.repo, python=sys.executable,
-                                     hermes_dir=ws.repo, fetch=False)
+                                     atlas_dir=ws.repo, fetch=False)
 
     # -- 单组 ---------------------------------------------------------------
 

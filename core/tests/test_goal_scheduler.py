@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from atlas import config, server
+from atlas.engine.goals import MAX_PLAN_ATTEMPTS
 from atlas.engine.session_sync import goal_command, goal_events, goal_state, mutate_goal
 from atlas.scheduler import AtlasScheduler, TaskStatus
 
@@ -74,7 +75,7 @@ async def test_automation_and_chat_share_goal_pause_resume_replace_and_clear(
 
 
 @pytest.mark.asyncio
-async def test_scheduled_trigger_uses_hermes_continuation_and_evaluation(
+async def test_scheduled_trigger_uses_atlas_continuation_and_evaluation(
     tmp_path: Path, monkeypatch,
 ) -> None:
     home = _isolate_goal_home(tmp_path, monkeypatch)
@@ -94,12 +95,17 @@ async def test_scheduled_trigger_uses_hermes_continuation_and_evaluation(
             yield {"type": "done", "message_id": f"assistant-{len(prompts)}", "model": "fake"}
 
     monkeypatch.setattr(server, "orchestrator", FakeOrchestrator())
-    import hermes_cli.goals as hermes_goals
+
+    # The scheduler path no longer calls hermes_cli.goals.judge_goal (that symbol has
+    # zero call sites left in atlas/). It goes through run_drive._atlas_goal_judge, so
+    # the judge is patched at the seam that actually exists.
+    import atlas.api.run_drive as run_drive
+
     verdicts = iter([
-        ("continue", "Continue with the next concrete step.", False, None, False),
-        ("done", "The review is complete.", False, None, False),
+        ("continue", "Continue with the next concrete step."),
+        ("done", "The review is complete."),
     ])
-    monkeypatch.setattr(hermes_goals, "judge_goal", lambda *_args, **_kwargs: next(verdicts))
+    monkeypatch.setattr(run_drive, "_atlas_goal_judge", lambda _mgr: (lambda *_a, **_k: next(verdicts)))
 
     transport = httpx.ASGITransport(app=server.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://atlas") as client:
@@ -114,16 +120,25 @@ async def test_scheduled_trigger_uses_hermes_continuation_and_evaluation(
         state = goal_state(home, "scheduled-goal-weekly-review")
         assert len(prompts) == 2
         assert prompts[0] == "Review this week and list priorities."
-        assert prompts[1].startswith("[Continuing toward your standing goal]")
-        assert "Goal: Review this week and list priorities." in prompts[1]
+        assert prompts[1].startswith("[Working toward this goal]")
+        assert "Review this week and list priorities." in prompts[1]
         assert state["status"] == "done"
         assert state["turns_used"] == 2
         assert state["last_verdict"] == "done"
         assert state["last_reason"] == "The review is complete."
         trace = await client.get("/api/goals/weekly-review/trace")
-        assert [item["event"] for item in trace.json()["events"]] == [
-            "goal.created", "goal.triggered", "goal.evaluated", "goal.evaluated",
+        events = trace.json()["events"]
+        assert [item["event"] for item in events] == [
+            "goal.created", "goal.triggered", "goal.evaluated",
+            "goal.planning_turn", "goal.evaluated",
         ]
+        # The first turn had no milestones, so the second prompt was a planning
+        # turn and must be recorded as such rather than looking like execution.
+        planning = [item for item in events if item["event"] == "goal.planning_turn"]
+        assert len(planning) == 1
+        assert planning[0]["data"]["attempt"] == 1
+        assert planning[0]["data"]["max_attempts"] == MAX_PLAN_ATTEMPTS
+        assert planning[0]["data"]["milestones"] == 0
 
 
 @pytest.mark.asyncio

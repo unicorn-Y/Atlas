@@ -15,7 +15,7 @@ turn. When the script is exhausted, main turns answer ``default_text``.
 Usage::
 
     with FakeLLMServer([ToolCall("terminal", {"command": "echo hi"}), Text("done")]) as srv:
-        write_hermes_home(home, srv.base_url)
+        write_atlas_home(home, srv.base_url)
         ...run hermes...
         assert srv.main_requests()[1]["messages"][-1]["role"] == "tool"
 
@@ -541,7 +541,7 @@ def _message_for(
 # HERMES_HOME wiring ---------------------------------------------------------
 
 
-def write_hermes_home(
+def write_atlas_home(
     home: Path,
     base_url: str,
     *,

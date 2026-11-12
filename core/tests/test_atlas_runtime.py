@@ -7,11 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from atlas.engine.hermes_runtime import HermesRuntime
+from atlas.engine.atlas_runtime import AtlasRuntime
 from atlas.engine.tool_registry import _translate
 
 
-class FakeHermesAgent:
+class FakeAtlasAgent:
     def __init__(self, **kwargs):
         self.kwargs = kwargs
         self.interrupted = False
@@ -42,7 +42,7 @@ class FakeHermesAgent:
         self.closed = True
 
 
-def test_hermes_tool_calls_translate_to_atlas_tools():
+def test_atlas_tool_calls_translate_to_atlas_tools():
     assert _translate("read_file", {"path": "notes.txt"}) == (
         "local_file", {"path": "notes.txt", "action": "read"},
     )
@@ -99,7 +99,7 @@ def test_hermes_tool_calls_translate_to_atlas_tools():
 async def test_runtime_bridges_thread_callbacks_and_uses_atlas_session_home(tmp_path, monkeypatch):
     captured = {}
 
-    class UsageReportingFakeHermesAgent(FakeHermesAgent):
+    class UsageReportingFakeAtlasAgent(FakeAtlasAgent):
         def run_conversation(self, **kwargs):
             result = super().run_conversation(**kwargs)
             self.kwargs["hooks"].on_usage({
@@ -113,7 +113,7 @@ async def test_runtime_bridges_thread_callbacks_and_uses_atlas_session_home(tmp_
     def factory(**kwargs):
         captured.update(kwargs)
         captured["home"] = os.environ.get("HERMES_HOME")
-        return UsageReportingFakeHermesAgent(**kwargs)
+        return UsageReportingFakeAtlasAgent(**kwargs)
 
     models = SimpleNamespace(
         current_model="test-model",
@@ -122,7 +122,7 @@ async def test_runtime_bridges_thread_callbacks_and_uses_atlas_session_home(tmp_
         _api_key="fake-key",
         list_models=lambda: [{"id": "test-model", "max_output_tokens": 1024}],
     )
-    runtime = HermesRuntime(data_dir=tmp_path / "atlas-data", model_manager=models,
+    runtime = AtlasRuntime(data_dir=tmp_path / "atlas-data", model_manager=models,
                             agent_factory=factory)
     events = [event async for event in runtime.run_turn(
         message="continue",
@@ -136,7 +136,7 @@ async def test_runtime_bridges_thread_callbacks_and_uses_atlas_session_home(tmp_
 
     assert [event["type"] for event in events] == [
         "chunk", "tool_call", "tool_result", "run.compaction.progress",
-        "run_usage", "run_usage", "hermes.result",
+        "run_usage", "run_usage", "atlas.result",
     ]
     assert captured["home"] == str((tmp_path / "atlas-data" / "engine").resolve())
     assert captured["session_id"] == "conversation-1"
@@ -154,12 +154,12 @@ async def test_runtime_bridges_thread_callbacks_and_uses_atlas_session_home(tmp_
 
 
 @pytest.mark.asyncio
-async def test_runtime_interrupts_hermes_when_atlas_cancel_is_set(tmp_path):
+async def test_runtime_interrupts_atlas_when_atlas_cancel_is_set(tmp_path):
     started = threading.Event()
     release = threading.Event()
     agents = []
 
-    class BlockingAgent(FakeHermesAgent):
+    class BlockingAgent(FakeAtlasAgent):
         def run_conversation(self, **_kwargs):
             started.set()
             release.wait(timeout=2)
@@ -180,7 +180,7 @@ async def test_runtime_interrupts_hermes_when_atlas_cancel_is_set(tmp_path):
         list_models=lambda: [{"id": "test-model"}],
     )
     cancel = asyncio.Event()
-    runtime = HermesRuntime(data_dir=tmp_path / "atlas-data", model_manager=models,
+    runtime = AtlasRuntime(data_dir=tmp_path / "atlas-data", model_manager=models,
                             agent_factory=factory)
     stream = runtime.run_turn(message="x", conversation_id="c", workspace=None,
                               history=[], cancel_event=cancel)
@@ -188,9 +188,9 @@ async def test_runtime_interrupts_hermes_when_atlas_cancel_is_set(tmp_path):
     await asyncio.to_thread(started.wait, 1)
     cancel.set()
     events = [await pending]
-    while events[-1]["type"] != "hermes.result":
+    while events[-1]["type"] != "atlas.result":
         events.append(await anext(stream))
-    assert events[-1]["type"] == "hermes.result"
+    assert events[-1]["type"] == "atlas.result"
     assert agents[0].interrupted
     await stream.aclose()
     assert agents[0].closed
@@ -200,7 +200,7 @@ async def test_runtime_interrupts_hermes_when_atlas_cancel_is_set(tmp_path):
 async def test_runtime_moa_uses_atlas_models_and_fake_reference_consult(tmp_path, monkeypatch):
     captured = {}
 
-    class CapturingAgent(FakeHermesAgent):
+    class CapturingAgent(FakeAtlasAgent):
         def run_conversation(self, *, user_message, system_message, conversation_history, task_id=None):
             captured["system_message"] = system_message
             return {"final_response": "primary answer", "messages": conversation_history}
@@ -223,7 +223,7 @@ async def test_runtime_moa_uses_atlas_models_and_fake_reference_consult(tmp_path
     monkeypatch.setattr("atlas.config.get_config", lambda: {
         "moa.reference_models": ["reference"], "moa.max_references": 2,
     })
-    runtime = HermesRuntime(
+    runtime = AtlasRuntime(
         data_dir=tmp_path / "atlas-data", model_manager=models,
         agent_factory=CapturingAgent, reference_consult=consult,
     )
@@ -260,7 +260,7 @@ async def test_runtime_bridges_atlas_run_budget_reminders(tmp_path, monkeypatch)
     )
     agents = []
 
-    class BudgetAgent(FakeHermesAgent):
+    class BudgetAgent(FakeAtlasAgent):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             agents.append(self)
@@ -268,7 +268,7 @@ async def test_runtime_bridges_atlas_run_budget_reminders(tmp_path, monkeypatch)
         def run_conversation(self, *, user_message, system_message, conversation_history, task_id=None):
             return {"final_response": "budget answer", "messages": conversation_history}
 
-    runtime = HermesRuntime(
+    runtime = AtlasRuntime(
         data_dir=tmp_path / "atlas-data", model_manager=models, agent_factory=BudgetAgent,
     )
     events = [event async for event in runtime.run_turn(
@@ -286,7 +286,7 @@ async def test_slow_agent_construction_does_not_block_the_event_loop(tmp_path):
     loop; on a busy machine that stalled WebSocket keepalive past its timeout."""
     import time
 
-    class QuietAgent(FakeHermesAgent):
+    class QuietAgent(FakeAtlasAgent):
         def run_conversation(self, **_kwargs):
             return {"final_response": "ok", "messages": []}
 
@@ -299,7 +299,7 @@ async def test_slow_agent_construction_does_not_block_the_event_loop(tmp_path):
         gateway_base_url="http://fake.invalid/v1", _api_key="fake-key",
         list_models=lambda: [{"id": "test-model"}],
     )
-    runtime = HermesRuntime(data_dir=tmp_path / "atlas-data", model_manager=models,
+    runtime = AtlasRuntime(data_dir=tmp_path / "atlas-data", model_manager=models,
                             agent_factory=slow_factory)
     gaps: list[float] = []
     stop = asyncio.Event()
@@ -317,7 +317,7 @@ async def test_slow_agent_construction_does_not_block_the_event_loop(tmp_path):
         await asyncio.sleep(0.01)
     stream = runtime.run_turn(message="x", conversation_id="c", workspace=None, history=[])
     async for event in stream:
-        if event["type"] == "hermes.result":
+        if event["type"] == "atlas.result":
             break
     await stream.aclose()
     stop.set()
@@ -331,7 +331,7 @@ async def test_budget_stopped_turn_is_reported_as_failed(tmp_path, monkeypatch):
     monkeypatch.setenv("ATLAS_RUN_INPUT_TOKEN_LIMIT", "100")
     monkeypatch.setenv("ATLAS_RUN_BUDGET_ID", f"budget-stop-{tmp_path.name}")
 
-    class BudgetedAgent(FakeHermesAgent):
+    class BudgetedAgent(FakeAtlasAgent):
         def run_conversation(self, **_kwargs):
             blocked = self.kwargs["hooks"].before_provider_request(10_000, "req-1")
             assert blocked is True
@@ -342,12 +342,12 @@ async def test_budget_stopped_turn_is_reported_as_failed(tmp_path, monkeypatch):
         gateway_base_url="http://fake.invalid/v1", _api_key="fake-key",
         list_models=lambda: [{"id": "test-model"}],
     )
-    runtime = HermesRuntime(data_dir=tmp_path / "atlas-data", model_manager=models,
+    runtime = AtlasRuntime(data_dir=tmp_path / "atlas-data", model_manager=models,
                             agent_factory=BudgetedAgent)
     result = None
     async for event in runtime.run_turn(message="x", conversation_id="c", workspace=None,
                                         history=[]):
-        if event["type"] == "hermes.result":
+        if event["type"] == "atlas.result":
             result = event["result"]
     assert result is not None and result["failed"] is True
     assert "预算" in result["error"]

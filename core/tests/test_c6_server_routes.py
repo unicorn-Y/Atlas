@@ -54,9 +54,9 @@ def _ensure_init_routes() -> None:
 
 
 def _seed_sessiondb(tmp_path: Path, conversation_id: str, contents: list[str]) -> list[str]:
-    import hermes_state
+    from atlas.engine.state import atlas_state
 
-    with hermes_state.SessionDB(db_path=tmp_path / "engine" / "state.db") as db:
+    with atlas_state.SessionDB(db_path=tmp_path / "engine" / "state.db") as db:
         db.ensure_session(conversation_id, "api_server")
         ids = []
         for content in contents:

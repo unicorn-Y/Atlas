@@ -5,7 +5,7 @@ from tests.fakes.fake_llm_provider import Text, ToolCall
 
 
 @pytest.mark.asyncio
-async def test_edit_is_verified_inside_hermes_loop_before_final_answer(tmp_path, monkeypatch):
+async def test_edit_is_verified_inside_atlas_loop_before_final_answer(tmp_path, monkeypatch):
     target = tmp_path / "test_sample.py"
     events, requests, ctx = await run_script(tmp_path, monkeypatch, [
         ToolCall("write_file", {"path": str(target), "content": "import unittest\nclass Sample(unittest.TestCase):\n    def test_value(self):\n        self.assertEqual(1 + 1, 2)\n"}),

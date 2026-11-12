@@ -79,7 +79,7 @@ def test_skill_source_priority_project_beats_user(tmp_path: Path) -> None:
     assert release.description == "project copy"
 
 
-def test_hermes_source_is_opt_in_between_atlas_and_claude(tmp_path: Path) -> None:
+def test_atlas_source_is_opt_in_between_atlas_and_claude(tmp_path: Path) -> None:
     hermes_dir = tmp_path / "hermes" / "skills"
     skill = hermes_dir / "dev" / "hermes-tool" / "SKILL.md"
     skill.parent.mkdir(parents=True)

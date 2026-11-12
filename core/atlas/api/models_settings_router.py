@@ -112,6 +112,18 @@ class ConnectionTestRequest(BaseModel):
     model: str | None = None
 
 
+def _annotate_models(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Attach the reasoning-capability flag every model payload must carry.
+
+    Both ``/api/models`` and ``/api/settings/configuration`` feed the composer, and the
+    renderer only shows the reasoning switcher when this flag is present. Annotating in
+    one place keeps the two surfaces from disagreeing.
+    """
+    for item in models:
+        item["supports_reasoning_effort"] = _model_supports_reasoning(item)
+    return models
+
+
 @router.get("/api/models")
 async def list_models(
     services: Annotated[AppServices, Depends(get_app_services)],
@@ -123,9 +135,7 @@ async def list_models(
 
         model_mgr = _atlas_server.model_mgr
     assert model_mgr is not None
-    models = model_mgr.list_models()
-    for item in models:
-        item["supports_reasoning_effort"] = _model_supports_reasoning(item)
+    models = _annotate_models(model_mgr.list_models())
     return ModelListResponse(
         models=models,
         current=model_mgr.current_model,
@@ -133,9 +143,32 @@ async def list_models(
 
 
 def _model_supports_reasoning(model: dict[str, Any]) -> bool:
+    """Whether the composer should offer a thinking switch for this model.
+
+    A model that declares ``reasoning_effort`` at all is controllable: the field exists
+    precisely to turn thinking on or off, so "off" as a default must not read as "this
+    model cannot think" (that mistake hid the switch entirely).
+    """
+    capabilities = model.get("capabilities")
+    caps = capabilities if isinstance(capabilities, dict) else {}
+
+    if model.get("reasoning_effort") or caps.get("reasoning_effort"):
+        return True
+    if "supports_reasoning" in caps:
+        return bool(caps["supports_reasoning"])
+    if "supports_reasoning" in model:
+        return bool(model["supports_reasoning"]) or bool(model.get("reasoning_efforts"))
+
+    model_name = str(model.get("litellm_model", model.get("id", ""))).lower()
+    if any(keyword in model_name for keyword in ("deepseek", "r1", "gemini-2", "gemini-3", "o1", "o3", "o4", "reason", "thinking")):
+        return True
+
+    efforts = model.get("reasoning_efforts")
+    if isinstance(efforts, list) and efforts:
+        return True
+
     try:
         from litellm import get_supported_openai_params
-        model_name = model.get("litellm_model", model.get("id", ""))
         provider = model.get("provider")
         params = get_supported_openai_params(model=model_name, custom_llm_provider=provider)
         return isinstance(params, list) and "reasoning_effort" in params
@@ -186,7 +219,7 @@ def _configuration_payload(model_mgr) -> dict[str, Any]:
         "gateway_source": getattr(model_mgr, "gateway_source", ""),
         "atlas_toml_gateway_base_url": getattr(model_mgr, "atlas_toml_gateway_base_url", ""),
         "api_key_configured": model_mgr.api_key_configured,
-        "models": model_mgr.list_models(),
+        "models": _annotate_models(model_mgr.list_models()),
         "current": model_mgr.current_model,
         "compression_model": str(settings.get("compression_model", "")),
         "memory_model": str(settings.get("memory_model", "")),

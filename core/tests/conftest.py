@@ -57,7 +57,7 @@ _INTEGRATION_MODULES = {
     "test_c6_main_chain.py",
     "test_c6_lsp_wiring.py",
     "test_gateway_integration.py",
-    "test_hermes_runtime_e2e.py",
+    "test_atlas_runtime_e2e.py",
     "test_long_lived_agent_e2e.py",
     "test_k1_daily_paths.py",
     "test_k1_daily_paths_x2x4x5.py",
@@ -67,7 +67,7 @@ _INTEGRATION_MODULES = {
     "test_release_build_scripts.py",
     "test_server.py",
     "test_server_agents_wiring.py",
-    "test_hermes_session_sync.py",
+    "test_atlas_session_sync.py",
     "test_run_usage_aggregation_e2e.py",
     "test_session_migration.py",
 }

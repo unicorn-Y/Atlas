@@ -247,6 +247,19 @@ def main() -> None:
     _prepare_runtime_files()
     os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "true")
     port = int(os.environ.get("ATLAS_PORT", "8765"))
+    # Answer "is this port already taken?" *before* arming the watchdog and before
+    # importing atlas.server. Electron's own probe refuses to spawn when a healthy
+    # backend answers, but it cannot see a backend that is listening and unhealthy
+    # or one owned by another user — and in that case the spawn used to die on
+    # [Errno 10048] with the real reason buried under a wall of start-up logs.
+    # Exiting here makes the last stderr line name the occupying PID.
+    from atlas.port_guard import describe, probe
+
+    occupied = probe("127.0.0.1", port)
+    if occupied["listening"]:
+        sys.stderr.write(f"atlas.desktop.port_busy {describe(occupied)}\n")
+        sys.stderr.flush()
+        raise SystemExit(2)
     # Arm the watchdog before importing atlas.server: the import itself loads the whole
     # application and is part of the window in which the port is still closed.
     _install_boot_watchdog(port)

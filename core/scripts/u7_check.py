@@ -212,10 +212,10 @@ def main() -> None:
         os.environ["ATLAS_BROWSER_EXTENSION_PORT"] = str(bridge_probe.getsockname()[1])
 
     from atlas.config import load_user_settings, save_user_settings
-    from atlas.engine_core.tools import browser_tool_real_profile as real_profile
-    from atlas.engine_core.tools.browser_extension_bridge import call_extension, connection_info
-    from atlas.engine_core.tools.browser_extension_router import routed_browser_handler
-    from atlas.engine_core.tools.browser_tool_vision import _analyze_screenshot_with_aux_llm
+    from atlas.engine.tools import browser_tool_real_profile as real_profile
+    from atlas.engine.tools.browser_extension_bridge import call_extension, connection_info
+    from atlas.engine.tools.browser_extension_router import routed_browser_handler
+    from atlas.engine.tools.browser_tool_vision import _analyze_screenshot_with_aux_llm
     from atlas.models.router import _anthropic_payload
     from types import SimpleNamespace
 
@@ -354,7 +354,7 @@ def main() -> None:
         save_user_settings(settings)
         routed = routed_browser_handler("browser_snapshot", {}, fallback=lambda: {"success": False, "error": "fallback used"})
         check("\"browser_target\": \"extension\"" in routed, "auto routing did not prioritize the connected extension")
-        from atlas.engine_core.tools.browser_extension_bridge import disconnect
+        from atlas.engine.tools.browser_extension_bridge import disconnect
         close_process(extension_browser)
         disconnect()
         settings = load_user_settings()
@@ -430,13 +430,13 @@ def main() -> None:
         if not dns_detail:
             # A few builds lose the first failing event while opening the network error page.
             dns_detail = navigate_and_wait_network_failure(bad["webSocketDebuggerUrl"], dns_url)
-        from atlas.engine_core.tools.browser_tool import _explain_navigation_error
+        from atlas.engine.tools.browser_tool import _explain_navigation_error
         error_text = _explain_navigation_error(dns_detail or "net::ERR_NAME_NOT_RESOLVED")
         check(bool(dns_detail) and (dns_detail in error_text or "DNS" in error_text),
               f"Chrome did not surface a specific network result: cdp={dns_detail!r}; diagnosis={error_text!r}")
         print(f"load failure PASS: real Chrome {dns_detail or 'DNS'} result plus actionable diagnosis")
 
-        from atlas.engine_core.tools.browser_tool_session import _apply_incognito_arg
+        from atlas.engine.tools.browser_tool_session import _apply_incognito_arg
         private_env = {"AGENT_BROWSER_ARGS": "--disable-dev-shm-usage"}
         _apply_incognito_arg(private_env, {"features": {"local": True}}, True)
         check("--incognito" in private_env["AGENT_BROWSER_ARGS"], "standalone private mode did not request Chromium incognito")

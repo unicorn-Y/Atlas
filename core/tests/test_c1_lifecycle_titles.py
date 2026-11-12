@@ -8,10 +8,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from atlas.agent import AgentOrchestrator
-from atlas.engine.hermes_runtime import HermesRuntime
+from atlas.engine.atlas_runtime import AtlasRuntime
 from atlas.memory import MemoryStore
 from atlas.tools.local_execution import LocalExecutionRuntime
-from tests.fakes.fake_llm_provider import FakeLLMServer, Text, write_hermes_home
+from tests.fakes.fake_llm_provider import FakeLLMServer, Text, write_atlas_home
 
 
 async def _run_title_turn(
@@ -39,7 +39,7 @@ async def _run_title_turn(
 
     with FakeLLMServer([Text("Session work completed")], aux=title_response) as fake:
         home = tmp_path / "atlas-data" / "engine"
-        write_hermes_home(
+        write_atlas_home(
             home, fake.base_url,
             extra_config=(
                 "auxiliary:\n"
@@ -98,7 +98,7 @@ async def _run_title_turn(
 
 
 @pytest.mark.asyncio
-async def test_real_hermes_title_callback_updates_atlas_and_exposes_upgrade(tmp_path, monkeypatch):
+async def test_real_atlas_title_callback_updates_atlas_and_exposes_upgrade(tmp_path, monkeypatch):
     events, fake, conversation, _memory = await _run_title_turn(tmp_path, monkeypatch)
 
     title_events = [event for event in events if event.get("type") == "session.title"]
@@ -109,7 +109,7 @@ async def test_real_hermes_title_callback_updates_atlas_and_exposes_upgrade(tmp_
 
 
 @pytest.mark.asyncio
-async def test_real_hermes_title_callback_preserves_manual_atlas_title(tmp_path, monkeypatch):
+async def test_real_atlas_title_callback_preserves_manual_atlas_title(tmp_path, monkeypatch):
     events, _fake, conversation, _memory = await _run_title_turn(
         tmp_path, monkeypatch, starting_title="User chosen title",
     )

@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
+from atlas.capabilities.probes import cached_capability_summary
 
 router = APIRouter()
 
@@ -61,12 +62,20 @@ async def health(
     else:
         status = "ok" if core_ready else "starting"
     errors = startup.error_snapshot() if startup is not None else {}
-    return {
+    body: dict[str, Any] = {
         "status": status,
         "version": "0.1.0",
         "components": components,
         "component_errors": errors,
     }
+    # Capability summary is attached only once GET /api/capabilities has produced
+    # a report (and only while it is fresh). Polling /api/health therefore never
+    # waits for a probe, opens a database, or takes a lock — and a bare app
+    # harness with no capability report keeps this payload exactly as before.
+    summary = cached_capability_summary(services)
+    if summary is not None:
+        body["capabilities"] = summary
+    return body
 
 
 @router.get("/api/sandbox/status")

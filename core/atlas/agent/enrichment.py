@@ -66,32 +66,184 @@ HOOK_POINTS = (
     "subagent_start", "subagent_end",
 )
 
+#: How a registered handler participates in :meth:`HookBus.emit`. See HookBus.
+_HOOK_MODES = frozenset({"serial", "waterfall", "parallel"})
+
 
 class HookBus:
-    """Ordered, optional lifecycle hooks. A failing hook never blocks Agent work."""
+    """Ordered, optional lifecycle hooks. A failing hook never blocks Agent work.
+
+    Three modes, because "run my handler" means different things:
+
+    ``serial`` (the default, and what every existing registration gets)
+        Handlers run one after another and their return values are ignored. This
+        is the telemetry/audit shape and stays byte-identical to the old
+        behaviour, so no existing hook changes meaning.
+
+    ``waterfall``
+        Each handler receives the previous handler's return value merged over the
+        payload, so a later handler can *rewrite* what the agent is about to do —
+        the only way to implement "inject a reminder before the model call" or
+        "redact a tool argument" without editing the call site.
+
+    ``parallel``
+        Handlers run concurrently and their return values are ignored. For side
+        effects that are slow and independent (a webhook, a metrics flush), where
+        serial execution would add up.
+
+    Registration carries the mode so call sites stay unchanged: ``emit`` looks up
+    each handler's mode rather than taking a per-call argument.
+    """
 
     def __init__(self) -> None:
         self._hooks: dict[str, list[Callable[..., Any]]] = defaultdict(list)
+        # Modes live in a parallel list rather than a dict keyed by ``id(handler)``:
+        # two identical lambdas can share an id once one is garbage collected, and
+        # a stale key would silently promote a serial handler to a waterfall one.
+        self._modes: dict[str, list[str]] = defaultdict(list)
+        #: Payload as seen after waterfall rewriting by the most recent ``emit``.
+        #: Call sites read this to pick up handler changes without a return value.
+        self.last_payload: dict[str, Any] = {}
 
-    def register(self, point: str, handler: Callable[..., Any]) -> None:
+    def register(
+        self,
+        point: str,
+        handler: Callable[..., Any],
+        *,
+        mode: str = "serial",
+    ) -> None:
         if point not in HOOK_POINTS:
             raise ValueError(f"Unknown hook point: {point}")
+        if mode not in _HOOK_MODES:
+            raise ValueError(f"Unknown hook mode: {mode}")
         self._hooks[point].append(handler)
+        self._modes[point].append(mode)
+
+    def mode_of(self, point: str, handler: Callable[..., Any]) -> str:
+        """Return the mode ``handler`` was registered with, defaulting to serial."""
+        modes = self._modes.get(point, [])
+        for index, registered in enumerate(self._hooks.get(point, [])):
+            if registered is handler and index < len(modes):
+                return modes[index]
+        return "serial"
+
+    def unregister(self, point: str, handler: Callable[..., Any]) -> bool:
+        """Remove one handler; returns whether it was there.
+
+        Needed by plugin hot reload: a reloaded plugin registers its hooks again,
+        and without a removal step each reload would leave the previous closures
+        attached, so one event would fire several copies of the same handler.
+        """
+        handlers = self._hooks.get(point)
+        if not handlers:
+            return False
+        modes = self._modes.get(point, [])
+        for index, registered in enumerate(handlers):
+            if registered is handler:
+                del handlers[index]
+                if index < len(modes):
+                    del modes[index]
+                return True
+        return False
+
+    def forget_owner(self, owner: str) -> int:
+        """Drop every handler tagged ``__atlas_owner__ == owner``; returns the count.
+
+        Plugin functions come back as fresh objects after a reload, so identity
+        cannot find the previous generation, and the closure's ``__qualname__`` is
+        the same for every plugin — matching on it would drop unrelated plugins'
+        hooks too. ``PluginRuntime`` tags each handler it registers with its plugin
+        name, which is the only per-plugin handle available.
+        """
+        if not owner:
+            return 0
+        removed = 0
+        for point in HOOK_POINTS:
+            handlers = self._hooks.get(point)
+            if not handlers:
+                continue
+            modes = self._modes.get(point, [])
+            keep: list[Callable[..., Any]] = []
+            kept_modes: list[str] = []
+            for index, handler in enumerate(handlers):
+                if getattr(handler, "__atlas_owner__", None) == owner:
+                    removed += 1
+                    continue
+                keep.append(handler)
+                if index < len(modes):
+                    kept_modes.append(modes[index])
+            if len(keep) != len(handlers):
+                self._hooks[point] = keep
+                self._modes[point] = kept_modes
+        return removed
 
     async def emit(self, point: str, **payload: Any) -> list[dict[str, str]]:
+        """Run the point's handlers; returns per-handler errors, never raises.
+
+        Handlers run in registration order. Every handler sees the payload as
+        rewritten so far, so a ``waterfall`` handler placed after another one can
+        build on its change; a handler that only wants to observe is unaffected
+        because serial handlers ignore the return value anyway. Consecutive
+        ``parallel`` handlers are gathered as one batch at their position in that
+        order, which keeps "parallel here, serial there" meaningful instead of
+        hoisting every parallel handler to the end.
+        """
         if point not in HOOK_POINTS:
             raise ValueError(f"Unknown hook point: {point}")
         errors: list[dict[str, str]] = []
-        for handler in tuple(self._hooks[point]):
+        handlers = tuple(self._hooks[point])
+        modes = tuple(self._modes.get(point, ()))
+        current = dict(payload)
+        batch: list[Callable[..., Any]] = []
+
+        async def _flush() -> None:
+            if not batch:
+                return
+            frozen = dict(current)
+            outcomes = await asyncio.gather(
+                *(_call_hook(handler, frozen) for handler in batch),
+                return_exceptions=True,
+            )
+            for handler, outcome in zip(batch, outcomes, strict=False):
+                if isinstance(outcome, BaseException):
+                    errors.append(_hook_error(handler, outcome))
+                    log.warning("agent.hook.failed", point=point, **errors[-1])
+            batch.clear()
+
+        for index, handler in enumerate(handlers):
+            mode = modes[index] if index < len(modes) else "serial"
+            if mode == "parallel":
+                batch.append(handler)
+                continue
             try:
-                result = handler(**payload)
-                if hasattr(result, "__await__"):
-                    await result
+                await _flush()
+                returned = await _call_hook(handler, dict(current))
+                # Only a dict return carries an opinion; ``None`` means "observed,
+                # nothing to change", which is what most handlers do.
+                if mode == "waterfall" and isinstance(returned, Mapping):
+                    current.update(returned)
             except Exception as exc:
-                item = {"hook": getattr(handler, "__name__", repr(handler)), "error": str(exc)}
-                errors.append(item)
-                log.warning("agent.hook.failed", point=point, exc_info=True, **item)
+                errors.append(_hook_error(handler, exc))
+                log.warning("agent.hook.failed", point=point, exc_info=True,
+                            **errors[-1])
+        try:
+            await _flush()
+        except Exception as exc:  # noqa: BLE001 - gather already isolates handlers
+            errors.append(_hook_error(_flush, exc))
+
+        self.last_payload = current
         return errors
+
+
+def _hook_error(handler: Callable[..., Any], exc: BaseException) -> dict[str, str]:
+    return {"hook": getattr(handler, "__name__", repr(handler)), "error": str(exc)}
+
+
+async def _call_hook(handler: Callable[..., Any], payload: Mapping[str, Any]) -> Any:
+    result = handler(**payload)
+    if hasattr(result, "__await__"):
+        return await result
+    return result
 
 
 @dataclass
@@ -412,7 +564,7 @@ class CodeActRuntime:
             " print('ATLAS_RESULT:'+json.dumps(result,ensure_ascii=True,default=str))\n"
             "asyncio.run(_run())\n"
         )
-        from atlas.engine_core.tools.environments.local import hermes_subprocess_env
+        from atlas.engine.tools.environments.local import hermes_subprocess_env
 
         process = await asyncio.create_subprocess_exec(
             sys.executable, "-u", "-c", runner,

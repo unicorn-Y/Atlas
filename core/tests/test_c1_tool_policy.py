@@ -199,7 +199,7 @@ async def test_ask_each_and_auto_file_request_only_their_configured_approvals():
 
 
 @pytest.mark.asyncio
-async def test_real_hermes_deferred_atlas_calls_apply_nested_allow_and_deny(tmp_path, monkeypatch):
+async def test_real_atlas_deferred_atlas_calls_apply_nested_allow_and_deny(tmp_path, monkeypatch):
     from tests.fakes.fake_llm_provider import Text, ToolCall
     from tests.test_c1_review_e2e import run_script
 

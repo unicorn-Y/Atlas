@@ -1,9 +1,9 @@
-"""Model-facing Atlas tool catalog for the Hermes runtime.
+"""Model-facing Atlas tool catalog for the Atlas engine.
 
 H2.2 module split: the tool schema assembly used to live on
 ``AgentOrchestrator._model_facing_tools``; the orchestrator keeps a thin
 delegating method so engine adapters (``engine.tool_registry`` /
-``engine.hermes_policy``) and tests keep calling it through the agent
+``engine.atlas_policy``) and tests keep calling it through the agent
 instance. Behavior is unchanged — the catalog is derived purely from the
 orchestrator's runtimes.
 """
@@ -358,6 +358,18 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
     ])
     tools.append({
         "type": "function", "function": {
+            "name": "compact_context",
+            "description": (
+                "Lightweight in-place compaction: replace older history with a work-state summary "
+                "and keep this task in the same context window. Unlike new_context_window, it does "
+                "not start a fresh window. Consider it once after the planning phase or a bounded "
+                "subtask closes, and compact only when the context is near its budget."
+            ),
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    })
+    tools.append({
+        "type": "function", "function": {
             "name": "new_context_window",
             "description": (
                 "Create a concise handoff summary of this task, then continue with a clean "
@@ -440,6 +452,47 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
             "description": "Read text, tables, formulas, and slide headings from an Office file.",
             "parameters": {"type": "object", "properties": {
                 "path": {"type": "string"},
+            }, "required": ["path"], "additionalProperties": False},
+        }},
+        {"type": "function", "function": {
+            "name": "export_pdf",
+            "description": (
+                "Convert a Word/Excel/PowerPoint/ODF file to PDF with a real office "
+                "engine (LibreOffice). Use this when the user wants a PDF or a "
+                "pixel-accurate rendering rather than extracted text."
+            ),
+            "parameters": {"type": "object", "properties": {
+                "path": {"type": "string", "description": "Source document in the workspace."},
+                "out_dir": {
+                    "type": "string",
+                    "description": "Optional output directory; defaults to the source's folder.",
+                },
+            }, "required": ["path"], "additionalProperties": False},
+        }},
+        {"type": "function", "function": {
+            "name": "office_recalculate",
+            "description": (
+                "Recompute spreadsheet formulas and write the cached values back, so "
+                "later reads (including openpyxl data_only) see numbers instead of "
+                "blank cells. Needed for any workbook whose formulas were written "
+                "programmatically and never opened in Excel."
+            ),
+            "parameters": {"type": "object", "properties": {
+                "path": {"type": "string", "description": ".xlsx/.xls/.ods/.csv to recompute."},
+                "out_dir": {"type": "string", "description": "Optional output directory."},
+            }, "required": ["path"], "additionalProperties": False},
+        }},
+        {"type": "function", "function": {
+            "name": "office_render",
+            "description": (
+                "Render one page of a document to a PNG so you can look at the layout "
+                "with vision instead of guessing from extracted text. Use it to check "
+                "for overflow, missing content, or bad formatting."
+            ),
+            "parameters": {"type": "object", "properties": {
+                "path": {"type": "string"},
+                "page": {"type": "integer", "minimum": 1, "description": "1-based page number."},
+                "out_dir": {"type": "string"},
             }, "required": ["path"], "additionalProperties": False},
         }},
     ])

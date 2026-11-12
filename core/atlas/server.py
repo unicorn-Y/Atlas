@@ -322,7 +322,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         agent_backend_host = AgentBackendHost()
 
         skill_mgr = SkillManager()
-        # E2: feed the one shared skill index from every source. Hermes skills are
+        # E2: feed the one shared skill index from every source. Engine skills are
         # strictly opt-in via `extensions.hermes_skills` in atlas.toml; plugin skill
         # dirs join through _refresh_extension_sources once plugin_runtime exists.
         hermes_skills = cfg.get("extensions.hermes_skills")
@@ -336,7 +336,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # S2.3: skill_mgr.scan_skills() is the deferred ``skills`` component; the
         # SkillManager object and its sources exist from here on.
         custom_tools = CustomToolStore(cfg.db_path.parent / "tools")
-        skill_registry = SkillRegistry(cfg.db_path.parent / "skill-registry.db")
+        from atlas.skills.agent_collections import _registry_path
+        _registry_override = _registry_path()
+        skill_registry = SkillRegistry(
+            _registry_override if _registry_override is not None
+            else cfg.db_path.parent / "skill-registry.db"
+        )
         _register_local_skills(skill_mgr, skill_registry)
         capabilities = AgentCapabilityRegistry()
         # S2.3: the per-skill capability loop (iterates skill_mgr.list_skills())
@@ -451,7 +456,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             handler=lambda inputs: CodeActRuntime(
                 AtlasToolBridge(local_execution, computer_use, mcp_client, checkpoints),
             ).execute(str(inputs["code"])),
-            source="Hermes execute_code pattern",
+            source="Atlas execute_code pattern",
         )
         capabilities.register(
             "agent.compact_context",
@@ -506,7 +511,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 ).delegate_task(
                     str(inputs["goal"]), inputs.get("context"), inputs.get("tool_profile"),
                 ),
-                source="Claude/Hermes disposable delegation pattern",
+                source="Atlas disposable delegation pattern",
             )
 
         orchestrator = AgentOrchestrator(
@@ -640,6 +645,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         services.device_registry = device_registry
         services.takeover = takeover_machine
         agent_skills_router.set_collections(AgentSkillCollections(skill_registry))
+        # The same instances go into the request container. The router globals keep
+        # standalone mounts working (see the comment above), but a field that only
+        # ever holds ``None`` is a field nobody can call — so wire it here rather
+        # than leave /api/introspect reporting it as unbound forever.
+        services.agent_skill_collections = agent_skills_router.get_collections()
         # The proposal apply path writes skill payloads through the ONE market save
         # path (register_local + rescan) — without it approve() reports 503 market_unwired.
         from atlas.api.skills_market_router import get_market
@@ -648,6 +658,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             skill_registry, market=get_market(),
             collections=agent_skills_router.get_collections(),
         ))
+        services.skill_proposals = agent_skills_router.get_proposals()
+        services.skills_market_supplier = get_market
         # -- end W10 wiring --
 
         # S2.8/S2.9/S2.6: scheduler start, the telegram fallback poll and
@@ -883,11 +895,50 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         kanban_dispatch_task = asyncio.create_task(dispatch_kanban_tasks(), name="atlas-kanban-dispatch")
 
+        # Goals persisted by GoalManager survive a restart; the in-run driver that
+        # kept them advancing does not. Surface what is still resumable so the
+        # console can offer to continue instead of the goal vanishing silently.
+        try:
+            from atlas.config import DATA_ROOT as _DATA_ROOT
+            from atlas.engine.goal_loop import scan_resumable_goals, summarize
+
+            stranded = await asyncio.to_thread(scan_resumable_goals, _DATA_ROOT / "engine")
+            if stranded:
+                log.info("goal_loop.resumable_goals", extra=summarize(stranded))
+        except Exception:
+            log.warning("goal_loop.startup_scan_failed", exc_info=True)
+
+        # OTLP export is inert unless an endpoint is configured, so this is a
+        # no-op for every install that has not opted in. It lives here rather
+        # than at import time for the same reason the goal scan does: the export
+        # thread should belong to the app that actually started, and a second
+        # app in the same process (tests) must not inherit a tracer provider.
+        try:
+            from atlas import telemetry as _telemetry
+
+            telemetry_state = _telemetry.setup_telemetry()
+            if telemetry_state.get("enabled"):
+                log.info("telemetry.ready", endpoint=telemetry_state.get("endpoint"))
+            else:
+                log.debug("telemetry.inert", reason=telemetry_state.get("reason"))
+        except Exception:
+            log.warning("telemetry.startup_failed", exc_info=True)
+
         yield  # app is running
     except BaseException:
         startup_aborted = True
         raise
     finally:
+        # Flush the OTLP batch before the loop goes away: the exporter's queue is
+        # bounded and its schedule delay is 5s, so a normal exit would otherwise
+        # drop whatever was traced during the last few seconds.
+        try:
+            from atlas import telemetry as _telemetry
+
+            if _telemetry.is_enabled():
+                await asyncio.to_thread(_telemetry.shutdown)
+        except Exception:
+            log.warning("telemetry.shutdown_failed", exc_info=True)
         if resume_task is not None:
             resume_task.cancel()
             with suppress(asyncio.CancelledError, Exception):

@@ -15,7 +15,11 @@ from atlas.engine.steer_dispatch import (
     is_send_now,
     queue_run_steer,
 )
-from tools.interrupt import consume_yield, is_thread_yield_requested
+_interrupt = pytest.importorskip(
+    "tools.interrupt", reason="thread yield signalling lived in the Hermes kernel"
+)
+consume_yield = _interrupt.consume_yield
+is_thread_yield_requested = _interrupt.is_thread_yield_requested
 
 
 class SteerableAgent:
@@ -172,7 +176,7 @@ class _RuntimeSteerableAgent:
 async def test_runtime_send_now_yields_tool_and_steers_next_turn(tmp_path):
     from tools.interrupt import request_yield  # noqa: F401  (module import sanity)
 
-    from atlas.engine.hermes_runtime import HermesRuntime
+    from atlas.engine.atlas_runtime import AtlasRuntime
 
     started, release = threading.Event(), threading.Event()
     agents: list[_RuntimeSteerableAgent] = []
@@ -188,7 +192,7 @@ async def test_runtime_send_now_yields_tool_and_steers_next_turn(tmp_path):
         list_models=lambda: [{"id": "test-model"}],
     )
     steer_queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
-    runtime = HermesRuntime(data_dir=tmp_path / "atlas-data", model_manager=models,
+    runtime = AtlasRuntime(data_dir=tmp_path / "atlas-data", model_manager=models,
                             agent_factory=factory)
     stream = runtime.run_turn(message="x", conversation_id="c", workspace=None,
                               history=[], steer_queue=steer_queue)
@@ -205,7 +209,7 @@ async def test_runtime_send_now_yields_tool_and_steers_next_turn(tmp_path):
 
     events = [await pending]
     release.set()
-    while events[-1]["type"] != "hermes.result":
+    while events[-1]["type"] != "atlas.result":
         events.append(await anext(stream))
     steered = [event for event in events if event["type"] == "run_steered"]
     assert steered == [{

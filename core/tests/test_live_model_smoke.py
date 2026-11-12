@@ -158,9 +158,9 @@ class LiveSession:
             env[key] = str(home)
         paths = [str(CORE_ROOT)]
         try:
-            import hermes_state
+            import atlas_state
 
-            paths.append(str(Path(hermes_state.__file__).resolve().parent))
+            paths.append(str(Path(atlas_state.__file__).resolve().parent))
         except ImportError:
             pass
         if env.get("PYTHONPATH"):

@@ -6,7 +6,7 @@
 # clean/smudge/process filters (worktree add's smudge, the finalization status
 # probe's clean) are neutralized via noninteractive_repo_git_env. Filter discovery
 # is fail-closed: creation is skipped and finalization keeps the tree unproven.
-# Changes: Atlas branch naming and subprocess integration; no Hermes runtime
+# Changes: Atlas branch naming and subprocess integration; no engine runtime
 # imports (noninteractive_git_env / noninteractive_repo_git_env inlined below).
 """Git worktree helpers for isolated Atlas children.
 

@@ -29,6 +29,25 @@ _SECRET_TEXT = re.compile(
 _BEARER_TEXT = re.compile(r"(?i)\bBearer\s+[^\s,;]+")
 
 
+def _trace_context(
+    _logger: Any, _method: str, event_dict: dict[str, Any]
+) -> dict[str, Any]:
+    """Stamp the active OTel trace/span id onto the record.
+
+    Lazy import keeps ``atlas.logs`` free of the OpenTelemetry dependency when
+    telemetry is not configured, and keeps a broken import from costing logs.
+    """
+    try:
+        from atlas.telemetry import current_ids
+
+        ids = current_ids()
+    except Exception:  # noqa: BLE001 - logging must never fail on telemetry
+        return event_dict
+    if ids:
+        event_dict.update(ids)
+    return event_dict
+
+
 def configure_logging(config: AtlasConfig | None = None) -> Path:
     """Install Atlas handlers once; JSON on disk, configured format on stderr."""
     config = config or get_config()
@@ -43,6 +62,7 @@ def configure_logging(config: AtlasConfig | None = None) -> Path:
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
+        _trace_context,
     ]
     with _configure_lock:
         root = logging.getLogger()

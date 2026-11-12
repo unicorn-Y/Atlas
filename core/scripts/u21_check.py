@@ -47,8 +47,8 @@ def check_wsl_policy() -> None:
 
 
 def check_browser_password_import(base: Path) -> None:
-    from atlas.engine_core.agent.browser_password_csv import import_selected, preview_csv
-    from atlas.engine_core.agent.vault_store import VaultStore
+    from atlas.engine.agent.browser_password_csv import import_selected, preview_csv
+    from atlas.engine.agent.vault_store import VaultStore
 
     def csv_text(password: str) -> str:
         output = io.StringIO(newline="")

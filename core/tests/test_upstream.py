@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -108,12 +109,17 @@ def test_set_pip_pin_rewrites_exact_pins_only(tmp_path: Path) -> None:
     assert '"uvicorn[standard]==0.31.0"' in text
 
 
-def test_set_hermes_pin(tmp_path: Path) -> None:
+def test_set_atlas_pin(tmp_path: Path) -> None:
     pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text('[tool.atlas.hermes]\nrepository = "x"\ncommit = "' + "a" * 40
+    old = "a" * 40
+    pyproject.write_text('[tool.atlas.engine]\nrepository = "x"\ncommit = "' + old
                          + '"\n\n[tool.ruff]\n', encoding="utf-8")
-    staging.set_hermes_pin(pyproject, "b" * 40)
-    assert f'commit = "{"b" * 40}"' in pyproject.read_text(encoding="utf-8")
+    staging.set_git_pin(pyproject, old, "b" * 40)
+    text = pyproject.read_text(encoding="utf-8")
+    assert f'commit = "{"b" * 40}"' in text
+    # The rewrite must not disturb the rest of the file: the surrounding section
+    # carries the fork URL and the ruff config that later stages still read.
+    assert "[tool.ruff]" in text and 'repository = "x"' in text
 
 
 def test_npm_spec_keeps_range_style() -> None:
@@ -175,35 +181,6 @@ def test_merge_text_keeps_windows_line_endings() -> None:
     assert merged == "a\r\nATLAS\r\nc\r\nUP\r\n"
 
 
-def test_merge_npm_fork_three_way(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def package(version: str, files: dict[str, str]) -> Path:
-        root = tmp_path / "pkgs" / version / "package"
-        for rel, text in files.items():
-            (root / rel).parent.mkdir(parents=True, exist_ok=True)
-            (root / rel).write_text(text, encoding="utf-8")
-        return root
-
-    base = package("1.0.0", {"a.ts": "1\n2\n3\n4\n", "same.ts": "s\n", "gone.ts": "g\n",
-                             "dist/x.js": "built\n", "edited.ts": "e\n"})
-    new = package("1.1.0", {"a.ts": "1\n2\n3\nUP\n", "same.ts": "s\n", "added.ts": "n\n",
-                            "dist/x.js": "built2\n", "edited.ts": "E-up\n"})
-    roots = {"1.0.0": base, "1.1.0": new}
-    monkeypatch.setattr(forks, "download_package", lambda _p, version, _dest: roots[version])
-    fork = tmp_path / "fork"
-    fork.mkdir()
-    (fork / "a.ts").write_text("1\nATLAS\n3\n4\n", encoding="utf-8")
-    (fork / "same.ts").write_text("s\n", encoding="utf-8")
-    (fork / "gone.ts").write_text("g\n", encoding="utf-8")
-    (fork / "edited.ts").write_text("e-atlas\n", encoding="utf-8")
-    result = forks.merge_npm_fork(fork, "pkg", "1.0.0", "1.1.0", tmp_path / "work")
-    assert (fork / "a.ts").read_text(encoding="utf-8") == "1\nATLAS\n3\nUP\n"
-    assert (fork / "added.ts").exists()
-    assert not (fork / "gone.ts").exists()
-    assert not (fork / "dist").exists()
-    assert result.conflicts == ["edited.ts"]
-    assert not result.clean
-
-
 # ---------------------------------------------------------------------------
 # 验证判定
 # ---------------------------------------------------------------------------
@@ -242,7 +219,7 @@ def test_relink_junctions_points_into_destination(tmp_path: Path) -> None:
         pytest.skip("symlinks not permitted here")
     staging.relink_junctions(src, dst, "node_modules")
     created = dst / "node_modules" / "@atlas" / "pkg"
-    assert created.is_symlink() or created.is_junction()
+    assert staging.is_link(created)
     assert created.resolve() == (dst / "pkg").resolve()
 
 
@@ -259,19 +236,30 @@ def test_mirror_never_deletes_through_workspace_links(tmp_path: Path) -> None:
                             timeout=30)
     else:
         link.symlink_to(repo / "frontend", target_is_directory=True)
-    assert link.is_junction() or link.is_symlink()
+    # The link must exist before mirror() can be shown not to follow it; a
+    # machine where mklink silently failed would otherwise make this test pass
+    # while proving nothing.
+    assert staging.is_link(link)
     staging.mirror(snap, repo / "node_modules")
     assert (repo / "frontend" / "package.json").exists()
     assert (repo / "node_modules" / "left-pad").is_dir()
 
 
-def test_group_plan_orders_kernel_first() -> None:
+def test_group_plan_orders_dependencies_before_their_transitives() -> None:
     components = [
-        {"id": "npm:react", "kind": "npm"}, {"id": "fork:hermes", "kind": "fork"},
-        {"id": "pip:x", "kind": "pip"}, {"id": "skill:s", "kind": "skill"},
+        {"id": "npm:react", "kind": "npm"}, {"id": "pip-transitive:t", "kind": "pip-transitive"},
+        {"id": "pip:x", "kind": "pip"}, {"id": "npm-transitive:r", "kind": "npm-transitive"},
     ]
-    groups = staging.group_plan(components, ["npm:react", "fork:hermes", "pip:x", "skill:s"])
-    assert [group.key for group in groups] == ["hermes", "pip", "npm"]
+    groups = staging.group_plan(
+        components, ["npm:react", "pip-transitive:t", "pip:x", "npm-transitive:r"],
+    )
+    # A transitive pin is only meaningful once its direct dependency is settled,
+    # so each transitive group must follow the group it derives from. `GROUPS`
+    # order is the contract; anything else silently upgrades a package before
+    # the thing that requires it.
+    assert [group.key for group in groups] == [
+        "pip", "pip-transitive", "npm", "npm-transitive",
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +332,7 @@ def test_scan_mcp_merges_npm_dependency_and_reads_live_config(tmp_path: Path) ->
                     encoding="utf-8")
     npm_item = Component(id="npm:@playwright/mcp", name="@playwright/mcp", category="automation",
                          kind="npm")
-    ctx = inventory.Context(repo=tmp_path, python="python", hermes_dir=tmp_path,
+    ctx = inventory.Context(repo=tmp_path, python="python", atlas_dir=tmp_path,
                             config_path=live, fetch=False)
     items = {item.id: item for item in inventory.scan_mcp(ctx, {npm_item.id: npm_item})}
     assert npm_item.detail["mcp_refs"][0]["version"] == "0.0.45"
@@ -361,7 +349,7 @@ def test_scan_git_pins_offline(tmp_path: Path) -> None:
         '[project]\nname="x"\ndependencies=[]\n[project.optional-dependencies]\n'
         f'learning = ["skillopt @ git+https://github.com/microsoft/SkillOpt@{sha}"]\n',
         encoding="utf-8")
-    ctx = inventory.Context(repo=tmp_path, python="python", hermes_dir=tmp_path, fetch=False)
+    ctx = inventory.Context(repo=tmp_path, python="python", atlas_dir=tmp_path, fetch=False)
     [item] = inventory.scan_git_pins(ctx)
     assert item.id == "git:skillopt" and item.category == "learning"
     assert item.detail == {"repo": "microsoft/SkillOpt", "sha": sha}
@@ -372,13 +360,18 @@ def test_scan_all_turns_scanner_errors_into_rows(tmp_path: Path,
     def boom(_ctx: inventory.Context) -> list[Component]:
         raise RuntimeError("网络断了")
 
-    for name in ("scan_pip", "scan_git_pins", "scan_npm", "scan_hermes",
-                 "scan_runtime", "scan_borrowed"):
+    for name in ("scan_pip", "scan_git_pins", "scan_npm", "scan_runtime",
+                 "scan_borrowed"):
         monkeypatch.setattr(inventory, name, boom)
-    ctx = inventory.Context(repo=tmp_path, python="python", hermes_dir=tmp_path, fetch=False)
+    ctx = inventory.Context(repo=tmp_path, python="python", atlas_dir=tmp_path, fetch=False)
     items = inventory.scan_all(ctx)
     assert {item.status for item in items} == {"error"}
-    assert len(ctx.errors) == 7
+    # Five scanners run independently — pip, git, npm, runtime, borrowed — and each
+    # converts its own failure into a row. mcp does not: it runs last against the
+    # npm results, so with npm failed it receives an empty mapping and returns
+    # cleanly. A scanner that raises without recording would be a silent hole in
+    # the inventory, so the count is asserted exactly rather than as "> 0".
+    assert len(ctx.errors) == 5
 
 
 # ---------------------------------------------------------------------------

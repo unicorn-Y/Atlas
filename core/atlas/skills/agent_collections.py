@@ -25,9 +25,11 @@ plus an aggregate row under ``agent_id='*'``.
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from contextlib import closing
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -286,3 +288,37 @@ class AgentSkillCollections:
             "agents": per_agent,
             "distinct_agents": len(per_agent),
         }
+
+
+def _registry_path() -> Path | None:
+    """Locate the skill registry DB the same way ``server.py`` builds it.
+
+    Honours an explicit override first so tests and alternate profiles never
+    write to the real registry.
+    """
+    override = os.environ.get("ATLAS_SKILL_REGISTRY_DB", "").strip()
+    if override:
+        return Path(override)
+    from atlas.config import get_config
+
+    return get_config().db_path.parent / "skill-registry.db"
+
+
+def record_skill_use(skill_name: str, agent_id: str = AGGREGATE_AGENT) -> None:
+    """Count one real skill activation, best effort.
+
+    Called from the ``use_skill`` tool, which is the only place a skill body is
+    actually handed to the model — so the count means "loaded into a turn",
+    not "appeared in the index". Never raises: telemetry must not be able to
+    fail a turn, and a missing or locked registry DB just means no count.
+    """
+    try:
+        path = _registry_path()
+        if path is None or not path.exists():
+            return
+        from atlas.skills.registry import SkillRegistry
+
+        AgentSkillCollections(SkillRegistry(path)).record_usage(skill_name, agent_id)
+    except Exception as exc:  # noqa: BLE001 - telemetry is never load-bearing
+        log.debug("skills.usage_record_failed", skill=skill_name,
+                  error=str(exc), error_type=type(exc).__name__)

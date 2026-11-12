@@ -22,7 +22,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from atlas.engine.hermes_runtime import HermesRuntime, _history_tokens
+from atlas.engine.atlas_runtime import AtlasRuntime, _history_tokens
 from atlas.models.router import ModelRouter
 from tests.fakes.fake_llm_provider import FakeLLMServer, Text
 
@@ -55,11 +55,11 @@ class _ProviderKeyManager:
         self.model_router = ModelRouter(self)
         self._models = [
             {
-                "id": "main-model", "provider": "atlas-fixture", "hermes_provider": "atlas-fixture",
+                "id": "main-model", "provider": "atlas-fixture", "atlas_provider": "atlas-fixture",
                 "litellm_model": "openai/main-model", "native_model": "main-model",
             },
             {
-                "id": "ref-model", "provider": "atlas-fixture", "hermes_provider": "atlas-fixture",
+                "id": "ref-model", "provider": "atlas-fixture", "atlas_provider": "atlas-fixture",
                 "litellm_model": "openai/ref-model", "native_model": "ref-model",
             },
         ]
@@ -99,11 +99,11 @@ class _NativeAnthropicManager:
         self.pool = _RecordingPool("anthropic")
         self._models = [
             {
-                "id": "main-model", "provider": "anthropic", "hermes_provider": "anthropic",
+                "id": "main-model", "provider": "anthropic", "atlas_provider": "anthropic",
                 "litellm_model": "anthropic/claude-main", "native_model": "claude-main",
             },
             {
-                "id": "other-model", "provider": "anthropic", "hermes_provider": "anthropic",
+                "id": "other-model", "provider": "anthropic", "atlas_provider": "anthropic",
                 "litellm_model": "anthropic/claude-other", "native_model": "claude-other",
             },
         ]
@@ -130,7 +130,7 @@ class _NativeAnthropicManager:
         pass
 
 
-class _FakeHermesAgent:
+class _FakeAtlasAgent:
     """Minimal Hermes agent double: no model HTTP, captures constructor kwargs."""
 
     def __init__(self, *, registry: list | None = None, **kwargs):
@@ -177,8 +177,8 @@ async def test_moa_reference_consult_routes_through_router_without_gateway(
     })
     with FakeLLMServer(aux=lambda _req: Text("reference opinion")) as fake:
         manager = _ProviderKeyManager(fake.base_url)
-        runtime = HermesRuntime(
-            data_dir=tmp_path / "data", model_manager=manager, agent_factory=_FakeHermesAgent,
+        runtime = AtlasRuntime(
+            data_dir=tmp_path / "data", model_manager=manager, agent_factory=_FakeAtlasAgent,
         )
         events = [event async for event in runtime.run_turn(
             message="review this migration", conversation_id="moa-router",
@@ -203,17 +203,17 @@ async def test_moa_reference_consult_routes_through_router_without_gateway(
 
 @pytest.mark.asyncio
 async def test_context_handoff_summary_routes_through_router(tmp_path, monkeypatch):
-    import atlas.engine.hermes_policy as hermes_policy
+    import atlas.engine.atlas_policy as atlas_policy
     import atlas.engine.tool_registry as tool_registry
 
-    monkeypatch.setattr(hermes_policy, "install_atlas_policy_plugin", lambda: None)
+    monkeypatch.setattr(atlas_policy, "install_atlas_policy_plugin", lambda: None)
     monkeypatch.setattr(tool_registry, "bind_atlas_tools", lambda *_args: None)
     monkeypatch.setattr(tool_registry, "activate_atlas_tool_context", lambda *_args: None)
     monkeypatch.setattr(tool_registry, "clear_atlas_tool_context", lambda: None)
     with FakeLLMServer(aux=lambda _req: Text("handoff summary text")) as fake:
         manager = _ProviderKeyManager(fake.base_url)
-        runtime = HermesRuntime(
-            data_dir=tmp_path / "data", model_manager=manager, agent_factory=_FakeHermesAgent,
+        runtime = AtlasRuntime(
+            data_dir=tmp_path / "data", model_manager=manager, agent_factory=_FakeAtlasAgent,
         )
         atlas_context = SimpleNamespace(
             mode="act",
@@ -224,7 +224,7 @@ async def test_context_handoff_summary_routes_through_router(tmp_path, monkeypat
             workspace=None, history=[], atlas_agent=SimpleNamespace(),
             atlas_context=atlas_context,
         )]
-        assert events[-1]["type"] == "hermes.result"
+        assert events[-1]["type"] == "atlas.result"
 
         summary = await atlas_context.new_context_window_callback()
         assert summary == "handoff summary text"
@@ -244,17 +244,17 @@ async def test_context_handoff_summary_routes_through_router(tmp_path, monkeypat
 async def test_main_agent_factory_uses_router_route_and_stable_pool_fingerprint(tmp_path):
     """Native route kwargs reach the constructor; the pool object never busts the cache."""
     manager = _NativeAnthropicManager("https://api.anthropic.example")
-    agents: list[_FakeHermesAgent] = []
-    runtime = HermesRuntime(
+    agents: list[_FakeAtlasAgent] = []
+    runtime = AtlasRuntime(
         data_dir=tmp_path / "data", model_manager=manager,
-        agent_factory=lambda **kwargs: _FakeHermesAgent(registry=agents, **kwargs),
+        agent_factory=lambda **kwargs: _FakeAtlasAgent(registry=agents, **kwargs),
     )
     for index in range(2):
         events = [event async for event in runtime.run_turn(
             message=f"turn {index}", conversation_id="native-route",
             workspace=None, history=[],
         )]
-        assert events[-1]["type"] == "hermes.result"
+        assert events[-1]["type"] == "atlas.result"
 
     # Two consecutive turns, one constructor call: the credential pool object is
     # re-created per resolve(), but the fingerprint must stay stable (H3 cache).
@@ -272,7 +272,7 @@ async def test_main_agent_factory_uses_router_route_and_stable_pool_fingerprint(
         message="after switch", conversation_id="native-route",
         workspace=None, history=[], model_id="other-model",
     )]
-    assert events[-1]["type"] == "hermes.result"
+    assert events[-1]["type"] == "atlas.result"
     assert len(agents) == 2
     assert agents[0].closed is True
     assert agents[1].kwargs["model"] == "claude-other"
@@ -289,16 +289,16 @@ async def test_unknown_model_falls_back_to_gateway_route_kwargs(tmp_path):
         list_models=lambda: [],
     )
     manager.model_router = ModelRouter(manager)
-    agents: list[_FakeHermesAgent] = []
-    runtime = HermesRuntime(
+    agents: list[_FakeAtlasAgent] = []
+    runtime = AtlasRuntime(
         data_dir=tmp_path / "data", model_manager=manager,
-        agent_factory=lambda **kwargs: _FakeHermesAgent(registry=agents, **kwargs),
+        agent_factory=lambda **kwargs: _FakeAtlasAgent(registry=agents, **kwargs),
     )
     events = [event async for event in runtime.run_turn(
         message="x", conversation_id="fallback-route", workspace=None, history=[],
     )]
 
-    assert events[-1]["type"] == "hermes.result"
+    assert events[-1]["type"] == "atlas.result"
     kwargs = agents[0].kwargs
     # legacy shape: unknown ids fall back to the raw current id, gateway creds
     assert kwargs["model"] == "m"

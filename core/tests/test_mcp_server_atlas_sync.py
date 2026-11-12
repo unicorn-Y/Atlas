@@ -25,7 +25,7 @@ def _set_isolated_atlas_config(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_api_added_mcp_server_is_saved_to_the_hermes_config(tmp_path, monkeypatch):
+async def test_api_added_mcp_server_is_saved_to_the_atlas_config(tmp_path, monkeypatch):
     from atlas import server
     from atlas.tools.mcp_client import MCPClient
 
@@ -64,17 +64,17 @@ async def test_api_added_mcp_server_is_saved_to_the_hermes_config(tmp_path, monk
 
 
 @pytest.mark.asyncio
-async def test_api_added_mcp_is_searchable_callable_and_removed_from_hermes(
+async def test_api_added_mcp_is_searchable_callable_and_removed_from_atlas(
     tmp_path, monkeypatch,
 ):
     from tools.mcp_tool_lifecycle import shutdown_mcp_servers
 
     from atlas import server
     from atlas.agent import AgentOrchestrator, AgentRunContext
-    from atlas.engine.hermes_runtime import HermesRuntime
+    from atlas.engine.atlas_runtime import AtlasRuntime
     from atlas.tools.local_execution import LocalExecutionRuntime
     from atlas.tools.mcp_client import MCPClient
-    from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_hermes_home
+    from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_atlas_home
 
     config_module, config_path, _ = _set_isolated_atlas_config(tmp_path, monkeypatch)
     fake_server = Path(__file__).parent / "fakes" / "fake_mcp_server.py"
@@ -166,7 +166,7 @@ async def test_api_added_mcp_is_searchable_callable_and_removed_from_hermes(
 
     with FakeLLMServer(respond) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         models = SimpleNamespace(
             current_model="fake-model", current_litellm_model="fake-model",
@@ -176,7 +176,7 @@ async def test_api_added_mcp_is_searchable_callable_and_removed_from_hermes(
         agent = AgentOrchestrator(
             models, object(), mcp_client=client, local_execution=LocalExecutionRuntime(),
         )
-        runtime = HermesRuntime(data_dir=tmp_path, model_manager=models)
+        runtime = AtlasRuntime(data_dir=tmp_path, model_manager=models)
         try:
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=server.app), base_url="http://test"
@@ -255,7 +255,7 @@ async def test_api_added_mcp_is_searchable_callable_and_removed_from_hermes(
 
 
 @pytest.mark.asyncio
-async def test_failed_api_mcp_add_does_not_change_hermes_config(tmp_path, monkeypatch):
+async def test_failed_api_mcp_add_does_not_change_atlas_config(tmp_path, monkeypatch):
     from atlas import server
     from atlas.tools.mcp_client import MCPClient
 

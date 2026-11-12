@@ -22,12 +22,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from atlas.engine import hermes_runtime
-from atlas.engine.hermes_runtime import HermesRuntime
-from tests.fakes.fake_llm_provider import FakeLLMServer, Text, write_hermes_home
+from atlas.engine import atlas_runtime
+from atlas.engine.atlas_runtime import AtlasRuntime
+from tests.fakes.fake_llm_provider import FakeLLMServer, Text, write_atlas_home
 
 
-class FakeHermesAgent:
+class FakeAtlasAgent:
     """Minimal Hermes agent double exercising the runtime's resource surface."""
 
     def __init__(self, *, registry: list | None = None, **kwargs):
@@ -93,14 +93,14 @@ class _CountingEnviron(MutableMapping):
 @pytest.fixture
 def mcp_registration_probe(monkeypatch):
     """Reset the process MCP fingerprint and count real registration calls."""
-    hermes_runtime.reset_runtime_registrations()
+    atlas_runtime.reset_runtime_registrations()
     calls: list[dict] = []
 
     def counting_register(_self):
         calls.append({})
         return []
 
-    monkeypatch.setattr(HermesRuntime, "_register_atlas_mcp", counting_register)
+    monkeypatch.setattr(AtlasRuntime, "_register_atlas_mcp", counting_register)
     return calls
 
 
@@ -108,12 +108,12 @@ def mcp_registration_probe(monkeypatch):
 async def test_mcp_registers_once_across_twenty_turns(tmp_path, monkeypatch, mcp_registration_probe):
     with FakeLLMServer(default_text="turn answer") as fake:
         models = _models(fake, [{"id": "main-model", "litellm_model": "openai/main-model"}])
-        runtime = HermesRuntime(data_dir=tmp_path / "data", model_manager=models,
-                                agent_factory=FakeHermesAgent)
-        import atlas.engine.hermes_policy as hermes_policy
+        runtime = AtlasRuntime(data_dir=tmp_path / "data", model_manager=models,
+                                agent_factory=FakeAtlasAgent)
+        import atlas.engine.atlas_policy as atlas_policy
         import atlas.engine.tool_registry as tool_registry
 
-        monkeypatch.setattr(hermes_policy, "install_atlas_policy_plugin", lambda: None)
+        monkeypatch.setattr(atlas_policy, "install_atlas_policy_plugin", lambda: None)
         monkeypatch.setattr(tool_registry, "bind_atlas_tools", lambda *_args: None)
         monkeypatch.setattr(tool_registry, "activate_atlas_tool_context", lambda *_args: None)
         monkeypatch.setattr(tool_registry, "clear_atlas_tool_context", lambda: None)
@@ -125,7 +125,7 @@ async def test_mcp_registers_once_across_twenty_turns(tmp_path, monkeypatch, mcp
                 atlas_agent=SimpleNamespace(_delegation=object()),
                 atlas_context=SimpleNamespace(mode="act"),
             )]
-            assert events[-1]["type"] == "hermes.result"
+            assert events[-1]["type"] == "atlas.result"
 
         assert len(mcp_registration_probe) == 1
 
@@ -143,13 +143,13 @@ async def test_mcp_config_change_refreshes_registration(tmp_path, monkeypatch):
         calls.append(1)
         return ["mcp-files"] if config["tools.servers"] else []
 
-    monkeypatch.setattr(HermesRuntime, "_register_atlas_mcp", counting_register)
-    hermes_runtime.reset_runtime_registrations()
+    monkeypatch.setattr(AtlasRuntime, "_register_atlas_mcp", counting_register)
+    atlas_runtime.reset_runtime_registrations()
     models = SimpleNamespace(current_model="m", current_litellm_model="openai/m",
                              gateway_base_url="http://fake.invalid/v1", _api_key="k",
                              list_models=lambda: [])
-    runtime = HermesRuntime(data_dir=tmp_path / "data", model_manager=models,
-                            agent_factory=FakeHermesAgent)
+    runtime = AtlasRuntime(data_dir=tmp_path / "data", model_manager=models,
+                            agent_factory=FakeAtlasAgent)
 
     assert runtime._ensure_atlas_mcp_registered() == []
     assert len(calls) == 1
@@ -170,20 +170,20 @@ async def test_mcp_config_change_refreshes_registration(tmp_path, monkeypatch):
 async def test_os_environ_stable_during_runs_and_home_written_once(tmp_path, monkeypatch):
     with FakeLLMServer(default_text="env answer") as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         models = _models(fake, [{"id": "main-model", "litellm_model": "openai/main-model"}])
         spy = _CountingEnviron(os.environ)
         monkeypatch.setattr(os, "environ", spy)
-        runtime = HermesRuntime(data_dir=tmp_path / "data", model_manager=models,
-                                agent_factory=FakeHermesAgent)
+        runtime = AtlasRuntime(data_dir=tmp_path / "data", model_manager=models,
+                                agent_factory=FakeAtlasAgent)
         snapshot = dict(os.environ)
         for index in range(3):
             events = [event async for event in runtime.run_turn(
                 message=f"turn {index}", conversation_id="env-stable",
                 workspace=str(tmp_path), history=[],
             )]
-            assert events[-1]["type"] == "hermes.result"
+            assert events[-1]["type"] == "atlas.result"
         assert dict(os.environ) == snapshot
         # Construction stamps HERMES_HOME once; turns never rewrite it (H3 rule 1).
         assert spy.writes.count("HERMES_HOME") == 1
@@ -196,17 +196,17 @@ async def test_same_session_reuses_one_agent_and_model_switch_rebuilds(tmp_path)
             {"id": "main-model", "litellm_model": "openai/main-model"},
             {"id": "other-model", "litellm_model": "openai/other-model"},
         ])
-        agents: list[FakeHermesAgent] = []
-        runtime = HermesRuntime(
+        agents: list[FakeAtlasAgent] = []
+        runtime = AtlasRuntime(
             data_dir=tmp_path / "data", model_manager=models,
-            agent_factory=lambda **kwargs: FakeHermesAgent(registry=agents, **kwargs),
+            agent_factory=lambda **kwargs: FakeAtlasAgent(registry=agents, **kwargs),
         )
         for index in range(5):
             events = [event async for event in runtime.run_turn(
                 message=f"turn {index}", conversation_id="reuse-session",
                 workspace=str(tmp_path), history=[],
             )]
-            assert events[-1]["type"] == "hermes.result"
+            assert events[-1]["type"] == "atlas.result"
         assert len(agents) == 1
 
         # Model switch invalidates the cache entry and closes the replaced agent.
@@ -214,7 +214,7 @@ async def test_same_session_reuses_one_agent_and_model_switch_rebuilds(tmp_path)
             message="after switch", conversation_id="reuse-session",
             workspace=str(tmp_path), history=[], model_id="other-model",
         )]
-        assert events[-1]["type"] == "hermes.result"
+        assert events[-1]["type"] == "atlas.result"
         assert len(agents) == 2
         assert agents[0].closed is True
         assert agents[1].closed is False
@@ -225,7 +225,7 @@ async def test_same_session_reuses_one_agent_and_model_switch_rebuilds(tmp_path)
             message="back again", conversation_id="reuse-session",
             workspace=str(tmp_path), history=[], model_id="main-model",
         )]
-        assert events[-1]["type"] == "hermes.result"
+        assert events[-1]["type"] == "atlas.result"
         assert len(agents) == 3
         assert agents[2].kwargs["model"] == "main-model"
         await runtime.aclose()
@@ -236,14 +236,14 @@ async def test_same_session_reuses_one_agent_and_model_switch_rebuilds(tmp_path)
 async def test_abandoned_stream_closes_agent_and_skips_cache(tmp_path):
     """aclose()/cancellation must not leave a half-turn agent in the reuse cache."""
     with FakeLLMServer(default_text="unused") as fake:
-        agents: list[FakeHermesAgent] = []
+        agents: list[FakeAtlasAgent] = []
 
-        class BlockingAgent(FakeHermesAgent):
+        class BlockingAgent(FakeAtlasAgent):
             def run_conversation(self, **kwargs):
                 time.sleep(0.2)
                 return {"final_response": "late", "messages": []}
 
-        runtime = HermesRuntime(
+        runtime = AtlasRuntime(
             data_dir=tmp_path / "data", model_manager=_models(fake, []),
             agent_factory=lambda **kwargs: BlockingAgent(registry=agents, **kwargs),
         )
@@ -266,16 +266,16 @@ async def test_lru_overflow_closes_oldest_agent(tmp_path, monkeypatch):
         "agent.agent_cache_size": 2, "agent.agent_cache_idle_seconds": 1800.0,
     }))
     with FakeLLMServer(default_text="lru answer") as fake:
-        agents: list[FakeHermesAgent] = []
-        runtime = HermesRuntime(
+        agents: list[FakeAtlasAgent] = []
+        runtime = AtlasRuntime(
             data_dir=tmp_path / "data", model_manager=_models(fake, []),
-            agent_factory=lambda **kwargs: FakeHermesAgent(registry=agents, **kwargs),
+            agent_factory=lambda **kwargs: FakeAtlasAgent(registry=agents, **kwargs),
         )
         for conversation in ("c1", "c2", "c3"):
             events = [event async for event in runtime.run_turn(
                 message="x", conversation_id=conversation, workspace=None, history=[],
             )]
-            assert events[-1]["type"] == "hermes.result"
+            assert events[-1]["type"] == "atlas.result"
         assert set(runtime._agent_cache) == {"c2", "c3"}
         assert [agent.closed for agent in agents] == [True, False, False]
         await runtime.aclose()
@@ -290,20 +290,20 @@ async def test_idle_timeout_reclaims_agents(tmp_path, monkeypatch):
         "agent.agent_cache_size": 16, "agent.agent_cache_idle_seconds": 0.05,
     }))
     with FakeLLMServer(default_text="idle answer") as fake:
-        agents: list[FakeHermesAgent] = []
-        runtime = HermesRuntime(
+        agents: list[FakeAtlasAgent] = []
+        runtime = AtlasRuntime(
             data_dir=tmp_path / "data", model_manager=_models(fake, []),
-            agent_factory=lambda **kwargs: FakeHermesAgent(registry=agents, **kwargs),
+            agent_factory=lambda **kwargs: FakeAtlasAgent(registry=agents, **kwargs),
         )
         events = [event async for event in runtime.run_turn(
             message="x", conversation_id="idle-1", workspace=None, history=[],
         )]
-        assert events[-1]["type"] == "hermes.result"
+        assert events[-1]["type"] == "atlas.result"
         await asyncio.sleep(0.15)
         events = [event async for event in runtime.run_turn(
             message="y", conversation_id="idle-2", workspace=None, history=[],
         )]
-        assert events[-1]["type"] == "hermes.result"
+        assert events[-1]["type"] == "atlas.result"
         deadline = time.monotonic() + 5
         while agents[0].closed is False and time.monotonic() < deadline:
             await asyncio.sleep(0.02)
@@ -315,11 +315,11 @@ async def test_idle_timeout_reclaims_agents(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_automatic_compaction_futures_do_not_leak(tmp_path):
     """100 automatic compactions leave the lifecycle-future set empty (H3 rule 6)."""
-    hermes_runtime._LIFECYCLE_FUTURES.clear()
+    atlas_runtime._LIFECYCLE_FUTURES.clear()
     with FakeLLMServer(default_text="ok") as fake:
-        agents: list[FakeHermesAgent] = []
+        agents: list[FakeAtlasAgent] = []
 
-        class CompressingAgent(FakeHermesAgent):
+        class CompressingAgent(FakeAtlasAgent):
             def run_conversation(self, *, user_message, system_message, conversation_history, task_id=None):
                 self.kwargs["event_callback"]("session:compress", {"compression_count": 1})
                 return {"final_response": "compressed", "messages": []}
@@ -330,7 +330,7 @@ async def test_automatic_compaction_futures_do_not_leak(tmp_path):
             hook_calls.append({"event": event_name, **payload})
             return {}
 
-        runtime = HermesRuntime(
+        runtime = AtlasRuntime(
             data_dir=tmp_path / "data", model_manager=_models(fake, []),
             agent_factory=lambda **kwargs: CompressingAgent(registry=agents, **kwargs),
         )
@@ -339,11 +339,11 @@ async def test_automatic_compaction_futures_do_not_leak(tmp_path):
                 message="grow the context", conversation_id="compact-session",
                 workspace=None, history=[], lifecycle_hook_callback=lifecycle_hook,
             )]
-            assert events[-1]["type"] == "hermes.result"
+            assert events[-1]["type"] == "atlas.result"
         deadline = time.monotonic() + 5
-        while hermes_runtime._LIFECYCLE_FUTURES and time.monotonic() < deadline:
+        while atlas_runtime._LIFECYCLE_FUTURES and time.monotonic() < deadline:
             await asyncio.sleep(0.01)
-        assert hermes_runtime._LIFECYCLE_FUTURES == set()
+        assert atlas_runtime._LIFECYCLE_FUTURES == set()
         assert len(hook_calls) == 100
         await runtime.aclose()
 
@@ -359,22 +359,22 @@ async def test_event_driven_notifications_reach_running_turn(tmp_path, monkeypat
     monkeypatch.setattr("atlas.config.get_config", lambda: FixtureConfig({
         "tools.servers": {}, "tools.auto_start": [],
     }))
-    import atlas.engine.hermes_policy as hermes_policy
+    import atlas.engine.atlas_policy as atlas_policy
     import atlas.engine.tool_registry as tool_registry
 
-    monkeypatch.setattr(hermes_policy, "install_atlas_policy_plugin", lambda: None)
+    monkeypatch.setattr(atlas_policy, "install_atlas_policy_plugin", lambda: None)
     monkeypatch.setattr(tool_registry, "bind_atlas_tools", lambda *_args: None)
     with FakeLLMServer(default_text="notified") as fake:
-        agents: list[FakeHermesAgent] = []
+        agents: list[FakeAtlasAgent] = []
 
-        class SlowAgent(FakeHermesAgent):
+        class SlowAgent(FakeAtlasAgent):
             def run_conversation(self, *, user_message, system_message, conversation_history, task_id=None):
                 started.set()
                 release.wait(timeout=5)
                 return {"final_response": "done", "messages": []}
 
         started, release = threading.Event(), threading.Event()
-        runtime = HermesRuntime(
+        runtime = AtlasRuntime(
             data_dir=tmp_path / "data", model_manager=_models(fake, []),
             agent_factory=lambda **kwargs: SlowAgent(registry=agents, **kwargs),
         )
@@ -393,7 +393,7 @@ async def test_event_driven_notifications_reach_running_turn(tmp_path, monkeypat
         assert agents[0].steered == ["后台通知（process.completed）：\nprocess exit=0; output READY"]
         release.set()
         events = await consume
-        assert events[-1]["type"] == "hermes.result"
+        assert events[-1]["type"] == "atlas.result"
         await runtime.aclose()
 
 
@@ -410,10 +410,10 @@ async def test_waiting_on_model_no_longer_polls_event_loop(tmp_path, monkeypatch
 
     with FakeLLMServer(slow_responder) as fake:
         home = tmp_path / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         models = _models(fake, [{"id": "main-model", "litellm_model": "openai/main-model"}])
-        runtime = HermesRuntime(data_dir=tmp_path / "data", model_manager=models)
+        runtime = AtlasRuntime(data_dir=tmp_path / "data", model_manager=models)
 
         loop = asyncio.get_running_loop()
         iterations = 0

@@ -31,6 +31,24 @@ CONFIG_PATH = (
 EXAMPLE_CONFIG_PATH = PROJECT_ROOT / "config" / "atlas.example.toml"
 USER_SETTINGS_PATH = DATA_ROOT / "data" / "user-settings.json"
 
+# ``atlas.engine.atlas_constants.get_atlas_home()`` resolves ``ATLAS_HOME``
+# → ``HERMES_HOME`` → ``memory.db_path``'s parent. Nothing ever set
+# ``ATLAS_HOME``, while a standalone Hermes install exports ``HERMES_HOME`` at
+# user level, so the engine home silently resolved to that install's directory:
+# boot warned on every start, and every engine path keyed off that home
+# (``auth.json``, ``vault/``, browser profiles, ``cache/``, the *default*
+# ``state.db``) pointed at another product's data.
+#
+# Atlas's real engine data lives in ``DATA_ROOT/engine`` — that is the literal
+# the rest of ``atlas/`` uses (``DATA_ROOT / "engine"`` appears throughout
+# conversations_router, run_phases, deferred_startup, sources, ...). Pinning
+# ``ATLAS_HOME`` here, in the module that owns path resolution and that
+# ``atlas_constants`` imports anyway, makes the two spellings agree for every
+# entry point (desktop_entry, ``uvicorn atlas.server:app``, CLI, workers)
+# without touching ``HERMES_HOME``, which stays Hermes's own.
+if not os.environ.get("ATLAS_HOME", "").strip():
+    os.environ["ATLAS_HOME"] = str(DATA_ROOT / "engine")
+
 
 def load_user_settings(path: Path | None = None) -> dict[str, Any]:
     """Load persistent settings written through the Atlas settings API."""
@@ -42,7 +60,37 @@ def load_user_settings(path: Path | None = None) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         log.warning("settings.invalid_or_unreadable", path=str(settings_path))
         return {}
-    return data if isinstance(data, dict) else {}
+    return _migrate_provider_key(data) if isinstance(data, dict) else {}
+
+
+_LEGACY_PROVIDER_KEY = "hermes_provider"
+_PROVIDER_KEY = "atlas_provider"
+
+
+def _migrate_provider_key(data: dict[str, Any]) -> dict[str, Any]:
+    """Carry the retired ``hermes_provider`` field forward onto ``atlas_provider``.
+
+    The per-model routing field was renamed because Atlas owns the engine. Settings
+    files written before the rename still carry the old key; without this every
+    user-defined model loses its provider id and silently routes as "custom", which
+    sends requests to the wrong endpoint. Migration runs on read so an old settings
+    file keeps working even when it is never rewritten, and it runs here rather than
+    in ModelManager so all ~40 settings consumers see the new key.
+    """
+    custom_models = data.get("custom_models")
+    if not isinstance(custom_models, list):
+        return data
+    migrated: list[Any] = []
+    changed = False
+    for entry in custom_models:
+        if isinstance(entry, dict) and _LEGACY_PROVIDER_KEY in entry:
+            entry = dict(entry)
+            entry.setdefault(_PROVIDER_KEY, entry.pop(_LEGACY_PROVIDER_KEY))
+            changed = True
+        migrated.append(entry)
+    if not changed:
+        return data
+    return {**data, "custom_models": migrated}
 
 
 def save_user_settings(data: dict[str, Any], path: Path | None = None) -> None:

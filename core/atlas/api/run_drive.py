@@ -42,6 +42,7 @@ from atlas.runtime.commands import CommandSource
 from atlas.runtime.external_agents import normalize_external_event
 from atlas.runtime.hooks import HookStore
 from atlas.scheduler import ScheduledTask, TaskStatus
+from atlas.session_projections import SessionProjections
 from atlas.skills import SkillManager, plugin_skill_sources
 from atlas.skills.registry import SkillRegistry
 from atlas.ssh import ssh_workspaces
@@ -311,7 +312,7 @@ def _goal_session_id(task_id: str) -> str:
 
 
 async def _ensure_goal_migrated(task: ScheduledTask) -> None:
-    """Import a pre-C3R schedule objective into Hermes once, then discard its copy."""
+    """Import a pre-C3R schedule objective into the engine once, then discard its copy."""
     if not task.legacy_goal:
         return
     from atlas.config import DATA_ROOT
@@ -345,7 +346,7 @@ async def _ensure_goal_migrated(task: ScheduledTask) -> None:
 
 
 async def _run_scheduled_goal(task_id: str, message: str = "") -> None:
-    """Run a scheduled goal using Hermes GoalManager as its only lifecycle authority."""
+    """Run a scheduled goal using the engine GoalManager as its only lifecycle authority."""
     del message
     if _server().scheduler is None:
         return
@@ -450,6 +451,13 @@ async def _run_scheduled_goal(task_id: str, message: str = "") -> None:
                 "reason": decision.get("reason", ""),
                 "status": decision.get("status"),
             }, run_id)
+            if decision.get("planning_turn"):
+                await asyncio.to_thread(record_goal_event, home, session_id, "goal.planning_turn", {
+                    "attempt": decision.get("plan_attempts"),
+                    "max_attempts": decision.get("max_plan_attempts"),
+                    "milestones": decision.get("milestones", 0),
+                    "expiring": decision.get("plan_gate_expiring", False),
+                }, run_id)
             if decision.get("verdict") == "blocked":
                 return
             if not decision.get("should_continue"):
@@ -466,6 +474,12 @@ def _agent_service() -> PersistentAgentService:
 
 def _atlas_goal_judge(model_manager: Any):
     """Return a conservative goal judge backed by Atlas' routed model API."""
+    if model_manager is None or getattr(model_manager, "model_router", None) is None:
+        # No model wiring yet (e.g. before lifespan, or in an isolated test app).
+        # Returning None makes this an explicitly unwired judge, so the goal layer
+        # reports "judge_unavailable" instead of dying on an AttributeError.
+        return None
+
     def judge(goal: str, response: str, state: Any) -> tuple[str, str]:
         contract = state.contract.render_block() if state.has_contract() else "(no completion contract)"
         prompt = (
@@ -1486,6 +1500,14 @@ async def _handle_run_start(
     model_id = data.get("model", (profile or {}).get("model"))
     reasoning_effort = data.get("reasoning_effort", (profile or {}).get("reasoning_effort"))
     permission_mode = data.get("permission_mode")
+    # A named preset is a convenience over permission_mode, not a second policy
+    # layer: it resolves to a mode here so every downstream reader still sees
+    # exactly one value. An explicit permission_mode wins over a preset.
+    preset_name = data.get("permission_preset")
+    if permission_mode is None and preset_name is not None:
+        from atlas.approval_policy import preset as _preset
+
+        permission_mode = _preset(str(preset_name))["mode"]
     run_tool_allow = data.get("tool_allow")
     run_tool_deny = data.get("tool_deny")
     if (run_tool_allow is not None and (not isinstance(run_tool_allow, list)
@@ -1944,6 +1966,29 @@ async def _handle_run_start(
             "category": "validation", "detail": "Docker 沙箱需要本机工作目录，不能与 ssh:// 同时使用。",
         }))
         return
+    # Bind before the workspace branches: the run.context.sources envelope at the
+    # end of this handler reads context_files for every run, including the
+    # no-workspace and ssh:// paths that never entered the "elif workspace" block.
+    # Bound only inside that branch it raised UnboundLocalError, which killed the
+    # websocket for every workspace-less run before the model was ever called.
+    context_files = data.get("context_files") or []
+    if not isinstance(context_files, list):
+        invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+        await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
+            "category": "validation", "detail": "context_files must be a list",
+        }))
+        return
+    # Same reason as context_files above: run.context.sources reads this for every
+    # run, but it was only bound inside the "elif workspace" branch.
+    context_conversations = data.get("context_conversations") or []
+    if not isinstance(context_conversations, list) or len(context_conversations) > 3:
+        invalid_run = RunState(run_id, str(data.get("conversation_id", "")),
+                               model_id or getattr(model_mgr, "current_model", ""))
+        await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
+            "category": "validation",
+            "detail": "context_conversations must contain at most three conversation ids",
+        }))
+        return
     if workspace and str(workspace).startswith("ssh://"):
         try:
             host, remote_root = ssh_workspaces.parse_workspace(str(workspace))
@@ -2019,13 +2064,6 @@ async def _handle_run_start(
             run.allowed_paths = [str(workspace_path.resolve())]
         if not run.ephemeral and memory is not None and getattr(memory, "_db", None) is not None and not (conversation and conversation.get("worktree_path")):
             await memory.update_conversation(conv_id, workspace=str(Path(workspace).expanduser().resolve()))
-        context_files = data.get("context_files", [])
-        if not isinstance(context_files, list):
-            invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-            await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
-                "category": "validation", "detail": "context_files must be a list",
-            }))
-            return
         if context_files and not run.workspace:
             invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
             await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
@@ -2064,13 +2102,6 @@ async def _handle_run_start(
                 return
         if context_blocks:
             content += "".join(context_blocks)
-        context_conversations = data.get("context_conversations", [])
-        if not isinstance(context_conversations, list) or len(context_conversations) > 3:
-            invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
-            await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
-                "category": "validation", "detail": "context_conversations must contain at most three conversation ids",
-            }))
-            return
         for other_id in context_conversations:
             other = await memory.get_conversation(str(other_id)) if memory else None
             if other is None:
@@ -2085,7 +2116,6 @@ async def _handle_run_start(
                 "session_summary": "\n".join(f"{m['role']}: {m['content'][:1000]}" for m in messages),
             }) if orchestrator else {"session_summary": "\n".join(m["content"][:500] for m in messages)}
             content += f"\n\n[Referenced conversation: {other.get('title', other_id)}]\n{compacted.get('session_summary', '')}"
-        run.user_input = content
         if data.get("ephemeral") is True:
             if memory is None:
                 invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
@@ -2157,6 +2187,13 @@ async def _handle_run_start(
                 "files": [{"path": item["path"], "bytes": item["bytes"]}
                           for item in run.workspace_rules],
             }))
+    # Bind the prompt to the run outside every workspace branch. It used to be set
+    # only inside the ``elif workspace`` block, so any run without a workspace
+    # reached ``persist_run`` below with ``user_input`` still "", and the stored
+    # transcript lost the request itself (436 rows in runtime_runs, 432 of them
+    # blank — every blank one was workspace-less). Bind it after the ephemeral
+    # rewrite so the persisted text matches what the model actually received.
+    run.user_input = content
     await manager.send(conn_id, run.next_envelope("run.context.sources", {
         "sources": [
             *[{"kind": "context_file", "path": str(path), "loaded": True} for path in context_files],
@@ -2762,6 +2799,13 @@ async def _execute_run(
 
     async def emit(event: str, data: dict[str, Any]) -> None:
         """Emit an event envelope to the client."""
+        # Derived session views depend on run events, so drop the affected cache
+        # entries here — this is the one funnel every run event passes through, so
+        # a projection never has to remember to invalidate itself.
+        try:
+            SessionProjections.invalidate_for(services, event)
+        except Exception:  # noqa: BLE001 - a cache miss must never fail a run
+            log.warning("session_projections.invalidate_failed", event=event, exc_info=True)
         if not run.ephemeral and event in {"subtask.started", "subtask.progress", "subtask.output", "subtask.completed",
                      "subtask.group_completed", "subtask.background_completed"}:
             try:
@@ -2949,7 +2993,7 @@ async def _execute_run(
                 except Exception as exc:
                     log.warning("mcp.startup_progress_unavailable", reason=type(exc).__name__)
 
-        # Keep only Atlas metadata; Hermes SessionDB owns the transcript.
+        # Keep only Atlas metadata; the engine SessionDB owns the transcript.
         try:
             await memory.save_conversation_metadata(run.conversation_id, title_hint=content)
             record_api_timing("conversation_metadata_saved")
@@ -3687,7 +3731,26 @@ async def _execute_run(
                         "verdict": goal_decision.get("verdict"),
                         "reason": goal_decision.get("reason"),
                         "message": goal_decision.get("message"),
+                        "planning_turn": bool(goal_decision.get("planning_turn")),
+                        "plan_attempts": goal_decision.get("plan_attempts"),
+                        "milestones": goal_decision.get("milestones"),
                     })
+                if goal_decision.get("planning_turn"):
+                    try:
+                        from atlas.engine.session_sync import record_goal_event
+
+                        await asyncio.to_thread(
+                            record_goal_event, DATA_ROOT / "engine", run.conversation_id,
+                            "goal.planning_turn", {
+                                "attempt": goal_decision.get("plan_attempts"),
+                                "max_attempts": goal_decision.get("max_plan_attempts"),
+                                "milestones": goal_decision.get("milestones", 0),
+                                "expiring": goal_decision.get("plan_gate_expiring", False),
+                            }, getattr(run, "run_id", None),
+                        )
+                    except Exception:
+                        log.warning("conversation.goal_planning_event_failed",
+                                    conversation_id=run.conversation_id)
                 continuation_prompt = goal_decision.get("continuation_prompt")
                 if goal_decision.get("should_continue") and continuation_prompt:
                     run.status = "running"

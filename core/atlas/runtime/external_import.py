@@ -133,7 +133,13 @@ def _source_home(source_home: Path | None) -> Path:
 
 def _canonical_mcp(raw: Mapping[str, Any]) -> dict[str, Any]:
     if raw.get("url") and not raw.get("command"):
-        return {"transport": "sse", "url": str(raw["url"]), "command": "", "args": [], "env": {}}
+        # Streamable HTTP is the default for URL-only servers: it is the one
+        # transport that can carry the 2026-07-28 stateless protocol. An
+        # explicitly declared ``sse`` is preserved so older two-endpoint
+        # servers keep working.
+        declared = str(raw.get("transport") or "").strip().lower()
+        transport = declared if declared in {"sse", "streamable_http"} else "streamable_http"
+        return {"transport": transport, "url": str(raw["url"]), "command": "", "args": [], "env": {}}
     return {
         "transport": "stdio", "url": "",
         "command": str(raw.get("command") or ""),
@@ -181,7 +187,7 @@ def _server_block(name: str, entry: Mapping[str, Any]) -> str:
         f"[tools.servers.{json.dumps(name, ensure_ascii=False)}]",
         f"transport = {json.dumps(entry['transport'])}",
     ]
-    if entry["transport"] == "sse":
+    if entry["transport"] != "stdio":
         lines.append(f"url = {json.dumps(entry['url'], ensure_ascii=False)}")
     else:
         lines.append(f"command = {json.dumps(entry['command'], ensure_ascii=False)}")
@@ -328,8 +334,8 @@ def scan_external(source: str, *, workspace: Path | None = None,
 
 
 def _mcp_detail(entry: Mapping[str, Any]) -> str:
-    if entry["transport"] == "sse":
-        return "SSE 服务器，写入 atlas.toml [tools.servers]"
+    if entry["transport"] != "stdio":
+        return f"{entry['transport']} 服务器，写入 atlas.toml [tools.servers]"
     return f"stdio 服务器 {entry['command']}，写入 atlas.toml [tools.servers]"
 
 

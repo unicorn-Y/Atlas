@@ -242,7 +242,7 @@ def test_origin_guard_rule_applies_standalone(client):
     assert http.get("/api/local/models/status").status_code == 200
 
 
-def test_router_needs_no_hermes_at_import():
+def test_router_needs_no_atlas_at_import():
     """The router module is import-safe without a running runtime (lazy hermes imports)."""
     import importlib
 

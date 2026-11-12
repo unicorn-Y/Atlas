@@ -1302,9 +1302,9 @@ class TestBackendParityWave1:
                 "summary": "A compactable conversation", "compressed": True,
             }
 
-        from atlas.engine.hermes_runtime import HermesRuntime
+        from atlas.engine.atlas_runtime import AtlasRuntime
 
-        monkeypatch.setattr(HermesRuntime, "compact_session", fake_compact_session)
+        monkeypatch.setattr(AtlasRuntime, "compact_session", fake_compact_session)
         compacted = await client.post(f"/api/conversations/{conv_id}/compact")
         assert compacted.status_code == 200 and compacted.json()["before_tokens"] > 0
         assert (await client.post("/api/conversations/missing/compact")).status_code == 404

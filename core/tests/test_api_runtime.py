@@ -274,6 +274,10 @@ async def test_native_subtask_resume_reuses_preserved_transcript(tmp_path) -> No
 _LIFESPAN_WIRED_ELSEWHERE = frozenset({
     "runtime_mgr", "runtime_start_handler", "runtime_resume_handler",
     "rules_trust_handler",
+    # Constructed by the dataclass default factory, not by the lifespan: it is a
+    # process-local cache registry with no external dependency to open, so waiting
+    # for startup would only delay the first projection without gaining anything.
+    "session_projections",
 })
 _LIFESPAN_LEGACY_SINGLETON_FIELDS = frozenset({
     "sandbox_manager", "skill_catalog_provider", "agent_skill_collections",

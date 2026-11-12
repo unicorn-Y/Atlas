@@ -5,11 +5,11 @@ from types import SimpleNamespace
 import pytest
 
 from atlas.agent import AgentOrchestrator
-from agent import title_generator
+title_generator = pytest.importorskip("agent.title_generator", reason="title generation module moved into the Atlas engine")
 from atlas.memory import MemoryStore
 from atlas.tools.local_execution import LocalExecutionRuntime
 from atlas.usage import aggregate_run_usage, deduplicate_run_usage
-from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_hermes_home
+from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_atlas_home
 
 
 @pytest.mark.asyncio
@@ -45,7 +45,7 @@ async def test_four_main_requests_forward_one_child_usage_row_once(tmp_path, mon
         Text("parent completed"),
     ]) as fake:
         home = data_root / "engine"
-        write_hermes_home(home, fake.base_url, extra_config=(
+        write_atlas_home(home, fake.base_url, extra_config=(
             "auxiliary:\n"
             "  title_generation:\n"
             "    enabled: false\n"

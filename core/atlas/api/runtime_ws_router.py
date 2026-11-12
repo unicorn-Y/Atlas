@@ -105,11 +105,31 @@ async def ws_chat(
                 service = delegation if services.orchestrator else None
                 if (run is None or service is None or not isinstance(text, str)
                         or not service.steer_subtask(subtask_id, text)):
+                    # Report every refusal, including the ``run is None`` case: the
+                    # renderer correlates on ``data.subtask_id`` and would otherwise
+                    # show its optimistic 「已发送补充要求」 forever, because
+                    # steerSubtask() here returns True before the outcome is known.
+                    if run is None:
+                        reason = "run_not_active"
+                    elif service is None:
+                        reason = "orchestrator_unavailable"
+                    elif not isinstance(text, str):
+                        reason = "invalid_content"
+                    else:
+                        reason = "subtask_not_active"
                     if run is not None:
                         await services.runtime_mgr.send_run(run, run.next_envelope(
-                            "subtask.steer_rejected", {"subtask_id": subtask_id,
-                                                        "reason": "subtask_not_active"},
+                            "subtask.steer_rejected",
+                            {"subtask_id": subtask_id, "reason": reason},
                         ), conn_id)
+                    else:
+                        # No run to address and nothing to persist: reply on the
+                        # connection that asked, using a throwaway envelope.
+                        rejected = RunState(run_id, "", "")
+                        await services.runtime_mgr.send(conn_id, rejected.next_envelope(
+                            "subtask.steer_rejected",
+                            {"subtask_id": subtask_id, "reason": reason},
+                        ))
                 else:
                     await services.runtime_mgr.send_run(run, run.next_envelope(
                         "subtask.steered", {"subtask_id": subtask_id, "text": text.strip()},

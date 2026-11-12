@@ -1,7 +1,7 @@
 """``/api/automations`` — Cron Agent API（W4；挂载由 server 集成方完成）.
 
 产品面 = CRUD + run-now/cancel/runs + pause/resume + import-legacy
-（integration-map §5 契约；Hermes cron 产品面 ∪ OpenClaw cron-tool actions 的交集）。
+（integration-map §5 契约；engine cron 产品面 ∪ OpenClaw cron-tool actions 的交集）。
 
 engine 未启动（DBOS 未接）时 CRUD 照常（只写 automations.toml），
 run-now / cancel / runs 返回 503。

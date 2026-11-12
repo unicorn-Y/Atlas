@@ -30,6 +30,8 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 
+from atlas.api.app_services import AppServices
+from atlas.api.dependencies import get_optional_app_services
 from atlas.origin_guard import TOKEN_HEADER, is_trusted
 from atlas.skills.acquisition import _parse_manifest, payload_sha256
 from atlas.skills.market import (
@@ -73,6 +75,25 @@ def get_market() -> Any:
         return default_market(skill_registry, skill_manager=skill_mgr)
 
     return build()
+
+
+def market_from_services(services: Any) -> Any:
+    """The market a request handler should use, preferring the container.
+
+    ``AppServices.skills_market_supplier`` is the composition root: when the app
+    wired one, the handler must use it. The module global stays as the fallback
+    for standalone mounts and tests, which is why this reads the container first
+    instead of replacing ``get_market``.
+
+    This is not a micro-optimisation. ``default_market()`` rebuilds the whole
+    market object on every call, so a handler that reached past the container was
+    paying for a fresh index on each request and ignoring whatever the container
+    had already resolved.
+    """
+    supplier = getattr(services, "skills_market_supplier", None)
+    if callable(supplier):
+        return supplier()
+    return get_market()
 
 
 def _http_error(exc: MarketError) -> HTTPException:
@@ -154,9 +175,10 @@ async def market_search(
     q: str = "",
     source: str | None = None,
     limit: int = 20,
+    services: AppServices | None = Depends(get_optional_app_services),
 ) -> Any:
     """Search every enabled market source; failures degrade, never block the UI."""
-    search_task = asyncio.create_task(get_market().search(query=q, source=source, limit=limit))
+    search_task = asyncio.create_task(market_from_services(services).search(query=q, source=source, limit=limit))
     try:
         while not search_task.done():
             await asyncio.wait({search_task}, timeout=0.1)
@@ -174,17 +196,17 @@ async def market_search(
 
 
 @router.get("/api/skills/market/sources", dependencies=[Depends(_require_trusted_origin)])
-async def list_market_sources() -> dict[str, Any]:
+async def list_market_sources(services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     try:
-        return get_market().list_sources()
+        return market_from_services(services).list_sources()
     except MarketError as exc:
         raise _http_error(exc) from None
 
 
 @router.post("/api/skills/market/sources", dependencies=[Depends(_require_trusted_origin)])
-async def add_market_source(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+async def add_market_source(payload: dict[str, Any] = Body(...), services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     try:
-        entry = get_market().add_source(
+        entry = market_from_services(services).add_source(
             str(payload.get("name", "")), str(payload.get("kind", "")),
             path=payload.get("path"), repo=payload.get("repo"),
             tap_path=str(payload.get("tap_path", "skills/")),
@@ -196,9 +218,9 @@ async def add_market_source(payload: dict[str, Any] = Body(...)) -> dict[str, An
 
 
 @router.delete("/api/skills/market/sources/{name}", dependencies=[Depends(_require_trusted_origin)])
-async def remove_market_source(name: str) -> dict[str, Any]:
+async def remove_market_source(name: str, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     try:
-        return get_market().remove_source(name)
+        return market_from_services(services).remove_source(name)
     except MarketError as exc:
         raise _http_error(exc) from None
 
@@ -207,9 +229,9 @@ async def remove_market_source(name: str) -> dict[str, Any]:
     "/api/skills/market/sources/{name}/enable",
     dependencies=[Depends(_require_trusted_origin)],
 )
-async def enable_market_source(name: str) -> dict[str, Any]:
+async def enable_market_source(name: str, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     try:
-        return get_market().set_source_enabled(name, True)
+        return market_from_services(services).set_source_enabled(name, True)
     except MarketError as exc:
         raise _http_error(exc) from None
 
@@ -218,19 +240,19 @@ async def enable_market_source(name: str) -> dict[str, Any]:
     "/api/skills/market/sources/{name}/disable",
     dependencies=[Depends(_require_trusted_origin)],
 )
-async def disable_market_source(name: str) -> dict[str, Any]:
+async def disable_market_source(name: str, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     try:
-        return get_market().set_source_enabled(name, False)
+        return market_from_services(services).set_source_enabled(name, False)
     except MarketError as exc:
         raise _http_error(exc) from None
 
 
 @router.get(
     "/api/skills/market/installed", dependencies=[Depends(_require_trusted_origin)])
-async def market_installed() -> dict[str, Any]:
+async def market_installed(services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     """Installed-with-provenance view (marketplace + X2/X5 local origins)."""
     try:
-        rows = get_market().installed()
+        rows = market_from_services(services).installed()
         return {"count": len(rows), "skills": rows}
     except MarketError as exc:
         raise _http_error(exc) from None
@@ -240,9 +262,9 @@ async def market_installed() -> dict[str, Any]:
     "/api/skills/market/provenance/{name}",
     dependencies=[Depends(_require_trusted_origin)],
 )
-async def market_provenance(name: str) -> dict[str, Any]:
+async def market_provenance(name: str, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     try:
-        record = get_market().provenance(name)
+        record = market_from_services(services).provenance(name)
         if record is None:
             raise HTTPException(status_code=404, detail=f"Skill not found: {name}")
         return record
@@ -254,25 +276,25 @@ async def market_provenance(name: str) -> dict[str, Any]:
     "/api/skills/market/{source}/{skill_id:path}",
     dependencies=[Depends(_require_trusted_origin)],
 )
-async def market_detail(source: str, skill_id: str) -> dict[str, Any]:
+async def market_detail(source: str, skill_id: str, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     """Detail + SKILL.md preview + file list for one market candidate.
 
     Declared after the literal sub-paths above so the ``{skill_id:path}`` catch
     all can never shadow them.
     """
     try:
-        return await get_market().detail(source, skill_id)
+        return await market_from_services(services).detail(source, skill_id)
     except MarketError as exc:
         raise _http_error(exc) from None
 
 
 @router.post("/api/skills/market/install", dependencies=[Depends(_require_trusted_origin)])
-async def market_install(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+async def market_install(payload: dict[str, Any] = Body(...), services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     try:
         from atlas.skills.source_policy import get_policy
         if not get_policy()["create"].get("marketplace", True) and payload.get("override_source_policy") is not True:
             raise HTTPException(status_code=403, detail="市场技能创建已被来源策略禁用；显式确认后可覆盖一次。")
-        return await get_market().install(
+        return await market_from_services(services).install(
             str(payload.get("source", "")), str(payload.get("id", "")),
             scope=str(payload.get("scope", "user")),
             overwrite=bool(payload.get("overwrite", False)),
@@ -282,10 +304,10 @@ async def market_install(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
 
 
 @router.get("/api/skills/updates", dependencies=[Depends(_require_trusted_origin)])
-async def skill_updates(name: str | None = None) -> dict[str, Any]:
+async def skill_updates(name: str | None = None, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     """Update check across installed-with-provenance skills (single state: Registry)."""
     try:
-        market = get_market()
+        market = market_from_services(services)
         return {
             "count": len(market.installed()),
             "installed": market.installed(),
@@ -296,17 +318,17 @@ async def skill_updates(name: str | None = None) -> dict[str, Any]:
 
 
 @router.post("/api/skills/market/update", dependencies=[Depends(_require_trusted_origin)])
-async def market_update(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+async def market_update(payload: dict[str, Any] = Body(...), services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     try:
-        return await get_market().update(str(payload.get("name", "")))
+        return await market_from_services(services).update(str(payload.get("name", "")))
     except MarketError as exc:
         raise _http_error(exc) from None
 
 
 @router.post("/api/skills/market/update-all", dependencies=[Depends(_require_trusted_origin)])
-async def market_update_all() -> dict[str, Any]:
+async def market_update_all(services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     try:
-        return await get_market().update_all()
+        return await market_from_services(services).update_all()
     except MarketError as exc:
         raise _http_error(exc) from None
 
@@ -315,9 +337,9 @@ async def market_update_all() -> dict[str, Any]:
     "/api/skills/market/{name}/enable",
     dependencies=[Depends(_require_trusted_origin)],
 )
-async def enable_skill(name: str) -> dict[str, Any]:
+async def enable_skill(name: str, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     try:
-        return get_market().enable(name)
+        return market_from_services(services).enable(name)
     except MarketError as exc:
         raise _http_error(exc) from None
 
@@ -326,42 +348,43 @@ async def enable_skill(name: str) -> dict[str, Any]:
     "/api/skills/market/{name}/disable",
     dependencies=[Depends(_require_trusted_origin)],
 )
-async def disable_skill(name: str) -> dict[str, Any]:
+async def disable_skill(name: str, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     try:
-        return get_market().disable(name)
+        return market_from_services(services).disable(name)
     except MarketError as exc:
         raise _http_error(exc) from None
 
 
 @router.delete("/api/skills/{name}", dependencies=[Depends(_require_trusted_origin)])  # noqa: E501
-async def uninstall_skill_route(name: str) -> dict[str, Any]:
+async def uninstall_skill_route(name: str, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     """Taskbook contract route. No DELETE /api/skills/{name} exists in server.py;
     if one is added there later, remount this as /api/skills/market/{name}."""
     try:
-        return get_market().uninstall(name)
+        return market_from_services(services).uninstall(name)
     except MarketError as exc:
         raise _http_error(exc) from None
 
 
 @router.delete("/api/skills/market/{name}", dependencies=[Depends(_require_trusted_origin)])
-async def uninstall_skill_market_route(name: str) -> dict[str, Any]:
+async def uninstall_skill_market_route(name: str, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     """Alias of the DELETE /api/skills/{name} contract at the market prefix —
     the frontend's uninstall call targets this path (skillsMarketApi.ts)."""
     try:
-        return get_market().uninstall(name)
+        return market_from_services(services).uninstall(name)
     except MarketError as exc:
         raise _http_error(exc) from None
 
 
 @router.patch("/api/skills/market/{name}/enabled", dependencies=[Depends(_require_trusted_origin)])
-async def set_skill_enabled(name: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+async def set_skill_enabled(name: str, payload: dict[str, Any] | None = None, services: AppServices | None = Depends(get_optional_app_services)) -> dict[str, Any]:
     """PATCH {enabled: bool} — frontend enable/disable toggle (skillsMarketApi.ts)."""
     enabled = bool((payload or {}).get("enabled", True))
     try:
-        market = get_market()
+        market = market_from_services(services)
         return market.enable(name) if enabled else market.disable(name)
     except MarketError as exc:
         raise _http_error(exc) from None
 
 
-__all__ = ["router", "set_market_supplier", "get_market", "save_local_skill_bundle"]
+__all__ = ["router", "set_market_supplier", "get_market", "market_from_services",
+           "save_local_skill_bundle"]

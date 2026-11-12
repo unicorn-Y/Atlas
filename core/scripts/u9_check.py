@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 
 from atlas.api.workspace_router import _pr_shape
-from atlas.engine_core.agent.vault_store import VaultStore
+from atlas.engine.agent.vault_store import VaultStore
 from atlas.memory import MemoryStore
 from atlas.projects import ProjectStore
 from atlas.tools.x2.recording import Recorder, RecordingStore, to_skill_bundle

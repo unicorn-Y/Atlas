@@ -188,7 +188,7 @@ def test_cooldown_expiry_recovery(isolated) -> None:
 # ③ 协议兼容：真实 hermes recover_with_credential_pool 走 429 路径换 key
 # ---------------------------------------------------------------------------
 
-def test_hermes_recover_with_credential_pool_swaps_key(isolated) -> None:
+def test_atlas_recover_with_credential_pool_swaps_key(isolated) -> None:
     from agent.agent_runtime_helpers import recover_with_credential_pool
     from agent.credential_pool import credential_pool_matches_provider
 

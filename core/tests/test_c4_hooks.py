@@ -21,7 +21,7 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from atlas.agent import AgentOrchestrator
-from atlas.engine import HermesRuntime
+from atlas.engine import AtlasRuntime
 from atlas.runtime.hooks import HookStore, _json_decision
 from atlas.tools.local_execution import LocalExecutionRuntime
 
@@ -55,6 +55,25 @@ def _store(tmp_path: Path) -> HookStore:
     return HookStore(tmp_path / "hooks.toml")
 
 
+def _approved_store(tmp_path: Path, event: str | None = None) -> HookStore:
+    """A store whose project hooks have been reviewed.
+
+    Project hooks are fail-closed: an unreviewed one is blocked before it runs,
+    because a settings file in a checkout is not consent. Tests that are about
+    what the hook *does* have to approve the current revision first, otherwise
+    every one of them would assert the trust gate instead.
+    """
+    store = _store(tmp_path)
+    for listed in store.list_all(str(tmp_path)):
+        if event is not None and listed.get("event") != event:
+            continue
+        status = store.trust_status(listed)
+        store.set_hook_trust(
+            listed["id"], True, fingerprint=status["trust_fingerprint"], cwd=str(tmp_path),
+        )
+    return store
+
+
 def _tool_runtime(tmp_path: Path, callback: Any, approval: Any = None) -> SimpleNamespace:
     return SimpleNamespace(
         cancel_event=None, pause_event=None, approval_callback=approval,
@@ -63,6 +82,9 @@ def _tool_runtime(tmp_path: Path, callback: Any, approval: Any = None) -> Simple
         conversation_id="conv-1", user_hook_callback=callback,
         tool_allow=None, tool_deny=[], read_only=False, mode="act",
         maintenance_context={},
+        # Resolved per-run env overrides; the tool path reads it unconditionally,
+        # so a stub without it fails the call instead of testing the hook.
+        session_env={},
     )
 
 
@@ -104,7 +126,7 @@ async def test_pretooluse_hook_blocks_tool_call(tmp_path: Path) -> None:
     ))
     _write_project_hooks(tmp_path, "PreToolUse", sys.executable, [str(script)],
                          matcher="local_file")
-    outcome = await _store(tmp_path).execute("tool.before", {
+    outcome = await _approved_store(tmp_path).execute("tool.before", {
         "conversation_id": "conv", "tool_name": "local_file",
         "parameters": {"path": "x.txt", "action": "read"},
     }, cwd=str(tmp_path))
@@ -122,7 +144,7 @@ async def test_pretooluse_hook_rewrites_tool_input(tmp_path: Path) -> None:
     ))
     _write_project_hooks(tmp_path, "PreToolUse", sys.executable, [str(script)],
                          matcher="read_office")
-    outcome = await _store(tmp_path).execute("tool.before", {
+    outcome = await _approved_store(tmp_path).execute("tool.before", {
         "conversation_id": "conv", "tool_name": "read_office",
         "parameters": {"path": "missing.xlsx"},
     }, cwd=str(tmp_path))
@@ -139,7 +161,7 @@ async def test_posttooluse_hook_appends_context(tmp_path: Path) -> None:
         " 'additionalContext': 'hook says check the numbers'}}))\n"
     ))
     _write_project_hooks(tmp_path, "PostToolUse", sys.executable, [str(script)])
-    outcome = await _store(tmp_path).execute("tool.after", {
+    outcome = await _approved_store(tmp_path).execute("tool.after", {
         "conversation_id": "conv", "tool_name": "read_office",
         "parameters": {"path": "hooked.xlsx"}, "result": {"content": []},
     }, cwd=str(tmp_path))
@@ -233,7 +255,7 @@ async def test_userpromptsubmit_hook_block_and_plain_stdout_context(
         "sys.exit(2)\n"
     ))
     _write_project_hooks(tmp_path, "UserPromptSubmit", sys.executable, [str(block_script)])
-    outcome = await _store(tmp_path).execute("UserPromptSubmit", {
+    outcome = await _approved_store(tmp_path).execute("UserPromptSubmit", {
         "prompt": "hello", "conversation_id": "conv",
     }, cwd=str(tmp_path))
     assert outcome["blocked"] is True
@@ -245,7 +267,7 @@ async def test_userpromptsubmit_hook_block_and_plain_stdout_context(
         "print('extra background for this turn')\n"
     ))
     _write_project_hooks(tmp_path, "UserPromptSubmit", sys.executable, [str(context_script)])
-    outcome = await _store(tmp_path).execute("UserPromptSubmit", {
+    outcome = await _approved_store(tmp_path).execute("UserPromptSubmit", {
         "prompt": "hello", "conversation_id": "conv",
     }, cwd=str(tmp_path))
     assert outcome["blocked"] is False
@@ -313,9 +335,10 @@ async def test_precompact_hook_blocks_manual_compaction(tmp_path: Path) -> None:
         "sys.exit(2)\n"
     ))
     _write_project_hooks(tmp_path, "PreCompact", sys.executable, [str(script)])
-    runtime = HermesRuntime(data_dir=tmp_path / "data", model_manager=MagicMock())
+    runtime = AtlasRuntime(data_dir=tmp_path / "data", model_manager=MagicMock())
     result = await runtime.compact_session(
         conversation_id="conv-1", workspace=str(tmp_path),
+        hook_store=_approved_store(tmp_path, "PreCompact"),
     )
     assert result["compressed"] is False
     assert result["reason"] == "blocked_by_hook"
@@ -387,8 +410,10 @@ async def test_subagentstop_hook_continue_keeps_same_child_session() -> None:
     assert [conversation for _, conversation in runs] == ["child-conv", "child-conv"]
     assert "还差一步没做完" in runs[1][0]
     assert [stop["stop_hook_active"] for stop in stops] == [False, True]
-    # Teardown (memory deletion) happens exactly once, after the final stop.
-    memory.delete_conversation.assert_awaited_once()
+    # The child conversation is kept, not deleted. Teardown emits SessionEnd and
+    # nothing else: a subtask's transcript is the evidence for what it did, and
+    # deleting it on success left `subtask.*` views pointing at nothing.
+    memory.delete_conversation.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -443,7 +468,7 @@ async def test_permissionrequest_hook_deny_skips_user_approval(tmp_path: Path) -
     ))
     _write_project_hooks(tmp_path, "PermissionRequest", sys.executable, [str(script)],
                          matcher="execute_command")
-    outcome = await _store(tmp_path).execute("PermissionRequest", {
+    outcome = await _approved_store(tmp_path, "PermissionRequest").execute("PermissionRequest", {
         "tool_name": "execute_command", "tool_input": {"command": "rm -rf /"},
     }, cwd=str(tmp_path))
     assert outcome["blocked"] is True
@@ -510,7 +535,7 @@ async def test_permissionrequest_hook_allow_bypasses_approval_sensitive_path(
     ))
     _write_project_hooks(tmp_path, "PermissionRequest", sys.executable, [str(script)],
                          matcher="local_file")
-    outcome = await _store(tmp_path).execute("PermissionRequest", {
+    outcome = await _approved_store(tmp_path).execute("PermissionRequest", {
         "tool_name": "local_file",
         "tool_input": {"path": "hooked.txt", "content": "original"},
     }, cwd=str(tmp_path))

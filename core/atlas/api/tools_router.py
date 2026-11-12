@@ -495,10 +495,10 @@ async def remove_mcp_server(
         ) from exc
 
     try:
-        from atlas.engine.hermes_runtime import HermesRuntime
+        from atlas.engine.atlas_runtime import AtlasRuntime
 
         await asyncio.to_thread(
-            HermesRuntime.unregister_atlas_mcp_server, server_name, runtime_tool_names,
+            AtlasRuntime.unregister_atlas_mcp_server, server_name, runtime_tool_names,
         )
     except Exception as exc:
         log.exception("mcp.hermes_unregister_failed", server=server_name)
@@ -510,7 +510,7 @@ async def remove_mcp_server(
 
 
 def _persist_mcp_server_config(name: str, server_config: dict[str, Any] | None) -> None:
-    """Persist API-managed MCP servers in the same TOML config Hermes loads per run."""
+    """Persist API-managed MCP servers in the same TOML config the engine loads per run."""
     import copy
 
     import tomli_w
@@ -529,7 +529,7 @@ def _persist_mcp_server_config(name: str, server_config: dict[str, Any] | None) 
         if auto_start:
             auto_start = [item for item in auto_start if item != name]
             if not auto_start:
-                # Empty means "all enabled servers" to Hermes. Preserve a non-empty
+                # Empty means "all enabled servers" to the engine. Preserve a non-empty
                 # selection that has just become empty by disabling previously excluded
                 # servers before switching back to that meaning.
                 for remaining in servers.values():

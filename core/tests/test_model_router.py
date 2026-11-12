@@ -332,9 +332,9 @@ async def test_chat_completions_route_keeps_registry_id_but_exposes_bare_wire_mo
     assert route.wire_model == "deepseek-v4.1-flash"
 
 
-async def test_hermes_agent_kwargs_carry_the_wire_model_not_the_litellm_prefix() -> None:
+async def test_atlas_agent_kwargs_carry_the_wire_model_not_the_litellm_prefix() -> None:
     """The pinned AIAgent must receive the bare wire id on chat_completions routes."""
-    kwargs = ModelRouter.hermes_agent_kwargs(await _relay_route())
+    kwargs = ModelRouter.atlas_agent_kwargs(await _relay_route())
 
     assert kwargs["model"] == "deepseek-v4.1-flash"
     assert kwargs["api_mode"] == "chat_completions"
@@ -344,7 +344,7 @@ async def test_explicit_native_model_wins_for_the_wire_id() -> None:
     route = await _relay_route(native_model="deepseek-chat-wire-alias")
 
     assert route.wire_model == "deepseek-chat-wire-alias"
-    assert ModelRouter.hermes_agent_kwargs(route)["model"] == "deepseek-chat-wire-alias"
+    assert ModelRouter.atlas_agent_kwargs(route)["model"] == "deepseek-chat-wire-alias"
 
 
 async def test_auxiliary_complete_sends_bare_wire_model_over_http() -> None:

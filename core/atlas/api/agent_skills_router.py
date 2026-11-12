@@ -30,6 +30,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from atlas.api.app_services import AppServices
+from atlas.api.dependencies import get_optional_app_services
 from atlas.origin_guard import TOKEN_HEADER, is_trusted
 from atlas.skills.agent_collections import AgentSkillCollections, CollectionError
 from atlas.skills.market import MarketError
@@ -59,6 +61,26 @@ def get_collections() -> AgentSkillCollections:
     if _collections is not None:
         return _collections
     return AgentSkillCollections(_market().registry)
+
+
+def collections_from_services(services: Any) -> AgentSkillCollections:
+    """The collections a request handler should use, preferring the container.
+
+    Same rule as ``skills_market_router.market_from_services``: ``AppServices`` is
+    the composition root, the module global is the standalone-mount fallback.
+    """
+    wired = getattr(services, "agent_skill_collections", None)
+    if wired is not None:
+        return wired
+    return get_collections()
+
+
+def proposals_from_services(services: Any) -> SkillProposalStore:
+    """The proposal store a request handler should use, preferring the container."""
+    wired = getattr(services, "skill_proposals", None)
+    if wired is not None:
+        return wired
+    return get_proposals()
 
 
 def get_proposals() -> SkillProposalStore:
@@ -144,10 +166,12 @@ class ProposalDecision(BaseModel):
     "/api/agents/{agent_id}/skills",
     dependencies=[Depends(_require_trusted_origin)],
 )
-async def list_agent_skills(agent_id: str) -> dict[str, Any]:
+async def list_agent_skills(
+    agent_id: str, services: AppServices | None = Depends(get_optional_app_services),
+) -> dict[str, Any]:
     """Relation rows plus the effective projection (module docstring semantics)."""
     try:
-        collections = get_collections()
+        collections = collections_from_services(services)
         return {
             "agent_id": agent_id,
             "count": len(collections.list_agent_skills(agent_id)),
@@ -159,9 +183,12 @@ async def list_agent_skills(agent_id: str) -> dict[str, Any]:
 
 
 @router.delete("/api/agents/{agent_id}/skills/{skill_name}", dependencies=[Depends(_require_trusted_origin)])
-async def remove_agent_skill(agent_id: str, skill_name: str) -> dict[str, Any]:
+async def remove_agent_skill(
+    agent_id: str, skill_name: str, services: AppServices | None = Depends(get_optional_app_services),
+) -> dict[str, Any]:
     try:
-        return {"removed": get_collections().remove_agent_skill(agent_id, skill_name),
+        collections = collections_from_services(services)
+        return {"removed": collections.remove_agent_skill(agent_id, skill_name),
                 "agent_id": agent_id, "skill_name": skill_name}
     except (CollectionError, ValueError) as exc:
         raise _http_error(exc) from None
@@ -173,10 +200,11 @@ async def remove_agent_skill(agent_id: str, skill_name: str) -> dict[str, Any]:
 )
 async def set_agent_skills(
     agent_id: str, payload: AgentSkillsBatch,
+    services: AppServices | None = Depends(get_optional_app_services),
 ) -> dict[str, Any]:
     """Batch upsert relation rows; the skill entities stay single-copy in the Registry."""
     try:
-        collections = get_collections()
+        collections = collections_from_services(services)
         rows = [
             collections.set_agent_skill(
                 agent_id, item.skill_name, enabled=item.enabled,
@@ -200,9 +228,10 @@ async def set_agent_skills(
 async def list_proposals(
     status: str | None = Query(default=None),
     skill_name: str | None = Query(default=None),
+    services: AppServices | None = Depends(get_optional_app_services),
 ) -> dict[str, Any]:
     try:
-        rows = get_proposals().list(status=status, skill_name=skill_name)
+        rows = proposals_from_services(services).list(status=status, skill_name=skill_name)
         return {"count": len(rows), "proposals": rows}
     except (ProposalError, CollectionError, ValueError) as exc:
         raise _http_error(exc) from None
@@ -212,9 +241,11 @@ async def list_proposals(
     "/api/skill-proposals/{proposal_id}",
     dependencies=[Depends(_require_trusted_origin)],
 )
-async def inspect_proposal(proposal_id: str) -> dict[str, Any]:
+async def inspect_proposal(
+    proposal_id: str, services: AppServices | None = Depends(get_optional_app_services),
+) -> dict[str, Any]:
     try:
-        store = get_proposals()
+        store = proposals_from_services(services)
         record = store.get(proposal_id)
         if record is None:
             raise HTTPException(status_code=404, detail={
@@ -229,9 +260,11 @@ async def inspect_proposal(proposal_id: str) -> dict[str, Any]:
     dependencies=[Depends(_require_trusted_origin)],
     status_code=201,
 )
-async def create_proposal(payload: ProposalCreate) -> dict[str, Any]:
+async def create_proposal(
+    payload: ProposalCreate, services: AppServices | None = Depends(get_optional_app_services),
+) -> dict[str, Any]:
     try:
-        record = get_proposals().create_proposal(
+        record = proposals_from_services(services).create_proposal(
             payload.skill_name, files=payload.files, writes=payload.writes,
             deletes=payload.deletes, kind=payload.kind,
             base_revision=payload.base_revision, origin=payload.origin,
@@ -248,10 +281,11 @@ async def create_proposal(payload: ProposalCreate) -> dict[str, Any]:
 )
 async def approve_proposal(
     proposal_id: str, payload: ProposalDecision | None = None,
+    services: AppServices | None = Depends(get_optional_app_services),
 ) -> dict[str, Any]:
     body = payload or ProposalDecision()
     try:
-        return get_proposals().approve(
+        return proposals_from_services(services).approve(
             proposal_id, expected_revision=body.expected_revision,
             reviewer_note=body.reviewer_note, actor=body.actor,
         )
@@ -265,10 +299,11 @@ async def approve_proposal(
 )
 async def reject_proposal(
     proposal_id: str, payload: ProposalDecision | None = None,
+    services: AppServices | None = Depends(get_optional_app_services),
 ) -> dict[str, Any]:
     body = payload or ProposalDecision()
     try:
-        return get_proposals().reject(
+        return proposals_from_services(services).reject(
             proposal_id, reason=body.reason or body.reviewer_note,
             actor=body.actor, expected_revision=body.expected_revision,
         )
@@ -282,9 +317,10 @@ async def reject_proposal(
 )
 async def rollback_proposal(
     proposal_id: str, payload: ProposalDecision | None = None,
+    services: AppServices | None = Depends(get_optional_app_services),
 ) -> dict[str, Any]:
     try:
-        return get_proposals().rollback(
+        return proposals_from_services(services).rollback(
             proposal_id, actor=(payload.actor if payload else "user"))
     except (ProposalError, MarketError, ValueError) as exc:
         raise _http_error(exc) from None
@@ -298,9 +334,11 @@ async def rollback_proposal(
     "/api/skills/{skill_name}/usage",
     dependencies=[Depends(_require_trusted_origin)],
 )
-async def skill_usage(skill_name: str) -> dict[str, Any]:
+async def skill_usage(
+    skill_name: str, services: AppServices | None = Depends(get_optional_app_services),
+) -> dict[str, Any]:
     try:
-        return get_collections().usage_stats(skill_name)
+        return collections_from_services(services).usage_stats(skill_name)
     except (CollectionError, ValueError) as exc:
         raise _http_error(exc) from None
 
@@ -344,4 +382,7 @@ async def put_skill_source_policy(payload: dict[str, Any]) -> dict[str, Any]:
 __all__ = [
     "router", "set_collections", "set_proposals",
     "get_collections", "get_proposals",
+    # Container-first accessors: the composition root wins, the module global is
+    # the standalone-mount fallback.
+    "collections_from_services", "proposals_from_services",
 ]

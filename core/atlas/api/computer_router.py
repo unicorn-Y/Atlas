@@ -1,6 +1,6 @@
 """REST surface for the X2 computer runtime (``/api/computer/*``).
 
-The router mirrors the Hermes computer-use doctor output (readiness, driver
+The router mirrors the engine computer-use doctor output (readiness, driver
 version, diagnostics) and never raises: the handler funnels every failure into
 an ``{"ok": false, "error": ...}`` payload with a 200 status so the frontend
 card can render a degraded state instead of an error page.
@@ -81,7 +81,7 @@ async def teach_export(req: dict[str, Any], request: Request) -> dict[str, Any]:
 
 @router.get("/status")
 async def computer_status() -> dict[str, Any]:
-    """Desktop-control readiness: Hermes doctor report + Atlas permission state."""
+    """Desktop-control readiness: engine doctor report + Atlas permission state."""
     from atlas.tools.x2.computer import status_snapshot
 
     return await asyncio.to_thread(status_snapshot)

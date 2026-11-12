@@ -29,6 +29,12 @@ import structlog
 
 structlog.configure(logger_factory=structlog.PrintLoggerFactory(file=sys.stderr))
 
+# Imported at module level, unlike every other atlas subsystem in this file, because
+# click resolves a Choice at decoration time and so needs the template names during
+# import. Safe: atlas.github_workflows imports nothing but pathlib. Do not add heavy
+# imports to that module or this one-line exception becomes a startup cost.
+from atlas.github_workflows import WORKFLOW_TEMPLATES
+
 class _LazyConsole:
     def __init__(self) -> None:
         self._console = None
@@ -905,6 +911,22 @@ def serve(port: int | None, host: str | None, reload: bool, safe_mode: bool) -> 
         console.print("[yellow]安全模式：已跳过 MCP、技能/插件和扩展自动启动；退出服务后普通运行 atlas serve 可恢复。[/yellow]")
     actual_port = port or cfg.server_port
     host = host or cfg.server_host
+
+    # 绑定失败是最晚才出现的信号：等 uvicorn 报 [Errno 10048] 时，模块已导入、
+    # lifespan 已启动，上面糊着一屏启动日志，而且看不出占用者是谁。更糟的情况是
+    # 端口被另一个 Atlas 占着——新窗口照样显示"已连接"，请求和设置全落到旧进程里，
+    # 两个后端各写各的库。所以先探一次，把 PID 说出来。
+    #
+    # --reload 下不做探测：reloader 会派生子进程重新执行本函数，子进程必然探到
+    # 父进程占着的端口，"端口被占"就会变成自己杀自己。开发热重载的误报代价比
+    # 一次清晰的启失败更大。
+    if not reload:
+        from atlas.port_guard import describe, probe
+
+        occupied = probe(host, actual_port)
+        if occupied["listening"]:
+            console.print(f"[red]{describe(occupied)}[/red]")
+            raise SystemExit(2)
 
     console.print(f"[bold]Atlas[/bold] server starting on {host}:{actual_port}...")
     uvicorn.run(
@@ -2802,10 +2824,10 @@ def _check_sessions() -> dict[str, Any]:
     from atlas.config import DATA_ROOT, get_config
 
     atlas_db = get_config().db_path
-    # The engine home is always <data>/engine (HermesRuntime pins it); a user-level
+    # The engine home is always <data>/engine (AtlasRuntime pins it); a user-level
     # HERMES_HOME belongs to a standalone Hermes install and must not be audited here.
-    hermes_home = DATA_ROOT / "engine"
-    state_db = hermes_home / "state.db"
+    atlas_home = DATA_ROOT / "engine"
+    state_db = atlas_home / "state.db"
     metadata_ids: set[str] = set()
     atlas_ids: set[str] = set()
     conversations_total = 0
@@ -2900,13 +2922,13 @@ def _check_sessions() -> dict[str, Any]:
         "conversations_total": conversations_total,
         "conversations_with_messages": len(atlas_ids),
         "atlas_legacy_messages": atlas_message_count,
-        "hermes_home": str(hermes_home),
+        "atlas_home": str(atlas_home),
         "hermes_sessions": len(hermes_ids),
         "hermes_messages": hermes_message_count,
         "session_message_count_mismatches": count_mismatches,
         "unpaired_tool_results": orphan_tool_results,
-        "missing_in_hermes": missing,
-        "orphans_in_hermes": orphans,
+        "missing_in_engine": missing,
+        "orphans_in_engine": orphans,
         "transcript_owner": "SessionDB",
         "legacy_rows_policy": "保留旧 Atlas 消息行只读；同 ID 的现存 SessionDB 历史具有权威性。",
         "atlas_db_error": db_error,
@@ -3079,7 +3101,15 @@ def github_group() -> None:
 
 @github_group.command("install-workflow")
 @click.option("--workspace", type=click.Path(exists=True, file_okay=False, path_type=Path), default=Path.cwd())
-@click.option("--template", "template_name", type=click.Choice(["atlas-review", "python-checks"]), required=True)
+# Choices come from the template registry itself. A hardcoded list here would be a
+# second source of truth, and it already drifted: adding a template to
+# atlas.github_workflows.WORKFLOW_TEMPLATES would leave it unreachable from the CLI.
+@click.option(
+    "--template",
+    "template_name",
+    type=click.Choice(sorted(WORKFLOW_TEMPLATES)),
+    required=True,
+)
 @click.option("--overwrite", is_flag=True, help="确认后替换已有目标文件")
 @click.option("--yes", is_flag=True, help="非交互安装；仍会打印完整预览")
 def github_install_workflow(workspace: Path, template_name: str, overwrite: bool, yes: bool) -> None:
@@ -3103,6 +3133,150 @@ def github_install_workflow(workspace: Path, template_name: str, overwrite: bool
     except (OSError, ValueError, FileExistsError) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"已安装：{path}\nGitHub 端还需在仓库 Settings → Secrets and variables → Actions 配置上方列出的 secret（如有）。")
+
+
+@main.group("logs")
+def logs_group() -> None:
+    """压缩轮转数据目录下的日志，并按保留策略清理归档。"""
+
+
+@logs_group.command("maintain")
+@click.option("--directory", type=click.Path(file_okay=False, path_type=Path), default=None)
+@click.option("--max-mb", type=int, default=32, help="单个日志文件超过多少 MB 就轮转")
+@click.option("--keep-days", type=int, default=14, help="归档保留天数")
+@click.option("--keep-total-mb", type=int, default=512, help="归档总量上限（MB）")
+@click.option("--dry-run", is_flag=True, help="只报告会做什么")
+@click.option("--older-than-hours", type=int, default=48,
+              help="会话日志超过这个小时数才压缩（正在跑的那一轮不能动）")
+def logs_maintain(directory: Path | None, max_mb: int, keep_days: int, keep_total_mb: int,
+                  dry_run: bool, older_than_hours: int) -> None:
+    """把超限日志压成 zstd 归档，再按天数和总量清理旧归档。"""
+    from atlas.config import PROJECT_ROOT
+    from atlas.log_rotation import maintain_logs
+
+    # Both branches must resolve the same default, otherwise ``--dry-run`` reports
+    # on one directory and the real run rotates another. That is exactly how this
+    # command first reported "0 oversized" while data/logs held a 23 MB file: the
+    # dry run used ``Path.cwd()`` (core/) and the real run used config's root.
+    default_dir = PROJECT_ROOT / "data" / "logs"
+
+    if dry_run:
+        target = directory or default_dir
+        oversized = [
+            f"  {item.name}  {item.stat().st_size / 1024 / 1024:.1f} MB"
+            for item in sorted(target.glob("*.log"))
+            if item.is_file() and item.stat().st_size > max_mb * 1024 * 1024
+        ] if target.is_dir() else []
+        click.echo(f"目录：{target}\n超过 {max_mb} MB 的日志：{len(oversized)} 个")
+        for line in oversized:
+            click.echo(line)
+        return
+
+    report = maintain_logs(
+        directory,
+        max_bytes=max_mb * 1024 * 1024,
+        keep_days=keep_days,
+        keep_total_bytes=keep_total_mb * 1024 * 1024,
+    )
+    click.echo(f"目录：{report['directory']}\n扫描：{report['scanned']} 个日志文件")
+    for item in report["rotated"]:
+        click.echo(f"  轮转 {Path(item['path']).name} → {Path(item['archive']).name}"
+                   f"  {item['original_bytes']} → {item['compressed_bytes']} 字节"
+                   f"（压缩比 {item['ratio']}）")
+    pruned = report["pruned"]
+    if pruned["removed"]:
+        click.echo(f"  清理 {len(pruned['removed'])} 个归档，释放 {pruned['freed_bytes']} 字节")
+    click.echo(f"本轮共省下 {report['saved_bytes']} 字节；归档现存 {pruned['kept']} 字节。")
+
+    from atlas.log_rotation import maintain_run_logs
+
+    runs = maintain_run_logs(directory, older_than_hours=older_than_hours)
+    click.echo(f"会话日志：扫描 {runs['scanned']} 个，压缩 {len(runs['archived'])} 个，"
+               f"省下 {runs['saved_bytes']} 字节。")
+
+
+@logs_group.command("spill")
+@click.option("--keep-days", type=int, default=14, help="溢出文件保留天数")
+@click.option("--keep-total-mb", type=int, default=512, help="溢出文件总量上限（MB）")
+@click.option("--min-age-hours", type=int, default=24, help="这个小时数内的文件一律不动（可能还在被引用）")
+@click.option("--dry-run", is_flag=True, help="只报告会做什么")
+def logs_spill(keep_days: int, keep_total_mb: int, min_age_hours: int, dry_run: bool) -> None:
+    """清理溢出的工具输出（超大工具结果被写到内容寻址文件后没人回收）。"""
+    from atlas import spill_store
+
+    click.echo(spill_store.describe())
+    report = spill_store.prune(
+        keep_days=keep_days,
+        keep_total_bytes=keep_total_mb * 1024 * 1024,
+        min_age_hours=min_age_hours,
+        dry_run=dry_run,
+    )
+    prefix = "将清理" if dry_run else "已清理"
+    click.echo(
+        f"{prefix} {report['removed_count']} 个文件，释放 {report['freed_bytes'] / 1024 / 1024:.1f} MB；"
+        f"现存 {report['kept_bytes'] / 1024 / 1024:.1f} MB，跳过 {report['skipped']} 个。"
+    )
+    if dry_run:
+        click.echo("（dry-run：没有删除任何文件）")
+
+
+@main.group("plugins")
+def plugins_group() -> None:
+    """查看与热重载本地插件，不需要重启后端。"""
+
+
+def _plugin_runtime():
+    """Build a runtime over the same roots the backend uses.
+
+    Kept identical to ``atlas/server.py`` on purpose: a reload driven from the CLI
+    must see the same plugin set as the app, or "it loaded here but not there"
+    becomes unexplainable.
+    """
+    from atlas.config import PROJECT_ROOT, get_config
+    from atlas.plugins import PluginRuntime
+
+    data_plugins = get_config().db_path.parent / "plugins"
+    return PluginRuntime([PROJECT_ROOT / "plugins", data_plugins], data_plugins / "state.json")
+
+
+@plugins_group.command("list")
+def plugins_list() -> None:
+    """列出发现到的插件及其组件数量。"""
+    items = _plugin_runtime().discover()
+    if not items:
+        click.echo("没有发现插件。")
+        return
+    click.echo(f"共 {len(items)} 个插件：")
+    for item in items:
+        state = "已启用" if item.get("enabled") else "已停用"
+        click.echo(
+            f"  {item['name']}  v{item.get('version', '?')}  {state}"
+            f"  技能 {len(item.get('skills') or [])}"
+            f"  命令 {len(item.get('commands') or [])}"
+            f"  Hook {item.get('hooks', 0)}"
+            f"  MCP {len(item.get('mcp_servers') or [])}"
+        )
+
+
+@plugins_group.command("reload")
+@click.argument("name")
+def plugins_reload(name: str) -> None:
+    """重读一个插件的文件，不用重启进程。"""
+    import asyncio
+
+    result = asyncio.run(_plugin_runtime().reload(name))
+    if not result.get("ok"):
+        click.echo(f"重载失败：{result.get('error')}", err=True)
+        raise SystemExit(1)
+    loaded = result.get("loaded") or {}
+    click.echo(
+        f"已重载 {name}：技能 {len(loaded.get('skills') or [])}"
+        f" 命令 {len(loaded.get('commands') or [])}"
+        f" Hook {loaded.get('hooks', 0)}"
+        f"；清理旧能力 {result.get('capabilities_removed', 0)} 项、"
+        f"旧 Hook {result.get('hooks_cleared', 0)} 个。"
+    )
+
 
 if __name__ == "__main__":
     cli_main()

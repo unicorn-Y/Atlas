@@ -29,6 +29,14 @@ def _connect() -> sqlite3.Connection:
         error_category TEXT, error_detail TEXT
     )""")
     db.execute("CREATE INDEX IF NOT EXISTS idx_model_trace_started ON model_request_traces(started_at)")
+    db.execute("""CREATE TABLE IF NOT EXISTS tool_call_traces (
+        call_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, tool_name TEXT NOT NULL,
+        family TEXT, tier TEXT, started_at TEXT NOT NULL, duration_ms INTEGER,
+        status TEXT NOT NULL, is_error INTEGER NOT NULL DEFAULT 0,
+        arguments_chars INTEGER, result_chars INTEGER, error_detail TEXT
+    )""")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_tool_trace_started ON tool_call_traces(started_at)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_tool_trace_run ON tool_call_traces(run_id)")
     db.execute("""CREATE TABLE IF NOT EXISTS maintenance_audit (
         id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL,
         category TEXT NOT NULL, action TEXT NOT NULL, outcome TEXT NOT NULL,
@@ -65,6 +73,44 @@ def list_model_requests(query: str = "", limit: int = 100) -> list[dict[str, Any
             ORDER BY started_at DESC LIMIT ?""",
             (query.strip(), needle, needle, needle, needle, needle, needle, max(1, min(500, limit)))).fetchall()
     return [{**dict(row), "request_params": json.loads(row["request_params"])} for row in rows]
+
+
+def record_tool_call(*, call_id: str, run_id: str, tool_name: str, family: str = "",
+                     tier: str = "", started_at: str, arguments_chars: int = 0) -> None:
+    """Open one tool-call trace row, keyed to the same ``run_id`` as model traces.
+
+    Model requests and tool calls share ``run_id``, so a single run can be read
+    back end to end without inventing a parallel trace id.
+    """
+    with closing(_connect()) as db, db:
+        db.execute("""INSERT OR REPLACE INTO tool_call_traces
+            (call_id,run_id,tool_name,family,tier,started_at,status,is_error,arguments_chars)
+            VALUES (?,?,?,?,?,?,'running',0,?)""",
+            (call_id[:160], run_id[:160], tool_name[:200], family[:80] or None,
+             tier[:40] or None, started_at, max(0, int(arguments_chars))))
+
+
+def finish_tool_call(call_id: str, *, duration_ms: int, is_error: bool = False,
+                     result_chars: int = 0, error_detail: str | None = None) -> None:
+    with closing(_connect()) as db, db:
+        db.execute("""UPDATE tool_call_traces SET duration_ms=?,status=?,is_error=?,
+            result_chars=?,error_detail=? WHERE call_id=?""",
+            (max(0, duration_ms), "error" if is_error else "ok", 1 if is_error else 0,
+             max(0, int(result_chars)), (error_detail or "")[:1200] or None, call_id[:160]))
+
+
+def list_tool_calls(query: str = "", limit: int = 100,
+                    run_id: str = "") -> list[dict[str, Any]]:
+    needle = f"%{query.strip()[:160]}%"
+    with closing(_connect()) as db:
+        rows = db.execute("""SELECT * FROM tool_call_traces
+            WHERE (?='' OR run_id=?)
+              AND (?='' OR call_id LIKE ? OR run_id LIKE ? OR tool_name LIKE ?
+                   OR family LIKE ? OR status LIKE ? OR error_detail LIKE ?)
+            ORDER BY started_at DESC LIMIT ?""",
+            (run_id.strip(), run_id.strip(), query.strip(), needle, needle, needle,
+             needle, needle, needle, max(1, min(500, limit)))).fetchall()
+    return [dict(row) for row in rows]
 
 
 def record_audit_event(category: str, action: str, outcome: str = "ok",

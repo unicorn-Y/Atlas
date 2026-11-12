@@ -200,7 +200,7 @@ class SkillCurator:
         Transcript excerpts are stored in the local candidate for review and
         rollback provenance; they are never included in application logs.
         """
-        from atlas.engine_core.agent.redact import redact_sensitive_text
+        from atlas.engine.agent.redact import redact_sensitive_text
 
         goal = " ".join(redact_sensitive_text(str(user_text or ""), force=True).split())[:4000]
         outcome = "\n".join(redact_sensitive_text(

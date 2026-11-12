@@ -194,7 +194,7 @@ async def get_diagnostic_tasks(services: Annotated[AppServices, Depends(get_app_
             cpu, memory = _process_resources(getattr(item.process, "pid", None))
             tasks.append({"id": f"process:{item.execution_id}", "kind": "后台进程", "name": str(item.command)[:160],
                           "status": "running", "stoppable": True, "cpu_percent": cpu, "memory_bytes": memory})
-    browser_module = sys.modules.get("atlas.engine_core.tools.browser_tool")
+    browser_module = sys.modules.get("atlas.engine.tools.browser_tool")
     for session_key, info in getattr(browser_module, "_active_sessions", {}).items() if browser_module else []:
         tasks.append({"id": f"browser:{session_key}", "kind": "浏览器会话", "name": str(info.get("session_name") or session_key),
                       "status": "active", "stoppable": True})
@@ -273,7 +273,7 @@ async def stop_all_activity(services: AppServices) -> dict[str, Any]:
 @router.post("/api/diagnostics/tasks/{run_id}/stop")
 async def stop_diagnostic_task(services: Annotated[AppServices, Depends(get_app_services)], run_id: str) -> dict[str, Any]:
     if run_id.startswith("browser:"):
-        module = sys.modules.get("atlas.engine_core.tools.browser_tool")
+        module = sys.modules.get("atlas.engine.tools.browser_tool")
         if module is None: return {"stopped": False, "reason": "浏览器运行时已关闭。"}
         try:
             module._lifecycle._cleanup_single_browser_session(run_id[8:])
@@ -417,7 +417,7 @@ async def get_diagnostics(
         "status": "ok" if proxy_configured else "unknown",
         "detail": "检测到代理环境变量（值已隐藏）。" if proxy_configured else "未检测到代理；需要代理时请在系统网络或启动环境中配置。此检查不会连接外网。",
     })
-    from atlas.engine_core.state.hermes_state_wal import is_sqlite_wal_reset_vulnerable
+    from atlas.engine.state.atlas_state_wal import is_sqlite_wal_reset_vulnerable
 
     sqlite_unsafe = is_sqlite_wal_reset_vulnerable(sqlite3.sqlite_version_info)
     checks.append({
@@ -492,3 +492,26 @@ async def get_diagnostics(
             "paths_included": False,
         },
     }
+
+
+@router.get("/api/diagnostics/memory")
+async def get_memory_diagnostics() -> dict[str, Any]:
+    """Read-only snapshot of the memory library queue and consolidation state."""
+    from atlas.memory.library.health import memory_health
+
+    return memory_health()
+
+
+@router.post("/api/diagnostics/memory/retry")
+async def retry_memory_diagnostics() -> dict[str, Any]:
+    """Make failed memory turns due again without touching their content."""
+    from atlas.memory.library.health import memory_root, queue_path
+    from atlas.memory.library.queue import TurnQueue
+
+    path = queue_path(memory_root())
+    if not path.exists():
+        return {"reset": 0}
+    try:
+        return {"reset": TurnQueue(path.parent).reset_attempts()}
+    except sqlite3.Error as exc:
+        return {"reset": 0, "error": f"{type(exc).__name__}: {exc}"}

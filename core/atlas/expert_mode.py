@@ -454,9 +454,9 @@ async def _apply_mcp(server: Any) -> None:
             try:
                 import asyncio
 
-                from atlas.engine.hermes_runtime import HermesRuntime
+                from atlas.engine.atlas_runtime import AtlasRuntime
 
-                await asyncio.to_thread(HermesRuntime.unregister_atlas_mcp_server, name, tool_names)
+                await asyncio.to_thread(AtlasRuntime.unregister_atlas_mcp_server, name, tool_names)
             except Exception:  # noqa: BLE001
                 _config.log.warning("expert_mode.mcp_unregister_failed", name=name)
         for name, spec in wanted.items():

@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
 import re
 from collections import OrderedDict
 from collections.abc import Iterable, Sequence
@@ -142,7 +143,7 @@ def tool_items(tool_schemas: Iterable[dict[str, Any]], mcp_servers: Iterable[str
 
 def all_tool_schemas(agent: Any) -> list[dict[str, Any]]:
     """Every tool the main agent could be offered (before deferral)."""
-    from atlas.kernel.tools import kernel_tool_schemas
+    from atlas.engine.kernel.tools import kernel_tool_schemas
 
     tools = list(agent._model_facing_tools()) if agent is not None else []
     names = {_function(t).get("name") for t in tools}
@@ -240,14 +241,54 @@ def _configured_servers(mcp_client: Any) -> list[str]:
 _SKILL_INDEX_CACHE: dict[str, Any] = {}
 
 
+def _skill_usage_counts() -> dict[str, int]:
+    """Load ``skill name → use_count`` from the usage telemetry table, best effort.
+
+    Read once per index build (the index itself is cached), so this adds one
+    small query when the skill set changes and nothing on a normal turn. A
+    missing table or unreadable DB simply means every skill ranks as unused.
+    """
+    try:
+        from atlas.skills.agent_collections import _registry_path
+
+        path = _registry_path()
+        if path is None or not path.exists():
+            return {}
+        import sqlite3
+
+        with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as db:
+            rows = db.execute(
+                "SELECT skill_name, SUM(use_count) FROM skill_usage GROUP BY skill_name"
+            ).fetchall()
+        return {str(name): int(count or 0) for name, count in rows}
+    except Exception:  # noqa: BLE001 - ranking falls back to retrieval order
+        return {}
+
+
 def _skill_index(skill_mgr: Any) -> tuple[Bm25Index, list[dict[str, Any]]]:
     store = get_store()
     names = ",".join(sorted(s.name for s in skill_mgr.list_skills())) if skill_mgr is not None else ""
     signature = f"{store.version}:{hashlib.sha1(names.encode()).hexdigest()}:{len(store.catalog())}"
     if _SKILL_INDEX_CACHE.get("sig") != signature:
         items = skill_items(skill_mgr, store)
+        usage = _skill_usage_counts()
+        for item in items:
+            item["use_count"] = usage.get(str(item.get("name") or ""), 0)
         _SKILL_INDEX_CACHE.update(sig=signature, items=items, index=Bm25Index(items))
     return _SKILL_INDEX_CACHE["index"], _SKILL_INDEX_CACHE["items"]
+
+
+def _usage_bonus(item: dict[str, Any]) -> float:
+    """Tie-break score from real load counts, in BM25 units.
+
+    ``log1p`` keeps a heavily used skill from permanently outranking a much more
+    relevant one: 1 use → ~0.07, 10 → ~0.24, 100 → ~0.46. Relevance scores are
+    typically several points, so this only reorders near-ties.
+    """
+    try:
+        return 0.1 * math.log1p(max(0, int(item.get("use_count") or 0)))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _skill_row(item: dict[str, Any]) -> dict[str, Any]:
@@ -271,7 +312,16 @@ def skill_index_message(skill_mgr: Any, query: str, *, top_k: int = 30,
         chosen = items
         header = ""
     else:
-        chosen = [item for _score, item in index.search(query, limit=top_k)]
+        # Retrieve a slightly wider candidate set, then let real usage reorder it:
+        # a skill that has actually been loaded before is more likely to be the
+        # right one than a fresh keyword tie. The bonus is capped well below the
+        # BM25 range so relevance still decides, and usage only breaks ties.
+        hits = index.search(query, limit=max(top_k * 2, top_k))
+        ranked = sorted(
+            ((_score + _usage_bonus(item), item) for _score, item in hits),
+            key=lambda pair: -pair[0],
+        )
+        chosen = [item for _score, item in ranked[:top_k]]
         counts: dict[str, int] = {}
         for item in items:
             counts[item.get("category_name") or "未整理"] = counts.get(item.get("category_name") or "未整理", 0) + 1

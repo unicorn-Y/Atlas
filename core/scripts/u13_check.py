@@ -6,8 +6,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from atlas.automation.engine import AutomationEngine
-from atlas.engine_core.goal_command import dispatch_goal_command
-from atlas.engine_core.goals import GoalManager
+from atlas.engine.goal_command import dispatch_goal_command
+from atlas.engine.goals import GoalManager
 from atlas.rewind import RewindManager
 from atlas.agent.checkpoints import ShadowGitCheckpointStore
 from atlas.review.engine import build_child_goal, parse_scope

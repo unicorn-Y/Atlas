@@ -15,7 +15,7 @@ module wires it into the Atlas seams instead of forking it:
 - Four takeover modes behind settings (设置 → 浏览器): ``standalone`` /
   ``copied real profile`` / ``cdp attach`` / ``extension``.  The mode is
   persisted in user-settings.json and pushed into the Hermes engine config's
-  ``[browser]`` section via :mod:`atlas.tools.x2.hermes_config_sync`.
+  ``[browser]`` section via :mod:`atlas.tools.x2.atlas_config_sync`.
 - Human handoff: ``browser_handoff`` emits ``browser.handoff_required`` and
   blocks on ``X2Context.wait_input`` (options open_panel / done / give_up),
   then resumes in place.  The frontend resolves the card through
@@ -51,8 +51,8 @@ from atlas.tools.x2.context import (
     X2Context,
     current_context,
 )
-from atlas.tools.x2.hermes_config_sync import (
-    _invalidate_hermes_config_cache,
+from atlas.tools.x2.atlas_config_sync import (
+    _invalidate_engine_config_cache,
     _load_yaml,
     _write_yaml,
     config_file,
@@ -189,7 +189,7 @@ _BROWSER_CONFIG_KEYS = {
 }
 
 
-def _apply_browser_mode_to_hermes(mode: str, cdp_url: str, proxy: str) -> None:
+def _apply_browser_mode_to_engine(mode: str, cdp_url: str, proxy: str) -> None:
     """Push the takeover mode into the Hermes engine config ``[browser]`` section
     (sync_x2_config owns the section's shape; only the mode keys are adjusted)."""
     internal = normalize_mode(mode)
@@ -208,7 +208,7 @@ def _apply_browser_mode_to_hermes(mode: str, cdp_url: str, proxy: str) -> None:
         section["extension_control"]["enabled"] = internal == "extension"
     data["browser"] = section
     _write_yaml(path, data)
-    _invalidate_hermes_config_cache()
+    _invalidate_engine_config_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -346,16 +346,16 @@ class HermesBrowserBackend:
     """
 
     _FUNCTIONS = {
-        "navigate": ("atlas.engine_core.tools.browser_tool", "browser_navigate"),
-        "snapshot": ("atlas.engine_core.tools.browser_tool", "browser_snapshot"),
-        "click": ("atlas.engine_core.tools.browser_tool", "browser_click"),
-        "type": ("atlas.engine_core.tools.browser_tool", "browser_type"),
-        "scroll": ("atlas.engine_core.tools.browser_tool", "browser_scroll"),
-        "back": ("atlas.engine_core.tools.browser_tool", "browser_back"),
-        "press": ("atlas.engine_core.tools.browser_tool", "browser_press"),
-        "vision": ("atlas.engine_core.tools.browser_tool", "browser_vision"),
-        "console": ("atlas.engine_core.tools.browser_tool", "browser_console"),
-        "get_images": ("atlas.engine_core.tools.browser_tool", "browser_get_images"),
+        "navigate": ("atlas.engine.tools.browser_tool", "browser_navigate"),
+        "snapshot": ("atlas.engine.tools.browser_tool", "browser_snapshot"),
+        "click": ("atlas.engine.tools.browser_tool", "browser_click"),
+        "type": ("atlas.engine.tools.browser_tool", "browser_type"),
+        "scroll": ("atlas.engine.tools.browser_tool", "browser_scroll"),
+        "back": ("atlas.engine.tools.browser_tool", "browser_back"),
+        "press": ("atlas.engine.tools.browser_tool", "browser_press"),
+        "vision": ("atlas.engine.tools.browser_tool", "browser_vision"),
+        "console": ("atlas.engine.tools.browser_tool", "browser_console"),
+        "get_images": ("atlas.engine.tools.browser_tool", "browser_get_images"),
     }
 
     async def call(self, action: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -371,10 +371,10 @@ class HermesBrowserBackend:
         try:
             module = importlib.import_module(module_name)
         except Exception as exc:  # noqa: BLE001 - offline / stack missing
-            raise BackendUnavailable(f"Hermes 浏览器模块 {module_name} 加载失败：{exc}") from exc
+            raise BackendUnavailable(f"Atlas 浏览器模块 {module_name} 加载失败：{exc}") from exc
         fn = getattr(module, func_name, None)
         if fn is None:
-            raise BackendUnavailable(f"Hermes 浏览器模块缺少 {func_name}")
+            raise BackendUnavailable(f"Atlas 浏览器模块缺少 {func_name}")
         raw = fn(**params)
         if isinstance(raw, dict):
             return raw
@@ -515,7 +515,7 @@ class X2BrowserRuntime:
         proxy = str(stored.get("proxy") or "")
         self.backend_request = backend_request(mode, cdp_url)
         try:
-            _apply_browser_mode_to_hermes(mode, cdp_url, proxy)
+            _apply_browser_mode_to_engine(mode, cdp_url, proxy)
         except Exception as exc:  # noqa: BLE001
             log.warning("x2.browser_mode_push_failed", extra={"error": str(exc)}, exc_info=True)
         if self._backend_factory is not None and self._backend is None:
@@ -541,7 +541,7 @@ class X2BrowserRuntime:
         backend = self.acquire_backend()
         if backend is None:
             raise BackendUnavailable(
-                "浏览器后端不可用：Hermes 浏览器栈未加载（离线或未安装 agent-browser）。")
+                "浏览器后端不可用：Atlas 浏览器栈未加载（离线或未安装 agent-browser）。")
         return await backend.call(action, params)
 
     # -- recording ---------------------------------------------------------
@@ -573,7 +573,7 @@ class X2BrowserRuntime:
         if self._backend_injected or self._backend_factory is not None:
             return  # injected test / direct-mode runtime owns no Hermes sessions
         try:
-            from atlas.engine_core.tools.browser_tool_lifecycle import cleanup_all_browsers
+            from atlas.engine.tools.browser_tool_lifecycle import cleanup_all_browsers
         except Exception as exc:  # noqa: BLE001 - stack absent offline
             log.debug("x2.browser_cleanup_import_failed", extra={"error": str(exc)}, exc_info=True)
             return
@@ -703,7 +703,7 @@ class X2BrowserRuntime:
         if item is None:
             return _error(f"没有句柄为 {handle!r} 的凭据，请先调用 browser_vault_list。")
         if str(item.get("kind") or "login") == "login":
-            from atlas.engine_core.agent.vault_store import normalize_origin
+            from atlas.engine.agent.vault_store import normalize_origin
 
             expected_origin = str(item.get("origin") or "")
             current_url = str(self.last_url or "")

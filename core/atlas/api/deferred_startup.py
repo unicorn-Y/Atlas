@@ -178,6 +178,7 @@ async def run_deferred_startup(app: Any, services: Any, components: StartupCompo
     ]
     if getattr(app, "state", None) is not None:  # test doubles pass a bare object
         _schedule_background(app, "upstream-auto", _upstream_auto_loop())
+        _schedule_background(app, "log-retention", _log_retention_loop())
     results = await asyncio.gather(*branches, return_exceptions=True)
     for result in results:
         if isinstance(result, BaseException) and not isinstance(result, asyncio.CancelledError):
@@ -364,7 +365,7 @@ async def _start_skills_plugins(services: Any, components: StartupComponents) ->
 
 async def _start_engine_registrations(app: Any, services: Any) -> None:
     """S2.5: H3/H5 seam — once-per-process registrations (Atlas policy plugin
-    + Hermes MCP servers) so the first user turn does not pay for them.
+    + engine MCP servers) so the first user turn does not pay for them.
     Idempotent and fingerprint-checked; a failure only means the first turn
     re-runs the registration. The engine import + registration work is CPU
     heavy and thread-safe; off the loop it overlaps the DBOS worker."""
@@ -401,12 +402,24 @@ async def _upstream_auto_loop() -> None:
     await auto_loop()
 
 
+async def _log_retention_loop() -> None:
+    """压缩并修剪旧的运行日志与溢出文件。
+
+    在此之前 ``maintain_run_logs`` 只能从 ``atlas logs maintain`` 触发，也就是说
+    默认路径下（从不打开终端的用户）每一份运行日志都留到了磁盘满为止。压缩逻辑
+    存在，但没有任何生产调用点——这里补上调用点。
+    """
+    from atlas.log_rotation import retention_loop
+
+    await retention_loop()
+
+
 # Atlas-owned modules the first turn needs. Import them on a worker thread so
 # optional engine setup never delays the API-ready signal.
 _ENGINE_WARM_IMPORTS = (
-    "atlas.engine_core.agent.agent_hooks", "atlas.engine_core.agent.plan_prompt",
-    "atlas.engine_core.tools.registry",
-    "atlas.engine.tool_registry", "atlas.engine.hermes_policy",
+    "atlas.engine.agent.agent_hooks", "atlas.engine.kernel.toolkit.plan_prompt",
+    "atlas.engine.tools.registry",
+    "atlas.engine.tool_registry", "atlas.engine.atlas_policy",
 )
 
 
@@ -427,9 +440,9 @@ async def _stop_background_startup_tasks(app: Any) -> None:
 
 def _engine_startup_registrations(model_manager: Any) -> None:
     from atlas.config import DATA_ROOT
-    from atlas.engine import HermesRuntime
+    from atlas.engine import AtlasRuntime
 
-    HermesRuntime(data_dir=DATA_ROOT, model_manager=model_manager).startup_registrations()
+    AtlasRuntime(data_dir=DATA_ROOT, model_manager=model_manager).startup_registrations()
 
 
 def _warm_engine() -> None:

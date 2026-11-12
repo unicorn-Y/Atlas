@@ -125,9 +125,9 @@ def test_migration_imports_full_atlas_shape_idempotently_and_doctor_stays_clean(
     conversations = asyncio.run(memory.list_conversations(limit=None))
     assert len(conversations) == 2
     assert {item["title"] for item in conversations} == {"中文分叉源"}
-    import hermes_state
+    import atlas_state
 
-    with hermes_state.SessionDB(db_path=home / "state.db") as db:
+    with atlas_state.SessionDB(db_path=home / "state.db") as db:
         imported_titles = [row[0] for row in db._read_all(
             "SELECT title FROM sessions WHERE id IN (?, ?)", (source_id, child_id),
         )]
@@ -182,9 +182,9 @@ def test_session_search_reads_sessiondb_when_legacy_messages_are_empty(
         await memory.init()
         try:
             conversation_id = await memory.create_conversation("canonical-only")
-            import hermes_state
+            import atlas_state
 
-            with hermes_state.SessionDB(db_path=home / "state.db") as db:
+            with atlas_state.SessionDB(db_path=home / "state.db") as db:
                 db.ensure_session(conversation_id, "api_server")
                 db.append_message(
                     conversation_id, "user", content="I prefer short answers.",
@@ -214,9 +214,9 @@ def test_existing_sessiondb_history_is_authoritative_and_counted_as_ignored(
         return conversation_id
 
     conversation_id = asyncio.run(seed())
-    import hermes_state
+    import atlas_state
 
-    with hermes_state.SessionDB(db_path=home / "state.db") as db:
+    with atlas_state.SessionDB(db_path=home / "state.db") as db:
         db.ensure_session(conversation_id, "api_server")
         db.append_message(conversation_id, "user", content="Canonical Hermes content")
     report = asyncio.run(migrate_legacy_sessions(home, memory))
@@ -245,19 +245,19 @@ def test_failed_mid_import_leaves_both_original_databases_byte_identical(tmp_pat
         return conversation
 
     conversation_id = asyncio.run(seed())
-    import hermes_state
+    import atlas_state
 
-    with hermes_state.SessionDB(db_path=home / "state.db") as db:
+    with atlas_state.SessionDB(db_path=home / "state.db") as db:
         db.ensure_session("preexisting", "api_server")
     atlas_before = _file_hashes(atlas_db)
     hermes_before = _file_hashes(home / "state.db")
-    original = hermes_state.SessionDB._import_session_row
+    original = atlas_state.SessionDB._import_session_row
 
     def fail_after_staging_row(self, conn, raw, messages, session_id):
         original(self, conn, raw, messages, session_id)
         raise RuntimeError("injected import failure")
 
-    monkeypatch.setattr(hermes_state.SessionDB, "_import_session_row", fail_after_staging_row)
+    monkeypatch.setattr(atlas_state.SessionDB, "_import_session_row", fail_after_staging_row)
     report = asyncio.run(migrate_legacy_sessions(home, memory))
     assert report.status == "failed"
     assert "此正文不得出现在错误中" not in (report.error or "")
@@ -295,9 +295,9 @@ def test_invalid_legacy_timestamp_fails_closed_without_mutating_either_database(
         return conversation_id
 
     conversation_id = asyncio.run(seed())
-    import hermes_state
+    import atlas_state
 
-    with hermes_state.SessionDB(db_path=home / "state.db") as db:
+    with atlas_state.SessionDB(db_path=home / "state.db") as db:
         db.ensure_session("preexisting", "api_server")
     atlas_before = _file_hashes(atlas_db)
     state_before = _file_hashes(home / "state.db")
@@ -319,9 +319,9 @@ def test_cancelled_migration_releases_only_its_home_barrier(tmp_path: Path, monk
         await memory.init()
         conversation_id = await memory.create_conversation("cancel gate")
         await memory.save_message(conversation_id, "user", "pending migration")
-        import hermes_state
+        import atlas_state
 
-        with hermes_state.SessionDB(db_path=other_home / "state.db") as db:
+        with atlas_state.SessionDB(db_path=other_home / "state.db") as db:
             db.create_session("other-home", "api_server")
         started = asyncio.Event()
 
@@ -396,11 +396,11 @@ def test_publish_failure_restores_original_main_and_sidecars_and_fails_gate(
         return conversation_id
 
     conversation_id = asyncio.run(seed())
-    import hermes_state
+    import atlas_state
     import atlas.engine.session_sync as session_sync
 
     state_db = home / "state.db"
-    with hermes_state.SessionDB(db_path=state_db) as db:
+    with atlas_state.SessionDB(db_path=state_db) as db:
         db.ensure_session("preexisting", "api_server")
     original_hash = hashlib.sha256(state_db.read_bytes()).hexdigest()
     real_replace = session_sync.os.replace

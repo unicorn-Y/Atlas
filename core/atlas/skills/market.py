@@ -301,7 +301,7 @@ class SkillMarket:
         project_skills_dir: Path | None = None,
         skill_manager: Any | None = None,
         adapters: list[Any] | None = None,
-        hermes_root: Path | str | None = None,
+        atlas_root: Path | str | None = None,
         hub_state_dir: Path | None = None,
     ) -> None:
         self.registry = registry
@@ -310,7 +310,7 @@ class SkillMarket:
         self.project_skills_dir = Path(project_skills_dir) if project_skills_dir else None
         self.skill_manager = skill_manager
         self._injected_adapters = list(adapters) if adapters is not None else None
-        self.hermes_root = Path(hermes_root) if hermes_root else None
+        self.atlas_root = Path(atlas_root) if atlas_root else None
         self.hub_state_dir = Path(hub_state_dir) if hub_state_dir else (
             self.data_dir / "skills-hub"
         )
@@ -339,7 +339,7 @@ class SkillMarket:
             log.warning("market.hub_dirs_unavailable", error=str(exc))
         self._hub_forced = True
 
-    def _import_hermes(self) -> dict[str, Any]:
+    def _import_legacy_module(self) -> dict[str, Any]:
         # 1) The pinned fork is usually importable directly (core/.venv installs
         #    hermes-agent editable from the checkout).
         try:
@@ -349,7 +349,7 @@ class SkillMarket:
             return {"hub": hub_mod, "search": search_mod}
         except ImportError:
             pass
-        root = self.hermes_root
+        root = self.atlas_root
         if root is None:
             env = os.environ.get("ATLAS_HERMES_ROOT", "").strip()
             if env:
@@ -365,7 +365,7 @@ class SkillMarket:
                         break
         if root is None or not Path(root).is_dir():
             raise MarketError(
-                "本地技能市场客户端（Hermes Skills Hub）不可用，无法访问在线技能源。",
+                "本地技能市场客户端不可用，无法访问在线技能源。",
                 code="hub_unavailable",
             )
         root_text = str(Path(root))
@@ -381,10 +381,10 @@ class SkillMarket:
         self._force_hub_state(hub_mod)
         return {"hub": hub_mod, "search": search_mod}
 
-    def _hermes_taps(self) -> list[dict[str, Any]]:
+    def _engine_taps(self) -> list[dict[str, Any]]:
         """Custom GitHub repo taps read from the hub taps file (forced location)."""
         try:
-            mods = self._import_hermes()
+            mods = self._import_legacy_module()
             taps = mods["hub"].TapsManager().list_taps()
             return [dict(tap) for tap in taps if isinstance(tap, dict) and tap.get("repo")]
         except MarketError:
@@ -392,7 +392,7 @@ class SkillMarket:
 
     def _record_tap(self, repo: str, path: str, add: bool) -> None:
         try:
-            mods = self._import_hermes()
+            mods = self._import_legacy_module()
         except MarketError:
             return
         taps = mods["hub"].TapsManager()
@@ -406,7 +406,7 @@ class SkillMarket:
             adapters: list[Any] = list(self._injected_adapters)
         else:
             try:
-                mods = self._import_hermes()
+                mods = self._import_legacy_module()
                 adapters = list(mods["search"].create_source_router())
             except MarketError:
                 # Hub unavailable (fork missing): online sources degrade to
@@ -418,7 +418,7 @@ class SkillMarket:
             adapters.insert(0, _DirectoryTapSource(tap["name"], Path(tap["path"])))
         if not adapters:
             raise MarketError(
-                "本地技能市场客户端（Hermes Skills Hub）不可用，且没有配置本地技能源。",
+                "本地技能市场客户端不可用，且没有配置本地技能源。",
                 code="hub_unavailable",
             )
         if source and source != "all":
@@ -488,7 +488,7 @@ class SkillMarket:
                 "enabled": bool(entry.get("enabled", True)), "proxy": entry.get("proxy"),
                 "path": entry.get("path"),
             })
-        for tap in self._hermes_taps():
+        for tap in self._engine_taps():
             name = f"github:{tap['repo']}"
             entry = configured.get(name, {})
             sources.append({
@@ -766,7 +766,7 @@ class SkillMarket:
             "data_dir": str(self.data_dir),
             "user_skills_dir": str(self.user_skills_dir),
             "project_skills_dir": str(self.project_skills_dir) if self.project_skills_dir else None,
-            "hermes_root": str(self.hermes_root) if self.hermes_root else None,
+            "atlas_root": str(self.atlas_root) if self.atlas_root else None,
             "hub_state_dir": str(self.hub_state_dir),
         }
         encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")

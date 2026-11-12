@@ -2,11 +2,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from atlas.engine.hermes_runtime import HermesRuntime
+from atlas.engine.atlas_runtime import AtlasRuntime
 
 
-def test_ssh_workspace_maps_to_hermes_terminal_scope_without_network():
-    cwd, policy = HermesRuntime._ssh_workspace_terminal_policy(
+def test_ssh_workspace_maps_to_atlas_terminal_scope_without_network():
+    cwd, policy = AtlasRuntime._ssh_workspace_terminal_policy(
         "ssh://build-host/srv/project",
         [{"alias": "build-host", "hostname": "build.example.test", "user": "builder"}],
     )
@@ -21,7 +21,7 @@ def test_ssh_workspace_maps_to_hermes_terminal_scope_without_network():
 
 
 @pytest.mark.asyncio
-async def test_ssh_workspace_scope_is_bound_to_hermes_turn_without_network(tmp_path, monkeypatch):
+async def test_ssh_workspace_scope_is_bound_to_atlas_turn_without_network(tmp_path, monkeypatch):
     from atlas.ssh import SSHWorkspaceManager
     from tools.terminal_scope import get_terminal_scope
 
@@ -34,7 +34,7 @@ async def test_ssh_workspace_scope_is_bound_to_hermes_turn_without_network(tmp_p
     )
     observed = {}
 
-    class StubHermesAgent:
+    class StubAtlasAgent:
         def __init__(self, **kwargs):
             observed["cwd"] = kwargs["cwd"]
             observed["init_scope"] = get_terminal_scope()
@@ -51,9 +51,9 @@ async def test_ssh_workspace_scope_is_bound_to_hermes_turn_without_network(tmp_p
         def close(self):
             pass
 
-    runtime = HermesRuntime(
+    runtime = AtlasRuntime(
         data_dir=tmp_path, model_manager=settings,
-        agent_factory=lambda **kwargs: StubHermesAgent(**kwargs),
+        agent_factory=lambda **kwargs: StubAtlasAgent(**kwargs),
     )
     events = [event async for event in runtime.run_turn(
         message="use ssh workspace", conversation_id="ssh-scope", workspace="ssh://build-host/srv/project",

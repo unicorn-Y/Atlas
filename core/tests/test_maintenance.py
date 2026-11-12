@@ -9,7 +9,7 @@ import pytest
 
 from atlas import diagnostic_store
 from atlas.api import maintenance_router
-from atlas.kernel.model_call import complete_stream
+from atlas.engine.kernel.model_call import complete_stream
 
 
 def test_model_trace_and_audit_are_durable_and_filterable(tmp_path: Path, monkeypatch) -> None:

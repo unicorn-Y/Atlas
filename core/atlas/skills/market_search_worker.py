@@ -30,14 +30,14 @@ def _search(payload: dict[str, Any]) -> dict[str, Any]:
         raise MarketError("技能市场搜索请求无效。", code="invalid_search")
 
     project_skills = payload.get("project_skills_dir")
-    hermes_root = payload.get("hermes_root")
+    atlas_root = payload.get("atlas_root")
     hub_state_dir = payload.get("hub_state_dir")
     market = SkillMarket(
         registry=None,
         data_dir=Path(payload["data_dir"]),
         user_skills_dir=Path(payload["user_skills_dir"]),
         project_skills_dir=Path(project_skills) if project_skills else None,
-        hermes_root=Path(hermes_root) if hermes_root else None,
+        atlas_root=Path(atlas_root) if atlas_root else None,
         hub_state_dir=Path(hub_state_dir) if hub_state_dir else None,
     )
     adapter = market._adapter_for(source)

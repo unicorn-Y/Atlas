@@ -148,7 +148,7 @@ async def app_client(tmp_path_factory: pytest.TempPathFactory, fake_llm: FakeLLM
     tmp_path = tmp_path_factory.mktemp("gateway-int")
     (tmp_path / "workspace").mkdir()
     data_root = tmp_path / "atlas-data"
-    # The engine home (HermesRuntime pins HERMES_HOME to <data>/engine) must
+    # The engine home (AtlasRuntime pins HERMES_HOME to <data>/engine) must
     # cap its retry ladder, or a scripted model failure burns minutes in the
     # 15/30/60s availability cycles before the run ever reaches run.failed.
     engine_home = data_root / "engine"

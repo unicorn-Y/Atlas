@@ -7,6 +7,7 @@ injection — never a module-level singleton — so two app instances stay isola
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -71,10 +72,29 @@ async def _goal_payload(task: ScheduledTask) -> dict[str, Any]:
     result["goal_status"] = (state or {}).get("status", "cleared")
     progress = {}
     if state:
+        from atlas.engine.goals import MAX_PLAN_ATTEMPTS, GoalState
+
+        subgoals = state.get("subgoals", [])
+        completed = [i for i in state.get("completed_subgoals", []) if isinstance(i, int)]
+        plan_attempts = int(state.get("plan_attempts", 0) or 0)
+        # Reuse GoalState.needs_plan so the gate cannot drift between the engine
+        # and the UI. A malformed row must degrade to "no gate", never raise.
+        try:
+            needs_plan = GoalState.from_json(json.dumps(state)).needs_plan()
+        except Exception:  # noqa: BLE001 - a corrupt row must not break /api/schedules
+            needs_plan = False
         progress = {
             "turns_used": state.get("turns_used", 0),
             "max_turns": state.get("max_turns", 20),
-            "subgoals": state.get("subgoals", []),
+            "subgoals": subgoals,
+            "completed_subgoals": completed,
+            "completed_count": len([i for i in completed if 0 < i <= len(subgoals)]),
+            # Plan-gate surface: the UI needs to tell "still planning" apart from
+            # "executing", which the old payload could not express.
+            "decomposition_required": bool(state.get("decomposition_required", True)),
+            "needs_plan": needs_plan,
+            "plan_attempts": plan_attempts,
+            "max_plan_attempts": MAX_PLAN_ATTEMPTS,
             "last_verdict": state.get("last_verdict"),
             "last_reason": state.get("last_reason"),
             "paused_reason": state.get("paused_reason"),
@@ -443,7 +463,7 @@ async def get_goal_trace(
     services: Annotated[AppServices, Depends(get_app_services)],
     goal_id: str, run_id: str | None = Query(default=None),
 ) -> dict[str, Any]:
-    """Return canonical Hermes state; Atlas no longer stores a second goal event trace."""
+    """Return canonical engine state; Atlas no longer stores a second goal event trace."""
     scheduler = services.scheduler
     if scheduler is None:
         from atlas import server as _atlas_server

@@ -18,7 +18,9 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from PIL import Image
 
-from tools.computer_use import tool as hermes_tool
+hermes_tool = pytest.importorskip(
+    "tools.computer_use", reason="x2 computer tool ran on the Hermes kernel layout"
+).tool
 from tools.computer_use.backend import ActionResult, CaptureResult, ComputerUseBackend
 
 from atlas.tools.x2 import computer as x2computer
@@ -166,7 +168,7 @@ def hermetic_vision_routing(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 # Alias translation
 # ---------------------------------------------------------------------------
-def test_alias_translation_maps_legacy_names_onto_hermes_actions() -> None:
+def test_alias_translation_maps_legacy_names_onto_atlas_actions() -> None:
     assert x2computer.translate_legacy_tool(
         "computer_observe", {"target": "desktop"}) == ("capture", {"mode": "som", "app": "desktop"})
     assert x2computer.translate_legacy_tool(
@@ -389,7 +391,7 @@ async def test_legacy_fallback_for_legacy_only_actions() -> None:
     assert any(e[0] == EVENT_COMPUTER_STEP for e in events)
 
 
-async def test_legacy_fallback_when_no_hermes_backend() -> None:
+async def test_legacy_fallback_when_no_atlas_backend() -> None:
     events: list[tuple[str, dict[str, Any]]] = []
     legacy = FakeLegacy()
     runtime = x2computer.X2ComputerRuntime(backend=None, legacy=legacy)
@@ -472,14 +474,14 @@ async def test_status_endpoint_survives_backend_failure(monkeypatch) -> None:
     assert response.json()["ok"] is False
 
 
-def test_ensure_configured_syncs_hermes_config(tmp_path, monkeypatch) -> None:
-    from atlas.tools.x2 import hermes_config_sync
+def test_ensure_configured_syncs_atlas_config(tmp_path, monkeypatch) -> None:
+    from atlas.tools.x2 import atlas_config_sync
 
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "engine"))
     runtime = x2computer.X2ComputerRuntime()
     runtime.ensure_configured()
     runtime.ensure_configured()  # idempotent
-    config = hermes_config_sync.config_file()
+    config = atlas_config_sync.config_file()
     assert config.exists()
 
     import yaml

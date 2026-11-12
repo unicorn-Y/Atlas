@@ -10,7 +10,7 @@ split into named, behavior-preserving phases:
   _phase_plan            resume or create the TaskPlan (plan_updated events)
   _phase_context         history + memory library recall
   _build_messages        system prompt assembly
-  _hermes_turn           the engine turn coroutine (executed as a task)
+  _engine_turn           the engine turn coroutine (executed as a task)
   _pump_events           event-driven queue pump with a cancel watcher (no polling)
   _phase_finalize        verify nudge, plan verification, goal evaluation,
                          persistence, memory library write, done event
@@ -163,6 +163,16 @@ _TOOL_RESULT_BOUNDARY_GUIDANCE = (
     "them distinct from the user's own words and intent."
 )
 
+# Marker prepended to a SystemMessage whose body changes every turn. Assembly
+# splits on these prefixes: marked sections leave the stable system prefix and
+# travel as turn context instead, so the cacheable prefix stays identical.
+_VOLATILE_PREFIX = "【本轮动态上下文】\n"
+_VOLATILE_PREFIXES = (
+    _VOLATILE_PREFIX,
+    "Atlas Skill index ", "Project context ", "【本轮相关记忆】",
+    "Current user-local date and time", "Follow this structured task plan",
+)
+
 
 def _breaker_prompt() -> str:
     """Workspace breaker prompt (engine/breaker.md) as the run's identity block.
@@ -175,7 +185,7 @@ def _breaker_prompt() -> str:
     global _BREAKER_CACHE
     if _BREAKER_CACHE is not None:
         return _BREAKER_CACHE
-    from atlas.engine.hermes_runtime import _load_breaker_identity
+    from atlas.engine.atlas_runtime import _load_breaker_identity
     from atlas.config import get_config as _get_cfg
 
     home = None
@@ -329,7 +339,7 @@ class _RunState:
     context: dict[str, Any] = field(default_factory=dict)
     initial_messages: list[BaseMessage] = field(default_factory=list)
     result: dict[str, Any] = field(default_factory=dict)
-    # Detail of a Hermes terminal failed-turn verdict ("" when the turn ended
+    # Detail of an engine terminal failed-turn verdict ("" when the turn ended
     # without one). A turn that produced no model output because the provider
     # terminally failed must end as a run failure, never as success (H10.2-2).
     turn_error: str = ""
@@ -387,11 +397,17 @@ async def execute_run(
                 raise
             if os.environ.get("ATLAS_DEBUG_MEMORY_CITATIONS") == "1":
                 log.info("agent.memory_citation_context_timed_out", timeout_seconds=context_budget)
-            state.context = {"use_memories": False, "generate_memories": True,
-                             "context_timeout": True}
+            # The budget expired before the corpus-wide recall finished. Do not
+            # answer with no memory at all: resident pages come from plain file
+            # reads and are independent of library size, so serve those and give
+            # the turn a shorter, still-grounded context.
+            degraded = await _merge_library_recall_resident(state.context)
+            state.context = {**degraded, "use_memories": True, "generate_memories": True,
+                             "context_degraded": True}
             yield {"type": "run.recovery.notice", "data": {
-                "message": "记忆召回超过前置时间上限；本轮保留会话历史并跳过记忆，回复不会继续等待。",
+                "message": "记忆召回超过前置时间上限；本轮改用常驻记忆（关于你 / 现状 / 最近在做），不做全库检索，回复不会继续等待。",
                 "timeout_seconds": context_budget,
+                "degraded": "resident-only",
             }}
         record_phase_timing(phase.__name__, round((time.perf_counter() - started) * 1000))
         if state.abort:
@@ -641,6 +657,36 @@ async def _merge_library_recall(context: Any, message: str) -> Any:
     except Exception as exc:
         log.warning("memory.library.recall_failed", error=str(exc), error_type=type(exc).__name__)
         return context
+    return _apply_recall(context, recall, bundle_memory)
+
+
+async def _merge_library_recall_resident(context: Any) -> Any:
+    """Degraded recall used when the full recall overruns the pre-model budget.
+
+    Drops the corpus-wide work (index sync, IDF scan, cued search) and keeps the
+    resident pages. The turn still gets "who you are / what is in progress"
+    instead of losing every memory, and it never blocks on library size.
+    """
+    try:
+        from atlas.memory.library import get_library
+
+        library = get_library()
+        if library is None:
+            return context
+        recall = await asyncio.to_thread(library.recall_resident)
+        bundle_memory = await asyncio.to_thread(_loaded_bundle_memory, library)
+    except Exception as exc:
+        log.warning("memory.library.recall_resident_failed", error=str(exc),
+                    error_type=type(exc).__name__)
+        return context
+    if os.environ.get("ATLAS_DEBUG_MEMORY_CITATIONS") == "1":
+        log.info("agent.memory_citation_resident_only",
+                 resident_loaded=bool(recall.get("resident")))
+    return _apply_recall(context, recall, bundle_memory)
+
+
+def _apply_recall(context: Any, recall: dict[str, Any], bundle_memory: dict[str, Any]) -> Any:
+    """Fold one recall result into the turn context (shared by both recall paths)."""
     if not (recall["system_block"] or recall["relevant"] or bundle_memory["text"]) or not isinstance(context, dict):
         return context
     # Resident pages change rarely and stay in the cacheable system prompt; this turn's
@@ -914,11 +960,16 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
         f"{now_local(config).isoformat(timespec='minutes')} ({timezone_name(config)}). "
         "Use this timezone when interpreting relative dates and times."
     )))
-    # Memory library recall: resident pages, then this turn's cues.
+    # Memory library recall. Resident pages are near-constant and stay in the
+    # cacheable system prompt; this turn's cues change on every message, so they
+    # are tagged volatile and moved to the turn context. Leaving them in the
+    # system block makes each turn's prefix diverge at the cue, which collapses
+    # the provider prefix cache for the whole conversation.
     if isinstance(state.context, dict) and state.context.get("system_prompt_prefix"):
         initial_messages.append(SystemMessage(content=state.context["system_prompt_prefix"]))
     if isinstance(state.context, dict) and state.context.get("turn_recall"):
-        initial_messages.append(SystemMessage(content=state.context["turn_recall"]))
+        initial_messages.append(SystemMessage(
+            content=_VOLATILE_PREFIX + state.context["turn_recall"]))
     memory_refs = list(dict.fromkeys(str(ref) for ref in (state.context.get("library_refs") or []) if ref)) if isinstance(state.context, dict) else []
     if memory_refs:
         initial_messages.append(SystemMessage(content=(
@@ -1080,9 +1131,9 @@ _FAILURE_NO_DETAIL = "模型轮次失败：提供方在未产生任何输出的�
 
 
 def _terminal_failure_detail(result: Any) -> str:
-    """Detail for a Hermes terminal failed-turn verdict; "" when the turn succeeded.
+    """Detail for an engine terminal failed-turn verdict; "" when the turn succeeded.
 
-    Hermes stamps every terminal result the turn loop returns with ``failed`` /
+    The engine stamps every terminal result the turn loop returns with ``failed`` /
     ``interrupted`` (``agent/turn_finalizer.py``): a provider that rejects the
     request without a retryable path (e.g. a 404 wire model) still returns a
     result dict — with an empty ``final_response`` and no usage. Reporting that
@@ -1094,17 +1145,14 @@ def _terminal_failure_detail(result: Any) -> str:
     return str(result.get("error") or "").strip() or _FAILURE_NO_DETAIL
 
 
-async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
+async def _engine_turn(agent, state: _RunState) -> dict[str, Any]:
     """Run one engine turn to completion, forwarding its events to the queue."""
     request, callbacks, runtime = state.request, state.callbacks, state.runtime
     try:
         from atlas.config import DATA_ROOT
-        from atlas.engine import HermesRuntime
+        from atlas.engine import AtlasRuntime
 
-        volatile_prefixes = (
-            "Atlas Skill index ", "Project context ", "【本轮相关记忆】",
-            "Current user-local date and time", "Follow this structured task plan",
-        )
+        volatile_prefixes = _VOLATILE_PREFIXES
         prompt_sections = [
             str(item.content) for item in state.initial_messages
             if isinstance(item, SystemMessage) and isinstance(item.content, str)
@@ -1120,16 +1168,16 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
         # Forked children reuse the already rendered, provider-visible static
         # scaffold byte-for-byte so the prompt cache recognizes the same prefix.
         runtime.stable_system_prefix = system_message
-        hermes_history = [
+        engine_history = [
             {"role": item["role"], "content": item["content"]}
             for item in state.history
             if item.get("role") in {"user", "assistant", "tool"}
             and isinstance(item.get("content"), str)
         ]
-        if (hermes_history and hermes_history[-1]["role"] == "user"
-                and hermes_history[-1]["content"] == state.message):
-            hermes_history.pop()
-        hermes = HermesRuntime(
+        if (engine_history and engine_history[-1]["role"] == "user"
+                and engine_history[-1]["content"] == state.message):
+            engine_history.pop()
+        engine = AtlasRuntime(
             data_dir=DATA_ROOT,
             model_manager=agent._model_mgr,
         )
@@ -1208,13 +1256,13 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
                 await result
             state.plan = plan
 
-        async for event in hermes.run_turn(
+        async for event in engine.run_turn(
             message=state.message,
             user_content=model_input,
             conversation_id=request.conversation_id,
             source=request.source,
             workspace=request.workspace,
-            history=hermes_history,
+            history=engine_history,
             system_message=system_message,
             volatile_context=volatile_context,
             cancel_event=callbacks.cancel_event,
@@ -1237,7 +1285,7 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
                 lifecycle_hook if callbacks.user_hook_callback else None
             ),
         ):
-            if event.get("type") == "hermes.result":
+            if event.get("type") == "atlas.result":
                 final_result = event.get("result", {})
                 continue
             if event.get("type") == "run.status":
@@ -1285,7 +1333,7 @@ async def _hermes_turn(agent, state: _RunState) -> dict[str, Any]:
 
 
 async def _pump_events(
-    state: _RunState, hermes_task: "asyncio.Task[dict[str, Any]]",
+    state: _RunState, engine_task: "asyncio.Task[dict[str, Any]]",
 ) -> AsyncIterator[dict[str, Any]]:
     """Forward queue events to the caller until the stream ends or cancel wins.
 
@@ -1312,9 +1360,9 @@ async def _pump_events(
                 return
             if event is _CANCEL_REQUESTED:
                 state.cancelled = True
-                if not hermes_task.done():
-                    hermes_task.cancel()
-                await asyncio.gather(hermes_task, return_exceptions=True)
+                if not engine_task.done():
+                    engine_task.cancel()
+                await asyncio.gather(engine_task, return_exceptions=True)
                 yield {"type": "cancelled"}
                 return
             yield event
@@ -1327,9 +1375,9 @@ async def _pump_events(
 async def _turn(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
     """Execute the engine turn, pump its events, finalize, and always clean up."""
     request, runtime = state.request, state.runtime
-    hermes_task = asyncio.create_task(_hermes_turn(agent, state))
+    engine_task = asyncio.create_task(_engine_turn(agent, state))
     try:
-        async with aclosing(_pump_events(state, hermes_task)) as pump:
+        async with aclosing(_pump_events(state, engine_task)) as pump:
             async for event in pump:
                 _note_tool_step(state, event)
                 yield event
@@ -1341,7 +1389,7 @@ async def _turn(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
             # `done`) must not run — a failed turn has no assistant reply to
             # finalize and must never end in `done` (H10.2-DEFECT-2).
             return
-        state.result = await hermes_task
+        state.result = await engine_task
         async with aclosing(_phase_finalize(agent, state)) as finalize:
             async for event in finalize:
                 yield event
@@ -1354,9 +1402,9 @@ async def _turn(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
         }
     finally:
         await agent._emit_hook(runtime, "agent_stop", conversation_id=request.conversation_id)
-        if not hermes_task.done():
-            hermes_task.cancel()
-        await asyncio.gather(hermes_task, return_exceptions=True)
+        if not engine_task.done():
+            engine_task.cancel()
+        await asyncio.gather(engine_task, return_exceptions=True)
         if agent._local_execution and runtime.run_id:
             await agent._local_execution.cancel_run(runtime.run_id)
 

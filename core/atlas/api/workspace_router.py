@@ -2145,12 +2145,18 @@ async def get_run_rollout(run_id: str) -> dict[str, Any]:
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", run_id):
         raise HTTPException(status_code=400, detail="无效的运行 ID")
     from atlas.logs import LOG_DIR
-    matches = list((LOG_DIR / "runs").glob(f"*/{run_id}.jsonl"))
+    from atlas.run_replay._util import open_run_log
+
+    matches = [
+        *(LOG_DIR / "runs").glob(f"*/{run_id}.jsonl"),
+        *(LOG_DIR / "runs").glob(f"*/{run_id}.jsonl.zst"),
+    ]
     if not matches:
         return {"run_id": run_id, "exists": False, "path": None, "events": [], "error": "归档文件不存在"}
     path = max(matches, key=lambda value: value.stat().st_mtime)
     try:
-        raw = path.read_text(encoding="utf-8")
+        with open_run_log(path) as stream:
+            raw = stream.read()
         events = [json.loads(line) for line in raw.splitlines() if line.strip()]
     except (OSError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=500, detail=f"无法读取运行归档：{exc}") from exc

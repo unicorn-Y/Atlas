@@ -191,7 +191,7 @@ async def test_providers_list_has_full_catalog_without_secrets(client: AsyncClie
     assert "deepseek" in by_id and "siliconflow" in by_id and "custom" in by_id
     for provider in providers:
         assert provider["label"]  # 中文标签
-        assert provider["hermes_provider"]
+        assert provider["atlas_provider"]
         assert provider["api_mode"] in {"openai", "anthropic_messages"}
         assert provider["docs_url"] == "" or provider["docs_url"].startswith("http")
         assert isinstance(provider["configured"], bool)

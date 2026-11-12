@@ -1,6 +1,6 @@
 """Decide which tool calls are dangerous enough for the safety reviewer.
 
-Command text goes through Hermes' detector (``hermes_detection``, ported verbatim apart from the
+Command text goes through Hermes' detector (``atlas_detection``, ported verbatim apart from the
 Atlas paths). Atlas adds what a shell detector cannot see: file-tool and MCP writes outside the
 work folder or into credential/config files, Windows whole-drive deletes as a floor, and a narrow
 pass for clearing regenerable build folders inside the work folder.
@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
 from typing import Any, Iterable
 
-from atlas.safety import hermes_detection as _h
+from atlas.safety import atlas_detection as _h
 
 # Shown in Settings → Safety; the detector itself carries ~100 finer-grained rules.
 RULES = {

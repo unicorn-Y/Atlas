@@ -5,7 +5,7 @@ Providers: Bocha (Chinese index), Exa, Parallel, Tavily, Brave, Keenable, Perple
 Configured under ``[web]`` in ``config/atlas.toml`` (see :mod:`atlas.websearch.settings`).
 
 Translated from Hermes Agent's web stack (NousResearch/hermes-agent@c9e076b); Atlas owns this
-code and imports nothing from Hermes. Source map: ``core/atlas/engine_core/PORTED.md``.
+code and imports nothing from Hermes. Source map: ``core/atlas/engine/PORTED.md``.
 """
 
 from atlas.websearch.service import WebSearchService, get_service

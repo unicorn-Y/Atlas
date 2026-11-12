@@ -436,10 +436,10 @@ async def test_directory_tap_is_installable(env):
     assert env["manager"].get_skill("tapped-skill") is not None
 
 
-def test_hermes_hub_state_forced_under_data_dir(env):
+def test_atlas_hub_state_forced_under_data_dir(env):
     """The hub taps/lock live under the Atlas data dir, never the real HERMES_HOME."""
-    hermes_root = Path("D:/hermes-agent")
-    if not hermes_root.is_dir():  # pragma: no cover - fork checkout missing
+    atlas_root = Path("D:/hermes-agent")
+    if not atlas_root.is_dir():  # pragma: no cover - fork checkout missing
         pytest.skip("hermes-agent checkout not available")
     import tools.skills_hub as hub_mod
 
@@ -450,15 +450,15 @@ def test_hermes_hub_state_forced_under_data_dir(env):
         market = SkillMarket(
             env["registry"], data_dir=env["tmp"], user_skills_dir=env["user_skills"],
             skill_manager=env["manager"], adapters=[env["adapter"]],
-            hermes_root=hermes_root,
+            atlas_root=atlas_root,
         )
-        taps = market._hermes_taps()
+        taps = market._engine_taps()
         assert isinstance(taps, list)
         forced = Path(hub_mod.SKILLS_DIR)
         assert forced == env["tmp"] / "skills-hub"
         assert (env["tmp"] / "skills-hub" / ".hub" / "taps.json").is_file()
         market.add_source("github", "github", repo="example-owner/example-repo")
-        entries = {tap["repo"] for tap in market._hermes_taps()}
+        entries = {tap["repo"] for tap in market._engine_taps()}
         assert "example-owner/example-repo" in entries
         assert market.remove_source("github:example-owner/example-repo")["removed"] == \
             "github:example-owner/example-repo"

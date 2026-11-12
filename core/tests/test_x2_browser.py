@@ -161,8 +161,8 @@ def clean_user_settings():
     save_user_settings({}, USER_SETTINGS_PATH)
 
 
-def hermes_config() -> dict[str, Any]:
-    from atlas.tools.x2.hermes_config_sync import config_file
+def atlas_config() -> dict[str, Any]:
+    from atlas.tools.x2.atlas_config_sync import config_file
 
     return yaml.safe_load(config_file().read_text(encoding="utf-8")) or {}
 
@@ -210,7 +210,7 @@ def test_mode_config_requests_correct_backend(
         "cdp_url": "http://127.0.0.1:9222" if frontend_mode == "cdp" else "",
     }]
 
-    section = hermes_config().get("browser") or {}
+    section = atlas_config().get("browser") or {}
     assert section.get("mode") == internal
     assert section.get("use_real_profile") is (internal == "real_profile")
     assert (section.get("extension_control") or {}).get("enabled") is (internal == "extension")
@@ -412,7 +412,7 @@ async def test_offline_backend_yields_chinese_error() -> None:
     assert events == []  # failed actions leave no step trail
 
 
-async def test_hermes_import_failure_maps_to_backend_unavailable(
+async def test_atlas_import_failure_maps_to_backend_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import importlib
@@ -431,7 +431,7 @@ async def test_hermes_import_failure_maps_to_backend_unavailable(
     assert "浏览器后端不可用" in result["content"][0]["text"]
 
 
-def test_hermes_backend_import_error_message() -> None:
+def test_atlas_backend_import_error_message() -> None:
     import importlib
 
     backend = x2browser.HermesBrowserBackend()
@@ -445,7 +445,7 @@ def test_hermes_backend_import_error_message() -> None:
         real = importlib.import_module
 
         def fake(name: str, *a: Any, **kw: Any):
-            if name == "atlas.engine_core.tools.browser_tool":
+            if name == "atlas.engine.tools.browser_tool":
                 raise ImportError("boom")
             return real(name, *a, **kw)
 

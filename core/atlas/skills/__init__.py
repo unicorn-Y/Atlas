@@ -302,6 +302,7 @@ class SkillManager:
     def __init__(self, skills_dir: Path | None = None) -> None:
         self._skills_dir = skills_dir or SKILLS_DIR
         self._index: dict[str, SkillInfo] = {}  # name → SkillInfo
+        self._scan_fingerprint: tuple[tuple[str, int, int], ...] = ()
         self._sources: dict[str, SkillSource] = {
             "atlas": SkillSource("atlas", self._skills_dir, 10, layout="category"),
         }
@@ -398,11 +399,44 @@ class SkillManager:
                     count += 1
 
         log.info("skills.scanned", count=count, sources=len(sources))
+        self._scan_fingerprint = self._current_fingerprint()
+
+    # -- freshness -------------------------------------------------------------
+
+    def _current_fingerprint(self) -> tuple[tuple[str, int, int], ...]:
+        """Cheap (path, mtime_ns, size) snapshot of every SKILL.md on disk."""
+        entries: list[tuple[str, int, int]] = []
+        for source in self._sources.values():
+            if not source.root.is_dir():
+                continue
+            for path in source.root.rglob("SKILL.md"):
+                try:
+                    stat = path.stat()
+                except OSError:
+                    continue
+                entries.append((str(path), stat.st_mtime_ns, stat.st_size))
+        return tuple(sorted(entries))
+
+    def _ensure_fresh(self) -> None:
+        """Rescan when a SKILL.md changed on disk.
+
+        Without this the index is frozen at construction time: editing a skill's
+        frontmatter (description, triggers, keywords) had no effect until the
+        whole Atlas process restarted. stat()-ing every SKILL.md costs
+        microseconds and only triggers a rescan when something actually changed.
+        """
+        try:
+            current = self._current_fingerprint()
+        except OSError:
+            return
+        if current != self._scan_fingerprint:
+            self.scan_skills_sync()
 
     # -- querying --------------------------------------------------------------
 
     def list_skills(self, category: str | None = None) -> list[SkillInfo]:
         """List all skills, optionally filtered by category."""
+        self._ensure_fresh()
         skills = list(self._index.values())
         if category:
             skills = [s for s in skills if s.category == category]
@@ -410,6 +444,7 @@ class SkillManager:
 
     def get_skill(self, name: str) -> SkillInfo | None:
         """Get a skill by its name."""
+        self._ensure_fresh()
         return self._index.get(name)
 
     def search_skills(self, query: str) -> list[SkillInfo]:

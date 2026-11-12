@@ -156,6 +156,133 @@ async def uninstall_plugin(
     return {"name": name, "removed": True, "report": await _server()._reload_extensions()}
 
 
+@router.post("/api/plugins/{name}/reload")
+async def reload_plugin(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    name: str,
+) -> dict[str, Any]:
+    """Re-read one plugin's files without restarting the backend.
+
+    Editing a plugin meant restarting everything before this: the skill text is
+    read once at load time, so a saved edit had no effect until the process died.
+    This reuses the same wiring ``load_all`` built (hook bus, MCP client, capability
+    registry), so a reload also *removes* the capabilities the old version
+    registered — without that, every reload would stack a duplicate set and
+    ``register`` would start refusing names.
+    """
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    try:
+        result = await plugin_runtime.reload(name)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not result.get("ok"):
+        # 404 only when the plugin genuinely is not there; a malformed edit is a
+        # 400, because "not found" would send the user looking in the wrong place.
+        status = 404 if "not found" in str(result.get("error", "")) else 400
+        raise HTTPException(status_code=status, detail=result.get("error"))
+    return {**result, "report": await _server()._reload_extensions()}
+
+
+@router.get("/api/plugins/{name}/patches")
+async def list_plugin_patches(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    name: str,
+) -> dict[str, Any]:
+    """List local overrides that survive an upgrade of this plugin."""
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    try:
+        return plugin_runtime.list_patches(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="插件不存在") from exc
+
+
+@router.put("/api/plugins/{name}/patches")
+async def write_plugin_patch(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    name: str,
+    req: dict[str, Any],
+) -> dict[str, Any]:
+    """Save a local edit as a patch instead of editing the installed file.
+
+    Editing ``plugins/<name>/skills/x/SKILL.md`` directly looks like it works and
+    then loses the change on the next upgrade, because ``_copy_replace`` swaps the
+    directory. Writing here keeps the original recoverable and re-applies the edit
+    after upgrading, which is the behaviour a user expects from "my tweak".
+
+    The response carries the re-load report because a patched ``SKILL.md`` that
+    nobody re-read is invisible until restart; reloading here makes the edit
+    actually take effect in the running process.
+    """
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    relative = str(req.get("path") or "").strip()
+    content = req.get("content")
+    if not relative or not isinstance(content, str):
+        raise HTTPException(status_code=400, detail="需要 path 与 content")
+    try:
+        result = plugin_runtime.patch_file(
+            name, relative, content, note=str(req.get("note") or ""),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="插件不存在") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    report = await _server()._reload_extensions()
+    reloaded = await plugin_runtime.reload(name)
+    return {**result, "report": report, "reload": reloaded}
+
+
+@router.delete("/api/plugins/{name}/patches")
+async def revert_plugin_patch(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    name: str,
+    path: str | None = None,
+) -> dict[str, Any]:
+    """Drop one override (``?path=``) or every override for the plugin."""
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    try:
+        result = plugin_runtime.revert_patch(name, path or None)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="插件不存在") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    report = await _server()._reload_extensions()
+    return {**result, "report": report}
+
+
+@router.get("/api/plugins/{name}/file")
+async def read_plugin_file(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    name: str,
+    path: str,
+) -> dict[str, Any]:
+    """Read a plugin file *as it currently behaves*, patch included.
+
+    Reading the file off disk would show the shipped bytes while the plugin runs
+    the patched ones — the reader and the runtime would disagree, which is how a
+    patch ends up looking like it did nothing.
+    """
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    try:
+        content = plugin_runtime.effective_text(name, path)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="插件不存在") from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="文件不存在") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"name": name, "path": path, "content": content}
+
+
 @router.get("/api/plugin-marketplaces")
 async def list_plugin_marketplaces(
     services: Annotated[AppServices, Depends(get_app_services)],

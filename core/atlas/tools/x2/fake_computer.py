@@ -4,7 +4,7 @@ Selected ONLY through the ``ATLAS_X2_COMPUTER_FAKE`` environment-variable gate
 in :func:`atlas.tools.x2.computer.get_runtime` (see there). It replaces the two
 drivers underneath the production bridge — Hermes' ``ComputerUseBackend``
 (:class:`FakeComputerBackend`) and the pinned ``tools.computer_use.tool``
-dispatch module (:class:`FakeHermesComputerTool`) — so the whole production
+dispatch module (:class:`FakeAtlasComputerTool`) — so the whole production
 path (registration → ``call_tool`` → permission check → legacy translation →
 ``_dispatch`` → normalize → ``computer.step`` events) stays identical and only
 the driver is fake.
@@ -80,7 +80,7 @@ class FakeComputerBackend:
         }]
 
 
-class FakeHermesComputerTool:
+class FakeAtlasComputerTool:
     """Stand-in for the pinned ``tools.computer_use.tool`` module surface.
 
     Only the member the X2 bridge touches is implemented: ``_dispatch`` (the
@@ -116,4 +116,4 @@ class FakeHermesComputerTool:
         return {"error": f"fake backend: unknown action {action}"}
 
 
-__all__ = ["FAKE_MARKER", "FAKE_PNG_B64", "FakeComputerBackend", "FakeHermesComputerTool"]
+__all__ = ["FAKE_MARKER", "FAKE_PNG_B64", "FakeComputerBackend", "FakeAtlasComputerTool"]

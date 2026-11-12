@@ -55,7 +55,7 @@ def _clean_component(name: str, value: str) -> str:
 def session_key(
     agent_id: str, channel: str = "", account: str = "", peer: str = "", group: bool = False,
 ) -> str:
-    """Build the Hermes session lineage key for one agent conversation.
+    """Build the Atlas session lineage key for one agent conversation.
 
     Grammar (ported from OpenClaw ``buildAgentPeerSessionKey``): ``agent:<id>:
     [channel:[account]:]kind:peer``. Scope follows r1 §1.4 — with no peer the

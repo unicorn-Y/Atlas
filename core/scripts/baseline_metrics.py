@@ -401,7 +401,7 @@ def _probe_worker(repo_root: Path, fake_url: str, data_root: Path) -> dict[str, 
             enabled_toolsets=[], atlas_agent=atlas_agent, atlas_context=context,
         )]
         result = next((event.get("result") for event in reversed(events)
-                       if event.get("type") == "hermes.result"), None)
+                       if event.get("type") == "atlas.result"), None)
         failed_events = [event for event in events
                          if event.get("type") in {"run.error", "run_failed", "run.cancelled"}]
         if (failed_events or not isinstance(result, dict) or not result.get("final_response")

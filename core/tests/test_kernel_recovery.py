@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from atlas.kernel.model_call import ModelCallError, complete_stream
-from atlas.kernel.repair import repair_unpaired_tool_calls, started_call_ids
+from atlas.engine.kernel.model_call import ModelCallError, complete_stream
+from atlas.engine.kernel.repair import repair_unpaired_tool_calls, started_call_ids
 
 
 def call_group(*ids):
@@ -89,14 +89,14 @@ def test_legacy_unsafe_recovery_receipts_are_conservative_in_model_view():
     [call_group("a", "a"), result("a")],
 ])
 def test_ambiguous_tool_histories_fail_locally(history):
-    from atlas.kernel.repair import normalize_tool_results
+    from atlas.engine.kernel.repair import normalize_tool_results
 
     with pytest.raises(ValueError):
         normalize_tool_results(history)
 
 
 def test_sequential_rounds_can_reuse_a_provider_tool_id():
-    from atlas.kernel.repair import normalize_tool_results
+    from atlas.engine.kernel.repair import normalize_tool_results
 
     history = [call_group("a"), result("a", "first"),
                {"role": "user", "content": "Next"}, call_group("a"), result("a", "second")]
@@ -106,7 +106,7 @@ def test_sequential_rounds_can_reuse_a_provider_tool_id():
 @pytest.mark.integration
 def test_reused_call_id_recovery_persists_current_unknown_result(tmp_path):
     from atlas.engine.session_sync import append_session_message, read_session_model_messages
-    from atlas.engine_core.state.hermes_state import SessionDB
+    from atlas.engine.state.atlas_state import SessionDB
 
     home = tmp_path / "engine"
     with SessionDB(db_path=home / "state.db") as db:
@@ -135,7 +135,7 @@ def test_reused_call_id_recovery_persists_current_unknown_result(tmp_path):
     "x" * 1480 + '{"password": "hunter2"}',
 ])
 def test_error_details_redact_quoted_fields_and_query_values_before_truncation(text):
-    from atlas.kernel.model_call import _provider_error_detail
+    from atlas.engine.kernel.model_call import _provider_error_detail
 
     detail = _provider_error_detail(ValueError(text))
     assert all(secret not in detail for secret in ("other-secret", "hunter2", "token-value"))
@@ -145,7 +145,7 @@ def test_error_details_redact_quoted_fields_and_query_values_before_truncation(t
 @pytest.mark.integration
 def test_session_projection_repairs_persisted_history_and_preserves_raw_rows(tmp_path):
     from atlas.engine.session_sync import append_session_message, read_session_model_messages
-    from atlas.engine_core.state.hermes_state import SessionDB
+    from atlas.engine.state.atlas_state import SessionDB
 
     home = tmp_path / "engine"
     with SessionDB(db_path=home / "state.db") as db:

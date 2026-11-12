@@ -3,7 +3,7 @@
 The live-model smoke proved the defect: the engine system prompt reported the
 CLI process launch dir as the working directory and the model wrote the file
 there instead of into ``--workspace`` (artifacts/h10-live-smoke/runs/
-01-probe-defect3-record.json). Root cause: ``hermes_runtime`` passed ``cwd=``
+01-probe-defect3-record.json). Root cause: ``atlas_runtime`` passed ``cwd=``
 to the AIAgent constructor but never registered it with the fork's cwd seams,
 so every resolver fell back to ``os.getcwd()``.
 
@@ -28,7 +28,7 @@ from typing import Any
 
 import pytest
 
-from atlas.engine.hermes_runtime import HermesRuntime
+from atlas.engine.atlas_runtime import AtlasRuntime
 
 
 class _CwdCapturingAgent:
@@ -71,8 +71,8 @@ class _MinimalModelManager:
     set_api_mode_probe = lambda self, _pid, _probe: None  # noqa: E731
 
 
-def _runtime(tmp_path: Path) -> HermesRuntime:
-    return HermesRuntime(
+def _runtime(tmp_path: Path) -> AtlasRuntime:
+    return AtlasRuntime(
         data_dir=tmp_path / "data",
         model_manager=_MinimalModelManager(),
         agent_factory=_CwdCapturingAgent,
@@ -101,7 +101,7 @@ async def test_run_turn_anchors_every_cwd_surface_to_the_workspace(
         message="hello", conversation_id=conversation_id,
         workspace=str(workspace), history=[],
     )]
-    assert events[-1]["type"] == "hermes.result"
+    assert events[-1]["type"] == "atlas.result"
 
     agent = next(
         entry["agent"] for entry in runtime._agent_cache.values()
@@ -130,10 +130,10 @@ async def test_run_turn_anchors_every_cwd_surface_to_the_workspace(
 
 @pytest.mark.asyncio
 async def test_session_workspace_helper_excludes_ssh_and_empty(tmp_path) -> None:
-    assert HermesRuntime._session_workspace(str(tmp_path)) == str(tmp_path)
-    assert HermesRuntime._session_workspace("ssh://host/remote/path") == ""
-    assert HermesRuntime._session_workspace("  ") == ""
-    assert HermesRuntime._session_workspace(None) == ""
+    assert AtlasRuntime._session_workspace(str(tmp_path)) == str(tmp_path)
+    assert AtlasRuntime._session_workspace("ssh://host/remote/path") == ""
+    assert AtlasRuntime._session_workspace("  ") == ""
+    assert AtlasRuntime._session_workspace(None) == ""
 
 
 @pytest.mark.asyncio
@@ -142,8 +142,8 @@ async def test_ssh_workspace_never_enters_local_session_records(tmp_path):
 
     conversation_id = "cwd-anchor-ssh"
     clear_session_cwd(conversation_id)
-    HermesRuntime._register_session_workspace(conversation_id, "ssh://host/remote/path")
-    HermesRuntime._register_session_workspace(conversation_id, None)
+    AtlasRuntime._register_session_workspace(conversation_id, "ssh://host/remote/path")
+    AtlasRuntime._register_session_workspace(conversation_id, None)
 
     assert get_session_cwd(conversation_id) is None
 
@@ -164,7 +164,7 @@ async def test_record_session_workspace_survives_record_failure(
 
     monkeypatch.setattr(builtins, "__import__", blocked)
     # Must not raise.
-    HermesRuntime._register_session_workspace("cwd-anchor-blocked", str(tmp_path))
+    AtlasRuntime._register_session_workspace("cwd-anchor-blocked", str(tmp_path))
 
 
 @pytest.mark.asyncio
@@ -184,7 +184,7 @@ async def test_worker_thread_pin_is_reset_after_each_turn(tmp_path, monkeypatch)
             message=f"turn {index}", conversation_id=conversation_id,
             workspace=str(workspace), history=[],
         )]
-        assert events[-1]["type"] == "hermes.result"
+        assert events[-1]["type"] == "atlas.result"
 
     # The agent cache retains the turn agent (H3); both turns observed the pin.
     agents = [entry["agent"] for entry in runtime._agent_cache.values()]

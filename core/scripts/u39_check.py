@@ -60,7 +60,7 @@ def cli_usage_terminal_scenarios() -> None:
 def main() -> None:
     env = dict(os.environ)
     env["ATLAS_ROOT"] = r"C:\engine-reg\_atlasroot"
-    python_path = [str(CORE), str(CORE / "atlas" / "engine_core" / "state")]
+    python_path = [str(CORE), str(CORE / "atlas" / "engine" / "state")]
     if env.get("PYTHONPATH"):
         python_path.append(env["PYTHONPATH"])
     env["PYTHONPATH"] = os.pathsep.join(python_path)
@@ -114,8 +114,8 @@ def main() -> None:
 
     pytest("2 complete branch tree and checkpoint fork workspace restore", [
         "tests/test_u39_checkpoint_fork.py",
-        "tests/test_hermes_session_sync.py::test_fork_copies_selected_turn_and_delete_removes_hermes_history",
-        "tests/test_hermes_session_sync.py::test_fork_session_through_turn_direct_cuts_from_sessiondb_transcript",
+        "tests/test_atlas_session_sync.py::test_fork_copies_selected_turn_and_delete_removes_atlas_history",
+        "tests/test_atlas_session_sync.py::test_fork_session_through_turn_direct_cuts_from_sessiondb_transcript",
     ], env)
     pytest("3 online subagent overview API across parent runs", [
         "tests/test_api_runtime.py::test_online_subtask_query_spans_parent_runs_and_excludes_terminal_children",

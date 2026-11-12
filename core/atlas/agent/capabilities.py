@@ -50,6 +50,37 @@ class AgentCapabilityRegistry:
             source=source,
         )
 
+    def unregister(self, name: str) -> bool:
+        """Drop one capability. Returns whether it existed.
+
+        Needed for reload: :meth:`register` refuses a duplicate name, so a plugin
+        that is reloaded must clear its old entries first. Returning a bool rather
+        than raising keeps "unload something already gone" an ordinary outcome.
+        """
+        return self._capabilities.pop(name, None) is not None
+
+    def unregister_source(self, source: str) -> int:
+        """Drop every capability from one source, e.g. ``plugin:foo``.
+
+        A plugin can change how many skills/commands it contributes between
+        reloads, so removing by source is the only way to guarantee no stale entry
+        survives when the list gets shorter.
+        """
+        stale = [
+            name for name, capability in self._capabilities.items()
+            if capability.source == source
+        ]
+        for name in stale:
+            del self._capabilities[name]
+        return len(stale)
+
+    def sources(self) -> dict[str, int]:
+        """Capability count per source, for reload diagnostics."""
+        counts: dict[str, int] = {}
+        for capability in self._capabilities.values():
+            counts[capability.source] = counts.get(capability.source, 0) + 1
+        return counts
+
     def discover(self) -> list[dict[str, str]]:
         return [
             capability.to_dict()

@@ -9,7 +9,7 @@ from atlas.agent import AgentOrchestrator
 from atlas.engine.session_sync import capture_session
 from atlas.memory import MemoryStore
 from atlas.tools.local_execution import LocalExecutionRuntime
-from tests.fakes.fake_llm_provider import FakeLLMServer, Text, write_hermes_home
+from tests.fakes.fake_llm_provider import FakeLLMServer, Text, write_atlas_home
 
 
 class _Memory:
@@ -28,7 +28,7 @@ class _Memory:
 
 
 @pytest.mark.asyncio
-async def test_real_hermes_atlas_child_keeps_context_and_permissions_then_cleans_up(tmp_path, monkeypatch):
+async def test_real_atlas_atlas_child_keeps_context_and_permissions_then_cleans_up(tmp_path, monkeypatch):
     class FixtureConfig(dict):
         db_path = tmp_path / "config.db"
 
@@ -44,7 +44,7 @@ async def test_real_hermes_atlas_child_keeps_context_and_permissions_then_cleans
     workspace.mkdir()
     with FakeLLMServer([Text("real child result")]) as fake:
         home = data_root / "engine"
-        write_hermes_home(home, fake.base_url)
+        write_atlas_home(home, fake.base_url)
         monkeypatch.setenv("HERMES_HOME", str(home))
         model_rows = [{
             "id": "child-model", "litellm_model": "openai/child-model",
@@ -147,7 +147,7 @@ async def test_atlas_child_lifecycle_isolated_and_sessiondb_is_cleaned(tmp_path,
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("outcome", ["cancelled", "failed"])
-async def test_atlas_child_cancel_and_failure_both_remove_hermes_session(tmp_path, monkeypatch, outcome):
+async def test_atlas_child_cancel_and_failure_both_remove_atlas_session(tmp_path, monkeypatch, outcome):
     monkeypatch.setenv("ATLAS_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "engine"))
     monkeypatch.setattr("atlas.config.DATA_ROOT", tmp_path)

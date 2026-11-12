@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from atlas.kernel.model_call import complete_stream
-from atlas.kernel.stuck import StuckDetector
+from atlas.engine.kernel.model_call import complete_stream
+from atlas.engine.kernel.stuck import StuckDetector
 from atlas.agent.enrichment import AtlasToolBridge, CodeActRuntime
 from atlas.tools.local_execution import LocalExecutionRuntime
 
@@ -148,7 +148,7 @@ async def test_incomplete_arguments_become_a_call_error_without_a_retry(monkeypa
 
 
 def test_tool_call_arguments_repair_only_closed_objects():
-    from atlas.kernel.model_call import _ToolDelta, _tool_calls
+    from atlas.engine.kernel.model_call import _ToolDelta, _tool_calls
 
     calls = _tool_calls({
         0: _ToolDelta("a", "write", '{"path": "y", "content": "ok",}'),
@@ -163,7 +163,7 @@ def test_tool_call_arguments_repair_only_closed_objects():
 
 
 def test_overlap_merge_preserves_boundary_character_repetition():
-    from atlas.kernel.model_call import _overlap_merge
+    from atlas.engine.kernel.model_call import _overlap_merge
 
     assert _overlap_merge("asci", "i") == "ascii"
     assert _overlap_merge("fast", "train") == "fasttrain"
@@ -173,7 +173,7 @@ def test_overlap_merge_preserves_boundary_character_repetition():
 
 
 def test_classify_error_extracts_http_429_from_upstream_message():
-    from atlas.kernel.model_call import classify_error
+    from atlas.engine.kernel.model_call import classify_error
 
     exc = RuntimeError("ModelCallError: Upstream API error (HTTP 429)")
     category, retryable, status = classify_error(exc)

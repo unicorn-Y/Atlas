@@ -13,6 +13,33 @@ from typing import Any
 
 from atlas.runtime.backends import AgentEvent, AgentSession
 
+# Lines that carry the reason a ZCode run failed. ZCode prints the provider error
+# first and then dumps a full HTTP response, so the tail alone is usually noise.
+_FAILURE_MARKERS = (
+    "error",
+    "Error",
+    "ERROR",
+    "insufficient",
+    "Insufficient",
+    "unauthorized",
+    "Unauthorized",
+    "forbidden",
+    "not logged in",
+    "login",
+    "balance",
+    "code:",
+    "message:",
+)
+
+
+def _looks_like_failure(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if stripped.startswith(("{", "}", "'", '"', "at ")):
+        return False
+    return any(marker in stripped for marker in _FAILURE_MARKERS)
+
 
 class ZCodeBackend:
     """Run one isolated ZCode CLI prompt per Atlas Agent turn."""
@@ -69,12 +96,38 @@ class ZCodeBackend:
                         AgentEvent(event_type, {"backend": self.name, "text": text})
                     )
 
+        stderr_tail: list[str] = []
+        error_lines: list[str] = []
+
+        async def read_stderr() -> None:
+            if process.stderr is None:
+                return
+            while line := await process.stderr.readline():
+                text = line.decode("utf-8", errors="replace").rstrip()
+                if not text:
+                    continue
+                stderr_tail.append(text)
+                del stderr_tail[:-40]
+                if _looks_like_failure(text):
+                    error_lines.append(text)
+                await state["events"].put(
+                    AgentEvent("progress", {"backend": self.name, "text": text})
+                )
+
         async def collect() -> None:
-            await asyncio.gather(read(process.stdout, "text"), read(process.stderr, "progress"))
+            await asyncio.gather(read(process.stdout, "text"), read_stderr())
             code = await process.wait()
-            await state["events"].put(
-                AgentEvent("done" if code == 0 else "error", {"exit_code": code})
-            )
+            if code == 0:
+                await state["events"].put(AgentEvent("done", {"exit_code": code}))
+            else:
+                # ZCode reports provider and authentication failures on stderr and
+                # exits non-zero with nothing on stdout. Reporting only the exit code
+                # hides the actual cause (for example an insufficient balance), so
+                # the most explanatory stderr lines travel with the error event.
+                detail = "\n".join((error_lines or stderr_tail)[:8])
+                await state["events"].put(
+                    AgentEvent("error", {"exit_code": code, "detail": detail or "zcode exited without output"})
+                )
             await state["events"].put(None)
 
         state["collector"] = asyncio.create_task(collect())

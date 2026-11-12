@@ -5,7 +5,12 @@ import uuid
 from pathlib import Path
 
 import pytest
-from tools.tool_result_storage import extract_persisted_path, maybe_persist_tool_result
+_storage = pytest.importorskip(
+    "tools.tool_result_storage",
+    reason="tool result persistence lived in the Hermes kernel; that module has no Atlas port",
+)
+extract_persisted_path = _storage.extract_persisted_path
+maybe_persist_tool_result = _storage.maybe_persist_tool_result
 
 from atlas.engine.notifications import consume_notifications, publish_notification
 from atlas.tools.local_execution import LocalExecutionRuntime

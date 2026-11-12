@@ -665,7 +665,7 @@ def _coerce_range(value: Any) -> list[int] | None:
 # review_command: strict read-only verification ------------------------------
 #
 # Refusal rule set ported from the Hermes danger detectors (agent side tables in
-# tools/ plus their Atlas port in atlas/safety/hermes_detection.py): deletion,
+# tools/ plus their Atlas port in atlas/safety/atlas_detection.py): deletion,
 # writes via shell operators, mutating git subcommands, permission/process/system
 # changes, package installs and remote-code execution. review_command is stricter
 # than the safety reviewer because it must NEVER write, so the git side is a
@@ -1017,7 +1017,7 @@ def register_review_tools() -> None:
     rebinds dispatch through bind_atlas_tools with override=True, so re-running
     this must never clobber that binding (hence the get_entry guard).
     """
-    from atlas.engine_core.tools.registry import registry
+    from atlas.engine.tools.registry import registry
 
     for name, schema in _REVIEW_TOOL_SCHEMAS:
         if registry.get_entry(name) is not None:

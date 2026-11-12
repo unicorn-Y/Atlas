@@ -336,6 +336,37 @@ def test_model_prefs_conflict_defaults_to_skip(
     assert result["skipped"] >= 1
 
 
+def test_url_servers_default_to_streamable_http(
+    atlas_root: Path, workspace: Path, tmp_path: Path,
+) -> None:
+    """URL-only MCP servers import as streamable_http; declared sse is kept.
+
+    Streamable HTTP is the transport that can carry the stateless protocol, so
+    it is the default. A server that explicitly declares ``sse`` must keep it,
+    and both forms must emit a usable ``url`` line into atlas.toml.
+    """
+    home = tmp_path / "url-home"
+    _write(home / ".claude.json", json.dumps({"mcpServers": {
+        "modern": {"url": "https://modern.test/mcp"},
+        "legacy": {"url": "https://legacy.test/sse", "transport": "sse"},
+    }}))
+
+    scan = scan_external("claude", workspace=workspace, atlas_home=atlas_root,
+                         source_home=home)
+    names = {item["name"] for item in _by_kind(scan["items"], "mcp")}
+    assert names == {"modern", "legacy"}
+
+    import_external("claude", scan["items"], workspace=workspace,
+                    atlas_home=atlas_root, source_home=home)
+
+    config = tomllib.loads((atlas_root / "config" / "atlas.toml").read_text(encoding="utf-8"))
+    servers = config["tools"]["servers"]
+    assert servers["modern"]["transport"] == "streamable_http"
+    assert servers["modern"]["url"] == "https://modern.test/mcp"
+    assert servers["legacy"]["transport"] == "sse"
+    assert servers["legacy"]["url"] == "https://legacy.test/sse"
+
+
 def test_unknown_source_is_rejected(atlas_root: Path, workspace: Path) -> None:
     with pytest.raises(ValueError):
         scan_external("cursor", workspace=workspace, atlas_home=atlas_root)

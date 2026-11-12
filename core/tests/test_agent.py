@@ -21,8 +21,12 @@ def _agent_state(ai: AIMessage, *, runtime: Any | None = None) -> ToolExecutionS
     return {
         "messages": [ai],
         "pending_events": [],
+        # `event_queue` is drained unconditionally on the cancel path; a stub
+        # without it turns a cancelled tool call into an AttributeError instead
+        # of the isolation this test is about.
         "runtime": runtime or SimpleNamespace(
-            cancel_event=None, pause_event=None, approval_callback=None
+            cancel_event=None, pause_event=None, approval_callback=None,
+            event_queue=asyncio.Queue(),
         ),
     }
 
@@ -110,7 +114,7 @@ class TestExecuteTools:
             "pending_events": [],
             "runtime": SimpleNamespace(
                 run_id="run-screen-1", cancel_event=None, pause_event=None,
-                approval_callback=None,
+                approval_callback=None, event_queue=asyncio.Queue(),
             ),
         }
 
@@ -242,7 +246,8 @@ class TestConcurrentRunIsolation:
                 "name": "fs__read", "args": {"path": "/a"}, "id": "a"
             }]),
             runtime=SimpleNamespace(
-                cancel_event=cancel_a, pause_event=None, approval_callback=None
+                cancel_event=cancel_a, pause_event=None, approval_callback=None,
+                event_queue=asyncio.Queue(),
             ),
         )
         state_b = _agent_state(
@@ -250,7 +255,8 @@ class TestConcurrentRunIsolation:
                 "name": "fs__read", "args": {"path": "/b"}, "id": "b"
             }]),
             runtime=SimpleNamespace(
-                cancel_event=cancel_b, pause_event=None, approval_callback=None
+                cancel_event=cancel_b, pause_event=None, approval_callback=None,
+                event_queue=asyncio.Queue(),
             ),
         )
         mcp_client.call_tool = AsyncMock(return_value={

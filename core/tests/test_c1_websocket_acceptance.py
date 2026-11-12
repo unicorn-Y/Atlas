@@ -20,7 +20,7 @@ import pytest
 import pytest_asyncio
 from websockets.asyncio.client import connect
 
-from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, StallMidStream, write_hermes_home
+from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, StallMidStream, write_atlas_home
 
 
 class IsolatedBackend:
@@ -42,7 +42,7 @@ class IsolatedBackend:
             '[tools]\nauto_start=[]\n[tools.servers]\n'
             '[scheduler]\nenabled=false\n', encoding="utf-8",
         )
-        write_hermes_home(data / "engine", fake.base_url, extra_config="auxiliary:\n  title_generation:\n    model_upgrade_enabled: false\n")
+        write_atlas_home(data / "engine", fake.base_url, extra_config="auxiliary:\n  title_generation:\n    model_upgrade_enabled: false\n")
         if fake_mcp:
             config_path = data / "config/atlas.toml"
             config_path.write_text(config_path.read_text().replace("auto_start=[]", 'auto_start=["c1-fake"]'), encoding="utf-8")
@@ -618,7 +618,7 @@ async def test_websocket_cancel_while_paused_ends_without_another_provider_turn(
 
 
 @pytest.mark.asyncio
-async def test_websocket_rewind_restores_files_and_hermes_session(backend):
+async def test_websocket_rewind_restores_files_and_atlas_session(backend):
     target = backend.root / "workspace/rewind.txt"
     target.write_text("original", encoding="utf-8")
     count = 0
