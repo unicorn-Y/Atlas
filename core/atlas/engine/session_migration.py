@@ -1,4 +1,4 @@
-"""First-start migration from the retired Atlas message table to Hermes SessionDB."""
+"""First-start migration from the retired Atlas message table to Atlas SessionDB."""
 
 from atlas.engine.session_sync import MigrationReport, migrate_legacy_sessions
 

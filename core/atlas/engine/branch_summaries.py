@@ -13,7 +13,7 @@ switching and are cached in the canonical SessionDB transcript:
 
 Model path: the auxiliary cheap model — the ``compression_model`` user setting
 resolved through ModelManager (the same setting Hermes' ContextCompressor uses
-via ``HermesRuntime._apply_compression_model_setting``), falling back to the
+via ``AtlasRuntime._apply_compression_model_setting``), falling back to the
 current run model. The completion itself goes through the shared model router
 (``complete_for(model, "compression", ...)``), so native provider credentials
 work with no gateway configured. Tests inject ``complete`` to fake the call.

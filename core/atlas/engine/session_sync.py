@@ -1,4 +1,4 @@
-"""Single write path for the durable conversation transcript (Hermes SessionDB).
+"""Single write path for the durable conversation transcript (Atlas SessionDB).
 
 DATA-OWNERS.md (H2.1): the conversation record (messages, tool calls/results,
 rewinds, forks) has ONE owner — Hermes ``SessionDB`` — and this module is the
@@ -9,8 +9,8 @@ what gets written. Callers that still address turns by Atlas message id resolve
 the ordinal themselves with :func:`atlas_turn_ordinal` and pass it to
 :func:`rewind_user_turn` / :func:`fork_session_through_turn`.
 
-Hermes source: ``hermes_state.py::SessionDB``, ``hermes_state_rewind.py`` and
-``hermes_state_portability.py`` at unicorn-Y/hermes-agent@562ad75 (MIT).
+Hermes source: ``atlas_state.py::SessionDB``, ``atlas_state_rewind.py`` and
+``atlas_state_portability.py`` at unicorn-Y/hermes-agent@562ad75 (MIT).
 
 SessionDB 以 ``conversation_id`` 为会话身份；本模块不持有 task_id 映射，
 会话记录保持纯转录权威（H2.1 单一所有者）。
@@ -112,7 +112,7 @@ def _open_db(home: str | Path):
     _require_migration_settled(home)
     root = Path(home).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
-    from atlas.engine_core.state.hermes_state import SessionDB
+    from atlas.engine.state.atlas_state import SessionDB
 
     return SessionDB(db_path=root / "state.db")
 
@@ -191,7 +191,7 @@ def read_session_model_messages(home: str | Path, conversation_id: str) -> list[
         if message.get("display_kind") not in {"structured_component", "agent_canvas", "subtask_activity"}
         and (message.get("display_metadata") or {}).get("display_kind") not in {"structured_component", "agent_canvas", "subtask_activity"}
     ]
-    from atlas.kernel.repair import normalize_tool_results
+    from atlas.engine.kernel.repair import normalize_tool_results
 
     # Corrupt orphan/duplicate receipts are excluded from the model projection;
     # the kernel's recovery pass then pairs unresolved assistant calls with an
@@ -230,8 +230,8 @@ def compact_session_messages(
     The generated snapshot manifest is stored in display metadata on the summary
     message, in the same SessionDB transaction that archives the old transcript.
     """
-    from atlas.engine_core.agent.conversation_compression_archive import coverage_for_commit
-    from atlas.engine_core.agent.context_compressor import stamp_db_persisted_markers
+    from atlas.engine.agent.conversation_compression_archive import coverage_for_commit
+    from atlas.engine.agent.context_compressor import stamp_db_persisted_markers
 
     import hashlib
 
@@ -466,11 +466,18 @@ def append_session_messages(
 
 def list_session_previews(home: str | Path, *, limit: int = 1000) -> dict[str, str]:
     with _open_db(home) as db:
-        sessions = db.list_sessions_rich(
-            limit=limit, include_children=True, include_archived=True, include_hidden=True,
-            project_compression_tips=False,
+        sessions = db.cached_read(
+            "session_previews",
+            (limit,),
+            lambda: [
+                {"id": str(item["id"]), "preview": str(item.get("preview") or "")}
+                for item in db.list_sessions_rich(
+                    limit=limit, include_children=True, include_archived=True, include_hidden=True,
+                    project_compression_tips=False,
+                )
+            ],
         )
-    return {str(item["id"]): str(item.get("preview") or "") for item in sessions}
+    return {item["id"]: item["preview"] for item in sessions}
 
 
 def search_session_messages(
@@ -688,14 +695,14 @@ async def migrate_legacy_sessions(home: str | Path, memory_store: Any, *,
     """Back up both stores, stage missing Atlas transcripts, verify, then publish SessionDB.
 
     Any imported content is validated in the staged database before the canonical state file
-    is replaced. Existing Hermes session IDs remain authoritative and are counted as ignored.
+    is replaced. Existing Atlas session IDs remain authoritative and are counted as ignored.
     The caller owns startup health state and user-facing failure notification.
     """
     from atlas.config import get_config
 
     atlas_path = Path(get_config().db_path)
-    hermes_path = Path(home).expanduser().resolve() / "state.db"
-    begin_session_migration(hermes_path.parent)
+    atlas_path = Path(home).expanduser().resolve() / "state.db"
+    begin_session_migration(atlas_path.parent)
     stage_dir: Path | None = None
     settled = False
     phase = "preflight"
@@ -703,28 +710,28 @@ async def migrate_legacy_sessions(home: str | Path, memory_store: Any, *,
         # T01.3：经 MemoryStore 公开只读方法取 DISTINCT 会话清单
         # （authority-map 1.0，不再直摸 memory_store._db）。
         atlas_ids = {str(cid) for cid in await memory_store.list_conversation_ids()}
-        original_session_ids = _existing_session_ids(hermes_path)
+        original_session_ids = _existing_session_ids(atlas_path)
         pending_ids = atlas_ids - original_session_ids
         ignored_existing = len(atlas_ids & original_session_ids)
         if not pending_ids:
-            finish_session_migration(hermes_path.parent, "ready")
+            finish_session_migration(atlas_path.parent, "ready")
             settled = True
             return MigrationReport("ready", ignored_existing_sessions=ignored_existing)
 
         timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
         backups = Path(backup_root) if backup_root else atlas_path.parent / "backup" / timestamp
         phase = "backup"
-        hermes_path.parent.mkdir(parents=True, exist_ok=True)
-        stage_dir = Path(tempfile.mkdtemp(prefix=".session-migration-", dir=hermes_path.parent))
+        atlas_path.parent.mkdir(parents=True, exist_ok=True)
+        stage_dir = Path(tempfile.mkdtemp(prefix=".session-migration-", dir=atlas_path.parent))
         stage_db = stage_dir / "state.db"
         backups = backups / timestamp if backup_root else backups
         backups.mkdir(parents=True, exist_ok=False)
         _copy_sqlite_backup(atlas_path, backups / "atlas.sqlite3")
-        _copy_sqlite_backup(hermes_path, backups / "state.db")
-        _copy_sqlite_backup(hermes_path, stage_db)
+        _copy_sqlite_backup(atlas_path, backups / "state.db")
+        _copy_sqlite_backup(atlas_path, stage_db)
         phase = "import"
         conversations = await memory_store.list_conversations(limit=None)
-        from atlas.engine_core.state.hermes_state import SessionDB
+        from atlas.engine.state.atlas_state import SessionDB
 
         with SessionDB(db_path=stage_db) as db:
             existing_rows = db._read_all("SELECT id, title FROM sessions")
@@ -787,7 +794,7 @@ async def migrate_legacy_sessions(home: str | Path, memory_store: Any, *,
                     "messages": messages,
                 })
             if not payloads:
-                finish_session_migration(hermes_path.parent, "ready")
+                finish_session_migration(atlas_path.parent, "ready")
                 settled = True
                 return MigrationReport(
                     "ready", ignored_existing_sessions=staged_ignored_existing,
@@ -805,19 +812,19 @@ async def migrate_legacy_sessions(home: str | Path, memory_store: Any, *,
         for sidecar in (Path(f"{stage_db}-wal"), Path(f"{stage_db}-shm")):
             sidecar.unlink(missing_ok=True)
         phase = "publish"
-        _publish_staged_database(stage_db, hermes_path, stage_dir)
-        finish_session_migration(hermes_path.parent, "ready")
+        _publish_staged_database(stage_db, atlas_path, stage_dir)
+        finish_session_migration(atlas_path.parent, "ready")
         settled = True
         return MigrationReport(
             "ready", imported, imported_messages,
             ignored_existing_sessions=staged_ignored_existing,
         )
     except asyncio.CancelledError:
-        finish_session_migration(hermes_path.parent, "failed")
+        finish_session_migration(atlas_path.parent, "failed")
         settled = True
         raise
     except (OSError, sqlite3.Error, RuntimeError, ValueError, TypeError, KeyError) as exc:
-        finish_session_migration(hermes_path.parent, "failed")
+        finish_session_migration(atlas_path.parent, "failed")
         settled = True
         return MigrationReport(
             "failed", error=(
@@ -828,7 +835,7 @@ async def migrate_legacy_sessions(home: str | Path, memory_store: Any, *,
         )
     finally:
         if not settled:
-            finish_session_migration(hermes_path.parent, "failed")
+            finish_session_migration(atlas_path.parent, "failed")
         if stage_dir is not None:
             shutil.rmtree(stage_dir, ignore_errors=True)
 
@@ -849,7 +856,7 @@ def restore_session(home: str | Path, payload: dict[str, Any] | None) -> None:
             db.delete_session(session_id)
         result = db.import_sessions([payload])
         if not result.get("ok") or result.get("imported") != 1:
-            raise RuntimeError(f"Hermes session restore failed: {result.get('errors', result)}")
+            raise RuntimeError(f"Atlas session restore failed: {result.get('errors', result)}")
 
 
 def delete_session(home: str | Path, conversation_id: str) -> bool:
@@ -931,7 +938,7 @@ def fork_session_through_turn(
         }
         result = db.import_sessions([cloned])
         if not result.get("ok") or result.get("imported") != 1:
-            raise RuntimeError(f"Hermes session fork failed: {result.get('errors', result)}")
+            raise RuntimeError(f"Atlas session fork failed: {result.get('errors', result)}")
 
 
 def list_branch_tree(home: str | Path, conversation_id: str) -> list[dict[str, Any]]:
@@ -998,8 +1005,8 @@ def list_branch_tree(home: str | Path, conversation_id: str) -> list[dict[str, A
 
 def goal_command(home: str | Path, conversation_id: str, command: str) -> dict[str, Any]:
     """Apply Atlas per-session /goal command and return its continuation prompt."""
-    from atlas.engine_core.goal_command import dispatch_goal_command, is_goal_control
-    from atlas.engine_core.goals import GoalManager
+    from atlas.engine.goal_command import dispatch_goal_command, is_goal_control
+    from atlas.engine.goals import GoalManager
 
     manager = GoalManager(conversation_id, home=home)
     previous = manager.state
@@ -1033,7 +1040,7 @@ def evaluate_goal_after_turn(
     home: str | Path, conversation_id: str, response: str, judge=None,
 ) -> dict[str, Any]:
     """Evaluate the persisted per-session goal after an assistant turn."""
-    from atlas.engine_core.goals import GoalManager
+    from atlas.engine.goals import GoalManager
 
     manager = GoalManager(conversation_id, home=home)
     if not manager.is_active():
@@ -1045,7 +1052,7 @@ def evaluate_goal_after_turn(
 
 def goal_state(home: str | Path, conversation_id: str) -> dict[str, Any] | None:
     """Return the persisted goal state for a conversation or automation session."""
-    from atlas.engine_core.goals import GoalManager
+    from atlas.engine.goals import GoalManager
 
     state = GoalManager(conversation_id, home=home).state
     return json.loads(state.to_json()) if state is not None else None
@@ -1053,7 +1060,7 @@ def goal_state(home: str | Path, conversation_id: str) -> dict[str, Any] | None:
 
 def set_goal(home: str | Path, conversation_id: str, goal: str) -> dict[str, Any]:
     """Create or replace a goal in the per-session state store."""
-    from atlas.engine_core.goals import GoalManager
+    from atlas.engine.goals import GoalManager
 
     manager = GoalManager(conversation_id, home=home)
     state = manager.set(goal)
@@ -1064,7 +1071,7 @@ def mutate_goal(
     home: str | Path, conversation_id: str, action: str, reason: str = "user-paused",
 ) -> dict[str, Any] | None:
     """Apply a per-session done, pause, resume, or clear action."""
-    from atlas.engine_core.goals import GoalManager
+    from atlas.engine.goals import GoalManager
 
     manager = GoalManager(conversation_id, home=home)
     if action == "pause":

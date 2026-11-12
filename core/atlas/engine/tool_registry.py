@@ -22,8 +22,8 @@ _registered: set[str] = set()
 _plan_registered: set[str] = set()
 _atlas_mcp_registered: dict[str, set[str]] = {}
 _active_contexts: dict[str, tuple[Any, Any, asyncio.AbstractEventLoop]] = {}
-_hermes_fallback_handlers: dict[str, Any] = {}
-_hermes_entries: dict[str, Any] = {}
+_engine_fallback_handlers: dict[str, Any] = {}
+_engine_entries: dict[str, Any] = {}
 _inline_wrapped: set[str] = set()
 _TOOLSETS: dict[str, dict[str, Any]] = {}
 NATIVE_FILE_TOOLS = {"read_file", "write_file", "patch", "search_files"}
@@ -108,7 +108,7 @@ def _v4a_touched_paths(args: dict[str, Any], runtime: Any) -> list[str]:
     if str(args.get("mode") or "") != "patch" or not str(args.get("patch") or ""):
         return []
     try:
-        from atlas.engine_core.tools.file_tools import _collect_v4a_header_paths
+        from atlas.engine.tools.file_tools import _collect_v4a_header_paths
 
         collected = _collect_v4a_header_paths(str(args["patch"]))
     except Exception:  # noqa: BLE001
@@ -262,7 +262,7 @@ def _read_file_result(agent: Any, arguments: dict[str, Any], result: str) -> str
         return result
     supports_vision = getattr(agent, "_model_supports_vision", None)
     if callable(supports_vision) and supports_vision():
-        from atlas.engine_core.tools.vision_tools import _resize_image_for_vision
+        from atlas.engine.tools.vision_tools import _resize_image_for_vision
 
         if not image_path.is_absolute():
             image_path = Path(getattr(agent, "cwd", None) or Path.cwd()) / image_path
@@ -275,11 +275,11 @@ def _read_file_result(agent: Any, arguments: dict[str, Any], result: str) -> str
             ),
             path,
         )
-    from atlas.engine_core.tools.registry import registry
+    from atlas.engine.tools.registry import registry
 
     vision_entry = registry.get_entry("vision_analyze")
     if vision_entry is not None and vision_entry.check_fn is not None and vision_entry.check_fn():
-        from atlas.engine_core.utils import run_async
+        from atlas.engine.utils import run_async
 
         return run_async(vision_entry.handler(
             {"image_url": path, "question": "请详细描述图片内容及其中可见的文字。"},
@@ -290,7 +290,7 @@ def _read_file_result(agent: Any, arguments: dict[str, Any], result: str) -> str
 
 def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) -> None:
     """Expose Atlas tool schemas and bind sync Hermes handlers to this async Atlas run."""
-    from atlas.engine_core.tools.registry import registry
+    from atlas.engine.tools.registry import registry
     from atlas.repomap import REPOMAP_TOOL_SPEC
 
     if registry.get_entry("new_context_window") is None:
@@ -383,8 +383,8 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                 indexed[name] = {"function": hermes_schema}
             previous = registry.get_entry(name)
             if previous is not None and name in _HERMES_CORE_TOOLS:
-                _hermes_fallback_handlers.setdefault(name, previous.handler)
-                _hermes_entries.setdefault(name, previous)
+                _engine_fallback_handlers.setdefault(name, previous.handler)
+                _engine_entries.setdefault(name, previous)
         for entry in indexed.values():
             function = entry.get("function", {})
             name = str(function.get("name", ""))
@@ -427,7 +427,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                 bound_runtime = active[1] if active else getattr(_context, "runtime", None)
                 bound_loop = active[2] if active else getattr(_context, "loop", None)
                 if bound_agent is None or bound_runtime is None or bound_loop is None:
-                    fallback = _hermes_fallback_handlers.get(_name)
+                    fallback = _engine_fallback_handlers.get(_name)
                     if fallback is None:
                         return json.dumps({"error": "Atlas 工具不在活动运行中。"}, ensure_ascii=False)
                     try:
@@ -446,11 +446,11 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                     if callback is None:
                         return "无法生成上下文交接摘要。"
                     summary = asyncio.run_coroutine_threadsafe(callback(), bound_loop).result()
-                    hermes_agent = getattr(bound_runtime, "hermes_agent", None)
+                    atlas_agent = getattr(bound_runtime, "atlas_agent", None)
                     summary_text = summary if isinstance(summary, str) else summary.get("summary") if isinstance(summary, dict) else None
-                    if hermes_agent is None or not isinstance(summary_text, str) or not summary_text.strip():
-                        return "无法切换上下文：当前会话没有可用的 Hermes Agent。"
-                    hermes_agent.set_context_handoff_summary(summary_text)
+                    if atlas_agent is None or not isinstance(summary_text, str) or not summary_text.strip():
+                        return "无法切换上下文：当前会话没有可用的 Atlas 引擎。"
+                    atlas_agent.set_context_handoff_summary(summary_text)
                     event_queue = getattr(bound_runtime, "event_queue", None)
                     if event_queue is not None:
                         asyncio.run_coroutine_threadsafe(event_queue.put({
@@ -507,11 +507,11 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                     # Keep Hermes' complete file implementation: paging, ripgrep,
                     # stale-write guards, fuzzy/V4A patching and document readers.
                     lsp_pre = _lsp_pre_write(args, bound_runtime) if _name in _LSP_WRITE_TOOLS else _LSP_SKIP
-                    native = _hermes_fallback_handlers[_name]
+                    native = _engine_fallback_handlers[_name]
                     result = native(args, **_kwargs)
                     if _name == "read_file":
                         result = _read_file_result(
-                            getattr(bound_runtime, "hermes_agent", None) or bound_agent,
+                            getattr(bound_runtime, "atlas_agent", None) or bound_agent,
                             args, str(result),
                         )
                     if lsp_pre is not _LSP_SKIP:
@@ -553,15 +553,15 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
                 )
                 result = future.result()
                 messages = result.get("messages", [])
-                if _name == "todo_list" and getattr(bound_runtime, "hermes_agent", None) is not None:
-                    bound_runtime.hermes_agent._todo_store.write([
+                if _name == "todo_list" and getattr(bound_runtime, "atlas_agent", None) is not None:
+                    bound_runtime.atlas_agent._todo_store.write([
                         {**item, "content": item["text"]}
                         for item in bound_runtime.todo_store.snapshot()["todos"]
                     ])
                 result = str(messages[-1].content) if messages else "工具没有返回内容。"
                 return _append_repetition_reminder(bound_runtime, _name, args, result)
 
-            native_entry = _hermes_entries.get(name)
+            native_entry = _engine_entries.get(name)
             registry.register(
                 name=name, toolset=atlas_toolset, schema=schema, handler=handler,
                 is_async=False, description=schema["description"], override=True,
@@ -577,7 +577,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
         if not plan_mode:
             registered.add("new_context_window")
             # X2 computer/browser: one surface each, same approval/checkpoint
-            # gates as the rest of the Atlas toolset (hermes_policy classifies
+            # gates as the rest of the Atlas toolset (atlas_policy classifies
             # these names as writes via atlas.tools.x2.permissions).
             from atlas.tools.x2.registration import bind_x2_tools
 
@@ -598,7 +598,7 @@ def unregister_atlas_mcp_tools(names: set[str], scopes: set[str | None]) -> None
     """Remove only Atlas registry copies of the specified MCP tools and scopes."""
     if not names or not scopes:
         return
-    from atlas.engine_core.tools.registry import registry
+    from atlas.engine.tools.registry import registry
 
     with _lock:
         scopes = set(scopes)

@@ -1,4 +1,4 @@
-"""Atlas title provenance synchronization for Hermes sessions."""
+"""Atlas title provenance synchronization for Atlas sessions."""
 
 from __future__ import annotations
 
