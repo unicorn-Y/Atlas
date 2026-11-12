@@ -228,10 +228,14 @@ def is_expired(entry_or_until: Entry | str, now: datetime) -> bool:
 class MemoryStore:
     """File + git access. One process-wide lock serialises every write."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, vcs: bool = True) -> None:
         self.root = Path(root)
         self.lock = threading.RLock()
         self._git_ok: bool | None = None
+        # vcs=False 让调用方拿到一个纯文件存储：不 git init、不自动 commit。
+        # 评测和测试用的临时记忆库不需要版本历史，隐式建仓会往里塞提交、污染
+        # 调用方的 git 状态（此前只能靠直接设 _ready=True 绕过 ensure()）。
+        self._vcs = vcs
 
     # ---------- setup ----------
     def ensure(self) -> None:
@@ -253,12 +257,12 @@ class MemoryStore:
                             handle.write("\n")
                         handle.write(pattern + "\n")
                     ignore_text += pattern + "\n"
-            if self._git_available() and not self._git_healthy():
+            if self._vcs and self._git_available() and not self._git_healthy():
                 # Missing, or left half-written by a killed process: `git init` is safe
                 # on an existing directory and keeps whatever objects survived.
                 self._git("init", "-q")
                 self.commit("记忆库建立")
-            if self._git_available() and self._git_healthy():
+            if self._vcs and self._git_available() and self._git_healthy():
                 self._git("config", "core.autocrlf", "false")
 
     def _git_healthy(self) -> bool:
@@ -267,6 +271,29 @@ class MemoryStore:
         result = subprocess.run(["git", "rev-parse", "--git-dir"], cwd=self.root,
                                 capture_output=True, timeout=30, check=False)
         return result.returncode == 0
+
+    def _owns_repo(self) -> bool:
+        """True only when this memory root is itself a git worktree root.
+
+        A memory root nested inside another checkout (tests build one under a
+        temporary directory) must never stage anything: ``git add -A`` resolves
+        upward to the enclosing repository and would commit that whole tree.
+        """
+        if not (self.root / ".git" / "HEAD").exists():
+            return False
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"], cwd=self.root,
+            capture_output=True, timeout=30, check=False,
+        )
+        if result.returncode != 0:
+            return False
+        toplevel = result.stdout.decode("utf-8", errors="replace").strip()
+        if not toplevel:
+            return False
+        try:
+            return Path(toplevel).resolve() == self.root.resolve()
+        except OSError:
+            return False
 
     # ---------- pages ----------
     def read(self, rel: str) -> Page:
@@ -372,9 +399,15 @@ class MemoryStore:
         return out
 
     def commit(self, message: str) -> str | None:
+        if not self._vcs:
+            return None
         if not self._git_available():
             return None
         with self.lock:
+            if not self._owns_repo():
+                # Never stage through a nested directory: `git add -A` would
+                # reach the enclosing repository and commit unrelated files.
+                return None
             self._git("-c", "core.autocrlf=false", "add", "-A")
             if not self._git("status", "--porcelain").strip():
                 return None
@@ -429,6 +462,8 @@ class MemoryStore:
             raise ValueError("bad commit id")
         with self.lock:
             message = "这次变动里有你要求忘掉的内容，不能撤销"
+            if not self._owns_repo():
+                raise ValueError(message)
             if not self._git("rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}", check=False).strip():
                 raise ValueError(message)
             for file in self.show(sha):

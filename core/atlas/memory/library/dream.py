@@ -11,6 +11,7 @@ from typing import Any
 
 import structlog
 
+from .consolidate import run_consolidation
 from .store import NOW, SRC_DREAM, SRC_EDITED, SRC_SAID, THINGS, Entry, new_id, safe_name
 
 log = structlog.get_logger(__name__)
@@ -210,10 +211,36 @@ async def run_dream(library: Any, model_mgr: Any = None) -> dict[str, Any]:
             encoding="utf-8",
         )
         library.index.sync()
-        return {"ok": True, "projects": written, "added": added, "changed": changed, "error": None}
+        # 项目整理完之后，再把它顺手消化成语义候选：先提，再应用。
+        #
+        # 这两步以前只做了「提」。提议写进 语义候选.md 就没人再动它了——应用
+        # 走的是另一条显式的 POST /consolidate?apply=true，没有任何定时路径去
+        # 调，于是这个文件一路涨到三百多行、八条待定候选堆在里面，而它们本该
+        # 进 我.md 变成长期记忆。提案不落地就等于没整理，所以两个阶段接在同一次
+        # dream 里：propose 负责从最近的 episode 里提，apply 负责把文件里所有待
+        # 定的候选真正写进去（apply 不需要模型，纯文件操作）。
+        #
+        # 顺序不能反：先 apply 会把这一轮刚提的候选漏掉，拖到下一轮。propose 失败
+        # 时仍然继续 apply，把上一轮遗留的候选清掉——它自己有兜底，不会抛。
+        consolidated = await run_consolidation(library, model_mgr)
+        applied = await run_consolidation(library, model_mgr, apply=True)
+        return {
+            "ok": True,
+            "projects": written,
+            "added": added,
+            "changed": changed,
+            "error": None,
+            "consolidate": consolidated,
+            "consolidate_applied": applied,
+        }
     except Exception as exc:  # noqa: BLE001 - any failed phase must leave the checkpoint unchanged.
-        log.warning("memory.library.dream_failed", error=str(exc), error_type=type(exc).__name__)
-        return {"ok": False, "projects": [], "added": 0, "changed": 0, "error": str(exc)}
+        # A failed consolidation must stay visible: keep the checkpoint where it
+        # is (so the next run retries the same window) and log the full traceback
+        # instead of returning a quiet {"ok": False} that looks like a no-op.
+        log.exception("memory.library.dream_failed", error=str(exc), error_type=type(exc).__name__,
+                      checkpoint=checkpoint, projects=sorted(groups))
+        return {"ok": False, "projects": [], "added": 0, "changed": 0, "error": str(exc),
+                "error_type": type(exc).__name__, "checkpoint": checkpoint}
 
 
 __all__ = ["run_dream"]

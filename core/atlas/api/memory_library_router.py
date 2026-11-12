@@ -8,6 +8,10 @@
 - POST /api/memlib/entry              {"id", "text"} 改一条 → 标成「你改的」
 - POST /api/memlib/add                {"path", "text"} 在某页加一条
 - POST /api/memlib/forget             {"id"} 忘掉一条（留墓碑，日记原文一并抹掉）
+- GET  /api/memlib/effective          现在的有效记忆 + 被取代但保留的那些
+- GET  /api/memlib/supersede?limit=200 只追加的取代账本（含撤销，最新在前）
+- POST /api/memlib/supersede           {"old_id", "new_id", "quote"} 记下谁取代了谁
+- POST /api/memlib/unsupersede         {"id"} 撤销一条取代关系（追加一行，不删记录）
 - POST /api/memlib/aliases            {"path", "aliases": [...]}
 - POST /api/memlib/revert             {"sha"} 撤销某次变动
 """
@@ -39,9 +43,9 @@ def _lib() -> MemoryLibrary:
     return library
 
 
-async def _run(fn: Any, *args: Any) -> Any:
+async def _run(fn: Any, *args: Any, **kwargs: Any) -> Any:
     try:
-        return await asyncio.to_thread(fn, *args)
+        return await asyncio.to_thread(fn, *args, **kwargs)
     except KeyError as exc:
         raise HTTPException(404, "找不到这条记忆，可能已经被改过。") from exc
     except ValueError as exc:
@@ -482,3 +486,95 @@ async def aliases(body: Aliases) -> dict[str, Any]:
 async def revert(body: Revert) -> dict[str, Any]:
     await _run(_lib().revert, body.sha)
     return {"ok": True}
+
+
+class Supersede(BaseModel):
+    old_id: str
+    new_id: str = ""
+    quote: str = ""
+    new_text: str = ""
+    why: str = ""
+    ref: str = ""
+    session: str = ""
+
+
+@router.get("/effective")
+async def effective(path: str | None = Query(None)) -> dict[str, Any]:
+    """Current entries plus the ones a live entry replaced (kept, only deprecated)."""
+    return await _run(_lib().effective_entries, path or None)
+
+
+@router.get("/supersede")
+async def supersede_audit(limit: int = Query(200, ge=1, le=1000)) -> dict[str, Any]:
+    """The append-only ledger itself: every supersession and retraction, newest first."""
+    return await _run(_lib().supersession_audit, limit=limit)
+
+
+@router.post("/supersede")
+async def record_supersede(body: Supersede) -> dict[str, Any]:
+    library = _lib()
+    session = body.session.strip()[:128]
+    ref = body.ref.strip()[:256]
+    if ref:
+        if not session or not ref.startswith(f"{session}@"):
+            raise HTTPException(400, "取代关系的出处必须是当前会话的消息引用。")
+    return await _run(
+        library.record_supersession, body.old_id, body.new_id,
+        quote=body.quote, ref=ref, session=session, new_text=body.new_text, why=body.why)
+
+
+@router.post("/unsupersede")
+async def retract_supersede(body: EntryRef) -> dict[str, Any]:
+    """Retract a pair by appending a line; the ledger is never rewritten."""
+    return await _run(_lib().retract_supersession, body.id)
+
+
+@router.get("/consolidate")
+async def consolidate_candidates() -> dict[str, Any]:
+    """Read the pending semantic candidates without touching the library.
+
+    ``propose`` writes them, ``apply`` consumes them; both live in
+    ``语义候选.md``. This only parses that file so a review UI can show what
+    would happen before anything is written — applying is a separate, explicit
+    step (``POST /consolidate`` with ``apply=true``).
+    """
+    from atlas.memory.library.consolidate import CANDIDATES_FILE, _load_report
+
+    root = getattr(_lib().store, "root", None)
+    if not root:
+        raise HTTPException(500, "记忆库没有根目录")
+    path = Path(root) / CANDIDATES_FILE
+    groups = await asyncio.to_thread(_load_report, path)
+    pending = groups.get("pending", [])
+    return {
+        "exists": path.exists(),
+        "path": str(path),
+        "pending": pending,
+        "pending_count": len(pending),
+        "applied_count": len(groups.get("applied", [])),
+        "skipped_count": len(groups.get("skipped", [])),
+    }
+
+
+class ConsolidateBody(BaseModel):
+    apply: bool = False
+    window_days: int | None = None
+
+
+@router.post("/consolidate")
+async def run_consolidation_now(body: ConsolidateBody = ConsolidateBody()) -> dict[str, Any]:
+    """Propose new semantic candidates, or apply the ones already waiting.
+
+    ``apply=false`` needs a model and only rewrites ``语义候选.md``.
+    ``apply=true`` needs no model: it appends entries, lowers the importance of
+    what they replace, and records the supersession. Nothing is ever deleted.
+    """
+    from atlas import server
+    from atlas.memory.library.consolidate import run_consolidation
+
+    days = body.window_days
+    if days is not None and not 1 <= days <= 365:
+        raise HTTPException(400, "window_days 必须在 1 到 365 之间。")
+    return await run_consolidation(
+        _lib(), getattr(server, "model_mgr", None), apply=body.apply, window_days=days)
+

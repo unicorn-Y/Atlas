@@ -8,9 +8,11 @@ Every run calls :meth:`MemoryLibrary.recall` before the model sees the message a
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
+import subprocess
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -23,9 +25,10 @@ from .index import MemoryIndex
 from .forget import purge_history
 from .queue import TurnQueue
 from .store import (
-    DIARY, EPISODES, ME, NOW, PEOPLE, RESIDENT_PAGES, SELF, SRC_EDITED, SRC_EPISODE, THINGS, Entry, MemoryStore, Page,
-    is_expired, new_id, safe_name, tombstone_hashes,
+    DIARY, EPISODES, ME, NOW, PEOPLE, RESIDENT_PAGES, SELF, SRC_EDITED, SRC_EPISODE, SRC_SAID, THINGS, Entry,
+    MemoryStore, Page, is_expired, new_id, safe_name, tombstone_hashes,
 )
+from .supersede import KIND_RETRACT, KIND_SUPERSEDE, SupersedeLedger
 
 log = structlog.get_logger(__name__)
 
@@ -50,6 +53,7 @@ INSTRUCTION = (
     "用户问到记录里没有的细节时，直接说不记得或不确定，绝不编造。"
     "「经历」是 Atlas 根据对话自己整理的，说明聊过和做过什么，不是用户确认过的事实；回答「之前怎么做的」时，要分清哪些步骤真验证过。"
     "和当前问题无关时不要硬提这些记忆。"
+    "标着「已过时 · 已被…取代」的旧说法仍然留着可查，但一律以新说法为准，不要拿旧的说事。"
 )
 
 _SINGLETON: MemoryLibrary | None = None
@@ -106,10 +110,12 @@ def _skip_reason(workspace: str, user_text: str, config: Any = None) -> str:
 
 
 class MemoryLibrary:
-    def __init__(self, root: Path, config: Any = None) -> None:
-        self.store = MemoryStore(root)
+    def __init__(self, root: Path, config: Any = None, *, vcs: bool = True) -> None:
+        self.store = MemoryStore(root, vcs=vcs)
         self.index = MemoryIndex(self.store)
         self.queue = TurnQueue(root)
+        # 只追加、不删改的取代账本，和记忆库放在一起（同一次 git 提交里可查）。
+        self.supersedes = SupersedeLedger(self.store.root)
         self.config = config
         self._turn_lock = asyncio.Lock()
         self._ready = False
@@ -150,6 +156,35 @@ class MemoryLibrary:
             "source_paths": source_paths,
             "resident_sources": resident_sources,
             "system_block": f"{INSTRUCTION}\n\n{resident}" if resident else "",
+        }
+
+    def recall_resident(self) -> dict[str, Any]:
+        """Resident-only recall: no index sync, no corpus scan.
+
+        ``recall()`` runs ``index.sync()`` (a sha1 per page) and ``_idf()``
+        (a full-corpus scan) before it can answer, so its cost grows with the
+        library. When that work overruns the pre-model budget the caller still
+        deserves the memories that come from plain file reads: who the user is,
+        what is in progress, and what Atlas itself is. Those pages are the bulk
+        of what makes Atlas feel like it remembers, and reading them is
+        independent of corpus size.
+        """
+        self.store.ensure()
+        resident = self._resident_block()
+        resident_sources = []
+        for rel, title in ((ME, "关于你"), (NOW, "现状 / 进行中"), (SELF, "Atlas 自己")):
+            if f"## {title}\n" in resident:
+                resident_sources.append(rel)
+        if "## 最近在聊 / 在做\n" in resident:
+            resident_sources.append("recent-episodes (last 7 days)")
+        return {
+            "resident": resident,
+            "relevant": "",
+            "refs": [],
+            "source_paths": [],
+            "resident_sources": resident_sources,
+            "system_block": f"{INSTRUCTION}\n\n{resident}" if resident else "",
+            "degraded": True,
         }
 
     def _resident_block(self) -> str:
@@ -224,24 +259,37 @@ class MemoryLibrary:
         for rel, names in self.index.entities():
             if any(name and name.casefold() in lowered for name in names):
                 cue_pages.append(rel)
+        old_notes = self.supersede_notes()
         for rel in cue_pages[:MAX_CUE_PAGES]:
             page = self.store.read(rel)
             current = [e for e in page.current if not is_expired(e, now)]
+            shown = current[-MAX_CUE_LINES:]
             lines = [f"- {e.text}{_label(e.src, e.at)}" + (f" [ref:{e.ref}]" if e.ref else "")
-                     for e in current[-MAX_CUE_LINES:]]
+                     + (f" {old_notes[e.id]}" if e.id in old_notes else "")
+                     for e in shown]
             if lines:
                 alias = f"（也叫 {'、'.join(page.aliases)}）" if page.aliases else ""
                 parts.append(f"## {page.title}{alias}\n" + "\n".join(lines))
                 source_paths.append(rel)
-                refs.extend(e.ref for e in current[-MAX_CUE_LINES:] if e.ref)
+                refs.extend(e.ref for e in shown if e.ref)
         skip = set(RESIDENT_PAGES) | set(cue_pages)
-        hits = [h for h in self.index.search(message, limit=MAX_SEARCH_FACTS * 2,
+        hits = [h for h in self.index.search(message, limit=MAX_SEARCH_FACTS * 4,
                                              kinds=("fact", "dream"), exclude_paths=tuple(skip), now=now)
-                if h["score"] >= SEARCH_MIN_SCORE][:MAX_SEARCH_FACTS]
+                if h["score"] >= SEARCH_MIN_SCORE]
+        # A superseded line is kept for audit but must not outrank the statement that
+        # corrected it, so the ordering puts live lines first and the marker explains why.
+        hits.sort(key=lambda h: (h["id"] in old_notes, -h["score"]))
+        hits = hits[:MAX_SEARCH_FACTS]
         if hits:
-            parts.append("## 可能相关\n" + "\n".join(
-                f"- {h['text']}{_label(h['src'], h['at'])}"
-                + (f" [ref:{h['ref']}]" if h.get("ref") else "") for h in hits))
+            lines = []
+            for h in hits:
+                line = (f"- {h['text']}{_label(h['src'], h['at'])}"
+                        + (f" [ref:{h['ref']}]" if h.get("ref") else ""))
+                note = old_notes.get(str(h.get("id") or ""))
+                if note:
+                    line += f" {note}"
+                lines.append(line)
+            parts.append("## 可能相关\n" + "\n".join(lines))
             source_paths.extend(str(hit.get("path") or "") for hit in hits if hit.get("path"))
             refs.extend(h.get("ref") for h in hits if h.get("ref"))
         resident_ids = {e.id for e in self._recent_episodes(now, 7, 6)}
@@ -280,6 +328,10 @@ class MemoryLibrary:
                     + (f" [ref:{h['ref']}]" if h.get("ref") else "") for h in diary))
                 refs.extend(h.get("ref") for h in diary if h.get("ref"))
                 source_paths.extend(str(hit.get("path") or "") for hit in diary if hit.get("path"))
+        corrections = self._supersede_section()
+        if corrections:
+            parts.insert(0, corrections)
+            source_paths.extend(RESIDENT_PAGES)
         if not parts:
             return "", [], []
         detailed = bool(_RECALL_INTENT.search(message))
@@ -291,13 +343,42 @@ class MemoryLibrary:
 
     # ---------- search tool ----------
     def search(self, query: str, limit: int = 8, include_history: bool = False,
-               kinds: tuple[str, ...] = ("fact", "dream", "diary")) -> list[dict[str, Any]]:
+               kinds: tuple[str, ...] = ("fact", "dream", "diary"), *,
+               scope: str | None = None, workspace: str = "") -> list[dict[str, Any]]:
         self.ready()
         self.index.sync()
+        project_root = ""
+        if workspace and not workspace.startswith("ssh://"):
+            try:
+                project_root = subprocess.run(
+                    ["git", "-C", workspace, "rev-parse", "--show-toplevel"],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace",
+                    timeout=3, check=True,
+                ).stdout.strip()
+            except (OSError, subprocess.SubprocessError):
+                try:
+                    project_root = str(Path(workspace).resolve())
+                except OSError:
+                    pass
+        project_scope = (f"project:{hashlib.sha256(project_root.casefold().encode('utf-8')).hexdigest()[:16]}"
+                         if project_root else None)
         keep = ("id", "path", "kind", "bucket", "text", "src", "at", "ref", "until", "quote", "score", "expired")
-        return [{k: h.get(k) for k in keep}
+        rows = [{k: h.get(k) for k in keep}
                 for h in self.index.search(query, limit=limit, include_history=include_history,
-                                           kinds=kinds, now=_now(self.config))]
+                                           kinds=kinds, now=_now(self.config), scope=scope,
+                                           project_scope=project_scope)]
+        # A superseded fact stays searchable (it is still a true record of what was once
+        # said) but the model must see which of two contradicting lines won.
+        pairs = self.supersedes.superseded_map()
+        if pairs:
+            notes = self.supersede_notes()
+            for row in rows:
+                newer = pairs.get(str(row.get("id") or ""))
+                if newer:
+                    row["superseded_by"] = newer
+                    row["outdated"] = notes.get(str(row.get("id") or ""), "")
+            rows.sort(key=lambda row: bool(row.get("superseded_by")))
+        return rows
 
     # ---------- write (after the reply, in the background) ----------
     def schedule_turn(self, **kwargs: Any) -> None:
@@ -380,7 +461,13 @@ class MemoryLibrary:
 
     @staticmethod
     def _turn_source_ref(session: str, user_text: str, fallback: str = "") -> str:
-        """Use the persisted user message id so a memory citation opens its source turn."""
+        """Use the persisted user message id so a memory citation opens its source turn.
+
+        Returns "" when the transcript is unavailable. That empty ref is load-bearing:
+        the caller refuses to persist a memory it cannot point back to, so we never
+        invent a plausible-looking reference. `fallback` is kept in the signature for
+        callers that pass the turn start time.
+        """
         try:
             from atlas.config import DATA_ROOT
             from atlas.engine.session_sync import read_session_all_messages
@@ -519,7 +606,8 @@ class MemoryLibrary:
         self.index.sync()
         return {"id": entry_id, "text": text}
 
-    def add_entry(self, rel: str, text: str, *, session: str = "", ref: str = "") -> dict[str, Any]:
+    def add_entry(self, rel: str, text: str, *, session: str = "", ref: str = "",
+                  scope: str = "global") -> dict[str, Any]:
         rel = self._safe_rel(rel)
         text = " ".join((text or "").split())
         if not text or extract.contains_secret(text):
@@ -528,12 +616,185 @@ class MemoryLibrary:
             page = self.store.read(rel)
             entry = Entry(text=text, id=new_id(), src=SRC_EDITED,
                           at=_now(self.config).isoformat(timespec="seconds"),
-                          session=session, ref=ref)
+                          session=session, ref=ref, scope=scope or "global")
             page.current.append(entry)
             self.store.write(page)
             self.store.commit(f"你加了：{text}"[:400])
         self.index.sync()
         return {"id": entry.id, "path": rel}
+
+    # ---------- supersede ledger (append-only, nothing is deleted) ----------
+    def _locate_entry(self, entry_id: str) -> tuple[Page, Entry, str]:
+        """Find one entry and refuse an ambiguous id.
+
+        Hand-written page lines carry ``stable_id(text)``, so two identical lines in
+        different pages can share an id. Marking the wrong one would be silent data
+        damage, so ambiguity is an error rather than a guess.
+        """
+        entry_id = str(entry_id or "").strip()
+        if not entry_id:
+            raise ValueError("缺少记忆 id")
+        found: list[tuple[Page, Entry, str]] = []
+        for rel in self.store.pages():
+            page = self.store.read(rel)
+            for bucket in ("current", "history"):
+                for entry in getattr(page, bucket):
+                    if entry.id == entry_id:
+                        found.append((page, entry, bucket))
+        if not found:
+            raise KeyError(entry_id)
+        if len(found) > 1:
+            where = "、".join(sorted({page.path for page, _entry, _bucket in found}))
+            raise ValueError(f"这个 id 在 {where} 里出现了不止一次，无法确定要标记哪一条")
+        return found[0]
+
+    def record_supersession(self, old_id: str, new_id: str = "", *, quote: str = "",
+                            ref: str = "", session: str = "", new_text: str = "",
+                            why: str = "", verified: bool = False) -> dict[str, Any]:
+        """Record that a newer statement replaces an older one. Never edits either entry.
+
+        ``new_id`` may be empty when the correction is already the user's current wording
+        but has not been stored as an entry yet; the quote then carries the evidence.
+        """
+        self.ready()
+        old_id, new_id = str(old_id or "").strip(), str(new_id or "").strip()
+        quote = " ".join(str(quote or "").split())
+        why = " ".join(str(why or "").split())
+        new_text = " ".join(str(new_text or "").split())
+        if not quote and not why:
+            raise ValueError("要记下取代关系，得带上用户的原话或一句理由")
+        if extract.contains_secret(quote) or extract.contains_secret(new_text):
+            raise ValueError("看起来含有密码或密钥，记忆库不保存这类内容")
+        with self.store.lock:
+            page, old_entry, _bucket = self._locate_entry(old_id)
+            new_entry: Entry | None = None
+            if new_id:
+                if new_id == old_id:
+                    raise ValueError("一条记忆不能取代它自己")
+                new_entry = self._locate_entry(new_id)[1]
+                # Walking the existing chain first turns a cycle into a refusal instead of a loop.
+                if self.supersedes.resolve(new_id) == old_id:
+                    raise ValueError("这两条记忆互相取代了，会形成环；请先核对哪一条才是新的")
+            record = self.supersedes.append(
+                kind=KIND_SUPERSEDE, old=old_id, new=new_id,
+                quote=quote or why, ref=ref or (new_entry or old_entry).ref,
+                session=session or (new_entry or old_entry).session,
+                old_text=old_entry.text,
+                new_text=new_text or (new_entry.text if new_entry else ""),
+                why=why, verified=verified,
+            )
+            self.store.commit(("你确认了新说法：%s → %s" % (old_entry.text, new_entry.text if new_entry else new_text))[:400])
+        self.index.sync()
+        return {"ok": True, "record": record.row(), "old": {"id": old_id, "path": page.path, "text": old_entry.text},
+                "new": {"id": new_id, "text": new_entry.text if new_entry else new_text}}
+
+    def retract_supersession(self, target: str, *, why: str = "") -> dict[str, Any]:
+        """Cancel a pair by appending a ``retract`` line; the original record stays on disk."""
+        self.ready()
+        target = str(target or "").strip()
+        if not target:
+            raise ValueError("缺少要撤销的取代记录")
+        known = {record.id for record in self.supersedes.records()} | set(self.supersedes.pairs())
+        if target not in known:
+            raise KeyError(target)
+        with self.store.lock:
+            record = self.supersedes.append(kind=KIND_RETRACT, old=target,
+                                           why=" ".join(str(why or "").split()))
+            self.store.commit(f"你撤销了一条取代关系：{target}"[:400])
+        return {"ok": True, "record": record.row()}
+
+    def effective_entries(self, rel: str | None = None) -> dict[str, Any]:
+        """Current entries minus those a live entry has replaced.
+
+        Superseded entries are still returned separately: they remain readable for audit
+        and are only lowered in priority, never removed.
+        """
+        self.ready()
+        pairs = self.supersedes.superseded_map()
+        live: list[dict[str, Any]] = []
+        retired: list[dict[str, Any]] = []
+        for path in ([self._safe_rel(rel)] if rel else self.store.pages()):
+            page = self.store.read(path)
+            for entry in page.current:
+                row = {"id": entry.id, "path": path, "text": entry.text, "src": entry.src,
+                       "at": entry.at, "ref": entry.ref, "quote": entry.quote,
+                       "superseded_by": pairs.get(entry.id, "")}
+                (retired if entry.id in pairs else live).append(row)
+        return {"effective": live, "superseded": retired,
+                "counts": {"effective": len(live), "superseded": len(retired),
+                           "pairs": len(pairs)}}
+
+    def supersession_audit(self, *, limit: int = 200) -> dict[str, Any]:
+        """The raw trail, newest first, retractions included."""
+        self.ready()
+        return {"ledger": self.supersedes.path.name, "count": len(self.supersedes.active()),
+                "entries": self.supersedes.audit(limit=limit)}
+
+    def supersession_marks(self, entry_ids: list[str]) -> dict[str, str]:
+        """``entry id -> newer id`` for the given ids, for recall marking."""
+        if not entry_ids:
+            return {}
+        pairs = self.supersedes.superseded_map()
+        return {entry_id: pairs[entry_id] for entry_id in entry_ids if entry_id in pairs}
+
+    def supersede_notes(self) -> dict[str, str]:
+        """``entry id -> one-line note`` for entries a newer statement has replaced.
+
+        The note carries the newer wording, so the model reading the recall block sees the
+        correction in place instead of only a dangling id. It never says "deleted": the old
+        line stays visible, on purpose.
+        """
+        pairs = self.supersedes.superseded_map()
+        if not pairs:
+            return {}
+        newer_text: dict[str, str] = {}
+        for record in self.supersedes.active():
+            text = " ".join(str(record.new_text or "").split())[:60]
+            if not text:
+                continue
+            # A pair may name an existing entry (``new``) or carry only the newer wording,
+            # because memory is written after the turn ends; both must reach the note.
+            # A pair with no newer entry keys off its own old id, so it can never land on
+            # the empty string and hand its wording to an unrelated entry.
+            if record.new:
+                newer_text[record.new] = text
+            newer_text.setdefault(record.old, text)
+        notes: dict[str, str] = {}
+        for old, newest in pairs.items():
+            text = newer_text.get(newest, "") if newest else newer_text.get(old, "")
+            notes[old] = (f"（已过时 · 已被「{text}」取代）" if text
+                          else f"（已过时 · 已被 {newest} 取代）")
+        return notes
+
+    def _supersede_section(self) -> str:
+        """Corrections to memories that already sit in the cached resident block.
+
+        The resident text itself must stay byte-identical (it is the cacheable system
+        prefix), so a mid-conversation correction cannot be written into it. This section
+        travels with the per-turn recall instead and names both sides, which is what stops
+        the model from quoting the stale line it can still see above.
+        """
+        notes = self.supersede_notes()
+        if not notes:
+            return ""
+        latest: dict[str, str] = {}
+        for record in self.supersedes.active():
+            latest[record.old] = " ".join(str(record.new_text or "").split())[:80] or record.new
+        lines: list[str] = []
+        for rel in RESIDENT_PAGES:
+            page = self.store.read(rel)
+            for entry in page.current:
+                if entry.id not in notes or not latest.get(entry.id):
+                    continue
+                lines.append(f"- 旧：{entry.text}{_label(entry.src, entry.at)}"
+                             f" → 新：{latest[entry.id]}（以新的为准，旧的留着可查）")
+                if len(lines) >= MAX_SEARCH_FACTS:
+                    break
+            if len(lines) >= MAX_SEARCH_FACTS:
+                break
+        if not lines:
+            return ""
+        return "## 有更近的说法（以新的为准）\n" + "\n".join(lines)
 
     def forget_entry(self, entry_id: str) -> dict[str, Any]:
         self.ready()
@@ -550,10 +811,14 @@ class MemoryLibrary:
             if entry.src == SRC_EPISODE and "：" in entry.text:
                 needles.extend(part for part in entry.text.split("：", 1) if len(part.strip()) >= 6)
             diary_pages = self.store.redact_diary(needles)
+            # The supersede ledger quotes the user's words a second time (snapshot), so a
+            # forgotten entry must be blanked there too or the purge below could not finish.
+            ledger_lines = self.supersedes.redact(needles)
             self.store.commit("按你的要求忘掉了一条记忆")
             history = self._purge([entry.text, entry.quote, entry.value])
         self.index.sync()
-        return {"ok": True, "pages": [page.path], "diary_pages": diary_pages, "history": history,
+        return {"ok": True, "pages": [page.path], "diary_pages": diary_pages,
+                "ledger_lines": ledger_lines, "history": history,
                 "not_covered": ["Atlas 的原始聊天记录（engine 会话库）", "你自己做的备份或同步副本"]}
 
     def _purge(self, needles: list[str]) -> dict[str, Any]:
