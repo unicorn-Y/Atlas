@@ -2,7 +2,15 @@
 name = "atlas-core"
 version = "0.1.0"
 description = "Atlas AI Agent - Core Backend"
-requires-python = ">=3.14"
+# 3.11, because that is what Atlas actually runs on. Three other places in this
+# repository already say so — [tool.ruff] target-version = "py311", the runtime
+# check in atlas/api/diagnostics_router.py (>= 3, 11), and the interpreter the
+# editable install lives in (3.11.16). This line alone said 3.14, which made
+# `pip install -e ./core` fail outright:
+#   ERROR: Package 'atlas-core' requires a different Python: 3.11.16 not in '>=3.14'
+# The intent behind 3.14 was presumably to move forward eventually; raising this
+# floor without raising the runtime is not a plan, it is a broken install.
+requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "UNLICENSED" }
 
@@ -93,6 +101,14 @@ dev = [
 ]
 terminal = ["pywinpty>=2.0.13; platform_system == 'Windows'"]
 release = ["pyinstaller>=6.11"]
+# OTLP trace export (atlas.telemetry). Optional by design: without it the module
+# reports "missing dependency" and the app runs exactly as before, so a default
+# install carries no exporter thread. Pin the SDK/exporter together — they share
+# an ABI and drift silently when mixed across minor versions.
+otel = [
+    "opentelemetry-sdk>=1.45.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.0",
+]
 # Nightly skill training (atlas.evolution.skill_sleep): microsoft/SkillOpt, MIT, pinned.
 learning = ["skillopt @ git+https://github.com/microsoft/SkillOpt@343db229dbd5ddaf9df6b1d5540d8bcdb2604d5c"]
 daytona = ["daytona>=0.160.0"]

@@ -138,7 +138,7 @@ async def _probe_anthropic_messages(base_url: str, api_key: str, model: str) -> 
     }
     network = load_model_network_settings()
     assert_transport_supported(network, provider="anthropic", api_mode="anthropic_messages")
-    from atlas.engine_core.agent.proxy_bypass import loopback_request_kwargs
+    from atlas.engine.agent.proxy_bypass import loopback_request_kwargs
 
     client = (
         build_model_httpx_client(
@@ -190,7 +190,7 @@ class ModelRouter:
         )
         if selected is None:
             raise ValueError(f"Unknown model route: {model_id}")
-        raw_provider = str(selected.get("hermes_provider") or selected.get("provider") or "")
+        raw_provider = str(selected.get("atlas_provider") or selected.get("provider") or "")
         provider_id = catalog.resolve_catalog_id(raw_provider) or raw_provider
         provider_entry = catalog.get_provider(provider_id) or {}
         configured_mode = str(selected.get("api_mode") or provider_entry.get("api_mode") or "openai")
@@ -374,7 +374,7 @@ class ModelRouter:
         usage_callback = kwargs.pop("usage_callback", None) or _USAGE_CALLBACK.get()
         from atlas.usage import env_run_usage_budget
         from atlas.models.tokens import estimate_tokens
-        from atlas.engine_core.agent.turn_usage import new_usage_request_id
+        from atlas.engine.agent.turn_usage import new_usage_request_id
 
         if route.purpose in _MEMORY_AUXILIARY_PURPOSES and kwargs.get("timeout") is None:
             kwargs["timeout"] = _MEMORY_AUXILIARY_TIMEOUT_SECONDS
@@ -419,7 +419,7 @@ class ModelRouter:
             raise
         text = _response_text(response)
         usage = response.get("usage") if isinstance(response, dict) else getattr(response, "usage", None)
-        from atlas.engine_core.agent.turn_usage import report_auxiliary_usage
+        from atlas.engine.agent.turn_usage import report_auxiliary_usage
 
         observed = report_auxiliary_usage(
             usage_callback, response, purpose=route.purpose,
@@ -470,21 +470,34 @@ class ModelRouter:
         for alt in ("deepseek-v4.1-flash", "deepseek-v3"):
             if alt not in candidates:
                 candidates.append(alt)
-        last_error = None
+        last_error: Exception | None = None
+        attempted: list[str] = []
         for candidate in candidates:
             try:
                 route = await self.resolve(candidate, purpose)
                 return await self.complete(route, messages, **kwargs)
             except Exception as exc:
+                attempted.append(candidate)
                 last_error = exc
                 continue
+        # Raise the FIRST failure, not the last. The candidate list ends with
+        # hardcoded fallbacks ("deepseek-v4.1-flash", "deepseek-v3"); raising the
+        # last error meant a genuinely broken primary route surfaced as
+        # "Unknown model route: deepseek-v3", which sends every investigation to
+        # the wrong place. The first error is the one about the model that was
+        # actually asked for.
         if last_error is not None:
+            detail = ", ".join(attempted)
+            if len(attempted) > 1:
+                raise RuntimeError(
+                    f"All model candidates failed for {model_id!r} (tried: {detail})"
+                ) from last_error
             raise last_error
         raise RuntimeError("No model candidates available")
 
     @staticmethod
-    def hermes_agent_kwargs(route: RouteSpec) -> dict[str, Any]:
-        """Kwargs accepted by the pinned Hermes AIAgent constructor, including its public pool seam.
+    def atlas_agent_kwargs(route: RouteSpec) -> dict[str, Any]:
+        """Kwargs accepted by the pinned engine agent constructor, including its public pool seam.
 
         The agent's transport sends ``model`` verbatim on the wire (no litellm
         indirection), so the agent is pinned to ``wire_model`` — the bare id the
@@ -807,7 +820,7 @@ _MODEL_RETRY_DELAYS = (0.25, 0.6)
 
 
 def _pool_key(route: RouteSpec, network: ModelNetworkSettings) -> tuple[Any, ...]:
-    from atlas.engine_core.agent.proxy_bypass import loopback_request_kwargs
+    from atlas.engine.agent.proxy_bypass import loopback_request_kwargs
 
     base = str(route.base_url or "")
     return (network.enabled, network.proxy_url, network.ca_bundle_path, network.trust_env,
@@ -825,7 +838,7 @@ def _shared_client(route: RouteSpec, network: ModelNetworkSettings) -> tuple[htt
                 client = build_model_httpx_client(network, base_url=str(route.base_url or ""),
                                                   async_mode=False)
             else:
-                from atlas.engine_core.agent.proxy_bypass import loopback_request_kwargs
+                from atlas.engine.agent.proxy_bypass import loopback_request_kwargs
                 client_kwargs = loopback_request_kwargs(str(route.base_url or ""))
                 if network.trust_env is not None:
                     client_kwargs["trust_env"] = network.trust_env

@@ -29,7 +29,7 @@ CONTEXT_1M_BETA = "context-1m-2025-08-07"
 _ALLOWED_SDK_BETAS = frozenset({CONTEXT_1M_BETA})
 _MIN_OUTPUT_LIMIT_OVERRIDE = 4096
 # 模型编辑（M6）允许修改的字段；id 与 custom 标记不可改，密钥不在这里改。
-_MODEL_PATCH_FIELDS = ("name", "base_url", "litellm_model", "native_model", "hermes_provider", "max_output_tokens", "price", "capabilities", "api_mode")
+_MODEL_PATCH_FIELDS = ("name", "base_url", "litellm_model", "native_model", "atlas_provider", "max_output_tokens", "price", "capabilities", "api_mode")
 
 # Default model configurations
 DEFAULT_MODELS: list[dict[str, Any]] = [
@@ -320,7 +320,7 @@ class ModelManager:
         model = self._find_model(model_id)
         if model is None or model.get("local_only"):
             return None
-        provider = _catalog.resolve_catalog_id(str(model.get("hermes_provider") or model.get("provider") or ""))
+        provider = _catalog.resolve_catalog_id(str(model.get("atlas_provider") or model.get("provider") or ""))
         if provider != "anthropic":
             return None
         if self.gateway_api_key or self.resolve_api_key(provider) or (not current_project_id() and os.environ.get("ANTHROPIC_API_KEY")):
@@ -361,7 +361,7 @@ class ModelManager:
         model = self._find_model(model_id)
         if model is None:
             return False
-        provider = _catalog.resolve_catalog_id(str(model.get("hermes_provider") or model.get("provider") or ""))
+        provider = _catalog.resolve_catalog_id(str(model.get("atlas_provider") or model.get("provider") or ""))
         if provider != "anthropic":
             return False
         capabilities = self._model_capabilities(model) or {}
@@ -706,9 +706,9 @@ class ModelManager:
             None, "openai", "chat_completions", "anthropic_messages",
         }:
             raise ValueError("api_mode must be openai, chat_completions, or anthropic_messages")
-        # hermes_provider 存的是 hermes id（qwen→alibaba、kimi→kimi-coding），
+        # atlas_provider 存的是 hermes id（qwen→alibaba、kimi→kimi-coding），
         # 校验必须走别名映射；存储/返回仍保持运行时路由期望的 hermes id。
-        hermes_pid = patch.get("hermes_provider")
+        hermes_pid = patch.get("atlas_provider")
         if hermes_pid and _catalog.resolve_catalog_id(str(hermes_pid)) is None:
             raise ValueError(f"未知服务商: {hermes_pid}")
         candidate = dict(target)
@@ -716,7 +716,7 @@ class ModelManager:
             if field not in patch:
                 continue
             value = patch[field]
-            if field in ("name", "base_url", "litellm_model", "native_model", "hermes_provider"):
+            if field in ("name", "base_url", "litellm_model", "native_model", "atlas_provider"):
                 candidate[field] = str(value).strip() if value is not None else None
             else:
                 candidate[field] = value
@@ -795,7 +795,7 @@ class ModelManager:
 
     def _model_capabilities(self, model: dict[str, Any]) -> dict[str, Any] | None:
         """models.dev（allow_network=False，永不联网）← 模型条目手填 capabilities 覆盖。"""
-        provider_pid = str(model.get("hermes_provider") or model.get("provider") or "").strip()
+        provider_pid = str(model.get("atlas_provider") or model.get("provider") or "").strip()
         native = self._native_model_id(model)
         merged: dict[str, Any] = {}
         if provider_pid and native:
@@ -818,8 +818,8 @@ class ModelManager:
         return merged or None
 
     def _model_reasoning_efforts(self, model: dict[str, Any]) -> list[str] | None:
-        """该模型路由支持的思考档位（vendored reasoning_effort；有 hermes_provider 时可得）。"""
-        provider_pid = str(model.get("hermes_provider") or "").strip()
+        """该模型路由支持的思考档位（vendored reasoning_effort；有 atlas_provider 时可得）。"""
+        provider_pid = str(model.get("atlas_provider") or "").strip()
         if not provider_pid:
             return None
         try:

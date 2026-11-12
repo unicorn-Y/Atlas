@@ -5,8 +5,8 @@ Source: NousResearch/hermes-agent (MIT), `agent/models_dev.py`,
 commit e287231d7906bcce5bc373d20fb2e3e1e6427220, copied 2026-10-02 and adapted:
 - ``requests`` → ``httpx`` synchronous client (Atlas does not ship requests);
 - cache directory injected from Atlas config (``atlas.config.get_config().db_path.parent
-  / "cache" / "models_dev"``) instead of ``get_hermes_home()``;
-- ``hermes_cli.config`` / ``hermes_constants`` / ``utils`` dependencies inlined
+  / "cache" / "models_dev"``) instead of ``get_atlas_home()``;
+- ``hermes_cli.config`` / ``atlas_constants`` / ``utils`` dependencies inlined
   (settings reader, atomic writes, ``openrouter_variant_base``);
 - ``providers.get_provider_profile`` plugin seam replaced with an empty declaration
   (per-model manual overrides live on Atlas custom model entries);
@@ -155,7 +155,7 @@ PROVIDER_TO_MODELS_DEV: Dict[str, str] = {
 _MODELS_DEV_TO_PROVIDER: Optional[Dict[str, List[str]]] = None
 
 
-def _models_dev_to_hermes_ids(mdev_id: str) -> List[str]:
+def _models_dev_to_engine_ids(mdev_id: str) -> List[str]:
     """Return the Hermes provider ids that map to *mdev_id* (may be [])."""
     global _MODELS_DEV_TO_PROVIDER
     if _MODELS_DEV_TO_PROVIDER is None:
@@ -165,8 +165,8 @@ def _models_dev_to_hermes_ids(mdev_id: str) -> List[str]:
     return _MODELS_DEV_TO_PROVIDER.get(mdev_id, [])
 
 
-# --- Inlined from hermes (utils.atomic_json_write / atomic_write_text, hermes_constants) ---
-# Atlas does not ship the hermes utils/hermes_constants modules; only the subset used here is kept.
+# --- Inlined from hermes (utils.atomic_json_write / atomic_write_text, atlas_constants) ---
+# Atlas does not ship the hermes utils/atlas_constants modules; only the subset used here is kept.
 
 _OPENROUTER_VARIANT_SUFFIXES: frozenset[str] = frozenset({"nitro", "floor", "exacto", "online"})
 
@@ -174,7 +174,7 @@ _OPENROUTER_VARIANT_SUFFIXES: frozenset[str] = frozenset({"nitro", "floor", "exa
 def openrouter_variant_base(model_id: str) -> Optional[str]:
     """Return the base model id when ``model_id`` carries a recognized
     OpenRouter routing-variant suffix (e.g. ``x-ai/grok-4:nitro`` →
-    ``x-ai/grok-4``), else ``None``. (Inlined from hermes_constants.)"""
+    ``x-ai/grok-4``), else ``None``. (Inlined from atlas_constants.)"""
     base, sep, suffix = (model_id or "").rpartition(":")
     if not sep or not base:
         return None
@@ -752,7 +752,7 @@ def _provider_override_section(provider: str, *, config: Optional[Dict[str, Any]
     if not overrides or not provider_key:
         return None
     # Forward (Hermes → models.dev id) and reverse (caller passed a models.dev id, config keyed by Hermes id) aliases.
-    candidates = [provider_key, PROVIDER_TO_MODELS_DEV.get(provider_key), *_models_dev_to_hermes_ids(provider_key)]
+    candidates = [provider_key, PROVIDER_TO_MODELS_DEV.get(provider_key), *_models_dev_to_engine_ids(provider_key)]
     return next((section for section in (overrides.get(key) if key else None for key in candidates) if isinstance(section, dict)), None)
 
 

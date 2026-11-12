@@ -3,7 +3,7 @@
 每条记录的字段：
 - id: catalog id（settings/providers/<pid>、前端网格均用此 id）
 - label: 中文展示名（UI 文案）
-- hermes_provider: hermes 引擎的 provider id（B3 接线时传给 AIAgent(provider=...)）
+- atlas_provider: hermes 引擎的 provider id（B3 接线时传给 AIAgent(provider=...)）
 - api_mode: "openai"（OpenAI 兼容 chat completions）或 "anthropic_messages"（Anthropic 原生）
 - default_base_url: 国内主站默认端点；hermes profile 默认若为海外端点，由 Atlas 传 base_url 覆盖
 - docs_url: 2026-10 查证的官方文档链接
@@ -21,7 +21,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "openai",
         "label": "OpenAI",
-        "hermes_provider": "openai",
+        "atlas_provider": "openai",
         "api_mode": "openai",
         "default_base_url": "https://api.openai.com/v1",
         "docs_url": "https://platform.openai.com/docs/api-reference",
@@ -32,7 +32,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "anthropic",
         "label": "Anthropic Claude",
-        "hermes_provider": "anthropic",
+        "atlas_provider": "anthropic",
         "api_mode": "anthropic_messages",
         "default_base_url": "https://api.anthropic.com",
         "docs_url": "https://docs.anthropic.com/en/docs/about-claude/models",
@@ -42,7 +42,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "google",
         "label": "Google Gemini",
-        "hermes_provider": "google",
+        "atlas_provider": "google",
         "api_mode": "openai",
         "default_base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "docs_url": "https://ai.google.dev/gemini-api/docs/models",
@@ -53,7 +53,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "deepseek",
         "label": "DeepSeek 深度求索",
-        "hermes_provider": "deepseek",
+        "atlas_provider": "deepseek",
         "api_mode": "openai",
         "default_base_url": "https://api.deepseek.com/v1",
         "docs_url": "https://api-docs.deepseek.com/guides/thinking_mode",
@@ -65,7 +65,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "qwen",
         "label": "通义千问 Qwen",
-        "hermes_provider": "alibaba",
+        "atlas_provider": "alibaba",
         "api_mode": "openai",
         # hermes alibaba profile 默认是海外 dashscope-intl；国内产品目录用国内主站（base_url 覆盖 profile 默认）。
         "default_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -76,7 +76,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "kimi",
         "label": "Kimi（月之暗面）",
-        "hermes_provider": "kimi-coding",
+        "atlas_provider": "kimi-coding",
         "api_mode": "openai",
         # hermes kimi-coding profile 默认 api.moonshot.ai（海外）；国内主站 api.moonshot.cn（hermes 另有
         # kimi-coding-cn profile 同端点）。Atlas 传 base_url 覆盖 profile 默认。
@@ -89,7 +89,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "zai",
         "label": "智谱 GLM",
-        "hermes_provider": "zai",
+        "atlas_provider": "zai",
         "api_mode": "openai",
         # hermes zai profile 默认 api.z.ai（海外）；国内主站 open.bigmodel.cn（base_url 覆盖 profile 默认）。
         "default_base_url": "https://open.bigmodel.cn/api/paas/v4",
@@ -101,7 +101,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "minimax",
         "label": "MiniMax",
-        "hermes_provider": "minimax",
+        "atlas_provider": "minimax",
         "api_mode": "anthropic_messages",
         # hermes minimax profile 默认 api.minimax.io（海外）；国内主站 api.minimaxi.com
         # （hermes minimax-cn profile 同端点）。Atlas 传 base_url 覆盖 profile 默认。
@@ -114,7 +114,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "stepfun",
         "label": "阶跃星辰 StepFun",
-        "hermes_provider": "stepfun",
+        "atlas_provider": "stepfun",
         "api_mode": "openai",
         # hermes stepfun profile 默认 api.stepfun.ai/step_plan/v1（Step Plan 订阅端点）；
         # 国内按量付费主站 api.stepfun.com/v1，Atlas 默认走主站、base_url 覆盖 profile 默认。
@@ -127,7 +127,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "xiaomi",
         "label": "小米 MiMo",
-        "hermes_provider": "xiaomi",
+        "atlas_provider": "xiaomi",
         "api_mode": "openai",
         "default_base_url": "https://api.xiaomimimo.com/v1",
         "docs_url": "https://mimo.mi.com/docs/zh-CN/quick-start/summary/first-api-call",
@@ -138,7 +138,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "siliconflow",
         "label": "硅基流动 SiliconFlow",
-        "hermes_provider": "siliconflow",
+        "atlas_provider": "siliconflow",
         "api_mode": "openai",
         "default_base_url": "https://api.siliconflow.cn/v1",
         "docs_url": "https://api-docs.siliconflow.cn/docs/userguide/quickstart",
@@ -150,7 +150,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "volcengine-ark",
         "label": "火山方舟（豆包）",
-        "hermes_provider": "volcengine-ark",
+        "atlas_provider": "volcengine-ark",
         "api_mode": "openai",
         "default_base_url": "https://ark.cn-beijing.volces.com/api/v3",
         "docs_url": "https://www.volcengine.com/docs/82379/1330310",
@@ -162,7 +162,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "openrouter",
         "label": "OpenRouter",
-        "hermes_provider": "openrouter",
+        "atlas_provider": "openrouter",
         "api_mode": "openai",
         "default_base_url": "https://openrouter.ai/api/v1",
         "docs_url": "https://openrouter.ai/docs",
@@ -172,7 +172,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "ollama",
         "label": "Ollama（本地）",
-        "hermes_provider": "ollama",
+        "atlas_provider": "ollama",
         "api_mode": "openai",
         "default_base_url": "http://127.0.0.1:11434/v1",
         "docs_url": "https://docs.ollama.com/api",
@@ -183,7 +183,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "lmstudio",
         "label": "LM Studio（本地）",
-        "hermes_provider": "lmstudio",
+        "atlas_provider": "lmstudio",
         "api_mode": "openai",
         "default_base_url": "http://127.0.0.1:1234/v1",
         "docs_url": "https://lmstudio.ai/docs/app/api",
@@ -194,7 +194,7 @@ PROVIDERS: list[dict] = [
     {
         "id": "custom",
         "label": "自定义端点",
-        "hermes_provider": "custom",
+        "atlas_provider": "custom",
         "api_mode": "openai",
         "default_base_url": "",
         "docs_url": "",
@@ -263,7 +263,7 @@ def resolve_catalog_id(value: str) -> str | None:
     """catalog id 与 hermes provider id 双向归一到 catalog id。
 
     settings 的 providers.<pid> 密钥/配置一律按 catalog id 存储；模型条目的
-    hermes_provider 字段存的是 hermes id（如 qwen→alibaba、kimi→kimi-coding）。
+    atlas_provider 字段存的是 hermes id（如 qwen→alibaba、kimi→kimi-coding）。
     """
     v = str(value or "").strip()
     if not v:
@@ -271,6 +271,6 @@ def resolve_catalog_id(value: str) -> str | None:
     if v in _PROVIDER_INDEX:
         return v
     for entry in PROVIDERS:
-        if entry["hermes_provider"] == v:
+        if entry["atlas_provider"] == v:
             return str(entry["id"])
     return None

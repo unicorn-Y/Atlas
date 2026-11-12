@@ -271,7 +271,7 @@ class CustomModelUpdateRequest(BaseModel):
     base_url: str | None = None
     litellm_model: str | None = None
     native_model: str | None = None
-    hermes_provider: str | None = None
+    atlas_provider: str | None = None
     max_output_tokens: int | None = None
     price: dict[str, Any] | None = None
     capabilities: dict[str, Any] | None = None
@@ -355,8 +355,8 @@ async def test_model(
     model = next((m for m in mgr.list_models() if m["id"] == req.model_id), None)
     if model is None:
         raise HTTPException(status_code=404, detail=f"未知模型：{req.model_id}")
-    # 密钥按 hermes_provider（归一到 catalog id）解析；旧条目缺省回退 provider 字段。
-    provider_id = str(model.get("hermes_provider") or model.get("provider") or "")
+    # 密钥按 atlas_provider（归一到 catalog id）解析；旧条目缺省回退 provider 字段。
+    provider_id = str(model.get("atlas_provider") or model.get("provider") or "")
     provider_id = _resolve_catalog_id(provider_id)
     api_key = mgr.resolve_api_key(provider_id)
     if not api_key:

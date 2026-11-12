@@ -332,7 +332,7 @@ class AtlasCredentialPool:
         from atlas.models.catalog import get_provider
 
         catalog_entry = get_provider(self._provider_id)
-        self.provider = str((catalog_entry or {}).get("hermes_provider") or self._provider_id)
+        self.provider = str((catalog_entry or {}).get("atlas_provider") or self._provider_id)
         if store is not None:
             self._store = store
         else:

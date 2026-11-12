@@ -100,7 +100,7 @@ def estimate_tokens(
             material += "\n" + json.dumps(tools, ensure_ascii=False, separators=(",", ":"))
         return len(encoding.encode(material))
 
-    from atlas.engine_core.agent.model_metadata import estimate_request_tokens_rough
+    from atlas.engine.agent.model_metadata import estimate_request_tokens_rough
 
     if isinstance(value, str):
         messages = [{"role": "user", "content": value}]

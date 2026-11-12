@@ -154,3 +154,132 @@ class StreamingRedactor:
 
 def resolve_env(env: dict[str, str] | None, project_id: str | None = None) -> dict[str, str]:
     return {key: resolve_handles(value, project_id) for key, value in (env or {}).items()}
+
+
+# --- Redaction by key name -------------------------------------------------
+#
+# ``redact`` hides values it can *recognise*, which covers everything that went
+# through this store. It cannot help with credentials that never did: provider
+# keys typed straight into ``config/atlas.toml`` are plaintext on disk and
+# invisible to ``list_secrets``. Echoing that config therefore needs a second
+# rule — mask by key *name* — or the introspection surface becomes a key-leak
+# surface.
+#
+# The hint list is deliberately generous. A false positive costs a config viewer
+# one masked field; a false negative costs the user their credentials.
+
+_SECRET_KEY_HINTS = (
+    "key",
+    "token",
+    "secret",
+    "password",
+    "passwd",
+    "credential",
+    "authorization",
+    "auth",
+    "cookie",
+    "session",
+    "private",
+    "webhook",
+    "dsn",
+    "salt",
+    "signature",
+)
+
+
+def is_secret_key(name: str) -> bool:
+    """True when a config key's *name* implies its value is a credential.
+
+    Call this with the **full dotted path**, not the leaf: ``web.keys.bocha``
+    names its credential in the middle segment, and passing only ``bocha`` would
+    miss it.
+    """
+    lowered = str(name).lower()
+    return any(hint in lowered for hint in _SECRET_KEY_HINTS)
+
+
+# A value that is a count or a flag is never a credential, even when its key name
+# looks like one: ``max_output_tokens = 8192`` must stay readable.
+_NUMERIC = re.compile(r"^\s*[-+]?\d+(\.\d+)?\s*$")
+
+# Self-identifying credential shapes. :func:`redact` only catches ``key=value``
+# forms, so a bare token sitting in prose — a prompt, a span attribute, a log
+# line — used to survive untouched. These prefixed formats are unambiguous
+# enough to mask on sight without guessing.
+_BARE_TOKEN = re.compile(
+    r"(?:"
+    r"sk-[A-Za-z0-9_\-]{16,}"          # OpenAI / relay style
+    r"|ghp_[A-Za-z0-9]{20,}"           # GitHub PAT
+    r"|gh[opsu]_[A-Za-z0-9]{20,}"      # GitHub other tokens
+    r"|xox[baprs]-[A-Za-z0-9\-]{10,}"  # Slack
+    r"|AKIA[0-9A-Z]{16}"               # AWS access key id
+    r"|eyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}"  # JWT
+    r")"
+)
+
+
+def scrub_bare_tokens(text: str) -> str:
+    """Mask self-identifying credentials that appear without a ``key=`` prefix."""
+    if not text:
+        return text
+
+    def _mask(match: re.Match[str]) -> str:
+        return mask(match.group(0))
+
+    return _BARE_TOKEN.sub(_mask, text)
+
+
+def mask(value: Any) -> str:
+    """Replace a credential with a fingerprint: enough to identify, not to use.
+
+    The first four characters survive so a reader can tell *which* key is
+    configured (the relay key and the search key are different secrets, and an
+    operator debugging a 401 needs to know which one is stale) without the value
+    being usable.
+    """
+    text = "" if value is None else str(value)
+    if not text:
+        return ""
+    if len(text) <= 8:
+        return "***"
+    return f"{text[:4]}…***（{len(text)} 字符）"
+
+
+def scrub(value: Any, key: str = "") -> Any:
+    """Redact a value for display: by content when possible, by key name always.
+
+    Order matters. :func:`redact` is content-based and precise, so it runs first
+    (it can also find a secret embedded mid-sentence, which name-based masking
+    never would). Name-based masking then catches plaintext credentials that this
+    store has never seen.
+
+    ``key`` should be the full dotted path so that credentials named in a middle
+    segment are still caught, and numeric values are exempt because a token
+    *count* is not a token.
+    """
+    if isinstance(value, dict):
+        return {str(k): scrub(v, str(k)) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [scrub(item) for item in value]
+    if isinstance(value, str):
+        if value and not _NUMERIC.match(value) and is_secret_key(key):
+            return mask(value)
+        return scrub_bare_tokens(redact(value))
+    return value
+
+
+__all__ = [
+    "StreamingRedactor",
+    "delete_secret",
+    "is_secret_key",
+    "list_secrets",
+    "mask",
+    "redact",
+    "resolve_env",
+    "resolve_handles",
+    "resolve_secret",
+    "reveal_secret",
+    "scrub",
+    "scrub_bare_tokens",
+    "set_secret",
+]

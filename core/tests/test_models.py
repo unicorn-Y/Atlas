@@ -139,7 +139,7 @@ def glm_model(mgr: ModelManager) -> str:
         "provider": "zai",
         "litellm_model": "zai/glm-5.3",
         "category": "reasoning",
-        "hermes_provider": "zai",
+        "atlas_provider": "zai",
         "native_model": "glm-5.3",
     })
     return "glm-5.3"
@@ -173,33 +173,33 @@ class TestUpdateModel:
 
     def test_update_unknown_provider_raises(self, mgr: ModelManager, glm_model: str) -> None:
         with pytest.raises(ValueError, match="未知服务商"):
-            mgr.update_model("glm-5.3", {"hermes_provider": "not-a-provider"})
+            mgr.update_model("glm-5.3", {"atlas_provider": "not-a-provider"})
 
-    def test_update_accepts_alias_hermes_provider(self, mgr: ModelManager) -> None:
-        """qwen 模型的 hermes_provider 是 alibaba（hermes id ≠ catalog id）；编辑不得误判未知服务商。"""
+    def test_update_accepts_alias_atlas_provider(self, mgr: ModelManager) -> None:
+        """qwen 模型的 atlas_provider 是 alibaba（hermes id ≠ catalog id）；编辑不得误判未知服务商。"""
         mgr.add_model({
             "id": "qwen3-max",
             "name": "Qwen3 Max",
             "provider": "qwen",
             "litellm_model": "qwen/qwen3-max",
             "category": "flagship",
-            "hermes_provider": "alibaba",
+            "atlas_provider": "alibaba",
             "native_model": "qwen3-max",
         })
-        # 前端 buildUpdatePatch() 回传模型已有的 hermes_provider（此处为 hermes id "alibaba"）
+        # 前端 buildUpdatePatch() 回传模型已有的 atlas_provider（此处为 hermes id "alibaba"）
         updated = mgr.update_model("qwen3-max", {
             "name": "Qwen3 Max 改",
             "base_url": None,
             "litellm_model": "qwen/qwen3-max",
             "native_model": "qwen3-max",
-            "hermes_provider": "alibaba",
+            "atlas_provider": "alibaba",
             "capabilities": {},
         })
         assert updated["name"] == "Qwen3 Max 改"
-        assert updated["hermes_provider"] == "alibaba"  # 存储/返回仍是 hermes id
+        assert updated["atlas_provider"] == "alibaba"  # 存储/返回仍是 hermes id
         reloaded = ModelManager(default_model="claude-sonnet-4")
         entry = next(m for m in reloaded.list_models() if m["id"] == "qwen3-max")
-        assert entry["hermes_provider"] == "alibaba"
+        assert entry["atlas_provider"] == "alibaba"
 
 
 class TestDeleteModel:
@@ -218,11 +218,17 @@ class TestDeleteModel:
         mgr.delete_model("glm-5.3")
         assert mgr.current_model == "claude-opus-4"
 
-    def test_delete_unknown_or_builtin_raises(self, mgr: ModelManager) -> None:
+    def test_delete_unknown_raises_and_builtin_is_hidden(self, mgr: ModelManager) -> None:
+        from atlas.config import load_user_settings
+
         with pytest.raises(ValueError, match="未知模型"):
             mgr.delete_model("no-such-model")
-        with pytest.raises(ValueError, match="自定义"):
-            mgr.delete_model("gpt-4o")
+        # A built-in model comes from DEFAULT_MODELS, so there is no file to remove;
+        # deleting one hides it instead of failing. Hiding has to outlive the reload,
+        # otherwise the row returns and the delete looks like a no-op.
+        mgr.delete_model("gpt-4o")
+        assert all(m["id"] != "gpt-4o" for m in mgr.list_models())
+        assert "gpt-4o" in (load_user_settings().get("hidden_models") or [])
 
 
 class TestProviderKeys:
@@ -318,7 +324,7 @@ class TestListModelMetadata:
             "context_window": 128000, "max_output_tokens": 32000,
         }
         assert entry["reasoning_efforts"] == ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-        # 无 hermes_provider 的默认模型走 provider 字段兜底（additive，不破坏既有字段）
+        # 无 atlas_provider 的默认模型走 provider 字段兜底（additive，不破坏既有字段）
         ds = next(m for m in mgr.list_models() if m["id"] == "deepseek-v3")
         assert ds["capabilities"]["supports_tools"] is True
         assert ds["reasoning_efforts"] is None
@@ -378,7 +384,7 @@ class TestLegacySettings:
 class TestProviderIdNamespaceAlias:
     """settings 按 catalog id 存储；模型条目/调用方可能传 hermes id（qwen→alibaba 等）。"""
 
-    def test_hermes_id_alias_resolves_to_catalog_entry(
+    def test_atlas_id_alias_resolves_to_catalog_entry(
         self, mgr: ModelManager, keyring_store: dict,
     ) -> None:
         mgr.add_key("qwen", "sk-qwen-1")           # routes/UI 用 catalog id 写入

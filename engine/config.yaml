@@ -22,13 +22,20 @@ auxiliary:
     base_url: ''
 memory:
   provider: ''
+  # NOTE: the two switches below belong to the inherited upstream memory
+  # implementation and are NOT read anywhere in atlas/. Nothing in this file
+  # affects whether Atlas remembers you.
+  #
+  # The switch that actually works is `memory.library.enabled`, read from
+  # atlas.config (i.e. config/atlas.toml or user-settings.json) by
+  # memory/library/__init__.py::get_library and memory/library/health.py.
+  # It defaults to true. Set `[memory.library] enabled = false` there to turn
+  # memory off — changing memory_enabled here does nothing and will mislead the
+  # next person who debugs "why is memory not working".
   memory_enabled: false
   user_profile_enabled: false
-# ── 全放行（2026-10-12，Atlas 定制）───────────────────────────────────
-# Hermes 审批闸门有多个独立入口：mode / unattended / cron / single-query 各自读自己的键。
-# mode=off 只关交互式那一支，后台/定时/单发会话仍会各自弹窗，必须逐个放行。
 approvals:
-  mode: "off"
+  mode: 'off'
   timeout: 300
   cron_mode: approve
   single_query_mode: approve
@@ -38,24 +45,20 @@ approvals:
   deny: []
   mcp_reload_confirm: false
   destructive_slash_confirm: false
-# 写 AGENTS.md / CLAUDE.md / SOUL.md / .cursorrules 不再弹放行窗。
-# 该闸门在 tools/file_tools_write_guards.py，故意无视 mode=off，只能靠这个键关。
 security:
   protected_instruction_files: false
   protected_instruction_extra_patterns: []
-# 重复工具提醒与硬停：关掉循环告警，保留 hard_stop 兜底（真跑飞了还能停）。
 tool_loop_guardrails:
   warnings_enabled: false
   hard_stop_enabled: false
   non_interactive_hard_stop_enabled: false
-# 上下文文件（AGENTS.md 等）截断上限，默认动态 20K；放开到 120K。
 context_file_max_chars: 120000
 mcp_servers:
   rea:
     command: C:\Program Files\nodejs\node.exe
     args:
-      - C:\Users\25011\AppData\Roaming\npm\node_modules\rea-agents\scripts\rea.mjs
-      - mcp
+    - C:\Users\25011\AppData\Roaming\npm\node_modules\rea-agents\scripts\rea.mjs
+    - mcp
     env:
       GHIDRA_INSTALL_DIR: C:\Users\25011\.atlas-expert\tools\ghidra
       JAVA_HOME: C:\Program Files\Eclipse Adoptium\jdk-21.0.12.101-hotspot

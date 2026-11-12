@@ -221,3 +221,6 @@ enabled = true
 # root = "D:/Atlas/data/memory"
 # writer_model = ""          # 提炼记忆固定用的模型；空 = 设置里的 memory_model → compression_model → 当前模型
 # writer_timeout_seconds = 90
+# 整理（dream）时顺带做一次"经历 → 语义"提炼：只写候选清单 语义候选.md，不动 我.md。
+# consolidate = true             # false 或环境变量 ATLAS_MEMORY_CONSOLIDATE=0 关闭
+# consolidate_window_days = 14   # 每次回看最近多少天的经历/日记

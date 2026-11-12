@@ -12,7 +12,7 @@ from typing import Any
 
 _MILLION = Decimal(1_000_000)
 
-# Hermes official documentation snapshots, expressed as USD per million tokens.
+# Provider price-list snapshots, expressed as USD per million tokens.
 _PRICE_TABLE: dict[str, tuple[Decimal, Decimal, Decimal, Decimal]] = {
     "claude-opus-4": (Decimal("15.00"), Decimal("75.00"), Decimal("1.50"), Decimal("18.75")),
     "claude-opus-4-20250514": (Decimal("15.00"), Decimal("75.00"), Decimal("1.50"), Decimal("18.75")),

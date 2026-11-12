@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
 import ssl
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -23,6 +25,55 @@ _PROXY_CREDENTIAL_KEY = "atlas.model_network.proxy_url"
 _ACTIVE_SETTINGS: ContextVar["ModelNetworkSettings | None"] = ContextVar(
     "atlas_model_network_settings", default=None,
 )
+
+# A bracketed IPv6 literal inside NO_PROXY, e.g. ``[::1]``.
+_BRACKETED_V6 = re.compile(r"^\[(?P<inner>[0-9A-Fa-f:.]+)\](?::(?P<port>\d+))?$")
+
+
+def normalize_no_proxy_value(value: str) -> str:
+    """Rewrite bracketed IPv6 entries in a ``NO_PROXY`` value to bare literals.
+
+    curl accepts ``NO_PROXY=[::1]`` but httpx does not. httpx validates each
+    entry with ``is_ipv6_hostname``, which rejects the bracketed form, so the
+    entry falls through to the generic domain branch and becomes the mount key
+    ``all://*[::1]``. That key is not a valid URL, and ``httpx.Client()`` raises
+    ``InvalidURL: Invalid port: ':1]'`` during construction — so a single
+    bracketed IPv6 entry anywhere in the user's environment makes *every* model
+    request fail, before any network I/O happens. ``::1`` is the form both
+    clients understand and means the same thing, so rewriting is safe.
+    """
+    if not value or "[" not in value:
+        return value
+    out: list[str] = []
+    for raw in value.split(","):
+        entry = raw.strip()
+        if not entry:
+            continue
+        match = _BRACKETED_V6.match(entry)
+        if match:
+            port = match.group("port")
+            out.append(f"{match.group('inner')}:{port}" if port else match.group("inner"))
+        else:
+            out.append(entry)
+    return ",".join(out)
+
+
+def normalize_no_proxy_env() -> list[str]:
+    """Apply :func:`normalize_no_proxy_value` to the process environment.
+
+    Returns the names of the variables that were rewritten, so callers can log
+    the repair instead of silently mutating the user's environment.
+    """
+    changed: list[str] = []
+    for name in ("NO_PROXY", "no_proxy"):
+        current = os.environ.get(name)
+        if not current:
+            continue
+        fixed = normalize_no_proxy_value(current)
+        if fixed != current:
+            os.environ[name] = fixed
+            changed.append(name)
+    return changed
 
 
 class ModelNetworkSettingsError(ValueError):
@@ -148,7 +199,7 @@ def assert_transport_supported(
 def _verify_for(settings: ModelNetworkSettings, base_url: str, fallback: Any = True) -> Any:
     if not settings.ca_bundle_path:
         return fallback
-    from atlas.engine_core.agent.ssl_verify import resolve_httpx_verify
+    from atlas.engine.agent.ssl_verify import resolve_httpx_verify
 
     return resolve_httpx_verify(ca_bundle=settings.ca_bundle_path, base_url=base_url)
 
@@ -159,7 +210,7 @@ def _new_scoped_http_client(
 ) -> Any:
     import httpx
 
-    from atlas.engine_core.agent.proxy_bypass import loopback_request_kwargs
+    from atlas.engine.agent.proxy_bypass import loopback_request_kwargs
 
     kwargs: dict[str, Any] = {
         "verify": verify,
@@ -168,6 +219,10 @@ def _new_scoped_http_client(
         "trust_env": (settings.trust_env if settings.trust_env is not None
                       else not loopback_request_kwargs(base_url).get("trust_env") is False),
     }
+    if kwargs["trust_env"]:
+        # httpx parses NO_PROXY during __init__ and raises on bracketed IPv6
+        # entries; repair them first so the client can be constructed at all.
+        normalize_no_proxy_env()
     if settings.proxy_url:
         kwargs["proxy"] = settings.proxy_url
     client_type = httpx.AsyncClient if async_mode else httpx.Client
@@ -195,10 +250,12 @@ def build_tool_httpx_client(
         return build_model_httpx_client(settings, base_url=base_url, async_mode=async_mode,
                                         timeout=timeout)
     import httpx
-    from atlas.engine_core.agent.proxy_bypass import loopback_request_kwargs
+    from atlas.engine.agent.proxy_bypass import loopback_request_kwargs
     kwargs = loopback_request_kwargs(base_url)
     if settings.trust_env is not None:
         kwargs["trust_env"] = settings.trust_env
+    if kwargs.get("trust_env", True):
+        normalize_no_proxy_env()
     client_type = httpx.AsyncClient if async_mode else httpx.Client
     return client_type(timeout=timeout or 30.0, **kwargs)
 
