@@ -1,0 +1,79 @@
+name: CI
+
+# Two jobs, both fast, each pinning something that has already broken here:
+#   contract  the three-source event-name agreement (Python <-> two TS files).
+#             It broke silently once: 16 backend events were dropped by the
+#             renderer with no error, no log, and no visible symptom.
+#   lint      ruff over the paths that are clean today, so the debt stops growing.
+#
+# The full pytest suite is NOT run. It needs a live model and a warm state DB, and
+# a clean checkout currently has ~198 failures. Wiring that in would give a badge
+# that is always red, which teaches everyone to ignore it. Turn it on after those
+# failures are triaged -- not before.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: event contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: core/pyproject.toml
+      - name: Install
+        working-directory: core
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest
+      - name: Event contract and introspection surface
+        working-directory: core
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python -m pytest \
+            tests/test_event_contract.py \
+            tests/test_introspect_providers.py \
+            -q -p no:cacheprovider -p no:randomly
+
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install ruff
+        run: python -m pip install ruff==0.16.9
+      - name: Lint the paths that are clean
+        working-directory: core
+        run: |
+          python -m ruff check \
+            atlas/introspect \
+            atlas/port_guard.py \
+            atlas/api/event_names.py \
+            atlas/log_rotation.py \
+            atlas/telemetry.py \
+            atlas/tts_local.py \
+            atlas/libreoffice.py \
+            atlas/agent/capabilities.py \
+            tests/test_event_contract.py \
+            tests/test_introspect_providers.py \
+            tests/test_log_rotation_telemetry.py \
+            tests/test_office_pdf_and_hooks.py

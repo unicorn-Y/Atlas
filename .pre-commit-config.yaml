@@ -1,0 +1,52 @@
+# Local gate that mirrors CI. Install once with:  pip install pre-commit && pre-commit install
+#
+# Deliberately short. A pre-commit hook that is slow or noisy gets disabled, and a
+# disabled hook protects nothing. These four checks are cheap and each one catches a
+# class of defect that has actually reached this repository:
+#
+#   trailing-whitespace / end-of-file   -> diff noise that hides real changes
+#   ruff                                -> the repo's own configured linter
+#   check-added-large-files             -> data/ and build output must never be committed
+#
+# Tests are NOT run here on purpose: the suite takes minutes, and the same tests run
+# in CI. Blocking a commit on a 5-minute suite is how people learn to use --no-verify.
+default_language_version:
+  python: python3.11
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^data/
+      - id: end-of-file-fixer
+        exclude: ^data/
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Pin to the version the project is developed against; a floating rev means a
+    # new ruff release can fail a commit that was fine yesterday.
+    rev: v0.16.9
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+        files: ^core/
+        # The codebase is NOT lint-clean today: ruff reports ~200 findings in
+        # core/atlas, most of them pre-existing. A file you touch will therefore be
+        # flagged for defects you did not introduce. That is intentional — the gate
+        # stops the count from growing — but it means committing a file that was
+        # already dirty needs an explicit escape:
+        #
+        #     SKIP=ruff git commit ...
+        #
+        # or fix the findings in that file as part of the same change. What is NOT
+        # acceptable is disabling the hook.
+      # `ruff-format` is deliberately absent. The codebase has never been
+      # formatter-clean, so attaching it here would rewrite every file the first
+      # time anyone commits — hundreds of unrelated files in one diff, which is
+      # exactly how a real change becomes unreviewable. Reformatting is a separate,
+      # whole-repository decision, not a side effect of installing a hook.
