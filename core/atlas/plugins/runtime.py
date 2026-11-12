@@ -8,13 +8,19 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+import structlog
+
 from atlas.agent.enrichment import HOOK_POINTS
+from atlas.plugins import patch_layer
+
+log = structlog.get_logger(__name__)
 
 MANIFEST_NAMES = (".claude-plugin/plugin.json", "plugin.json")
 MARKETPLACE_NAMES = (".claude-plugin/marketplace.json", "marketplace.json")
@@ -120,6 +126,10 @@ class PluginRuntime:
         self._state: dict[str, Any] = {}
         self._enabled: dict[str, bool] = {}
         self._loaded: dict[str, dict[str, Any]] = {}
+        #: Bound dependencies remembered from ``load_all`` so ``reload`` can
+        #: re-attach the same hook bus / capability registry without the caller
+        #: having to pass them again.
+        self._wiring: dict[str, Any] = {}
         self._load_state()
 
     def _load_state(self) -> None:
@@ -773,7 +783,13 @@ class PluginRuntime:
             os.chmod(item, stat.S_IWRITE)
             func(item)
 
-        shutil.rmtree(path, onexc=_force)
+        # ``onexc`` replaced ``onerror`` in 3.12; Atlas runs on 3.11 (see the
+        # requires-python floor in pyproject.toml), where passing it raises
+        # TypeError and an upgrade can never remove the old install.
+        if sys.version_info >= (3, 12):
+            shutil.rmtree(path, onexc=_force)
+        else:
+            shutil.rmtree(path, onerror=_force)
 
     @staticmethod
     def _copy_replace(source: Path, target: Path) -> None:
@@ -783,9 +799,23 @@ class PluginRuntime:
             PluginRuntime._rmtree(incoming)
         # Installed copies are deploy snapshots; history stays in the checkout.
         shutil.copytree(source, incoming, ignore=shutil.ignore_patterns(".git"))
+        # Lift the existing patch layer out of the directory that is about to be
+        # deleted. Without this an upgrade silently deletes every local edit —
+        # the shipped file is replaced, so ``reload`` cannot recover it either.
+        soup = None
         if target.exists():
+            carried = patch_layer.carry_over(target, incoming)
+            if carried["had_patches"]:
+                soup = carried
             PluginRuntime._rmtree(target)
         incoming.replace(target)
+        if soup is not None:
+            # New files have landed; copy the patches back over them.
+            reapplied = patch_layer.reapply(target)
+            log.info(
+                "plugin.patches_carried",
+                path=str(target), carried=soup["carried"], applied=reapplied["count"],
+            )
 
     @staticmethod
     def _run_git_with_retry(args: list[str], *, timeout: int = 60) -> subprocess.CompletedProcess[str]:
@@ -968,6 +998,39 @@ class PluginRuntime:
             self._loaded.pop(name, None)
         return True
 
+    # --- patch layer -------------------------------------------------------
+    #
+    # These four are the whole public surface of ``patch_layer`` at runtime
+    # level. They exist because an installed plugin is a deploy snapshot that
+    # gets replaced wholesale on upgrade, so the only durable place for a local
+    # tweak is a patch directory that ``_copy_replace`` knows to carry over.
+
+    def _root_for(self, name: str) -> Path:
+        """Resolve a plugin name to its root, or raise ``KeyError``."""
+        plugin = next((item for item in self.discover() if item["name"] == name), None)
+        if plugin is None:
+            raise KeyError(name)
+        return Path(plugin["path"])
+
+    def list_patches(self, name: str) -> dict[str, Any]:
+        """Every local override installed on this plugin."""
+        return patch_layer.list_patches(self._root_for(name))
+
+    def patch_file(self, name: str, relative: str, content: str, *, note: str = "") -> dict[str, Any]:
+        """Store a local edit as a patch, leaving the shipped file recoverable."""
+        return patch_layer.write(self._root_for(name), relative, content, note=note)
+
+    def revert_patch(self, name: str, relative: str | None = None) -> dict[str, Any]:
+        """Drop one override, or all of them when ``relative`` is omitted."""
+        root = self._root_for(name)
+        if relative is None:
+            return patch_layer.revert_all(root)
+        return patch_layer.revert(root, relative)
+
+    def effective_text(self, name: str, relative: str) -> str:
+        """Read a plugin file with any patch applied."""
+        return patch_layer.effective_text(self._root_for(name), relative)
+
     def uninstall(self, name: str) -> bool:
         plugin = next((item for item in self.discover() if item["name"] == name), None)
         if plugin is None:
@@ -1088,6 +1151,9 @@ class PluginRuntime:
     ) -> dict[str, Any]:
         """Load Atlas/Hermes compatibility contributions; Claude hooks go via HookStore."""
         report: dict[str, Any] = {"loaded": [], "skipped": [], "errors": {}}
+        self._wiring = {
+            "hook_bus": hook_bus, "mcp_client": mcp_client, "capabilities": capabilities,
+        }
         self._loaded.clear()
         for plugin in self.discover():
             name = plugin["name"]
@@ -1103,6 +1169,85 @@ class PluginRuntime:
             except Exception as exc:
                 report["errors"][name] = str(exc)
         return report
+
+    async def reload(
+        self, name: str, *, hook_bus: Any = None, mcp_client: Any = None,
+        capabilities: Any = None,
+    ) -> dict[str, Any]:
+        """Re-read one plugin from disk without restarting the backend.
+
+        Why this exists: ``load_all`` clears and reloads *everything*, so a plugin
+        author editing a ``SKILL.md`` had to restart the whole backend to see the
+        change. Reloading one plugin is the operation they actually want.
+
+        The three things that can leak are handled explicitly:
+
+        * capabilities — ``register`` rejects duplicates, so the plugin's entries
+          are removed **by source** before loading (a plugin can contribute fewer
+          skills after an edit, so removing the known names is not enough);
+        * hooks — the previous generation is cleared through
+          ``HookBus.forget_owner`` (handlers are tagged with the plugin name at
+          registration, because a reload creates new closure objects whose
+          ``__qualname__`` is shared by every plugin);
+        * MCP servers — already-connected servers are reused by ``_load_one``.
+
+        Unchanged plugins are re-read anyway: the point is to pick up edits, and
+        comparing mtimes would make "I edited it but nothing happened" possible.
+        """
+        hook_bus = hook_bus if hook_bus is not None else self._wiring.get("hook_bus")
+        mcp_client = mcp_client if mcp_client is not None else self._wiring.get("mcp_client")
+        capabilities = (
+            capabilities if capabilities is not None else self._wiring.get("capabilities")
+        )
+
+        plugin = next((item for item in self.discover() if item["name"] == name), None)
+        if plugin is None:
+            return {"ok": False, "name": name, "error": "plugin not found"}
+
+        # ``_read_json`` is deliberately forgiving elsewhere (a corrupt manifest
+        # must not break discovery), but during an explicit reload a file that does
+        # not parse is exactly the case the user needs told about: loading it would
+        # produce an empty plugin and look like the edit "worked".
+        manifest_path, _ = _manifest(Path(plugin["path"]))
+        if manifest_path is not None:
+            try:
+                json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                return {
+                    "ok": False,
+                    "name": name,
+                    "error": f"清单无法解析（{manifest_path.name}）：{exc}",
+                }
+
+        removed = 0
+        if capabilities is not None and hasattr(capabilities, "unregister_source"):
+            removed = capabilities.unregister_source(f"plugin:{name}")
+
+        hooks_cleared = 0
+        if hook_bus is not None and hasattr(hook_bus, "forget_owner"):
+            hooks_cleared = hook_bus.forget_owner(f"plugin:{name}")
+
+        previous = self._loaded.pop(name, None)
+        try:
+            loaded = await self._load_one(
+                Path(plugin["path"]), plugin_name=name, hook_bus=hook_bus,
+                mcp_client=mcp_client, capabilities=capabilities,
+            )
+        except Exception as exc:  # noqa: BLE001 - a bad edit must not kill the app
+            # Restore the previous entry so a broken edit leaves the runtime in the
+            # state it was in, rather than dropping the plugin entirely.
+            if previous is not None:
+                self._loaded[name] = previous
+            return {"ok": False, "name": name, "error": f"{type(exc).__name__}: {exc}"}
+
+        self._loaded[name] = loaded
+        return {
+            "ok": True,
+            "name": name,
+            "capabilities_removed": removed,
+            "hooks_cleared": hooks_cleared,
+            "loaded": loaded,
+        }
 
     async def _load_one(
         self, root: Path, *, plugin_name: str, hook_bus: Any,
@@ -1137,6 +1282,10 @@ class PluginRuntime:
             def _handler(_argv: list[str] = argv, **payload: Any) -> None:
                 subprocess.run(_argv, input=json.dumps(payload, ensure_ascii=False, default=str), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, check=False)
 
+            # Tagged so ``reload`` can clear exactly this plugin's previous
+            # generation: the closure is a new object each load, and its
+            # ``__qualname__`` is identical across plugins.
+            _handler.__atlas_owner__ = f"plugin:{plugin_name}"
             if hook_bus is not None:
                 hook_bus.register(point, _handler)
             loaded["hooks"] += 1

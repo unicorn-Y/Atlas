@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
+
+from atlas.session_projections import SessionProjections
 
 
 @dataclass(slots=True)
@@ -71,3 +73,77 @@ class AppServices:
     office_handoffs: Any = None
     office_writebacks: Any = None
     office_live_sessions: Any = None
+    # Registrable derived session views with event-driven invalidation. Default-
+    # constructed so every AppServices — including test harnesses that build a bare
+    # container — gets one, and two features describing the same session share it.
+    session_projections: Any = field(default_factory=SessionProjections)
+
+    # -- guarded accessors -------------------------------------------------
+    # Every handler writes ``services.<field>.<method>``, and a field that is
+    # still ``None`` turns that into ``AttributeError: 'NoneType' object has no
+    # attribute ...`` — a 500 with a traceback that names the attribute but not
+    # the missing service. These accessors make the same failure name the field
+    # that was never wired, which is the fact the caller needs.
+    #
+    # They are deliberately few. Atlas keeps capability in the owning module and
+    # uses this container as a composition root, so wrapping 638 domain methods
+    # here would only add a second place to look for every behaviour.
+
+    def require(self, name: str) -> Any:
+        """The bound service, or a ``LookupError`` naming the unwired field.
+
+        Use when the handler genuinely cannot proceed without the service::
+
+            services.require("memory").recall(query)
+
+        A ``LookupError`` rather than ``AttributeError`` so an API layer can map
+        it to 503 ("not wired in this build") instead of 500 ("we have a bug").
+        """
+        if name not in type(self).__slots__:
+            raise LookupError(f"AppServices 没有字段 {name!r}")
+        value = getattr(self, name, None)
+        if value is None:
+            raise LookupError(f"服务 {name!r} 未接线（字段存在但为 None）")
+        return value
+
+    def has(self, name: str) -> bool:
+        """True when ``name`` is a declared field and is currently bound."""
+        return name in type(self).__slots__ and getattr(self, name, None) is not None
+
+    def maybe(self, name: str) -> Any:
+        """The bound service, or ``None``. For optional capabilities.
+
+        The point is the field-existence check: ``services.maybe("typo")`` returns
+        ``None`` either way, but :meth:`missing` can then report the typo, whereas
+        a bare ``getattr(self, "typo", None)`` hides it forever.
+        """
+        if name not in type(self).__slots__:
+            return None
+        return getattr(self, name, None)
+
+    def missing(self, *names: str) -> list[str]:
+        """Which of ``names`` are undeclared, and which are declared but unbound.
+
+        Returns the undeclared ones first: a typo is a different bug from an
+        unwired dependency, and they are fixed in different places.
+        """
+        undeclared = [n for n in names if n not in type(self).__slots__]
+        unbound = [n for n in names if n in type(self).__slots__ and getattr(self, n, None) is None]
+        return undeclared + unbound
+
+    def wired(self) -> dict[str, str]:
+        """``{field: type name}`` for every bound service.
+
+        The one-glance wiring report: what this application actually built.
+        """
+        return {
+            name: type(getattr(self, name, None)).__name__
+            for name in type(self).__slots__
+            if getattr(self, name, None) is not None
+        }
+
+    def unwired(self) -> list[str]:
+        """Every declared field that is still ``None``."""
+        return [
+            name for name in type(self).__slots__ if getattr(self, name, None) is None
+        ]

@@ -11,79 +11,86 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from atlas.api.agent_backends_router import router as agent_backends_router
 from atlas.api.agent_skills_router import router as agent_skills_router
-from atlas.api.artifact_sites_router import router as artifact_sites_router
 from atlas.api.app_services import AppServices
-from atlas.api.startup_components import StartupComponents
+from atlas.api.artifact_sites_router import router as artifact_sites_router
 from atlas.api.automation_router import automation_router
-from atlas.api.standing_orders_router import router as standing_orders_router
-from atlas.api.workflow_router import router as workflow_router
 from atlas.api.browser_router import router as browser_router
-from atlas.api.pets_router import router as pets_router
-from atlas.api.mobile_preview_router import router as mobile_preview_router
-from atlas.api.cluster_router import router as cluster_router
+from atlas.api.capability_probes_router import router as capability_probes_router
 from atlas.api.channel_router import router as channel_router
-from atlas.api.conversations_router import router as conversations_router
-from atlas.api.quick_write_router import router as quick_write_router
-from atlas.api.shares_router import router as shares_router
-from atlas.api.conversation_activity_router import router as conversation_activity_router
-from atlas.api.triage_router import router as triage_router
+from atlas.api.cloud_documents_router import router as cloud_documents_router
+from atlas.api.cluster_router import router as cluster_router
 from atlas.api.computer_router import router as computer_router
-from atlas.api.secrets_router import router as secrets_router
+from atlas.api.config_editor_router import router as config_editor_router
+from atlas.api.conversation_activity_router import router as conversation_activity_router
+from atlas.api.conversations_router import router as conversations_router
+from atlas.api.dashboard_router import router as dashboard_router
 from atlas.api.device_router import router as device_router
-from atlas.api.evolution_router import evolution_router
-from atlas.api.upstream_router import upstream_router
-from atlas.api.group_router import router as group_router
-from atlas.api.skills_router import router as skills_router
-from atlas.api.usage_router import router as usage_router
-from atlas.api.u4_router import router as u4_router
-from atlas.api.health_router import router as health_router
-from atlas.api.integrations_router import router as integrations_router
-from atlas.api.local_models_router import router as local_models_router
-from atlas.api.memory_router import router as memory_router
-from atlas.api.models_settings_router import router as models_settings_router
-from atlas.api.plugins_router import router as plugins_router
-from atlas.api.recipes_router import router as recipe_templates_router
-from atlas.api.extension_packages_router import router as extension_packages_router
-from atlas.api.settings_export_router import router as settings_export_router
 from atlas.api.diagnostics_router import router as diagnostics_router
 from atlas.api.dns_router import router as dns_router
-from atlas.api.portal_router import router as portal_router
-from atlas.api.maintenance_router import router as maintenance_router
+from atlas.api.evolution_router import evolution_router
+from atlas.api.expert_mode_router import router as expert_mode_router
+from atlas.api.extension_packages_router import router as extension_packages_router
 from atlas.api.external_history_router import router as external_history_router
-from atlas.api.workspace_trust_settings_router import router as workspace_trust_settings_router
-from atlas.api.run_limits_router import router as run_limits_router
-from atlas.api.network_settings_router import router as network_settings_router
+from atlas.api.goal_loop_router import router as goal_loop_router
+from atlas.api.permissions_router import router as permissions_router
+from atlas.api.group_router import router as group_router
+from atlas.api.health_router import router as health_router
 from atlas.api.hook_trust_router import router as hook_trust_router
+from atlas.api.integrations_router import router as integrations_router
+from atlas.api.introspect_router import router as introspect_router
+from atlas.api.library_router import router as library_router
 from atlas.api.linear_integration_router import router as linear_integration_router
-from atlas.api.cloud_documents_router import router as cloud_documents_router
+from atlas.api.local_models_router import router as local_models_router
+from atlas.api.maintenance_router import router as maintenance_router
 from atlas.api.mcp_resources_lazy_router import router as mcp_resources_router
+from atlas.api.memory_library_router import router as memory_library_router
+from atlas.api.memory_router import router as memory_router
+from atlas.api.mobile_preview_router import router as mobile_preview_router
 from atlas.api.model_catalog_preferences_router import router as model_catalog_preferences_router
-from atlas.api.output_style_settings_router import router as output_style_settings_router
+from atlas.api.model_routes_router import router as model_routes_router
+from atlas.api.models_settings_router import router as models_settings_router
+from atlas.api.network_settings_router import router as network_settings_router
 from atlas.api.office_router import router as office_router
-from atlas.api.wsl_policy_router import router as wsl_policy_router
-from atlas.api.tool_search_settings_router import router as tool_search_settings_router
+from atlas.api.output_style_settings_router import router as output_style_settings_router
 from atlas.api.personal_todos_router import router as personal_todos_router
+from atlas.api.pets_router import router as pets_router
+from atlas.api.plan_simulate_router import router as plan_simulate_router
+from atlas.api.plugins_router import router as plugins_router
+from atlas.api.portal_router import router as portal_router
 from atlas.api.projects_router import router as projects_router
-from atlas.api.u6_router import router as u6_router
-from atlas.api.ultraplan_router import router as ultraplan_router
+from atlas.api.quick_write_router import router as quick_write_router
+from atlas.api.recipes_router import router as recipe_templates_router
 from atlas.api.records_router import router as records_router
-from atlas.api.dashboard_router import router as dashboard_router
 from atlas.api.remote_router import router as remote_router
 from atlas.api.remote_tasks_router import router as remote_tasks_router
 from atlas.api.remote_tasks_router import start_remote_tasks, stop_remote_tasks
+from atlas.api.run_limits_router import router as run_limits_router
+from atlas.api.run_replay_router import router as run_replay_router
 from atlas.api.runtime import RuntimeManager
 from atlas.api.runtime_router import router as runtime_router
 from atlas.api.runtime_ws_router import router as runtime_ws_router
-from atlas.api.scheduling_router import router as scheduling_router
-from atlas.api.skills_market_router import router as skills_market_router
-from atlas.api.memory_library_router import router as memory_library_router
 from atlas.api.scenario_bundles_router import router as scenario_bundles_router
-from atlas.api.workspace_router import router as workspace_router
-from atlas.api.workbench_router import router as workbench_router
-from atlas.api.library_router import router as library_router
-from atlas.api.expert_mode_router import router as expert_mode_router
-from atlas.api.config_editor_router import router as config_editor_router
+from atlas.api.scheduling_router import router as scheduling_router
+from atlas.api.secrets_router import router as secrets_router
+from atlas.api.settings_export_router import router as settings_export_router
+from atlas.api.shares_router import router as shares_router
+from atlas.api.skills_market_router import router as skills_market_router
+from atlas.api.skills_router import router as skills_router
+from atlas.api.standing_orders_router import router as standing_orders_router
+from atlas.api.startup_components import StartupComponents
+from atlas.api.tool_search_settings_router import router as tool_search_settings_router
 from atlas.api.tools_router import router as tools_router
+from atlas.api.triage_router import router as triage_router
+from atlas.api.u4_router import router as u4_router
+from atlas.api.u6_router import router as u6_router
+from atlas.api.ultraplan_router import router as ultraplan_router
+from atlas.api.upstream_router import upstream_router
+from atlas.api.usage_router import router as usage_router
+from atlas.api.workbench_router import router as workbench_router
+from atlas.api.workflow_router import router as workflow_router
+from atlas.api.workspace_router import router as workspace_router
+from atlas.api.workspace_trust_settings_router import router as workspace_trust_settings_router
+from atlas.api.wsl_policy_router import router as wsl_policy_router
 from atlas.config import get_config
 from atlas.models.routes import models_router
 from atlas.origin_guard import DEV_ORIGINS, OriginGuard
@@ -151,6 +158,7 @@ def create_app(
         triage_router,
         group_router,
         health_router,
+        capability_probes_router,
         integrations_router,
         memory_router,
         models_settings_router,
@@ -162,11 +170,14 @@ def create_app(
         dns_router,
         portal_router,
         maintenance_router,
+    model_routes_router,
+    plan_simulate_router,
         external_history_router,
         workspace_trust_settings_router,
         run_limits_router,
         network_settings_router,
         hook_trust_router,
+        permissions_router,
         linear_integration_router,
         cloud_documents_router,
         mcp_resources_router,
@@ -183,6 +194,7 @@ def create_app(
         dashboard_router,
         skills_router,
         runtime_router,
+        run_replay_router,
         runtime_ws_router,
         scheduling_router,
         tools_router,
@@ -200,4 +212,10 @@ def create_app(
     app.include_router(memory_library_router)
     app.include_router(scenario_bundles_router)
     app.include_router(standing_orders_router)
+    # Cross-restart goal resumption: read-only about stranded goals until the
+    # caller explicitly resumes one.
+    app.include_router(goal_loop_router)
+    # Self-introspection. Appended last so its providers observe the fully
+    # assembled route table, and so nothing above this line changes.
+    app.include_router(introspect_router)
     return app
