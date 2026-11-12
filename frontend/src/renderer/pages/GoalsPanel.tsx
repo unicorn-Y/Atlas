@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { CircleDashed, LoaderCircle, Pause, Pencil, Play, Plus, RefreshCw, Target, X } from 'lucide-react';
+import { CircleCheck, CircleDashed, LoaderCircle, Pause, Pencil, Play, Plus, RefreshCw, Target, X } from 'lucide-react';
 import { api, relativeTime } from '../services/api';
 import { describeSchedule } from './AutomationPage';
 
@@ -10,7 +10,7 @@ interface Goal {
   trigger_type: string;
   trigger_args: Record<string, unknown>;
   goal_status?: string;
-  goal_progress?: { subgoals?: string[]; turns_used?: number; max_turns?: number; last_verdict?: string; last_reason?: string; paused_reason?: string; last_evaluation?: { reason?: string; verdict?: string } };
+  goal_progress?: { subgoals?: string[]; turns_used?: number; max_turns?: number; last_verdict?: string; last_reason?: string; paused_reason?: string; last_evaluation?: { reason?: string; verdict?: string }; completed_subgoals?: number[]; completed_count?: number; needs_plan?: boolean; decomposition_required?: boolean; plan_attempts?: number; max_plan_attempts?: number };
   last_run_at?: string | null;
   next_run_at?: string | null;
   run_count?: number;
@@ -31,6 +31,7 @@ const EVENT: Record<string, string> = {
   'goal.resumed': '恢复',
   'goal.triggered': '开始一轮',
   'goal.evaluated': '目标评价',
+  'goal.planning_turn': '规划轮',
   'goal.evaluation_failed': '检查未通过',
   'goal.replanned': '重新规划',
   'goal.verified': '目标达成',
@@ -48,11 +49,19 @@ type Freq = 'hours' | 'daily' | 'weekly';
 
 const eventDetail = (event: GoalEvent) => {
   const data = event.data ?? {};
+  if (event.event === 'goal.planning_turn') {
+    const attempt = typeof data.attempt === 'number' ? data.attempt : 0;
+    const max = typeof data.max_attempts === 'number' ? data.max_attempts : 0;
+    const parts = [`第 ${attempt}${max ? `/${max}` : ''} 轮拆解`];
+    if (typeof data.milestones === 'number') parts.push(`已有 ${data.milestones} 个里程碑`);
+    if (data.expiring === true) parts.push('下一轮仍未拆解就不再拦');
+    return parts.join(' · ');
+  }
   const text = data.reason ?? data.detail ?? (typeof data.replan_count === 'number' ? `第 ${data.replan_count} 次重新规划` : '');
   return typeof text === 'string' ? text : '';
 };
 
-/** Goals use Hermes lifecycle state and advance when their schedule triggers. */
+/** Goals use Atlas lifecycle state and advance when their schedule triggers. */
 export default function GoalsPanel({ apiBaseUrl, connected, onToast }: { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void }) {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [selected, setSelected] = useState('');
@@ -173,15 +182,23 @@ export default function GoalsPanel({ apiBaseUrl, connected, onToast }: { apiBase
             : current.goal}</dd></div>
           {(current.goal_progress?.last_reason || (currentStatus === 'blocked' && current.goal_progress?.paused_reason)) && <div><dt>{currentStatus === 'blocked' ? '卡住原因' : '上次评价'}</dt><dd>{currentStatus === 'blocked' ? current.goal_progress?.paused_reason : current.goal_progress?.last_reason}</dd></div>}
           {current.goal_progress && <div><dt>推进轮数</dt><dd>{current.goal_progress.turns_used ?? 0} / {current.goal_progress.max_turns ?? 20}</dd></div>}
+          {current.goal_progress?.needs_plan
+            ? <div><dt>当前阶段</dt><dd style={{ color: 'var(--brand)' }}>规划中 · 下一轮先拆解里程碑再动手（已用 {current.goal_progress.plan_attempts ?? 0}/{current.goal_progress.max_plan_attempts ?? 2} 轮）</dd></div>
+            : subgoals.length > 0
+              ? <div><dt>当前阶段</dt><dd>执行中 · 里程碑 {current.goal_progress?.completed_count ?? 0}/{subgoals.length} 完成</dd></div>
+              : current.goal_progress?.decomposition_required === false
+                ? <div><dt>当前阶段</dt><dd style={{ color: 'var(--ink3)' }}>直接执行（已关闭拆解检查）</dd></div>
+                : <div><dt>当前阶段</dt><dd style={{ color: 'var(--ink3)' }}>直接执行（拆解轮次已用尽，未保存里程碑）</dd></div>}
           <div><dt>下一轮</dt><dd>{current.next_run_at ? `${new Date(current.next_run_at).toLocaleString()}（${relativeTime(current.next_run_at)}）` : '未排期'}</dd></div>
         </dl>
         {subgoals.length > 0 && <>
           <h3 style={{ fontSize: 13, margin: '14px 0 6px' }}>检查条件</h3>
           <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6, fontSize: 13 }}>
             {subgoals.map((item, index) => {
+              const done = (current.goal_progress?.completed_subgoals ?? []).includes(index + 1);
               return <li key={`${index}:${item}`} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <CircleDashed size={15} color="var(--ink3)" />
-                <span>{item}</span>
+                {done ? <CircleCheck size={15} color="var(--ok)" /> : <CircleDashed size={15} color="var(--ink3)" />}
+                <span style={done ? { color: 'var(--ink3)', textDecoration: 'line-through' } : undefined}>{item}</span>
               </li>;
             })}
           </ol>

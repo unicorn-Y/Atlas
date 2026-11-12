@@ -128,15 +128,15 @@ export default function SettingsPage(props: SettingsPageProps) {
           || (providerFilter === 'configured' && item.configured)
           || (providerFilter === 'unconfigured' && !item.configured)
           || (providerFilter === 'attention' && attention);
-        const matchesSearch = !query || `${item.label} ${item.id} ${item.hermes_provider}`.toLocaleLowerCase().includes(query);
+        const matchesSearch = !query || `${item.label} ${item.id} ${item.atlas_provider}`.toLocaleLowerCase().includes(query);
         return matchesStatus && matchesSearch;
       })
       .sort((a, b) => Number(pinnedProviderIds.includes(b.id)) - Number(pinnedProviderIds.includes(a.id)));
   }, [props.providers, providerSearch, providerFilter, pinnedProviderIds]);
   const providerVisible = providerResults.some((item) => item.id === provider?.id);
 
-  const modelProvider = (model: ModelInfo) => model.hermes_provider
-    ? props.providers.find((item) => item.id === model.hermes_provider || item.hermes_provider === model.hermes_provider) ?? null
+  const modelProvider = (model: ModelInfo) => model.atlas_provider
+    ? props.providers.find((item) => item.id === model.atlas_provider || item.atlas_provider === model.atlas_provider) ?? null
     : null;
   const hiddenModelIds = useMemo(() => new Set(modelCatalogPreferences?.hidden_ids ?? []), [modelCatalogPreferences]);
   const pinnedModelIds = useMemo(() => new Set(modelCatalogPreferences?.pinned_ids ?? []), [modelCatalogPreferences]);
@@ -156,27 +156,27 @@ export default function SettingsPage(props: SettingsPageProps) {
   const modelResults = useMemo(() => {
     const query = modelSearch.trim().toLocaleLowerCase();
     return orderedModels.filter((model) => {
-      const routedProvider = model.hermes_provider ? props.providers.find((item) =>
-        item.id === model.hermes_provider || item.hermes_provider === model.hermes_provider,
+      const routedProvider = model.atlas_provider ? props.providers.find((item) =>
+        item.id === model.atlas_provider || item.atlas_provider === model.atlas_provider,
       ) : undefined;
-      const usesProvider = Boolean(model.hermes_provider);
-      const savedRoute = model.base_url?.trim() ? true : routedProvider ? routedProvider.configured : !model.hermes_provider && props.apiKeyConfigured;
+      const usesProvider = Boolean(model.atlas_provider);
+      const savedRoute = model.base_url?.trim() ? true : routedProvider ? routedProvider.configured : !model.atlas_provider && props.apiKeyConfigured;
       const matchesFilter = modelFilter === 'all'
         || (modelFilter === 'selected' && model.id === props.selectedModel)
         || (modelFilter === 'provider' && usesProvider)
         || (modelFilter === 'gateway' && !usesProvider)
         || (modelFilter === 'configured' && savedRoute)
         || (modelFilter === 'unconfigured' && !savedRoute);
-      const matchesSearch = !query || [model.name, model.id, model.provider, model.hermes_provider, model.native_model, model.litellm_model]
+      const matchesSearch = !query || [model.name, model.id, model.provider, model.atlas_provider, model.native_model, model.litellm_model]
         .some((value) => typeof value === 'string' && value.toLocaleLowerCase().includes(query));
       const selectedHidden = model.id === props.selectedModel && hiddenModelIds.has(model.id);
       return selectedHidden || (!hiddenModelIds.has(model.id) && matchesFilter && matchesSearch);
     });
   }, [orderedModels, props.providers, props.selectedModel, props.apiKeyConfigured, modelSearch, modelFilter, hiddenModelIds]);
 
-  // The model entry this provider already has, if any; legacy gateway models (no hermes_provider) never match.
+  // The model entry this provider already has, if any; legacy gateway models (no atlas_provider) never match.
   const providerModel = provider
-    ? props.models.find((model) => Boolean(model.hermes_provider) && (model.provider === provider.id || model.hermes_provider === provider.hermes_provider)) ?? null
+    ? props.models.find((model) => Boolean(model.atlas_provider) && (model.provider === provider.id || model.atlas_provider === provider.atlas_provider)) ?? null
     : null;
   const editingModel = editingModelId ? props.models.find((model) => model.id === editingModelId) ?? null : null;
   const subagentSelectedModel = props.subagentDefaultModel || props.selectedModel;
@@ -333,7 +333,7 @@ export default function SettingsPage(props: SettingsPageProps) {
         const routeProvider = modelProvider(model);
         const availability = model.base_url?.trim() ? '已设置每模型地址'
           : routeProvider ? routeProvider.configured ? `${routeProvider.label}已保存密钥或地址` : `${routeProvider.label}未保存密钥或地址`
-            : model.hermes_provider ? '服务商状态未加载'
+            : model.atlas_provider ? '服务商状态未加载'
               : props.apiKeyConfigured ? '网关密钥已保存' : '网关密钥未配置（本机模型可能无需密钥）';
         const effortHint = Array.isArray(model.reasoning_efforts) && model.reasoning_efforts.length
           ? `Atlas 路由入口档位：${model.reasoning_efforts.join(' / ')}` : null;

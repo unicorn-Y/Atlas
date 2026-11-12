@@ -29,7 +29,12 @@ export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEven
     'computer.foreground_required', 'computer.foreground_resumed', 'computer.foreground_denied', 'computer.step', 'computer.frame',
     // X2 浏览器代理：交接确认与结果、面板地址同步、录制中的每一步（供 BrowserHandoffCard / BrowserRecorderPanel）。
     'browser.handoff_required', 'browser.handoff_resolved', 'browser.panel.sync', 'browser.step', 'browser.artifact',
-    'browser.vault_fill_denied', 'mcp.startup.progress', 'media.ocr.progress', 'canvas.update', 'component.push']);
+    'browser.vault_fill_denied', 'mcp.startup.progress', 'media.ocr.progress', 'canvas.update', 'component.push',
+    // Already rendered elsewhere but dropped here — a name missing from this set is a silent
+    // runtime drop, not a type error. Steer feedback (ConversationActivity:322) and the goal
+    // notices (timeline goal case) both used to be unreachable for exactly that reason.
+    'subtask.steered', 'subtask.steer_rejected', 'run.steer.rejected',
+    'goal.updated', 'goal.continuation', 'safety.reviewed', 'moa.references', 'run.context.warning']);
   known.add('process.notification');
   const base = { id: envelope.event_id, runId: envelope.run_id, sequence: envelope.sequence, timestamp: envelope.timestamp };
   // Office files and other generated documents: shown like any other artifact.

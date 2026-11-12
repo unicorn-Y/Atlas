@@ -8,7 +8,7 @@ type ModelCatalogEntry = {
   name: string;
   provider: string;
   category: string;
-  hermes_provider: string;
+  atlas_provider: string;
   custom: boolean;
   selected: boolean;
   hidden: boolean;
@@ -62,7 +62,7 @@ export default function ModelCatalogPreferencesPanel({ apiBaseUrl, onPreferences
       if (category && model.category !== category) return false;
       if (visibility === 'visible' && model.hidden) return false;
       if (visibility === 'hidden' && !model.hidden) return false;
-      return !needle || [model.name, model.id, model.provider, model.hermes_provider, model.category]
+      return !needle || [model.name, model.id, model.provider, model.atlas_provider, model.category]
         .some((value) => value.toLocaleLowerCase().includes(needle));
     });
   }, [catalog, category, provider, query, visibility]);

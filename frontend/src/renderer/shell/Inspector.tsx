@@ -273,6 +273,16 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
   const tokenLimit = typeof latestUsage?.context_limit === 'number' ? latestUsage.context_limit : 0;
   const tokenUsed = typeof latestUsage?.context_tokens === 'number' ? latestUsage.context_tokens : 0;
   const contextPercent = tokenLimit ? Math.min(100, Math.round(tokenUsed / tokenLimit * 100)) : 0;
+  // The kernel decides when to compact, so the panel reports its watermarks
+  // rather than a percentage someone guessed here. Before the first warning
+  // event there is nothing to show, and showing nothing is correct.
+  const watermark = [...(run?.events ?? [])].reverse().find((event) => event.type === 'run.context.warning')?.data as
+    { warning_tokens?: number; auto_compact_tokens?: number; blocking_tokens?: number } | undefined;
+  const pressure = tokenLimit > 0 && tokenUsed > 0
+    ? (watermark?.blocking_tokens && tokenUsed >= watermark.blocking_tokens ? 'critical'
+      : watermark?.auto_compact_tokens && tokenUsed >= watermark.auto_compact_tokens ? 'tight'
+      : watermark?.warning_tokens && tokenUsed >= watermark.warning_tokens ? 'filling' : 'roomy')
+    : null;
   const [gitRefresh, setGitRefresh] = useState(0);
   const refreshGit = () => { setGitRefresh((current) => current + 1); onWorktreeChanged(); };
   const gitRefreshKey = `${run?.id}:${run?.status}:${worktree?.branch}:${gitRefresh}`;
@@ -289,7 +299,13 @@ function ContextTab({ conversationTitle, modelName, run, tools, skills, activeSk
         {breakdown.categories.map((item) => <i key={item.id} title={`${item.label} ${item.tokens.toLocaleString()} tokens`}
           className="block h-full" style={{ width: `${tokenLimit ? Math.min(100, item.tokens / tokenLimit * 100) : 0}%`, background: CONTEXT_COLORS[item.id] ?? 'var(--brand)' }} />)}
       </div>
-      <p className="m-0 mb-2 text-[11.5px] text-fg-3">已用 {contextPercent}% · 剩余 {Math.max(0, tokenLimit - tokenUsed).toLocaleString()} tokens · 达到 80% 时提示使用 /compact</p>
+      <p className="m-0 mb-2 text-[11.5px] text-fg-3">
+        已用 {contextPercent}% · 剩余 {Math.max(0, tokenLimit - tokenUsed).toLocaleString()} tokens
+        {watermark?.auto_compact_tokens
+          ? ` · 到 ${watermark.auto_compact_tokens.toLocaleString()} tokens 时自动压缩`
+          : ' · 还没到压缩水位'}
+        {pressure === 'critical' ? ' · 已到硬上限，再压缩不动这一轮就会失败' : ''}
+      </p>
       <div className="grid gap-1.5">
         {breakdown.categories.map((item) => <div key={item.id} className="flex justify-between gap-3 text-[12.5px]">
           <span className="text-fg-3">{item.label}</span><span className="tabular-nums text-fg-2">{item.tokens.toLocaleString()} tokens</span>

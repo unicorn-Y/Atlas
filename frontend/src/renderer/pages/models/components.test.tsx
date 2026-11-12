@@ -7,7 +7,7 @@ import ProviderGrid from './ProviderGrid';
 import ReasoningStages from './ReasoningStages';
 
 const provider: ProviderState = {
-  id: 'deepseek', label: '深度求索', hermes_provider: 'deepseek', api_mode: 'openai',
+  id: 'deepseek', label: '深度求索', atlas_provider: 'deepseek', api_mode: 'openai',
   default_base_url: 'https://api.deepseek.com/v1', docs_url: null, notes: null,
   configured: true, base_url: null, key_count: 1,
   keys: [{ id: 'k_ab12cd', label: '主密钥', cooldown_until: Math.floor(Date.now() / 1000) + 3600, last_error: '429 too many requests', request_count: 7 }],
@@ -31,7 +31,7 @@ describe('model settings components', () => {
       id: 'deepseek/deepseek-v4.1-flash',
       litellm_model: 'deepseek/deepseek-v4.1-flash',
       provider: 'deepseek',
-      hermes_provider: 'deepseek',
+      atlas_provider: 'deepseek',
       native_model: 'deepseek-v4.1-flash',
       max_output_tokens: 8192,
       price: { input: 0.1, output: 0.2, cached_input: 0.01 },
@@ -40,7 +40,7 @@ describe('model settings components', () => {
   });
 
   it('builds an update patch that can switch capability flags off', () => {
-    const model: ModelInfo = { id: 'deepseek/deepseek-v4.1-flash', name: '深度求索', litellm_model: 'deepseek/deepseek-v4.1-flash', hermes_provider: 'deepseek' };
+    const model: ModelInfo = { id: 'deepseek/deepseek-v4.1-flash', name: '深度求索', litellm_model: 'deepseek/deepseek-v4.1-flash', atlas_provider: 'deepseek' };
     const patch = buildUpdatePatch(model, { ...values, capabilities: { ...values.capabilities, supports_tools: false } });
     expect(patch.litellm_model).toBe('deepseek/deepseek-v4.1-flash');
     expect(patch.base_url).toBeNull();

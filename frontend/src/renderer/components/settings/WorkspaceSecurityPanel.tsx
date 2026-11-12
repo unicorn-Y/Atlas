@@ -16,6 +16,38 @@ const permissionOptions: Array<{ value: PermissionMode; label: string; hint: str
   { value: 'read_only', label: '只读', hint: '只能查看，不能修改。' },
 ];
 
+/** A standing grant: one "always allow" the user handed the agent. */
+interface StandingGrant {
+  request_fingerprint?: string;
+  tool?: string;
+  workspace?: string;
+  scope?: string;
+  granted_at?: string;
+}
+
+interface PermissionsSnapshot {
+  count: number;
+  by_tool: Record<string, number>;
+  grants: StandingGrant[];
+}
+
+async function permissionsRequest(apiBaseUrl: string, path: string, method: 'GET' | 'POST', body?: unknown): Promise<PermissionsSnapshot> {
+  const baseUrl = apiBaseUrl.replace(/\/+$/, '');
+  const response = await fetch(`${baseUrl}/api/permissions${path}`, {
+    method,
+    ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  });
+  const text = await response.text();
+  let parsed: unknown;
+  try { parsed = text ? JSON.parse(text) as unknown : null; } catch { parsed = text; }
+  if (!response.ok) {
+    const detail = parsed && typeof parsed === 'object' && 'detail' in parsed ? String(parsed.detail) : '';
+    throw new Error(detail || `HTTP ${response.status}`);
+  }
+  return parsed as PermissionsSnapshot;
+}
+
+
 const fieldClass = 'w-full rounded-[9px] bg-sunken px-3 py-2 text-[13px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]';
 const pathInputClass = 'min-w-0 flex-1 rounded-[9px] bg-sunken px-3 py-2 text-[12px] text-fg outline-none shadow-[inset_0_0_0_1px_var(--line)] focus:shadow-[inset_0_0_0_1px_var(--brand)]';
 
@@ -63,6 +95,10 @@ export default function WorkspaceSecurityPanel({ apiBaseUrl, conversation, onCha
   const [allowedPathDraft, setAllowedPathDraft] = useState('');
   const [extraRootDraft, setExtraRootDraft] = useState('');
   const [pathError, setPathError] = useState('');
+  const [grants, setGrants] = useState<PermissionsSnapshot | null>(null);
+  const [grantsError, setGrantsError] = useState('');
+  const [grantsBusy, setGrantsBusy] = useState(false);
+  const [grantsNotice, setGrantsNotice] = useState('');
 
   useEffect(() => {
     let current = true;
@@ -117,6 +153,57 @@ export default function WorkspaceSecurityPanel({ apiBaseUrl, conversation, onCha
     });
     return () => { current = false; };
   }, [apiBaseUrl, remoteWorkspace, trustRefresh, workspace]);
+
+  // Standing grants are global, not per conversation: the "always allow" a user
+  // clicked yesterday still applies today, and nothing in the product could list
+  // or revoke it. Fetched once per panel open.
+  useEffect(() => {
+    let current = true;
+    setGrantsError('');
+    void permissionsRequest(apiBaseUrl, '', 'GET').then((snapshot) => {
+      if (current) setGrants(snapshot);
+    }).catch((error: unknown) => {
+      if (current) setGrantsError(error instanceof Error ? error.message : String(error));
+    });
+    return () => { current = false; };
+  }, [apiBaseUrl]);
+
+  const revokeGrant = async (grant: StandingGrant) => {
+    setGrantsBusy(true);
+    setGrantsError('');
+    setGrantsNotice('');
+    try {
+      // The API refuses an unfiltered revoke on purpose, so send the narrowest
+      // identity the grant actually carries.
+      const filter = grant.request_fingerprint
+        ? { request_fingerprint: grant.request_fingerprint }
+        : grant.tool
+          ? { tool: grant.tool }
+          : { workspace: grant.workspace };
+      const snapshot = await permissionsRequest(apiBaseUrl, '/revoke', 'POST', filter);
+      setGrants(snapshot);
+      setGrantsNotice(`已撤销 ${grant.tool || grant.workspace || '这条授权'} 的长期许可。`);
+    } catch (error) {
+      setGrantsError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setGrantsBusy(false);
+    }
+  };
+
+  const revokeAllGrants = async () => {
+    setGrantsBusy(true);
+    setGrantsError('');
+    setGrantsNotice('');
+    try {
+      const snapshot = await permissionsRequest(apiBaseUrl, '/clear', 'POST');
+      setGrants(snapshot);
+      setGrantsNotice('已清空所有长期授权；之后每一步都会重新询问。');
+    } catch (error) {
+      setGrantsError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setGrantsBusy(false);
+    }
+  };
 
   const externalExecutor = Boolean(conversation.executor && conversation.executor !== 'atlas');
   const dockerBlock = remoteWorkspace
@@ -312,6 +399,45 @@ export default function WorkspaceSecurityPanel({ apiBaseUrl, conversation, onCha
       {externalExecutor && <p className="m-0 text-[12px] leading-[1.55] text-fg-3">
         当前使用外部 Agent。外部 Agent 不经过 Atlas 的工具确认；选择任何非“完全访问”模式会按现有行为自动切回 Atlas。
       </p>}
+    </div>
+
+    <div className="grid gap-2.5 rounded-xl bg-sunken p-3.5 shadow-[inset_0_0_0_1px_var(--line)]">
+      <div className="flex items-start gap-2.5">
+        <ShieldCheck size={16} className="mt-0.5 shrink-0 text-fg-3" />
+        <div className="grid min-w-0 flex-1 gap-1">
+          <strong className="text-[13px] font-medium text-fg">
+            长期授权 <span className="font-normal text-fg-3">{grants ? `${grants.count} 条` : '读取中…'}</span>
+          </strong>
+          <p className="m-0 text-[12px] leading-[1.55] text-fg-3">
+            在确认卡上点“始终允许”会写入一条长期授权，对所有之后的工作区生效。这里能看到它们，也能单条撤销或全部清空；此前只能添加，无法查看和撤销。
+          </p>
+        </div>
+      </div>
+      {grantsError && <p className={styles.settingsError} role="alert">{grantsError}</p>}
+      {grants && grants.count > 0 && <>
+        <div className="grid gap-1.5">
+          {grants.grants.slice(0, 12).map((grant, index) => <div
+            key={`${grant.request_fingerprint || grant.tool || grant.workspace || index}`}
+            className="flex min-w-0 items-center gap-2 rounded-lg bg-card px-2.5 py-2 shadow-[inset_0_0_0_1px_var(--line)]">
+            <div className="grid min-w-0 flex-1 gap-0.5">
+              <span className="truncate text-[12px] text-fg" title={grant.scope || grant.tool}>{grant.tool || '未标注工具'}</span>
+              <span className="truncate text-[11px] text-fg-3" title={grant.workspace}>{grant.workspace || '所有工作区'}</span>
+            </div>
+            <Button type="button" variant="ghost" size="icon-sm" disabled={grantsBusy}
+              aria-label={`撤销 ${grant.tool || '这条授权'}`} title="撤销这条授权"
+              onClick={() => void revokeGrant(grant)}><X /></Button>
+          </div>)}
+          {grants.count > 12 && <p className="m-0 text-[11.5px] text-fg-3">还有 {grants.count - 12} 条未列出；清空会一并处理。</p>}
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[11.5px] text-fg-3">
+            {Object.entries(grants.by_tool).slice(0, 4).map(([tool, count]) => `${tool} × ${count}`).join('、')}
+          </span>
+          <Button type="button" variant="ghost" size="sm" disabled={grantsBusy} onClick={() => void revokeAllGrants()}>全部撤销</Button>
+        </div>
+      </>}
+      {grants && grants.count === 0 && <p className="m-0 text-[12px] text-fg-3">当前没有长期授权；每一步都会按上面的权限模式询问。</p>}
+      {grantsNotice && <p className="m-0 text-[12px] text-ok" role="status">{grantsNotice}</p>}
     </div>
 
     <div className="grid gap-2.5 rounded-xl bg-sunken p-3.5 shadow-[inset_0_0_0_1px_var(--line)]">

@@ -69,14 +69,14 @@ export default function UsagePanel({ username, onSaveUsername, apiBaseUrl = '', 
     let live = true;
     setProviderAccountLoading(true);
     setProviderAccountError(null);
-    const providerId = currentModel?.hermes_provider || currentModel?.provider || '';
+    const providerId = currentModel?.atlas_provider || currentModel?.provider || '';
     void api<{ providers: ProviderAccountUsage[] }>(apiBaseUrl,
       `/api/providers/account-usage${providerId ? `?provider_id=${encodeURIComponent(providerId)}` : ''}`)
       .then((value) => { if (live) setProviderAccounts(value.providers ?? []); })
       .catch((exc: unknown) => { if (live) setProviderAccountError(exc instanceof Error ? exc.message : String(exc)); })
       .finally(() => { if (live) setProviderAccountLoading(false); });
     return () => { live = false; };
-  }, [apiBaseUrl, currentModel?.provider, currentModel?.hermes_provider]);
+  }, [apiBaseUrl, currentModel?.provider, currentModel?.atlas_provider]);
 
   useEffect(() => {
     let live = true;

@@ -88,7 +88,7 @@ export type TimelineItem =
   | { kind: 'checks'; id: string; results: CheckResults }
   | { kind: 'cancelled'; id: string; reason?: string }
   /** One-line runtime notes: the model was swapped after errors, or Atlas went back to verify its edits. */
-  | { kind: 'notice'; id: string; tone: 'switch' | 'verify' | 'todo'; text: string }
+  | { kind: 'notice'; id: string; tone: 'switch' | 'verify' | 'todo' | 'goal'; text: string }
   /** LSP 在编辑后报的新问题：默认收成一行，可展开看明细。 */
   | { kind: 'lsp'; id: string; path: string; count: number; diagnostics: LspDiagnosticItem[] }
   /** /review 代码审查的结构化结论，由 ReviewFindingsCard 渲染；findings 为空即「没有发现问题」。 */
@@ -670,6 +670,34 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         }
         items.push({ kind: 'notice', id: event.id, tone: 'switch',
           text: String(data.message ?? data.detail ?? '模型遇到问题，正在尝试恢复并继续。') });
+        break;
+      }
+      // Goal loop: the judge's verdict after a turn, then the hand-off that keeps
+      // the run going. Both were emitted since the goal loop landed but the
+      // timeline had no case, so every verdict fell through to `default` and the
+      // user never learned why Atlas continued (or stopped).
+      case 'goal.updated': {
+        const message = String(data.message ?? data.reason ?? '').trim();
+        if (!message) break;
+        closeReply(); closeBlocks();
+        items.push({ kind: 'notice', id: event.id, tone: data.verdict === 'blocked' ? 'verify' : 'goal',
+          text: data.status === 'done' || data.verdict === 'done' ? `目标已达成：${message}` : message });
+        break;
+      }
+      case 'goal.continuation': {
+        closeReply(); closeBlocks();
+        items.push({ kind: 'notice', id: event.id, tone: 'goal',
+          text: `目标还没完成${data.reason ? `（${String(data.reason)}）` : ''}，Atlas 接着做` });
+        break;
+      }
+      // A steer that never reached the run. steer() returns true unconditionally, so
+      // without this notice a rejected message would vanish with no feedback at all.
+      case 'run.steer.rejected': {
+        closeReply(); closeBlocks();
+        items.push({ kind: 'notice', id: event.id, tone: 'verify',
+          text: data.reason === 'run_not_active' ? '这条消息没送到：任务已经不在运行了'
+            : data.reason === 'invalid_content' ? '这条消息没送到：内容是空的'
+              : `这条消息没送到${data.reason ? `（${String(data.reason)}）` : ''}` });
         break;
       }
       case 'rules.trust_required':

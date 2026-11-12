@@ -5,9 +5,10 @@ import { api } from '../../services/api';
 import { LibChangesView, PeopleView, TodayView } from './LibraryPages';
 import { MOCK_MEMLIB_ENABLED, mockMemlib, mockStats, type Episode, type Entry, type MemlibItem, type OpenResult, type Project, type ProjectSummary, type Stats } from './mockMemlib';
 import MemoryJourney from './MemoryJourney';
+import ConsolidateView from './ConsolidateView';
 import { useAtlasStore } from '../../store/useAtlasStore';
 
-type View = 'search' | 'timeline' | 'journey' | 'projects' | 'people' | 'me' | 'changes';
+type View = 'search' | 'timeline' | 'journey' | 'projects' | 'people' | 'me' | 'changes' | 'consolidate';
 type Props = { apiBaseUrl: string; connected: boolean; onToast: (text: string) => void };
 const SOURCES = [
   ['你说的', '你说的'], ['你改的', '你改的'], ['推测', '推测'], ['经历', '经历'], ['整理', '整理'], ['原对话', '原对话'],
@@ -18,6 +19,7 @@ const NAV: Array<{ id: View; title: string; icon: typeof Search }> = [
   { id: 'journey', title: '学习 Journey', icon: GitBranch },
   { id: 'projects', title: '项目', icon: FolderKanban }, { id: 'people', title: '人', icon: UserRound },
   { id: 'me', title: '关于你', icon: BookOpen }, { id: 'changes', title: '变动记录', icon: GitCompare },
+  { id: 'consolidate', title: '待确认的整理', icon: Sparkles },
 ];
 const KIND_QUERY = 'memory,raw';
 const today = () => new Date().toISOString().slice(0, 10);
@@ -264,7 +266,8 @@ export default function MemlibBrowser({ apiBaseUrl, connected, onToast }: Props)
   const renderContent = () => view === 'journey' ? <MemoryJourney apiBaseUrl={apiBaseUrl} connected={connected} onOpenRef={openDrawer} onToast={onToast} /> : view === 'search' ? renderSearch() : view === 'timeline' ? renderTimeline() : view === 'projects' ? renderProjects() : view === 'people'
     ? <PeopleView apiBaseUrl={apiBaseUrl} connected={connected || MOCK_MEMLIB_ENABLED} onToast={onToast} conversationId={conversationId} />
     : view === 'me' ? <TodayView apiBaseUrl={apiBaseUrl} connected={connected || MOCK_MEMLIB_ENABLED} onToast={onToast} conversationId={conversationId} />
-      : <LibChangesView apiBaseUrl={apiBaseUrl} connected={connected || MOCK_MEMLIB_ENABLED} onToast={onToast} sourceFilter={sources} conversationId={conversationId} />;
+      : view === 'consolidate' ? <ConsolidateView apiBaseUrl={apiBaseUrl} connected={connected} onToast={onToast} />
+        : <LibChangesView apiBaseUrl={apiBaseUrl} connected={connected || MOCK_MEMLIB_ENABLED} onToast={onToast} sourceFilter={sources} conversationId={conversationId} />;
 
   return <div className="memory-browser -mx-4 -mt-4 grid min-h-full grid-cols-1 border-t border-[var(--line)] lg:-mx-6 lg:-mt-6 lg:grid-cols-[220px_minmax(0,1fr)]">
     <aside className="flex min-h-0 flex-col border-b border-[var(--line)] bg-[var(--sunk)] p-3 lg:border-b-0 lg:border-r" aria-label="记忆分区">

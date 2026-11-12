@@ -343,7 +343,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
     queue: {}, queuePaused: {}, pendingSteers: {}, followUpMode: readFollowUpMode(), nextRunMode: 'act', pendingRunOverrides: null, answers: {},
     unread: [], subtaskUnread: readSubtaskUnread(), pinned: [], archived: [], runPrompts: {},
     profiles: [], recipes: [], customCommands: [], profileId: storageGet(PROFILE) ?? 'default',
-    reasoningEffort: (['minimal', 'low', 'medium', 'high'].includes(storageGet(REASONING) ?? '') ? storageGet(REASONING) : '') as ReasoningEffort | '',
+    reasoningEffort: (['off', 'minimal', 'low', 'medium', 'high'].includes(storageGet(REASONING) ?? '') ? storageGet(REASONING) : '') as ReasoningEffort | '',
     worktreeRequests: {},
     initOpen: false, initBusy: false, initApplying: false, initError: null, initProposal: null,
     fileOpenRequest: null,
@@ -1284,7 +1284,8 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   const workspace = typeof conversation?.workspace === 'string' && conversation.workspace ? conversation.workspace : undefined;
   const state = get();
   const worktree = state.worktreeRequests[conversationId];
-  const supportsEffort = Boolean(state.models.find((model) => model.id === state.model)?.supports_reasoning_effort);
+  const targetModelId = overrides?.model ?? state.conversationModels[run.conversationId] ?? state.model;
+  const supportsEffort = Boolean(state.models.find((model) => model.id === targetModelId)?.supports_reasoning_effort);
   const envByConversationKey = 'atlas.preference.session-env-by-conversation';
   let envByConversation: Record<string, Record<string, string>> = {};
   try {
@@ -1308,7 +1309,7 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   // gains an optional agent_id/group_id). The adapter's RunStartRequest type predates
   // W1, so the extra field is attached via an assertion at this one call site.
   const request = {
-    type: 'run.start', run_id: run.id, content, conversation_id: run.conversationId, model: overrides?.model ?? state.conversationModels[run.conversationId] ?? state.model, attachments, active_skills: state.activeSkills,
+    type: 'run.start', run_id: run.id, content, conversation_id: run.conversationId, model: targetModelId, attachments, active_skills: state.activeSkills,
     ...(storageGet('atlas.preference.daybreak') === 'true' ? { daybreak: true } : {}),
     ...(bypassPromptCache ? { bypass_prompt_cache: true } : {}),
     ...(item.messageSkills?.length ? { message_skills: item.messageSkills } : {}),

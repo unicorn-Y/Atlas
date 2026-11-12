@@ -96,7 +96,7 @@ export default function RecipeManagerPanel({ apiBaseUrl, models, providers, exte
 
   const selectedModelOptions = useMemo(() => {
     if (!draft?.provider_id) return models;
-    return models.filter((model) => model.provider === draft.provider_id || model.hermes_provider === draft.provider_id || model.hermes_provider === providers.find((provider) => provider.id === draft.provider_id)?.hermes_provider);
+    return models.filter((model) => model.provider === draft.provider_id || model.atlas_provider === draft.provider_id || model.atlas_provider === providers.find((provider) => provider.id === draft.provider_id)?.atlas_provider);
   }, [draft?.provider_id, models, providers]);
 
   const save = async (event: FormEvent) => {

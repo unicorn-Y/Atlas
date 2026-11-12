@@ -635,7 +635,7 @@ export const messages: Record<string, string> = {
   "配置会话压缩使用的辅助模型。": "Configure the auxiliary model used for session compression.",
   "压缩辅助模型": "Compression auxiliary model",
   "跟随当前模型": "Follow current model",
-  "默认使用当前模型；也可以为 Hermes 上下文压缩单独选一个已配置模型。": "Uses the current model by default; you can also choose a separately configured model for Hermes context compression.",
+  "默认使用当前模型；也可以为 Atlas 上下文压缩单独选一个已配置模型。": "Uses the current model by default; you can also choose a separately configured model for Atlas context compression.",
   "只影响这台电脑。": "Only affects this computer.",
   "置顶任务摘要": "Pinned task summary",
   "在长对话顶部显示首条目标和最近进度": "Show the initial goal and latest progress at the top of long conversations",
@@ -2240,7 +2240,7 @@ export const messages: Record<string, string> = {
   "隐藏": "Hide",
   "没有匹配的模型，请调整筛选条件。": "No matching models. Adjust the filter criteria.",
   "当前 Atlas 动态模型目录为空。": "The current Atlas dynamic model catalog is empty.",
-  "已保存。请重启 Atlas 后端；当前运行中的会话和 Hermes 辅助模型缓存不会即时更新。": "Saved. Please restart the Atlas backend; currently running sessions and the Hermes auxiliary model cache will not update immediately.",
+  "已保存。请重启 Atlas 后端；当前运行中的会话和 Atlas 辅助模型缓存不会即时更新。": "Saved. Please restart the Atlas backend; currently running sessions and the Atlas auxiliary model cache will not update immediately.",
   "模型网络设置": "Model network settings",
   "代理与 CA 只应用于 Atlas 的模型 HTTPX 请求，不会改写系统代理环境变量，也不会代理插件、更新或普通外联。设置保存在本机；代理地址凭据写入系统凭据库。保存后重启 Atlas 后端以重建主模型和辅助模型连接。": "The proxy and CA apply only to Atlas's model HTTPX requests. They do not rewrite system proxy environment variables, nor do they proxy plugins, updates, or general outbound connections. Settings are saved locally; proxy address credentials are written to the system credential store. After saving, restart the Atlas backend to rebuild the main model and auxiliary model connections.",
   "模型代理 URL": "Model proxy URL",
@@ -6904,7 +6904,7 @@ export const messages: Record<string, string> = {
   ,"该文件已导入；来源副本未写入或改动。": "This file was already imported; the source copy was not written or changed."
   ,"已导入 __U26_SLOT_0__ 条消息到会话 __U26_SLOT_1__。": "Imported __U26_SLOT_0__ messages into conversation __U26_SLOT_1__."
   ,"导入 JSONL 会话": "Import JSONL conversations"
-  ,"选择 Pi、Hermes 或 Atlas CLI（atlas --print --output-format jsonl）导出的 JSONL 文件。Atlas 只在内存中读取所选文件，不改动源文件；导入前会预览并允许调整字段映射。使用同一数据目录的 `atlas chat` 会话已经在 Atlas 会话列表中，无需重复迁移。": "Select a JSONL file exported by Pi, Hermes, or Atlas CLI (atlas --print --output-format jsonl). Atlas reads the selected file in memory without changing it; preview the messages and adjust field mappings before import. Sessions created by `atlas chat` with the same data directory already appear in Atlas and do not need to be imported again."
+  ,"选择 Pi、Atlas 或 Atlas CLI（atlas --print --output-format jsonl）导出的 JSONL 文件。Atlas 只在内存中读取所选文件，不改动源文件；导入前会预览并允许调整字段映射。使用同一数据目录的 `atlas chat` 会话已经在 Atlas 会话列表中，无需重复迁移。": "Select a JSONL file exported by Pi, Hermes, or Atlas CLI (atlas --print --output-format jsonl). Atlas reads the selected file in memory without changing it; preview the messages and adjust field mappings before import. Sessions created by `atlas chat` with the same data directory already appear in Atlas and do not need to be imported again."
   ,"选择 JSONL 会话文件": "Choose a JSONL conversation file"
   ,"文件超过 32 MiB 上限": "File exceeds the 32 MiB limit"
   ,"格式": "Format"

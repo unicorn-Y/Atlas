@@ -17,7 +17,7 @@ export interface ModelInfo {
   /** Reasoning efforts this model accepts, e.g. ["minimal","low","medium","high"]. */
   reasoning_efforts?: string[];
   /** Catalog provider id this model runs through; absent = legacy gateway behaviour. */
-  hermes_provider?: string;
+  atlas_provider?: string;
   /** Native model id without the LiteLLM prefix. */
   native_model?: string;
   base_url?: string | null;
@@ -58,7 +58,7 @@ export interface CustomModelRequest {
   /** Per million tokens, in the currency the user thinks in; enables cost estimates. */
   price?: { input?: number; output?: number; cached_input?: number };
   /** Catalog provider id this model runs through; absent = legacy gateway behaviour. */
-  hermes_provider?: string;
+  atlas_provider?: string;
   /** Native model id without the LiteLLM prefix. */
   native_model?: string;
   /** Per-model base URL override; null = follow the provider config or catalog default. */
@@ -72,7 +72,7 @@ export interface CustomModelUpdateRequest {
   base_url?: string | null;
   litellm_model?: string;
   native_model?: string | null;
-  hermes_provider?: string | null;
+  atlas_provider?: string | null;
   max_output_tokens?: number;
   price?: { input?: number; output?: number; cached_input?: number };
   capabilities?: ModelCapabilities;
@@ -83,7 +83,7 @@ export interface ProviderCatalogEntry {
   id: string;
   /** Chinese display name, e.g. 深度求索. */
   label: string;
-  hermes_provider: string;
+  atlas_provider: string;
   api_mode: 'openai' | 'anthropic_messages' | string;
   default_base_url: string;
   docs_url?: string | null;
@@ -309,7 +309,7 @@ export interface HookLog {
   source?: string;
 }
 
-/** A discovered plugin bundle (Claude Code format or Atlas/Hermes native). */
+/** A discovered plugin bundle (Claude Code format or Atlas native). */
 export interface PluginInfo {
   name: string;
   display_name?: string;
@@ -396,7 +396,7 @@ export interface PullRequestInfo {
   checks: Array<{ name: string; status: string; conclusion: string | null; url?: string | null }>;
 }
 
-export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+export type ReasoningEffort = 'off' | 'minimal' | 'low' | 'medium' | 'high';
 
 export interface AgentProfile {
   id: string;

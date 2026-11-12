@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState } from 'react';
-import { BookMarked, Check, ClipboardCopy, FileCheck2, FileWarning, SearchCheck, ChevronRight, CircleDashed, LoaderCircle, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Users, X } from 'lucide-react';
+import { BookMarked, Check, ClipboardCopy, FileCheck2, FileWarning, SearchCheck, ChevronRight, CircleDashed, LoaderCircle, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Target, Users, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
 import { Button } from '../ui/Button';
@@ -85,7 +85,7 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     case 'group': return <WorkerGroup key={item.id} item={item} />;
     case 'checks': return <Checks key={item.id} item={item} />;
     case 'notice': return <div key={item.id} className="my-3 flex items-center gap-2 text-[12.5px] text-fg-2">
-      {item.tone === 'switch' ? <Repeat2 size={13} className="shrink-0 text-brand" /> : item.tone === 'todo' ? <ListChecks size={13} className="shrink-0 text-brand" /> : <FlaskConical size={13} className="shrink-0 text-brand" />}
+      {item.tone === 'switch' ? <Repeat2 size={13} className="shrink-0 text-brand" /> : item.tone === 'goal' ? <Target size={13} className="shrink-0 text-brand" /> : item.tone === 'todo' ? <ListChecks size={13} className="shrink-0 text-brand" /> : <FlaskConical size={13} className="shrink-0 text-brand" />}
       <span>{item.text}</span>
     </div>;
     case 'lsp': return <LspNotice key={item.id} item={item} />;

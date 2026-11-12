@@ -7,7 +7,7 @@ export type AgentEventType =
   | 'tool.preparing' | 'tool.started' | 'tool.output' | 'tool.completed' | 'approval.required' | 'approval.responded'
   | 'artifact.updated' | 'run.paused' | 'run.resumed'
   | 'run.plan.updated'
-  | 'run.steered' | 'run.usage' | 'run.todos' | 'rules.loaded' | 'run.context.sources' | 'input.required' | 'run.plan.proposed'
+  | 'run.steered' | 'run.steer.rejected' | 'run.usage' | 'run.todos' | 'rules.loaded' | 'run.context.sources' | 'input.required' | 'run.plan.proposed'
   | 'subtask.started' | 'subtask.progress' | 'subtask.output' | 'subtask.completed' | 'subtask.group_completed' | 'subtask.background_completed'
   | 'subtask.steered' | 'subtask.steer_rejected'
   | 'check.results'
@@ -20,7 +20,9 @@ export type AgentEventType =
   | 'lsp.diagnostics' | 'review.findings'
   | 'computer.foreground_required' | 'computer.foreground_resumed' | 'computer.foreground_denied' | 'computer.step' | 'computer.frame'
   | 'browser.handoff_required' | 'browser.handoff_resolved' | 'browser.panel.sync' | 'browser.step' | 'browser.artifact'
-  | 'browser.vault_fill_denied';
+  | 'browser.vault_fill_denied'
+  | 'goal.updated' | 'goal.continuation'
+  | 'safety.reviewed' | 'moa.references' | 'run.context.warning';
 
 export interface AgentEvent {
   id: string;

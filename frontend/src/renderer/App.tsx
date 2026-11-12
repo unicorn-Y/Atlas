@@ -2,7 +2,7 @@ import { lazy, startTransition, Suspense, useCallback, useEffect, useMemo, useRe
 import { useShallow } from 'zustand/react/shallow';
 import {
   AudioLines, Bell, BookMarked, Brain, Copy, Cpu, Keyboard, Monitor, Radio, Smartphone, Wrench, Sparkles, Laptop, Webhook, Server, ShieldCheck, ShieldAlert as ShieldAsk, Lock, Download, FolderOpen, GitBranch, GitBranchPlus, MessagesSquare, UserCog, Image as ImageIcon, ListChecks, MessageCircle, MessageSquareX, Undo2, Minus, Moon, PanelRight, Pause, Pencil, Play, Plus, Puzzle, RotateCcw, Settings,
-  SlidersHorizontal, Square, Sun, Zap, FileCog, Volume2, X, Gauge, Search, Pin, HardDrive, File as FileIcon,
+  SlidersHorizontal, Square, Sun, Zap, FileCog, Volume2, X, Gauge, Search, Pin, HardDrive, File as FileIcon, ScanSearch,
 } from 'lucide-react';
 import { backend, useAtlasStore } from './store/useAtlasStore';
 import type { ConversationMessage as HistoryMessage, RunFile } from '@atlas/backend-adapter';
@@ -84,6 +84,7 @@ const ImportPanel = lazy(() => import('./components/ImportPanel'));
 const McpServersPanel = lazy(() => import('./components/settings/McpServersPanel'));
 const ConfigTransferPanel = lazy(() => import('./components/settings/ConfigTransferPanel'));
 const DiagnosticsPanel = lazy(() => import('./components/settings/DiagnosticsPanel'));
+const IntrospectionPanel = lazy(() => import('./components/settings/IntrospectionPanel'));
 const RecipeManagerPanel = lazy(() => import('./components/settings/RecipeManagerPanel'));
 const ExtensionPackagesPanel = lazy(() => import('./components/settings/ExtensionPackagesPanel'));
 const ExtensionCatalogPanel = lazy(() => import('./components/settings/ExtensionCatalogPanel'));
@@ -134,9 +135,12 @@ import { Tip, TooltipProvider } from './ui/Tooltip';
 import { cn } from './ui/cn';
 import { cleanSearchSnippet, rankSearchHits, searchHitRoleLabel } from './services/searchHits';
 import ComputerLivePreview from './components/x2/ComputerLivePreview';
+import ErrorBoundary from './components/ErrorBoundary';
+import BlockLoading from './components/BlockLoading';
+import Toaster, { useToastQueue, type ToastLevel } from './components/Toaster';
 const ScreenRecorderDialog = lazy(() => import('./components/ScreenRecorderDialog'));
 
-type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'mobile' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage' | 'memories' | 'teach' | 'secrets' | 'pets';
+type SheetPane = 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'mobile' | 'channels' | 'devices' | 'localModels' | 'shortcuts' | 'appearance' | 'u4' | 'plugins' | 'mcp' | 'skills' | 'recipes' | 'extensions' | 'transfer' | 'diagnostics' | 'introspection' | 'security' | 'commands' | 'platform' | 'integrations' | 'network' | 'expert' | 'mainConfig' | 'storage' | 'memories' | 'teach' | 'secrets' | 'pets';
 type MemoryMarkerDraft = { text: string; path: string; session?: string; ref?: string };
 
 const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
@@ -169,6 +173,7 @@ const SETTINGS_NAV: Array<[SheetPane, string, typeof Bell, string]> = [
   ['extensions', '扩展目录与来源', Puzzle, 'extension package registry catalog 扩展 包 目录 来源'],
   ['transfer', '配置导入导出', Download, 'settings config export import backup 配置 导入 导出 备份'],
   ['diagnostics', '诊断', ShieldCheck, 'diagnostics health config errors 诊断 健康 配置 错误'],
+  ['introspection', '运行时自省', ScanSearch, 'introspect inspect provider 自省 内省 服务图谱 接口面 工具面 事件契约 上下文压力 就绪度 运行时 只读查询 遮挡路由 shadowed'],
   ['storage', '存储与保留', HardDrive, 'storage disk cache retention data clear 存储 占用 保留期限 清理'],
   ['platform', '平台集成', Laptop, 'desktop platform global shortcut hotkey always on top VS Code JetBrains deep link'],
   ['integrations', '任务与集成', GitBranchPlus, 'github pull request Slack Linear cloud tasks automation'],
@@ -189,7 +194,7 @@ const PERMISSION: Record<PermissionMode, { label: string; hint: string }> = {
   plan: { label: '计划模式', hint: '只读探索并先提交计划，批准后再执行' },
   read_only: { label: '只读', hint: '只能查看，不能改任何东西' },
 };
-const EFFORT_LABEL: Record<string, string> = { minimal: '最低', low: '低', medium: '中', high: '高' };
+const EFFORT_LABEL: Record<string, string> = { off: '关闭', minimal: '最低', low: '低', medium: '中', high: '高' };
 const PROVIDER_USAGE_URL: Record<string, { label: string; url: string }> = {
   anthropic: { label: 'Anthropic 用量与账单', url: 'https://platform.claude.com/usage' },
   openai: { label: 'OpenAI 用量与账单', url: 'https://platform.openai.com/usage' },
@@ -228,7 +233,7 @@ const readStatusBarPreferences = (): StatusBarPreferences => {
   return Object.fromEntries(STATUS_BAR_KEYS.map((key) => [key, typeof saved[key] === 'boolean' ? saved[key] : true])) as StatusBarPreferences;
 };
 
-export default function App() {
+function AppContent() {
   // 窄选择器：只订阅这个界面真正要读的数据字段；动作函数恒定，从 getState 合入。
   // conversationMessages 仍在列（朗读/撤回/复制要用），但重列表的渲染已交给 MessageThread 自己的窄订阅。
   const storeData = useAtlasStore(useShallow((state) => ({
@@ -385,7 +390,16 @@ export default function App() {
   const [homeGitStatus, setHomeGitStatus] = useState<{ isGit: boolean; changed: number; languages: string[] }>({ isGit: false, changed: 0, languages: [] });
   const [homeMode, setHomeMode] = useState('chat');
   const [createPrompt, setCreatePrompt] = useState('');
-  const [toast, setToast] = useState('');
+  // Toasts live in a small queue (see components/Toaster.tsx) so several can show
+  // at once; `setToast` keeps the old single-string signature working for callers.
+  const toasts = useToastQueue();
+  const setToast = useCallback(
+    (message: string, level: ToastLevel = 'info') => {
+      if (message) toasts.push(message, level);
+      else toasts.clear();
+    },
+    [toasts.push, toasts.clear],
+  );
   const [batteryStatus, setBatteryStatus] = useState<{ level: number | null; charging: boolean | null } | null>(null);
   const setTuiFullscreenMode = (enabled: boolean) => {
     setTuiFullscreen(enabled); setPref('tui-fullscreen', String(enabled));
@@ -811,7 +825,7 @@ export default function App() {
     }, 300);
     return () => window.clearTimeout(timer);
   }, [input, store.activeConversationId]);
-  const notify = useCallback((text: string) => setToast(text), []);
+  const notify = useCallback((text: string, level: ToastLevel = 'info') => setToast(text, level), [setToast]);
   const saveUsername = (value: string) => {
     const next = value.trim() || 'User';
     setPref('username', next);
@@ -1061,11 +1075,8 @@ export default function App() {
     }
   }, [activeEvents, activeRun, voiceOutput, voiceOpen, speechRate, speechVoice, speechVoices]);
 
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast(''), 2200);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
+  // Toast auto-dismiss (2200ms, dedupe, cap) is owned by useToastQueue now.
+
 
   useEffect(() => {
     const addContextFile = (event: Event) => {
@@ -2834,11 +2845,11 @@ export default function App() {
         </MenuItem>)}
       </MenuContent>
     </Menu>}
-    {activeConversation && <Suspense fallback={null}><RunSetupMenu conversation={activeConversation} workspace={workspacePath}
+    {activeConversation && <ErrorBoundary label="运行设置" compact><Suspense fallback={<BlockLoading label="运行设置" />}><RunSetupMenu conversation={activeConversation} workspace={workspacePath}
       onChange={(patch) => store.setConversationSettings(activeConversation.id, patch)}
       onPickFolder={async () => window.atlasDesktop?.selectDirectory
         ? window.atlasDesktop.selectDirectory(workspacePath || undefined)
-        : window.prompt('允许访问的目录（完整路径）', '')?.trim() || null} /></Suspense>}
+        : window.prompt('允许访问的目录（完整路径）', '')?.trim() || null} /></Suspense></ErrorBoundary>}
     {store.profiles.length > 0 && <Menu>
       <Tip label={`角色：${profileName}`}><MenuTrigger asChild>
         <button type="button" aria-label={`角色：${profileName}`} className={cn('inline-flex h-7 items-center gap-1.5 rounded-[9px] px-2 text-[12px] hover:bg-hover', store.profileId !== 'default' ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
@@ -2853,14 +2864,16 @@ export default function App() {
       </MenuContent>
     </Menu>}
     {Boolean(currentModel?.supports_reasoning_effort) && <Menu>
-      <Tip label={store.reasoningEffort ? `推理：${EFFORT_LABEL[store.reasoningEffort]}` : '推理档位：模型默认'}><MenuTrigger asChild>
-        <button type="button" aria-label="推理档位" className={cn('inline-flex h-7 items-center gap-1.5 rounded-[9px] px-2 text-[12px] hover:bg-hover', store.reasoningEffort ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
-          <Brain size={15} />{store.reasoningEffort && EFFORT_LABEL[store.reasoningEffort]}
+      <Tip label={store.reasoningEffort ? `思考推理：${EFFORT_LABEL[store.reasoningEffort] || store.reasoningEffort}` : '推理档位：模型默认'}><MenuTrigger asChild>
+        <button type="button" aria-label="推理档位" className={cn('inline-flex h-7 items-center gap-1.5 rounded-[9px] px-2 text-[12px] hover:bg-hover', store.reasoningEffort && store.reasoningEffort !== 'off' ? 'bg-brand-soft text-fg' : 'text-fg-3 hover:text-fg')}>
+          <Brain size={15} />{store.reasoningEffort ? EFFORT_LABEL[store.reasoningEffort] : '推理'}
         </button>
       </MenuTrigger></Tip>
       <MenuContent side="top">
-        <MenuLabel>推理档位</MenuLabel>
+        <MenuLabel>推理 / 深度思考</MenuLabel>
         <MenuItem checked={!store.reasoningEffort} onSelect={() => store.setReasoningEffort('')}>模型默认</MenuItem>
+        <MenuItem checked={store.reasoningEffort === 'off'} onSelect={() => store.setReasoningEffort('off')}>关闭思考 (off)</MenuItem>
+        <MenuSeparator />
         {(['minimal', 'low', 'medium', 'high'] as const).map((effort) => <MenuItem key={effort} checked={store.reasoningEffort === effort} onSelect={() => store.setReasoningEffort(effort)}>{EFFORT_LABEL[effort]}</MenuItem>)}
       </MenuContent>
     </Menu>}
@@ -2938,7 +2951,7 @@ export default function App() {
     && (['rate_limit', 'billing'].includes(String(event.data.category)) || event.data.reason === 'rate_limit' || /rate.?limit|quota|额度|限流|429|余额/i.test(String(event.data.detail ?? ''))))?.data;
   const rateRetrySeconds = typeof rateFailure?.retry_after_seconds === 'number' ? Math.max(0, Math.ceil(rateFailure.retry_after_seconds)) : 30;
   const selectedProvider = store.models.find((item) => item.id === store.model)?.provider?.toLowerCase()
-    || store.models.find((item) => item.id === store.model)?.hermes_provider?.toLowerCase() || '';
+    || store.models.find((item) => item.id === store.model)?.atlas_provider?.toLowerCase() || '';
   const usagePage = PROVIDER_USAGE_URL[selectedProvider];
   const errorNote = (store.error || rateFailure) && <div role="alert" className="anim-fade mt-3 flex items-start justify-between gap-3 rounded-xl bg-danger-soft px-4 py-2.5 text-[13px] text-danger">
     <div className="min-w-0">
@@ -3257,9 +3270,9 @@ export default function App() {
           {tuiFullscreen ? <div className="flex min-w-0 flex-1 items-center gap-3"><span className="text-[12px] text-fg-3">全屏渲染</span><span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{activeConversation?.title ?? '当前对话'}</span><button type="button" className="no-drag rounded-lg px-3 py-1.5 text-[12px] text-fg-2 hover:bg-hover" onClick={() => setTuiFullscreenMode(false)}>退出全屏 · Esc</button></div> : focusMode ? <div className="flex min-w-0 flex-1 items-center gap-3"><span className="text-[12px] text-fg-3">专注视图</span><span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{activeConversation?.title ?? '当前对话'}</span><button type="button" className="no-drag rounded-lg px-3 py-1.5 text-[12px] text-fg-2 hover:bg-hover" onClick={() => { setFocusMode(false); setPref('focus-mode', 'false'); }}>退出专注视图 · Ctrl+Shift+O</button></div> : <>
           <div className={cn('flex min-w-0 items-center gap-3', showTabs && 'flex-1')}>
             {showTabs
-              ? <Suspense fallback={null}><TabStrip tabs={tabs} conversations={store.conversations} activeId={store.activeConversationId} running={runningConversations} onSelect={openConversation} onClose={closeTab} /></Suspense>
+              ? <ErrorBoundary label="标签栏" compact><Suspense fallback={<BlockLoading label="标签栏" />}><TabStrip tabs={tabs} conversations={store.conversations} activeId={store.activeConversationId} running={runningConversations} onSelect={openConversation} onClose={closeTab} /></Suspense></ErrorBoundary>
               : pageTitle && <span className="truncate text-[13.5px] text-fg-2">{pageTitle}</span>}
-            {view === 'chat' && <Suspense fallback={null}><ForkTree conversations={store.conversations} activeId={store.activeConversationId} onOpen={openConversation} running={runningConversations} waiting={waitingConversations} /></Suspense>}
+            {view === 'chat' && <ErrorBoundary label="分支树" compact><Suspense fallback={<BlockLoading label="分支树" />}><ForkTree conversations={store.conversations} activeId={store.activeConversationId} onOpen={openConversation} running={runningConversations} waiting={waitingConversations} /></Suspense></ErrorBoundary>}
             {view === 'chat' && activeConversation && <Tip label="查看本会话最近自动回顾"><button type="button" aria-label="查看最近回顾" onClick={() => void openRecentRecaps()} className="no-drag rounded-md px-1.5 py-0.5 text-[11.5px] text-fg-3 hover:bg-hover hover:text-fg">最近回顾</button></Tip>}
             {connection}
           </div>
@@ -3311,7 +3324,7 @@ export default function App() {
           正在加载{pendingComponents.map((name) => ({ mcp: 'MCP', plugins: '插件', plugin: '插件', memory: '记忆', lsp: '代码服务', scheduler: '计划任务' }[name.toLowerCase()] ?? name)).join('、')}；可以先发送消息。
         </div>}
 
-        <Suspense fallback={<div aria-label="正在加载页面" className="flex flex-1 flex-col gap-3 p-6" aria-busy="true"><div className="h-5 w-36 animate-pulse rounded bg-hover" /><div className="h-24 animate-pulse rounded-xl bg-sunken" /><div className="h-10 animate-pulse rounded-lg bg-sunken" /></div>}>
+        <ErrorBoundary label="当前页面"><Suspense fallback={<div aria-label="正在加载页面" className="flex flex-1 flex-col gap-3 p-6" aria-busy="true"><div className="h-5 w-36 animate-pulse rounded bg-hover" /><div className="h-24 animate-pulse rounded-xl bg-sunken" /><div className="h-10 animate-pulse rounded-lg bg-sunken" /></div>}>
         {view === 'home' && <HomeView username={username} notice={errorNote} recent={store.conversations.slice(0, 3)} onOpen={openConversation} onSuggest={suggest} suggestions={homeSuggestions}
           composer={<><Composer {...composerBase} variant="hero" onSubmit={() => void submit(true)}
             placeholder={homeMode === 'image' ? '描述你想要的画面，Atlas 会带你去图像工作台' : '描述一件事，Atlas 会把它做完'}
@@ -3319,7 +3332,7 @@ export default function App() {
             <div className="mt-1.5 flex min-w-0 items-center gap-0.5 overflow-x-auto px-1 text-[11.5px] text-fg-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div></>} />}
 
         {view === 'chat' && <div className="flex min-h-0 flex-1">
-          <Suspense fallback={null}><PaneWorkspace besideId={focusedLayout ? '' : besideId} activeId={store.activeConversationId} conversations={store.conversations} username={username}
+          <ErrorBoundary label="会话窗格"><Suspense fallback={<BlockLoading variant="panel" label="会话窗格" />}><PaneWorkspace besideId={focusedLayout ? '' : besideId} activeId={store.activeConversationId} conversations={store.conversations} username={username}
             onSwitch={(conversation) => { const previous = store.activeConversationId; void openConversation(conversation); setBesideId(previous); }}
             onRemove={(id) => { if (besideId === id) setBesideId(''); }}>
           <div className={`relative flex min-w-0 flex-1 flex-col ${paneCount > 0 && mainPaneFocused ? 'ring-1 ring-inset ring-brand/60' : ''}`} onPointerDown={() => setMainPaneFocused(true)}>
@@ -3349,7 +3362,7 @@ export default function App() {
               footerNote={<>{retryNote}{errorNote}</>} />
             <div className="px-8 pb-5">
               <div className={cn('mx-auto w-[min(760px,100%)]', focusedLayout && 'pt-2')}>
-                {!focusedLayout && <Suspense fallback={null}>{queueStrip}{todoStrip}</Suspense>}
+                {!focusedLayout && <ErrorBoundary label="面板" compact><Suspense fallback={<BlockLoading label="面板" />}>{queueStrip}{todoStrip}</Suspense></ErrorBoundary>}
                 {!focusedLayout && activeRun && !runDone && <div className="mb-2 flex items-center gap-2 rounded-lg border border-brand/20 bg-brand-soft px-3 py-2 text-[11.5px] text-fg-2" role="status">
                   <span className="size-1.5 animate-pulse rounded-full bg-brand" />
                   {activeRun && /^\s*\/review\b/i.test(store.runPrompts[activeRun.id]?.content ?? '') ? 'Reviewing · 正在审查' : '运行中 · 新消息可排队或转为优先任务'}
@@ -3374,7 +3387,7 @@ export default function App() {
                 </div>
               </div>
             </div>
-          </PaneWorkspace></Suspense>
+          </PaneWorkspace></Suspense></ErrorBoundary>
           {inspectorOpen && !focusedLayout && <Inspector tab={inspectorTab} onTab={setInspectorTab} onClose={() => { setFullScreenDiff(false); toggleInspector(false); }} fullScreenDiff={fullScreenDiff} onFullScreenDiffChange={setFullScreenDiff} run={activeRun} canvasEvents={canvasEvents} artifacts={activeArtifacts}
             conversationTitle={activeConversation?.title} modelName={modelName} tools={store.tools} skills={store.skills} activeSkills={store.activeSkills} capabilities={store.capabilities}
             apiBaseUrl={store.apiBaseUrl} connected={store.connected} onToast={notify}
@@ -3405,11 +3418,11 @@ export default function App() {
         {view === 'user-page' && (userSidebarPages.find((page) => page.id === selectedUserSidebarPageId)
           ? <UserSidebarPage page={userSidebarPages.find((page) => page.id === selectedUserSidebarPageId)!} onChange={updateUserSidebarPage} />
           : <section className="mx-auto grid h-full max-w-3xl place-content-center p-8 text-center"><h1 className="text-xl font-semibold text-heading">选择或创建自定义页面</h1><p className="text-sm text-fg-3">页面会保存在本机，并显示在侧栏“我的页面”区域。</p></section>)}
-        </Suspense>
+        </Suspense></ErrorBoundary>
       </main>
     </div>
 
-    <Suspense fallback={<div aria-label="正在加载设置" className="fixed inset-0 z-50 grid place-items-center bg-black/20 text-[12px] text-fg-3" aria-busy="true">正在加载设置…</div>}>
+    <ErrorBoundary label="设置"><Suspense fallback={<div aria-label="正在加载设置" className="fixed inset-0 z-50 grid place-items-center bg-black/20 text-[12px] text-fg-3" aria-busy="true">正在加载设置…</div>}>
     <Dialog open={Boolean(sheet)} onOpenChange={(open) => { if (!open) { setSheet(null); setSettingsQuery(''); } }} label="设置"
       className="grid h-[min(720px,calc(100vh-48px))] w-[min(980px,calc(100vw-32px))] grid-cols-[210px_minmax(0,1fr)]">
       <nav aria-label="设置分类" className="overflow-y-auto bg-sunken px-2.5 py-5 shadow-[inset_-1px_0_0_var(--line)]">
@@ -3451,7 +3464,7 @@ export default function App() {
               <option value="">跟随当前模型</option>
               {store.models.map((model) => <option key={model.id} value={model.id}>{model.name || model.id}</option>)}
             </select>
-            <small className="mt-1 block text-fg-3">默认使用当前模型；也可以为 Hermes 上下文压缩单独选一个已配置模型。</small>
+            <small className="mt-1 block text-fg-3">默认使用当前模型；也可以为 Atlas 上下文压缩单独选一个已配置模型。</small>
           </label>
           {store.error && <p role="alert" className="mt-3 text-[13px] text-danger">{store.error}</p>}
           <div className="mt-8 border-t border-line pt-6">
@@ -3501,7 +3514,7 @@ export default function App() {
         </section>}
         {sheet === 'profiles' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">角色</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">把指令、模型、技能、工具和模式打包成一个角色，在输入框里一键切换。</p>
           <div className="grid gap-8"><ProfilesPanel profiles={store.profiles} models={store.models} skills={store.skills} onChanged={() => void store.reloadProfiles()} /><OutputStyleSettingsPanel apiBaseUrl={store.apiBaseUrl} /></div></section>}
-        {sheet === 'tools' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">脚本工具</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">用一个小脚本给 Atlas 加新能力。</p><div className="mb-5"><Suspense fallback={<div className="text-[11px] text-fg-3">正在加载工具策略…</div>}><ToolSearchModePanel apiBaseUrl={store.apiBaseUrl} /></Suspense></div><ScriptToolsPanel /></section>}
+        {sheet === 'tools' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">脚本工具</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">用一个小脚本给 Atlas 加新能力。</p><div className="mb-5"><ErrorBoundary label="工具策略" compact><Suspense fallback={<div className="text-[11px] text-fg-3">正在加载工具策略…</div>}><ToolSearchModePanel apiBaseUrl={store.apiBaseUrl} /></Suspense></ErrorBoundary></div><ScriptToolsPanel /></section>}
         {sheet === 'telegram' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">手机远程（Telegram）</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">不在电脑前时，用手机给 Atlas 布置任务、看结果、批准操作。</p><TelegramPanel /></section>}
         {sheet === 'mobile' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">移动入口</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">使用 Atlas 移动 Web 或 Telegram。Atlas 原生 App 尚无已发布安装包。</p><MobileEntryPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} onOpenTelegram={() => setSheet('telegram')} /></section>}
         {sheet === 'channels' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">Gateway 与渠道账号</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">配置当前已注册渠道的账号和密钥；消息进来后交给哪个 Agent，在 Agents → Channels 里绑定。</p><ChannelsSettings apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
@@ -3518,7 +3531,8 @@ export default function App() {
         {sheet === 'extensions' && <div className="grid gap-8"><ExtensionCatalogPanel apiBaseUrl={store.apiBaseUrl} /><ExtensionPackagesPanel apiBaseUrl={store.apiBaseUrl} /></div>}
         {sheet === 'transfer' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">配置导入导出</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">转移允许携带的本地偏好；密钥、地址和路径不会进入导出文件。</p><ConfigTransferPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'diagnostics' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">本机诊断</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">查看配置来源、告警历史、运行时调试和后台任务。密钥值会隐藏。</p><DiagnosticsPanel apiBaseUrl={store.apiBaseUrl} workspacePath={typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : ''} /></section>}
-        {sheet === 'security' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">工作区安全与会话设置</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理当前对话后续运行的权限、Docker 隔离、模型和凭据。</p>{activeConversation ? <><WorkspaceSecurityPanel apiBaseUrl={store.apiBaseUrl} conversation={activeConversation} onChange={(patch) => store.setConversationSettings(activeConversation.id, patch)} /><Suspense fallback={<div className="text-[11px] text-fg-3">正在加载会话模型设置…</div>}><ConversationModelSettings apiBaseUrl={store.apiBaseUrl} conversationId={activeConversation.id} onToast={notify} /></Suspense></> : <div className="rounded-xl bg-sunken p-4 text-[13px] text-fg-3">先打开一个对话，再配置其工作区权限、模型与凭据。</div>}</section>}
+        {sheet === 'introspection' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">运行时自省</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">向正在运行的 Atlas 提只读问题：服务接线、接口遮挡、工具与事件的真实形状、上下文压力、模型与办公组件就绪度。</p><ErrorBoundary label="运行时自省" compact><Suspense fallback={<div className="text-[11px] text-fg-3">正在加载自省面板…</div>}><IntrospectionPanel apiBaseUrl={store.apiBaseUrl} /></Suspense></ErrorBoundary></section>}
+        {sheet === 'security' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">工作区安全与会话设置</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理当前对话后续运行的权限、Docker 隔离、模型和凭据。</p>{activeConversation ? <><WorkspaceSecurityPanel apiBaseUrl={store.apiBaseUrl} conversation={activeConversation} onChange={(patch) => store.setConversationSettings(activeConversation.id, patch)} /><ErrorBoundary label="会话模型" compact><Suspense fallback={<div className="text-[11px] text-fg-3">正在加载会话模型设置…</div>}><ConversationModelSettings apiBaseUrl={store.apiBaseUrl} conversationId={activeConversation.id} onToast={notify} /></Suspense></ErrorBoundary></> : <div className="rounded-xl bg-sunken p-4 text-[13px] text-fg-3">先打开一个对话，再配置其工作区权限、模型与凭据。</div>}</section>}
         {sheet === 'memories' && (activeConversation ? <ConversationMemoryPanel apiBaseUrl={store.apiBaseUrl} conversationId={activeConversation.id} /> : <p className="m-0 rounded-xl bg-sunken p-4 text-[13px] text-fg-3">先打开一个对话，再设置该对话的记忆读取与生成。</p>)}
         {sheet === 'teach' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">桌面操作教学</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">演示一次操作，校正步骤、试运行，再保存为本机技能。</p><DesktopTeachPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'secrets' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">密钥库</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">管理本机通用凭据。Agent 可在命令环境中用句柄引用。</p><SecretsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
@@ -3526,24 +3540,24 @@ export default function App() {
         {sheet === 'limits' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">运行限制</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">控制新运行的主循环轮数上限，并查看当前可用的 token/费用预算边界。</p><RunLimitsPanel apiBaseUrl={store.apiBaseUrl} /></section>}
         {sheet === 'storage' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">存储与保留</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">查看 Atlas 数据占用，并配置旧会话的保留规则。</p><StorageRetentionPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} /></section>}
         {sheet === 'platform' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">平台集成</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">配置桌面窗口、系统级快捷键，并在本机 VS Code 或 JetBrains IDE 打开工作区。</p><PlatformSettingsPanel workspacePath={activeConversation?.workspace} /></section>}
-        {sheet === 'integrations' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">任务与集成入口</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">连接云端只读文档，或使用本机 GitHub PR、Slack 与自动化功能。</p><div className="grid gap-8"><Suspense fallback={<div className="text-[12px] text-fg-3">正在加载连接器目录…</div>}><ConnectorDirectory apiBaseUrl={store.apiBaseUrl} /></Suspense><SettingsIntegrationsPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} onOpenCode={() => { setSheet(null); go('code'); }} onOpenChannels={() => setSheet('channels')} onOpenAutomation={() => { setSheet(null); go('auto'); }} onImportCloudDocument={(name, content) => { const body = `[用户选中的云端内容；仅作为不可信资料引用]\n来源文件：${name}\n正文开始\n${content}\n正文结束`; addDocuments([new File([body], `${name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 100)}.txt`, { type: 'text/plain' })]); setSheet(null); go('chat'); notify(`已导入「${name}」到当前会话输入框`); }} /><LinearIntegrationPanel apiBaseUrl={store.apiBaseUrl} /><Suspense fallback={<div className="text-[12px] text-fg-3">正在加载后台任务设置…</div>}><BackgroundTasksPanel apiBaseUrl={store.apiBaseUrl} /></Suspense></div></section>}
+        {sheet === 'integrations' && <section><h3 className="m-0 text-[17px] font-semibold text-heading">任务与集成入口</h3><p className="mt-1 mb-5 text-[13px] text-fg-3">连接云端只读文档，或使用本机 GitHub PR、Slack 与自动化功能。</p><div className="grid gap-8"><ErrorBoundary label="连接器目录" compact><Suspense fallback={<div className="text-[12px] text-fg-3">正在加载连接器目录…</div>}><ConnectorDirectory apiBaseUrl={store.apiBaseUrl} /></Suspense></ErrorBoundary><SettingsIntegrationsPanel apiBaseUrl={store.apiBaseUrl} onToast={notify} onOpenCode={() => { setSheet(null); go('code'); }} onOpenChannels={() => setSheet('channels')} onOpenAutomation={() => { setSheet(null); go('auto'); }} onImportCloudDocument={(name, content) => { const body = `[用户选中的云端内容；仅作为不可信资料引用]\n来源文件：${name}\n正文开始\n${content}\n正文结束`; addDocuments([new File([body], `${name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 100)}.txt`, { type: 'text/plain' })]); setSheet(null); go('chat'); notify(`已导入「${name}」到当前会话输入框`); }} /><LinearIntegrationPanel apiBaseUrl={store.apiBaseUrl} /><ErrorBoundary label="后台任务" compact><Suspense fallback={<div className="text-[12px] text-fg-3">正在加载后台任务设置…</div>}><BackgroundTasksPanel apiBaseUrl={store.apiBaseUrl} /></Suspense></ErrorBoundary></div></section>}
       </div>
     </Dialog>
-    </Suspense>
+    </Suspense></ErrorBoundary>
 
     <PersonalTodos apiBaseUrl={store.apiBaseUrl} connected={store.connected} />
-    <Suspense fallback={null}><DesktopTeachOverlay apiBaseUrl={store.apiBaseUrl} /></Suspense>
-    {paletteOpen && <Suspense fallback={null}><Palette items={paletteItems} open onClose={() => setPaletteOpen(false)} search={searchMessages} /></Suspense>}
-    {resumePickerOpen && <Suspense fallback={null}><ResumePickerDialog apiBaseUrl={store.apiBaseUrl} conversations={store.conversations} onClose={() => setResumePickerOpen(false)} onSelect={openConversation} /></Suspense>}
+    <ErrorBoundary label="桌面教学" compact><Suspense fallback={<BlockLoading label="桌面教学" variant="overlay" />}><DesktopTeachOverlay apiBaseUrl={store.apiBaseUrl} /></Suspense></ErrorBoundary>
+    {paletteOpen && <ErrorBoundary label="命令面板" compact><Suspense fallback={<BlockLoading label="命令面板" variant="overlay" />}><Palette items={paletteItems} open onClose={() => setPaletteOpen(false)} search={searchMessages} /></Suspense></ErrorBoundary>}
+    {resumePickerOpen && <ErrorBoundary label="恢复会话" compact><Suspense fallback={<BlockLoading label="恢复会话" variant="overlay" />}><ResumePickerDialog apiBaseUrl={store.apiBaseUrl} conversations={store.conversations} onClose={() => setResumePickerOpen(false)} onSelect={openConversation} /></Suspense></ErrorBoundary>}
     {transcriptOpen && <TranscriptDialog conversationId={store.activeConversationId} messages={threadMessages} events={activeEvents} onClose={() => setTranscriptOpen(false)} />}
     {keymapOpen && <KeymapDialog onClose={() => setKeymapOpen(false)} />}
     {whichKeyOpen && <div role="dialog" aria-label="快捷键前缀提示" className="fixed inset-x-4 bottom-5 z-[100] mx-auto max-w-2xl rounded-xl border border-line bg-panel p-3 shadow-xl">
       <div className="mb-2 flex items-center justify-between"><b className="text-[12.5px] text-fg">Ctrl+Alt+Space · 可用快捷键</b><span className="text-[11px] text-fg-3">按提示中的键执行 · Esc 关闭</span></div>
       <div className="flex flex-wrap gap-1.5">{whichKeyItems.map((item) => <span key={`${item.action}:${item.combo}`} className="inline-flex items-center gap-2 rounded-lg bg-sunken px-2 py-1 text-[11.5px] text-fg-2"><kbd className="font-mono text-fg">{item.combo}</kbd>{item.label}</span>)}</div>
     </div>}
-    {fallbackOpen && <Suspense fallback={null}><FallbackModelsDialog apiBaseUrl={store.apiBaseUrl} currentModel={store.model} onClose={() => setFallbackOpen(false)} onToast={notify} /></Suspense>}
+    {fallbackOpen && <ErrorBoundary label="备用模型" compact><Suspense fallback={<BlockLoading label="备用模型" variant="overlay" />}><FallbackModelsDialog apiBaseUrl={store.apiBaseUrl} currentModel={store.model} onClose={() => setFallbackOpen(false)} onToast={notify} /></Suspense></ErrorBoundary>}
 
-    {voiceOpen && <Suspense fallback={null}><VoiceOverlay
+    {voiceOpen && <ErrorBoundary label="语音" compact><Suspense fallback={<BlockLoading label="语音" variant="overlay" />}><VoiceOverlay
       apiBaseUrl={store.apiBaseUrl}
       onClose={(toChat) => { setVoiceOpen(false); if (toChat) go('chat'); }}
       onSend={(text) => { if (view !== 'chat') go('chat'); void store.sendMessage(text); }}
@@ -3554,17 +3568,17 @@ export default function App() {
       speechVoice={speechVoice}
       speechVoices={speechVoices}
       onSpeechVoiceChange={(value) => { setSpeechVoice(value); setPref('speech-voice', value); }}
-    /></Suspense>}
+    /></Suspense></ErrorBoundary>}
 
-    {remoteOpen && <Suspense fallback={null}><RemoteFolderDialog open onClose={() => setRemoteOpen(false)} current={workspacePath}
+    {remoteOpen && <ErrorBoundary label="远程目录" compact><Suspense fallback={<BlockLoading label="远程目录" variant="overlay" />}><RemoteFolderDialog open onClose={() => setRemoteOpen(false)} current={workspacePath}
       onChoose={(workspace) => { void (async () => {
         const conversationId = useAtlasStore.getState().activeConversationId;
         if (conversationId) store.setWorkspace(conversationId, workspace);
         else store.setDraftWorkspace(workspace);
         setToast(`工作目录：${workspace}`);
-      })(); }} /></Suspense>}
-    {store.initOpen && <Suspense fallback={null}><InitDialog onToast={notify} /></Suspense>}
-    {onboardingOpen && <Suspense fallback={null}><OnboardingDialog open onClose={closeOnboarding} username={username}
+      })(); }} /></Suspense></ErrorBoundary>}
+    {store.initOpen && <ErrorBoundary label="启动引导" compact><Suspense fallback={<BlockLoading label="启动引导" variant="overlay" />}><InitDialog onToast={notify} /></Suspense></ErrorBoundary>}
+    {onboardingOpen && <ErrorBoundary label="新手引导" compact><Suspense fallback={<BlockLoading label="新手引导" variant="overlay" />}><OnboardingDialog open onClose={closeOnboarding} username={username}
       onUsername={(value) => { setPref('username', value); setUsername(value); }}
       defaultWorkspace={defaultWorkspace} onDefaultWorkspace={(path) => { setPref('default-workspace', path); setDefaultWorkspace(path); }}
       onTry={(text) => {
@@ -3572,13 +3586,13 @@ export default function App() {
         if (store.activeConversationId) skipDraftRestoreRef.current = true;
         store.beginConversationDraft(defaultWorkspace || null);
         writeDraft('', text); setInput(text);
-      }} /></Suspense>}
-    <Suspense fallback={null}>{featureLessonsOpen && <FeatureLessons open onClose={() => setFeatureLessonsOpen(false)} />}</Suspense>
-    {recipesOpen && <Suspense fallback={null}><RecipesDialog open onClose={() => setRecipesOpen(false)} recipes={store.recipes}
-      onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} /></Suspense>}
-    {workflowManagerOpen && <Suspense fallback={null}><WorkflowManagerDialog apiBaseUrl={store.apiBaseUrl} open onClose={() => setWorkflowManagerOpen(false)}
-      onRun={(goal) => { void startDynamicWorkflow(goal).catch((error) => setToast(`工作流启动失败：${error instanceof Error ? error.message : String(error)}`)); }} onToast={notify} /></Suspense>}
-    {ideManagerOpen && <Suspense fallback={null}><IDEManagerDialog open onClose={() => setIdeManagerOpen(false)} apiBaseUrl={store.apiBaseUrl} onToast={notify}
+      }} /></Suspense></ErrorBoundary>}
+    <ErrorBoundary label="功能速览" compact><Suspense fallback={<BlockLoading label="功能速览" variant="overlay" />}>{featureLessonsOpen && <FeatureLessons open onClose={() => setFeatureLessonsOpen(false)} />}</Suspense></ErrorBoundary>
+    {recipesOpen && <ErrorBoundary label="配方" compact><Suspense fallback={<BlockLoading label="配方" variant="overlay" />}><RecipesDialog open onClose={() => setRecipesOpen(false)} recipes={store.recipes}
+      onRun={(id, params) => { go('chat'); void store.runRecipe(id, params); }} onDelete={(id) => void store.deleteRecipe(id)} /></Suspense></ErrorBoundary>}
+    {workflowManagerOpen && <ErrorBoundary label="工作流" compact><Suspense fallback={<BlockLoading label="工作流" variant="overlay" />}><WorkflowManagerDialog apiBaseUrl={store.apiBaseUrl} open onClose={() => setWorkflowManagerOpen(false)}
+      onRun={(goal) => { void startDynamicWorkflow(goal).catch((error) => setToast(`工作流启动失败：${error instanceof Error ? error.message : String(error)}`)); }} onToast={notify} /></Suspense></ErrorBoundary>}
+    {ideManagerOpen && <ErrorBoundary label="编辑器" compact><Suspense fallback={<BlockLoading label="编辑器" variant="overlay" />}><IDEManagerDialog open onClose={() => setIdeManagerOpen(false)} apiBaseUrl={store.apiBaseUrl} onToast={notify}
       workspacePath={typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : ''}
       onOpenWorkspace={() => {
         const workspace = typeof activeConversation?.workspace === 'string' ? activeConversation.workspace : '';
@@ -3586,7 +3600,7 @@ export default function App() {
         if (workspace.startsWith('ssh://')) { notify('远程目录不能从本机外部编辑器打开'); return; }
         void window.atlasDesktop?.openPath?.(workspace).then((result) => notify(result === 'opened' || result === 'revealed' ? '已请求系统打开工作目录' : `无法打开工作目录：${result}`))
           .catch((error) => notify(`无法打开工作目录：${error instanceof Error ? error.message : String(error)}`));
-      }} /></Suspense>}
+      }} /></Suspense></ErrorBoundary>}
     <Dialog open={shareDialogOpen} onOpenChange={(open) => { if (!shareBusy) setShareDialogOpen(open); }} label="创建自托管会话分享" className="w-[min(620px,92vw)] bg-panel p-5 shadow-xl">
       <h2 className="m-0 text-[16px] font-semibold text-heading">自托管会话分享</h2>
       <p className="mt-2 mb-4 text-[12.5px] leading-relaxed text-fg-3">填写接收者可访问的 Atlas 地址或反向代理地址。公开分享任何持有链接的人都能查看；设置口令后，页面会先验证口令。分享内容是脱敏后的只读快照，保留时间到期后自动失效。</p>
@@ -3663,7 +3677,7 @@ export default function App() {
       <p className="mt-3 mb-0 text-[11px] text-fg-3">语法：单行 `# 记忆内容` 或 `#记住：记忆内容`；后续非空行属于同一条，空行开始新段。代码围栏中的 # 不触发；行首写 `\#` 表示普通文本。</p>
       <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" disabled={memoryMarkerSaving} onClick={dismissMemoryMarkerReview}>仅发送，不保存</Button><Button variant="primary" disabled={memoryMarkerSaving || !memoryMarkerDrafts?.length || memoryMarkerDrafts.some((item) => !item.text.trim())} onClick={() => void saveMemoryMarkerDrafts()}>{memoryMarkerSaving ? '正在保存…' : '确认保存记忆'}</Button></div>
     </Dialog>
-    {(side.open || sideChatWindow) && <Suspense fallback={null}><SideChat open onClose={() => { setSide({ open: false }); if (sideChatWindow) window.close(); }} conversationId={side.blank ? undefined : activeConversation?.id} blank={side.blank || (!activeConversation && !sideChatWindow)} sourceContext={(store.conversationMessages[activeConversation?.id ?? ''] ?? []).map((message) => `${message.role}: ${message.content}`).join('\n\n').slice(-200_000)} model={store.model} initialQuestion={side.question || sideChatQuestion} /></Suspense>}
+    {(side.open || sideChatWindow) && <ErrorBoundary label="侧边对话" compact><Suspense fallback={<BlockLoading label="侧边对话" variant="overlay" />}><SideChat open onClose={() => { setSide({ open: false }); if (sideChatWindow) window.close(); }} conversationId={side.blank ? undefined : activeConversation?.id} blank={side.blank || (!activeConversation && !sideChatWindow)} sourceContext={(store.conversationMessages[activeConversation?.id ?? ''] ?? []).map((message) => `${message.role}: ${message.content}`).join('\n\n').slice(-200_000)} model={store.model} initialQuestion={side.question || sideChatQuestion} /></Suspense></ErrorBoundary>}
     <Dialog open={schedulePromptOpen} onOpenChange={setSchedulePromptOpen} label="安排插话" className="w-[min(480px,92vw)] bg-panel p-5 shadow-xl">
       <h2 className="m-0 text-[16px] font-semibold text-heading">这条消息怎么交给正在运行的任务？</h2>
       <p className="mt-2 mb-4 text-[13px] text-fg-3">Atlas 会按文本初步识别意图；请确认执行时机。{/(刚才|上一步|改成|修改|更正|补充|不要|改为)/.test(input) ? '这句话看起来像对当前任务的修正。' : '这句话看起来可能是一个后续任务。'}</p>
@@ -3673,10 +3687,10 @@ export default function App() {
         <Button variant="ghost" onClick={() => setSchedulePromptOpen(false)}>继续编辑</Button>
       </div>
     </Dialog>
-    {ultraplan && <Suspense fallback={null}><UltraplanPanel open goal={ultraplan.goal}
+    {ultraplan && <ErrorBoundary label="高级计划" compact><Suspense fallback={<BlockLoading label="高级计划" variant="overlay" />}><UltraplanPanel open goal={ultraplan.goal}
       apiBaseUrl={store.apiBaseUrl} workspace={ultraplan.workspace}
       conversationId={ultraplan.conversationId} model={store.model} onClose={() => setUltraplan(null)} onToast={notify}
-      onOpenArtifact={(path, title) => { setUltraplanArtifact({ id: `ultraplan-${path}`, runId: '', type: 'file', name: `高级计划：${ultraplan.title}`, path, summary: title, createdAt: new Date().toISOString() }); setInspectorOpen(true); setInspectorTab('artifacts'); }} /></Suspense>}
+      onOpenArtifact={(path, title) => { setUltraplanArtifact({ id: `ultraplan-${path}`, runId: '', type: 'file', name: `高级计划：${ultraplan.title}`, path, summary: title, createdAt: new Date().toISOString() }); setInspectorOpen(true); setInspectorTab('artifacts'); }} /></Suspense></ErrorBoundary>}
 
     <Dialog open={scrollSpeedOpen} onOpenChange={setScrollSpeedOpen} label="滚轮速度调节" className="w-[min(480px,92vw)] bg-panel p-5 shadow-xl">
       <h2 className="m-0 text-[16px] font-semibold text-heading">对话滚轮速度</h2>
@@ -3706,12 +3720,25 @@ export default function App() {
     </Dialog>
     {recapViewerOpen && <div role="dialog" aria-modal="true" aria-label="最近自动回顾" className="fixed inset-0 z-[90] grid place-items-center bg-black/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setRecapViewerOpen(false); }}><section className="card-surface flex max-h-[75vh] w-full max-w-2xl flex-col gap-3 rounded-2xl p-5 shadow-xl"><header className="flex items-center gap-2"><h2 className="m-0 flex-1 text-[16px] font-semibold text-heading">最近自动回顾 · {activeConversation?.title ?? '当前会话'}</h2><button type="button" aria-label="关闭最近回顾" className="btn ghost" onClick={() => setRecapViewerOpen(false)}>关闭</button></header><div className="min-h-0 flex-1 space-y-3 overflow-auto">{recentRecaps.map((recap) => <article key={recap.run_id} className="rounded-xl border border-line bg-sunken p-3"><div className="mb-2 flex items-center gap-2 text-[11px] text-fg-3"><span>运行 {recap.run_id.slice(0, 8)}</span><time>{new Date(recap.created_at).toLocaleString()}</time></div><div className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-fg-2">{recap.summary}</div></article>)}{!recentRecaps.length && <p role="status" className="m-0 p-6 text-center text-[12px] text-fg-3">这个会话还没有自动回顾。可在外观与语音设置中开启“每轮自动回顾”。</p>}</div></section></div>}
 
-    {view !== 'chat' && view !== 'home' && <Suspense fallback={null}><ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} /></Suspense>}
-    <Suspense fallback={null}><SettingsProposalCards apiBaseUrl={store.apiBaseUrl} onModel={(model) => void store.selectModel(model)} onToast={notify} currentModel={store.model} modelName={(id) => store.models.find((model) => model.id === id)?.name ?? id} /></Suspense>
+    {view !== 'chat' && view !== 'home' && <ErrorBoundary label="专家模式" compact><Suspense fallback={<BlockLoading label="专家模式" />}><ExpertModeBadge apiBaseUrl={store.apiBaseUrl} onOpen={() => setSheet('expert')} /></Suspense></ErrorBoundary>}
+    <ErrorBoundary label="模型建议" compact><Suspense fallback={<BlockLoading label="模型建议" />}><SettingsProposalCards apiBaseUrl={store.apiBaseUrl} onModel={(model) => void store.selectModel(model)} onToast={notify} currentModel={store.model} modelName={(id) => store.models.find((model) => model.id === id)?.name ?? id} /></Suspense></ErrorBoundary>
     <DiagnosticsFloatingOverlay apiBaseUrl={store.apiBaseUrl} />
-    {screenRecorderOpen && <Suspense fallback={null}><ScreenRecorderDialog open onClose={() => setScreenRecorderOpen(false)} onToast={notify} onAttach={(file) => setFiles((current) => [...current, file])} /></Suspense>}
-    {toast && <div role="status" className="pop anim-pop fixed bottom-7 left-1/2 z-[80] -translate-x-1/2 rounded-xl px-4 py-2.5 text-[13.5px] text-fg">{toast}</div>}
+    {screenRecorderOpen && <ErrorBoundary label="录屏" compact><Suspense fallback={<BlockLoading label="录屏" variant="overlay" />}><ScreenRecorderDialog open onClose={() => setScreenRecorderOpen(false)} onToast={notify} onAttach={(file) => setFiles((current) => [...current, file])} /></Suspense></ErrorBoundary>}
+    <Toaster items={toasts.items} onDismiss={toasts.dismiss} />
   </TooltipProvider>;
+}
+
+/**
+ * Root wrapper: everything renders inside one boundary, so an unexpected render
+ * error shows a recoverable card instead of a white screen. `App` stays the
+ * default export (and the only importer, main.tsx, is untouched).
+ */
+export default function App() {
+  return (
+    <ErrorBoundary label="应用" className="grid h-full place-items-center p-6">
+      <AppContent />
+    </ErrorBoundary>
+  );
 }
 
 function TranscriptDialog({ conversationId, messages, events, onClose }: {

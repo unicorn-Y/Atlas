@@ -56,7 +56,7 @@ export default function NetworkSettingsPanel({ apiBaseUrl }: { apiBaseUrl: strin
       setProxyUrl('');
       setClearProxy(false);
       setCaBundlePath(updated.ca_bundle_path);
-      setMessage('已保存。请重启 Atlas 后端；当前运行中的会话和 Hermes 辅助模型缓存不会即时更新。');
+      setMessage('已保存。请重启 Atlas 后端；当前运行中的会话和 Atlas 辅助模型缓存不会即时更新。');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {

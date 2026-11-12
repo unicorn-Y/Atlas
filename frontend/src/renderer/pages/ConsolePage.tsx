@@ -533,6 +533,8 @@ export function PluginsPanel({ apiBaseUrl }: { apiBaseUrl: string }) {
               {plugin.enabled ? '停用' : '启用'}
             </button>
             <button className={styles.quietButton} onClick={() => void post(`/api/plugins/${encodeURIComponent(plugin.name)}/update`)} disabled={busy}>更新</button>
+            <button className={styles.quietButton} title="改了插件文件后点这里，不用重启应用"
+              onClick={() => void post(`/api/plugins/${encodeURIComponent(plugin.name)}/reload`, {}, `已重载 ${plugin.name}`)} disabled={busy}>重载</button>
             <button className={styles.quietButton} style={confirmRemove === plugin.name ? { color: 'var(--danger)' } : undefined}
               onClick={() => {
                 if (confirmRemove !== plugin.name) { setConfirmRemove(plugin.name); return; }

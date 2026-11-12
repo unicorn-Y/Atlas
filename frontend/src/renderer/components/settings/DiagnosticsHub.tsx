@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import LocalMaintenancePanel from './LocalMaintenancePanel';
+import CapabilityPanel from './CapabilityPanel';
+import RunReplayPanel from './RunReplayPanel';
+import ToolTracePanel from './ToolTracePanel';
+import ModelRoutesPanel from './ModelRoutesPanel';
+import PlanSimulatePanel from './PlanSimulatePanel';
 
 type SourceRow = { key: string; value: unknown; sources: Array<{ source: string; value: unknown; active: boolean }> };
 type AlertRow = { id: string; category: string; title: string; detail: string; target: string; read: boolean; created_at: string };
 type TaskRow = { id: string; kind: string; name: string; status: string; stoppable?: boolean; cpu_percent?: number | null; memory_bytes?: number | null; model?: string; duration_ms?: number; input_tokens?: number; output_tokens?: number; cached_tokens?: number; recent_tools?: Array<{ name: string; duration_ms: number; running?: boolean }> };
 
 export default function DiagnosticsHub({ apiBaseUrl, workspacePath = '' }: { apiBaseUrl: string; workspacePath?: string }) {
-  const [tab, setTab] = useState<'sources' | 'alerts' | 'debug' | 'tasks' | 'maintenance'>('sources');
+  const [tab, setTab] = useState<'sources' | 'alerts' | 'debug' | 'tasks' | 'maintenance' | 'capabilities' | 'replay' | 'tools' | 'routes' | 'simulate'>('sources');
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
@@ -28,16 +33,21 @@ export default function DiagnosticsHub({ apiBaseUrl, workspacePath = '' }: { api
     } catch (exc) { setError(exc instanceof Error ? exc.message : String(exc)); }
   }, [apiBaseUrl, workspacePath]);
   useEffect(() => { void refresh(); const timer = window.setInterval(() => { if (tab === 'debug' || tab === 'tasks') void refresh(); }, 1500); return () => window.clearInterval(timer); }, [refresh, tab]);
-  useEffect(() => { const select = (event: Event) => { const next = (event as CustomEvent<string>).detail; if (next === 'sources' || next === 'alerts' || next === 'debug' || next === 'tasks' || next === 'maintenance') setTab(next); }; window.addEventListener('atlas:diagnostics-tab', select); return () => window.removeEventListener('atlas:diagnostics-tab', select); }, []);
+  useEffect(() => { const select = (event: Event) => { const next = (event as CustomEvent<string>).detail; if (next === 'sources' || next === 'alerts' || next === 'debug' || next === 'tasks' || next === 'maintenance' || next === 'capabilities' || next === 'replay' || next === 'tools' || next === 'routes' || next === 'simulate') setTab(next); }; window.addEventListener('atlas:diagnostics-tab', select); return () => window.removeEventListener('atlas:diagnostics-tab', select); }, []);
   const markRead = async (id: string) => { await api(apiBaseUrl, `/api/diagnostics/alerts/${encodeURIComponent(id)}/read`, { method: 'POST' }); await refresh(); };
   const stop = async (id: string) => { await api(apiBaseUrl, `/api/diagnostics/tasks/${encodeURIComponent(id)}/stop`, { method: 'POST' }); await refresh(); };
-  const tabs = [['sources', '配置来源树'], ['alerts', `告警中心${unread ? ` (${unread})` : ''}`], ['debug', '实时调试'], ['tasks', '任务管理器'], ['maintenance', '日志与存储维护']] as const;
+  const tabs = [['sources', '配置来源树'], ['alerts', `告警中心${unread ? ` (${unread})` : ''}`], ['capabilities', '能力体检'], ['tools', '工具调用追踪'], ['routes', '模型路由'], ['simulate', '发送前预演'], ['replay', '运行回放'], ['debug', '实时调试'], ['tasks', '任务管理器'], ['maintenance', '日志与存储维护']] as const;
   return <section className="mt-5 rounded-xl border border-line bg-surface p-4" aria-label="状态与诊断中心">
     <h3 className="m-0 mb-2 text-[14px] font-semibold text-heading">状态与诊断中心</h3>
     <nav className="mb-3 flex flex-wrap gap-1 border-b border-line pb-2" aria-label="诊断工具">
       {tabs.map(([id, label]) => <button key={id} type="button" onClick={() => { setTab(id); void refresh(); }} className={`rounded-md px-2.5 py-1.5 text-[12px] ${tab === id ? 'bg-hover text-fg' : 'text-fg-3 hover:text-fg'}`}>{label}</button>)}
     </nav>
     {error && <p role="alert" className="text-danger">读取诊断数据失败：{error}</p>}
+    {tab === 'capabilities' && <CapabilityPanel apiBaseUrl={apiBaseUrl}/>}
+    {tab === 'tools' && <ToolTracePanel apiBaseUrl={apiBaseUrl}/>}
+    {tab === 'routes' && <ModelRoutesPanel apiBaseUrl={apiBaseUrl}/>}
+    {tab === 'simulate' && <PlanSimulatePanel apiBaseUrl={apiBaseUrl}/>}
+    {tab === 'replay' && <RunReplayPanel apiBaseUrl={apiBaseUrl}/>}
     {tab === 'sources' && <>
       <p className="text-[11.5px] text-fg-3">展示本机配置文件中的值及覆盖顺序。敏感值已隐藏；项目 .atlas/ 和命令行覆盖会在工作区/启动参数来源中标注。</p>
       <ul className="grid max-h-80 gap-2 overflow-auto">{sources.map((row) => <li key={row.key} className="rounded-lg bg-sunken p-2 text-[11.5px]"><strong>{row.key}</strong><div>生效值：{String(row.value)}</div>{row.sources.map((source) => <div key={source.source} className={source.active ? 'text-brand' : 'text-fg-3'}>{source.active ? '✓' : '↳'} {source.source}：{String(source.value)}{!source.active && '（被覆盖）'}</div>)}</li>)}</ul>
