@@ -159,3 +159,66 @@ frontend/electron-runtime/
 
 # Memory library: personal data, its own git repo (docs/memory/PLAN-V1.md)
 /data/memory/
+
+# LoCoMo-Refined 评测数据集（2.7MB，不入库）
+.eval-data/
+
+# 运行时/派生数据：模型缓存、网页抓取缓存、迁移前手工备份、逆向研究产物。
+# 这些是本地生成的，体积大（合计约 1 GB）、不可重建性存疑，从不属于源代码。
+data/cache/
+_backup_pre_merge/
+_research/
+
+# 一次性探针脚本与它们的日志（tasks/_w1_*、tasks/_w1*.log 等）。
+# 真正要留的结论在 docs/ 和 taskbooks 里，这些是当时调试的中间产物。
+tasks/_w*
+tasks/*.log
+tasks/*.txt
+
+# 本地工作目录：嵌入模型缓存、临时验证脚本与截图、运行产物、手工落盘的演示文件。
+# 都是可重建或一次性的，提交进来只会变成下一个人要清理的噪声。
+/cache/
+/tmp/
+/runs/
+/_shots/
+/_audit/
+data/artifacts/
+data/tmp/
+data/runtime/
+_tmp_oapi.json
+_merge_engine.py
+cur.png
+atlas-frontend-v4.html
+
+# core/ 根目录下的临时探针输出（all.txt/gg.txt/r1..r5.txt 这类）
+core/*.txt
+core/probe_draft.py
+core/.atlas/
+core/_shots/
+
+# 配色/布局设计稿的静态原型与截图（无代码引用，属于本地探索）
+/design/
+
+# 真实配置：含明文 api_key / web.keys.bocha。只有 config/atlas.example.toml 入库。
+# data/config/ 是运行时覆盖配置，历史上被误放在 data/ 下且从未忽略。
+config/atlas.toml
+data/config/
+
+# 用户记忆：真实数据，独立 git 库或纯本地副本，均不入库。
+/memory/
+data/data/
+
+# data/ 下的运行时状态与本地二进制产物（sqlite、诊断快照、启动脚本、探测音视频）
+data/*.sqlite3
+data/*.sqlite3-wal
+data/*.sqlite3-shm
+data/diagnostics.sqlite3
+data/diagnostic-alerts.json
+data/whatsnew-cache.json
+data/cdp-shot.png
+data/tts_probe.wav
+data/user-settings.json.pre-v2.bak
+data/start-atlas*.bat
+data/_p*.py
+data/_probe*.py
+data/workbench/
