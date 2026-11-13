@@ -15,8 +15,10 @@ import asyncio
 import base64
 import codecs
 import copy
+import contextlib
 import glob as glob_module
 import functools
+import hashlib
 import json
 import math
 import os
@@ -832,7 +834,60 @@ class LocalExecutionRuntime:
         self.output_callback = output_callback
         self._processes: dict[str, LocalProcess] = {}
         self._closed = False
-        self._read_paths: set[str] = set()
+        self._session_reads: dict[tuple[str, str], dict[str, Any]] = {}
+
+    @staticmethod
+    def _file_version(path: Path) -> dict[str, Any]:
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            return {"exists": False}
+        if not path.is_file():
+            return {"exists": True, "is_file": False, "mtime_ns": stat.st_mtime_ns,
+                    "size": stat.st_size, "inode": stat.st_ino}
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return {"exists": True, "is_file": True, "mtime_ns": stat.st_mtime_ns,
+                "size": stat.st_size, "inode": stat.st_ino,
+                "sha256": digest.hexdigest()}
+
+    @staticmethod
+    def _observation_identity(path: Path, args: dict[str, Any]) -> tuple[str, str]:
+        return str(args.get("_atlas_conversation_id") or ""), str(path)
+
+    def _record_observation(self, path: Path, args: dict[str, Any], token: dict[str, Any]) -> None:
+        session_id, resolved = self._observation_identity(path, args)
+        if session_id:
+            from atlas.config import DATA_ROOT
+            from atlas.engine.session_sync import record_file_observation
+
+            record_file_observation(DATA_ROOT / "engine", session_id, resolved, token)
+        else:
+            self._session_reads[(session_id, resolved)] = token
+
+    def _get_observation(self, path: Path, args: dict[str, Any]) -> dict[str, Any] | None:
+        session_id, resolved = self._observation_identity(path, args)
+        if session_id:
+            from atlas.config import DATA_ROOT
+            from atlas.engine.session_sync import get_file_observation
+
+            return get_file_observation(DATA_ROOT / "engine", session_id, resolved)
+        return self._session_reads.get((session_id, resolved))
+
+    def _require_current_observation(
+        self, path: Path, args: dict[str, Any], *, allow_unobserved_create: bool = False,
+    ) -> dict[str, Any]:
+        observed = self._get_observation(path, args)
+        current = self._file_version(path)
+        if observed is None:
+            if allow_unobserved_create and not current.get("exists"):
+                return current
+            raise ValueError(f"read the file first with local_file action=read ({path})")
+        if observed != current:
+            raise RuntimeError(f"File changed since this session observed it: {path}")
+        return current
 
     def get_tools_for_llm(self) -> list[dict[str, Any]]:
         tools = copy.deepcopy(LOCAL_TOOLS)
@@ -1155,10 +1210,7 @@ class LocalExecutionRuntime:
         replace_all = bool(args.get("replace_all", False))
         if not old_string:
             raise ValueError("old_string is required (use local_file write for new files)")
-        if str(path) not in self._read_paths:
-            raise ValueError(
-                f"read the file first with local_file action=read ({path})"
-            )
+        expected = self._require_current_observation(path, args)
         content = path.read_text(encoding=str(args.get("encoding", "utf-8")))
         count = content.count(old_string)
         if count == 0:
@@ -1170,7 +1222,22 @@ class LocalExecutionRuntime:
         updated = content.replace(old_string, new_string) if replace_all else (
             content.replace(old_string, new_string, 1)
         )
-        path.write_text(updated, encoding=str(args.get("encoding", "utf-8")))
+        if self._file_version(path) != expected:
+            raise RuntimeError(f"File changed while preparing edit: {path}")
+        fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".atlas-tmp", dir=path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding=str(args.get("encoding", "utf-8")), newline="") as stream:
+                stream.write(updated)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.chmod(temp_name, path.stat().st_mode)
+            if self._file_version(path) != expected:
+                raise RuntimeError(f"File changed before edit commit: {path}")
+            os.replace(temp_name, path)
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(temp_name)
+        self._record_observation(path, args, self._file_version(path))
         replacements = count if replace_all else 1
         return {
             "path": str(path),
@@ -1185,7 +1252,7 @@ class LocalExecutionRuntime:
             raise ValueError("edits must contain between 1 and 32 changes")
         workspace = self._workspace_root(args)
         cwd = workspace or Path(args.get("cwd") or Path.cwd())
-        staged: list[tuple[Path, bytes, bytes, tuple[int, int, int]]] = []
+        staged: list[tuple[Path, bytes, bytes, dict[str, Any]]] = []
         seen: set[Path] = set()
         for edit in edits:
             if not isinstance(edit, dict):
@@ -1195,8 +1262,7 @@ class LocalExecutionRuntime:
             if path in seen:
                 raise ValueError(f"Duplicate edit target: {path}")
             seen.add(path)
-            if str(path) not in self._read_paths:
-                raise ValueError(f"read the file first with local_file action=read ({path})")
+            expected = self._require_current_observation(path, args)
             encoding = str(edit.get("encoding", "utf-8"))
             old = str(edit.get("old_string", ""))
             if not old:
@@ -1212,15 +1278,13 @@ class LocalExecutionRuntime:
             if count > 1 and not replace_all:
                 raise ValueError(f"old_string matches {count} locations in {path}; set replace_all")
             updated = text.replace(old, str(edit.get("new_string", "")), -1 if replace_all else 1)
-            stat = path.stat()
-            staged.append((path, original, updated.encode(encoding), (stat.st_mtime_ns, stat.st_size, stat.st_ino)))
+            staged.append((path, original, updated.encode(encoding), expected))
 
         replaced: list[tuple[Path, bytes]] = []
         temp_paths: list[Path] = []
         try:
             for path, original, updated, signature in staged:
-                now = path.stat()
-                if (now.st_mtime_ns, now.st_size, now.st_ino) != signature:
+                if self._file_version(path) != signature:
                     raise RuntimeError(f"File changed during batch validation: {path}")
                 fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".atlas-tmp", dir=path.parent)
                 temp_path = Path(temp_name)
@@ -1230,6 +1294,8 @@ class LocalExecutionRuntime:
                     stream.flush()
                     os.fsync(stream.fileno())
                 os.chmod(temp_path, path.stat().st_mode)
+                if self._file_version(path) != signature:
+                    raise RuntimeError(f"File changed before batch edit commit: {path}")
                 os.replace(temp_path, path)
                 replaced.append((path, original))
         except Exception:
@@ -1244,6 +1310,8 @@ class LocalExecutionRuntime:
         finally:
             for temp_path in temp_paths:
                 temp_path.unlink(missing_ok=True)
+        for path, _original, _updated, _signature in staged:
+            self._record_observation(path, args, self._file_version(path))
         return {"committed": True, "applied": len(staged),
                 "paths": [str(item[0]) for item in staged],
                 "atomicity": "all-target-validation plus rollback-on-failure; replacements are sequential"}
@@ -1319,7 +1387,9 @@ class LocalExecutionRuntime:
         workspace = self._workspace_root(args)
         if action == "read":
             if not path.exists():
+                self._record_observation(path, args, {"exists": False})
                 raise FileNotFoundError(f"File not found: {path}")
+            version_before = self._file_version(path)
             total_size = path.stat().st_size if path.is_file() else 0
             if args.get("byte_offset") is not None or args.get("byte_limit") is not None:
                 if not path.is_file():
@@ -1388,8 +1458,11 @@ class LocalExecutionRuntime:
                     raw = "".join(chunks).encode(encoding)
                     next_offset = len(chunks) + 1 if truncated else None
                     complete = not truncated
+            version_after = self._file_version(path)
+            if version_before != version_after:
+                raise RuntimeError(f"File changed while being observed: {path}")
             if complete and int(args.get("offset", 1)) == 1 and int(args.get("byte_offset", 0)) == 0:
-                self._read_paths.add(str(path))
+                self._record_observation(path, args, version_after)
             result = {
                 "path": str(path),
                 "size": len(raw),
@@ -1411,9 +1484,37 @@ class LocalExecutionRuntime:
         if action in ("write", "append"):
             self._ensure_workspace_path(path, workspace)
             path.parent.mkdir(parents=True, exist_ok=True)
-            mode = "ab" if action == "append" else "wb"
-            with path.open(mode) as stream:
-                stream.write(str(args.get("content", "")).encode(encoding))
+            expected = self._require_current_observation(
+                path, args, allow_unobserved_create=(action == "write"),
+            )
+            payload = str(args.get("content", "")).encode(encoding)
+            if action == "append":
+                if self._file_version(path) != expected:
+                    raise RuntimeError(f"File changed before append: {path}")
+                with path.open("ab") as stream:
+                    stream.write(payload)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            elif expected.get("exists"):
+                fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".atlas-tmp", dir=path.parent)
+                try:
+                    with os.fdopen(fd, "wb") as stream:
+                        stream.write(payload)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                    os.chmod(temp_name, path.stat().st_mode)
+                    if self._file_version(path) != expected:
+                        raise RuntimeError(f"File changed before write: {path}")
+                    os.replace(temp_name, path)
+                finally:
+                    with contextlib.suppress(FileNotFoundError):
+                        os.unlink(temp_name)
+            else:
+                with path.open("xb") as stream:
+                    stream.write(payload)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            self._record_observation(path, args, self._file_version(path))
             return {"path": str(path), "size": path.stat().st_size}
         if action == "mkdir":
             self._ensure_workspace_path(path, workspace)
