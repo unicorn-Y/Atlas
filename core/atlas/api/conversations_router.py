@@ -59,6 +59,131 @@ def _service(name: str, services: AppServices) -> Any:
     return value
 
 
+def _causal_message_id(message: dict[str, Any]) -> str:
+    return str(message.get("_row_id") or message.get("id") or "")
+
+
+def _tool_calls(message: dict[str, Any]) -> list[dict[str, str]]:
+    calls = message.get("tool_calls")
+    if not isinstance(calls, list):
+        return []
+    result: list[dict[str, str]] = []
+    for call in calls:
+        if not isinstance(call, dict):
+            continue
+        function = call.get("function") if isinstance(call.get("function"), dict) else {}
+        call_id = str(call.get("id") or call.get("tool_call_id") or "")
+        if call_id:
+            result.append({"id": call_id, "name": str(function.get("name") or call.get("name") or "")})
+    return result
+
+
+async def _record_rewind_causality_event(
+    home: Path, conversation_id: str, *, rewind_id: str, mode: str,
+    message_ids: list[str], boundary_message_id: str | None = None,
+    point_id: str | None = None,
+) -> None:
+    from atlas.engine.session_sync import append_session_event
+
+    await asyncio.to_thread(append_session_event, home, conversation_id, "session.rewind", {
+        "rewind_id": rewind_id, "mode": mode,
+        "message_ids": message_ids, "boundary_message_id": boundary_message_id,
+        "point_id": point_id,
+    })
+
+
+def _explain_message_causality(
+    message_id: str, all_messages: list[dict[str, Any]],
+    display_messages: list[dict[str, Any]], model_messages: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Build a read-only causal view from transcript, compaction projection, and durable events."""
+    target_index = next((index for index, item in enumerate(all_messages)
+                         if message_id in {_causal_message_id(item), str(item.get("message_uid") or "")}), None)
+    if target_index is None:
+        return None
+    target = all_messages[target_index]
+    target_row_id = _causal_message_id(target)
+    target_uid = str(target.get("message_uid") or target.get("id") or "")
+    role = str(target.get("role") or "unknown")
+
+    turn_start = target_index
+    while turn_start > 0 and all_messages[turn_start].get("role") != "user":
+        turn_start -= 1
+    if all_messages[turn_start].get("role") != "user":
+        turn_start = target_index
+    turn_user_id = _causal_message_id(all_messages[turn_start]) if all_messages[turn_start].get("role") == "user" else None
+    turn_ordinal = sum(1 for item in all_messages[:turn_start + 1] if item.get("role") == "user") if turn_user_id else None
+    step_ordinal = sum(1 for item in all_messages[turn_start:target_index + 1] if item.get("role") == "assistant")
+
+    calls = _tool_calls(target) if role == "assistant" else []
+    tool_call_id = str(target.get("tool_call_id") or "") if role == "tool" else ""
+    owner = None
+    if tool_call_id:
+        owner = next((item for item in reversed(all_messages[:target_index])
+                      if any(call["id"] == tool_call_id for call in _tool_calls(item))), None)
+        if owner:
+            calls = [call for call in _tool_calls(owner) if call["id"] == tool_call_id]
+    tool_results: list[dict[str, str]] = []
+    for call in calls:
+        result_message = next((item for item in all_messages[target_index + 1:]
+                               if item.get("role") == "tool"
+                               and str(item.get("tool_call_id") or "") == call["id"]), None)
+        if result_message is None and role == "tool" and tool_call_id == call["id"]:
+            result_message = target
+        tool_results.append({
+            "tool_call_id": call["id"], "tool_name": call["name"],
+            "result_message_id": _causal_message_id(result_message) if result_message else "",
+        })
+
+    display_ids = {_causal_message_id(item) for item in display_messages}
+    model_ids = {_causal_message_id(item) for item in model_messages}
+    visible_id = target_row_id or target_uid
+    rewound = visible_id not in display_ids
+    metadata = target.get("display_metadata") if isinstance(target.get("display_metadata"), dict) else {}
+    run_id = str(metadata.get("kernel_run_id") or target.get("kernel_run_id") or "")
+    matching_events: list[dict[str, Any]] = []
+    for event in events:
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        references = {str(payload.get(key) or "") for key in (
+            "message_id", "message_uid", "target_message_id", "assistant_message_id",
+            "tool_call_id", "run_id",
+        )}
+        if ({target_row_id, target_uid, tool_call_id, run_id} - {""}) & references:
+            matching_events.append({"seq": event.get("seq"), "event_type": event.get("event_type"),
+                                    "created_at": event.get("created_at"),
+                                    "rewind_id": payload.get("rewind_id"),
+                                    "mode": payload.get("mode")})
+        elif (isinstance(payload.get("message_ids"), list)
+              and ({target_row_id, target_uid} & {str(item) for item in payload["message_ids"]})):
+            matching_events.append({"seq": event.get("seq"), "event_type": event.get("event_type"),
+                                    "created_at": event.get("created_at"),
+                                    "rewind_id": payload.get("rewind_id"),
+                                    "mode": payload.get("mode")})
+
+    rewind_event = next((item for item in matching_events
+                         if "rewind" in str(item.get("event_type") or "").lower()), None)
+    return {
+        "message": {
+            "id": target_row_id or target_uid, "message_uid": target_uid or None,
+            "role": role, "created_at": target.get("timestamp") or target.get("created_at"),
+        },
+        "causality": {
+            "turn": {"user_message_id": turn_user_id, "ordinal": turn_ordinal,
+                     "basis": "ordered transcript"},
+            "step": {"ordinal": step_ordinal or None, "run_id": run_id or None,
+                     "step_id": metadata.get("step_id"), "basis": "ordered transcript"},
+            "tool_results": tool_results,
+            "compression": {"shadowed": visible_id in display_ids and visible_id not in model_ids,
+                            "basis": "display and active model projections"},
+            "rewind": {"inactive": rewound, "event": rewind_event,
+                       "specific_rewind": (rewind_event.get("rewind_id") if rewind_event
+                                           else "not_recorded" if rewound else None)},
+            "session_events": matching_events,
+        },
+    }
+
+
 class ConversationUpdateRequest(BaseModel):
     title: str | None = None
     pinned: bool | None = None
@@ -385,6 +510,54 @@ async def get_conversation_messages(
         read_session_messages, DATA_ROOT / "engine", conversation_id,
         limit=limit, before_id=before_id,
     )
+
+
+@router.get("/api/conversations/{conversation_id}/explain")
+async def explain_conversation_message(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str,
+    message_id: str = Query(..., min_length=1, max_length=128),
+) -> dict[str, Any]:
+    """Explain a message using transcript order, tool links, compaction, rewind, and durable events."""
+    memory = services.memory or _server().memory
+    if memory is None:
+        raise HTTPException(status_code=503, detail="Conversation store is unavailable")
+    if await memory.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    from atlas.config import DATA_ROOT
+    from atlas.engine.state.atlas_state import SessionDB
+
+    def load_causality_inputs() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+        with SessionDB(db_path=DATA_ROOT / "engine" / "state.db") as db:
+            all_messages = db.get_messages_as_conversation(
+                conversation_id, include_inactive=True, include_compacted=True,
+                include_row_ids=True,
+            )
+            display_messages = db.get_messages_as_conversation(
+                conversation_id, include_compacted=True, include_row_ids=True,
+            )
+            model_messages = db.get_messages_as_conversation(
+                conversation_id, include_row_ids=True,
+            )
+            events: list[dict[str, Any]] = []
+            after_seq = 0
+            while True:
+                page = db.list_session_events(conversation_id, after_seq=after_seq, limit=10_000)
+                if not page:
+                    break
+                events.extend(page)
+                next_seq = int(page[-1]["seq"])
+                if next_seq <= after_seq or len(page) < 10_000:
+                    break
+                after_seq = next_seq
+        return all_messages, display_messages, model_messages, events
+
+    inputs = await asyncio.to_thread(load_causality_inputs)
+    explanation = _explain_message_causality(message_id, *inputs)
+    if explanation is None:
+        raise HTTPException(status_code=404, detail="Message not found in conversation")
+    return explanation
 
 
 @router.post("/api/conversations/{conversation_id}/handoff-summary")
@@ -1438,6 +1611,17 @@ async def _legacy_rewind_conversation(
             await _restore_rewind_files(file_snapshot)
         raise
     await memory.update_rewind_restored_files(rewind_id, len(restored_files))
+    current_messages = await asyncio.to_thread(
+        read_session_all_messages, DATA_ROOT / "engine", conversation_id,
+    )
+    current_ids = {str(item.get("id") or "") for item in current_messages}
+    removed_ids = [str(item.get("id")) for item in removed
+                   if item.get("id") and str(item.get("id")) not in current_ids]
+    await _record_rewind_causality_event(
+        DATA_ROOT / "engine", conversation_id, rewind_id=rewind_id,
+        mode="both" if files_requested else "conversation", message_ids=removed_ids,
+        boundary_message_id=message_id,
+    )
     return {
         "rewind_id": rewind_id,
         "removed_messages": len(removed),
@@ -1524,6 +1708,10 @@ async def rewind_conversation(
             _snapshot_point_files, selected.workspace, rewind_preview.files,
         )
 
+    messages_before_rewind = await asyncio.to_thread(
+        read_session_all_messages, DATA_ROOT / "engine", conversation_id,
+    )
+
     truncate_state: dict[str, Any] = {}
 
     def truncate_at_checkpoint(
@@ -1575,6 +1763,17 @@ async def rewind_conversation(
         if wants_code and redo_files:
             await _restore_rewind_files(redo_files)
         raise
+    messages_after_rewind = await asyncio.to_thread(
+        read_session_all_messages, DATA_ROOT / "engine", conversation_id,
+    )
+    current_ids = {str(item.get("id") or "") for item in messages_after_rewind}
+    removed_ids = [str(item.get("id")) for item in messages_before_rewind
+                   if item.get("id") and str(item.get("id")) not in current_ids]
+    await _record_rewind_causality_event(
+        DATA_ROOT / "engine", conversation_id, rewind_id=rewind_id, mode=mode,
+        message_ids=removed_ids, boundary_message_id=selected.after_message_id,
+        point_id=selected.point_id,
+    )
     return {
         "rewind_id": rewind_id, "removed_messages": removed_messages,
         "restored_files": restored_files, "skipped": [],

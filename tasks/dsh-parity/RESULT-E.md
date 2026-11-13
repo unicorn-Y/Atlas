@@ -76,6 +76,50 @@ TypeScript: No errors found
 
 合并后启动 `atlas.server:app`：`/api/health` 返回 HTTP 200。`rtk python scripts/dsh_live_ws_check.py 8811 'Reply with exactly the word: OK'` 实际事件包含 `run.started`、`message.completed`、`run.completed`；模型 `deepseek-v4.1-flash`，回复 `OK`，`[result] terminal=run.completed chars=2`。验证完成后停止后端并确认 `PORT_CLOSED`。
 
+## MASTER §6–§9 收尾（Batch E 范围）
+
+### 因果 explain API
+
+在 `/api/conversations/{conversation_id}/explain?message_id=N` 增加只读因果查询。它用同一 SessionDB 分别读取全量、展示态、模型态 transcript，返回 turn/step 顺序、工具调用与结果消息关联、压缩遮蔽状态、inactive 状态和匹配的 session event。rewind handler 成功后追加 `session.rewind` 事件，包含 `rewind_id`、受影响消息 IDs、边界、模式和 checkpoint ID；不改变 `messages` 表语义，也没有在 `_execute_write` 回调中嵌套写事务。
+
+证据边界：step ID 目前按 transcript 中 assistant 消息顺序推断；旧 rewind 没有逐消息事件，无法追溯其 ID，返回 `specific_rewind: not_recorded`。新增 rewind 的事件记录在 rewind 后追加，不与消息回退处于同一个 SQLite 事务。故该项标为 PARTIAL，未宣称历史因果链全覆盖。
+
+新增文件：`core/tests/test_conversation_explain.py`。更新文件：`core/atlas/api/conversations_router.py`。
+
+```text
+rtk python -m pytest -q -p no:cacheprovider tests/test_conversation_explain.py
+
+4 passed, 5 warnings in 2.39s
+```
+
+最终合并验证（含三源桌面事件契约）：
+
+```text
+rtk python -m pytest -q -p no:cacheprovider tests/test_conversation_explain.py tests/test_event_contract.py
+
+17 passed, 5 warnings in 5.17s
+```
+
+扩展 API 回归 `rtk python -m pytest -q -p no:cacheprovider tests/test_conversation_explain.py tests/test_event_contract.py tests/test_c6_server_routes.py`：`31 passed, 2 failed, 5 warnings in 10.91s`。失败为 `test_review_intercept_rewrites_run` 的 tool_allow 期望与实际扩展工具列表不一致，以及 `test_new_queue_events_reach_wire_unchanged` 中 `_noop_hook()` 不接受 `bridge_event_alias` 参数；这两个失败点与本次 explain/rewind 代码无关，未在此修改。它们不计作通过。
+
+`rtk python -m py_compile atlas/api/conversations_router.py` 成功；`rtk git diff --check` 通过。
+
+真实 HTTP 验证：后端 `/api/health` 返回 200；真实模型回合输出 `[result] terminal=run.completed chars=2`。随后从 `/api/conversations` 找到该回合，GET explain 返回 HTTP 200：
+
+```text
+EXPLAIN_HTTP_OK conversation=dsh-live-350bdb91 message=18408 role=assistant turn=1 step=1 compaction_shadowed=False rewind_inactive=False
+```
+
+停止模型回合后对当前代码重新启动服务复验同一条消息：`EXPLAIN_HTTP_OK status=200 message=18408 turn=1 step=1`；完成后确认 `PORT_CLOSED`。
+
+### 其余新增要求与目录责任
+
+- `capabilities.usage` 需要 `core/atlas/introspect/` 注册与调用计量，不在 Batch E 的 `frontend/src/` / `core/atlas/api/` 目录内；登记由 Batch D / capability-introspection owner 承接，本批未跨目录改动。
+- effect receipt 要从 Batch A/C 的工具/沙箱执行点采集，并由 Batch B 的事件持久层写入；不在 Batch E 目录内，由 A/C/B 承接，本批未跨目录改动。
+- 八项优势的聚合回归文件 `core/tests/test_atlas_advantages.py` 不在本批所有权内。按能力由 A（写路径 LSP）、D（hooks/skills）、E（rewind、桌面多窗格、消息操作、富预览）和 memory/library owner 提供覆盖；本批没有改该聚合测试文件，也没有声称八项已锁定。
+- `core/scripts/dsh_parity_bench.py` 与 `BENCH.md` 不在 Batch E 目录内，由 coordinator/core-scripts owner 承接；本批未运行跨进程 DSH 对照，不给出性能优劣结论。
+- 新增 [`COVERAGE.md`](COVERAGE.md) 仅写 Batch E 的 D1–D33 行，并将 §6 新要求的范围/责任显式标记；完整 135 行覆盖表要等 A–D owner 合并各自状态。
+
 ## 全账本状态
 
 本次提交后 `DSH-GAP-LEDGER.md` 共 135 行能力差距；24 行已标关闭（其中包括之前已关闭的 16 行与本轮追加关闭的 8 行），其余仍有 111 行 ABSENT、PRESENT-WEAKER 或尚未闭合的 parity 项。因此五批结果文件和本轮提交已经交付，但“全部差距补齐”的总目标尚未达到，不能报告为全量完成。S1/S2 仍开放；本轮没有改变 `messages` 表语义。其余未关闭项按 E/S/X/D 行号和原因保留在本账本及各批结果文件中。
