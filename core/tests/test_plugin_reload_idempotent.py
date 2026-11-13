@@ -142,18 +142,38 @@ async def test_loaded_plugin_exposes_disposer_for_every_registry_contribution(ru
     dispose = runtime._disposers["demo"].dispose
     assert loaded["disposer_count"] == 3
 
-    dispose()
-    dispose()
+    await dispose()
+    await dispose()
 
     assert registry.discover() == []
     assert hook_bus._hooks["after_response"] == []
-
-    runtime.set_enabled("demo", False)
+    await runtime.set_enabled("demo", False)
     report = await runtime.load_all(hook_bus=hook_bus, capabilities=registry)
 
     assert report["loaded"] == []
     assert _capability_names(registry) == set()
     assert hook_bus._hooks["after_response"] == []
+
+
+@pytest.mark.asyncio
+async def test_async_mcp_contribution_is_disposed_on_reload(runtime: PluginRuntime):
+    class AsyncMCP(_FakeMCPClient):
+        async def disconnect_server(self, name: str) -> None:
+            self.connected.remove(name)
+
+    root = runtime._dirs[0] / "demo-plugin"
+    (root / "plugin.json").write_text(json.dumps({
+        "name": "demo", "version": "1.0.0", "description": "demo plugin",
+        "mcpServers": {"demo-mcp": {"command": "python", "args": ["-V"]}},
+    }), encoding="utf-8")
+    client = AsyncMCP()
+    first = await runtime.load_all(mcp_client=client)
+    assert first["loaded"] == ["demo"]
+    assert client.connected == ["demo-mcp"]
+
+    second = await runtime.load_all(mcp_client=client)
+    assert second["loaded"] == ["demo"]
+    assert client.connected == ["demo-mcp"]
 
 
 @pytest.mark.asyncio

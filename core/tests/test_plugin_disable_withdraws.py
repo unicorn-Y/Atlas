@@ -64,7 +64,7 @@ async def test_disable_then_reload_leaves_nothing_registered(runtime: PluginRunt
     assert _names(registry)
     assert len(hook_bus._hooks["after_response"]) == 1
 
-    runtime.set_enabled("demo", False)
+    await runtime.set_enabled("demo", False)
     report = await runtime.load_all(hook_bus=hook_bus, capabilities=registry)
 
     assert report["loaded"] == []
@@ -80,7 +80,7 @@ async def test_disable_immediately_withdraws_before_any_reload(runtime: PluginRu
     hook_bus = HookBus()
 
     await runtime.load_all(hook_bus=hook_bus, capabilities=registry)
-    runtime.set_enabled("demo", False)
+    await runtime.set_enabled("demo", False)
 
     assert _names(registry) == set()
     assert hook_bus._hooks["after_response"] == []
@@ -94,11 +94,11 @@ async def test_reenabling_restores_registrations_exactly_once(runtime: PluginRun
     await runtime.load_all(hook_bus=hook_bus, capabilities=registry)
     baseline = _names(registry)
 
-    runtime.set_enabled("demo", False)
+    await runtime.set_enabled("demo", False)
     await runtime.load_all(hook_bus=hook_bus, capabilities=registry)
     assert _names(registry) == set()
 
-    runtime.set_enabled("demo", True)
+    await runtime.set_enabled("demo", True)
     report = await runtime.load_all(hook_bus=hook_bus, capabilities=registry)
 
     assert report["loaded"] == ["demo"]
@@ -109,6 +109,6 @@ async def test_reenabling_restores_registrations_exactly_once(runtime: PluginRun
 @pytest.mark.asyncio
 async def test_disable_before_first_load_is_safe(runtime: PluginRuntime):
     """No wiring captured yet: the call must not raise."""
-    runtime.set_enabled("demo", False)
+    await runtime.set_enabled("demo", False)
     report = await runtime.load_all()
     assert report["loaded"] == []

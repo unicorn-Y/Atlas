@@ -73,6 +73,60 @@ def _patch_root(plugin_root: str | Path) -> Path:
     return Path(plugin_root) / PATCH_DIRNAME
 
 
+def merge_config_layers(*layers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Apply ordered config rows; matching row ids replace in place, new ids insert.
+
+    A row may set ``before`` or ``after`` to another row id to control insertion.
+    ``op='delete'`` removes an existing row. Layers are applied in call order,
+    which callers use as base, profile, bundle, then local patch.
+    """
+    rows: list[dict[str, Any]] = []
+    positions: dict[str, int] = {}
+    for layer in layers:
+        if not isinstance(layer, list):
+            raise ValueError("config layers must be lists")
+        for raw in layer:
+            if not isinstance(raw, dict):
+                raise ValueError("config rows must be objects")
+            row = dict(raw)
+            row_id = row.get("row_id")
+            if not isinstance(row_id, str) or not row_id.strip():
+                raise ValueError("config rows require a non-empty row_id")
+            row_id = row_id.strip()
+            row["row_id"] = row_id
+            old_index = positions.get(row_id)
+            if row.get("op") == "delete":
+                if old_index is not None:
+                    rows.pop(old_index)
+                    positions = {item["row_id"]: i for i, item in enumerate(rows)}
+                continue
+            row.pop("op", None)
+            if old_index is not None:
+                rows[old_index] = row
+                continue
+            anchor = row.pop("before", row.pop("after", None))
+            relation = "before" if "before" in raw else "after"
+            if anchor is None or anchor not in positions:
+                rows.append(row)
+            else:
+                index = positions[anchor] + (1 if relation == "after" else 0)
+                rows.insert(index, row)
+                positions = {item["row_id"]: i for i, item in enumerate(rows)}
+            positions[row_id] = rows.index(row)
+    return rows
+
+
+def dump_config_preview(config: dict[str, Any], layers: list[list[dict[str, Any]]]) -> dict[str, Any]:
+    """Return a non-writing preview and JSON dump of the effective ordered rows."""
+    effective = merge_config_layers(*layers)
+    return {
+        "config": dict(config),
+        "layers": len(layers),
+        "effective": effective,
+        "json": json.dumps({**config, "rows": effective}, ensure_ascii=False, indent=2),
+    }
+
+
 def _safe_relative(value: str) -> Path:
     """Reject absolute paths and ``..`` escapes before anything touches disk."""
     raw = str(value or "").replace("\\", "/").strip()
