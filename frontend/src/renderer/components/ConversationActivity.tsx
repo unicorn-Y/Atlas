@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState, type ComponentType } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { BookMarked, Check, ClipboardCopy, FileCheck2, FileWarning, SearchCheck, ChevronRight, CircleDashed, LoaderCircle, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Target, Users, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
@@ -14,6 +14,7 @@ import ForegroundConfirmCard from './x2/ForegroundConfirmCard';
 import BrowserHandoffCard from './x2/BrowserHandoffCard';
 import { DiagnosticsList } from './diagnostics';
 import { buildTimeline, cacheShare, describeTool, duration, isPlanReviewIntent, tokenCount, type Step, type TimelineItem } from './timeline';
+import { TimelineProjection } from './timelineProjection';
 import type { InspectorTab } from '../shell/Inspector';
 import { TokenUsageCard, TokenUsageToggle } from './TokenUsage';
 import { usageSummary } from './runInsights';
@@ -145,7 +146,12 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
 });
 
 export default function ConversationActivity({ events, store, username, setTab, onOpenBrowser }: ConversationActivityProps) {
-  const items = useMemo(() => buildTimeline(events), [events]);
+  const projectionRef = useRef<{ runId: string; projection: TimelineProjection } | null>(null);
+  const runId = events[0]?.runId ?? '';
+  const items = useMemo(() => {
+    if (projectionRef.current?.runId !== runId) projectionRef.current = { runId, projection: new TimelineProjection() };
+    return projectionRef.current.projection.project(events);
+  }, [events, runId]);
   const busy = store.busy && !store.paused;
   // Each Atlas turn shows its header once; later steps and replies in the same turn hang beneath it.
   let headed = false;

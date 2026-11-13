@@ -6,7 +6,8 @@ import { useAtlasStore } from '../store/useAtlasStore';
 import { TimelineRow } from './ConversationActivity';
 import ConversationMessage from './ConversationMessage';
 import Mark from './Mark';
-import { attachHistoryResult, buildTimeline, historyStep, todoEditNotice, type Step, type TimelineItem } from './timeline';
+import { attachHistoryResult, historyStep, todoEditNotice, type Step, type TimelineItem } from './timeline';
+import { TimelineProjection } from './timelineProjection';
 import { structuredComponent } from './StructuredComponentCard';
 import { isTodoEdit } from './runInsights';
 import { Button } from '../ui/Button';
@@ -168,6 +169,7 @@ export interface MessageThreadProps {
 export default function MessageThread({ history, componentSelections = {}, username, historyActions, emptyState, footerNote, threadRef, setTab, onOpenBrowser, focusMode = false, focusSummary = '', tuiFullscreen = false, onToast }: MessageThreadProps) {
   // 窄选择器：只有当前会话的运行事件/正文变化才重渲染这里，别的会话流式输出不打扰。
   const conversationId = useAtlasStore((state) => state.activeConversationId);
+  const activeRunId = useAtlasStore((state) => state.activeRunId);
   const events = useAtlasStore((state) => state.runs.find((run) => run.id === state.activeRunId)?.events ?? EMPTY_EVENTS);
   const truncatedCount = useAtlasStore((state) => {
     const run = state.runs.find((item) => item.id === state.activeRunId);
@@ -239,15 +241,19 @@ export default function MessageThread({ history, componentSelections = {}, usern
     return () => window.removeEventListener('atlas:jump-message', onJump);
   }, []);
 
+  const timelineProjectionRef = useRef<{ runId: string | null; projection: TimelineProjection } | null>(null);
   const timelineItems = useMemo(() => {
-    const items = buildTimeline(events);
+    if (timelineProjectionRef.current?.runId !== activeRunId) {
+      timelineProjectionRef.current = { runId: activeRunId, projection: new TimelineProjection() };
+    }
+    const items = timelineProjectionRef.current.projection.project(events);
     if (!focusMode || !working) return focusMode ? [] : items;
     const compact: TimelineItem[] = items.filter((item) => item.kind === 'user' || item.kind === 'reply');
     const userIndex = compact.reduce((found, item, index) => item.kind === 'user' ? index : found, -1);
     const insertAt = compact.findIndex((item, index) => index > userIndex && item.kind === 'reply');
     compact.splice(insertAt < 0 ? compact.length : insertAt, 0, { kind: 'notice', id: 'focus-summary', tone: 'switch', text: focusSummary || '正在处理当前请求' });
     return compact;
-  }, [events, focusMode, working, focusSummary]);
+  }, [activeRunId, events, focusMode, working, focusSummary]);
   // The placeholder only covers the gap before anything streams; once thinking text arrives the
   // reasoning row takes over (keeping both stacked them on top of each other).
   const thinking = working && !events.some((event) => event.type === 'message.delta' || event.type === 'tool.started' || event.type === 'tool.preparing'

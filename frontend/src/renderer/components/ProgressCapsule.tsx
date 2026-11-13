@@ -1,9 +1,10 @@
 import * as Popover from '@radix-ui/react-popover';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, CircleDashed, Clock3, Coins, Gauge, LoaderCircle, Pause, Square, X } from 'lucide-react';
 import type { AgentEvent, AgentRun } from '../../types/runtime';
 import { cn } from '../ui/cn';
-import { buildTimeline, duration } from './timeline';
+import { duration, type TimelineItem } from './timeline';
+import { TimelineProjection } from './timelineProjection';
 import { clock, formatTokens, latestTodos, usageSummary } from './runInsights';
 
 type StepState = 'pending' | 'running' | 'done' | 'failed' | 'cancelled';
@@ -12,7 +13,7 @@ interface ProgressStep { id: string; text: string; detail?: string; state: StepS
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
 /** Prefer the Agent's own todo list, then an approved plan, then the tool steps it actually took. */
-function progressSteps(events: AgentEvent[]): { steps: ProgressStep[]; source: 'todos' | 'plan' | 'tools' } {
+function progressSteps(events: AgentEvent[], timelineItems: TimelineItem[]): { steps: ProgressStep[]; source: 'todos' | 'plan' | 'tools' } {
   const todos = latestTodos(events);
   if (todos?.todos.length) return {
     source: 'todos',
@@ -29,7 +30,7 @@ function progressSteps(events: AgentEvent[]): { steps: ProgressStep[]; source: '
         state: step.status === 'completed' ? 'done' : step.status === 'running' || step.status === 'in_progress' ? 'running' : step.status === 'failed' ? 'failed' : 'pending' };
     }),
   };
-  const steps = buildTimeline(events).flatMap((item) => item.kind === 'steps' ? item.steps : []);
+  const steps = timelineItems.flatMap((item) => item.kind === 'steps' ? item.steps : []);
   return {
     source: 'tools',
     steps: steps.map((step) => ({ id: step.id, text: step.verb, detail: step.target, state: step.state === 'running' ? 'running' : step.state,
@@ -75,7 +76,12 @@ export default function ProgressCapsule({ run, events, onShowAll, indicatorStyle
     return () => window.clearInterval(timer);
   }, [live]);
 
-  const { steps, source } = useMemo(() => progressSteps(events), [events]);
+  const projectionRef = useRef<{ runId: string; projection: TimelineProjection } | null>(null);
+  const timelineItems = useMemo(() => {
+    if (projectionRef.current?.runId !== run.id) projectionRef.current = { runId: run.id, projection: new TimelineProjection() };
+    return projectionRef.current.projection.project(events);
+  }, [events, run.id]);
+  const { steps, source } = useMemo(() => progressSteps(events, timelineItems), [events, timelineItems]);
   const usage = useMemo(() => usageSummary(events), [events]);
   const endedAt = useMemo(() => [...events].reverse().find((event) => event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.cancelled')?.timestamp, [events]);
   const startedAt = events.find((event) => event.type === 'run.started')?.timestamp ?? run.startedAt;

@@ -189,9 +189,9 @@
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| D1 | 认证本地载体 + boot injection + OS 分配端口 | `apps/desktop/src/web-document.ts:41,72`；`main.ts:664,685` | `preload/index.cts:8` 硬编码 8765；`main/electron.ts:1006` 全局注入 token；无注入通道 | PRESENT-WEAKER |
-| D2 | 两进程 typed IPC 生命周期（ready/fatal/shutdown-complete/quit-inspection） | `apps/desktop/src/host-process.ts:189,57-78` | `backendProcess.ts:683,101,485` 靠 health + pid + 退出码推断 | PRESENT-WEAKER |
-| D3 | 流式增量：chunk 折叠进 per-node state，重连重放压缩流 | `api/session-controller/.../events.ts:8`；`ui-conversation/.../assembler.ts:174,364` | 不再对 800 条之后的旧事件截断；timeline 仍按全量事件重建，chunk folding/per-node incremental state 未完成 | PRESENT-WEAKER |
+| D1 | 认证本地载体 + boot injection + OS 分配端口 | `apps/desktop/src/web-document.ts:41,72`；`main.ts:664,685` | renderer 从 `window.atlasDesktop.apiBaseUrl` 读取 preload 提供的地址；preload 仍依赖 `ATLAS_PORT` / 8765，OS 分配端口及认证 boot injection 未接通 | PARTIAL (W12: renderer 消费既有 apiBaseUrl；allocator 与 main/preload 注入不在本批目录) |
+| D2 | 两进程 typed IPC 生命周期（ready/fatal/shutdown-complete/quit-inspection） | `apps/desktop/src/host-process.ts:189,57-78` | renderer 已消费 typed `BackendStartupProgress`；ready/fatal/shutdown-complete/quit-inspection 生命周期生产端仍未接通 | PARTIAL (W12: main/preload/shared IPC 不在本批目录) |
+| D3 | 流式增量：chunk 折叠进 per-node state，重连重放压缩流 | `api/session-controller/.../events.ts:8`；`ui-conversation/.../assembler.ts:174,364` | 连续 `message.delta` 现在增量更新 reply node；其它事件仍经全量 `buildTimeline` 投影 | PARTIAL (W12: reply delta 已增量折叠，结构事件仍会全量重建) |
 | D4 | keyed ConversationNode renderer 注册表 | `ui-chat/.../register-node-renderers.ts:39-69` | `timeline.ts:73-99` 静态联合 + `ConversationActivity.tsx:42` 单 switch，无注册 API | ABSENT |
 | D5 | durable 附件暂存：内容寻址、先存后发、进度、可取消 | `docs/subsystems/attachment.md`；`client/file-upload/src/client/contract.ts` | `App.tsx:1380-1410` 读成 base64 data URL（4 张/4MiB/共 8MiB），`App.tsx:1222` 内联进 run.start | PRESENT-WEAKER |
 | D6 | 结构化草稿：chip 进文本模型、per-session 语义草稿、重载存活 | `ui-conversation/.../ReferenceChip.tsx` | `Composer.tsx:740` 纯 textarea；mentions 另存 `App.tsx:413`，草稿只存纯文本 `App.tsx:215` | PRESENT-WEAKER |

@@ -127,7 +127,7 @@ import { observeLocalizedCopy, readLocale, saveLocale, t } from './services/i18n
 import { api, relativeTime } from './services/api';
 import { extractMemoryMarkers } from './services/memoryMarkers';
 import { filterSafeSuggestions } from './services/suggestionSafety';
-import { buildTimeline } from './components/timeline';
+import { TimelineProjection } from './components/timelineProjection';
 import { shouldSuggestSkillExtraction } from './services/skillExtraction';
 const ComputerEdgeBar = lazy(() => import('./components/x2').then((module) => ({ default: module.ComputerEdgeBar })));
 import UpdateBanner from './components/UpdateBanner';
@@ -806,7 +806,14 @@ function AppContent() {
     return `正在工作${status ? ` · ${String(status)}` : node ? ` · ${String(node)}` : ' · 正在处理当前请求'}`;
   }, [activeRun, activeEvents, runDone]);
   // 当前运行的时间线，与 MessageThread 里的构建保持一致；TimelineNav 也要按它数行。
-  const timelineItems = useMemo(() => buildTimeline(activeEvents), [activeEvents]);
+  const timelineProjectionRef = useRef<{ runId: string; projection: TimelineProjection } | null>(null);
+  const timelineItems = useMemo(() => {
+    const runId = activeRun?.id ?? '';
+    if (timelineProjectionRef.current?.runId !== runId) {
+      timelineProjectionRef.current = { runId, projection: new TimelineProjection() };
+    }
+    return timelineProjectionRef.current.projection.project(activeEvents);
+  }, [activeEvents, activeRun?.id]);
   // X2：活动任务要求操作前台窗口、还没等到 computer.foreground_resumed 时，会话区顶部挂一条提示。
   const foregroundEvent = useMemo(() => {
     for (let index = activeEvents.length - 1; index >= 0; index--) {
