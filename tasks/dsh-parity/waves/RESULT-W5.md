@@ -42,4 +42,13 @@ python -m pytest -q -p no:cacheprovider tests/test_atlas_session_sync.py tests/t
 [result] terminal=run.completed chars=2
 ```
 
+## 验证环境副作用
+
+最初启动时曾短暂使用 worktree 默认 `data/`，服务日志指向该目录的 memory DB。检查到以下文件在本次运行时间内写入：
+
+- `data/atlas.db`：110592 bytes，最后写入 `2026-11-14 04:43:23 +08:00`。
+- `data/logs/runs/2026-11-13/68109f47-3ccc-4d40-93a7-48421cc5ce71.jsonl`：6096 bytes，最后写入 `2026-11-14 04:43:53 +08:00`。
+
+这些位于仓库规则标记为用户状态的 `data/`，本次没有删除或回滚。早期 server 已停止，8825 当前无监听；后续成功验证所用临时配置目录已清理。
+
 这是后端 WebSocket、模型路由和回复传输的真实回合证据；没有触发 reader repair、图片恢复或文件读后编辑路径，不能证明三行功能已闭环。此前一次请求误连到尚未退出的旧 8825 进程并失败（`TypeError: int(None)`）；确认并停止旧 PID 后，以上回合在新隔离进程中成功。
