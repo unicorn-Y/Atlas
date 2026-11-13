@@ -1059,6 +1059,16 @@ class AtlasRuntime:
                 with use_run_usage_budget(usage_budget):
                     async for event in kernel.run(request):
                         yield event
+                # Give run-scoped maintenance a single idle window after the
+                # user turn has fully closed. Hosts can provide a callback on
+                # the runtime context; the kernel enforces that maintenance
+                # cannot overlap a turn.
+                maintenance_callback = getattr(atlas_context, "maintenance_callback", None)
+                if not callable(maintenance_callback):
+                    maintenance_callback = lambda: None
+                maintenance_ran = await kernel.runMaintenance(maintenance_callback)
+                if maintenance_ran:
+                    logger.info("atlas_runtime.idle_maintenance_completed")
                 if budget_exceeded and usage_budget is not None:
                     yield {"type": "run.recovery.notice", "data": {
                         "message": (
