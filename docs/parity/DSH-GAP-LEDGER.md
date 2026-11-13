@@ -102,7 +102,7 @@
 | S13 | 会话查询语料库：可丢弃 fts5 索引 + revision/generation 增量 + `current|shadowed|log-only` 分类 | `session-query-sqlite/src/schema.ts:8,127` | 搜索结果提供稳定 `seq`、`after_seq` 游标和 `current|shadowed|log-only` 分类，覆盖 FTS/LIKE/CJK 路径 | ✅ 本轮关闭 |
 | S19 | durable 附件：内容寻址不可变 ref、每次读重校验、先准入后追加用户事件 | `attachment-local/src/file-store.ts:14,76` | 图片**从不持久化**——`agent/__init__.py:1022` 造瞬时 wire payload，只有 OCR 文本进 prompt | PRESENT-WEAKER |
 | S21 | fs 观察策略：per-session 观察态 + provider version token；未见过 vs 不存在区分 | `packages/fs/fs-observation-policy/src/index.ts:28` | 两套半成品：`edit.py:489,497` 快照随 run 死亡；`local_execution.py:1085,1319` 只有 `_read_paths` 集合，写入 `path.write_text` 存在 TOCTOU | PRESENT-WEAKER |
-| S22 | OTel：普通事件与 session-log 双通道独立队列 | `packages/telemetry/otel/src/index.ts:22,30` | `require_checkpoint()` 会产生 `atlas.run_checkpoint.write` 生产 span；普通事件/session-log 独立队列仍未实现 | PRESENT-WEAKER |
+| S22 | OTel：普通事件与 session-log 双通道独立队列 | `packages/telemetry/otel/src/index.ts:22,30` | `require_checkpoint()` 与已注册的 `SessionDB.get_session_timeline()` 产生生产 span（`atlas.run_checkpoint.write` / `atlas.session.turn_outline`）；普通事件/session-log 独立队列仍未实现 | PRESENT-WEAKER |
 | S25 | tokenMeter 逐 surface 节点计价 + route-aware 图像计价 | `packages/llm/token-meter/src/index.ts:146` | `token_meter.py` 新增逐节点 route-aware 计价 API 和 `measure()` 集成；没有生产模型请求调用点或生产图像计价回调 | PRESENT-WEAKER |
 | S32 | fork 要求边界不在开放 turn 内，`session/end-seed{inherited:true}` 标记继承切点 | `packages/core/session/src/fork.ts:21` | `session_sync.py` 拒绝未闭合 tool turn；子会话导入事务中追加 `session/end-seed{inherited:true}` | ✅ 本轮关闭 |
 
@@ -115,7 +115,7 @@
 | S12 | 投影持久缓存 `session_projcache`：`(key,ver,seq,val)` 行 | `session-projection-cache/src/spec.ts:29` | 无持久缓存；`state/projections.py:86` 是无关的页缓存 | ABSENT |
 | S14 | 模型可见查询工具五件套 | `experimental/tool-session-query/src/index.ts:66-96` | 只有 `session_search` | PRESENT-WEAKER |
 | S15 | `sessionStats` 投影：整日志折叠，含 llmMs/toolMs/ttftMs | `session-stats/README.md:42-46` | `conversations_router.py:815-868` 只有消息数/轮数/token 成本 | PRESENT-WEAKER |
-| S16 | `turnOutline` 投影 | `session-turn-outline/src/projection.ts:85` | `atlas_state_timeline.py:142` **实现存在但无人 import、无 mixin → 死代码** | ABSENT（不可达） |
+| S16 | `turnOutline` 投影 | `session-turn-outline/src/projection.ts:85` | `atlas_state_timeline.py` 由 `SessionTimelineMixin` 注册到 `SessionDB`；`get_session_timeline()` 和 `get_session_messages_around()` 可直接调用，并有真实 SQLite 覆盖 | PRESENT-PARITY |
 | S17 | 会话导出 ZIP：live root 先 flush，含子会话与附件字节 | `session-log-export/src/archive.ts:187-195` | `export_session/import_sessions` 存在（`atlas_state_portability.py:293,734`）但**无 HTTP 路由**，不含附件 | PRESENT-WEAKER |
 | S18 | spill 缝：`saveText → {locator, bytes, hint}`，保存失败保留原文 | `docs/subsystems/spill.md:92`；`spill-policy/src/index.ts:27` | `context.py:274-310` 写 sha256 文件 + 路径提示；`spill_store.py:128` 按龄/大小清理；无 locator 抽象、无降级契约 | PRESENT-WEAKER |
 | S20 | deliverables `present` 工具 + per-turn `workspace/changes` | `tool-present/src/index.ts:40,105`；`workspace-changes/src/recorder.ts:351` | `canvas_update/push_component` 只推瞬时事件；变更文件只由子代理上报 | ABSENT |

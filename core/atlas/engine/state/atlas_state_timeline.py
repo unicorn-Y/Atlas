@@ -167,3 +167,21 @@ def get_session_timeline(db, session_id, *, limit=500, after_row_id=0):
                        "next_cursor": page[-1]["sort_id"] if has_more else None},
     }
 
+
+class SessionTimelineMixin:
+    """Register bounded prompt projections on the public SessionDB surface."""
+
+    def get_session_messages_around(self, session_id, row_id, *, limit=120):
+        return get_session_messages_around(self, session_id, row_id, limit=limit)
+
+    def get_session_timeline(self, session_id, *, limit=500, after_row_id=0):
+        from atlas import telemetry
+
+        with telemetry.span("atlas.session.turn_outline", {"timeline.limit": limit}) as current:
+            result = get_session_timeline(self, session_id, limit=limit, after_row_id=after_row_id)
+            if current is not None:
+                pagination = result["pagination"]
+                current.set_attribute("timeline.returned", pagination["returned"])
+                current.set_attribute("timeline.total", pagination["total"])
+            return result
+
