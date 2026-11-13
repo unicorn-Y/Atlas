@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import uuid
 from collections.abc import Callable, Mapping
 from typing import Any
@@ -124,15 +125,34 @@ async def execute_workflow_tool(
         workflow_id = resume_id
 
     conversation_id = str(getattr(runtime, "conversation_id", "") or "")
+    exec_manager = getattr(runtime, "exec_manager", None)
+    workflow_task: asyncio.Task[Any] | None = None
+    workflow_registered = False
 
     async def on_workflow_event(event: dict[str, Any]) -> None:
         if conversation_id and event.get("type") in {"workflow_started", "workflow_resumed"}:
             journal.bind_context(workflow_id, conversation_id, kind="expert")
+        if exec_manager is not None:
+            exec_manager.append_job_output(
+                workflow_id, json.dumps(event, ensure_ascii=False) + "\n",
+            )
         await _workflow_event(runtime, event)
 
     resume_existing = bool(resume_id)
     while True:
         runner = KernelWorkflowSubagentRunner(agent, runtime, workflow_id)
+        if exec_manager is not None and not workflow_registered:
+            def cancel_workflow() -> dict[str, str]:
+                if workflow_task is not None and not workflow_task.done():
+                    workflow_task.cancel()
+                    return {"state": "cancelled"}
+                return {"state": "completed"}
+
+            exec_manager.register_background_job(
+                workflow_id, label=goal or f"Resume workflow {workflow_id}",
+                kind="workflow", kill=cancel_workflow,
+            )
+            workflow_registered = True
         execute_workflow = (
             resume_workflow(
                 workflow_id,
@@ -151,17 +171,34 @@ async def execute_workflow_tool(
                 journal=journal,
             )
         )
-        result = await _run_with_pause_bridge(
+        workflow_task = asyncio.create_task(_run_with_pause_bridge(
             execute_workflow,
             workflow_id=workflow_id,
             journal=journal,
             pause_event=pause_event,
             cancel_event=cancel_event,
-        )
+        ))
+        try:
+            result = await workflow_task
+        except asyncio.CancelledError:
+            if exec_manager is not None:
+                exec_manager.settle_background_job(workflow_id, state="cancelled")
+            raise
+        except Exception:
+            if exec_manager is not None:
+                exec_manager.settle_background_job(workflow_id, state="failed")
+            raise
         if result.status != "paused" or not journal.pause_requested(workflow_id):
             break
         await _wait_for_planner_resume(pause_event, cancel_event)
         resume_existing = True
+
+    if exec_manager is not None:
+        final_state = "failed" if result.status in {"failed", "error"} else "completed"
+        exec_manager.append_job_output(
+            workflow_id, json.dumps({"status": result.status, "error": result.error}, ensure_ascii=False) + "\n",
+        )
+        exec_manager.settle_background_job(workflow_id, state=final_state)
 
     await _complete_workflow_group(runtime, result)
     return {

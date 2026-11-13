@@ -1809,6 +1809,9 @@ class AtlasKernel:
                     [
                         schema for schema in kernel_tool_schemas(include_workflow=include_workflow)
                         if supports_tools is not False
+                        and (exec_manager is not None or schema["function"]["name"] not in {
+                            "job_list", "job_output", "job_kill",
+                        })
                         and tool_allowed(str(schema["function"]["name"]), tool_allow, tool_deny)
                         and _mcp_tool_allowed(runtime, str(schema["function"]["name"]))
                         and not (read_only and schema["function"]["name"] == "workflow")
@@ -2812,6 +2815,17 @@ class AtlasKernel:
                     await event_queue.put(event)
             return result
 
+        if exec_manager is not None and name in {"job_list", "job_output", "job_kill"}:
+            from atlas.engine.tool_permissions import tool_allowed
+
+            if not tool_allowed(
+                name, getattr(runtime, "tool_allow", None),
+                getattr(runtime, "tool_deny", ()),
+            ):
+                return {"content": f"{name} is not allowed in this run.",
+                        "is_error": True, "outcome": "failed"}
+            return await exec_manager.execute(name, arguments)
+
         from atlas.engine.kernel.lifecycle_tools import dispatch_lifecycle_tool
         lifecycle_result = await dispatch_lifecycle_tool(name, arguments, runtime)
         if lifecycle_result is not None:
@@ -3227,7 +3241,14 @@ class AtlasKernel:
             query = str(arguments.get("query") or "").strip()
             limit = max(1, min(50, int(arguments.get("limit", 8) or 8)))
             candidates = list(agent._model_facing_tools())
-            candidates.extend(kernel_tool_schemas(include_workflow=True))
+            kernel_candidates = kernel_tool_schemas(include_workflow=True)
+            if exec_manager is None:
+                kernel_candidates = [
+                    schema for schema in kernel_candidates
+                    if str((schema.get("function") or schema).get("name", ""))
+                    not in {"job_list", "job_output", "job_kill"}
+                ]
+            candidates.extend(kernel_candidates)
             candidates = [
                 schema for schema in candidates
                 if _mcp_tool_allowed(

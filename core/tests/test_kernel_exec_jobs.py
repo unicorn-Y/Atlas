@@ -1,3 +1,6 @@
+import asyncio
+from types import SimpleNamespace
+
 import pytest
 
 from atlas.engine.kernel.exec import (
@@ -6,7 +9,11 @@ from atlas.engine.kernel.exec import (
     SETTLED_JOB_OUTPUT_BYTES,
     ExecManager,
 )
+from atlas.engine.kernel import workflow_tool
+from atlas.engine.kernel.loop import AtlasKernel
+from atlas.engine.kernel.tools import kernel_tool_schemas
 from atlas.tools.local_execution import LOCAL_TOOLS
+from atlas.workflow.types import WorkflowGraph
 
 
 pytestmark = pytest.mark.unit
@@ -86,6 +93,14 @@ def test_background_job_tools_are_model_visible():
     assert schemas["job_output"]["parameters"]["required"] == ["job_id"]
     assert schemas["job_kill"]["parameters"]["required"] == ["job_id"]
 
+    kernel_schemas = {
+        tool["function"]["name"]: tool["function"]
+        for tool in kernel_tool_schemas(include_workflow=True)
+    }
+    assert set(("job_list", "job_output", "job_kill")) <= kernel_schemas.keys()
+    assert kernel_schemas["job_output"]["parameters"]["required"] == ["job_id"]
+    assert kernel_schemas["job_kill"]["parameters"]["required"] == ["job_id"]
+
 
 @pytest.mark.asyncio
 async def test_background_job_tool_names_dispatch_to_registry(tmp_path):
@@ -100,6 +115,41 @@ async def test_background_job_tool_names_dispatch_to_registry(tmp_path):
     output = await manager.execute("job_output", {"job_id": "subagent-1"})
     assert listed["data"]["jobs"][0]["job_id"] == "subagent-1"
     assert output["output"] == "result"
+
+
+@pytest.mark.asyncio
+async def test_kernel_dispatches_job_tools_directly_to_run_registry(tmp_path):
+    async def dispatch(_name, _arguments):
+        return {"is_error": True, "error": "not expected"}
+
+    manager = ExecManager(dispatch, output_dir=tmp_path, run_id="owner-a")
+    manager.register_background_job("job-1", kill=lambda: {"state": "cancelled"})
+    manager.append_job_output("job-1", "kernel output")
+    kernel = object.__new__(AtlasKernel)
+
+    output = await kernel._dispatch(
+        agent=None, runtime=None, call_id="call-output", name="job_output",
+        arguments={"job_id": "job-1"}, event_queue=asyncio.Queue(),
+        exec_manager=manager,
+    )
+    listed = await kernel._dispatch(
+        agent=None, runtime=None, call_id="call-list", name="job_list",
+        arguments={}, event_queue=asyncio.Queue(), exec_manager=manager,
+    )
+    killed = await kernel._dispatch(
+        agent=None, runtime=None, call_id="call-kill", name="job_kill",
+        arguments={"job_id": "job-1"}, event_queue=asyncio.Queue(),
+        exec_manager=manager,
+    )
+    denied = await kernel._dispatch(
+        agent=None, runtime=SimpleNamespace(tool_allow=None, tool_deny=("job_kill",)),
+        call_id="call-denied", name="job_kill", arguments={"job_id": "job-1"},
+        event_queue=asyncio.Queue(), exec_manager=manager,
+    )
+    assert output["output"] == "kernel output"
+    assert listed["data"]["jobs"][0]["job_id"] == "job-1"
+    assert killed["state"] == "cancelled"
+    assert denied["is_error"] is True
 
 
 @pytest.mark.asyncio
@@ -183,3 +233,56 @@ async def test_detached_shell_uses_same_job_output_ring(tmp_path):
     settled = await manager.job_output("shell-1")
     assert settled["state"] == "completed"
     assert settled["output"] == stdout.decode()
+
+
+@pytest.mark.asyncio
+async def test_workflow_runs_in_shared_job_registry_and_can_be_cancelled(tmp_path, monkeypatch):
+    entered = asyncio.Event()
+
+    class Config:
+        @staticmethod
+        def get(_key, default=None):
+            return default
+
+    async def plan_workflow(*_args, **_kwargs):
+        return WorkflowGraph("test workflow", [], str(tmp_path))
+
+    async def run_workflow(_graph, _runner, *, on_event, **_kwargs):
+        await on_event({"type": "workflow_started", "message": "started"})
+        entered.set()
+        await asyncio.Future()
+
+    async def dispatch(_name, _arguments):
+        return {"is_error": True, "error": "not expected"}
+
+    monkeypatch.setattr("atlas.config.get_config", lambda: Config())
+    monkeypatch.setattr(workflow_tool, "plan_workflow", plan_workflow)
+    monkeypatch.setattr(workflow_tool, "run_workflow", run_workflow)
+    monkeypatch.setattr(workflow_tool, "_workflow_event", lambda *_args: asyncio.sleep(0))
+
+    manager = ExecManager(dispatch, output_dir=tmp_path, run_id="owner-a")
+    runtime = SimpleNamespace(
+        tool_allow=None, tool_deny=(), read_only=False, mode="act",
+        workspace=str(tmp_path), model="test-model", cancel_event=None,
+        pause_event=None, exec_manager=manager, conversation_id="",
+    )
+    agent = SimpleNamespace(
+        _model_mgr=SimpleNamespace(current_model="test-model"),
+        _run_atlas_subtask=lambda *_args, **_kwargs: None,
+    )
+    task = asyncio.create_task(workflow_tool.execute_workflow_tool(
+        agent, runtime, {"goal": "test workflow"},
+    ))
+    await asyncio.wait_for(entered.wait(), timeout=2)
+
+    job = next(item for item in manager.job_list() if item["kind"] == "workflow")
+    assert job["state"] == "running"
+    output = await manager.job_output(job["job_id"])
+    assert '"type": "workflow_started"' in output["output"]
+
+    killed = await manager.job_kill(job["job_id"])
+    assert killed["state"] == "cancelled"
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    final = await manager.job_output(job["job_id"])
+    assert final["state"] == "cancelled"
