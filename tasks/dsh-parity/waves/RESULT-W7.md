@@ -31,7 +31,7 @@ Final output:
 ```text
 ......                                                                   [100%]
 ============================== warnings summary ==============================
-... 5 existing FastAPI/Pydantic deprecation warnings ...
+... 5 FastAPI/Pydantic deprecation warnings ...
 6 passed, 5 warnings
 ```
 
