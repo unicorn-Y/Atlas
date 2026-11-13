@@ -75,3 +75,7 @@ TypeScript: No errors found
 ```
 
 合并后启动 `atlas.server:app`：`/api/health` 返回 HTTP 200。`rtk python scripts/dsh_live_ws_check.py 8811 'Reply with exactly the word: OK'` 实际事件包含 `run.started`、`message.completed`、`run.completed`；模型 `deepseek-v4.1-flash`，回复 `OK`，`[result] terminal=run.completed chars=2`。验证完成后停止后端并确认 `PORT_CLOSED`。
+
+## 全账本状态
+
+本次提交后 `DSH-GAP-LEDGER.md` 共 135 行能力差距；24 行已标关闭（其中包括之前已关闭的 16 行与本轮追加关闭的 8 行），其余仍有 111 行 ABSENT、PRESENT-WEAKER 或尚未闭合的 parity 项。因此五批结果文件和本轮提交已经交付，但“全部差距补齐”的总目标尚未达到，不能报告为全量完成。S1/S2 仍开放；本轮没有改变 `messages` 表语义。其余未关闭项按 E/S/X/D 行号和原因保留在本账本及各批结果文件中。
