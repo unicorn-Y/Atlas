@@ -2810,6 +2810,15 @@ def _map_tool_runtime_event(
             "result": event.get("content", []),
             "is_error": event.get("is_error", False),
         }
+        output_contract = event.get("output_contract")
+        if not isinstance(output_contract, dict):
+            from atlas.agent.tool_catalog import output_contracts_for_tools
+
+            output_contract = output_contracts_for_tools([{
+                "function": {"name": str(event.get("name") or "")},
+            }]).get(str(event.get("name") or ""))
+        if isinstance(output_contract, dict):
+            data["output_contract"] = output_contract
         if event.get("data") is not None:
             data["execution"] = event["data"]
             if isinstance(event["data"], dict) and event["data"].get("full_output_path"):

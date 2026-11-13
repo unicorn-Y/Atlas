@@ -666,6 +666,48 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
     return [by_name[name] for name in sorted(by_name)]
 
 
+def output_contracts_for_tools(tools: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Return registered output contracts for the currently offered model tools.
+
+    The model-facing function schemas remain provider-compatible; output contracts
+    travel with tool result events and drive the renderer independently.
+    """
+    from atlas.engine.tools.registry import registry
+
+    contracts: dict[str, dict[str, Any]] = {}
+    for item in tools:
+        function = item.get("function") if isinstance(item, dict) else None
+        function = function if isinstance(function, dict) else item
+        name = str(function.get("name") or "") if isinstance(function, dict) else ""
+        if not name:
+            continue
+        contract = registry.get_output_contract(name)
+        if contract is None:
+            # Tools supplied by MCP, local execution, or a host adapter do not
+            # register in ToolRegistry. Give each of them an explicit, uniquely
+            # named JSON-compatible result contract so the same renderer path
+            # handles registry and host tools.
+            contracts[name] = {
+                "schema": {
+                    "title": f"{name} output",
+                    "anyOf": [
+                        {"type": "string"}, {"type": "object"}, {"type": "array"},
+                        {"type": "number"}, {"type": "integer"},
+                        {"type": "boolean"}, {"type": "null"},
+                    ],
+                },
+                "render": "text",
+                "presentation_meta": {},
+            }
+        else:
+            contracts[name] = {
+                "schema": contract.schema,
+                "render": contract.render,
+                "presentation_meta": dict(contract.presentation_meta),
+            }
+    return contracts
+
+
 def filter_executable_tools(tools: list[dict[str, Any]], allow: Any = None,
                             deny: Any = ()) -> list[dict[str, Any]]:
     """Filter a model-facing tool pool with the dispatch allow/deny predicate."""

@@ -17,7 +17,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 
 import jsonschema
 
@@ -985,6 +985,19 @@ class ToolRegistry:
     def get_output_contract(self, name: str) -> ToolOutputContract | None:
         """Return the output schema and presentation contract for a tool."""
         return self._attr(name, "output_contract")
+
+    def validate_output(self, name: str, output: Any) -> Any:
+        """Validate a transformed output against the registered tool contract.
+
+        Dispatch already validates the handler result. The kernel calls this again
+        after post-use hooks, since a hook may replace that result before it is
+        persisted, sent to the model, or rendered in the UI.
+        """
+        if isinstance(output, dict) and (
+            output.get("is_error") or output.get("error") or output.get("success") is False
+        ):
+            return output
+        return self._normalize_handler_result(name, output, self.get_output_contract(name))
 
     def get_toolset_for_tool(self, name: str) -> Optional[str]:
         return self._attr(name, "toolset")

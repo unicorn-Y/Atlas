@@ -32,13 +32,13 @@
 |---|---|---|---|---|
 | E1 | 只追加会话事件日志 = 唯一真源；`deriveMessages()` 派生模型历史 | `packages/core/session/src/index.ts:798,819`；`docs/subsystems/session.md` | `engine/session_sync.py:385-415` 直接写 role 行；run 事实走 `loop.py:603` JSONL 且**内容被抹掉**（`logs.py:104-116` 存 `{"length":N}`） | ABSENT |
 | E2 | turn / step 两级生命周期（turn=一条用户消息，step=一次模型调用），`turn/end` 带 typed reason | `packages/core/agent-loop/src/agent.ts:298,400`；`docs/agent-lifecycle.md` | typed terminal reason 已写入 run journal/result；完整 turn/step state machine 和 per-step end event 仍缺 | PRESENT-WEAKER |
-| E3 | 工具执行流水线三瀑布：pre-execute → execute → post-execute → result，带 typed decision | `packages/core/tools/src/index.ts:1375,1499,1151,1787,1838`；`docs/tool-execution-pipeline.md` | ToolScheduler 增加 typed pre_execute/post_execute/result_stage 决策接口；kernel loop 的 PreToolUse/PostToolUse 与该接口尚未统一接线 | PARTIAL (W2; runtime integration remains) |
+| E3 | 工具执行流水线三瀑布：pre-execute → execute → post-execute → result，带 typed decision | `packages/core/tools/src/index.ts:1375,1499,1151,1787,1838`；`docs/tool-execution-pipeline.md` | ToolScheduler 的 typed pre_execute/post_execute/result_stage 已接入 kernel loop；PreToolUse、PostToolUse、PostToolUseFailure 与最终结果校验均经过对应阶段 | ✅ W2-V2 已接线；真实模型工具回合已验证 |
 
 ### P1
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| E4 | 每工具强制输出契约 `{schema, render, presentationMeta}`，成功即校验 | `packages/core/tools/src/index.ts:214,1838` | ToolRegistry 支持输出 JSON Schema 校验与 render/presentation_meta 契约查询；既有工具仅获兼容默认契约，渲染消费和逐工具显式 schema 尚未接线 | PARTIAL (W2; per-tool/render integration remains) |
+| E4 | 每工具强制输出契约 `{schema, render, presentationMeta}`，成功即校验 | `packages/core/tools/src/index.ts:214,1838` | registry 工具支持注册输出 JSON Schema 并在 handler 与 post-hook 后校验；kernel/API 事件携带契约，时间线和工具卡片消费 `render` 与 presentation metadata；无显式声明的既有及 host 工具仍使用兼容通用 JSON schema | PARTIAL (W2-V2; explicit semantic schemas for existing tools remain) |
 | E5 | 两有序表 durable inbox：`next-turn` / `next-step`，`inject` 不唤醒 | `packages/core/agent-loop/src/inbox.ts:74,109` | `engine/kernel/inbox.py` 持久化两条 lane 并回放/确认；`runtime_ws_router.py` inject 分支写 inbox，不唤醒 steer 队列 | ✅ 本轮关闭 |
 | E6 | 请求信封落日志 + 工具增删发 developer 消息告知模型 | `agent.ts:626-700` | `request_envelope.py` 记录请求摘要/角色/长度/工具名；`loop.py` 在工具池变化时发 developer 消息 | ✅ 本轮关闭 |
 | E7 | 并发安全按**调用参数**判定，派发前**复检**，不支持者成 barrier | `packages/core/agent-loop/src/tool-calls.ts:60,122,199` | `tools.py` 调用级参数分类并在派发前复检；读写不明的调用串行化为 barrier | ✅ **本次已修**（参数感知 + 派发前复检 + barrier） |

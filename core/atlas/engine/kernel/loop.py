@@ -46,7 +46,7 @@ from atlas.engine.kernel.tool_finalize import (
     finalize_view,
 )
 from atlas.engine.kernel.tools import (
-    READ_ONLY_TOOLS, ToolExecutionResult, ToolScheduler, validate_tool_arguments,
+    READ_ONLY_TOOLS, ToolDecision, ToolExecutionResult, ToolScheduler, validate_tool_arguments,
 )
 
 log = logging.getLogger(__name__)
@@ -1061,9 +1061,132 @@ class AtlasKernel:
             bad_tool_args: dict[str, str] = {}
             offered_schemas: dict[str, dict[str, Any]] = {}
             # The tool node already reports each call's real output on event_queue;
-            # those ids get no second, output-less tool_result from the batch end.
+            # top-level results are held until the scheduler's post/result stages finish.
             tool_started_at: dict[str, float] = {}
-            forwarded_results: set[str] = set()
+            pretool_results: dict[str, dict[str, Any]] = {}
+
+            async def pre_execute(call_id: str, name: str, args: dict[str, Any]) -> ToolDecision:
+                """Run the existing PreToolUse hook at the scheduler's pre-execute seam."""
+                if name == "concludeTurn" or not _mcp_tool_allowed(runtime, name):
+                    return ToolDecision()
+                if call_id in bad_tool_args:
+                    return ToolDecision()
+                offered_schema = offered_schemas.get(name)
+                if offered_schema is not None and validate_tool_arguments(name, args, offered_schema):
+                    return ToolDecision()
+                if _plan_mode_denies(proxy_runtime, name):
+                    return ToolDecision()
+                pre_tool = await self._run_hook(request, "PreToolUse", {
+                    "tool_name": name, "tool_use_id": call_id,
+                    "tool_input": copy.deepcopy(args), "conversation_id": session_id,
+                    "run_id": run_id, "cwd": request.workspace or "",
+                })
+                updated = pre_tool.get("updated_input")
+                tool_args = copy.deepcopy(updated) if isinstance(updated, dict) else copy.deepcopy(args)
+                tool_inputs[call_id] = tool_args
+                additional_context = pre_tool.get("additional_context")
+                if isinstance(additional_context, str) and additional_context.strip():
+                    tool_hook_context.setdefault(call_id, []).append(additional_context.strip())
+                permission_decision = str(
+                    pre_tool.get("permission_decision")
+                    or pre_tool.get("permissionDecision")
+                    or ("ask" if pre_tool.get("ask_user") else "")
+                ).lower()
+                if pre_tool.get("blocked") or permission_decision in {"deny", "defer"}:
+                    reason = str(pre_tool.get("reason") or (
+                        f"Tool use blocked by PreToolUse hook ({permission_decision or 'blocked'})."
+                    ))
+                    denied_hook = await self._run_hook(request, "PermissionDenied", {
+                        "tool_name": name, "tool_use_id": call_id,
+                        "tool_input": copy.deepcopy(tool_args), "reason": reason,
+                        "conversation_id": session_id, "run_id": run_id,
+                        "cwd": request.workspace or "",
+                    })
+                    if denied_hook.get("retry") is True:
+                        record("permission_denied_retry", tool_call_id=call_id, name=name,
+                               reason=reason)
+                        pre_tool["blocked"] = False
+                        pre_tool["permission_decision"] = "allow"
+                    else:
+                        pretool_blocked.add(call_id)
+                        record("tool_blocked", tool_call_id=call_id,
+                               name=name, decision=permission_decision or "blocked",
+                               reason=reason)
+                        return ToolDecision.deny(reason)
+                pretool_results[call_id] = pre_tool
+                return ToolDecision.replace(tool_args) if tool_args != args else ToolDecision()
+
+            async def post_execute(
+                call_id: str, name: str, args: dict[str, Any], output: Any,
+            ) -> ToolDecision:
+                """Run the existing post-use hooks before a result enters the transcript."""
+                initial_error = (
+                    isinstance(output, dict) and bool(
+                        output.get("is_error") or output.get("error")
+                        or output.get("success") is False
+                        or output.get("outcome") not in {None, "completed", "cancelled"}
+                    )
+                )
+                payload = {
+                    "tool_name": name, "tool_use_id": call_id,
+                    "tool_input": copy.deepcopy(args),
+                    "tool_response": _tool_output_text(output),
+                    "conversation_id": session_id, "run_id": run_id,
+                    "cwd": request.workspace or "",
+                }
+                if not initial_error:
+                    outcome = await self._run_hook(request, "PostToolUse", payload)
+                    updated = outcome.get("updated_tool_output")
+                    for key in ("additional_context", "feedback"):
+                        value = outcome.get(key)
+                        if isinstance(value, str) and value.strip():
+                            tool_hook_context.setdefault(call_id, []).append(value.strip())
+                    if outcome.get("blocked") or outcome.get("continue") is False:
+                        value = outcome.get("reason")
+                        if isinstance(value, str) and value.strip():
+                            tool_hook_context.setdefault(call_id, []).append(value.strip())
+                    return ToolDecision.replace(updated) if updated is not None else ToolDecision()
+                if call_id not in pretool_blocked:
+                    outcome = await self._run_hook(request, "PostToolUseFailure", {
+                        **payload,
+                        "error": output.get("error") if isinstance(output, dict) else _tool_output_text(output),
+                        "error_type": str(output.get("outcome") or "failed")
+                        if isinstance(output, dict) else "failed",
+                    })
+                    for key in ("additional_context", "feedback", "reason"):
+                        value = outcome.get(key)
+                        if isinstance(value, str) and value.strip():
+                            tool_hook_context.setdefault(call_id, []).append(value.strip())
+                return ToolDecision()
+
+            def result_stage(call_id: str, name: str, _args: dict[str, Any], output: Any) -> ToolDecision:
+                """Revalidate the post-hook result against the tool's registered contract."""
+                from atlas.engine.tools.registry import registry
+
+                presentation = tool_output_contracts.get(name)
+                if presentation is None:
+                    return ToolDecision()
+                if registry.get_output_contract(name) is not None:
+                    validated = registry.validate_output(name, output)
+                    return ToolDecision.replace(validated) if validated is not output else ToolDecision()
+                if isinstance(output, dict) and (
+                    output.get("is_error") or output.get("error") or output.get("success") is False
+                ):
+                    return ToolDecision()
+                try:
+                    import jsonschema
+
+                    jsonschema.validate(output, presentation["schema"])
+                except Exception as exc:  # noqa: BLE001 - host output must stay in the tool-result channel
+                    from atlas.engine.tools.registry import tool_error
+
+                    validated = tool_error(
+                        "Tool output violated its declared schema",
+                        error_type="tool_output_schema", tool=name,
+                        validation_error=str(exc)[:300],
+                    )
+                    return ToolDecision.replace(validated)
+                return ToolDecision()
 
             conclusion = TurnConclusion()
 
@@ -1088,17 +1211,10 @@ class AtlasKernel:
                 if _plan_mode_denies(proxy_runtime, name):
                     return {"content": "Plan mode is read-only. Submit the plan and wait for approval before using this tool.",
                             "is_error": True, "outcome": "denied"}
-                pre_tool = await self._run_hook(request, "PreToolUse", {
-                    "tool_name": name, "tool_use_id": call_id,
-                    "tool_input": copy.deepcopy(tool_args), "conversation_id": session_id,
-                    "run_id": run_id, "cwd": request.workspace or "",
-                })
+                pre_tool = pretool_results.pop(call_id, {})
                 if isinstance(pre_tool.get("updated_input"), dict):
-                    tool_args = copy.deepcopy(pre_tool["updated_input"])
+                    tool_args = copy.deepcopy(args)
                 tool_inputs[call_id] = tool_args
-                additional_context = pre_tool.get("additional_context")
-                if isinstance(additional_context, str) and additional_context.strip():
-                    tool_hook_context.setdefault(call_id, []).append(additional_context.strip())
                 permission_decision = str(
                     pre_tool.get("permission_decision")
                     or pre_tool.get("permissionDecision")
@@ -1247,6 +1363,9 @@ class AtlasKernel:
                 dispatch_tool,
                 max_concurrency=int(engine_config.get("tool_concurrency", 10)),
                 allow=tool_allow, deny=tool_deny,
+                pre_execute=pre_execute,
+                post_execute=post_execute,
+                result_stage=result_stage,
             )
             context_manager = ContextManager(raw_config, output_dir=run_dir / "compact-output")
             def context_remaining_callback() -> dict[str, Any]:
@@ -1578,11 +1697,14 @@ class AtlasKernel:
                 output_resolver = getattr(agent._model_mgr, "output_tokens_for_model", None)
                 if callable(output_resolver):
                     output_token_limit = output_resolver(
-                        turn_model, int(requested_output_limit), configured_output_limit,
-                    ) or int(requested_output_limit)
+                        turn_model, requested_output_limit, configured_output_limit,
+                    )
                 else:
-                    output_token_limit = min(int(requested_output_limit), int(configured_output_limit)) \
-                        if configured_output_limit else int(requested_output_limit)
+                    output_token_limit = requested_output_limit
+                    if configured_output_limit:
+                        output_token_limit = min(
+                            requested_output_limit, configured_output_limit,
+                        ) if requested_output_limit else configured_output_limit
 
                 async def summarize(old: list[dict[str, Any]], summary_prompt: str) -> str:
                     from atlas.models.reasoning_stages import effort_for_phase, load_stage_config
@@ -1816,7 +1938,9 @@ class AtlasKernel:
 
                 available_tools = agent._model_facing_tools()
                 from atlas.engine.kernel.tools import kernel_tool_schemas
-                from atlas.agent.tool_catalog import filter_executable_tools
+                from atlas.agent.tool_catalog import (
+                    filter_executable_tools, output_contracts_for_tools,
+                )
 
                 tool_allow = getattr(runtime, "tool_allow", None)
                 tool_deny = getattr(runtime, "tool_deny", ())
@@ -1868,6 +1992,9 @@ class AtlasKernel:
                         not in {"local_edit", "local_edit_batch"}
                     ]
                     available_tools = [*available_tools, *edit_manager.get_tools_for_llm()]
+                # Keep contracts for the complete executable pool, including
+                # schemas that tool_search may defer and expose later this turn.
+                tool_output_contracts = output_contracts_for_tools(available_tools)
                 deferred_note = None
                 tool_pool_pruned = False
                 schema_chars_before = len(json.dumps(available_tools, ensure_ascii=False, default=str))
@@ -1951,6 +2078,7 @@ class AtlasKernel:
                 tools = plan.filter_tools(
                     available_tools, read_only_names=("build_repo_map", "concludeTurn"),
                 )
+                tool_output_contracts.update(output_contracts_for_tools(tools))
                 offered_schemas.clear()
                 offered_schemas.update({
                     str((item.get("function") or item).get("name")): dict(
@@ -2466,47 +2594,6 @@ class AtlasKernel:
                         tool_args = tool_inputs.get(result.call_id, next(
                             (call["args"] for call in calls if call["id"] == result.call_id), {}
                         ))
-                        initial_error = (
-                            bool(isinstance(result.output, dict) and (
-                                result.output.get("is_error")
-                                or result.output.get("error")
-                                or result.output.get("success") is False
-                            ))
-                            or receipt["state"] not in {"completed", "cancelled"}
-                        )
-                        hook_payload = {
-                            "tool_name": result.name, "tool_use_id": result.call_id,
-                            "tool_input": copy.deepcopy(tool_args),
-                            "tool_response": _tool_output_text(result.output),
-                            "conversation_id": session_id, "run_id": run_id,
-                            "cwd": request.workspace or "",
-                        }
-                        if not initial_error:
-                            post_tool = await self._run_hook(request, "PostToolUse", hook_payload)
-                            if post_tool.get("updated_tool_output") is not None:
-                                result.output = post_tool["updated_tool_output"]
-                            for key in ("additional_context", "feedback"):
-                                value = post_tool.get(key)
-                                if isinstance(value, str) and value.strip():
-                                    tool_hook_context.setdefault(result.call_id, []).append(value.strip())
-                            if post_tool.get("blocked") or post_tool.get("continue") is False:
-                                value = post_tool.get("reason")
-                                if isinstance(value, str) and value.strip():
-                                    tool_hook_context.setdefault(result.call_id, []).append(value.strip())
-                        elif result.call_id not in pretool_blocked:
-                            failure_hook = await self._run_hook(request, "PostToolUseFailure", {
-                                **hook_payload,
-                                "error": (result.output.get("error") if isinstance(result.output, dict)
-                                          else _tool_output_text(result.output)),
-                                "error_type": receipt["state"],
-                            })
-                            for key in ("additional_context", "feedback"):
-                                value = failure_hook.get(key)
-                                if isinstance(value, str) and value.strip():
-                                    tool_hook_context.setdefault(result.call_id, []).append(value.strip())
-                            reason = failure_hook.get("reason")
-                            if isinstance(reason, str) and reason.strip():
-                                tool_hook_context.setdefault(result.call_id, []).append(reason.strip())
                         record("tool_end", tool_call_id=result.call_id, name=result.name,
                                state=receipt["state"], duration_ms=receipt["duration_ms"],
                                output_ref=receipt.get("output_ref"),
@@ -2596,6 +2683,7 @@ class AtlasKernel:
                             "kernel_run_id": run_id, "output_ref": receipt.get("output_ref"),
                             "receipt_state": receipt["state"],
                             "duration_ms": receipt["duration_ms"],
+                            "output_contract": tool_output_contracts.get(result.name),
                         })
                         # Durable boundary: the result is in the session history, so
                         # a resume that finds this checkpoint must skip the call
@@ -2615,14 +2703,12 @@ class AtlasKernel:
                         if repeat_notice:
                             messages.append({"role": "developer", "content": repeat_notice})
                         tool_started_at.pop(result.call_id, None)
-                        if result.call_id in forwarded_results:
-                            forwarded_results.discard(result.call_id)
-                            continue
                         result_events.append(emit(
                             "tool_result", id=result.call_id, name=result.name,
                             content=[{"type": "text", "text": content}],
                             data={"state": receipt["state"],
                                   "duration_ms": receipt["duration_ms"]},
+                            output_contract=tool_output_contracts.get(result.name),
                             is_error=is_error,
                             **({"error_category": "tool"} if is_error else {}),
                         ))
@@ -2641,15 +2727,17 @@ class AtlasKernel:
                                     and queued_event.get("type") == "approval_required"
                                     and state.phase == RunPhase.TOOLS):
                                 transition(RunPhase.WAITING_APPROVAL)
-                            if (isinstance(queued_event, dict)
-                                    and queued_event.get("type") == "tool_result"
-                                    and str(queued_event.get("id")) in open_call_ids
-                                    and str(queued_event.get("id")) not in forwarded_results):
-                                queued_event = _with_execution(
-                                    queued_event, tool_started_at.get(str(queued_event["id"])),
+                            top_level_result = (
+                                isinstance(queued_event, dict)
+                                and queued_event.get("type") == "tool_result"
+                                and (
+                                    str(queued_event.get("id")) in open_call_ids
+                                    or str(queued_event.get("name") or "")
+                                    in {str(call.get("name") or "") for call in calls}
                                 )
-                                forwarded_results.add(str(queued_event["id"]))
-                            yield queued_event
+                            )
+                            if not top_level_result:
+                                yield queued_event
                             queue_get = asyncio.create_task(event_queue.get())
                     results: list[ToolExecutionResult] = await tool_task
                 except asyncio.CancelledError:
@@ -3848,17 +3936,6 @@ def _tool_output_text(output: Any) -> str:
         if "data" in output:
             return json.dumps(output["data"], ensure_ascii=False, default=str)
     return str(output or "")
-
-
-def _with_execution(event: dict[str, Any], started_at: float | None) -> dict[str, Any]:
-    """Add the receipt fields (state, duration) to the tool node's own result event."""
-    data = dict(event["data"]) if isinstance(event.get("data"), dict) else {}
-    data.setdefault("state", str(data.get("outcome") or (
-        "failed" if event.get("is_error") else "completed"
-    )))
-    if started_at is not None:
-        data.setdefault("duration_ms", int((time.monotonic() - started_at) * 1000))
-    return {**event, "data": data}
 
 
 def _tool_result_event_text(result: ToolExecutionResult) -> str:

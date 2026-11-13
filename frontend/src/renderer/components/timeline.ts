@@ -44,6 +44,12 @@ export interface Step {
   subtaskId?: string;
   /** Where the backend saved a tool result too large for the model's context. */
   fullOutputPath?: string;
+  /** Per-tool output contract used to select a safe, predictable result renderer. */
+  outputContract?: {
+    schema?: unknown;
+    render?: string;
+    presentation_meta?: Record<string, unknown>;
+  };
 }
 
 export interface RunUsage { input_tokens?: number | null; output_tokens?: number | null; cached_input_tokens?: number | null; context_tokens?: number | null; context_limit?: number | null }
@@ -510,6 +516,8 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
           stepsBlock(event.id).steps.push(step);
         }
         const result = resultRecord(data.result);
+        const outputContract = data.output_contract && typeof data.output_contract === 'object'
+          ? data.output_contract as Step['outputContract'] : undefined;
         const failed = Boolean(data.is_error) || result?.is_error === true || execution?.state === 'failed' || execution?.state === 'error'
           || data.status === 'failed' || (typeof execution?.exit_code === 'number' && execution.exit_code !== 0);
         step.state = execution?.state === 'cancelled' ? 'cancelled' : failed ? 'failed' : 'done';
@@ -518,6 +526,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
         step.imagePreview = image.preview;
         step.result = image.summary || cap(text(data.result));
         step.summary = step.state === 'failed' ? undefined : summarizeToolResult(step.category, data.result, execution);
+        step.outputContract = outputContract;
         if (step.state === 'failed') step.failureReason = failureMessage(data.result, execution) ?? '工具返回失败状态';
         if (typeof data.full_output_path === 'string') step.fullOutputPath = data.full_output_path;
         if (execution) {
@@ -857,6 +866,9 @@ export function attachHistoryResult(step: Step, content: string, metadata: Recor
   const receipt = typeof metadata.receipt_state === 'string' ? metadata.receipt_state : '';
   step.state = receipt === 'failed' || receipt === 'error' || receipt === 'denied' ? 'failed' : 'done';
   step.result = content;
+  if (metadata.output_contract && typeof metadata.output_contract === 'object') {
+    step.outputContract = metadata.output_contract as Step['outputContract'];
+  }
   step.endedAt = createdAt;
   if (typeof metadata.duration_ms === 'number') step.endedAt = new Date(Date.parse(step.startedAt) + metadata.duration_ms).toISOString();
   if (typeof metadata.output_ref === 'string' && metadata.output_ref) step.fullOutputPath = metadata.output_ref;

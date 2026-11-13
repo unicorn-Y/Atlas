@@ -2,12 +2,13 @@
 
 import pytest
 
+from atlas.agent.tool_catalog import output_contracts_for_tools
 from atlas.engine.kernel.tools import (
     ToolDecision,
     ToolDecisionKind,
     ToolScheduler,
 )
-from atlas.engine.tools.registry import ToolRegistry
+from atlas.engine.tools.registry import ToolRegistry, registry
 
 pytestmark = pytest.mark.unit
 
@@ -91,6 +92,40 @@ def test_registry_rejects_handler_output_that_violates_declared_schema():
         assert "tool_output_schema" in result, repr(result)
     finally:
         registry.deregister("w2_invalid_probe")
+
+
+def test_registry_revalidates_post_hook_output_against_the_registered_contract():
+    registry = ToolRegistry()
+    registry.register(
+        "w2_post_hook_probe", "w2", {"parameters": {"type": "object"}},
+        lambda _args: "valid", output_schema={"type": "string", "minLength": 3},
+    )
+    try:
+        result = registry.validate_output("w2_post_hook_probe", "x")
+        assert isinstance(result, str)
+        assert "tool_output_schema" in result
+        assert registry.validate_output("w2_post_hook_probe", "updated") == "updated"
+    finally:
+        registry.deregister("w2_post_hook_probe")
+
+
+def test_model_tool_catalog_exposes_registered_and_host_output_contracts():
+    registry.register(
+        "w2_catalog_registered", "w2", {"parameters": {"type": "object"}},
+        lambda _args: "valid", output_schema={"type": "string", "minLength": 3},
+        render="markdown", presentation_meta={"label": "Preview"},
+    )
+    try:
+        contracts = output_contracts_for_tools([
+            {"function": {"name": "w2_catalog_registered"}},
+            {"function": {"name": "w2_host_adapter"}},
+        ])
+        assert contracts["w2_catalog_registered"]["schema"]["minLength"] == 3
+        assert contracts["w2_catalog_registered"]["render"] == "markdown"
+        assert contracts["w2_host_adapter"]["schema"]["title"] == "w2_host_adapter output"
+        assert contracts["w2_host_adapter"]["render"] == "text"
+    finally:
+        registry.deregister("w2_catalog_registered")
 
 
 def test_registry_assigns_a_compatibility_output_contract_to_legacy_tools():

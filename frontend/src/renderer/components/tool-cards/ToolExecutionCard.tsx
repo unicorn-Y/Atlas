@@ -4,6 +4,8 @@ import {
   Globe, Image, ListChecks, LoaderCircle, MessageCircleQuestion, Monitor,
   Pencil, Search, Terminal, Users, Wrench, X, type LucideIcon,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { cn } from '../../ui/cn';
 import ClipboardAction from '../message-actions/ClipboardAction';
 import ImagePreview from '../message-actions/ImagePreview';
@@ -137,7 +139,9 @@ export default function ToolExecutionCard({ step, live, children }: {
       </button>}
       {open && hasDetails && <div className="anim-fade mt-2 ml-[23px] grid gap-2">
         {step.input && <Detail label="输入参数" value={step.input} />}
-        {step.result && <Detail label="工具结果" value={step.result} copyLabel={step.state === 'failed' ? '复制工具结果' : undefined} />}
+        {step.result && <Detail label={String(step.outputContract?.presentation_meta?.label ?? '工具结果')}
+          value={step.result} render={step.outputContract?.render}
+          copyLabel={step.state === 'failed' ? '复制工具结果' : undefined} />}
         {step.output && <Detail label="运行输出" value={step.output} copyLabel={step.state === 'failed' ? '复制运行输出' : undefined} />}
         {step.fullOutputPath && <p className="m-0 text-[11.5px] text-fg-3">
           完整输出：{window.atlasDesktop?.openPath
@@ -149,12 +153,22 @@ export default function ToolExecutionCard({ step, live, children }: {
   </div>;
 }
 
-export function Detail({ label, value, copyLabel }: { label: string; value: string; copyLabel?: string }) {
+export function Detail({ label, value, render, copyLabel }: {
+  label: string; value: string; render?: string; copyLabel?: string;
+}) {
+  let renderedValue = value;
+  if (render === 'json') {
+    try { renderedValue = JSON.stringify(JSON.parse(value), null, 2); } catch { /* preserve invalid JSON as text */ }
+  }
   return <div className="min-w-0 overflow-hidden rounded-lg bg-code shadow-[inset_0_0_0_1px_var(--line)]">
     <div className="flex items-center justify-between border-b border-line px-2.5 py-1">
       <p className="m-0 text-[10.5px] text-fg-3">{label}</p>
       {copyLabel && <ClipboardAction text={value} label={copyLabel} />}
     </div>
-    <pre className="m-0 max-h-72 overflow-auto px-2.5 py-2 font-mono text-[11.5px] leading-[1.55] whitespace-pre-wrap break-words text-fg-2">{value}</pre>
+    {render === 'markdown'
+      ? <div className="prose-atlas max-h-72 overflow-auto px-2.5 py-2 text-[12px] text-fg-2">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
+      </div>
+      : <pre className="m-0 max-h-72 overflow-auto px-2.5 py-2 font-mono text-[11.5px] leading-[1.55] whitespace-pre-wrap break-words text-fg-2">{renderedValue}</pre>}
   </div>;
 }
