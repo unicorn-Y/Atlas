@@ -31,7 +31,7 @@
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
 | E1 | 只追加会话事件日志 = 唯一真源；`deriveMessages()` 派生模型历史 | `packages/core/session/src/index.ts:798,819`；`docs/subsystems/session.md` | `engine/session_sync.py:385-415` 直接写 role 行；run 事实走 `loop.py:603` JSONL 且**内容被抹掉**（`logs.py:104-116` 存 `{"length":N}`） | ABSENT |
-| E2 | turn / step 两级生命周期（turn=一条用户消息，step=一次模型调用），`turn/end` 带 typed reason | `packages/core/agent-loop/src/agent.ts:298,400`；`docs/agent-lifecycle.md` | typed terminal reason 已写入 run journal/result；完整 turn/step state machine 和 per-step end event 仍缺 | PRESENT-WEAKER |
+| E2 | turn / step 两级生命周期（turn=一条用户消息，step=一次模型调用），`turn/end` 带 typed reason | `packages/core/agent-loop/src/agent.ts:298,400`；`docs/agent-lifecycle.md` | 内核跟踪 turn 与每次模型调用 step，在 journal 记录 `turn_start`、`step_start`、typed `step_end`、typed `turn_end`；真实模型端到端证据尚未完成 | PRESENT-WEAKER |
 | E3 | 工具执行流水线三瀑布：pre-execute → execute → post-execute → result，带 typed decision | `packages/core/tools/src/index.ts:1375,1499,1151,1787,1838`；`docs/tool-execution-pipeline.md` | 有 PreToolUse/PostToolUse hooks 和 result finalizers；完整 typed decision/waterfall/result observer 尚未统一 | PRESENT-WEAKER |
 
 ### P1
@@ -58,13 +58,13 @@
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| E19 | `concludeTurn()`：工具结果可声明"本轮结束" | `packages/core/tools/src/index.ts:435,1428,1860` | 无；总要再付一次模型往返 | ABSENT |
+| E19 | `concludeTurn()`：工具结果可声明"本轮结束" | `packages/core/tools/src/index.ts:435,1428,1860` | 内核提供 `concludeTurn` 控制工具并在工具批次完成后终止当前 turn；真实模型端到端证据尚未完成 | PRESENT-WEAKER |
 | E20 | 重复调用提醒：按 `(name, canonical_args)` 连续相同判定，阈值 [3,5,8]，只提醒不否决 | `packages/guard/repeat-tool-reminder/src/index.ts:44,58` | `stuck.py` 按连续相同工具名和规范化参数在第 3/5/8 次发提醒，不阻止调用，不纳入结果文本 | ✅ 本轮关闭 |
 | E21 | 工作目录 per-session durable `working-directory/change`，沙箱写根不随之移动 | `docs/subsystems/working-directory.md` | 工作区固定 per run；模型只能求用户改 | ABSENT |
 | E22 | Agent Teams：root 范围 roster、steer-only 消息、任务 DAG per-mutation revision CAS、`blockedBy` 无环、`waitForChange` | `packages/experimental/agent-team/src/index.ts:135-199` | 存储都在（`groups/store.py`、`kanban.py:15-190`、`peer_inbox.py`），但**没有作为模型工具暴露** | ABSENT（in-loop） |
 | E23 | Workflow：模型写编排**脚本**（`agent()`/`parallel()`/`pipeline()`） | `packages/workflow/workflow-ptc/src/index.ts:109` | `workflow` 工具只从目标规划 DAG，模型不能表达自定义控制流 | PRESENT-WEAKER |
 | E24 | Ralph：串行上下文重置迭代，`maxRounds` 256，handoff ≤16KiB | `packages/experimental/tool-ralph/src/index.ts:35,151` | 无 | ABSENT |
-| E25 | 空闲维护槽 `runMaintenance()`，公开状态仍 idle | `docs/subsystems/core.md#the-agent-handle` | 无；压缩/目标评估在用户消息路径或定时器上 | PRESENT-WEAKER |
+| E25 | 空闲维护槽 `runMaintenance()`，公开状态仍 idle | `docs/subsystems/core.md#the-agent-handle` | 内核提供 idle-only `runMaintenance(callback)`，活动 turn 时拒绝、维护期间阻止新 turn；生产侧调度调用点尚未接入 | PRESENT-WEAKER |
 | E26 | `tools.restrict()` 注册级 scope 层，未知名/空集注册即失败 | `packages/core/tools/src/index.ts:1103` | run 级 allow/deny glob 交集（`tool_permissions.py:6,35`），无进程内 per-agent 作用域 | PRESENT-WEAKER |
 | E27 | PTC 模式：单一 `run_code` 传输，其它工具直调被拒并提示，子调用各记日志 | `packages/core/tools/src/ptc.ts:30` | `execute_code` 是**可选附加**工具，不替换工具面 | PRESENT-WEAKER |
 | E28 | 压缩区域安全：位置跨度，不切开 tool-call/result 对，尾部按 token 计价 | `compaction-basic/src/region.ts:117,139` | `context.py:415-440` 行为等价（取最早未配对） | PRESENT-PARITY |
