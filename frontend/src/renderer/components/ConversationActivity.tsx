@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { BookMarked, Check, ClipboardCopy, FileCheck2, FileWarning, SearchCheck, ChevronRight, CircleDashed, LoaderCircle, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Target, Users, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
@@ -68,81 +68,9 @@ export function registerConversationNode(definition: ConversationNodeDefinition)
 
 /** 渲染单条时间线（用户消息、步骤、回复、审批卡片…）；虚拟列表按条复用，输出与整段渲染完全一致。 */
 export const TimelineRow = memo(function TimelineRow({ item, context, firstInTurn, last }: { item: TimelineItem; context: TimelineRowContext; firstInTurn: boolean; last: boolean }) {
-  const { events, store, username, setTab, busy, onOpenBrowser } = context;
   const nodeKind = item.kind === 'extension' ? item.nodeType : item.kind;
   const RegisteredRenderer = conversationNodeRenderers.get(nodeKind);
-  if (RegisteredRenderer) {
-    return <RegisteredRenderer item={item} context={context} firstInTurn={firstInTurn} last={last} />;
-  }
-  if (item.kind === 'extension') return null;
-  switch (item.kind) {
-    case 'user': return <ConversationMessage key={item.id} role="user" content={item.content} username={username} note={item.steered ? '插话' : undefined} createdAt={item.timestamp} />;
-    case 'reply': return <ConversationMessage key={item.id} role="assistant" content={item.content} username={username} continued={!firstInTurn} streaming={item.streaming} createdAt={item.timestamp}
-      status={item.status ?? (item.streaming ? '正在回复' : undefined)} working={item.streaming && busy} />;
-    case 'reasoning': return <div key={item.id}>
-      {firstInTurn && <TurnHeader working={last && busy} />}
-      <ReasoningBlock text={item.text} streaming={last && busy && item.source === 'run.status'} startedAt={item.startedAt} endedAt={item.endedAt} truncated={item.truncated} />
-    </div>;
-    case 'steps': return <div key={item.id}>
-      {firstInTurn && <TurnHeader working={last && busy} />}
-      <StepTrack steps={item.steps} live={last && busy} runId={events[0]?.runId ?? ''} store={store} onCancelSubtask={(subtaskId) => { const runId = events[0]?.runId; if (runId) store.cancelSubtask(runId, subtaskId); }} />
-    </div>;
-    case 'artifact': return <div key={item.id} className="my-3 flex items-center gap-3 rounded-xl card-surface px-3.5 py-2.5 text-[13px]">
-      <FileText size={16} className="shrink-0 text-brand" />
-      <div className="min-w-0 flex-1"><b className="font-medium text-fg">{item.name}</b>{item.summary && <p className="m-0 truncate text-fg-3">{item.summary}</p>}</div>
-      <Button size="sm" variant="ghost" onClick={() => setTab('artifacts')}>查看</Button>
-    </div>;
-    case 'approval': return <Approval key={item.id} event={item.event} store={store} />;
-    case 'question': return item.event.data.proposal === true
-      ? <SessionProposal key={item.id} event={item.event} store={store} />
-      : isPlanReviewIntent(item.event)
-        ? <Plan key={item.id} event={item.event} store={store} />
-        : <Question key={item.id} event={item.event} store={store} />;
-    case 'plan': return <Plan key={item.id} event={item.event} store={store} />;
-    case 'trust': return <Trust key={item.id} event={item.event} store={store} />;
-    case 'foreground': {
-      const data = item.event.data;
-      return <div key={item.id} className="my-4">
-        <ForegroundConfirmCard apiBaseUrl={store.apiBaseUrl} runId={item.event.runId}
-          reason={typeof data.reason === 'string' && data.reason ? data.reason : 'Atlas 想在你正在使用的窗口里操作'}
-          target={typeof data.target === 'string' ? data.target : undefined} />
-      </div>;
-    }
-    case 'handoff': {
-      const data = item.event.data;
-      const url = typeof data.url === 'string' ? data.url : undefined;
-      return <div key={item.id} className="my-4">
-        <BrowserHandoffCard apiBaseUrl={store.apiBaseUrl} runId={item.event.runId}
-          reason={typeof data.reason === 'string' && data.reason ? data.reason : '浏览器这一步需要你搭把手'}
-          url={url}
-          onOpenPanel={() => { if (url && onOpenBrowser) onOpenBrowser(url); else setTab('browser'); }} />
-      </div>;
-    }
-    case 'group': return <WorkerGroup key={item.id} item={item} />;
-    case 'checks': return <Checks key={item.id} item={item} />;
-    case 'notice': return <div key={item.id} className="my-3 flex items-center gap-2 text-[12.5px] text-fg-2">
-      {item.tone === 'switch' ? <Repeat2 size={13} className="shrink-0 text-brand" /> : item.tone === 'goal' ? <Target size={13} className="shrink-0 text-brand" /> : item.tone === 'todo' ? <ListChecks size={13} className="shrink-0 text-brand" /> : <FlaskConical size={13} className="shrink-0 text-brand" />}
-      <span>{item.text}</span>
-    </div>;
-    case 'lsp': return <LspNotice key={item.id} item={item} />;
-    case 'review': return <ReviewFindingsCard key={item.id} item={item} store={store} />;
-    case 'component': return <StructuredComponentCard key={item.component.id} item={item.component} store={store} />;
-    case 'cancelled': return <div key={item.id} className="my-4 flex items-center gap-2 text-[12.5px] text-fg-3">
-      <Square size={12} />{item.reason ? `会话已结束：${item.reason}` : '你停止了这次任务'}
-    </div>;
-    case 'done': return <DoneLine key={item.id} item={item} events={events} store={store} setTab={setTab} />;
-    case 'failed': return <div key={item.id} role="alert" className="my-4 rounded-xl bg-danger-soft px-4 py-3 text-[13px] text-danger">
-      {item.reason && <p className="m-0 mb-1 font-medium">{item.service ? `服务 ${item.service}：` : ''}{item.reason}{item.status ? `（HTTP ${item.status}）` : ''}</p>}
-      <p className="m-0">没能完成：{item.detail}</p>
-      {item.reason && <p className="m-0 mt-2 text-[12px] text-fg-2">
-        {item.retryAfterSeconds != null
-          ? `约 ${Math.max(0, Math.ceil(item.retryAfterSeconds))} 秒后可以重试。`
-          : '服务没有提供可用的重试时间，请稍后重试。'}
-        {' '}发送补充说明可以续接这项任务。
-      </p>}
-    </div>;
-    default: return null;
-  }
+  return RegisteredRenderer ? <RegisteredRenderer item={item} context={context} firstInTurn={firstInTurn} last={last} /> : null;
 });
 
 export default function ConversationActivity({ events, store, username, setTab, onOpenBrowser }: ConversationActivityProps) {
@@ -750,3 +678,72 @@ function Trust({ event, store }: { event: AgentEvent; store: Store }) {
     </div>
   </div>;
 }
+
+type BuiltinKind = Exclude<TimelineItem['kind'], 'extension'>;
+type BuiltinProps<K extends BuiltinKind> = ConversationNodeProps & { item: Extract<TimelineItem, { kind: K }> };
+
+function builtinRenderer<K extends BuiltinKind>(
+  kind: K,
+  render: (props: BuiltinProps<K>) => ReactNode,
+): readonly [K, ComponentType<ConversationNodeProps>] {
+  const Renderer: ComponentType<ConversationNodeProps> = (props) =>
+    props.item.kind === kind ? render(props as BuiltinProps<K>) : null;
+  return [kind, Renderer];
+}
+
+const builtinConversationNodeRenderers: Array<readonly [BuiltinKind, ComponentType<ConversationNodeProps>]> = [
+  builtinRenderer('user', ({ item, context }) => <ConversationMessage key={item.id} role="user" content={item.content} username={context.username} note={item.steered ? '插话' : undefined} createdAt={item.timestamp} />),
+  builtinRenderer('reply', ({ item, context, firstInTurn }) => <ConversationMessage key={item.id} role="assistant" content={item.content} username={context.username} continued={!firstInTurn} streaming={item.streaming} createdAt={item.timestamp}
+    status={item.status ?? (item.streaming ? '正在回复' : undefined)} working={item.streaming && context.busy} />),
+  builtinRenderer('reasoning', ({ item, context, firstInTurn, last }) => <div key={item.id}>
+    {firstInTurn && <TurnHeader working={last && context.busy} />}
+    <ReasoningBlock text={item.text} streaming={last && context.busy && item.source === 'run.status'} startedAt={item.startedAt} endedAt={item.endedAt} truncated={item.truncated} />
+  </div>),
+  builtinRenderer('steps', ({ item, context, firstInTurn, last }) => <div key={item.id}>
+    {firstInTurn && <TurnHeader working={last && context.busy} />}
+    <StepTrack steps={item.steps} live={last && context.busy} runId={context.events[0]?.runId ?? ''} store={context.store} onCancelSubtask={(subtaskId) => { const runId = context.events[0]?.runId; if (runId) context.store.cancelSubtask(runId, subtaskId); }} />
+  </div>),
+  builtinRenderer('artifact', ({ item, context }) => <div key={item.id} className="my-3 flex items-center gap-3 rounded-xl card-surface px-3.5 py-2.5 text-[13px]">
+    <FileText size={16} className="shrink-0 text-brand" />
+    <div className="min-w-0 flex-1"><b className="font-medium text-fg">{item.name}</b>{item.summary && <p className="m-0 truncate text-fg-3">{item.summary}</p>}</div>
+    <Button size="sm" variant="ghost" onClick={() => context.setTab('artifacts')}>查看</Button>
+  </div>),
+  builtinRenderer('approval', ({ item, context }) => <Approval key={item.id} event={item.event} store={context.store} />),
+  builtinRenderer('question', ({ item, context }) => item.event.data.proposal === true
+    ? <SessionProposal key={item.id} event={item.event} store={context.store} />
+    : isPlanReviewIntent(item.event) ? <Plan key={item.id} event={item.event} store={context.store} />
+      : <Question key={item.id} event={item.event} store={context.store} />),
+  builtinRenderer('plan', ({ item, context }) => <Plan key={item.id} event={item.event} store={context.store} />),
+  builtinRenderer('trust', ({ item, context }) => <Trust key={item.id} event={item.event} store={context.store} />),
+  builtinRenderer('foreground', ({ item, context }) => {
+    const data = item.event.data;
+    return <div key={item.id} className="my-4"><ForegroundConfirmCard apiBaseUrl={context.store.apiBaseUrl} runId={item.event.runId}
+      reason={typeof data.reason === 'string' && data.reason ? data.reason : 'Atlas 想在你正在使用的窗口里操作'}
+      target={typeof data.target === 'string' ? data.target : undefined} /></div>;
+  }),
+  builtinRenderer('handoff', ({ item, context }) => {
+    const data = item.event.data;
+    const url = typeof data.url === 'string' ? data.url : undefined;
+    return <div key={item.id} className="my-4"><BrowserHandoffCard apiBaseUrl={context.store.apiBaseUrl} runId={item.event.runId}
+      reason={typeof data.reason === 'string' && data.reason ? data.reason : '浏览器这一步需要你搭把手'} url={url}
+      onOpenPanel={() => { if (url && context.onOpenBrowser) context.onOpenBrowser(url); else context.setTab('browser'); }} /></div>;
+  }),
+  builtinRenderer('group', ({ item }) => <WorkerGroup key={item.id} item={item} />),
+  builtinRenderer('checks', ({ item }) => <Checks key={item.id} item={item} />),
+  builtinRenderer('notice', ({ item }) => <div key={item.id} className="my-3 flex items-center gap-2 text-[12.5px] text-fg-2">
+    {item.tone === 'switch' ? <Repeat2 size={13} className="shrink-0 text-brand" /> : item.tone === 'goal' ? <Target size={13} className="shrink-0 text-brand" /> : item.tone === 'todo' ? <ListChecks size={13} className="shrink-0 text-brand" /> : <FlaskConical size={13} className="shrink-0 text-brand" />}
+    <span>{item.text}</span>
+  </div>),
+  builtinRenderer('lsp', ({ item }) => <LspNotice key={item.id} item={item} />),
+  builtinRenderer('review', ({ item, context }) => <ReviewFindingsCard key={item.id} item={item} store={context.store} />),
+  builtinRenderer('component', ({ item, context }) => <StructuredComponentCard key={item.component.id} item={item.component} store={context.store} />),
+  builtinRenderer('cancelled', ({ item }) => <div key={item.id} className="my-4 flex items-center gap-2 text-[12.5px] text-fg-3"><Square size={12} />{item.reason ? `会话已结束：${item.reason}` : '你停止了这次任务'}</div>),
+  builtinRenderer('done', ({ item, context }) => <DoneLine key={item.id} item={item} events={context.events} store={context.store} setTab={context.setTab} />),
+  builtinRenderer('failed', ({ item }) => <div key={item.id} role="alert" className="my-4 rounded-xl bg-danger-soft px-4 py-3 text-[13px] text-danger">
+    {item.reason && <p className="m-0 mb-1 font-medium">{item.service ? `服务 ${item.service}：` : ''}{item.reason}{item.status ? `（HTTP ${item.status}）` : ''}</p>}
+    <p className="m-0">没能完成：{item.detail}</p>
+    {item.reason && <p className="m-0 mt-2 text-[12px] text-fg-2">{item.retryAfterSeconds != null ? `约 ${Math.max(0, Math.ceil(item.retryAfterSeconds))} 秒后可以重试。` : '服务没有提供可用的重试时间，请稍后重试。'}{' '}发送补充说明可以续接这项任务。</p>}
+  </div>),
+];
+
+for (const [kind, renderer] of builtinConversationNodeRenderers) conversationNodeRenderers.set(kind, renderer);
