@@ -1082,6 +1082,8 @@ async def execute_tools_node(
                 child_options = {**atlas_options, "workspace_trusted": ctx.workspace_trusted,
                                  "agent_role": definition.get("role", "leaf"),
                                  "agent_type": definition["name"],
+                                 "persona": definition.get("prompt", ""),
+                                 "parent_conversation_id": ctx.conversation_id,
                                  "stable_system_prefix": getattr(ctx, "stable_system_prefix", None),
                                  "depth": ctx.agent_depth + 1, "model": agent_model,
                                  "reasoning_effort": requested_effort or ctx.reasoning_effort,
