@@ -15,9 +15,11 @@ import logging
 import sys
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Set
+
+import jsonschema
 
 from atlas.engine.atlas_constants import atlas_home_key, normalize_scope
 
@@ -177,8 +179,8 @@ def _save_discovery_cache(cache: dict[str, list]) -> None:
     if path is None:
         return
     try:
-        from atlas.engine.utils import atomic_json_write  # stdlib+yaml only; no cycle
         from atlas.engine.atlas_constants import mkdir_under_atlas_home
+        from atlas.engine.utils import atomic_json_write  # stdlib+yaml only; no cycle
         mkdir_under_atlas_home(path.parent)
         atomic_json_write(path, cache, indent=0)
     except Exception as e:
@@ -202,6 +204,26 @@ class ToolEntry:
     # Zero-arg callable whose dict is shallow-merged onto the schema at every get_definitions()
     # — for fields tracking runtime config (delegate_task's description reflects limits).
     dynamic_schema_overrides: Optional[Callable] = None
+    output_contract: "ToolOutputContract | None" = None
+
+
+@dataclass(frozen=True, slots=True)
+class ToolOutputContract:
+    """The machine-checkable output shape and presentation hints for a tool."""
+
+    schema: dict
+    render: str = "text"
+    presentation_meta: dict = field(default_factory=dict)
+
+
+_DEFAULT_OUTPUT_SCHEMA = {
+    "oneOf": [
+        {"type": "string"},
+        {"type": "object", "properties": {
+            "_multimodal": {"const": True}, "content": {"type": "array"}},
+         "required": ["_multimodal", "content"]},
+    ]
+}
 
 
 class _PluginOverridePolicy:
@@ -660,7 +682,10 @@ class ToolRegistry:
         check_fn: Callable | None = None, requires_env: list | None = None, is_async: bool = False,
         description: str = "", emoji: str = "", max_result_size_chars: float | None = None,
         dynamic_schema_overrides: Callable | None = None, override: bool = False,
-        scope: Optional[str] = None):
+        scope: Optional[str] = None,
+        output_schema: dict | None = None,
+        render: str = "text",
+        presentation_meta: dict | None = None):
         """Register a tool (called at import time by each tool file). ``override=True`` is an
         explicit opt-in for plugins replacing a built-in implementation (e.g. a headed-Chrome
         browser backend); without it, cross-toolset shadowing is rejected."""
@@ -675,6 +700,21 @@ class ToolRegistry:
             raise ValueError(
                 f"Tool {name!r}: schema['parameters'] must be an object (JSON Schema dict), "
                 f"got {type(params).__name__}")
+        contract_schema = output_schema if output_schema is not None else _DEFAULT_OUTPUT_SCHEMA
+        if not isinstance(contract_schema, dict):
+            raise ValueError(f"Tool {name!r}: output_schema must be a JSON Schema object")
+        try:
+            jsonschema.validators.validator_for(contract_schema).check_schema(contract_schema)
+        except jsonschema.exceptions.SchemaError as exc:
+            raise ValueError(f"Tool {name!r}: invalid output_schema: {exc.message}") from exc
+        if not isinstance(render, str) or not render.strip():
+            raise ValueError(f"Tool {name!r}: render must be a non-empty string")
+        if presentation_meta is not None and not isinstance(presentation_meta, dict):
+            raise ValueError(f"Tool {name!r}: presentation_meta must be an object")
+        output_contract = ToolOutputContract(
+            schema=contract_schema, render=render.strip(),
+            presentation_meta=dict(presentation_meta or {}),
+        )
         handler_owner = self._plugin_owner_of(handler)
         caller_owner = self._plugin_namespace_of_module(self._caller_module())
         owner = caller_owner or handler_owner
@@ -725,7 +765,8 @@ class ToolRegistry:
                 requires_env=requires_env or [], is_async=is_async,
                 description=description or schema.get("description", ""), emoji=emoji,
                 max_result_size_chars=max_result_size_chars,
-                dynamic_schema_overrides=dynamic_schema_overrides)
+                dynamic_schema_overrides=dynamic_schema_overrides,
+                output_contract=output_contract)
             # Availability is derived per-tool (_toolset_has_exposable_tools), so this map no
             # longer gates a toolset; it still feeds get_toolset_requirements ->
             # TOOLSET_REQUIREMENTS["check_fn"], which banner.py reads (presence only,
@@ -865,22 +906,33 @@ class ToolRegistry:
     # ---- Dispatch ----------------------------------------------------
 
     @staticmethod
-    def _normalize_handler_result(name: str, result):
+    def _normalize_handler_result(name: str, result, contract: ToolOutputContract | None = None):
         """Results must be a string or the multimodal envelope; anything else becomes a
         string error so logging/hooks/budgeting/persistence never receive values they
         cannot slice or size."""
         if isinstance(result, str):
-            return _bound_json_error_result(result)
-        if (
+            normalized = _bound_json_error_result(result)
+        elif (
             isinstance(result, dict)
             and result.get("_multimodal") is True
             and isinstance(result.get("content"), list)):
-            return result
-        result_type = type(result).__name__
-        logger.error("Tool %s handler returned unsupported result type: %s", name, result_type)
-        return tool_error(
-            f"Tool handler returned unsupported result type: {result_type}",
-            error_type="tool_result_contract", tool=name, result_type=result_type)
+            normalized = result
+        else:
+            result_type = type(result).__name__
+            logger.error("Tool %s handler returned unsupported result type: %s", name, result_type)
+            return tool_error(
+                f"Tool handler returned unsupported result type: {result_type}",
+                error_type="tool_result_contract", tool=name, result_type=result_type)
+        if contract is not None:
+            try:
+                jsonschema.validate(normalized, contract.schema)
+            except jsonschema.ValidationError as exc:
+                logger.error("Tool %s output violated its schema: %s", name, exc.message)
+                return tool_error(
+                    "Tool handler output violated its declared schema",
+                    error_type="tool_output_schema", tool=name,
+                    validation_error=exc.message[:300])
+        return normalized
 
     def dispatch(
         self, name: str, args: dict, *, scope: Optional[str] = None, **kwargs) -> str | dict:
@@ -899,7 +951,7 @@ class ToolRegistry:
                 result = run_async(entry.handler(args, **kwargs))
             else:
                 result = entry.handler(args, **kwargs)
-            return self._normalize_handler_result(name, result)
+            return self._normalize_handler_result(name, result, entry.output_contract)
         except Exception as e:
             # exc_info already renders the exception, so keep the message copy bounded.
             logger.exception("Tool %s dispatch error: %s", name, _bound_error_text(str(e)))
@@ -929,6 +981,10 @@ class ToolRegistry:
     def get_schema(self, name: str) -> Optional[dict]:
         """Raw schema dict, bypassing check_fn filtering (token estimates, introspection)."""
         return self._attr(name, "schema")
+
+    def get_output_contract(self, name: str) -> ToolOutputContract | None:
+        """Return the output schema and presentation contract for a tool."""
+        return self._attr(name, "output_contract")
 
     def get_toolset_for_tool(self, name: str) -> Optional[str]:
         return self._attr(name, "toolset")
