@@ -25,9 +25,9 @@ import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
+from enum import Enum
 from typing import Any
 
-from atlas.engine.tool_permissions import tool_allowed
 from atlas.engine.kernel.state import ToolReceipt
 from atlas.engine.kernel.tool_errors import (
     ToolTimeoutError,
@@ -36,8 +36,35 @@ from atlas.engine.kernel.tool_errors import (
     error_output,
     tail_text,
 )
+from atlas.engine.tool_permissions import tool_allowed
 
 Dispatch = Callable[[str, str, dict[str, Any]], Awaitable[Any]]
+
+
+class ToolDecisionKind(Enum):
+    CONTINUE = "continue"
+    DENY = "deny"
+    REPLACE = "replace"
+
+
+@dataclass(frozen=True, slots=True)
+class ToolDecision:
+    """Typed control returned by a kernel tool pipeline stage."""
+
+    kind: ToolDecisionKind = ToolDecisionKind.CONTINUE
+    reason: str = ""
+    value: Any = None
+
+    @classmethod
+    def deny(cls, reason: str) -> ToolDecision:
+        return cls(ToolDecisionKind.DENY, reason=str(reason))
+
+    @classmethod
+    def replace(cls, value: Any) -> ToolDecision:
+        return cls(ToolDecisionKind.REPLACE, value=value)
+
+
+ToolStage = Callable[..., ToolDecision | Awaitable[ToolDecision]]
 READ_ONLY_TOOLS = frozenset({
     "read_file", "search_files", "session_search", "web_search", "web_fetch", "deep_research",
     "read", "glob", "grep", "list_directory", "lsp_diagnostics", "lsp_hover",
@@ -592,20 +619,26 @@ def _timed_out_of(output: Any) -> bool:
 
 
 #: States that mean "this call did not produce a usable result".
-FAILED_STATES = frozenset({"failed", "unknown", "not_started"})
+FAILED_STATES = frozenset({"failed", "denied", "unknown", "not_started"})
 
 
 class ToolScheduler:
     def __init__(self, dispatch: Dispatch, *, max_concurrency: int = 10,
                  allow: Any = None, deny: Any = (),
                  read_only: Callable[[str, dict[str, Any]], bool] | None = None,
-                 partial_snapshot: Callable[[str, str], str | None] | None = None) -> None:
+                 partial_snapshot: Callable[[str, str], str | None] | None = None,
+                 pre_execute: ToolStage | None = None,
+                 post_execute: ToolStage | None = None,
+                 result_stage: ToolStage | None = None) -> None:
         self.dispatch = dispatch
         self.allow, self.deny = allow, deny
         self.read_only = read_only
         # Optional host hook: return whatever output a call already produced so a
         # timed-out call can report partial evidence instead of nothing.
         self.partial_snapshot = partial_snapshot
+        self.pre_execute = pre_execute
+        self.post_execute = post_execute
+        self.result_stage = result_stage
         self.max_concurrency = max(1, int(max_concurrency))
         self._slots = asyncio.Semaphore(self.max_concurrency)
         # Serialize batches as well: a write in another caller cannot overlap reads.
@@ -664,9 +697,49 @@ class ToolScheduler:
                 )
             else:
                 async with self._slots:
-                    state = "unknown"
-                    handler_started = True
-                    output = await self._dispatch_with_deadline(call_id, name, args)
+                    decision = await self._run_stage(self.pre_execute, call_id, name, args)
+                    if decision.kind is ToolDecisionKind.DENY:
+                        state = "failed"
+                        output = error_output(
+                            error_from_exception(
+                                PermissionError(decision.reason or "Tool rejected before execution"),
+                                name=name,
+                            ),
+                            outcome="denied",
+                        )
+                    else:
+                        if decision.kind is ToolDecisionKind.REPLACE and isinstance(decision.value, dict):
+                            args = decision.value
+                        state = "unknown"
+                        handler_started = True
+                        output = await self._dispatch_with_deadline(call_id, name, args)
+                        post_decision = await self._run_stage(
+                            self.post_execute, call_id, name, args, output,
+                        )
+                        if post_decision.kind is ToolDecisionKind.DENY:
+                            state = "failed"
+                            output = error_output(
+                                error_from_exception(
+                                    PermissionError(post_decision.reason or "Tool rejected after execution"),
+                                    name=name,
+                                ),
+                                outcome="failed",
+                            )
+                        elif post_decision.kind is ToolDecisionKind.REPLACE:
+                            output = post_decision.value
+                        result_decision = await self._run_stage(
+                            self.result_stage, call_id, name, args, output,
+                        )
+                        if result_decision.kind is ToolDecisionKind.DENY:
+                            output = error_output(
+                                error_from_exception(
+                                    PermissionError(result_decision.reason or "Tool result rejected"),
+                                    name=name,
+                                ),
+                                outcome="failed",
+                            )
+                        elif result_decision.kind is ToolDecisionKind.REPLACE:
+                            output = result_decision.value
                 state = "failed" if is_error(output) else "completed"
                 if isinstance(output, dict):
                     state = str(output.get("outcome") or state)
@@ -708,6 +781,17 @@ class ToolScheduler:
             call_id, name, output, receipt,
             timed_out=_timed_out_of(output),
         )
+
+    @staticmethod
+    async def _run_stage(stage: ToolStage | None, *args: Any) -> ToolDecision:
+        if stage is None:
+            return ToolDecision()
+        decision = stage(*args)
+        if isinstance(decision, Awaitable):
+            decision = await decision
+        if not isinstance(decision, ToolDecision):
+            raise TypeError("Tool pipeline stages must return ToolDecision")
+        return decision
 
     def timeout_for(self, name: str) -> float:
         """One call's deadline, honouring the env overrides in :func:`resolve_tool_timeout`."""
