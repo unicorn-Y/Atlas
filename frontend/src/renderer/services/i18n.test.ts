@@ -27,6 +27,14 @@ describe('renderer locale resources', () => {
     expect(tn('updates', '查看说明')).toBe('View details');
   });
 
+  it('provides namespaced copy for mandatory update policy', () => {
+    saveLocale('en-US');
+    expect(tn('updates', '必须更新 Atlas')).toBe('Atlas update required');
+    expect(tn('updates', '下载并安装受支持版本')).toBe('Download and install a supported version');
+    expect(tn('updates', '当前版本 2.1.0 已停止支持。最低支持版本为 2.3.0，请安装 2.4.0 后继续使用。'))
+      .toBe('Version 2.1.0 is no longer supported. The minimum supported version is 2.3.0. Install 2.4.0 to continue.');
+  });
+
   it('keeps Chinese source copy when Chinese is selected and falls back safely', () => {
     saveLocale('zh-CN');
     expect(t('通知级别')).toBe('通知级别');

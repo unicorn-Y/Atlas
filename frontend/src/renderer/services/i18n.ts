@@ -7,6 +7,7 @@ export type LocaleNamespace = string;
 const KEY = 'atlas.preference.locale';
 const SLOT_PATTERN = /__U26_SLOT_(\d+)__/g;
 const namespaceCatalogs = new Map<LocaleNamespace, Partial<Record<Locale, Record<string, string>>>>();
+const namespaceEnglishPatterns = new Map<LocaleNamespace, ReturnType<typeof compilePatterns>>();
 
 registerLocaleNamespace('updates', 'en-US', {
   '查看说明': 'View details',
@@ -15,6 +16,10 @@ registerLocaleNamespace('updates', 'en-US', {
   '稍后提醒': 'Remind me later',
   '下载并重启安装': 'Download and restart installation',
   '立即更新源码': 'Update source now',
+  '必须更新 Atlas': 'Atlas update required',
+  '下载并安装受支持版本': 'Download and install a supported version',
+  '该 Release 暂无 Windows 安装包，应用将保持锁定，直到发布包可用。': 'This release has no Windows installer yet. Atlas will stay locked until one is available.',
+  '当前版本 __U26_SLOT_0__ 已停止支持。最低支持版本为 __U26_SLOT_1__，请安装 __U26_SLOT_2__ 后继续使用。': 'Version __U26_SLOT_0__ is no longer supported. The minimum supported version is __U26_SLOT_1__. Install __U26_SLOT_2__ to continue.',
 });
 registerLocaleNamespace('updates', 'zh-CN', {
   '查看说明': '查看说明',
@@ -23,15 +28,20 @@ registerLocaleNamespace('updates', 'zh-CN', {
   '稍后提醒': '稍后提醒',
   '下载并重启安装': '下载并重启安装',
   '立即更新源码': '立即更新源码',
+  '必须更新 Atlas': '必须更新 Atlas',
+  '下载并安装受支持版本': '下载并安装受支持版本',
+  '该 Release 暂无 Windows 安装包，应用将保持锁定，直到发布包可用。': '该 Release 暂无 Windows 安装包，应用将保持锁定，直到发布包可用。',
+  '当前版本 __U26_SLOT_0__ 已停止支持。最低支持版本为 __U26_SLOT_1__，请安装 __U26_SLOT_2__ 后继续使用。': '当前版本 __U26_SLOT_0__ 已停止支持。最低支持版本为 __U26_SLOT_1__，请安装 __U26_SLOT_2__ 后继续使用。',
 });
 
 export function registerLocaleNamespace(namespace: LocaleNamespace, locale: Locale, messages: Record<string, string>): void {
   const catalogs = namespaceCatalogs.get(namespace) ?? {};
   catalogs[locale] = { ...catalogs[locale], ...messages };
   namespaceCatalogs.set(namespace, catalogs);
+  namespaceEnglishPatterns.delete(namespace);
 }
 
-const englishPatterns = Object.entries(enUS)
+function compilePatterns(catalog: Record<string, string>) { return Object.entries(catalog)
   .filter(([source]) => /__U26_SLOT_\d+__/.test(source))
   .map(([source, translated]) => {
     SLOT_PATTERN.lastIndex = 0;
@@ -47,7 +57,19 @@ const englishPatterns = Object.entries(enUS)
     }
     expression += source.slice(cursor).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$';
     return { regex: new RegExp(expression), slots, translated };
-  });
+  }); }
+const englishPatterns = compilePatterns(enUS);
+
+function translatePattern(source: string, patterns: ReturnType<typeof compilePatterns>): string | undefined {
+  if (!/[\u3400-\u9fff]/.test(source)) return undefined;
+  for (const pattern of patterns) {
+    const match = pattern.regex.exec(source);
+    if (!match) continue;
+    const values = new Map(pattern.slots.map((slot, index) => [slot, match[index + 1]]));
+    return pattern.translated.replace(SLOT_PATTERN, (_token, slot: string) => values.get(Number(slot)) ?? '');
+  }
+  return undefined;
+}
 
 
 const originals = new WeakMap<Text, { source: string; translated: string }>();
@@ -130,17 +152,20 @@ export function t(source: string, locale: Locale = readLocale()): string {
   if (locale !== 'en-US') return zhCN[source] ?? source;
   const exact = enUS[source];
   if (exact !== undefined) return exact;
-  if (!/[\u3400-\u9fff]/.test(source)) return source;
-  for (const pattern of englishPatterns) {
-    const match = pattern.regex.exec(source);
-    if (!match) continue;
-    const values = new Map(pattern.slots.map((slot, index) => [slot, match[index + 1]]));
-    return pattern.translated.replace(SLOT_PATTERN, (_token, slot: string) => values.get(Number(slot)) ?? '');
-  }
-  return source;
+  return translatePattern(source, englishPatterns) ?? source;
 }
 
 export function tn(namespace: LocaleNamespace, source: string, locale: Locale = readLocale()): string {
   const scoped = namespaceCatalogs.get(namespace)?.[locale]?.[source];
-  return scoped ?? t(source, locale);
+  if (scoped !== undefined) return scoped;
+  if (locale === 'en-US') {
+    let patterns = namespaceEnglishPatterns.get(namespace);
+    if (!patterns) {
+      patterns = compilePatterns(namespaceCatalogs.get(namespace)?.['en-US'] ?? {});
+      namespaceEnglishPatterns.set(namespace, patterns);
+    }
+    const translated = translatePattern(source, patterns);
+    if (translated !== undefined) return translated;
+  }
+  return t(source, locale);
 }

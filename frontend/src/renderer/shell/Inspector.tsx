@@ -24,7 +24,7 @@ import LspDiagnosticsPanel from './panels/LspDiagnosticsPanel';
 import RolloutPanel from './panels/RolloutPanel';
 import AndroidEmulatorPanel from './panels/AndroidEmulatorPanel';
 import RepoTreemapPanel from './panels/RepoTreemapPanel';
-import { inspectorLayoutKey, readInspectorLayout, writeInspectorLayout } from './inspectorLayout';
+import { inspectorLayoutKey, moveInspectorFloat, readInspectorLayout, writeInspectorLayout } from './inspectorLayout';
 import { getInspectorTab, listInspectorTabs } from './inspectorTabs';
 
 export type InspectorTab = string;
@@ -144,6 +144,7 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
   const [browserOpened, setBrowserOpened] = useState(false);
   const [splitTab, setSplitTab] = useState<InspectorTab | null>(null);
   const [floating, setFloating] = useState(false);
+  const [floatPosition, setFloatPosition] = useState<{ left: number; top: number } | null>(null);
   const layoutKey = inspectorLayoutKey(conversationId);
   const [loadedLayoutKey, setLoadedLayoutKey] = useState('');
   useEffect(() => {
@@ -152,15 +153,16 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
       onTab(saved.tab);
       setSplitTab(saved.splitTab);
       setFloating(saved.floating);
-    } catch { setSplitTab(null); setFloating(false); }
+      setFloatPosition(saved.floatPosition);
+    } catch { setSplitTab(null); setFloating(false); setFloatPosition(null); }
     setLoadedLayoutKey(layoutKey);
   // Conversation identity selects a separate, local layout; never apply one session's dock to another.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]);
   useEffect(() => {
     if (loadedLayoutKey !== layoutKey) return;
-    writeInspectorLayout(conversationId, { version: 1, tab, splitTab, floating });
-  }, [conversationId, layoutKey, loadedLayoutKey, tab, splitTab, floating]);
+    writeInspectorLayout(conversationId, { version: 1, tab, splitTab, floating, floatPosition });
+  }, [conversationId, layoutKey, loadedLayoutKey, tab, splitTab, floating, floatPosition]);
   useEffect(() => { if (tab === 'terminal') setTerminalOpened(true); if (tab === 'browser') setBrowserOpened(true); }, [tab]);
   const messages: ConversationMessage[] = useAtlasStore((state) => state.conversationMessages[conversationId]) ?? EMPTY_MESSAGES;
   const conversationRuns = useAtlasStore((state) => state.runs);
@@ -171,6 +173,17 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
   const current = artifacts.find((item) => item.id === selected);
   const refreshKey = `${run?.id}:${run?.status}`;
   const scopedTerminalCommand = commandForConversation(terminalCommand, conversationId);
+  const dragFloat = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!floating || (event.target as HTMLElement).closest('button,[role="tab"]')) return;
+    event.preventDefault();
+    const start = { x: event.clientX, y: event.clientY };
+    const rect = event.currentTarget.parentElement!.getBoundingClientRect();
+    const origin = floatPosition ?? { left: rect.left, top: rect.top };
+    const move = (pointer: PointerEvent) => setFloatPosition(moveInspectorFloat(origin, { x: pointer.clientX - start.x, y: pointer.clientY - start.y }, { width: window.innerWidth, height: window.innerHeight }));
+    const stop = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop, { once: true });
+  };
 
   const resize = useResizableWidth(conversationId);
   const tabs: Array<[InspectorTab, string]> = [
@@ -178,14 +191,14 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
   ];
   for (const extension of listInspectorTabs()) tabs.push([extension.id, extension.label]);
   const extensionTab = getInspectorTab(tab);
-  return <aside aria-label={fullScreenDiff ? '全屏差异查看器' : '任务面板'} style={!fullScreenDiff && resize.width ? { width: resize.width } : undefined}
+  return <aside aria-label={fullScreenDiff ? '全屏差异查看器' : '任务面板'} style={!fullScreenDiff && resize.width ? { width: resize.width, ...(floating && floatPosition ? { left: floatPosition.left, top: floatPosition.top, right: 'auto', bottom: 'auto' } : {}) } : floating && floatPosition ? { left: floatPosition.left, top: floatPosition.top, right: 'auto', bottom: 'auto' } : undefined}
     className={cn('anim-fade relative flex shrink-0 flex-col bg-canvas shadow-[inset_1px_0_0_var(--line)]', fullScreenDiff ? 'fixed inset-3 z-40 min-w-0' : floating ? 'fixed bottom-4 right-4 top-14 z-40 min-w-0 w-[min(620px,82vw)] shadow-xl' : 'min-w-0', !resize.dragging && 'transition-[width] duration-200', !fullScreenDiff && !floating && !resize.width && (WIDE.includes(tab) || extensionTab?.wide ? 'w-[min(480px,62vw)]' : 'w-[min(340px,62vw)]'))}>
     {!fullScreenDiff && <div role="separator" aria-orientation="vertical" aria-label="拖动或使用方向键调整任务面板宽度，双击恢复自动" aria-valuemin={widthLimits().min} aria-valuemax={widthLimits().max} aria-valuenow={Math.min(widthLimits().max, Math.max(widthLimits().min, resize.width ?? (WIDE.includes(tab) ? 480 : 340)))} tabIndex={0} title="拖动或用方向键调整宽度，双击恢复自动"
       onPointerDown={resize.start} onDoubleClick={resize.reset} onKeyDown={resize.resizeByKeyboard}
       className={cn('absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize after:absolute after:inset-y-0 after:left-[3px] after:w-0.5 after:rounded-full after:transition-colors hover:after:bg-brand/50', resize.dragging && 'after:bg-brand')} />}
     {/* While dragging, keep the embedded browser from swallowing the pointer. */}
     {resize.dragging && <div className="fixed inset-0 z-50 cursor-col-resize" />}
-    <div className={cn('flex items-center gap-2 pr-2 shadow-[inset_0_-1px_0_var(--line)]', fullScreenDiff ? 'min-h-12 px-4' : 'pl-4 pt-3')}>
+    <div onPointerDown={dragFloat} className={cn('flex items-center gap-2 pr-2 shadow-[inset_0_-1px_0_var(--line)]', floating && 'cursor-move', fullScreenDiff ? 'min-h-12 px-4' : 'pl-4 pt-3')}>
       {fullScreenDiff && <div className="flex min-w-0 flex-1 items-center gap-2"><FileText size={16} className="shrink-0 text-brand" /><strong className="truncate text-[14px] text-fg">全屏差异查看器</strong><span className="hidden text-[11.5px] text-fg-3 sm:inline">Ctrl+Alt+[ / Ctrl+Alt+] 折叠或展开 · Ctrl+Alt+↑/↓ 跳转差异块</span></div>}
       {!fullScreenDiff && <button type="button" aria-label="查看任务面板标签概览" title="查看所有任务面板标签" onClick={() => onTab('tabs' as InspectorTab)} className="grid size-7 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><LayoutGrid size={15} /></button>}
       <div className="flex min-w-0 flex-1 items-center gap-3.5 overflow-x-auto [scrollbar-width:none]" role="tablist">

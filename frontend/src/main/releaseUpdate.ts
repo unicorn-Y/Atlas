@@ -5,7 +5,7 @@ import { Readable } from 'node:stream';
 import { execFileSync, spawn } from 'node:child_process';
 import path from 'node:path';
 
-export interface ReleaseStatus { supported: boolean; available: boolean; current: string; latest?: string; notes?: string; assetName?: string; error?: string; skipped?: boolean }
+export interface ReleaseStatus { supported: boolean; available: boolean; current: string; latest?: string; minimumVersion?: string; mandatory?: boolean; notes?: string; assetName?: string; error?: string; skipped?: boolean }
 type Semver = { core: [number, number, number]; prerelease: Array<string | number> };
 function semver(raw: string): Semver {
   const match = raw.trim().match(/^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/);
@@ -76,11 +76,18 @@ export async function checkReleaseUpdate(source: string, current: string, userDa
     const release = await jsonFetch(source.trim());
     const latest = String(release.tag_name ?? release.name ?? '').trim();
     semver(latest);
+    const notes = String(release.body ?? '');
+    const minimumVersion = notes.match(/^\s*Minimum-Atlas-Version:\s*(v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)\s*$/im)?.[1];
+    if (minimumVersion) {
+      semver(minimumVersion);
+      if (compareSemver(latest, minimumVersion) < 0) throw new Error('Release 的最低支持版本高于当前发布版本。');
+    }
+    const mandatory = Boolean(minimumVersion && compareSemver(current, minimumVersion) < 0);
     const asset = (release.assets as Array<{ name: string; browser_download_url: string }> | undefined)?.find((item) => /setup\.exe$/i.test(item.name));
     const p = prefs(userData);
     const skipped = p.skipped === latest;
-    return { supported: true, current, latest, notes: String(release.body ?? ''), assetName: asset?.name,
-      available: compareSemver(latest, current) > 0 && !skipped && !(p.remindAfter && Date.now() < p.remindAfter), skipped };
+    return { supported: true, current, latest, minimumVersion, mandatory, notes, assetName: asset?.name,
+      available: compareSemver(latest, current) > 0 && (mandatory || (!skipped && !(p.remindAfter && Date.now() < p.remindAfter))), skipped };
   } catch (error) { return { supported: true, available: false, current, error: error instanceof Error ? error.message : String(error) }; }
 }
 export async function downloadVerifiedInstaller(source: string, expectedVersion: string, userData: string, progress: (percent: number) => void): Promise<string> {
