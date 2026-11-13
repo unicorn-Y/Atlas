@@ -29,3 +29,38 @@ def test_require_checkpoint_rejects_missing_run_id():
 
     with pytest.raises(checkpoints.CheckpointWriteError, match="run_id"):
         checkpoints.require_checkpoint("", kind="phase", phase="running")
+
+
+def test_required_checkpoint_emits_a_production_span(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    from atlas import telemetry
+    import atlas.run_checkpoints as checkpoints
+
+    class CurrentSpan:
+        def __init__(self):
+            self.attributes = {}
+
+        def set_attribute(self, key, value):
+            self.attributes[key] = value
+
+    class Tracer:
+        def __init__(self):
+            self.spans = []
+
+        @contextmanager
+        def start_as_current_span(self, name):
+            current = CurrentSpan()
+            self.spans.append((name, current))
+            yield current
+
+    tracer = Tracer()
+    monkeypatch.setattr(checkpoints, "DATA_ROOT", tmp_path)
+    monkeypatch.setitem(telemetry._state, "tracer", tracer)
+
+    checkpoints.require_checkpoint("run-traced", kind="tool_dispatch", phase="execution")
+
+    assert [name for name, _span in tracer.spans] == ["atlas.run_checkpoint.write"]
+    attributes = tracer.spans[0][1].attributes
+    assert attributes["checkpoint.kind"] == "tool_dispatch"
+    assert attributes["checkpoint.persisted"] is True

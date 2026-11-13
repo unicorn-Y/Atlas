@@ -98,6 +98,19 @@ def _mcp_tool_allowed(runtime: Any, name: str) -> bool:
     return server in allowed
 
 
+def scoped_mcp_client_for_runtime(client: Any, runtime: Any) -> Any:
+    """Bind MCP resource access to the server allowlist of this run."""
+    if client is None:
+        return None
+    allowed = getattr(runtime, "mcp_server_allow", None)
+    if allowed is None:
+        return client
+    scope = getattr(client, "for_scope", None)
+    if not callable(scope):
+        raise TypeError("MCP client cannot enforce this run's server scope")
+    return scope(allowed)
+
+
 def _plan_mode_denies(runtime: Any, name: str) -> bool:
     """Keep both preset and interactively selected plan mode read-only."""
     plan_mode = bool(getattr(runtime, "dynamic_plan_mode", False)) or (
@@ -3134,7 +3147,10 @@ class AtlasKernel:
             except (KeyError, OSError, RuntimeError, ValueError, PermissionError) as exc:
                 return {"content": str(exc), "is_error": True, "outcome": "failed"}
         if name in {"list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"}:
-            client = getattr(agent, "_mcp", None)
+            try:
+                client = scoped_mcp_client_for_runtime(getattr(agent, "_mcp", None), runtime)
+            except TypeError as exc:
+                return {"content": str(exc), "is_error": True, "outcome": "denied"}
             if client is None:
                 return {"content": "No MCP client is attached to this run.", "is_error": True}
             if name == "list_mcp_resources":

@@ -7,6 +7,7 @@ from typing import Any
 
 from atlas.session_projections import SessionProjections
 from atlas.engine.kernel.tool_finalize import ToolResultFinalizers
+from atlas.runtime.commands import SlashCommandRegistry
 
 
 @dataclass(slots=True)
@@ -44,6 +45,7 @@ class AppServices:
     runtime_resume_handler: Any = None
     rules_trust_handler: Any = None
     plugin_runtime: Any = None
+    slash_command_registry: SlashCommandRegistry = field(default_factory=SlashCommandRegistry)
     notifications: Any = None
     web_runtime: Any = None
     custom_tools: Any = None

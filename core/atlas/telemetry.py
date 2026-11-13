@@ -167,14 +167,35 @@ def span(name: str, attributes: dict[str, Any] | None = None) -> Iterator[Any]:
         yield None
         return
     try:
-        with tracer.start_as_current_span(name) as current:
-            if attributes:
-                for key, value in _scrub_attributes(attributes).items():
-                    current.set_attribute(key, value)
-            yield current
+        span_context = tracer.start_as_current_span(name)
+        current = span_context.__enter__()
     except Exception as exc:  # noqa: BLE001 - a span must never abort the caller
         log.debug("telemetry.span_failed", span=name, error=str(exc))
         yield None
+        return
+
+    if attributes:
+        try:
+            for key, value in _scrub_attributes(attributes).items():
+                current.set_attribute(key, value)
+        except Exception as exc:  # noqa: BLE001 - telemetry cannot abort the caller
+            log.debug("telemetry.span_attributes_failed", span=name, error=str(exc))
+
+    try:
+        yield current
+    except BaseException as exc:
+        # Preserve the caller's exception. The exporter should see it, but a
+        # broken span processor must not replace it with its own failure.
+        try:
+            span_context.__exit__(type(exc), exc, exc.__traceback__)
+        except Exception as span_exc:  # noqa: BLE001
+            log.debug("telemetry.span_failed", span=name, error=str(span_exc))
+        raise
+    else:
+        try:
+            span_context.__exit__(None, None, None)
+        except Exception as exc:  # noqa: BLE001 - telemetry cannot abort the caller
+            log.debug("telemetry.span_failed", span=name, error=str(exc))
 
 
 def current_ids() -> dict[str, str]:

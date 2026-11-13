@@ -106,6 +106,26 @@ def test_span_attributes_never_carry_a_credential() -> None:
 
 
 @pytest.mark.unit
+def test_span_preserves_caller_exceptions(monkeypatch: pytest.MonkeyPatch) -> None:
+    from contextlib import contextmanager
+
+    class CurrentSpan:
+        def set_attribute(self, _key: str, _value: object) -> None:
+            pass
+
+    class Tracer:
+        @contextmanager
+        def start_as_current_span(self, _name: str):
+            yield CurrentSpan()
+
+    monkeypatch.setitem(telemetry._state, "tracer", Tracer())
+
+    with pytest.raises(ValueError, match="caller failure"):
+        with telemetry.span("probe"):
+            raise ValueError("caller failure")
+
+
+@pytest.mark.unit
 def test_scrub_bare_tokens_catches_unprefixed_credentials() -> None:
     github = "ghp_abcdefghijklmnopqrstuvwxyz0123"
 

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-DEFAULT_MAX_TURNS = 20
+DEFAULT_MAX_TURNS = 256
 MAX_PLAN_ATTEMPTS = 2
 _CONTRACT_FIELDS = ("outcome", "verification", "constraints", "boundaries", "stop_when")
 _CONTRACT_LABELS = {"outcome": "Outcome", "verification": "Verification", "constraints": "Constraints", "boundaries": "Boundaries", "stop_when": "Stop when blocked"}
@@ -40,6 +41,21 @@ class GoalContract:
         return "\n".join(f"- {_CONTRACT_LABELS[name]}: {getattr(self, name).strip()}" for name in _CONTRACT_FIELDS if getattr(self, name).strip())
 
 
+class GoalRevisionConflict(RuntimeError):
+    """A goal write was based on an obsolete goal identity or revision."""
+
+    def __init__(self, expected_id: str, expected_revision: int,
+                 actual_id: str | None, actual_revision: int) -> None:
+        super().__init__(
+            f"stale goal revision: expected {expected_id or '<none>'}@{expected_revision}, "
+            f"found {actual_id or '<none>'}@{actual_revision}"
+        )
+        self.expected_id = expected_id
+        self.expected_revision = expected_revision
+        self.actual_id = actual_id
+        self.actual_revision = actual_revision
+
+
 def parse_contract(text: str) -> tuple[str, GoalContract]:
     fields: dict[str, list[str]] = {name: [] for name in _CONTRACT_FIELDS}
     headline: list[str] = []
@@ -71,6 +87,8 @@ class GoalGate:
 @dataclass
 class GoalState:
     goal: str
+    goal_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    revision: int = 0
     status: str = "active"
     turns_used: int = 0
     max_turns: int = DEFAULT_MAX_TURNS
@@ -100,6 +118,11 @@ class GoalState:
     @classmethod
     def from_json(cls, raw: str) -> GoalState:
         data = json.loads(raw)
+        data["goal_id"] = str(data.get("goal_id") or "")
+        try:
+            data["revision"] = max(0, int(data.get("revision", 0)))
+        except (TypeError, ValueError):
+            data["revision"] = 0
         data["contract"] = GoalContract.from_dict(data.get("contract"))
         data["gates"] = [GoalGate.from_dict(g) for g in data.get("gates", []) if isinstance(g, dict) and g.get("command")]
         data["subgoals"] = [str(item.get("text") or "") if isinstance(item, dict) else str(item)
@@ -158,18 +181,45 @@ def _load(session_id: str, home: str | Path | None) -> GoalState | None:
         return None
 
 
-def _save(session_id: str, home: str | Path | None, state: GoalState | None) -> None:
+def _save(
+    session_id: str, home: str | Path | None, state: GoalState, *,
+    expected_goal_id: str | None, expected_revision: int,
+) -> int:
+    next_revision = expected_revision + 1
     if home is None:
-        return
+        state.revision = next_revision
+        return next_revision
     from atlas.engine.state.atlas_state import SessionDB
     path = Path(home).expanduser().resolve() / "state.db"
     with SessionDB(db_path=path) as db:
         key = f"goal:{session_id}"
-        if state is None:
-            # Keep historical semantics: clear stores a tombstone; use the exact legacy cleared shape.
-            db.set_meta(key, json.dumps({"goal": "", "status": "cleared", "max_turns": DEFAULT_MAX_TURNS}, ensure_ascii=False))
-        else:
-            db.set_meta(key, state.to_json())
+
+        def compare_and_save(conn):
+            row = conn.execute("SELECT value FROM state_meta WHERE key = ?", (key,)).fetchone()
+            current_raw = row[0] if row else None
+            try:
+                current_data = json.loads(current_raw) if current_raw else {}
+                actual_revision = max(0, int(current_data.get("revision", 0)))
+                actual_id = str(current_data.get("goal_id") or "") or None
+            except (AttributeError, TypeError, ValueError):
+                actual_revision, actual_id = 0, None
+            if (actual_revision != expected_revision
+                    or actual_id != (expected_goal_id or None)):
+                raise GoalRevisionConflict(
+                    expected_goal_id or "", expected_revision, actual_id, actual_revision,
+                )
+            state.revision = actual_revision + 1
+            conn.execute(
+                "INSERT INTO state_meta (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, state.to_json()),
+            )
+            return state.revision
+
+        try:
+            return db._execute_write(compare_and_save)
+        except GoalRevisionConflict:
+            raise
 
 
 _DRAFT_PROMPT = (
@@ -265,7 +315,7 @@ _PLAN_REQUIREMENT = (
 
 def goal_kick_prompt(goal: str, last_user_message: Any = None, *, require_plan: bool = False, plan_attempts: int = 0) -> str:
     suffix = f"\n\nUser's original request: {last_user_message}" if isinstance(last_user_message, str) and last_user_message.strip() else ""
-    body = f"[Working toward this goal]\n{goal}{suffix}\n\nMake concrete progress toward the goal. If it needs multiple steps, use the goal_subgoal tool to save concise, independently verifiable milestones before implementation, then mark each one complete only after finishing it. When resuming, list saved milestones and continue with the first incomplete one. Continue until all subgoals are complete, the goal is complete, or you are blocked."
+    body = f"[Working toward this goal]\n{goal}{suffix}\n\nMake concrete progress toward the goal. If it needs multiple steps, use the goal_subgoal tool to save concise, independently verifiable milestones before implementation, then mark each one complete only after finishing it. For every goal_subgoal mutation, include the current goal_id and revision shown below; if a revision conflict is returned, refresh goal progress before retrying. When resuming, list saved milestones and continue with the first incomplete one. Continue until all subgoals are complete, the goal is complete, or you are blocked."
     if require_plan:
         body += "\n\n" + _PLAN_REQUIREMENT
         if plan_attempts >= MAX_PLAN_ATTEMPTS - 1:
@@ -280,6 +330,11 @@ class GoalManager:
         self.session_id, self.home = session_id, home
         self.default_max_turns = int(default_max_turns or DEFAULT_MAX_TURNS)
         self._state = _load(session_id, home)
+        self._base_revision = int(self._state.revision) if self._state else 0
+        self._base_goal_id = (self._state.goal_id or None) if self._state else None
+        if self._state and self._state.goal and not self._state.goal_id:
+            self._state.goal_id = uuid.uuid4().hex
+            self._save()
 
     @property
     def state(self) -> GoalState | None: return self._state
@@ -287,8 +342,37 @@ class GoalManager:
     def has_goal(self) -> bool: return bool(self._state and self._state.goal)
     def has_contract(self) -> bool: return bool(self._state and self._state.has_contract())
     def _save(self):
-        _save(self.session_id, self.home, self._state)
+        if self._state is None:
+            return None
+        if not self._state.goal_id:
+            self._state.goal_id = uuid.uuid4().hex
+        try:
+            revision = _save(
+                self.session_id, self.home, self._state,
+                expected_goal_id=self._base_goal_id,
+                expected_revision=self._base_revision,
+            )
+        except GoalRevisionConflict:
+            self._state = _load(self.session_id, self.home)
+            self._base_revision = int(self._state.revision) if self._state else 0
+            self._base_goal_id = (self._state.goal_id or None) if self._state else None
+            raise
+        self._base_revision = revision
+        self._base_goal_id = self._state.goal_id
         return self._state
+
+    def check_revision(self, goal_id: str | None, revision: int | None) -> None:
+        if goal_id is None and revision is None:
+            return
+        state = self._state
+        actual_id = state.goal_id if state else None
+        actual_revision = state.revision if state else 0
+        if (not isinstance(goal_id, str) or not goal_id
+                or not isinstance(revision, int) or isinstance(revision, bool)
+                or goal_id != actual_id or revision != actual_revision):
+            raise GoalRevisionConflict(
+                str(goal_id or ""), int(revision or 0), actual_id, actual_revision,
+            )
     def status_line(self) -> str:
         if not self._state: return "(no active goal)"
         s = self._state
@@ -322,7 +406,9 @@ class GoalManager:
     def _require(self):
         if not self.has_goal(): raise RuntimeError("no active goal")
         return self._state
-    def add_subgoal(self, text: str):
+    def add_subgoal(self, text: str, *, expected_goal_id: str | None = None,
+                    expected_revision: int | None = None):
+        self.check_revision(expected_goal_id, expected_revision)
         text = (text or "").strip()
         if not text: raise ValueError("subgoal text is empty")
         self._require().subgoals.append(text); self._save(); return text
@@ -390,16 +476,24 @@ class GoalManager:
         next_step = f"\nResume at the first incomplete subgoal: {remaining[0]}" if remaining else ""
         require_plan = s.needs_plan()
         prompt = goal_kick_prompt(
-            s.goal + ("\n" + s.contract.render_block() if s.has_contract() else "") + progress + next_step,
+            s.goal + ("\n" + s.contract.render_block() if s.has_contract() else "")
+            + f"\nCurrent goal CAS token: goal_id={s.goal_id} revision={s.revision}."
+            + progress + next_step,
             require_plan=require_plan,
             plan_attempts=s.plan_attempts,
         )
+        prompt_revision = s.revision
         if require_plan:
             # Bounded gate: the model gets MAX_PLAN_ATTEMPTS planning turns, then
             # Atlas proceeds regardless. Without this a model that never calls
             # goal_subgoal would trap the goal in planning forever.
             s.plan_attempts += 1
             self._save()
+        if s.revision != prompt_revision:
+            prompt = prompt.replace(
+                f"goal_id={s.goal_id} revision={prompt_revision}.",
+                f"goal_id={s.goal_id} revision={s.revision}.",
+            )
         return prompt
     def render_contract(self): return self._state.contract.render_block() if self._state and self._state.has_contract() else "(no completion contract)"
     def evaluate_after_turn(self, response: str, *, judge: Callable | None = None, **kwargs):

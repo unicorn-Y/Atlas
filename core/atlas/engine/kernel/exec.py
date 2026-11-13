@@ -24,6 +24,9 @@ DEFAULT_BASH_MAX_TIMEOUT_MS = 600_000
 DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024
 OUTPUT_METADATA_RESERVE_BYTES = 512
 MAX_CONCURRENT_TERMINALS = 64
+MAX_BACKGROUND_JOBS_PER_OWNER = 10
+JOB_OUTPUT_RING_BYTES = 256 * 1024
+SETTLED_JOB_OUTPUT_BYTES = 16 * 1024
 
 # Hook subprocess budgets are separate from interactive Bash budgets. Keep the
 # policy here so command-execution callers can share the same timeout rules.
@@ -110,6 +113,54 @@ class HeadTailBuffer:
         return _decode_output(bytes(self.head)) + marker.decode() + _decode_output(bytes(self.tail))
 
 
+class JobOutputRing:
+    """Byte-bounded output ring for background job retrieval."""
+
+    def __init__(self, max_bytes: int = JOB_OUTPUT_RING_BYTES) -> None:
+        self.max_bytes = max(0, int(max_bytes))
+        self.data = bytearray()
+        self.total_bytes = 0
+        self.omitted_bytes = 0
+
+    def append(self, chunk: bytes) -> None:
+        self.total_bytes += len(chunk)
+        self.data.extend(chunk)
+        excess = max(0, len(self.data) - self.max_bytes)
+        if excess:
+            del self.data[:excess]
+            self.omitted_bytes += excess
+
+    def settle(self) -> None:
+        self.max_bytes = min(self.max_bytes, SETTLED_JOB_OUTPUT_BYTES)
+        excess = max(0, len(self.data) - self.max_bytes)
+        if excess:
+            del self.data[:excess]
+            self.omitted_bytes += excess
+
+    def read(self, offset: int = 0, limit: int = JOB_OUTPUT_RING_BYTES) -> tuple[bytes, int, int]:
+        start = self.total_bytes - len(self.data)
+        requested = max(0, int(offset))
+        bounded_limit = max(0, min(int(limit), JOB_OUTPUT_RING_BYTES))
+        effective = max(requested, start)
+        local_start = min(len(self.data), effective - start)
+        local_end = min(len(self.data), local_start + bounded_limit)
+        return bytes(self.data[local_start:local_end]), effective, start
+
+
+@dataclass(slots=True)
+class RegisteredJob:
+    job_id: str
+    owner_id: str
+    label: str
+    kind: str
+    output: JobOutputRing = field(default_factory=JobOutputRing)
+    state: str = "running"
+    kill_callback: Callable[[], Any] | None = None
+    refresh_callback: Callable[[], Any] | None = None
+    last_output: str = ""
+    started: float = field(default_factory=time.monotonic)
+
+
 def _decode_output(raw: bytes) -> str:
     """Prefer UTF-8, then a detected local CLI encoding, then lossy UTF-8."""
     try:
@@ -162,6 +213,7 @@ class ExecHandle:
     execution_id: str
     output_path: Path
     buffer: HeadTailBuffer
+    job_output: JobOutputRing
     timeout: float | None
     shell: str = "Shell: none (direct argv)"
     yield_time_ms: int = 2_000
@@ -195,6 +247,162 @@ class ExecManager:
         self.local_runtime = local_runtime
         self.event_queue = event_queue
         self.handles: dict[str, ExecHandle] = {}
+        self.registered_jobs: dict[str, RegisteredJob] = {}
+
+    def _owner_matches(self, owner_id: str | None) -> bool:
+        return owner_id is None or str(owner_id) == str(self.run_id or "")
+
+    def _background_count(self, *, excluding: str | None = None) -> int:
+        local = sum(
+            handle.outcome == "running" and handle.detached and handle.execution_id != excluding
+            for handle in self.handles.values()
+        )
+        external = sum(job.state == "running" for job in self.registered_jobs.values())
+        return local + external
+
+    def register_background_job(
+        self, job_id: str, *, label: str = "background job", kind: str = "subagent",
+        owner_id: str | None = None, kill: Callable[[], Any] | None = None,
+        refresh: Callable[[], Any] | None = None,
+    ) -> RegisteredJob:
+        """Register an external background producer under this run's owner fence."""
+        owner = str(self.run_id or "")
+        if owner_id is not None and str(owner_id) != owner:
+            raise PermissionError("job_owner_mismatch")
+        identifier = str(job_id or "").strip()
+        if not identifier:
+            raise ValueError("job_id must not be empty")
+        if identifier in self.handles or identifier in self.registered_jobs:
+            raise ValueError("job_id is already registered")
+        for existing in self.registered_jobs.values():
+            self._refresh_registered_job(existing)
+        if self._background_count() >= MAX_BACKGROUND_JOBS_PER_OWNER:
+            raise ValueError("maximum of 10 background jobs per owner")
+        job = RegisteredJob(
+            identifier, owner, str(label), str(kind),
+            kill_callback=kill, refresh_callback=refresh,
+        )
+        self.registered_jobs[identifier] = job
+        return job
+
+    def ensure_background_capacity(self) -> None:
+        if self._background_count() >= MAX_BACKGROUND_JOBS_PER_OWNER:
+            raise ValueError("maximum of 10 background jobs per owner")
+
+    def _refresh_registered_job(self, job: RegisteredJob) -> None:
+        if job.refresh_callback is None or job.state != "running":
+            return
+        try:
+            snapshot = job.refresh_callback()
+        except Exception:
+            return
+        if not isinstance(snapshot, dict):
+            return
+        state = str(snapshot.get("status") or job.state).lower()
+        terminal_state = {
+            "done": "completed", "complete": "completed", "completed": "completed",
+            "failed": "failed", "error": "failed", "cancelled": "cancelled",
+            "canceled": "cancelled", "timed_out": "timed_out",
+        }.get(state)
+        current_output = str(snapshot.get("result") or snapshot.get("progress") or "")
+        if current_output and current_output != job.last_output:
+            delta = current_output[len(job.last_output):] if current_output.startswith(job.last_output) else current_output
+            job.output.append(delta.encode("utf-8"))
+            job.last_output = current_output
+        if terminal_state is not None:
+            job.state = terminal_state
+            job.output.settle()
+
+    def append_job_output(self, job_id: str, chunk: bytes | str, *, owner_id: str | None = None) -> None:
+        if not self._owner_matches(owner_id):
+            raise PermissionError("job_owner_mismatch")
+        job = self.registered_jobs.get(str(job_id))
+        if job is None or job.state != "running":
+            raise KeyError("unknown_or_settled_job")
+        data = chunk.encode("utf-8") if isinstance(chunk, str) else bytes(chunk)
+        job.output.append(data)
+
+    def settle_background_job(
+        self, job_id: str, *, state: str = "completed", owner_id: str | None = None,
+    ) -> None:
+        if not self._owner_matches(owner_id):
+            raise PermissionError("job_owner_mismatch")
+        job = self.registered_jobs.get(str(job_id))
+        if job is None:
+            raise KeyError("unknown_job")
+        if state not in {"completed", "failed", "cancelled", "timed_out"}:
+            raise ValueError("invalid terminal job state")
+        job.state = state
+        job.output.settle()
+
+    def job_list(self, *, owner_id: str | None = None) -> list[dict[str, Any]] | dict[str, str]:
+        if not self._owner_matches(owner_id):
+            return {"error": "job_owner_mismatch"}
+        for job in self.registered_jobs.values():
+            self._refresh_registered_job(job)
+        jobs = [{
+            "job_id": handle.execution_id, "owner_id": str(self.run_id or ""),
+            "label": handle.shell, "kind": "terminal", "state": handle.outcome,
+            "detached": handle.detached,
+        } for handle in self.handles.values()]
+        jobs.extend({
+            "job_id": job.job_id, "owner_id": job.owner_id,
+            "label": job.label, "kind": job.kind, "state": job.state,
+            "detached": True,
+        } for job in self.registered_jobs.values())
+        return jobs
+
+    async def job_output(
+        self, job_id: str, *, owner_id: str | None = None, offset: int = 0,
+        limit: int = JOB_OUTPUT_RING_BYTES,
+    ) -> dict[str, Any]:
+        if not self._owner_matches(owner_id):
+            return {"error": "job_owner_mismatch", "is_error": True}
+        identifier = str(job_id or "")
+        handle = self.handles.get(identifier)
+        if handle is not None:
+            result = await self.poll(identifier)
+            if result.get("is_error"):
+                return result
+            chunk, effective, ring_start = handle.job_output.read(offset, limit)
+            return {"job_id": identifier, "state": handle.outcome,
+                    "output": _decode_output(chunk), "offset": effective,
+                    "next_offset": effective + len(chunk), "omitted_bytes": max(
+                        handle.job_output.omitted_bytes, ring_start),
+                    "is_error": False}
+        job = self.registered_jobs.get(identifier)
+        if job is None:
+            return {"error": "unknown_job", "is_error": True}
+        self._refresh_registered_job(job)
+        chunk, effective, ring_start = job.output.read(offset, limit)
+        return {"job_id": identifier, "state": job.state,
+                "output": _decode_output(chunk), "offset": effective,
+                "next_offset": effective + len(chunk),
+                "omitted_bytes": max(job.output.omitted_bytes, ring_start),
+                "is_error": False}
+
+    async def job_kill(self, job_id: str, *, owner_id: str | None = None) -> dict[str, Any]:
+        if not self._owner_matches(owner_id):
+            return {"error": "job_owner_mismatch", "is_error": True}
+        identifier = str(job_id or "")
+        if identifier in self.handles:
+            return await self.kill(identifier)
+        job = self.registered_jobs.get(identifier)
+        if job is None:
+            return {"error": "unknown_job", "is_error": True}
+        if job.state != "running":
+            return {"job_id": identifier, "state": job.state, "is_error": False}
+        if job.kill_callback is None:
+            return {"error": "job_kill_unavailable", "is_error": True}
+        try:
+            result = job.kill_callback()
+            if hasattr(result, "__await__"):
+                result = await result
+        except Exception as exc:
+            return {"error": str(exc), "is_error": True}
+        state = str(result.get("state") if isinstance(result, dict) else "cancelled")
+        self.settle_background_job(identifier, state=state)
+        return {"job_id": identifier, "state": state, "is_error": False}
 
     def _output_budget(self, value: Any) -> int:
         if value is None:
@@ -251,6 +459,9 @@ class ExecManager:
         args["action"] = "start"
         args.setdefault("detached", True if direct_process_start else False)
         args.setdefault("keep_stdin", True)
+        if args.get("detached") and self._background_count() >= MAX_BACKGROUND_JOBS_PER_OWNER:
+            return {"is_error": True,
+                    "error": f"Atlas allows a maximum of {MAX_BACKGROUND_JOBS_PER_OWNER} background jobs per owner."}
         if "cmd" in args:
             args["command"] = args.pop("cmd")
         if "workdir" in args:
@@ -304,7 +515,7 @@ class ExecManager:
         elif not shell_label:
             shell_label = "Shell: none (direct argv)"
         handle = ExecHandle(
-            execution_id, path, HeadTailBuffer(output_budget), timeout,
+            execution_id, path, HeadTailBuffer(output_budget), JobOutputRing(), timeout,
             shell=shell_label,
             yield_time_ms=yield_time_ms,
             detached=bool(args.get("detached")),
@@ -327,6 +538,7 @@ class ExecManager:
                     while chunk := source.read(65536):
                         self._append_output_file(handle, chunk)
                         handle.buffer.push_chunk(chunk)
+                        handle.job_output.append(chunk)
                         handle.offsets[stream] += len(chunk)
             return
         for stream in ("stdout", "stderr"):
@@ -344,6 +556,7 @@ class ExecManager:
                 chunk = str(data.get("text") or "").encode("utf-8")
                 self._append_output_file(handle, chunk)
                 handle.buffer.push_chunk(chunk)
+                handle.job_output.append(chunk)
                 handle.offsets[stream] = next_offset
                 if data.get("complete"):
                     break
@@ -421,6 +634,7 @@ class ExecManager:
                 handle.outcome = "failed"
             else:
                 handle.outcome = "completed" if handle.exit_code == 0 else "failed"
+            handle.job_output.settle()
         return self._result(handle)
 
     async def _watch(self, handle: ExecHandle) -> None:
@@ -497,6 +711,24 @@ class ExecManager:
 
     async def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         args = dict(arguments)
+        if name == "job_list":
+            jobs = self.job_list(owner_id=args.get("owner_id"))
+            if isinstance(jobs, dict):
+                return {**jobs, "is_error": True}
+            return {"data": {"jobs": jobs}, "content": str(jobs), "is_error": False}
+        if name == "job_output":
+            result = await self.job_output(
+                str(args.get("job_id") or args.get("execution_id") or ""),
+                owner_id=args.get("owner_id"), offset=args.get("offset", 0),
+                limit=args.get("limit", JOB_OUTPUT_RING_BYTES),
+            )
+            result["content"] = result.get("output", result.get("error", ""))
+            return result
+        if name == "job_kill":
+            return await self.job_kill(
+                str(args.get("job_id") or args.get("execution_id") or ""),
+                owner_id=args.get("owner_id"),
+            )
         if name == "local_process" and args.get("action") == "start":
             return await self.start(args)
         if name in {"terminal", "local_shell", "local_exec", "exec_command"}:
@@ -541,7 +773,23 @@ class ExecManager:
             return await self.poll(execution_id)
         execution_id = str(args.get("execution_id") or args.get("session_id") or "")
         action = args.get("action", "poll")
+        if name == "local_process" and action == "list":
+            jobs = self.job_list(owner_id=args.get("owner_id"))
+            if isinstance(jobs, dict):
+                return {**jobs, "is_error": True}
+            return {"data": {"processes": jobs, "jobs": jobs}, "is_error": False}
         if name == "local_process" and execution_id not in self.handles:
+            if execution_id in self.registered_jobs:
+                if action in {"read", "log", "output"}:
+                    result = await self.job_output(
+                        execution_id, owner_id=args.get("owner_id"),
+                        offset=args.get("offset", 0), limit=args.get("limit", JOB_OUTPUT_RING_BYTES),
+                    )
+                    result["data"] = {**result}
+                    result["data"]["text"] = result.get("output", "")
+                    return result
+                if action in {"kill", "cancel", "stop"}:
+                    return await self.job_kill(execution_id, owner_id=args.get("owner_id"))
             return await self.dispatch(name, args)
         if action in {"poll", "status"}:
             return await self.poll(execution_id)
@@ -573,6 +821,9 @@ class ExecManager:
                 await self.kill(handle.execution_id)
             if handle.watcher is not None:
                 handle.watcher.cancel()
+        for job in self.registered_jobs.values():
+            if job.state == "running" and job.kill_callback is not None:
+                await self.job_kill(job.job_id)
         await asyncio.gather(*(
             h.watcher for h in self.handles.values()
             if h.watcher is not None

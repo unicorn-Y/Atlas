@@ -1098,10 +1098,14 @@ async def execute_tools_node(
                     delegated_context = "\n\n".join(filter(None, [rendered, delegated_context]))
                 if not isinstance(delegated_goal, str) or not delegated_goal.strip():
                     raise ValueError("delegate_task requires goal or recipe")
+                background = bool(fn_args.get("background", False))
+                exec_manager = getattr(ctx, "exec_manager", None)
+                if background and exec_manager is not None:
+                    exec_manager.ensure_background_capacity()
                 result = {"data": await agent._delegation.delegate_task(
                     delegated_goal, delegated_context, fn_args.get("tool_profile"),
                     executor=str(fn_args.get("executor", "atlas")),
-                    background=bool(fn_args.get("background", False)),
+                    background=background,
                     output_schema=fn_args.get("output_schema", definition.get("output_schema")),
                     event_metadata={
                         "agent": definition["name"],
@@ -1119,6 +1123,20 @@ async def execute_tools_node(
                     on_completed=getattr(ctx, "subtask_completed", None),
                     cwd=workspace,
                 )}
+                subtask_id = str(result["data"].get("subtask_id") or "")
+                if background and exec_manager is not None and subtask_id:
+                    def cancel_registered_subtask(identifier: str = subtask_id) -> dict[str, str]:
+                        if agent._delegation.cancel_subtask(identifier):
+                            return {"state": "cancelled"}
+                        snapshot = agent._delegation.subtask_status(identifier) or {}
+                        state = str(snapshot.get("status") or "completed")
+                        return {"state": "failed" if state == "error" else state}
+
+                    exec_manager.register_background_job(
+                        subtask_id, label=delegated_goal.strip()[:120], kind="subagent",
+                        kill=cancel_registered_subtask,
+                        refresh=lambda identifier=subtask_id: agent._delegation.subtask_status(identifier),
+                    )
                 for usage_entry in result["data"].get("evidence", []):
                     if isinstance(usage_entry, dict) and usage_entry.get("input_tokens") is not None:
                         child_usage = dict(usage_entry)
@@ -1401,6 +1419,13 @@ async def execute_tools_node(
                 if not conversation_id:
                     raise ValueError("conversation goal progress requires an active conversation")
                 action = str(fn_args.get("action") or "").strip().lower()
+                goal_id = fn_args.get("goal_id")
+                revision = fn_args.get("revision")
+                if action in {"add", "complete", "reopen"} and (
+                        not isinstance(goal_id, str) or not goal_id
+                        or not isinstance(revision, int) or isinstance(revision, bool)
+                        or revision < 1):
+                    raise ValueError("goal_subgoal mutations require the current goal_id and revision")
                 if action == "add":
                     text = str(fn_args.get("text") or "").strip()
                     if not text:
@@ -1419,6 +1444,8 @@ async def execute_tools_node(
                 from atlas.engine.session_sync import goal_command
                 result_data = await asyncio.to_thread(
                     goal_command, DATA_ROOT / "engine", conversation_id, command,
+                    expected_goal_id=goal_id if action != "list" else None,
+                    expected_revision=revision if action != "list" else None,
                 )
                 if result_data.get("error"):
                     raise ValueError(result_data["output"])
@@ -1612,6 +1639,7 @@ async def execute_tools_node(
                     result = await ssh_tool_callback(fn_name, fn_args)
                 elif getattr(ctx, "exec_manager", None) is not None and fn_name in {
                     "local_shell", "local_exec", "local_process",
+                    "job_list", "job_output", "job_kill",
                 }:
                     result = await ctx.exec_manager.execute(fn_name, fn_args)
                 elif (getattr(ctx, "acp_filesystem", None) is not None

@@ -227,18 +227,42 @@ def require_checkpoint(
     if not str(run_id or "").strip():
         raise CheckpointWriteError("required durable checkpoint needs a non-empty run_id")
     try:
-        persisted = write_checkpoint(
-            run_id,
-            kind=kind,
-            phase=phase,
-            tool_call_id=tool_call_id,
-            tool_name=tool_name,
-            state=state,
-            replay_safe=replay_safe,
-            sequence=sequence,
-            payload=payload,
+        from atlas import telemetry
+
+        span_context = telemetry.span(
+            "atlas.run_checkpoint.write",
+            {"checkpoint.kind": kind, "checkpoint.phase": phase},
         )
-    except Exception as exc:
+    except Exception:  # noqa: BLE001 - telemetry setup must not affect durability
+        from contextlib import nullcontext
+
+        span_context = nullcontext(None)
+    write_error: Exception | None = None
+    persisted = False
+    with span_context as current:
+        try:
+            persisted = write_checkpoint(
+                run_id,
+                kind=kind,
+                phase=phase,
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                state=state,
+                replay_safe=replay_safe,
+                sequence=sequence,
+                payload=payload,
+            )
+        except Exception as exc:
+            write_error = exc
+        if current is not None:
+            try:
+                current.set_attribute("checkpoint.persisted", bool(persisted))
+                if write_error is not None:
+                    current.set_attribute("checkpoint.error_type", type(write_error).__name__)
+            except Exception:  # noqa: BLE001 - span attributes are best-effort
+                pass
+    if write_error is not None:
+        exc = write_error
         raise CheckpointWriteError(
             f"required durable checkpoint failed for run {str(run_id)[:_MAX_RUN_ID]!r}"
         ) from exc

@@ -42,6 +42,8 @@ const FallbackModelsDialog = lazy(() => import('./components/FallbackModelsDialo
 const IDEManagerDialog = lazy(() => import('./components/IDEManagerDialog'));
 import { applyFileBindings, bindingsForAction, loadBindings, matchShortcut, SHORTCUTS, shortcutSignature } from './services/shortcuts';
 import { resolveSlashAvailability, slashCommandUsage } from './services/slashCommands';
+import { createPluginSlashCommand } from './services/pluginSlashCommands';
+import type { PluginSlashCommandDescriptor } from './services/pluginSlashCommands';
 import type { CustomCommandInfo, PermissionMode } from '@atlas/backend-adapter';
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from './ui/Menu';
 import Mark, { MarkDefs } from './components/Mark';
@@ -401,6 +403,26 @@ function AppContent() {
     },
     [toasts.push, toasts.clear],
   );
+  const [pluginSlashCommands, setPluginSlashCommands] = useState<PluginSlashCommandDescriptor[]>([]);
+  useEffect(() => {
+    if (!store.connected) { setPluginSlashCommands([]); return; }
+    let active = true;
+    void api<{ commands: Array<PluginSlashCommandDescriptor & { source?: string; invocation?: string }> }>(store.apiBaseUrl, '/api/commands')
+      .then(({ commands }) => {
+        if (active) setPluginSlashCommands(commands.filter((command) => command.source === 'plugin-handler' && command.invocation === 'direct'));
+      })
+      .catch(() => { if (active) setPluginSlashCommands([]); });
+    return () => { active = false; };
+  }, [store.connected, store.apiBaseUrl]);
+  const invokePluginSlashCommand = useCallback(async (id: string, arguments_: Record<string, unknown>) => {
+    try {
+      const response = await api<{ result: unknown }>(store.apiBaseUrl, '/api/commands/invoke', { method: 'POST', json: { id, arguments: arguments_ } });
+      const result = typeof response.result === 'string' ? response.result : JSON.stringify(response.result);
+      setToast(`${id.slice('plugin-handler:'.length)} 已执行${result ? `：${result.slice(0, 240)}` : ''}`);
+    } catch (error) {
+      setToast(`插件命令执行失败：${error instanceof Error ? error.message : String(error)}`, 'error');
+    }
+  }, [store.apiBaseUrl, setToast]);
   const [batteryStatus, setBatteryStatus] = useState<{ level: number | null; charging: boolean | null } | null>(null);
   const setTuiFullscreenMode = (enabled: boolean) => {
     setTuiFullscreen(enabled); setPref('tui-fullscreen', String(enabled));
@@ -2686,6 +2708,7 @@ function AppContent() {
         else { store.applySkill(skill.name); setToast(`下一次任务会用上 ${skill.name}`); }
       },
     })),
+    ...pluginSlashCommands.map((command) => createPluginSlashCommand(command, invokePluginSlashCommand, (error) => setToast(error.message, 'error'))),
     ...store.customCommands.map((command) => ({
       id: `command-${command.id}`, label: `/${command.name}`,
       hint: command.description || (command.argument_hint ? `参数：${command.argument_hint}` : '自定义命令'),

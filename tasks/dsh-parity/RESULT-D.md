@@ -4,7 +4,7 @@
 
 关闭：X17（skill invocation flags 已在用户 slash 与模型调用两条路径执行）、X29（typed webhook provider/HMAC adapter）。
 
-部分完成：X2（plugin skill/command/hook disposer 可逆；async MCP lifecycle disposer 未覆盖）、X4（patch row_id/order 已有；profile/bundle merge 和预览未做）、X8（revisioned capability preset 已保存并应用；ledger 的 isolate realm/子插件行能力未实现）、X9（automation webhook preset 已接线；ACP 入口未接）、X13（plugin `.codex/hooks.json` 支持若干事件；repo/user 通用来源与 trust surface 未接）、X16（durable digest/retirement/revisioned available-skills 已接；`/name` 内联和摘要 diff 交付未实现）、X23（scope facade 有测试但 agent/session 尚未使用）、X27（注册表支持自定义扩展节点；内置 renderer switch 仍保留）、X28（backend registry/event log 与 invocation gate 已有，但 plugin/runtime/frontend dispatch 未接）。
+部分完成：X2（plugin skill/command/hook disposer 可逆；async MCP lifecycle disposer 未覆盖）、X4（patch row_id/order 已有；profile/bundle merge 和预览未做）、X8（revisioned capability preset 已保存并应用；ledger 的 isolate realm/子插件行能力未实现）、X9（automation webhook preset 已接线；ACP 入口未接）、X13（plugin `.codex/hooks.json` 支持若干事件；repo/user 通用来源与 trust surface 未接）、X16（durable digest/retirement/revisioned available-skills 已接；`/name` 内联和摘要 diff 交付未实现）、X27（注册表支持自定义扩展节点；内置 renderer switch 仍保留）。关闭 X23（runtime allow-list 已贯穿 MCP tool 与 resource 操作）和 X28（插件直接命令前后端接线，详见下）。
 
 ## 改动文件
 
@@ -63,3 +63,22 @@ TypeScript: No errors found
 ## 未完成项与原因
 
 其余 partial 行见上方逐行状态。真实回合只验证 model/provider、后端和事件流基础链路，不证明各插件 hook、webhook 或 preset 分支均已运行。
+
+## 后续收尾：X23、X28
+
+X23 的 runtime capability server allow-list 进入实际运行时，kernel 在工具发现/调用时执行 allow/deny 检查，MCP resource 经 `for_scope()` 视图隔离；`tests/test_mcp_client_scope.py` 已包含在后续集成回归中。X28 由 `/api/commands` 列出插件 direct handlers，前端加载后创建 `/name` slash command，解析 JSON object 并直接 POST `/api/commands/invoke`；不触发模型请求，后端落 append-only command/run|done。更新文件：`core/atlas/api/app_services.py`、`core/atlas/api/usage_router.py`、`core/atlas/runtime/commands.py`、`core/atlas/engine/kernel/loop.py`、`core/tests/test_slash_command_api.py`、`core/tests/test_mcp_client_scope.py`、`frontend/src/renderer/App.tsx`、`frontend/src/renderer/services/pluginSlashCommands.ts`、`frontend/src/renderer/services/pluginSlashCommands.test.ts`。
+
+```text
+rtk python -m pytest -q -p no:cacheprovider tests/test_slash_command_api.py tests/test_slash_command_registry.py tests/test_c4_wiring.py tests/test_mcp_client_scope.py
+
+18 passed, 5 warnings in 3.90s
+```
+
+```text
+rtk npm test -- --run src/renderer/services/pluginSlashCommands.test.ts
+
+Test Files  1 passed (1)
+Tests      2 passed (2)
+```
+
+`rtk npx tsc -p tsconfig.renderer.json --noEmit`：`TypeScript: No errors found`。

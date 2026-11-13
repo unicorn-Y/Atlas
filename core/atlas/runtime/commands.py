@@ -144,6 +144,12 @@ class SlashCommandRegistry:
     async def invoke(
         self, name: str, arguments: dict[str, Any], *, event_store: CommandInvocationStore,
     ) -> Any:
+        _invocation_id, result = await self.invoke_with_id(name, arguments, event_store=event_store)
+        return result
+
+    async def invoke_with_id(
+        self, name: str, arguments: dict[str, Any], *, event_store: CommandInvocationStore,
+    ) -> tuple[str, Any]:
         with self._lock:
             command = self._commands.get(name)
         if command is None:
@@ -157,7 +163,7 @@ class SlashCommandRegistry:
             event_store.command_done(invocation_id, status="error", error=str(exc))
             raise
         event_store.command_done(invocation_id, status="ok", result=result)
-        return result
+        return invocation_id, result
 
 
 @dataclass(frozen=True)

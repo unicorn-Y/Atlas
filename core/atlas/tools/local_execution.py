@@ -556,6 +556,28 @@ LOCAL_TOOLS = [
         ["action"],
     ),
     _tool(
+        "job_list",
+        "List background shell and registered subagent jobs owned by this run.",
+        {},
+        [],
+    ),
+    _tool(
+        "job_output",
+        "Read the bounded output ring for a background job owned by this run.",
+        {
+            "job_id": {"type": "string"},
+            "offset": {"type": "integer", "minimum": 0},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 262144},
+        },
+        ["job_id"],
+    ),
+    _tool(
+        "job_kill",
+        "Cancel a running background job owned by this run.",
+        {"job_id": {"type": "string"}},
+        ["job_id"],
+    ),
+    _tool(
         "local_file",
         (
             "Read files and manage files or directories at any local path: read, list, glob, search, "

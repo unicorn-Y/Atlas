@@ -327,11 +327,15 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
         _function_schema("goal_subgoal", (
             "Persist resumable milestones for the active conversation goal. Use this only when a long-term goal "
             "needs multiple steps: add concise milestones before execution, mark each completed milestone when "
-            "its work is actually done, and list progress when resuming. Do not add trivial one-step tasks."
+            "its work is actually done, and list progress when resuming. Mutations require the current goal_id "
+            "and revision from the active goal context; refresh progress after a revision conflict. "
+            "Do not add trivial one-step tasks."
         ), {
             "action": {"type": "string", "enum": ["add", "complete", "reopen", "list"]},
             "text": {"type": "string", "description": "Required for add; one concrete, independently verifiable milestone."},
             "index": {"type": "integer", "minimum": 1, "description": "Required for complete/reopen; 1-based milestone number."},
+            "goal_id": {"type": "string", "description": "Current goal ID, required for mutations."},
+            "revision": {"type": "integer", "minimum": 1, "description": "Current goal revision, required for mutations."},
         }, ["action"]),
         _function_schema("EnterPlanMode", "Switch this run into a read-only planning phase before implementation.", {
             "reason": {"type": "string"},

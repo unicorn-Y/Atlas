@@ -1064,15 +1064,23 @@ def list_branch_tree(home: str | Path, conversation_id: str) -> list[dict[str, A
     return output
 
 
-def goal_command(home: str | Path, conversation_id: str, command: str) -> dict[str, Any]:
+def goal_command(
+    home: str | Path, conversation_id: str, command: str, *,
+    expected_goal_id: str | None = None, expected_revision: int | None = None,
+) -> dict[str, Any]:
     """Apply Atlas per-session /goal command and return its continuation prompt."""
-    from atlas.engine.goal_command import dispatch_goal_command, is_goal_control
-    from atlas.engine.goals import GoalManager
+    from atlas.engine.goal_command import GoalCommandResult, dispatch_goal_command, is_goal_control
+    from atlas.engine.goals import GoalManager, GoalRevisionConflict
 
     manager = GoalManager(conversation_id, home=home)
     previous = manager.state
-    result = dispatch_goal_command(
-        manager, command, authorize_gate=lambda: "Goal gates require explicit approval.")
+    try:
+        if expected_goal_id is not None or expected_revision is not None:
+            manager.check_revision(expected_goal_id, expected_revision)
+        result = dispatch_goal_command(
+            manager, command, authorize_gate=lambda: "Goal gates require explicit approval.")
+    except GoalRevisionConflict as exc:
+        result = GoalCommandResult(str(exc), error=True)
     state = manager.state
     normalized = command.strip().split(maxsplit=1)[0].casefold() if command.strip() else ""
     event = None
@@ -1092,7 +1100,8 @@ def goal_command(home: str | Path, conversation_id: str, command: str) -> dict[s
         "error": result.error,
         "goal": ({"text": state.goal, "status": state.status, "turns_used": state.turns_used,
                   "max_turns": state.max_turns, "subgoals": state.subgoals,
-                  "completed_subgoals": state.completed_subgoals}
+                  "completed_subgoals": state.completed_subgoals,
+                  "goal_id": state.goal_id, "revision": state.revision}
                  if state is not None else None),
     }
 

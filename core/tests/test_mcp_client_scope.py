@@ -1,6 +1,8 @@
 import pytest
+from types import SimpleNamespace
 
 from atlas.tools.mcp_client import MCPClient, ToolInfo
+from atlas.engine.kernel.loop import scoped_mcp_client_for_runtime
 
 pytestmark = pytest.mark.unit
 
@@ -59,3 +61,19 @@ async def test_scoped_client_filters_resource_operations(monkeypatch) -> None:
     assert await scoped.read_resource("alpha", "file://item") == {"contents": [], "is_error": False}
     assert listed == ["alpha"]
     assert read == [("alpha", "file://item")]
+
+
+def test_runtime_scope_selects_a_per_run_mcp_view() -> None:
+    client = MCPClient()
+
+    scoped = scoped_mcp_client_for_runtime(client, SimpleNamespace(mcp_server_allow=["alpha"]))
+    unscoped = scoped_mcp_client_for_runtime(client, SimpleNamespace(mcp_server_allow=None))
+
+    assert scoped.get_configured_server_names() == []
+    assert scoped is not client
+    assert unscoped is client
+
+
+def test_runtime_scope_fails_closed_for_clients_without_scope_support() -> None:
+    with pytest.raises(TypeError, match="cannot enforce"):
+        scoped_mcp_client_for_runtime(object(), SimpleNamespace(mcp_server_allow=["alpha"]))

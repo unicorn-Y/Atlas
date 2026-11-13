@@ -13,6 +13,7 @@ comforting zero.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from atlas.engine.kernel.context import (
@@ -26,6 +27,7 @@ LEVELS = ("idle", "roomy", "filling", "tight", "critical")
 
 #: Fraction of the gap between warning and blocking that still counts as roomy.
 _ROOMY_BELOW = 0.25
+_IMAGE_PART_TYPES = frozenset({"image", "image_url", "input_image"})
 
 
 def _band(used: int, thresholds: ContextThresholds) -> str:
@@ -71,6 +73,12 @@ def measure(
     model_window: int | None = None,
     config: dict[str, Any] | None = None,
     compressor: Any = None,
+    surface_nodes: Sequence[Mapping[str, Any]] | None = None,
+    route: Mapping[str, Any] | None = None,
+    image_pricing: Callable[
+        [Mapping[str, Any], Sequence[Mapping[str, Any]]], Sequence[Mapping[str, Any]]
+    ]
+    | None = None,
 ) -> dict[str, Any]:
     """Report context pressure for one live turn.
 
@@ -100,7 +108,7 @@ def measure(
         window = None
 
     if window is None or used_value is None:
-        return {
+        return _with_surface_prices({
             "pressure": "unknown",
             "sentence": _SENTENCES["unknown"],
             "used_tokens": used_value,
@@ -108,14 +116,14 @@ def measure(
             "used_percent": None,
             "thresholds": None,
             "headroom": {},
-        }
+        }, surface_nodes, route, image_pricing)
 
     manager = ContextManager(config or {})
     thresholds = manager.thresholds(window)
     band = _band(used_value, thresholds)
     percent = max(0, min(100, round(used_value / window * 100)))
     # A window smaller than a watermark would otherwise report a negative gap.
-    return {
+    return _with_surface_prices({
         "pressure": band,
         "sentence": _SENTENCES[band],
         "used_tokens": used_value,
@@ -132,7 +140,7 @@ def measure(
             "to_auto_compact": _headroom(used_value, thresholds.auto_compact),
             "to_blocking": _headroom(used_value, thresholds.blocking),
         },
-    }
+    }, surface_nodes, route, image_pricing)
 
 
 def measure_session(session_usage: dict[str, Any], model_window: int | None = None) -> dict[str, Any]:
@@ -150,9 +158,122 @@ def measure_session(session_usage: dict[str, Any], model_window: int | None = No
     return measure(used=used, model_window=window or None)
 
 
+def price_surface_nodes(
+    nodes: Sequence[Mapping[str, Any]],
+    *,
+    route: Mapping[str, Any],
+    image_pricing: Callable[
+        [Mapping[str, Any], Sequence[Mapping[str, Any]]], Sequence[Mapping[str, Any]]
+    ]
+    | None = None,
+) -> dict[str, Any]:
+    """Price ordered transcript surface nodes under one model request route.
+
+    Each node is ``{"seq": int, "message": mapping}``. ``image_pricing`` is
+    the routed adapter's pricing function: it receives this route and every
+    image occurrence in positional order, returning matching
+    ``{"visual_tokens": int, "text": str}`` records. Missing image pricing
+    keeps Atlas' fixed heuristic for the entire node. The input messages are
+    never mutated.
+    """
+    from atlas.engine.agent.model_metadata import estimate_messages_tokens_rough
+
+    if not isinstance(route, Mapping):
+        raise TypeError("route must be a mapping")
+    output_nodes: list[dict[str, int]] = []
+    surface_tokens = 0
+    for index, node in enumerate(nodes):
+        if not isinstance(node, Mapping):
+            raise TypeError(f"surface node {index} must be a mapping")
+        seq = node.get("seq")
+        message = node.get("message")
+        if type(seq) is not int or seq < 0:
+            raise ValueError(f"surface node {index} seq must be a non-negative integer")
+        if not isinstance(message, Mapping):
+            raise TypeError(f"surface node {index} message must be a mapping")
+        heuristic_tokens = estimate_messages_tokens_rough([dict(message)])
+        images = _image_parts(message)
+        tokens = heuristic_tokens
+        if image_pricing is not None and images:
+            prices = list(image_pricing(route, images))
+            if len(prices) != len(images):
+                raise ValueError(
+                    "route image pricing returned "
+                    f"{len(prices)} prices for {len(images)} image occurrences"
+                )
+            replacements: dict[int, str] = {}
+            visual_tokens = 0
+            for image_index, price in enumerate(prices):
+                if not isinstance(price, Mapping):
+                    raise TypeError(f"route image price {image_index} must be a mapping")
+                visual = price.get("visual_tokens")
+                text = price.get("text")
+                if type(visual) is not int or visual < 0:
+                    raise ValueError(
+                        f"route image price {image_index} visual_tokens must be non-negative"
+                    )
+                if not isinstance(text, str):
+                    raise TypeError(f"route image price {image_index} text must be a string")
+                visual_tokens += visual
+                replacements[image_index] = text
+            projected = _replace_image_parts(message, replacements)
+            tokens = estimate_messages_tokens_rough([projected]) + visual_tokens
+        surface_tokens += tokens
+        output_nodes.append({"seq": seq, "tokens": tokens, "heuristic_tokens": heuristic_tokens})
+    return {"surface_tokens": surface_tokens, "nodes": output_nodes}
+
+
+def _with_surface_prices(
+    result: dict[str, Any],
+    surface_nodes: Sequence[Mapping[str, Any]] | None,
+    route: Mapping[str, Any] | None,
+    image_pricing: Callable[
+        [Mapping[str, Any], Sequence[Mapping[str, Any]]], Sequence[Mapping[str, Any]]
+    ]
+    | None,
+) -> dict[str, Any]:
+    if surface_nodes is None:
+        return result
+    return {
+        **result,
+        **price_surface_nodes(surface_nodes, route=route or {}, image_pricing=image_pricing),
+    }
+
+
+def _image_parts(message: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    content = message.get("content")
+    if not isinstance(content, list):
+        return []
+    return [
+        part
+        for part in content
+        if isinstance(part, Mapping) and part.get("type") in _IMAGE_PART_TYPES
+    ]
+
+
+def _replace_image_parts(
+    message: Mapping[str, Any], replacements: Mapping[int, str]
+) -> dict[str, Any]:
+    content = message.get("content")
+    if not isinstance(content, list):
+        return dict(message)
+    projected_content: list[Any] = []
+    image_index = 0
+    for part in content:
+        if isinstance(part, Mapping) and part.get("type") in _IMAGE_PART_TYPES:
+            projected_content.append({"type": "text", "text": replacements[image_index]})
+            image_index += 1
+        else:
+            projected_content.append(part)
+    return {**message, "content": projected_content}
+
+
 def level_index(band: str) -> int:
     """Sort key for a band; unknown sorts before every real band."""
     return LEVELS.index(band) if band in LEVELS else -1
 
 
-__all__ = ["DEFAULT_CONTEXT_WINDOW", "LEVELS", "level_index", "measure", "measure_session"]
+__all__ = [
+    "DEFAULT_CONTEXT_WINDOW", "LEVELS", "level_index", "measure", "measure_session",
+    "price_surface_nodes",
+]

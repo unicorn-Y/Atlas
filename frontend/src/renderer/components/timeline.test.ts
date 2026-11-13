@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentEvent } from '../../types/runtime';
-import { buildTimeline, cacheShare, describeTool, duration, shortPath, tokenCount } from './timeline';
+import { buildTimeline, cacheShare, describeTool, duration, isPlanReviewIntent, shortPath, tokenCount } from './timeline';
 
 let seq = 0;
 const ev = (type: AgentEvent['type'], data: Record<string, unknown>, second = seq): AgentEvent =>
   ({ id: `e${++seq}`, runId: 'r1', sequence: seq, type, timestamp: new Date(Date.UTC(2026, 8, 29, 10, 0, second)).toISOString(), data });
+
+describe('isPlanReviewIntent', () => {
+  it('routes only explicitly tagged plan-review questions to the plan action', () => {
+    expect(isPlanReviewIntent(ev('input.required', { intent: 'plan-review' }))).toBe(true);
+    expect(isPlanReviewIntent(ev('input.required', { intent: 'clarification' }))).toBe(false);
+    expect(isPlanReviewIntent(ev('input.required', { intent: 'plan-review', proposal: true }))).toBe(false);
+  });
+});
 
 describe('describeTool', () => {
   it('turns Atlas local tools into plain-language steps', () => {

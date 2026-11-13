@@ -6,7 +6,7 @@
 
 部分完成：E2（typed terminal reason 已落 journal/result，但还没有完整的 turn/step 生命周期）、E3（hook/finalizer 已接入，typed waterfall/result observer 仍不完整）、E17（现有 delegate 能力尚缺完整 fork 前缀与 persona）、E18（kernel 审批边界 fail-closed，但 host per-call OS sandbox 执行器缺失）、X9（preset 能力在 RunContext 应用；ACP 入口还未接入）。
 
-未关闭：E4（强制 output schema/render/presentationMeta）、E11（`engine/goals.py` 的 revision CAS 与默认上限）、E19（concludeTurn）、E25（idle-only maintenance slot）。
+未关闭：E4（强制 output schema/render/presentationMeta）、E19（concludeTurn）、E25（idle-only maintenance slot）。
 
 ## 改动文件
 
@@ -54,4 +54,14 @@ rtk python -m pytest -q -p no:cacheprovider tests/test_agent_preset_enforcement.
 
 ## 未完成项与原因
 
-E4、E11、E19、E25 未实现完整能力；E2、E3、E17 仍只有部分 parity。E18 的 per-call host sandbox 执行器不存在，因此不宣称该路径已可执行。X9 对 ACP 入口尚未接线。曾运行 `test_kernel_tool_error_regressions.py`，其中 `test_tool_call_arguments_repair_only_closed_objects` 失败；失败点在未修改的 `model_call.py`，同组其余 21 项通过。未运行整套 core 测试。
+E4、E19、E25 未实现完整能力；E2、E3、E17 仍只有部分 parity。E18 的 per-call host sandbox 执行器不存在，因此不宣称该路径已可执行。X9 对 ACP 入口尚未接线。曾运行 `test_kernel_tool_error_regressions.py`，其中 `test_tool_call_arguments_repair_only_closed_objects` 失败；失败点在未修改的 `model_call.py`，同组其余 21 项通过。未运行整套 core 测试。
+
+## 后续收尾：E11
+
+关闭 E11：GoalState 持久 `goal_id`/revision；SQLite 单次 `_execute_write` 回调内比较并原子 upsert，拒绝过期 writer；`goal_subgoal` 要求 `{goal_id, revision}` token，并在 stale 时返回当前版本；默认预算改为 256。没有在写回回调中嵌套 `_execute_write`。改动文件：`core/atlas/engine/goals.py`、`core/atlas/engine/session_sync.py`、`core/atlas/engine/kernel/tools.py`、`core/atlas/agent/tool_node.py`（与 E16 改动分离）、`core/tests/test_goal_revision_cas.py`。
+
+```text
+rtk python -m pytest -q -p no:cacheprovider tests/test_goal_revision_cas.py tests/test_goal_command_stranded.py tests/test_goal_loop.py tests/test_goal_plan_gate.py tests/test_goal_subgoal_commands.py tests/test_goal_planning_event.py tests/test_goal_payload_plan.py tests/test_goal_scheduler.py
+
+68 passed, 5 warnings in 11.24s
+```

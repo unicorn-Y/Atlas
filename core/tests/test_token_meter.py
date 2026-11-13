@@ -119,3 +119,74 @@ def test_measure_session_without_a_window_is_unknown():
 def test_level_index_sorts_unknown_first():
     assert tm.level_index("unknown") < tm.level_index("idle")
     assert tm.level_index("nonsense") == -1
+
+
+def test_surface_meter_prices_each_node_and_route_images():
+    from atlas.engine.agent.model_metadata import estimate_messages_tokens_rough
+
+    message = {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Describe this"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,private"}},
+        ],
+    }
+    seen = []
+
+    def image_pricing(route, images):
+        seen.append((route, images))
+        return [{"visual_tokens": 120, "text": "[high-resolution image]"}]
+
+    priced = tm.price_surface_nodes(
+        [{"seq": 7, "message": message}],
+        route={"provider": "vision", "model": "vision-large"},
+        image_pricing=image_pricing,
+    )
+    expected_message = {
+        **message,
+        "content": [message["content"][0], {"type": "text", "text": "[high-resolution image]"}],
+    }
+
+    assert seen[0][0] == {"provider": "vision", "model": "vision-large"}
+    assert len(seen[0][1]) == 1
+    assert priced["surface_tokens"] == priced["nodes"][0]["tokens"]
+    assert priced["nodes"] == [{
+        "seq": 7,
+        "tokens": estimate_messages_tokens_rough([expected_message]) + 120,
+        "heuristic_tokens": estimate_messages_tokens_rough([message]),
+    }]
+    assert message["content"][1]["type"] == "image_url"
+
+
+def test_surface_meter_uses_heuristics_without_image_route_pricing():
+    from atlas.engine.agent.model_metadata import estimate_messages_tokens_rough
+
+    message = {"role": "user", "content": [{"type": "input_image", "url": "opaque"}]}
+    measured = tm.price_surface_nodes([{"seq": 2, "message": message}], route={"provider": "text"})
+
+    assert measured["nodes"][0]["tokens"] == estimate_messages_tokens_rough([message])
+    assert measured["nodes"][0]["tokens"] == measured["nodes"][0]["heuristic_tokens"]
+
+
+def test_surface_meter_rejects_misaligned_route_image_prices():
+    message = {"role": "user", "content": [{"type": "image", "url": "a"}]}
+
+    with pytest.raises(ValueError, match="prices for 1 image occurrences"):
+        tm.price_surface_nodes(
+            [{"seq": 1, "message": message}], route={"model": "vision"},
+            image_pricing=lambda _route, _images: [],
+        )
+
+
+def test_context_measure_can_include_surface_node_prices():
+    message = {"role": "user", "content": "hello"}
+    result = tm.measure(
+        used=10,
+        model_window=200_000,
+        surface_nodes=[{"seq": 4, "message": message}],
+        route={"provider": "text", "model": "text-small"},
+    )
+
+    assert result["used_tokens"] == 10
+    assert result["surface_tokens"] == result["nodes"][0]["tokens"]
+    assert result["nodes"][0]["seq"] == 4

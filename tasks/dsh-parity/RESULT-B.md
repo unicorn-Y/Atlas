@@ -4,7 +4,7 @@
 
 关闭：S3、S6、S11、S13、S32。
 
-未关闭：S4（reader-side repair closer 仍需 kernel/reader 的更完整接线）、S9（工具结果遮蔽替换与 resume 重放）、S19（durable image attachment）、S21（session-scoped filesystem observation）、S22（真实 OTel span 调用点）、S25（per-node token pricing）。这些实现分布在本批文件边界之外或仍需 runtime 接线。
+未关闭：S4（reader-side repair closer 仍需 kernel/reader 的更完整接线）、S9（工具结果遮蔽替换与 resume 重放）、S19（durable image attachment）、S21（session-scoped filesystem observation）、S22（普通事件与 session-log 的独立队列）、S25（缺少真实模型路径和图像计价器接线）。
 
 ## 改动文件
 
@@ -39,4 +39,14 @@ rtk python -m pytest -q -p no:cacheprovider tests/test_session_projections.py te
 
 ## 未完成项与原因
 
-S4/S9/S19/S21/S22/S25 没有在本批所有权内全部完成；S4 与 S9 还需要 kernel/read-repair 行为，不把已有消息表改写当成修复。真实回合只验证服务启动、WS 消息流与真实模型回复，不替代各 persistence feature 的独立运行验证。
+S4/S9/S19/S21 仍未完成；S4 与 S9 还需要 kernel/read-repair 行为，不把已有消息表改写当成修复。S22 仅在 `require_checkpoint()` 写入路径新增并验证 `atlas.run_checkpoint.write` 生产 span，不代表普通事件/session-log 双队列已完成。S25 增加 `price_surface_nodes(nodes, route, image_pricing)` 以及 `measure()` 可选接入，逐节点计价和回调校验有测试；由于模型调用没有 route-aware 计价调用点和生产图片计价适配器，保留 PRESENT-WEAKER。
+
+## 后续收尾验证
+
+```text
+rtk python -m pytest -q -p no:cacheprovider tests/test_run_checkpoints_fail_closed.py tests/test_log_rotation_telemetry.py tests/test_token_meter.py tests/test_context_compact_in_place.py
+
+22 passed, 5 warnings in 2.56s
+```
+
+新增/更新文件：`core/atlas/run_checkpoints.py`、`core/atlas/telemetry.py`、`core/tests/test_run_checkpoints_fail_closed.py`、`core/tests/test_log_rotation_telemetry.py`、`core/atlas/engine/agent/token_meter.py`、`core/tests/test_token_meter.py`。

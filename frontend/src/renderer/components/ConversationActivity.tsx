@@ -13,7 +13,7 @@ import StructuredComponentCard from './StructuredComponentCard';
 import ForegroundConfirmCard from './x2/ForegroundConfirmCard';
 import BrowserHandoffCard from './x2/BrowserHandoffCard';
 import { DiagnosticsList } from './diagnostics';
-import { buildTimeline, cacheShare, describeTool, duration, tokenCount, type Step, type TimelineItem } from './timeline';
+import { buildTimeline, cacheShare, describeTool, duration, isPlanReviewIntent, tokenCount, type Step, type TimelineItem } from './timeline';
 import type { InspectorTab } from '../shell/Inspector';
 import { TokenUsageCard, TokenUsageToggle } from './TokenUsage';
 import { usageSummary } from './runInsights';
@@ -94,7 +94,9 @@ export const TimelineRow = memo(function TimelineRow({ item, context, firstInTur
     case 'approval': return <Approval key={item.id} event={item.event} store={store} />;
     case 'question': return item.event.data.proposal === true
       ? <SessionProposal key={item.id} event={item.event} store={store} />
-      : <Question key={item.id} event={item.event} store={store} />;
+      : isPlanReviewIntent(item.event)
+        ? <Plan key={item.id} event={item.event} store={store} />
+        : <Question key={item.id} event={item.event} store={store} />;
     case 'plan': return <Plan key={item.id} event={item.event} store={store} />;
     case 'trust': return <Trust key={item.id} event={item.event} store={store} />;
     case 'foreground': {

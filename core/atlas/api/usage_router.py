@@ -29,7 +29,13 @@ from atlas.safety.policy import (
     rule_catalog as get_safety_rules,
     update_settings as update_safety_settings,
 )
-from atlas.runtime.commands import _frontmatter, list_user_commands, render_user_command, UserCommand
+from atlas.runtime.commands import (
+    CommandInvocationStore,
+    _frontmatter,
+    list_user_commands,
+    render_user_command,
+    UserCommand,
+)
 from atlas.runtime.hooks import HookStore
 
 from atlas.api.app_services import AppServices
@@ -349,7 +355,45 @@ async def list_commands(
     workspace: str | None = None,
 ) -> dict[str, Any]:
     """List user-defined, plugin-contributed, and Recipe slash commands."""
-    return {"commands": [item.to_dict() for item in _user_commands(workspace)]}
+    commands = [item.to_dict() for item in _user_commands(workspace)]
+    commands.extend({
+        "id": f"plugin-handler:{item['name']}",
+        "name": item["name"],
+        "description": item["description"],
+        "input": item["input"],
+        "source": "plugin-handler",
+        "invocation": "direct",
+    } for item in services.slash_command_registry.list())
+    return {"commands": commands}
+
+
+@router.post("/api/commands/invoke")
+async def invoke_plugin_command(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    req: dict[str, Any],
+) -> dict[str, Any]:
+    """Invoke a registered plugin handler directly and durably record its lifecycle."""
+    command_id = str(req.get("id", ""))
+    prefix = "plugin-handler:"
+    if not command_id.startswith(prefix):
+        raise HTTPException(status_code=400, detail="Expected a plugin-handler command ID")
+    name = command_id[len(prefix):]
+    arguments = req.get("arguments", {})
+    if not isinstance(arguments, dict):
+        raise HTTPException(status_code=422, detail="arguments must be an object")
+    invocation_store = CommandInvocationStore(
+        get_config().db_path.parent / "command-invocations.sqlite3",
+    )
+    try:
+        invocation_id, result = await services.slash_command_registry.invoke_with_id(
+            name, arguments, event_store=invocation_store,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Plugin command not found") from exc
+    except Exception as exc:
+        log.exception("plugin_command.invoke_failed", command=name)
+        raise HTTPException(status_code=500, detail="Plugin command failed") from exc
+    return {"invocation_id": invocation_id, "result": result}
 
 
 @router.post("/api/commands/render")

@@ -6,7 +6,7 @@
 
 部分完成：E14（Docker per-call read-only/workspace-write；danger-full-access 在该路径 fail-closed，但没有通用 host OS sandbox）、E18（单次审批和 Docker 路径已接入；缺少所有 host 工具共用的 per-call isolation executor）。
 
-未关闭：E16（统一后台作业 registry 在 `engine/kernel/exec.py`，不属本批改动）。X9 的自动化入口已解析并传递 preset 能力；完整 preset runtime enforcement 记录在 Batch A/D。
+关闭：E16（统一后台作业 registry，追加收尾见下）。X9 的自动化入口已解析并传递 preset 能力；完整 preset runtime enforcement 记录在 Batch A/D。
 
 ## 改动文件
 
@@ -51,4 +51,22 @@ rtk python -m pytest -q -p no:cacheprovider tests/test_permission_policy_batch_c
 
 ## 未完成项与原因
 
-E14/E18 的缺口是通用 host per-call sandbox enforcement；E16 的统一作业取回/终止和 byte-capped ring buffer 还未实现。真实模型回合不覆盖隔离执行与审批拒绝等独立分支。
+E14/E18 的缺口是通用 host per-call sandbox enforcement。真实模型回合不覆盖隔离执行与审批拒绝等独立分支。
+
+## 后续收尾：E16
+
+`ExecManager` 统一注册 detached shell 和后台 subagent，提供 owner-fenced `job_list/job_output/job_kill`、256KiB 运行环形缓冲、settled 后 16KiB 保留、每 owner 最多 10 个，并将 `job_*` 工具接入模型调用。subagent 通过 refresh/kill 回调接入同一注册表。新增文件：`core/tests/test_kernel_exec_jobs.py`；更新 `core/atlas/engine/kernel/exec.py`、`core/atlas/tools/local_execution.py`、`core/atlas/agent/tool_node.py`。
+
+```text
+rtk python -m pytest -q -p no:cacheprovider tests/test_kernel_exec_jobs.py
+
+9 passed, 5 warnings in 2.38s
+```
+
+```text
+rtk python -m pytest -q -p no:cacheprovider tests/test_kernel_exec_jobs.py tests/test_local_execution.py -k "not shells_executable_cwd_environment_and_nonzero_exit"
+
+27 passed, 1 deselected, 5 warnings in 11.36s
+```
+
+被排除的断言是既有 nonzero-exit 行为不匹配，与本次 registry 无关。

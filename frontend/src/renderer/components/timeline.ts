@@ -100,6 +100,11 @@ export type TimelineItem =
   | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
   | { kind: 'failed'; id: string; detail: string; service?: string; reason?: string; retryAfterSeconds?: number; status?: number };
 
+/** A question explicitly tagged for plan review uses the plan approval controls. */
+export function isPlanReviewIntent(event: AgentEvent): boolean {
+  return event.data.intent === 'plan-review' && event.data.proposal !== true;
+}
+
 const TARGET_KEYS = ['path', 'file_path', 'filepath', 'file', 'command', 'cmd', 'query', 'pattern', 'url', 'q', 'target', 'name'];
 
 const VERBS: Array<[RegExp, string]> = [
