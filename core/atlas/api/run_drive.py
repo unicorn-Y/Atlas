@@ -3707,11 +3707,17 @@ async def _execute_run(
                 await emit("message.delta", {"content": chunk_content})
 
             elif etype == "artifact_created":
-                await emit("artifact.created", {
+                artifact = {
                     "path": event.get("path", ""),
                     "kind": event.get("kind", "document"),
                     "bytes": event.get("bytes", 0),
-                })
+                }
+                # ``present`` declares a title and summary for the deliverable
+                # card; Office creators only supply a path.
+                for key in ("title", "summary"):
+                    if event.get(key):
+                        artifact[key] = event[key]
+                await emit("artifact.created", artifact)
 
             elif etype == "check.results":
                 await emit("check.results", event.get("data", {}))

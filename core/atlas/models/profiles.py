@@ -77,10 +77,13 @@ DEFAULT = ModelProfile("Default", (), ("Follow the tool descriptions and verify 
 
 def profile_for(*models: Any) -> ModelProfile:
     """First profile whose marker appears in any of the given model names."""
-    names = [str(item or "").lower() for item in models if item]
-    for profile in PROFILES:
-        if any(marker in name for marker in profile.markers for name in names):
-            return profile
+    # A generic LiteLLM provider prefix (for example ``openai/``) must not
+    # classify a DeepSeek wire model as GPT before its model family is checked.
+    names = [str(item or "").lower().rsplit("/", 1)[-1] for item in models if item]
+    for name in names:
+        for profile in PROFILES:
+            if any(marker in name for marker in profile.markers):
+                return profile
     return DEFAULT
 
 
