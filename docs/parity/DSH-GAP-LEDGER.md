@@ -193,8 +193,8 @@
 | D2 | 两进程 typed IPC 生命周期（ready/fatal/shutdown-complete/quit-inspection） | `apps/desktop/src/host-process.ts:189,57-78` | renderer 已消费 typed `BackendStartupProgress`；ready/fatal/shutdown-complete/quit-inspection 生命周期生产端仍未接通 | PARTIAL (W12: main/preload/shared IPC 不在本批目录) |
 | D3 | 流式增量：chunk 折叠进 per-node state，重连重放压缩流 | `api/session-controller/.../events.ts:8`；`ui-conversation/.../assembler.ts:174,364` | 连续 `message.delta` 现在增量更新 reply node；其它事件仍经全量 `buildTimeline` 投影 | PARTIAL (W12: reply delta 已增量折叠，结构事件仍会全量重建) |
 | D4 | keyed ConversationNode renderer 注册表 | `ui-chat/.../register-node-renderers.ts:39-69` | `timeline.ts:73-99` 静态联合 + `ConversationActivity.tsx:42` 单 switch，无注册 API | ABSENT |
-| D5 | durable 附件暂存：内容寻址、先存后发、进度、可取消 | `docs/subsystems/attachment.md`；`client/file-upload/src/client/contract.ts` | `App.tsx:1380-1410` 读成 base64 data URL（4 张/4MiB/共 8MiB），`App.tsx:1222` 内联进 run.start | PRESENT-WEAKER |
-| D6 | 结构化草稿：chip 进文本模型、per-session 语义草稿、重载存活 | `ui-conversation/.../ReferenceChip.tsx` | `Composer.tsx:740` 纯 textarea；mentions 另存 `App.tsx:413`，草稿只存纯文本 `App.tsx:215` | PRESENT-WEAKER |
+| D5 | durable 附件暂存：内容寻址、先存后发、进度、可取消 | `docs/subsystems/attachment.md`；`client/file-upload/src/client/contract.ts` | `renderer/services/attachmentStaging.ts` 以 SHA-256 存入 IndexedDB；`App.tsx` 的文件、图片、白板图和最近截图路径先暂存再进入发送队列，显示进度、允许取消，并把暂存引用随会话草稿恢复。发送仍将 base64 内联到 run.start；缺少 UI 重载和有效真实模型端到端证据 | PARTIAL |
+| D6 | 结构化草稿：chip 进文本模型、per-session 语义草稿、重载存活 | `ui-conversation/.../ReferenceChip.tsx` | `renderer/services/composerDraft.ts` 按会话保存文本、mentions 和暂存附件引用；提交时将所有 chip 序列化进模型文本。单测覆盖序列化/隔离，尚未有真实 UI 重载或模型回合通过证据 | PARTIAL |
 | D7 | follow 重连：首帧 header+tail+cursor+投影基线，`page()` 补缺口 | `docs/subsystems/web-client.md:48` | `client.ts:670-694` 永远 `after_sequence: 0`；退避最多 3 次后放弃 | PRESENT-WEAKER |
 | D8 | 右侧栏：split 树、浮动面板、可插 tab 类型、per-session 布局 | `docs/subsystems/sidebar-right.md:26,74`；`ui-dockkit/.../FloatLayer.tsx` | `shell/Inspector.tsx:28,156` 单列固定 union，布局不持久 | PRESENT-WEAKER |
 | D9 | 应用内连接恢复控件（可点击重试 + 恢复确认） | `ui-primitives/.../ConnectionIndicator.tsx:6-40` | 断连提示提供键盘可操作的“重试连接”；桌面重启动作先确认 | ✅ 本轮关闭 |

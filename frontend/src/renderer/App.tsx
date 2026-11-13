@@ -17,6 +17,8 @@ import { resolveMessageSkillReferences } from './components/skillMentions';
 import { cancelRoutedSpeech, speakRouted } from './services/speechPlayback';
 import { getSelectedInputStream } from './services/audioDevices';
 import { hasFileDropPayload, isBlockedFileDropTarget, readDroppedItems } from './services/fileDrop';
+import { loadStagedAttachment, stageAttachment, type StagedAttachment } from './services/attachmentStaging';
+import { readComposerDraft, serializeMentionContext, writeComposerDraft } from './services/composerDraft';
 const MessageThread = lazy(() => import('./components/MessageThread'));
 const TodoPanel = lazy(() => import('./components/TodoPanel'));
 const ProgressCapsule = lazy(() => import('./components/ProgressCapsule'));
@@ -208,16 +210,30 @@ const PROVIDER_USAGE_URL: Record<string, { label: string; url: string }> = {
 };
 /** Shift+Tab 和 /permissions 共用的切换顺序；read_only 不在循环里，只能从菜单选。 */
 const PERMISSION_CYCLE: PermissionMode[] = ['ask_each', 'ask_writes', 'auto_file', 'plan', 'full_access'];
-const draftKey = (conversationId: string) => `atlas.draft.${conversationId || 'home'}`;
 function parseRecentScreenshotCache(value: unknown): { capturedAt: number; items: string[] } | null {
   if (!value || typeof value !== 'object') return null;
   const row = value as { capturedAt?: unknown; items?: unknown };
   if (typeof row.capturedAt !== 'number' || !Array.isArray(row.items)) return null;
   return { capturedAt: row.capturedAt, items: row.items.filter((item): item is string => typeof item === 'string') };
 }
-const readDraft = (conversationId: string) => { try { return localStorage.getItem(draftKey(conversationId)) ?? ''; } catch { return ''; } };
+const imageFileFromDataUrl = (dataUrl: string, name: string): File => {
+  const comma = dataUrl.indexOf(',');
+  const mime = /^data:([^;,]+)/.exec(dataUrl.slice(0, comma))?.[1] || 'image/png';
+  const binary = atob(dataUrl.slice(comma + 1));
+  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  return new File([bytes.buffer as ArrayBuffer], name, { type: mime });
+};
+const base64FromBytes = (bytes: Uint8Array): string => {
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  return btoa(binary);
+};
 const writeDraft = (conversationId: string, text: string) => {
-  try { if (text) localStorage.setItem(draftKey(conversationId), text); else localStorage.removeItem(draftKey(conversationId)); } catch { /* storage unavailable */ }
+  try {
+    const existing = readComposerDraft(localStorage, conversationId);
+    writeComposerDraft(localStorage, conversationId, text ? { ...existing, text } : { text: '', mentions: [], attachments: [] });
+  } catch { /* storage unavailable */ }
 };
 const pref = (key: string) => { try { return localStorage.getItem(`atlas.preference.${key}`); } catch { return null; } };
 const setPref = (key: string, value: string) => { try { localStorage.setItem(`atlas.preference.${key}`, value); } catch { /* storage unavailable */ } };
@@ -434,6 +450,8 @@ function AppContent() {
   const [memoryMarkerDrafts, setMemoryMarkerDrafts] = useState<MemoryMarkerDraft[] | null>(null);
   const [memoryMarkerSaving, setMemoryMarkerSaving] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
+  const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([]);
+  const attachmentUploadAbortRef = useRef<AbortController[]>([]);
   const [recentScreenshots, setRecentScreenshots] = useState<RecentScreenshot[]>([]);
   const [files, setFiles] = useState<Array<RunFile & { size: number }>>([]);
   const [screenRecorderOpen, setScreenRecorderOpen] = useState(false);
@@ -834,16 +852,38 @@ function AppContent() {
   const go = useCallback((next: View) => startTransition(() => setView(next)), []);
 
   // Unsent text survives switching conversations and restarting the app.
-  const draftOwnerRef = useRef(store.activeConversationId);
+  const draftOwnerRef = useRef<string | null>(null);
   const skipDraftRestoreRef = useRef(false);
   useEffect(() => {
     if (draftOwnerRef.current === store.activeConversationId) return;
     draftOwnerRef.current = store.activeConversationId;
-    if (skipDraftRestoreRef.current) skipDraftRestoreRef.current = false;
-    else setInput(readDraft(store.activeConversationId));
+    const skipRestore = skipDraftRestoreRef.current;
+    skipDraftRestoreRef.current = false;
     setAttachments([]);
     setFiles([]);
-    setMentions([]);
+    setStagedAttachments([]);
+    if (skipRestore) {
+      setInput('');
+      setMentions([]);
+    } else {
+      const draft = readComposerDraft(localStorage, store.activeConversationId);
+      setInput(draft.text);
+      setMentions(draft.mentions);
+      setStagedAttachments(draft.attachments);
+      void Promise.all(draft.attachments.map(async (item) => {
+        const blob = await loadStagedAttachment(item.id);
+        if (!blob || useAtlasStore.getState().activeConversationId !== store.activeConversationId) return null;
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        const encoded = base64FromBytes(bytes);
+        return item.kind === 'image'
+          ? { kind: 'image' as const, value: `data:${item.mime};base64,${encoded}` }
+          : { kind: 'file' as const, value: { name: item.name, mime: item.mime, data_base64: encoded, size: item.size, stagingId: item.id } };
+      })).then((restored) => {
+        if (useAtlasStore.getState().activeConversationId !== store.activeConversationId) return;
+        setAttachments(restored.flatMap((item) => item?.kind === 'image' ? [item.value] : []));
+        setFiles(restored.flatMap((item) => item?.kind === 'file' ? [item.value] : []));
+      }).catch((error) => setToast(`恢复暂存附件失败：${error instanceof Error ? error.message : String(error)}`, 'error'));
+    }
     setEditing(null);
     editingDraftRef.current = null;
   }, [store.activeConversationId]);
@@ -851,10 +891,10 @@ function AppContent() {
     const conversationId = store.activeConversationId;
     const timer = window.setTimeout(() => {
       if (useAtlasStore.getState().activeConversationId !== conversationId) return;
-      writeDraft(conversationId, input);
+      writeComposerDraft(localStorage, conversationId, { text: input, mentions, attachments: stagedAttachments });
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [input, store.activeConversationId]);
+  }, [input, mentions, stagedAttachments, store.activeConversationId]);
   const notify = useCallback((text: string, level: ToastLevel = 'info') => setToast(text, level), [setToast]);
   const saveUsername = (value: string) => {
     const next = value.trim() || 'User';
@@ -1246,14 +1286,10 @@ function AppContent() {
       return;
     }
     scheduleBypass.current = false;
-    let text = submittedInput;
+    let text = serializeMentionContext(submittedInput, mentions);
     const memoryCandidates = extractMemoryMarkers(submittedInput);
     const images = attachments;
     const documents = files.map(({ name, mime, data_base64 }) => ({ name, mime, data_base64 }));
-    const elementRefs = mentions.filter((item) => item.kind === 'element');
-    if (elementRefs.length) text += `\n\n请根据以下 PPT 元素引用进行精确修改：\n${elementRefs.map((item) => `- ${item.label}（文件/定位：${item.id}）`).join('\n')}`;
-    const sessionRefs = mentions.filter((item) => item.kind === 'conversation');
-    if (sessionRefs.length) text += `\n\n${sessionRefs.map((item) => `请用 read_session 读取会话 ${item.id}（${item.label}）。`).join('\n')}`;
     for (const reference of mentions.filter((item) => item.kind === 'resource')) {
       const [server_name, ...uriParts] = reference.id.split('\n');
       const uri = uriParts.join('\n');
@@ -1295,6 +1331,7 @@ function AppContent() {
     writeDraft(store.activeConversationId, '');
     setAttachments([]);
     setFiles([]);
+    setStagedAttachments([]);
     setMentions([]);
     if (fromHome) {
       go('chat');
@@ -1385,25 +1422,31 @@ function AppContent() {
     const tooBig = picked.find((file) => file.size > 10 * 1024 * 1024);
     if (tooBig) { setToast(`${tooBig.name} 超过 10 MB，发不了`); return; }
     if (files.reduce((sum, file) => sum + file.size, 0) + picked.reduce((sum, file) => sum + file.size, 0) > 20 * 1024 * 1024) { setToast('一条消息的文件加起来不能超过 20 MB'); return; }
-    Promise.allSettled(picked.map((file) => new Promise<RunFile & { size: number }>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => typeof reader.result === 'string'
-        ? resolve({ name: file.name, mime: file.type || 'application/octet-stream', data_base64: reader.result.slice(reader.result.indexOf(',') + 1), size: file.size })
-        : reject(new Error('无法读取文件'));
-      reader.onprogress = (event) => {
-        if (event.lengthComputable) setAttachmentProgress(`正在读取 ${file.name}（${Math.round(event.loaded / event.total * 100)}%）`);
-      };
-      reader.onerror = () => reject(new Error('无法读取文件'));
-      reader.onloadend = () => { attachmentReadsRef.current -= 1; if (!attachmentReadsRef.current) setAttachmentProgress(''); };
-      attachmentReadsRef.current += 1;
-      setAttachmentProgress(`正在读取 ${file.name}`);
-      reader.readAsDataURL(file);
-    }))).then((results) => {
+    const controller = new AbortController();
+    attachmentUploadAbortRef.current.push(controller);
+    attachmentReadsRef.current += picked.length;
+    Promise.allSettled(picked.map(async (file) => {
+      setAttachmentProgress(`暂存 ${file.name}（0%）`);
+      const staged = await stageAttachment(file, 'file', controller.signal, (loaded, total) => {
+        setAttachmentProgress(`暂存 ${file.name}（${total ? Math.round(loaded / total * 100) : 100}%）`);
+      });
+      const blob = await loadStagedAttachment(staged.id);
+      if (!blob) throw new Error('暂存文件找不到');
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      return { staged, file: { name: staged.name, mime: staged.mime, data_base64: base64FromBytes(bytes), size: staged.size, stagingId: staged.id } };
+    })).then((results) => {
       if (useAtlasStore.getState().activeConversationId !== conversationId) return;
       const read = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
-      const failed = results.flatMap((result, index) => result.status === 'rejected' ? [picked[index]] : []);
-      if (read.length) setFiles((current) => [...current, ...read]);
+      const failed = results.flatMap((result, index) => result.status === 'rejected' && !(result.reason instanceof DOMException && result.reason.name === 'AbortError') ? [picked[index]] : []);
+      if (read.length) {
+        setFiles((current) => [...current, ...read.map((item) => item.file)]);
+        setStagedAttachments((current) => [...current, ...read.map((item) => item.staged)]);
+      }
       if (failed.length) { setFailedAttachmentReads((current) => [...current, ...failed]); setToast(`读取 ${failed.length} 个文件失败，可重试`); }
+    }).finally(() => {
+      attachmentReadsRef.current = Math.max(0, attachmentReadsRef.current - picked.length);
+      attachmentUploadAbortRef.current = attachmentUploadAbortRef.current.filter((active) => active !== controller);
+      if (!attachmentReadsRef.current) setAttachmentProgress('');
     });
   };
   const addImages = (picked: File[]) => {
@@ -1413,25 +1456,34 @@ function AppContent() {
     if (selected.some((file) => file.size > 4 * 1024 * 1024)) { setToast('单张图片不能超过 4 MiB'); return; }
     const queuedBytes = attachments.reduce((sum, image) => sum + Math.max(0, Math.floor((image.length - image.indexOf(',') - 1) * 3 / 4)), 0);
     if (queuedBytes + selected.reduce((sum, file) => sum + file.size, 0) > 8 * 1024 * 1024) { setToast('单条消息的图片总大小不能超过 8 MiB'); return; }
-    Promise.allSettled(selected.map((file) => new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('无法读取图片'));
-      reader.onerror = () => reject(new Error('无法读取图片'));
-      reader.onprogress = (event) => {
-        if (event.lengthComputable) setAttachmentProgress(`正在读取 ${file.name}（${Math.round(event.loaded / event.total * 100)}%）`);
-      };
-      reader.onloadend = () => { attachmentReadsRef.current -= 1; if (!attachmentReadsRef.current) setAttachmentProgress(''); };
-      attachmentReadsRef.current += 1;
-      setAttachmentProgress(`正在读取 ${file.name}`);
-      reader.readAsDataURL(file);
-    }))).then((results) => {
+    const controller = new AbortController();
+    attachmentUploadAbortRef.current.push(controller);
+    attachmentReadsRef.current += selected.length;
+    Promise.allSettled(selected.map(async (file) => {
+      setAttachmentProgress(`暂存 ${file.name}（0%）`);
+      const staged = await stageAttachment(file, 'image', controller.signal, (loaded, total) => {
+        setAttachmentProgress(`暂存 ${file.name}（${total ? Math.round(loaded / total * 100) : 100}%）`);
+      });
+      const blob = await loadStagedAttachment(staged.id);
+      if (!blob) throw new Error('暂存图片找不到');
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      return { staged, dataUrl: `data:${staged.mime};base64,${base64FromBytes(bytes)}` };
+    })).then((results) => {
       if (useAtlasStore.getState().activeConversationId !== conversationId) return;
       const images = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
-      const failed = results.flatMap((result, index) => result.status === 'rejected' ? [selected[index]] : []);
-      if (images.length) setAttachments((current) => [...current, ...images].slice(0, 4));
+      const failed = results.flatMap((result, index) => result.status === 'rejected' && !(result.reason instanceof DOMException && result.reason.name === 'AbortError') ? [selected[index]] : []);
+      if (images.length) {
+        setAttachments((current) => [...current, ...images.map((item) => item.dataUrl)].slice(0, 4));
+        setStagedAttachments((current) => [...current, ...images.map((item) => item.staged)]);
+      }
       if (failed.length) { setFailedAttachmentReads((current) => [...current, ...failed]); setToast(`读取 ${failed.length} 张图片失败，可重试`); }
+    }).finally(() => {
+      attachmentReadsRef.current = Math.max(0, attachmentReadsRef.current - selected.length);
+      attachmentUploadAbortRef.current = attachmentUploadAbortRef.current.filter((active) => active !== controller);
+      if (!attachmentReadsRef.current) setAttachmentProgress('');
     });
   };
+  const cancelAttachmentUpload = () => attachmentUploadAbortRef.current.forEach((controller) => controller.abort());
   const retryFailedAttachments = () => {
     const retry = failedAttachmentReads;
     setFailedAttachmentReads([]);
@@ -1442,8 +1494,8 @@ function AppContent() {
   const addRecentScreenshots = (screenshots: RecentScreenshot[]) => {
     const available = Math.max(0, 4 - attachments.length);
     if (!available) { setToast('每条消息最多 4 张图片'); return; }
-    const selected = screenshots.slice(0, available);
-    setAttachments((items) => [...new Set([...items, ...selected.map((item) => item.dataUrl)])].slice(0, 4));
+    const selected = screenshots.filter((item) => !attachments.includes(item.dataUrl)).slice(0, available);
+    if (selected.length) addImages(selected.map((item, index) => imageFileFromDataUrl(item.dataUrl, `截图-${index + 1}.png`)));
     setToast(selected.length < screenshots.length ? `已加入 ${selected.length} 张截图；每条消息最多 4 张图片` : `已加入 ${selected.length} 张截图`);
   };
   const addRecentScreenshot = (screenshot: RecentScreenshot) => addRecentScreenshots([screenshot]);
@@ -1462,7 +1514,7 @@ function AppContent() {
     if (bytes > 4 * 1024 * 1024) { setToast('白板图片超过 4 MiB，无法附加'); return false; }
     const queuedBytes = attachments.reduce((sum, image) => sum + Math.max(0, Math.floor((image.length - image.indexOf(',') - 1) * 3 / 4)), 0);
     if (queuedBytes + bytes > 8 * 1024 * 1024) { setToast('单条消息的图片总大小不能超过 8 MiB'); return false; }
-    setAttachments((current) => [...current, dataUrl]);
+    addImages([imageFileFromDataUrl(dataUrl, '白板.png')]);
     setToast('白板已作为图片附加到当前消息');
     return true;
   };
@@ -1808,7 +1860,7 @@ function AppContent() {
   useEffect(() => { setPref('tabs', JSON.stringify(tabs)); }, [tabs]);
   useEffect(() => { setPref('closed-tabs', JSON.stringify(closedTabs.slice(-12))); }, [closedTabs]);
   const closeTab = (id: string, alreadyConfirmed = false) => {
-    const hasDraft = (id === store.activeConversationId ? input : readDraft(id)).trim().length > 0;
+      const hasDraft = (id === store.activeConversationId ? input : readComposerDraft(localStorage, id).text).trim().length > 0;
     const isRunning = store.runs.some((run) => run.conversationId === id && !TERMINAL.includes(run.status));
     if ((hasDraft || isRunning) && !alreadyConfirmed && !window.confirm(`${hasDraft ? '此标签有未发送草稿（会保存在本机）。' : ''}${isRunning ? '此会话任务仍在运行，关闭标签不会停止任务。' : ''}\n仍要关闭当前标签吗？可用 Ctrl+Shift+T 恢复标签。`)) return;
     if (id === store.activeConversationId && hasDraft) writeDraft(id, input);
@@ -1973,7 +2025,7 @@ function AppContent() {
     try {
       const pending = parseRecentScreenshotCache(JSON.parse(localStorage.getItem(key) ?? '{}'));
       if (pending && Date.now() - pending.capturedAt < 30 * 60 * 1000 && pending.items.length) {
-        setAttachments((items) => [...items, ...pending.items].slice(0, 4));
+        addImages(pending.items.slice(0, 4).map((item, index) => imageFileFromDataUrl(item, `截图-${index + 1}.png`)));
         localStorage.removeItem(key); setToast('最近的会话截图已放入输入框');
       } else localStorage.removeItem(key);
     } catch { /* corrupt screenshot cache is ignored */ }
@@ -2937,7 +2989,7 @@ function AppContent() {
   const composerBase = {
     value: input, onChange: setInput, attachments, onPickImages: addFiles, onPickFolders: addFolderReferences, listening, onToggleMic: () => { void toggleSpeechInput(); },
     speechInputMode, onStartMic: () => { void toggleSpeechInput(true); }, onStopMic: () => { void stopSpeechInput(); },
-    attachmentProgress, failedAttachmentCount: failedAttachmentReads.length, onRetryFailedAttachments: retryFailedAttachments,
+    attachmentProgress, failedAttachmentCount: failedAttachmentReads.length, onRetryFailedAttachments: retryFailedAttachments, onCancelAttachmentUpload: cancelAttachmentUpload,
     onEnhancePrompt: enhancePrompt, onRefineLastAnswer: messages.some((message) => message.role === 'assistant') ? refineLastAnswer : undefined,
     onAttachDrawing: attachDrawing, contextKey: store.activeConversationId,
     onExternalEditor: () => {
@@ -2945,11 +2997,19 @@ function AppContent() {
       if (!open) { setToast('外部编辑器只在桌面版可用'); return; }
       void open(input).then((text) => { if (text !== null) { setInput(text); writeDraft(store.activeConversationId, text); } }).catch((error) => setToast(`编辑器打开失败：${error instanceof Error ? error.message : String(error)}`));
     },
-    onRemoveAttachment: (index: number) => setAttachments((items) => items.filter((_, position) => position !== index)),
+    onRemoveAttachment: (index: number) => {
+      setAttachments((items) => items.filter((_, position) => position !== index));
+      let imageIndex = -1;
+      setStagedAttachments((items) => items.filter((item) => item.kind !== 'image' || ++imageIndex !== index));
+    },
     onListCaptureWindows: () => window.atlasDesktop?.listCaptureWindows?.() ?? Promise.resolve([]),
     onCaptureWindow: captureWindow, recentScreenshots, onPickRecentScreenshot: addRecentScreenshot, onPickRecentScreenshots: addRecentScreenshots,
     onDeleteRecentScreenshot: (id: string) => { void window.atlasDesktop?.deleteRecentScreenshot?.(id).then(() => setRecentScreenshots((items) => items.filter((item) => item.id !== id))); },
-    files, onRemoveFile: (index: number) => setFiles((items) => items.filter((_, position) => position !== index)),
+    files, onRemoveFile: (index: number) => {
+      setFiles((items) => items.filter((_, position) => position !== index));
+      let fileIndex = -1;
+      setStagedAttachments((items) => items.filter((item) => item.kind !== 'file' || ++fileIndex !== index));
+    },
     findMentions, mentions, onAddMention: (item: MentionItem) => { if (item.id) setMentions((current) => [...current, item]); },
     onRemoveMention: (item: MentionItem) => setMentions((current) => current.filter((entry) => !(entry.kind === item.kind && entry.id === item.id))),
     onLongPaste: (text: string) => { addDocuments([new File([text], `粘贴的文本-${new Date().toLocaleTimeString().replace(/:/g, '')}.txt`, { type: 'text/plain' })]); setToast(`粘贴内容有 ${text.length} 个字，已转成附件`); },

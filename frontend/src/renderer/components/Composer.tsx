@@ -200,6 +200,7 @@ interface ComposerProps {
   attachmentProgress?: string;
   failedAttachmentCount?: number;
   onRetryFailedAttachments?: () => void;
+  onCancelAttachmentUpload?: () => void;
   /** Extra toolbar controls next to the attach button (working directory, plan mode). */
   tools?: ReactNode;
   onEnhancePrompt?: (text: string) => Promise<string>;
@@ -800,6 +801,7 @@ export default function Composer(props: ComposerProps) {
     </div>}
     {(props.attachmentProgress || (props.failedAttachmentCount ?? 0) > 0) && <div className="mt-2 flex items-center gap-2 text-[12px] text-fg-3" role="status" aria-live="polite">
       {props.attachmentProgress && <span>{props.attachmentProgress}</span>}
+      {props.attachmentProgress && props.onCancelAttachmentUpload && <button type="button" onClick={props.onCancelAttachmentUpload} className="text-brand hover:underline">取消</button>}
       {(props.failedAttachmentCount ?? 0) > 0 && <><span>{props.failedAttachmentCount} 个附件读取失败</span><button type="button" onClick={props.onRetryFailedAttachments} className="inline-flex items-center gap-1 text-brand hover:underline"><RotateCcw size={12} />重试</button></>}
     </div>}
     <input ref={fileRef} hidden type="file" multiple onChange={(event) => { props.onPickImages(event.target.files); event.currentTarget.value = ''; }} />
