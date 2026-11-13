@@ -25,7 +25,12 @@ from atlas.automation import (
 from atlas.automation.engine import AutomationEngine, compute_next_run_at
 from atlas.automation.migrate import import_legacy_schedules
 from atlas.automation.store import AutomationLimitError, normalize_record
-from atlas.automation.webhooks import get_webhook_credentials
+from atlas.automation.webhooks import (
+    WebhookAuthenticationError,
+    WebhookPayloadError,
+    get_webhook_credentials,
+    get_webhook_provider,
+)
 
 log = structlog.get_logger()
 
@@ -106,6 +111,8 @@ class PayloadSpec(BaseModel):
     kind: Literal["agent_turn", "heartbeat", "script"] = "agent_turn"
     message: str = ""
     agent_id: str = ""
+    agent_preset_id: str = "default"
+    permission_preset: Literal["observe", "ask", "trusted", "free"] = "ask"
     model: str = ""
     reasoning_effort: Literal["", "off", "minimal", "low", "medium", "high"] = ""
     skills: list[str] = Field(default_factory=list)
@@ -468,16 +475,16 @@ async def receive_automation_webhook(automation_id: str, request: Request) -> di
         raise HTTPException(status_code=413, detail="Webhook 请求体超过 256 KiB")
     timestamp = request.headers.get("x-atlas-timestamp", "")
     signature = request.headers.get("x-atlas-signature", "")
-    if not get_webhook_credentials().verify(automation_id, timestamp, signature, raw):
-        raise HTTPException(status_code=401, detail="Webhook 签名无效、过期或已使用")
     try:
-        payload = json.loads(raw or b"{}")
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise HTTPException(status_code=400, detail="Webhook 请求体必须是 JSON") from exc
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="Webhook JSON 顶层必须是对象")
+        session = get_webhook_provider(get_webhook_credentials()).authenticate(
+            automation_id, timestamp, signature, raw,
+        )
+    except WebhookAuthenticationError as exc:
+        raise HTTPException(status_code=401, detail="Webhook 签名无效、过期或已使用") from exc
+    except WebhookPayloadError as exc:
+        raise HTTPException(status_code=400, detail="Webhook JSON 顶层必须是对象") from exc
     try:
-        return await engine.trigger_event(automation_id, source="webhook", payload=payload)
+        return await engine.trigger_event(session.automation_id, source="webhook", payload=session.payload)
     except KeyError as exc:
         raise _not_found(automation_id) from exc
     except RuntimeError as exc:

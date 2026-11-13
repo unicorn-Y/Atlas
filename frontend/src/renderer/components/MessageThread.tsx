@@ -48,6 +48,7 @@ function timelineClass(item: TimelineItem): ThreadClassId {
     case 'plan': return 'plans';
     case 'checks': case 'review': case 'lsp': return 'checks';
     case 'component': return 'messages';
+    case 'extension': return 'messages';
     case 'artifact': case 'done': return 'files';
     case 'cancelled': case 'notice': case 'failed': return 'status';
   }

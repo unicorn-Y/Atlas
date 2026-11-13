@@ -33,6 +33,27 @@ _IMPORT_MESSAGE_TEXT_FIELDS = (
     "tool_call_id", "tool_name", "effect_disposition", "finish_reason",
     "reasoning", "reasoning_content", "platform_message_id", "message_id",
 )
+
+
+def _append_session_event_row(
+    conn, session_id: str, event_type: str, payload: dict[str, Any],
+) -> int:
+    session_id = str(session_id or "").strip()
+    event_type = str(event_type or "").strip()
+    if not session_id:
+        raise ValueError("session_id must not be empty")
+    if not event_type:
+        raise ValueError("event_type must not be empty")
+    if not isinstance(payload, dict):
+        raise ValueError("session event payload must be an object")
+    cursor = conn.execute(
+        "INSERT INTO session_events(session_id, event_type, payload_json, created_at) "
+        "VALUES (?, ?, ?, ?)",
+        (session_id, event_type,
+         json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+         datetime.now(timezone.utc).isoformat()),
+    )
+    return int(cursor.lastrowid)
 _IMPORT_MESSAGE_JSON_FIELDS = (
     "reasoning_details", "codex_reasoning_items", "codex_message_items", "absorbed_message_uids", "tool_call_uids",
 )
@@ -731,7 +752,56 @@ class SessionPortabilityMixin:
                 detached += 1
         return detached
 
-    def import_sessions(self, sessions: list[dict[str, Any]]) -> dict[str, Any]:
+    def append_session_event_with_cursor(
+        self, cursor, session_id: str, event_type: str, payload: dict[str, Any],
+    ) -> int:
+        """Insert an event using the caller's active write cursor.
+
+        Only call this from an existing ``_execute_write`` callback. It never
+        starts or commits a transaction, so it is safe to compose with a state
+        mutation without re-entering SessionDB's non-reentrant writer lock.
+        """
+        return _append_session_event_row(cursor, session_id, event_type, payload)
+
+    def append_session_event(
+        self, session_id: str, event_type: str, payload: dict[str, Any],
+    ) -> int:
+        """Append one immutable lifecycle event in its own write transaction."""
+        return self._execute_write(
+            lambda conn: self.append_session_event_with_cursor(
+                conn, session_id, event_type, payload,
+            )
+        )
+
+    def list_session_events(
+        self, session_id: str, *, after_seq: int = 0, limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Read durable session events after a sequence cursor, in append order."""
+        session_id = str(session_id or "").strip()
+        if not session_id:
+            raise ValueError("session_id must not be empty")
+        if type(after_seq) is not int or after_seq < 0:
+            raise ValueError("after_seq must be a non-negative integer")
+        if type(limit) is not int or not 1 <= limit <= 10_000:
+            raise ValueError("limit must be between 1 and 10000")
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT seq, session_id, event_type, payload_json, created_at "
+                "FROM session_events WHERE session_id = ? AND seq > ? ORDER BY seq LIMIT ?",
+                (session_id, after_seq, limit),
+            ).fetchall()
+        return [{
+            "seq": int(row["seq"]),
+            "session_id": str(row["session_id"]),
+            "event_type": str(row["event_type"]),
+            "payload": json.loads(row["payload_json"]),
+            "created_at": str(row["created_at"]),
+        } for row in rows]
+
+    def import_sessions(
+        self, sessions: list[dict[str, Any]], *,
+        session_events: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """Import sessions exported by :meth:`export_session` or ``export_all``. Existing ids
         are skipped. A child keeps its parent only when the parent exists or is in the
         same payload; otherwise it is detached so partial imports pass FK validation.
@@ -753,6 +823,14 @@ class SessionPortabilityMixin:
         normalized, errors = self._validate_import_payload(sessions)
         if errors:
             return {"ok": False, "imported": 0, "skipped": 0, "detached": 0, "errors": errors}
+        events = list(session_events or [])
+        valid_ids = {str(item["session"].get("id") or "").strip() for item in normalized}
+        for event in events:
+            if (not isinstance(event, dict)
+                    or str(event.get("session_id") or "").strip() not in valid_ids
+                    or not str(event.get("event_type") or "").strip()
+                    or not isinstance(event.get("payload", {}), dict)):
+                raise ValueError("session_events must target an imported session and contain an event type and object payload")
 
         def _do(conn):
             imported_ids: list[str] = []
@@ -769,6 +847,14 @@ class SessionPortabilityMixin:
                 if parent_id:
                     parent_updates.append((session_id, parent_id))
                 imported_ids.append(session_id)
+            imported_set = set(imported_ids)
+            for event in events:
+                session_id = str(event["session_id"]).strip()
+                if session_id not in imported_set:
+                    continue
+                self.append_session_event_with_cursor(
+                    conn, session_id, str(event["event_type"]), event.get("payload", {}),
+                )
             return {
                 "ok": True, "imported": len(imported_ids), "skipped": len(skipped_ids),
                 "detached": self._attach_import_parents(conn, parent_updates),

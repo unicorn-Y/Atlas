@@ -473,6 +473,10 @@ LOCAL_TOOLS = [
             "detached": {"type": "boolean"},
             "keep_stdin": {"type": "boolean"},
             "pty": {"type": "boolean"},
+            "sandbox_permissions": {"type": "string", "enum": [
+                "read-only", "workspace-write", "danger-full-access",
+            ]},
+            "justification": {"type": "string"},
         },
         ["command"],
     ),
@@ -501,6 +505,10 @@ LOCAL_TOOLS = [
             "timeout": {"type": "number"},
             "max_output_bytes": {"type": "integer", "minimum": 1},
             "detached": {"type": "boolean"},
+            "sandbox_permissions": {"type": "string", "enum": [
+                "read-only", "workspace-write", "danger-full-access",
+            ]},
+            "justification": {"type": "string"},
         },
         ["executable"],
     ),
@@ -539,6 +547,11 @@ LOCAL_TOOLS = [
             "stream": {"type": "string", "enum": ["stdout", "stderr"]},
             "offset": {"type": "integer", "minimum": 0},
             "limit": {"type": "integer", "minimum": 1, "maximum": 65536},
+            "idle_timeout": {"type": "number", "minimum": 0.1, "maximum": 30},
+            "sandbox_permissions": {"type": "string", "enum": [
+                "read-only", "workspace-write", "danger-full-access",
+            ]},
+            "justification": {"type": "string"},
         },
         ["action"],
     ),
@@ -720,6 +733,8 @@ class LocalProcess:
     started_at: str
     owner_run_id: str | None
     detached: bool
+    pty: bool = False
+    last_output_monotonic: float = 0.0
     exit_code_command: str = ""
     shell_name: str = "none (direct argv)"
     shell_path: str = ""
@@ -763,12 +778,28 @@ class LocalProcess:
             "started_at": self.started_at,
             "duration_seconds": round(time.monotonic() - self.started_monotonic, 3),
             "detached": self.detached,
+            "pty": self.pty,
             "handoff_note": self.handoff_note,
             "output_bytes_total": self.output_bytes_total,
             "output_bytes_dropped": self.output_bytes_dropped,
             "output_truncated": self.output_truncated,
             "cancel_note": self.cancel_note,
         }
+
+
+def _process_owner_allowed(record: LocalProcess, run_id: str | None) -> bool:
+    """Unowned/handoff processes are shared; a live run owns its own handles."""
+    owner = record.owner_run_id
+    return owner is None or (run_id is not None and owner == run_id)
+
+
+def _wait_reason(record: LocalProcess, *, timed_out: bool = False) -> str:
+    """Classify a terminal wait result using the DSH closed reason set."""
+    if timed_out:
+        return "timeout"
+    if record.state != "running":
+        return "session_exit"
+    return "stdin_read" if record.pty else "inferred_idle"
 
 
 class LocalExecutionRuntime:
@@ -845,6 +876,23 @@ class LocalExecutionRuntime:
     ) -> dict[str, Any]:
         from atlas import secrets_store
         args = dict(arguments or {})
+        sandbox_request = None
+        if "sandbox_permissions" in args:
+            from atlas.engine.tool_permissions import normalize_sandbox_escalation
+
+            try:
+                sandbox_request = normalize_sandbox_escalation(args)
+            except ValueError as exc:
+                return self._error(str(exc))
+            authorization = args.pop("_sandbox_approval_outcome", None)
+            if authorization != "allowed-once":
+                return self._error(
+                    "Sandbox permission request must receive a one-call approval before execution."
+                )
+            if sandbox_request["sandbox_permissions"] != "danger-full-access":
+                return self._error(
+                    "Native local execution cannot enforce read-only or workspace-write OS sandboxing."
+                )
         project_id = args.pop("_atlas_project_id", None)
         if isinstance(args.get("env"), dict):
             try:
@@ -860,6 +908,9 @@ class LocalExecutionRuntime:
             output_callback = safe_output
         result = await self._call_tool_unredacted(name, args, run_id=run_id, output_callback=output_callback,
             event_callback=event_callback, cancel_event=cancel_event)
+        if sandbox_request is not None and isinstance(result.get("data"), dict):
+            result["data"]["sandbox_permissions"] = sandbox_request["sandbox_permissions"]
+            result["data"]["sandbox_enforced"] = True
         return _redact_nested(result, secrets_store.redact)
 
     async def _call_tool_unredacted(
@@ -1652,6 +1703,8 @@ class LocalExecutionRuntime:
             started_at=datetime.now(UTC).isoformat(),
             owner_run_id=run_id,
             detached=detached,
+            pty=pty,
+            last_output_monotonic=time.monotonic(),
             stdout_path=stdout_path,
             stderr_path=stderr_path,
         )
@@ -1699,6 +1752,7 @@ class LocalExecutionRuntime:
         from atlas.secrets_store import StreamingRedactor
         redactor = StreamingRedactor()
         while chunk := await reader.read(4096):
+            record.last_output_monotonic = time.monotonic()
             record.output_bytes_total += len(chunk)
             text = redactor.feed(decoder.decode(chunk))
             safe_chunk = text.encode("utf-8")
@@ -1788,8 +1842,35 @@ class LocalExecutionRuntime:
             raise
 
     async def _wait_result(
-        self, record: LocalProcess, timeout: float | None = None
+        self, record: LocalProcess, timeout: float | None = None,
+        idle_timeout: float | None = None,
     ) -> dict[str, Any]:
+        if idle_timeout is not None:
+            try:
+                idle_seconds = float(idle_timeout)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("idle_timeout must be between 0.1 and 30 seconds") from exc
+            if not 0.1 <= idle_seconds <= 30:
+                raise ValueError("idle_timeout must be between 0.1 and 30 seconds")
+            while not record.wait_task.done():
+                remaining = idle_seconds - (time.monotonic() - record.last_output_monotonic)
+                if remaining <= 0:
+                    break
+                await asyncio.wait({record.wait_task}, timeout=remaining)
+            if not record.wait_task.done():
+                if timeout is not None and float(timeout) <= idle_seconds:
+                    await self._cancel_process(record)
+                    result = self._result(record)
+                    result["timed_out"] = True
+                    result["outcome"] = "timed_out"
+                    result["data"].update({"state": "timed_out", "timed_out": True,
+                                           "exit_code": 124, "waitReason": "timeout"})
+                    result["is_error"] = True
+                    return result
+                result = self._result(record)
+                result["data"]["waitReason"] = _wait_reason(record)
+                result["data"]["state"] = record.state
+                return result
         try:
             if timeout is None:
                 await record.wait_task
@@ -1800,7 +1881,8 @@ class LocalExecutionRuntime:
             result = self._result(record)
             result["timed_out"] = True
             result["outcome"] = "timed_out"
-            result["data"].update({"state": "timed_out", "timed_out": True, "exit_code": 124})
+            result["data"].update({"state": "timed_out", "timed_out": True,
+                                   "exit_code": 124, "waitReason": "timeout"})
             result["content"] = [{
                 "type": "text",
                 "text": f"Process timed out after {float(timeout):g}s.\n{result['content'][0]['text']}",
@@ -1810,7 +1892,9 @@ class LocalExecutionRuntime:
         except asyncio.CancelledError:
             await self._cancel_process(record)
             raise
-        return self._result(record)
+        result = self._result(record)
+        result["data"]["waitReason"] = _wait_reason(record)
+        return result
 
     def _read_log(
         self, record: LocalProcess, stream: str, offset: int = 0, limit: int = 65536
@@ -1882,7 +1966,10 @@ class LocalExecutionRuntime:
         if action == "list":
             data = {
                 "processes": [
-                    item.summary() for item in self._processes.values() if item.state == "running"
+                    item.summary() for item in self._processes.values()
+                    if item.state == "running" and (
+                        item.owner_run_id is None or item.owner_run_id == run_id
+                    )
                 ]
             }
             return {
@@ -1905,6 +1992,8 @@ class LocalExecutionRuntime:
             record = self._processes.get(str(args.get("execution_id", "")))
             if record is None:
                 return self._error("Unknown Atlas execution_id.")
+            if not _process_owner_allowed(record, run_id):
+                return self._error("This Atlas process belongs to a different run.")
             if action == "status":
                 data = record.summary()
                 if args.get("_native_poll"):
@@ -1931,7 +2020,9 @@ class LocalExecutionRuntime:
                         int(args.get("offset", 0)), int(args.get("limit", 65536)),
                     )
             elif action == "wait":
-                return await self._wait_result(record, args.get("timeout"))
+                return await self._wait_result(
+                    record, args.get("timeout"), args.get("idle_timeout"),
+                )
             elif action == "cancel":
                 if record.state != "running":
                     raise ValueError("Only a running process can be cancelled.")

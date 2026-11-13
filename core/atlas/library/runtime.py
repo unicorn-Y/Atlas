@@ -31,6 +31,8 @@ from atlas.library.taxonomy import OTHER_ID
 log = structlog.get_logger(__name__)
 
 _STORE: LibraryStore | None = None
+_DISCOVERY_REGISTRY: Any | None = None
+_DISCOVERY_REGISTRY_PATH: str | None = None
 
 
 def get_store() -> LibraryStore:
@@ -267,15 +269,56 @@ def _skill_usage_counts() -> dict[str, int]:
 
 def _skill_index(skill_mgr: Any) -> tuple[Bm25Index, list[dict[str, Any]]]:
     store = get_store()
-    names = ",".join(sorted(s.name for s in skill_mgr.list_skills())) if skill_mgr is not None else ""
-    signature = f"{store.version}:{hashlib.sha1(names.encode()).hexdigest()}:{len(store.catalog())}"
+    infos = skill_mgr.list_skills() if skill_mgr is not None else []
+    live_skills: list[tuple[str, str, str]] = []
+    for info in infos:
+        if getattr(info, "disable_model_invocation", False):
+            continue
+        try:
+            digest = hashlib.sha256(Path(info.path).read_bytes()).hexdigest()
+        except (OSError, AttributeError):
+            digest = "unavailable"
+        live_skills.append((str(info.name), str(getattr(info, "version", "")), digest))
+    live_skills.sort()
+    _sync_discovery_catalog(skill_mgr, infos)
+    fingerprint = json.dumps(live_skills, separators=(",", ":"), ensure_ascii=False)
+    catalog_revision = hashlib.sha256(fingerprint.encode()).hexdigest()
+    signature = f"{store.version}:{catalog_revision}:{len(store.catalog())}"
     if _SKILL_INDEX_CACHE.get("sig") != signature:
         items = skill_items(skill_mgr, store)
+        model_disabled = {str(info.name) for info in infos
+                          if getattr(info, "disable_model_invocation", False)}
+        items = [item for item in items if str(item.get("name") or "") not in model_disabled]
         usage = _skill_usage_counts()
         for item in items:
             item["use_count"] = usage.get(str(item.get("name") or ""), 0)
-        _SKILL_INDEX_CACHE.update(sig=signature, items=items, index=Bm25Index(items))
+        _SKILL_INDEX_CACHE.update(
+            sig=signature, items=items, index=Bm25Index(items),
+            catalog_revision=catalog_revision,
+        )
     return _SKILL_INDEX_CACHE["index"], _SKILL_INDEX_CACHE["items"]
+
+
+def _sync_discovery_catalog(skill_mgr: Any, infos: list[Any]) -> dict[str, list[str]]:
+    """Keep a durable digest/retirement projection beside the skill registry."""
+    global _DISCOVERY_REGISTRY, _DISCOVERY_REGISTRY_PATH
+    if skill_mgr is None:
+        return {"added": [], "updated": [], "retired": [], "unchanged": []}
+    try:
+        from atlas.skills.agent_collections import _registry_path
+        from atlas.skills.registry import SkillRegistry
+
+        path = _registry_path()
+        if path is None:
+            return {"added": [], "updated": [], "retired": [], "unchanged": []}
+        key = str(path.resolve())
+        if _DISCOVERY_REGISTRY is None or _DISCOVERY_REGISTRY_PATH != key:
+            _DISCOVERY_REGISTRY = SkillRegistry(path)
+            _DISCOVERY_REGISTRY_PATH = key
+        return _DISCOVERY_REGISTRY.reconcile_discovery_catalog(infos)
+    except Exception as exc:  # noqa: BLE001 - prompt retrieval can use live scan on DB failure
+        log.warning("library.skill_catalog_sync_failed", error_type=type(exc).__name__)
+        return {"added": [], "updated": [], "retired": [], "unchanged": []}
 
 
 def _usage_bonus(item: dict[str, Any]) -> float:
@@ -333,7 +376,9 @@ def skill_index_message(skill_mgr: Any, query: str, *, top_k: int = 30,
             return ("Atlas Skill index (call use_skill(name) to load full instructions when one matches "
                     f"this task):{header}\n[]")
     return ("Atlas Skill index (call use_skill(name) to load full instructions when one matches "
-            f"this task):{header}\n" + json.dumps([_skill_row(i) for i in chosen], ensure_ascii=False))
+            f"this task):{header}\n<available_skills revision=\"{_SKILL_INDEX_CACHE.get('catalog_revision', '')}\">\n"
+            + json.dumps([_skill_row(i) for i in chosen], ensure_ascii=False)
+            + "\n</available_skills>")
 
 
 def search_skills(skill_mgr: Any, query: str, *, category: str = "", limit: int = 10) -> list[dict[str, Any]]:

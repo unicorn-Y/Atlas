@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyRuntimeEvent, MAX_RUN_EVENTS, normalizeRuntimeEvent } from './runtimeEvents';
+import { applyRuntimeEvent, normalizeRuntimeEvent } from './runtimeEvents';
 import { useAtlasStore } from '../store/useAtlasStore';
 import type { AgentEvent, AgentRun } from '../../types/runtime';
 
@@ -69,7 +69,7 @@ describe('new wire events are known', () => {
   });
 });
 
-describe('bounded run events', () => {
+describe('run event retention', () => {
   const baseRun = (events: AgentEvent[] = []): AgentRun => ({
     id: 'run-1', conversationId: 'c1', title: 'T', status: 'running', phase: 'execution',
     startedAt: '', updatedAt: '',
@@ -85,14 +85,14 @@ describe('bounded run events', () => {
     expect(run.eventsTruncated).toBeFalsy();
   });
 
-  it('drops the oldest events past the cap and marks the run for the UI', () => {
+  it('keeps every event when a long run exceeds the former 800 event limit', () => {
     let run = baseRun();
-    const total = MAX_RUN_EVENTS + 120;
+    const total = 920;
     for (let sequence = 1; sequence <= total; sequence++) run = applyRuntimeEvent(run, at(sequence));
-    expect(run.events).toHaveLength(MAX_RUN_EVENTS);
-    expect(run.events[0].sequence).toBe(total - MAX_RUN_EVENTS + 1);
-    expect(run.eventsTruncated).toBe(true);
-    expect(run.droppedEventCount).toBe(120);
+    expect(run.events).toHaveLength(total);
+    expect(run.events[0].sequence).toBe(1);
+    expect(run.eventsTruncated).toBeFalsy();
+    expect(run.droppedEventCount).toBe(0);
     expect(run.lastEventSequence).toBe(total);
   });
 

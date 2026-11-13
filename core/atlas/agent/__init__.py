@@ -64,6 +64,7 @@ from atlas.agent.prompt_caching import (
     envelope_tool_part_cache_markers_supported,
 )
 from atlas.agent.planning import TaskPlan, requires_plan
+from atlas.engine.kernel.inbox import DurableInbox
 from atlas.checks import parse_test_summary, run_checks
 from atlas.config import get_config, load_user_settings
 from atlas.memory import MemoryStore
@@ -275,17 +276,23 @@ class AgentRunContext:
     maintenance_snapshot: dict[str, Any] | None = None
     maintenance_context: dict[str, Any] = field(default_factory=dict)
     steer_queue: asyncio.Queue[dict[str, str]] | None = None
+    inbox: DurableInbox | None = None
     input_callback: Callable[[str, str, list[str] | None], Any] | None = None
     workspace: str | None = None
     workspace_trusted: bool = False
     agent_role: str = "general"
     agent_depth: int = 0
     agent_type: str = "general"
+    agent_preset_id: str = "default"
+    agent_preset_capabilities: dict[str, Any] | None = None
+    permission_preset: str = "ask"
     todo_store: TodoStore = field(default_factory=TodoStore)
     moa_enabled: bool = False
     mode: str = "act"
+    mode_explicit: bool = False
     tool_allow: list[str] | None = None
     tool_deny: list[str] = field(default_factory=list)
+    mcp_server_allow: list[str] | None = None
     read_only: bool = False
     permission_mode: str = "full_access"
     allowed_paths: list[str] = field(default_factory=list)
@@ -565,7 +572,20 @@ class AgentOrchestrator:
         except Exception as exc:
             log.warning("agent.use_skill.fetch_failed", name=name, error=str(exc))
         try:
-            content = await self._skills.activate(name.strip())
+            # Keep test/integration adapters that only expose ``activate`` working;
+            # the production SkillManager provides the policy-enforcing method.
+            activator = getattr(type(self._skills), "activate_for_model", None)
+            if callable(activator):
+                content = await self._skills.activate_for_model(name.strip())
+            else:
+                content = await self._skills.activate(name.strip())
+        except PermissionError as exc:
+            message = str(exc)
+            return {
+                "data": {"error": message},
+                "content": [{"type": "text", "text": message}],
+                "is_error": True,
+            }
         except Exception as exc:
             content = None
             log.warning("agent.use_skill.failed", name=name, error=str(exc), exc_info=True)
@@ -886,6 +906,7 @@ class AgentOrchestrator:
         active_skill_instructions: list[dict[str, str]] | None = None,
         run_id: str | None = None,
         steer_queue: asyncio.Queue[dict[str, str]] | None = None,
+        inbox: DurableInbox | None = None,
         input_callback: Callable[[str, str, list[str] | None], Any] | None = None,
         runtime_event_callback: Callable[[dict[str, Any]], Any] | None = None,
         workspace: str | None = None,
@@ -893,10 +914,14 @@ class AgentOrchestrator:
         agent_role: str = "general",
         agent_depth: int = 0,
         agent_type: str = "general",
+        agent_preset_id: str = "default",
+        agent_preset_capabilities: dict[str, Any] | None = None,
+        permission_preset: str = "ask",
         moa: bool = False,
         workspace_rules: list[dict[str, Any]] | None = None,
         ignore_workspace_rules: bool = False,
         mode: str = "act",
+        mode_explicit: bool | None = None,
         tool_allow: list[str] | None = None,
         tool_deny: list[str] | None = None,
         read_only: bool = False,
@@ -953,8 +978,12 @@ class AgentOrchestrator:
             active_skill_instructions=active_skill_instructions, run_id=run_id,
             workspace=workspace, workspace_trusted=workspace_trusted,
             agent_role=agent_role, agent_depth=agent_depth, agent_type=agent_type,
+            agent_preset_id=agent_preset_id,
+            agent_preset_capabilities=agent_preset_capabilities,
+            permission_preset=permission_preset,
             moa=moa, workspace_rules=workspace_rules,
             ignore_workspace_rules=ignore_workspace_rules, mode=mode,
+            mode_explicit=(mode != "act" if mode_explicit is None else mode_explicit),
             tool_allow=tool_allow, tool_deny=tool_deny, read_only=read_only,
             permission_mode=permission_mode, allowed_paths=allowed_paths,
             sandbox_enabled=sandbox_enabled, project_id=project_id,
@@ -964,6 +993,7 @@ class AgentOrchestrator:
             session_env=dict(session_env or {}),
             ephemeral=ephemeral,
             bypass_prompt_cache=bypass_prompt_cache,
+            inbox=inbox,
         )
         callbacks = RunCallbacks(
             cancel_event=cancel_event, pause_event=pause_event,

@@ -36,6 +36,8 @@ class RunState:
         "ephemeral", "ephemeral_source", "tool_output_dir", "subtasks",
         "read_only", "active_skills", "profile_id", "agent_id", "user_input",
         "permission_mode", "allowed_paths", "trust_future", "trust_event_id",
+        "sandbox_mode", "approval_policy", "permission_preset",
+        "inbox",
         "executor", "sandbox", "extra_roots",
         "trust_roots",
         "session_env",
@@ -98,6 +100,10 @@ class RunState:
         self.resume_context: dict[str, Any] = {}
         self.background = False
         self.permission_mode = "full_access"
+        self.sandbox_mode: str | None = None
+        self.approval_policy: str | None = None
+        self.permission_preset: str | None = None
+        self.inbox: Any = None
         self.allowed_paths: list[str] = []
         self.trust_future: asyncio.Future[bool] | None = None
         self.trust_event_id: str | None = None
@@ -159,6 +165,9 @@ def _resume_context(run: "RunState") -> dict[str, Any]:
         "mode": run.mode,
         "model": run.model,
         "permission_mode": run.permission_mode,
+        "sandbox_mode": run.sandbox_mode,
+        "approval_policy": run.approval_policy,
+        "permission_preset": run.permission_preset,
         "allowed_paths": run.allowed_paths,
         "extra_roots": run.extra_roots,
         "read_only": run.read_only,

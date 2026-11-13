@@ -475,6 +475,18 @@ class MCPClient:
         self._unreachable: dict[str, str] = {}
         self._stopping = False
 
+    def for_scope(self, server_names: list[str] | tuple[str, ...] | set[str]) -> "ScopedMCPClient":
+        """Return a fail-closed view exposing only the named MCP servers.
+
+        The facade shares this client's connections but never exposes them
+        outside ``server_names`` through discovery, tool calls, or resources.
+        It does not own the underlying connection lifecycle.
+        """
+        if isinstance(server_names, str):
+            raise TypeError("MCP server scope must be a collection of names")
+        names = frozenset(str(name).strip() for name in server_names if str(name).strip())
+        return ScopedMCPClient(self, names)
+
     def _request_semaphore(self, server_name: str) -> asyncio.Semaphore:
         """Bound concurrent RPC work per MCP server without serializing other servers."""
         semaphore = self._request_semaphores.get(server_name)
@@ -1419,6 +1431,74 @@ class MCPClient:
     @property
     def tool_count(self) -> int:
         return len(self._tool_index)
+
+
+class ScopedMCPClient:
+    """An authorization-filtered view over an ``MCPClient`` instance."""
+
+    def __init__(self, client: MCPClient, server_names: frozenset[str]) -> None:
+        self._client = client
+        self._server_names = server_names
+
+    def _allowed(self, server_name: str) -> bool:
+        return server_name in self._server_names
+
+    def get_server_names(self) -> list[str]:
+        return [name for name in self._client.get_server_names() if self._allowed(name)]
+
+    def get_configured_server_names(self) -> list[str]:
+        return [name for name in self._client.get_configured_server_names() if self._allowed(name)]
+
+    def list_tools(self) -> list[ToolInfo]:
+        return [tool for tool in self._client.list_tools() if self._allowed(tool.server_name)]
+
+    def get_tools_for_llm(self) -> list[dict[str, Any]]:
+        return [tool.to_openai_tool() for tool in self.list_tools()]
+
+    def get_server_tools(self, server_name: str) -> list[ToolInfo]:
+        return self._client.get_server_tools(server_name) if self._allowed(server_name) else []
+
+    def get_tool(self, qualified_name: str) -> ToolInfo | None:
+        tool = self._client.get_tool(qualified_name)
+        return tool if tool is not None and self._allowed(tool.server_name) else None
+
+    def get_server_instructions(self) -> list[tuple[str, str]]:
+        return [item for item in self._client.get_server_instructions()
+                if self._allowed(item[0])]
+
+    async def call_tool(
+        self, qualified_name: str, arguments: dict[str, Any] | None = None,
+        *, timeout: float = 30.0,
+    ) -> dict[str, Any]:
+        if self.get_tool(qualified_name) is None:
+            return {"content": [{"type": "text", "text": "Unknown tool in MCP scope"}],
+                    "is_error": True}
+        return await self._client.call_tool(qualified_name, arguments, timeout=timeout)
+
+    async def list_resources(
+        self, server_name: str | None = None, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        names = [server_name] if server_name is not None else sorted(self._server_names)
+        result: dict[str, Any] = {}
+        for name in names:
+            if self._allowed(name):
+                result.update(await self._client.list_resources(name, cursor))
+        return result
+
+    async def list_resource_templates(
+        self, server_name: str | None = None, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        names = [server_name] if server_name is not None else sorted(self._server_names)
+        result: dict[str, Any] = {}
+        for name in names:
+            if self._allowed(name):
+                result.update(await self._client.list_resource_templates(name, cursor))
+        return result
+
+    async def read_resource(self, server_name: str, uri: str) -> dict[str, Any]:
+        if not self._allowed(server_name):
+            return {"is_error": True, "error": "MCP server is outside this scope"}
+        return await self._client.read_resource(server_name, uri)
 
 
 # ---------------------------------------------------------------------------

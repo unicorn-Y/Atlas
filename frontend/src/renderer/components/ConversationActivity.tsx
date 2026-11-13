@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState, type ComponentType } from 'react';
 import { BookMarked, Check, ClipboardCopy, FileCheck2, FileWarning, SearchCheck, ChevronRight, CircleDashed, LoaderCircle, FileText, FlaskConical, ListChecks, MessageCircleQuestion, Repeat2, Send, ShieldAlert, Square, Target, Users, X } from 'lucide-react';
 import type { AgentEvent } from '../../types/runtime';
 import { useAtlasStore } from '../store/useAtlasStore';
@@ -38,9 +38,42 @@ export interface TimelineRowContext {
   onOpenBrowser?: (url: string) => void;
 }
 
+export interface ConversationNodeProps {
+  item: TimelineItem;
+  context: TimelineRowContext;
+  firstInTurn: boolean;
+  last: boolean;
+}
+
+export interface ConversationNodeDefinition {
+  kind: string;
+  renderer: ComponentType<ConversationNodeProps>;
+}
+
+const conversationNodeRenderers = new Map<string, ComponentType<ConversationNodeProps>>();
+
+/** Register a keyed timeline renderer; the returned disposer unregisters only this renderer. */
+export function registerConversationNode(definition: ConversationNodeDefinition): () => void {
+  if (!definition.kind.trim()) throw new Error('Conversation node kind is required');
+  if (conversationNodeRenderers.has(definition.kind)) {
+    throw new Error(`Conversation node renderer already registered: ${definition.kind}`);
+  }
+  const { kind, renderer } = definition;
+  conversationNodeRenderers.set(kind, renderer);
+  return () => {
+    if (conversationNodeRenderers.get(kind) === renderer) conversationNodeRenderers.delete(kind);
+  };
+}
+
 /** 渲染单条时间线（用户消息、步骤、回复、审批卡片…）；虚拟列表按条复用，输出与整段渲染完全一致。 */
 export const TimelineRow = memo(function TimelineRow({ item, context, firstInTurn, last }: { item: TimelineItem; context: TimelineRowContext; firstInTurn: boolean; last: boolean }) {
   const { events, store, username, setTab, busy, onOpenBrowser } = context;
+  const nodeKind = item.kind === 'extension' ? item.nodeType : item.kind;
+  const RegisteredRenderer = conversationNodeRenderers.get(nodeKind);
+  if (RegisteredRenderer) {
+    return <RegisteredRenderer item={item} context={context} firstInTurn={firstInTurn} last={last} />;
+  }
+  if (item.kind === 'extension') return null;
   switch (item.kind) {
     case 'user': return <ConversationMessage key={item.id} role="user" content={item.content} username={username} note={item.steered ? '插话' : undefined} createdAt={item.timestamp} />;
     case 'reply': return <ConversationMessage key={item.id} role="assistant" content={item.content} username={username} continued={!firstInTurn} streaming={item.streaming} createdAt={item.timestamp}

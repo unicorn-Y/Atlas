@@ -87,9 +87,14 @@ async def ws_chat(
                         "run.steer.rejected", {"reason": "run_not_active"},
                     ))
                 else:
-                    from atlas.engine.steer_dispatch import queue_run_steer
+                    if data.get("inject") is True or "lane" in data:
+                        from atlas.api.run_drive import _inject_run_message
 
-                    reason = queue_run_steer(run, data)
+                        reason, _inbox_event_id = await _inject_run_message(run, data)
+                    else:
+                        from atlas.engine.steer_dispatch import queue_run_steer
+
+                        reason = queue_run_steer(run, data)
                     if reason:
                         rejected = RunState(run_id, "", "")
                         await services.runtime_mgr.send(conn_id, rejected.next_envelope(

@@ -131,6 +131,23 @@ async def test_disabling_a_plugin_removes_its_registrations(runtime: PluginRunti
     assert _capability_names(registry)
     assert len(hook_bus._hooks["after_response"]) == 1
 
+
+@pytest.mark.asyncio
+async def test_loaded_plugin_exposes_disposer_for_every_registry_contribution(runtime: PluginRuntime):
+    registry = AgentCapabilityRegistry()
+    hook_bus = HookBus()
+    await runtime.load_all(hook_bus=hook_bus, capabilities=registry)
+
+    loaded = runtime._loaded["demo"]
+    dispose = runtime._disposers["demo"].dispose
+    assert loaded["disposer_count"] == 3
+
+    dispose()
+    dispose()
+
+    assert registry.discover() == []
+    assert hook_bus._hooks["after_response"] == []
+
     runtime.set_enabled("demo", False)
     report = await runtime.load_all(hook_bus=hook_bus, capabilities=registry)
 

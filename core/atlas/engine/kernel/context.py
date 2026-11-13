@@ -20,6 +20,13 @@ from typing import Any, Awaitable, Callable, Mapping, Sequence
 DEFAULT_CONTEXT_WINDOW = 200_000
 OUTPUT_RESERVE_TOKENS = 21_000
 BUFFER_TOKENS = 13_000
+
+
+def compaction_surface(messages: Sequence[Mapping[str, Any]]) -> str:
+    """Return a stable digest of the exact provider history after compaction."""
+    encoded = json.dumps(list(messages), ensure_ascii=False, sort_keys=True,
+                         default=str, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 WARNING_BUFFER_TOKENS = 20_000
 BLOCKING_BUFFER_TOKENS = 3_000
 AUTO_COMPACT_BUFFER_TOKENS = 13_000

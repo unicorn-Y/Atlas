@@ -1,5 +1,7 @@
 from pathlib import Path
 import asyncio
+import pytest
+import pytest
 
 from atlas.runtime.commands import (
     CommandSource,
@@ -7,6 +9,8 @@ from atlas.runtime.commands import (
     render_user_command,
 )
 from atlas.skills import SkillManager, SkillSource
+
+pytestmark = pytest.mark.unit
 
 
 def _skill(root: Path, name: str, body: str, description: str | None = None) -> Path:
@@ -105,3 +109,29 @@ def test_positional_placeholders_follow_claude_convention_and_skip_malformed(tmp
     two = next(item for item in listed if item.name == "two")
     rendered = render_user_command(two, '"x y" z')
     assert rendered.prompt == "first=x y second=z alias0=x y raw=\"x y\" z\n"
+
+
+def test_command_invocation_metadata_blocks_disallowed_callers(tmp_path: Path) -> None:
+    root = tmp_path / ".claude" / "commands"
+    root.mkdir(parents=True)
+    (root / "human-only.md").write_text(
+        "---\ndisable-model-invocation: true\nuser-invocable: true\n---\nDo it\n",
+        encoding="utf-8",
+    )
+    command = list_user_commands(workspace=tmp_path)[0]
+
+    with pytest.raises(PermissionError, match="model invocation"):
+        render_user_command(command, invocation_source="model")
+    assert render_user_command(command).prompt == "Do it\n"
+
+
+def test_non_user_invocable_command_rejects_user_source(tmp_path: Path) -> None:
+    root = tmp_path / ".claude" / "commands"
+    root.mkdir(parents=True)
+    (root / "internal.md").write_text(
+        "---\nuser-invocable: false\n---\nInternal\n", encoding="utf-8",
+    )
+    command = list_user_commands(workspace=tmp_path)[0]
+
+    with pytest.raises(PermissionError, match="user invocation"):
+        render_user_command(command, invocation_source="user")

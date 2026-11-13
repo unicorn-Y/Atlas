@@ -328,6 +328,22 @@ def latest_session_message_id(
     return None
 
 
+def append_session_event(
+    home: str | Path, conversation_id: str, event_type: str, payload: dict[str, Any],
+) -> int:
+    """Append one durable lifecycle event without changing transcript messages."""
+    with _open_db(home) as db:
+        return db.append_session_event(conversation_id, event_type, payload)
+
+
+def read_session_events(
+    home: str | Path, conversation_id: str, *, after_seq: int = 0, limit: int = 1000,
+) -> list[dict[str, Any]]:
+    """Read lifecycle events for a conversation after a durable sequence cursor."""
+    with _open_db(home) as db:
+        return db.list_session_events(conversation_id, after_seq=after_seq, limit=limit)
+
+
 def latest_session_message(
     home: str | Path, conversation_id: str, *, role: str | None = None,
 ) -> dict[str, Any] | None:
@@ -923,6 +939,9 @@ def fork_session_through_turn(
                     stop = index
                     break
                 seen_users += 1
+        prefix = transcript[:stop]
+        if prefix and _has_open_turn(prefix):
+            raise ValueError("Cannot fork a session through an open turn")
         model_config = payload.get("model_config") or {}
         if isinstance(model_config, str):
             try:
@@ -934,11 +953,53 @@ def fork_session_through_turn(
             "title": f"{str(payload.get('title') or '对话')[:80]} · 分支 {fork_id[:6]}",
             "model_config": {**model_config, "_branched_from": source_id,
                              "_branch_message_id": branch_message_id},
-            "messages": ([preamble] if preamble else []) + transcript[:stop],
+            "messages": ([preamble] if preamble else []) + prefix,
         }
-        result = db.import_sessions([cloned])
+        result = db.import_sessions(
+            [cloned],
+            session_events=[{
+                "session_id": fork_id,
+                "event_type": "session/end-seed",
+                "payload": {
+                    "inherited": True,
+                    "source_session_id": source_id,
+                    "source_message_count": len(prefix),
+                },
+            }],
+        )
         if not result.get("ok") or result.get("imported") != 1:
             raise RuntimeError(f"Atlas session fork failed: {result.get('errors', result)}")
+
+
+def _has_open_turn(messages: list[dict[str, Any]]) -> bool:
+    """Whether a transcript prefix ends before its assistant turn is complete.
+
+    Tool calls are paired by call id because multiple calls can be outstanding in
+    one assistant message and their results can arrive in any order. A completed
+    turn also needs an assistant response after the last user/tool result.
+    """
+    pending: set[str] = set()
+    last_role: str | None = None
+    for message in messages:
+        role = str(message.get("role") or "")
+        if role == "assistant":
+            raw_calls = message.get("tool_calls") or []
+            if isinstance(raw_calls, str):
+                try:
+                    raw_calls = json.loads(raw_calls)
+                except (TypeError, ValueError):
+                    raw_calls = []
+            if isinstance(raw_calls, list):
+                for call in raw_calls:
+                    if isinstance(call, dict) and call.get("id"):
+                        pending.add(str(call["id"]))
+        elif role == "tool":
+            call_id = str(message.get("tool_call_id") or "")
+            if call_id:
+                pending.discard(call_id)
+        if role not in {"system", "developer"}:
+            last_role = role
+    return bool(pending) or last_role != "assistant"
 
 
 def list_branch_tree(home: str | Path, conversation_id: str) -> list[dict[str, Any]]:

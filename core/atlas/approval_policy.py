@@ -33,24 +33,32 @@ PERMISSION_PRESETS: dict[str, dict[str, Any]] = {
     "observe": {
         "label": "只看不动",
         "mode": "read_only",
+        "sandbox_mode": "read-only",
+        "approval_policy": "never",
         "allow_always": False,
         "sentence": "只读：可以查看、检索、跑只读命令，任何写入都被拒绝。",
     },
     "ask": {
         "label": "改前问我",
         "mode": "ask_writes",
+        "sandbox_mode": "workspace-write",
+        "approval_policy": "ask",
         "allow_always": True,
         "sentence": "写入前弹审批；你选「始终允许」后同一调用不再询问。",
     },
     "trusted": {
         "label": "可信工作区",
         "mode": "auto_file",
+        "sandbox_mode": "workspace-write",
+        "approval_policy": "never",
         "allow_always": True,
         "sentence": "工作区内的文件改动直接执行，越界和外部请求仍然询问。",
     },
     "free": {
         "label": "全权",
         "mode": "full_access",
+        "sandbox_mode": "danger-full-access",
+        "approval_policy": "never",
         "allow_always": True,
         "sentence": "不再弹审批，但仍受 origin_guard 与记忆写入规则约束。",
     },
@@ -74,6 +82,32 @@ def preset_for_mode(mode: str | None) -> dict[str, Any]:
         if body["mode"] == wanted:
             return {"name": name, **body}
     return preset(None)
+
+
+def preset_for_policy(
+    *, permission_mode: str | None, sandbox_mode: str | None,
+    approval_policy: str | None,
+) -> dict[str, Any]:
+    """Derive a named preset only when every policy dimension matches.
+
+    A partially matching permission mode is not enough to claim a named
+    preset: sandbox and approval behavior are part of that preset's contract.
+    Custom combinations remain visible to callers instead of silently
+    inheriting a more permissive named preset.
+    """
+    wanted = (permission_mode, sandbox_mode, approval_policy)
+    for name, body in PERMISSION_PRESETS.items():
+        if wanted == (body["mode"], body["sandbox_mode"], body["approval_policy"]):
+            return {"name": name, **body}
+    return {
+        "name": "custom",
+        "label": "自定义",
+        "mode": permission_mode,
+        "sandbox_mode": sandbox_mode,
+        "approval_policy": approval_policy,
+        "allow_always": False,
+        "sentence": "权限组合已自定义；按当前各项策略执行。",
+    }
 
 
 def permission_scope(
@@ -232,5 +266,6 @@ def _now() -> float:
 
 __all__ = [
     "DEFAULT_PRESET", "PERMISSION_PRESETS", "clear", "grant", "grants",
-    "is_allowed", "permission_scope", "preset", "preset_for_mode", "revoke",
+    "is_allowed", "permission_scope", "preset", "preset_for_mode",
+    "preset_for_policy", "revoke",
 ]

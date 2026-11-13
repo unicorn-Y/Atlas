@@ -354,6 +354,7 @@ async def test_cancelling_atlas_process_terminates_child_tree(tmp_path: Path) ->
                 "stream": "stdout",
                 "offset": 0,
             },
+            run_id="tree-run",
         )
         if "parent-ready" in output["data"]["text"]:
             break
@@ -491,7 +492,8 @@ async def test_detached_process_survives_run_cleanup_but_stops_on_shutdown(tmp_p
 
     await runtime.cancel_run("detached-run")
     status = await runtime.call_tool(
-        "local_process", {"action": "status", "execution_id": execution_id}
+        "local_process", {"action": "status", "execution_id": execution_id},
+        run_id="detached-run",
     )
     await runtime.shutdown()
     await asyncio.sleep(2.1)

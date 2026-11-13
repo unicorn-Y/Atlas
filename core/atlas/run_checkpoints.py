@@ -43,11 +43,13 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "CLASSIFIED_UNSAFE",
+    "CheckpointWriteError",
     "checkpoint_overview",
     "classify_tool",
     "latest_checkpoint",
     "list_checkpoints",
     "summarize_checkpoints",
+    "require_checkpoint",
     "write_checkpoint",
 ]
 
@@ -62,6 +64,10 @@ _MAX_PHASE = 48
 _MAX_TOOL_NAME = 120
 _MAX_STATE = 32
 _MAX_DETAIL = 4000
+
+
+class CheckpointWriteError(RuntimeError):
+    """A required recovery boundary could not be durably recorded."""
 
 
 def _path() -> Path:
@@ -197,6 +203,49 @@ def write_checkpoint(
     except sqlite3.Error:
         log.exception("run_checkpoints.write_failed", extra={"run_id": key, "kind": kind})
         return False
+    return True
+
+
+def require_checkpoint(
+    run_id: str,
+    *,
+    kind: str,
+    phase: str | None = None,
+    tool_call_id: str | None = None,
+    tool_name: str | None = None,
+    state: str | None = None,
+    replay_safe: bool | None = None,
+    sequence: int = 0,
+    payload: dict[str, Any] | None = None,
+) -> bool:
+    """Persist a checkpoint or raise so callers can stop before unsafe progress.
+
+    ``write_checkpoint`` remains best-effort for diagnostic and observational
+    call sites. Recovery barriers must use this strict variant and let the
+    exception abort dispatch or the enclosing phase transition.
+    """
+    if not str(run_id or "").strip():
+        raise CheckpointWriteError("required durable checkpoint needs a non-empty run_id")
+    try:
+        persisted = write_checkpoint(
+            run_id,
+            kind=kind,
+            phase=phase,
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+            state=state,
+            replay_safe=replay_safe,
+            sequence=sequence,
+            payload=payload,
+        )
+    except Exception as exc:
+        raise CheckpointWriteError(
+            f"required durable checkpoint failed for run {str(run_id)[:_MAX_RUN_ID]!r}"
+        ) from exc
+    if not persisted:
+        raise CheckpointWriteError(
+            f"required durable checkpoint was not persisted for run {str(run_id)[:_MAX_RUN_ID]!r}"
+        )
     return True
 
 

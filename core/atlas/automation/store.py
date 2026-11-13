@@ -153,6 +153,8 @@ def normalize_payload(raw: dict[str, Any] | None) -> dict[str, Any]:
         "kind": _text(raw.get("kind"), "agent_turn"),
         "message": _text(raw.get("message")),
         "agent_id": _text(raw.get("agent_id")),
+        "agent_preset_id": _text(raw.get("agent_preset_id"), "default"),
+        "permission_preset": _text(raw.get("permission_preset"), "ask"),
         "model": _text(raw.get("model")),
         "reasoning_effort": _text(raw.get("reasoning_effort")),
         "skills": [str(item) for item in skills],
@@ -284,6 +286,14 @@ def validate_record(record: dict[str, Any]) -> None:
     model = _text(payload.get("model"))
     if len(model) > 500 or any(ord(char) < 32 for char in model):
         raise AutomationValidationError("payload.model 必须是有效的模型 ID（最多 500 字符）")
+    preset_id = _text(payload.get("agent_preset_id"), "default")
+    if not ID_PATTERN.fullmatch(preset_id):
+        raise AutomationValidationError("payload.agent_preset_id 必须是有效的 preset ID")
+    from atlas.approval_policy import PERMISSION_PRESETS
+
+    permission_preset = _text(payload.get("permission_preset"), "ask")
+    if permission_preset not in PERMISSION_PRESETS:
+        raise AutomationValidationError("payload.permission_preset 必须是已知权限预设")
     if _text(payload.get("reasoning_effort")) not in REASONING_EFFORTS:
         raise AutomationValidationError(
             f"payload.reasoning_effort 必须是 {'|'.join(REASONING_EFFORTS).strip('|')} 之一"

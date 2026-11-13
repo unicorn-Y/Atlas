@@ -94,6 +94,8 @@ export type TimelineItem =
   /** /review 代码审查的结构化结论，由 ReviewFindingsCard 渲染；findings 为空即「没有发现问题」。 */
   | { kind: 'review'; id: string; scope: string; scopeLabel: string; workspace: string; mode?: 'general' | 'security' | 'cleanup-only'; findings: ReviewFinding[] }
   | { kind: 'component'; id: string; component: StructuredComponentItem }
+  /** Node supplied by a registered client extension renderer. */
+  | { kind: 'extension'; id: string; nodeType: string; data: Record<string, unknown> }
   | { kind: 'artifact'; id: string; name: string; summary: string }
   | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
   | { kind: 'failed'; id: string; detail: string; service?: string; reason?: string; retryAfterSeconds?: number; status?: number };

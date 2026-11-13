@@ -31,6 +31,7 @@ import structlog
 from fastapi import HTTPException, Request
 
 from atlas.api.runtime import RunState, RuntimeManager
+from atlas.approval_policy import PERMISSION_PRESETS
 from atlas.approval_policy import is_allowed as approval_always_allowed
 from atlas.approval_policy import permission_scope as approval_permission_scope
 from atlas.automation import AutomationEngine
@@ -76,12 +77,57 @@ def _task_store(kind: str) -> TomlRecordStore:
     return TomlRecordStore(get_config().db_path.parent, kind)
 
 
+def _resolve_permission_policy(data: dict[str, Any]) -> dict[str, Any]:
+    """Resolve a preset across permission, sandbox and approval dimensions."""
+    from atlas.approval_policy import preset, preset_for_policy
+
+    named = preset(data.get("permission_preset")) if data.get("permission_preset") is not None else None
+    permission_mode = data.get("permission_mode")
+    sandbox_mode = data.get("sandbox_mode")
+    approval_policy = data.get("approval_policy")
+    if named is not None:
+        permission_mode = permission_mode if permission_mode is not None else named["mode"]
+        sandbox_mode = sandbox_mode if sandbox_mode is not None else named["sandbox_mode"]
+        approval_policy = approval_policy if approval_policy is not None else named["approval_policy"]
+    if approval_policy is not None and approval_policy not in {"ask", "never"}:
+        raise ValueError("approval_policy must be 'ask' or 'never'")
+    if sandbox_mode is not None and sandbox_mode not in {
+        "read-only", "workspace-write", "danger-full-access",
+    }:
+        raise ValueError("sandbox_mode must be read-only, workspace-write, or danger-full-access")
+    resolved = preset_for_policy(
+        permission_mode=permission_mode,
+        sandbox_mode=sandbox_mode,
+        approval_policy=approval_policy,
+    )
+    return resolved
+
+
+def _restore_permission_policy(run: RunState, context: dict[str, Any]) -> None:
+    """Restore the independent permission dimensions for an interrupted run."""
+    run.sandbox_mode = context.get("sandbox_mode") or run.sandbox_mode
+    run.approval_policy = context.get("approval_policy") or run.approval_policy
+    run.permission_preset = context.get("permission_preset") or run.permission_preset
+
+
 async def _session_messages(conversation_id: str, limit: int = 1000) -> list[dict[str, Any]]:
     from atlas.config import DATA_ROOT
     from atlas.engine.session_sync import read_session_messages
 
     return await asyncio.to_thread(
         read_session_messages, DATA_ROOT / "engine", conversation_id, limit=limit,
+    )
+
+
+async def _persist_approval_lifecycle(
+    conversation_id: str, event_type: str, payload: dict[str, Any],
+) -> None:
+    """Commit approval state in the append-only session event log."""
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import append_session_event
+
+    await asyncio.to_thread(
+        append_session_event, DATA_ROOT / "engine", conversation_id, event_type, payload,
     )
 
 
@@ -609,6 +655,11 @@ async def _collect_orchestrator_text(
     reasoning_effort: str | None = None,
     workspace: str | None = None,
     active_skill_instructions: list[dict[str, str]] | None = None,
+    agent_preset_id: str = "default",
+    permission_preset: str = "ask",
+    agent_preset_capabilities: dict[str, Any] | None = None,
+    mode: str = "act",
+    mode_explicit: bool = False,
 ) -> str:
     """One unattended orchestrator turn (heartbeat / automation / group); assistant text."""
     if _server().orchestrator is None:
@@ -628,6 +679,11 @@ async def _collect_orchestrator_text(
         source_run_id=uuid.uuid4().hex,
         active_skill_instructions=active_skill_instructions,
         workspace=workspace,
+        agent_preset_id=agent_preset_id,
+        permission_preset=permission_preset,
+        agent_preset_capabilities=agent_preset_capabilities,
+        mode=mode,
+        mode_explicit=mode_explicit,
     ):
         event_type = event.get("type")
         if event_type == "error":
@@ -668,6 +724,27 @@ async def _automation_dispatch_turn(payload: dict[str, Any]) -> dict[str, str]:
     agent_id = str(payload.get("agent_id") or "").strip()
     model = str(payload.get("model") or "").strip() or None
     reasoning_effort = str(payload.get("reasoning_effort") or "").strip() or None
+    agent_preset_id = str(payload.get("agent_preset_id") or "default").strip()
+    permission_preset = str(payload.get("permission_preset") or "ask").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", agent_preset_id):
+        raise ValueError("payload.agent_preset_id must be a valid preset ID")
+    if permission_preset not in PERMISSION_PRESETS:
+        raise ValueError("payload.permission_preset must be a known permission preset")
+    from atlas.task_artifacts import AgentPresetStore
+
+    preset_store = AgentPresetStore(get_config().db_path.parent)
+    capabilities = preset_store.resolve(agent_preset_id)
+    if "mode" in payload:
+        mode = str(payload.get("mode") or "").strip()
+        if mode not in {"act", "plan"}:
+            raise ValueError("payload.mode must be act or plan")
+        mode_explicit = True
+    else:
+        mode = str(capabilities.get("mode") or "act")
+        mode_explicit = False
+    preset_model = str(capabilities.get("model") or "inherit").strip()
+    if model is None and preset_model.lower() != "inherit":
+        model = preset_model
     app = getattr(_server(), "app", None)
     services = getattr(getattr(app, "state", None), "services", None)
     agents = getattr(services, "persistent_agents", None)
@@ -676,11 +753,24 @@ async def _automation_dispatch_turn(payload: dict[str, Any]) -> dict[str, str]:
         config = agents.resolve_agent_run_config(agent_id)
         model = model or config.get("model") or None
         reasoning_effort = reasoning_effort or config.get("reasoning_effort") or None
+    preset_skills = capabilities.get("skills")
+    requested_skills = payload.get("skills")
+    skills = list(dict.fromkeys([
+        *([str(skill) for skill in preset_skills] if isinstance(preset_skills, list) else []),
+        *([str(skill) for skill in requested_skills] if isinstance(requested_skills, list) else []),
+    ]))
+    skill_instructions = await _server()._resolve_active_skill_instructions(skills) if skills else []
     text = await _server()._collect_orchestrator_text(
         str(payload.get("message") or ""), conversation_id,
         model=model,
         reasoning_effort=reasoning_effort,
         workspace=str(payload.get("workspace") or "") or None,
+        agent_preset_id=agent_preset_id,
+        permission_preset=permission_preset,
+        agent_preset_capabilities=capabilities,
+        mode=mode,
+        mode_explicit=mode_explicit,
+        active_skill_instructions=skill_instructions,
     )
     return {"text": text, "conversation_id": conversation_id}
 
@@ -1139,6 +1229,37 @@ def _queue_run_steer(
     return None
 
 
+async def _run_inbox(run: RunState) -> Any:
+    """Return the shared durable inbox attached to a live API run."""
+    if not run.conversation_id or run.ephemeral:
+        return None
+    if run.inbox is None:
+        from atlas.config import DATA_ROOT
+        from atlas.engine.kernel.inbox import DurableInbox
+
+        run.inbox = DurableInbox(DATA_ROOT / "engine", run.conversation_id)
+    await run.inbox.restore()
+    return run.inbox
+
+
+async def _inject_run_message(run: RunState, data: Any) -> tuple[str | None, str | None]:
+    """Durably inject into an ordered lane without waking the active run."""
+    if run.status in {"completed", "failed", "cancelled"}:
+        return "run_not_active", None
+    if not isinstance(data, dict) or data.get("inject") is not True:
+        return "invalid_inject", None
+    content = data.get("content")
+    if not isinstance(content, str) or not content.strip():
+        return "invalid_content", None
+    lane = data.get("lane", "next-step")
+    if lane not in {"next-turn", "next-step"}:
+        return "invalid_lane", None
+    inbox = await _run_inbox(run)
+    if inbox is None:
+        return "inbox_unavailable", None
+    return None, await inbox.inject(content, lane=lane)
+
+
 def _workspace_path(root: str, relative: str = "") -> tuple[Path, Path]:
     root_path = Path(root).expanduser()
     if not root_path.is_absolute():
@@ -1499,15 +1620,17 @@ async def _handle_run_start(
     effective_mode = data.get("mode", (profile or {}).get("mode", "act"))
     model_id = data.get("model", (profile or {}).get("model"))
     reasoning_effort = data.get("reasoning_effort", (profile or {}).get("reasoning_effort"))
-    permission_mode = data.get("permission_mode")
-    # A named preset is a convenience over permission_mode, not a second policy
-    # layer: it resolves to a mode here so every downstream reader still sees
-    # exactly one value. An explicit permission_mode wins over a preset.
-    preset_name = data.get("permission_preset")
-    if permission_mode is None and preset_name is not None:
-        from atlas.approval_policy import preset as _preset
-
-        permission_mode = _preset(str(preset_name))["mode"]
+    try:
+        resolved_permission_policy = _resolve_permission_policy(data)
+    except ValueError as exc:
+        invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+        await manager.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation", "detail": str(exc),
+        }))
+        return
+    permission_mode = resolved_permission_policy["mode"]
+    sandbox_mode = resolved_permission_policy["sandbox_mode"]
+    approval_policy = resolved_permission_policy["approval_policy"]
     run_tool_allow = data.get("tool_allow")
     run_tool_deny = data.get("tool_deny")
     if (run_tool_allow is not None and (not isinstance(run_tool_allow, list)
@@ -1785,6 +1908,9 @@ async def _handle_run_start(
     run.dynamic_plan_mode = effective_mode == "plan"
     run.reasoning_effort = reasoning_effort
     run.permission_mode = permission_mode
+    run.sandbox_mode = sandbox_mode
+    run.approval_policy = approval_policy
+    run.permission_preset = resolved_permission_policy["name"]
     run.allowed_paths = [
         str(item) if str(item).startswith("ssh://") else str(Path(item).expanduser().resolve())
         for item in allowed_paths or []
@@ -1813,7 +1939,7 @@ async def _handle_run_start(
     run.extra_roots = list(extra_roots if extra_roots is not None
                            else (conversation or {}).get("extra_roots") or [])
     if conversation:
-        if "permission_mode" not in data:
+        if "permission_mode" not in data and "permission_preset" not in data:
             run.permission_mode = conversation.get("permission_mode", "full_access")
             run.read_only = run.permission_mode == "read_only" or profile_id in {"architect", "reviewer"}
         if "allowed_paths" not in data:
@@ -2516,6 +2642,7 @@ async def resume_run_after_restart(
     run.workspace = workspace
     run.mode = context.get("mode") or run.mode or "act"
     run.permission_mode = context.get("permission_mode") or run.permission_mode
+    _restore_permission_policy(run, context)
     run.allowed_paths = context.get("allowed_paths") or run.allowed_paths
     run.extra_roots = context.get("extra_roots") or run.extra_roots
     run.read_only = bool(context.get("read_only"))
@@ -3102,13 +3229,18 @@ async def _execute_run(
             approval_event_id: str, tool_name: str, tool_args: dict[str, Any]
         ) -> str:
             """Emit approval.required and wait for client response."""
-            if str(getattr(run, "permission_mode", "") or "").lower() in {"full_access", "yolo"}:
+            approval_policy = getattr(run, "approval_policy", None)
+            if approval_policy == "never":
+                return "rejected" if "sandbox_permissions" in tool_args else "allowed-once"
+            if (approval_policy != "ask" and
+                    str(getattr(run, "permission_mode", "") or "").lower() in {"full_access", "yolo"}):
                 return "allow"
             public_input = {key: value for key, value in tool_args.items()
                             if key not in {"subtask_id", "_reviewer_reason", "_approval_reason",
-                                           "_approval_scope", "_approval_resource"}}
+                                           "_approval_scope", "_approval_resource",
+                                           "_approval_no_always"}}
             resource = tool_args.get("_approval_resource") or tool_args.get("resource")
-            permission = None if run.ephemeral else approval_permission_scope(
+            permission = None if run.ephemeral or tool_args.get("_approval_no_always") else approval_permission_scope(
                 run.workspace, tool_name, public_input,
                 str(resource) if resource else None,
             )
@@ -3128,15 +3260,37 @@ async def _execute_run(
                 approval_payload["reviewer_reason"] = str(tool_args["_reviewer_reason"])
             if tool_args.get("subtask_id"):
                 approval_payload["subtask_id"] = tool_args["subtask_id"]
+
+            async def record_decision(value: Any, source: str) -> str:
+                from atlas.approval_outcome import normalize as normalize_approval
+
+                outcome = normalize_approval(value)
+                await _persist_approval_lifecycle(run.conversation_id, "approval/decided", {
+                    "approval_id": approval_event_id,
+                    "tool": tool_name,
+                    "outcome": outcome,
+                    "source": source,
+                })
+                return outcome
+
+            async def record_asked() -> None:
+                await _persist_approval_lifecycle(run.conversation_id, "approval/asked", {
+                    "approval_id": approval_event_id,
+                    "tool": tool_name,
+                    "description": approval_payload["description"],
+                    "permission_scope": permission,
+                })
+
             if permission is not None:
                 approval_payload["permission_scope"] = permission
                 if approval_always_allowed(permission):
+                    await record_asked()
                     await emit("approval.required", {**approval_payload, "previously_allowed": True})
                     await emit("approval.responded", {
                         "event_id": approval_event_id, "choice": "allow_always",
                         "permission_scope": permission, "source": "persisted_grant",
                     })
-                    return "allow"
+                    return await record_decision("allowed-once", "persisted_grant")
             approval_future = run.approval_futures.get(approval_event_id)
             if approval_future is None:
                 approval_future = asyncio.get_running_loop().create_future()
@@ -3146,15 +3300,17 @@ async def _execute_run(
                 "allow_always_available": permission is not None,
             }
             run.status = "waiting"
+            await record_asked()
             await emit("approval.required", approval_payload)
 
             services = manager.services
             bridge = getattr(services, "gateway_bridge", None) if services else None
             try:
                 if bridge is not None and bridge.owns_run(run.run_id):
-                    return await bridge.request_approval(
+                    decision = await bridge.request_approval(
                         run, approval_event_id, approval_payload["description"],
                     )
+                    return await record_decision(decision, "gateway")
                 telegram = getattr(services, "telegram_service", None) if services else None
                 if run.telegram_user_id is not None and telegram is not None:
                     telegram_future = await telegram.request_approval(
@@ -3168,10 +3324,10 @@ async def _execute_run(
                             return_when=asyncio.FIRST_COMPLETED,
                         )
                         if telegram_future in done:
-                            return telegram_future.result()
+                            return await record_decision(telegram_future.result(), "telegram")
                         if not approval_future.done():
-                            approval_future.set_result("deny")
-                        return "deny"
+                            approval_future.set_result("unavailable")
+                        return await record_decision("unavailable", "timeout")
                     finally:
                         cancel_waiter.cancel()
                         await asyncio.gather(cancel_waiter, return_exceptions=True)
@@ -3182,10 +3338,11 @@ async def _execute_run(
                         return_when=asyncio.FIRST_COMPLETED,
                     )
                     if approval_future in done:
-                        return approval_future.result()
+                        return await record_decision(approval_future.result(), "user")
                     if not approval_future.done():
-                        approval_future.set_result("deny")
-                    return "deny"
+                        approval_future.set_result("cancelled" if run.cancel_event.is_set() else "unavailable")
+                    outcome = "cancelled" if run.cancel_event.is_set() else "unavailable"
+                    return await record_decision(outcome, "cancel" if outcome == "cancelled" else "timeout")
                 finally:
                     cancel_waiter.cancel()
                     await asyncio.gather(cancel_waiter, return_exceptions=True)
@@ -3448,7 +3605,24 @@ async def _execute_run(
             )
 
         async def sandbox_tool(run_id: str, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-            return await sandbox_manager.call_tool(run_id, name, arguments)
+            from atlas.engine.tool_permissions import authorize_sandbox_escalation
+
+            call_args = dict(arguments)
+            if "sandbox_permissions" in call_args:
+                authorization = await authorize_sandbox_escalation(
+                    call_args, approval_callback, tool_name=name,
+                    tool_call_id=str(call_args.get("tool_call_id") or f"sandbox:{run_id}:{uuid.uuid4()}"),
+                )
+                if not authorization["approved"]:
+                    outcome = authorization["approval_outcome"]
+                    detail = (
+                        f"Sandbox permission request was not approved ({outcome})."
+                    )
+                    return {"data": {"error": detail, **authorization},
+                            "content": [{"type": "text", "text": detail}], "is_error": True}
+            else:
+                call_args["sandbox_permissions"] = run.sandbox_mode or "workspace-write"
+            return await sandbox_manager.call_tool(run_id, name, call_args)
 
         orchestrator_events = orchestrator.run(
             message=content,
@@ -3462,6 +3636,7 @@ async def _execute_run(
             source_run_id=str(resume_from or run.run_id),
             image_attachments=image_attachments,
             active_skill_instructions=active_skill_instructions,
+            inbox=await _run_inbox(run),
             run_id=run.run_id,
             steer_queue=run.steer_queue,
             input_callback=input_callback,

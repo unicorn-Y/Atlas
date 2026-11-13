@@ -36,6 +36,25 @@ class RunTerminalStatus(StrEnum):
     BUDGET_EXCEEDED = "budget_exceeded"
 
 
+class TurnEndReason(StrEnum):
+    """Typed terminal reason for a user-visible kernel turn."""
+
+    COMPLETED = "completed"
+    USER_INTERRUPTED = "user_interrupted"
+    BUDGET_EXCEEDED = "budget_exceeded"
+    FAILED = "failed"
+
+    @classmethod
+    def from_terminal_status(cls, status: RunTerminalStatus) -> "TurnEndReason":
+        if status is RunTerminalStatus.COMPLETED:
+            return cls.COMPLETED
+        if status is RunTerminalStatus.USER_INTERRUPTED:
+            return cls.USER_INTERRUPTED
+        if status is RunTerminalStatus.BUDGET_EXCEEDED:
+            return cls.BUDGET_EXCEEDED
+        return cls.FAILED
+
+
 _TRANSITIONS: dict[RunPhase, frozenset[RunPhase]] = {
     RunPhase.PREPARING: frozenset({
         RunPhase.AWAITING_MODEL_RESPONSE, RunPhase.STREAMING, RunPhase.TOOLS, RunPhase.WAITING_APPROVAL,

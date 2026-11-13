@@ -10,6 +10,7 @@ import type { BackendStartupProgress, RecentScreenshot } from '../shared/ipc';
 import type { Artifact } from '../types/artifact';
 import type { AgentEvent } from '../types/runtime';
 import { latestTodos, usageSummary } from './components/runInsights';
+import { ConnectionRecovery } from './components/ConnectionRecovery';
 import Composer, { type ComposerMode, type MentionItem, type SlashCommand } from './components/Composer';
 import KeymapDialog from './components/KeymapDialog';
 import { resolveMessageSkillReferences } from './components/skillMentions';
@@ -3212,7 +3213,7 @@ function AppContent() {
   const connection = !store.connected
     ? store.backendStarting
       ? <span className="inline-flex items-center gap-1.5 text-[12px] text-fg-2"><i className="size-1.5 animate-pulse rounded-full bg-fg-3" />后端启动中{store.startupDetail ? `（${store.startupDetail}）` : '…'}</span>
-      : <span className="inline-flex items-center gap-1.5 text-[12px] text-danger"><i className="size-1.5 rounded-full bg-danger" />后端没有连接</span>
+      : <ConnectionRecovery onRetry={() => store.initialize()} onRestart={window.atlasDesktop?.restartBackend ? () => window.atlasDesktop!.restartBackend!(false) : undefined} />
     : null;
 
   return <TooltipProvider>

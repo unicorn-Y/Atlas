@@ -50,6 +50,8 @@ class SkillInfo:
     author: str = ""
     source: str = "atlas"
     source_priority: int = 0
+    disable_model_invocation: bool = False
+    user_invocable: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize for API responses with canonical dependencies."""
@@ -65,6 +67,8 @@ class SkillInfo:
             "author": self.author,
             "source": self.source,
             "source_priority": self.source_priority,
+            "disable_model_invocation": self.disable_model_invocation,
+            "user_invocable": self.user_invocable,
         }
 
 
@@ -257,6 +261,15 @@ def _frontmatter_to_skill_info(
         invalid("author must be a string")
         return None
 
+    disable_model_invocation = fm.get("disable-model-invocation", False)
+    user_invocable = fm.get("user-invocable", True)
+    if not isinstance(disable_model_invocation, bool):
+        invalid("disable-model-invocation must be a boolean")
+        return None
+    if not isinstance(user_invocable, bool):
+        invalid("user-invocable must be a boolean")
+        return None
+
     # Infer category from directory structure if not in frontmatter
     if not category:
         # skills/<category>/<skill-name>/SKILL.md
@@ -281,6 +294,8 @@ def _frontmatter_to_skill_info(
         tags=tags,
         related_skills=related,
         author=author,
+        disable_model_invocation=disable_model_invocation,
+        user_invocable=user_invocable,
     )
 
 
@@ -483,7 +498,7 @@ class SkillManager:
             cmd = text.split()[0].lower()  # e.g. "/arxiv"
             for skill in self._index.values():
                 for trigger in skill.triggers:
-                    if trigger.get("command", "").lower() == cmd:
+                    if skill.user_invocable and trigger.get("command", "").lower() == cmd:
                         return [skill]
 
         # Phase 2: regex pattern matching
@@ -541,6 +556,23 @@ class SkillManager:
         _fm, body = parsed
         log.info("skills.activated", name=name)
         return body
+
+    async def activate_for_model(
+        self,
+        name: str,
+        *,
+        connected_servers: list[str] | None = None,
+        configured_servers: list[str] | None = None,
+        registry: Any | None = None,
+    ) -> str | None:
+        """Activate a skill for model use, enforcing its frontmatter policy."""
+        skill = self.get_skill(name)
+        if skill is not None and skill.disable_model_invocation:
+            raise PermissionError(f"model invocation is disabled for skill ({name})")
+        return await self.activate(
+            name, connected_servers=connected_servers,
+            configured_servers=configured_servers, registry=registry,
+        )
 
     # -- dependency checking ---------------------------------------------------
 

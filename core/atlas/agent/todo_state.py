@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+from pathlib import Path
+from typing import Any, Callable
 
 VALID_STATUSES = {"pending", "in_progress", "completed", "cancelled"}
 MAX_TODO_CONTENT_CHARS = 4000
@@ -15,6 +17,46 @@ class TodoStore:
     def __init__(self) -> None:
         self._items: list[dict[str, str]] = []
         self._revision = 0
+        self._durable_writer: Callable[[dict[str, Any]], Any] | None = None
+
+    def bind_durable_writer(self, writer: Callable[[dict[str, Any]], Any] | None) -> None:
+        self._durable_writer = writer if callable(writer) else None
+
+    async def bind_session_events(self, home: str | Path, session_id: str) -> None:
+        """Restore the latest durable todo event and persist future writes there."""
+        from atlas.engine.session_sync import append_session_event, read_session_events
+
+        events = await asyncio.to_thread(read_session_events, home, session_id)
+        latest = next((event for event in reversed(events)
+                       if event.get("event_type") == "todo.updated"
+                       and isinstance(event.get("payload"), dict)), None)
+        if latest is not None:
+            self.restore(latest["payload"])
+        self.bind_durable_writer(
+            lambda snapshot: append_session_event(home, session_id, "todo.updated", snapshot)
+        )
+
+    def restore(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+        """Restore a durable todo snapshot without emitting another event."""
+        if not isinstance(snapshot, dict):
+            raise ValueError("todo snapshot must be an object")
+        revision = snapshot.get("revision", 0)
+        if type(revision) is not int or revision < 0:
+            raise ValueError("todo snapshot revision must be a non-negative integer")
+        writer = self._durable_writer
+        self._durable_writer = None
+        try:
+            items = snapshot.get("todos") or []
+            if not isinstance(items, list):
+                raise ValueError("todo snapshot todos must be a list")
+            restored = self.write([
+                {**item, "content": item.get("text", item.get("content", ""))}
+                for item in items if isinstance(item, dict)
+            ])
+            self._revision = revision
+            return self.snapshot()
+        finally:
+            self._durable_writer = writer
 
     def snapshot(self) -> dict[str, Any]:
         return {"revision": self._revision, "todos": [dict(item) for item in self._items]}
@@ -22,7 +64,8 @@ class TodoStore:
     def write(self, todos: list[dict[str, Any]], *, merge: bool = False) -> dict[str, Any]:
         if not isinstance(todos, list):
             raise ValueError("todos must be a list")
-        before = self.snapshot()["todos"]
+        before_snapshot = self.snapshot()
+        before = before_snapshot["todos"]
         incoming: list[dict[str, str]] = []
         ids: set[str] = set()
         for value in todos:
@@ -56,7 +99,15 @@ class TodoStore:
                        if not item.get("parent") or item["parent"] in valid]
         if self._items != before:
             self._revision += 1
-        return self.snapshot()
+        snapshot = self.snapshot()
+        if self._durable_writer is not None:
+            try:
+                self._durable_writer(snapshot)
+            except Exception:
+                self._items = before
+                self._revision = before_snapshot["revision"]
+                raise
+        return snapshot
 
     def format_for_injection(self) -> str | None:
         active = [item for item in self._items if item["status"] in {"pending", "in_progress"}]

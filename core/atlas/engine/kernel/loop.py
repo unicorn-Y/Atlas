@@ -24,16 +24,21 @@ from typing import Any, AsyncIterator, Callable
 from atlas.approval_outcome import ALLOWED as APPROVAL_ALLOWED
 from atlas.approval_outcome import denial_reason as approval_denial_reason
 from atlas.approval_outcome import normalize as normalize_approval
-from atlas.engine.kernel.context import CompactionResult, ContextManager, estimate_tokens
+from atlas.engine.kernel.context import (
+    CompactionResult, ContextManager, compaction_surface, estimate_tokens,
+)
 from atlas.engine.kernel.model_call import ModelCallError, ModelCallResult, complete_stream
 from atlas.engine.kernel.plan import PlanMode
 from atlas.engine.kernel.prompt import build_prompt
+from atlas.engine.kernel.request_envelope import request_envelope, tool_pool_change_message
 from atlas.engine.kernel.repair import (
     ToolHistoryError, normalize_tool_results, repair_unpaired_tool_calls,
     started_call_ids,
 )
-from atlas.engine.kernel.state import KernelEvent, RunPhase, RunState, RunTerminalStatus
-from atlas.engine.kernel.stuck import StuckDetector
+from atlas.engine.kernel.state import (
+    KernelEvent, RunPhase, RunState, RunTerminalStatus, TurnEndReason,
+)
+from atlas.engine.kernel.stuck import RepeatToolReminder, StuckDetector
 from atlas.engine.kernel.tool_finalize import (
     FinalizedOutput,
     ToolResultFinalizers,
@@ -50,8 +55,61 @@ _THINKING_OFF = frozenset({"off", "none", "disabled"})
 # Tool-call rounds per run. The user asked for no practical cap: the default is
 # high and the hard ceiling only guards against a runaway integer in config.
 DEFAULT_MAX_TURNS = 1000
+
+
+async def authorize_local_sandbox_request(
+    arguments: dict[str, Any], approval_callback: Callable | None, *,
+    tool_name: str, tool_call_id: str, sandbox_executor_available: bool,
+) -> dict[str, Any]:
+    """Approve a one-call sandbox request, refusing execution without enforcement."""
+    from atlas.engine.tool_permissions import authorize_sandbox_escalation
+
+    try:
+        authorization = await authorize_sandbox_escalation(
+            arguments, approval_callback, tool_name=tool_name,
+            tool_call_id=tool_call_id,
+        )
+    except (TypeError, ValueError) as exc:
+        detail = str(exc)
+        return {"approved": False, "sandbox_enforced": False, "is_error": True,
+                "detail": detail, "approval_outcome": "unavailable"}
+    if not authorization["approved"]:
+        detail = f"Sandbox permission request was not approved ({authorization['approval_outcome']})."
+        return {**authorization, "sandbox_enforced": False, "is_error": True,
+                "detail": detail}
+    if not sandbox_executor_available:
+        detail = (
+            "The per-call sandbox request was approved, but no executor can enforce that mode; "
+            "the tool was not run."
+        )
+        return {**authorization, "sandbox_enforced": False, "is_error": True,
+                "detail": detail}
+    return {**authorization, "sandbox_enforced": True, "is_error": False}
 MAX_TURNS_CAP = 100_000
 MAX_UNFULFILLED_ACTION_CONTINUATIONS = 2
+
+
+def _mcp_tool_allowed(runtime: Any, name: str) -> bool:
+    """Apply the run's server scope to namespaced MCP tools."""
+    allowed = getattr(runtime, "mcp_server_allow", None)
+    if allowed is None or "__" not in name:
+        return True
+    server = name.split("__", 1)[0]
+    return server in allowed
+
+
+def _plan_mode_denies(runtime: Any, name: str) -> bool:
+    """Keep both preset and interactively selected plan mode read-only."""
+    plan_mode = bool(getattr(runtime, "dynamic_plan_mode", False)) or (
+        getattr(runtime, "mode", "act") == "plan"
+    )
+    plan_exemptions = {
+        "update_plan", "EnterPlanMode", "ExitPlanMode", "get_context_remaining",
+        "read_tool_history", "tool_search", "memory_search", "list_mcp_resources",
+        "list_mcp_resource_templates", "read_mcp_resource", "request_user_input",
+        "request_user_input_async", "AskUserQuestion",
+    }
+    return plan_mode and name not in plan_exemptions and name not in READ_ONLY_TOOLS
 
 _ACTION_INTENT_RE = re.compile(
     r"(?:我(?:现在就|现在|马上|立刻|这就|馬上|馬上就)?来(?:帮你)?(?:创建|生成|制作|写|保存|导出|下载|发送|查找|搜索|打开|运行|执行)"
@@ -621,27 +679,18 @@ class AtlasKernel:
         def emit(event_type: str, **data: Any) -> dict[str, Any]:
             return KernelEvent(event_type, data).as_run_event()
 
-        def checkpoint(kind: str, **fields: Any) -> None:
-            """Stamp one durable resume position (see :mod:`atlas.run_checkpoints`).
-
-            A checkpoint is a *position*, never a replay instruction: it says a
-            boundary was durably reached so a resume can skip past it. Failures
-            are logged only -- losing a position record must never fail a run.
-            """
+        def require_checkpoint(kind: str, **fields: Any) -> None:
+            """Fail the run when a required dispatch/resume position is not durable."""
             if request.ephemeral:
                 return
-            try:
-                from atlas.run_checkpoints import write_checkpoint
+            from atlas.run_checkpoints import require_checkpoint as persist_required
 
-                write_checkpoint(
-                    run_id, kind=kind,
-                    sequence=len(state.usage_rows) + len(receipts),
-                    payload={"session_id": session_id, "model": selected_model},
-                    **fields,
-                )
-            except Exception:
-                log.exception("kernel.run_checkpoint_failed",
-                              extra={"run_id": run_id, "kind": kind})
+            persist_required(
+                run_id, kind=kind,
+                sequence=len(state.usage_rows) + len(receipts),
+                payload={"session_id": session_id, "model": selected_model},
+                **fields,
+            )
 
         def replay_safe_tool(name: Any) -> bool:
             """True only when repeating this tool cannot change user state."""
@@ -660,7 +709,7 @@ class AtlasKernel:
                 # safe resume boundary (no tool is ever mid-flight across one).
                 record("run_phase", phase=str(phase), previous=previous,
                        elapsed_ms=int((time.monotonic() - started_at) * 1000))
-                checkpoint("phase", phase=str(phase))
+                require_checkpoint("phase", phase=str(phase))
 
         def persist(role: str, content: Any, metadata: dict[str, Any] | None = None) -> None:
             if request.ephemeral:
@@ -678,7 +727,7 @@ class AtlasKernel:
             # ``transition`` only fires on change, so the opening phase is
             # recorded here explicitly: a replay must start with a phase.
             record("run_phase", phase=str(state.phase), previous=None, elapsed_ms=0)
-            checkpoint("phase", phase=str(state.phase))
+            require_checkpoint("phase", phase=str(state.phase))
             turn_context = _turn_context_block(request.volatile_context)
             # Where the time before the first model request goes (logged on tool_offer).
             prep_started = time.monotonic()
@@ -969,6 +1018,9 @@ class AtlasKernel:
             forwarded_results: set[str] = set()
 
             async def dispatch_tool(call_id: str, name: str, args: dict[str, Any]) -> Any:
+                if not _mcp_tool_allowed(runtime, name):
+                    return {"content": f"MCP server is outside this agent preset's scope: {name}",
+                            "is_error": True, "outcome": "denied"}
                 if call_id in bad_tool_args:
                     # Unparseable arguments: answer this call only, the rest of the batch runs.
                     return {"content": bad_tool_args.pop(call_id), "is_error": True,
@@ -979,14 +1031,7 @@ class AtlasKernel:
                     schema_error = validate_tool_arguments(name, tool_args, offered_schema)
                     if schema_error:
                         return {"content": schema_error, "is_error": True, "outcome": "failed"}
-                if (getattr(proxy_runtime, "dynamic_plan_mode", False)
-                        and name not in {
-                            "update_plan", "EnterPlanMode", "ExitPlanMode",
-                            "get_context_remaining", "read_tool_history", "tool_search", "memory_search",
-                            "list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource",
-                            "request_user_input", "request_user_input_async",
-                            "AskUserQuestion",
-                        } and name not in READ_ONLY_TOOLS):
+                if _plan_mode_denies(proxy_runtime, name):
                     return {"content": "Plan mode is read-only. Submit the plan and wait for approval before using this tool.",
                             "is_error": True, "outcome": "denied"}
                 pre_tool = await self._run_hook(request, "PreToolUse", {
@@ -1023,7 +1068,17 @@ class AtlasKernel:
                         record("tool_blocked", tool_call_id=call_id, name=name,
                                decision=permission_decision or "blocked", reason=reason)
                         return {"content": reason, "is_error": True, "outcome": "denied"}
-                if permission_decision == "ask":
+                sandbox_escalation_requested = "sandbox_permissions" in tool_args
+                sandbox_callback = getattr(proxy_runtime, "sandbox_tool_callback", None)
+                if sandbox_escalation_requested and name not in {
+                    "local_shell", "local_exec", "local_git",
+                }:
+                    return {
+                        "content": "Per-call sandbox escalation is only supported for local execution tools.",
+                        "is_error": True, "outcome": "denied",
+                        "sandbox_enforced": False,
+                    }
+                if permission_decision == "ask" and not sandbox_escalation_requested:
                     permission_hook = await self._run_hook(request, "PermissionRequest", {
                         "tool_name": name, "tool_use_id": call_id,
                         "tool_input": copy.deepcopy(tool_args), "conversation_id": session_id,
@@ -1106,8 +1161,28 @@ class AtlasKernel:
                                    reason=reason)
                         proxy_runtime._preapproved_tool_call_ids.add(call_id)
                         pretool_blocked.discard(call_id)
+                if sandbox_escalation_requested and not callable(sandbox_callback):
+                    authorization = await authorize_local_sandbox_request(
+                        tool_args, getattr(proxy_runtime, "approval_callback", None),
+                        tool_name=name, tool_call_id=call_id,
+                        sandbox_executor_available=False,
+                    )
+                    if authorization.get("is_error"):
+                        record("tool_blocked", tool_call_id=call_id, name=name,
+                               decision="sandbox_escalation_unavailable",
+                               approval=authorization.get("approval_outcome"),
+                               reason=authorization.get("detail"))
+                        return {
+                            "content": authorization["detail"],
+                            "data": authorization, "is_error": True,
+                            "outcome": "denied", "sandbox_enforced": False,
+                        }
                 active_call_ids.add(call_id)
                 tool_started_at[call_id] = time.monotonic()
+                require_checkpoint(
+                    "tool_dispatch", phase=str(state.phase), tool_call_id=call_id,
+                    tool_name=name, state="dispatching", replay_safe=replay_safe_tool(name),
+                )
                 record("tool_start", tool_call_id=call_id, name=name, arguments=tool_args)
                 return await self._dispatch(
                     agent, proxy_runtime, call_id, name, tool_args, event_queue,
@@ -1190,6 +1265,9 @@ class AtlasKernel:
 
             model_profile = profile_for(wire_model, selected_model)
             stuck = StuckDetector(**model_profile.stuck)
+            repeat_tool_reminder = RepeatToolReminder()
+            last_tool_pool: set[str] | None = None
+            inbox_items_in_flight: dict[str, Any] = {}
             usage_budget = request.usage_budget or configured_run_usage_budget()
 
             async def record_workflow_usage(row: dict[str, Any]) -> None:
@@ -1630,6 +1708,18 @@ class AtlasKernel:
 
                 if turn_index == 0:
                     prep_mark("setup")
+                inbox = getattr(runtime, "inbox", None)
+                if inbox is not None:
+                    lanes = (["next-turn"] if turn_index == 0 else []) + ["next-step"]
+                    for lane in lanes:
+                        item = await inbox.peek(lane)
+                        if item is not None:
+                            if item.event_id not in inbox_items_in_flight:
+                                messages.append({
+                                    "role": "developer",
+                                    "content": f"[Durable {lane} injection]\n{item.content}",
+                                })
+                                inbox_items_in_flight[item.event_id] = item
                 compaction_started = time.monotonic()
                 compaction = await prepare_compaction()
                 if turn_index == 0:
@@ -1686,6 +1776,10 @@ class AtlasKernel:
                 # The model sees only the pool the current run may dispatch.
                 # This uses the same allow/deny predicate as ToolScheduler.
                 available_tools = filter_executable_tools(available_tools, tool_allow, tool_deny)
+                available_tools = [
+                    schema for schema in available_tools
+                    if _mcp_tool_allowed(runtime, str((schema.get("function") or schema).get("name", "")))
+                ]
 
                 include_workflow = (
                     getattr(runtime, "agent_role", "general") != "leaf"
@@ -1703,6 +1797,7 @@ class AtlasKernel:
                         schema for schema in kernel_tool_schemas(include_workflow=include_workflow)
                         if supports_tools is not False
                         and tool_allowed(str(schema["function"]["name"]), tool_allow, tool_deny)
+                        and _mcp_tool_allowed(runtime, str(schema["function"]["name"]))
                         and not (read_only and schema["function"]["name"] == "workflow")
                     ],
                     sort=False,
@@ -1794,6 +1889,15 @@ class AtlasKernel:
                     ) for item in tools
                     if str((item.get("function") or item).get("name") or "")
                 })
+                current_tool_pool = set(offered_schemas)
+                if last_tool_pool is not None:
+                    pool_notice = tool_pool_change_message(last_tool_pool, current_tool_pool)
+                    if pool_notice:
+                        messages.append({"role": "developer", "content": pool_notice})
+                last_tool_pool = current_tool_pool
+                envelope = request_envelope(messages, tools)
+                record("model_request_envelope", model=turn_model, attempt=turn_index + 1,
+                       **envelope)
                 tool_json = json.dumps(messages, ensure_ascii=False, default=str)
                 record("model_request", model=turn_model, input_chars=len(tool_json),
                        input_tokens=estimate_tokens(messages), attempt=turn_index + 1)
@@ -2040,9 +2144,11 @@ class AtlasKernel:
                                 or overflow_retry_used):
                             raise stream_error
                         overflow_retry_used = True
+                        surface_before = compaction_surface(messages)
                         compaction_started = time.monotonic()
                         compaction = await prepare_compaction(force=True)
-                        if compaction.method == "none":
+                        if (compaction.method == "none"
+                                or compaction_surface(messages) == surface_before):
                             raise stream_error
                         yield emit("run.compaction.progress", data={
                             "phase": compaction.method,
@@ -2064,6 +2170,10 @@ class AtlasKernel:
                         continue
                     if response is None:
                         raise ModelCallError("Model stream ended without a response", category="stream")
+                    if inbox is not None:
+                        for item in list(inbox_items_in_flight.values()):
+                            await inbox.ack(item.event_id, lane=item.lane)
+                            inbox_items_in_flight.pop(item.event_id, None)
                     if (response.finish_reason in {"length", "max_tokens"}
                             and not response.tool_calls):
                         if await recover_output_limit(response.text, "finish_reason"):
@@ -2415,8 +2525,8 @@ class AtlasKernel:
                         # rather than repeat it. ``replay_safe`` states whether
                         # repeating it would be harmless (read-only tools only) --
                         # a resume reports the unsafe ones instead of re-running them.
-                        checkpoint(
-                            "tool",
+                        require_checkpoint(
+                            "tool_result",
                             tool_call_id=result.call_id,
                             tool_name=result.name,
                             state=receipt["state"],
@@ -2424,6 +2534,9 @@ class AtlasKernel:
                             phase=str(state.phase),
                         )
                         stuck.observe_tool(result.name, tool_args, result.output, is_error=is_error)
+                        repeat_notice = repeat_tool_reminder.observe(result.name, tool_args)
+                        if repeat_notice:
+                            messages.append({"role": "developer", "content": repeat_notice})
                         tool_started_at.pop(result.call_id, None)
                         if result.call_id in forwarded_results:
                             forwarded_results.discard(result.call_id)
@@ -2544,17 +2657,22 @@ class AtlasKernel:
 
             transition(RunPhase.DONE)
             state.terminal_status = RunTerminalStatus.COMPLETED
+            end_reason = TurnEndReason.from_terminal_status(state.terminal_status)
             elapsed = int((time.monotonic() - started_at) * 1000)
+            record("turn_end", reason=end_reason.value)
             record("run_end", status="completed", terminal_status=state.terminal_status.value,
                    duration_ms=elapsed, total_input_tokens=sum(int(row.get("input_tokens") or 0) for row in usage_rows),
                    total_output_tokens=sum(int(row.get("output_tokens") or 0) for row in usage_rows))
             yield emit("atlas.result", result={"final_response": final_response,
                                                 "usage": usage_rows,
-                                                "terminal_status": state.terminal_status.value})
+                                                "terminal_status": state.terminal_status.value,
+                                                "turn_end_reason": end_reason.value})
         except asyncio.CancelledError:
             if state.phase not in {RunPhase.DONE, RunPhase.FAILED, RunPhase.INTERRUPTED}:
                 transition(RunPhase.INTERRUPTED)
             state.terminal_status = RunTerminalStatus.USER_INTERRUPTED
+            record("turn_end", reason=TurnEndReason.from_terminal_status(
+                state.terminal_status).value)
             try:
                 await preserve_partial_output("interrupted")
                 # A stream can be cancelled after tool-call deltas arrived but
@@ -2608,6 +2726,8 @@ class AtlasKernel:
                 state.terminal_status = RunTerminalStatus.BUDGET_EXCEEDED
             else:
                 state.terminal_status = RunTerminalStatus.ERROR
+            record("turn_end", reason=TurnEndReason.from_terminal_status(
+                state.terminal_status).value)
             if state.phase not in {RunPhase.DONE, RunPhase.FAILED, RunPhase.INTERRUPTED}:
                 state.error = failure
                 transition(RunPhase.FAILED)
@@ -3092,6 +3212,12 @@ class AtlasKernel:
             limit = max(1, min(50, int(arguments.get("limit", 8) or 8)))
             candidates = list(agent._model_facing_tools())
             candidates.extend(kernel_tool_schemas(include_workflow=True))
+            candidates = [
+                schema for schema in candidates
+                if _mcp_tool_allowed(
+                    runtime, str((schema.get("function") or schema).get("name", "")),
+                )
+            ]
             # Loads the matches into this conversation; the next model call offers their schemas.
             found = search_tools(candidates, query, limit=limit,
                                  session_id=str(getattr(runtime, "conversation_id", "") or ""))

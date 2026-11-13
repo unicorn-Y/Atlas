@@ -50,9 +50,6 @@ export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEven
   return { ...base, type: envelope.event as AgentEvent['type'], data: envelope.data ?? {} };
 }
 
-/** 每个运行最多保留的事件数；超出后丢最旧的，时间线头部显示「已折叠早期事件」。 */
-export const MAX_RUN_EVENTS = 800;
-
 export function applyRuntimeEvent(run: AgentRun, event: AgentEvent): AgentRun {
   const data = event.data;
   let status = run.status;
@@ -73,7 +70,7 @@ export function applyRuntimeEvent(run: AgentRun, event: AgentEvent): AgentRun {
   let events: AgentEvent[];
   if (event.type === 'tool.preparing' && event.sequence > run.lastEventSequence) {
     // Argument-growth updates replace the previous one for the same call, keeping when it started,
-    // so a long write_file does not push older events past MAX_RUN_EVENTS.
+    // so a long write_file does not create a row for every argument update.
     let previous: AgentEvent | undefined;
     for (let i = run.events.length - 1; i >= 0; i -= 1) {
       const item = run.events[i];
@@ -91,13 +88,6 @@ export function applyRuntimeEvent(run: AgentRun, event: AgentEvent): AgentRun {
     if (run.events.some((item) => item.id === event.id) || run.events.some((item) => item.sequence === event.sequence)) return run;
     events = [...run.events, event].sort((a, b) => a.sequence - b.sequence);
   }
-  // 长会话有界化：丢最旧的事件并记录数量，UI 在时间线头部显示占位。
-  let truncated = run.eventsTruncated ?? false;
-  let dropped = run.droppedEventCount ?? 0;
-  if (events.length > MAX_RUN_EVENTS) {
-    dropped += events.length - MAX_RUN_EVENTS;
-    events = events.slice(events.length - MAX_RUN_EVENTS);
-    truncated = true;
-  }
-  return { ...run, status, phase, background, updatedAt: event.timestamp, lastEventSequence: Math.max(run.lastEventSequence, event.sequence), events, eventsTruncated: truncated, droppedEventCount: dropped };
+  return { ...run, status, phase, background, updatedAt: event.timestamp, lastEventSequence: Math.max(run.lastEventSequence, event.sequence), events,
+    eventsTruncated: run.eventsTruncated ?? false, droppedEventCount: run.droppedEventCount ?? 0 };
 }

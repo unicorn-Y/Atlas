@@ -1,6 +1,68 @@
-"""Resolve child tool restrictions against the tools actually available to Atlas."""
+"""Resolve child tool restrictions and per-call sandbox requests."""
 
+import inspect
+from collections.abc import Callable, Mapping
 from fnmatch import fnmatchcase
+
+
+SANDBOX_PERMISSION_MODES = frozenset({
+    "read-only", "workspace-write", "danger-full-access",
+})
+
+
+def normalize_sandbox_escalation(arguments):
+    """Validate a per-call sandbox permission request without granting it.
+
+    The caller must run the returned request through its approval flow and
+    apply it to this call only. This helper intentionally does not mutate a
+    run's permission preset or treat an omitted/invalid request as consent.
+    """
+    if not isinstance(arguments, Mapping):
+        raise ValueError("sandbox_permissions request must be an object")
+    mode = arguments.get("sandbox_permissions")
+    if not isinstance(mode, str) or mode not in SANDBOX_PERMISSION_MODES:
+        raise ValueError(
+            "sandbox_permissions must be read-only, workspace-write, or danger-full-access"
+        )
+    justification = arguments.get("justification")
+    if not isinstance(justification, str) or not justification.strip():
+        raise ValueError("justification is required for sandbox permission requests")
+    return {
+        "sandbox_permissions": mode,
+        "justification": justification.strip()[:4000],
+    }
+
+
+async def authorize_sandbox_escalation(
+    arguments, approval_callback: Callable | None, *, tool_name: str,
+    tool_call_id: str,
+):
+    """Ask the existing approval channel for a one-call sandbox escalation.
+
+    The result is a decision only; callers must apply the returned mode to
+    this invocation and must not persist it as the run's permission mode.
+    Missing approval wiring and every non-allowing response fail closed.
+    """
+    from atlas.approval_outcome import ALLOWED, UNAVAILABLE, normalize
+
+    request = normalize_sandbox_escalation(arguments)
+    if approval_callback is None:
+        outcome = UNAVAILABLE
+    else:
+        approval_args = dict(arguments)
+        approval_args["sandbox_permissions"] = request["sandbox_permissions"]
+        approval_args["justification"] = request["justification"]
+        approval_args["_approval_reason"] = request["justification"]
+        approval_args["_approval_no_always"] = True
+        response = approval_callback(str(tool_call_id), str(tool_name), approval_args)
+        if inspect.isawaitable(response):
+            response = await response
+        outcome = normalize(response)
+    return {
+        "request": request,
+        "approval_outcome": outcome,
+        "approved": outcome == ALLOWED,
+    }
 
 
 def tool_allowed(name, allow=None, deny=()):

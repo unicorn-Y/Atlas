@@ -55,6 +55,16 @@ class SkillRegistry:
                     PRIMARY KEY (name, version)
                 )
             """)
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS skill_discovery_catalog (
+                    name TEXT PRIMARY KEY,
+                    version TEXT NOT NULL,
+                    digest TEXT NOT NULL,
+                    metadata TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('active','retired')),
+                    updated_at TEXT NOT NULL
+                )
+            """)
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS skill_lifecycle_history (
                     event_id TEXT PRIMARY KEY,
@@ -352,6 +362,93 @@ class SkillRegistry:
         with closing(self._connect()) as db, db:
             rows = db.execute(query, values).fetchall()
         return [self._row_to_dict(row) for row in rows]
+
+    def reconcile_discovery_catalog(self, skills: list[Any]) -> dict[str, list[str]]:
+        """Persist discovered skill digests and retire entries absent from a scan.
+
+        Only catalog metadata and SHA-256 digests are stored; skill bodies remain
+        at their source paths. A changed file digest updates the active catalog
+        row even when its declared version did not change.
+        """
+        discovered: dict[str, dict[str, str]] = {}
+        for skill in skills:
+            def value(key: str, default: str = "") -> str:
+                if isinstance(skill, dict):
+                    item = skill.get(key, default)
+                else:
+                    item = getattr(skill, key, default)
+                return str(item or default)
+
+            name, version, path = value("name"), value("version", "0.0.0"), value("path")
+            if not _NAME_RE.fullmatch(name) or not version or not path:
+                continue
+            try:
+                digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+            except OSError:
+                continue
+            if name in discovered:
+                raise ValueError(f"duplicate discovered skill name: {name}")
+            metadata = {
+                key: value(key) for key in ("name", "description", "category", "source")
+            }
+            discovered[name] = {
+                "version": version, "digest": digest,
+                "metadata": json.dumps(metadata, ensure_ascii=False, sort_keys=True),
+            }
+
+        result = {"added": [], "updated": [], "retired": [], "unchanged": []}
+        now = self._now()
+        with closing(self._connect()) as db, db:
+            existing = {
+                row["name"]: row for row in db.execute(
+                    "SELECT name,version,digest,metadata,status FROM skill_discovery_catalog"
+                ).fetchall()
+            }
+            for name, current in sorted(discovered.items()):
+                prior = existing.get(name)
+                if prior is None:
+                    change = "added"
+                elif (prior["version"], prior["digest"], prior["metadata"], prior["status"]) == (
+                    current["version"], current["digest"], current["metadata"], "active",
+                ):
+                    result["unchanged"].append(name)
+                    continue
+                else:
+                    change = "updated"
+                db.execute("""
+                    INSERT INTO skill_discovery_catalog
+                        (name,version,digest,metadata,status,updated_at)
+                    VALUES (?,?,?,?, 'active', ?)
+                    ON CONFLICT(name) DO UPDATE SET
+                        version=excluded.version,digest=excluded.digest,
+                        metadata=excluded.metadata,status='active',updated_at=excluded.updated_at
+                """, (name, current["version"], current["digest"], current["metadata"], now))
+                result[change].append(name)
+
+            for name, prior in existing.items():
+                if name not in discovered and prior["status"] == "active":
+                    db.execute(
+                        "UPDATE skill_discovery_catalog SET status='retired',updated_at=? WHERE name=?",
+                        (now, name),
+                    )
+                    result["retired"].append(name)
+        for names in result.values():
+            names.sort()
+        return result
+
+    def discovery_catalog(self, *, include_retired: bool = True) -> list[dict[str, Any]]:
+        """Read the durable discovered-skill catalog without loading bodies."""
+        query = "SELECT name,version,digest,metadata,status,updated_at FROM skill_discovery_catalog"
+        if not include_retired:
+            query += " WHERE status='active'"
+        query += " ORDER BY name COLLATE BINARY"
+        with closing(self._connect()) as db, db:
+            rows = db.execute(query).fetchall()
+        return [
+            {**json.loads(row["metadata"]), "version": row["version"],
+             "digest": row["digest"], "status": row["status"], "updated_at": row["updated_at"]}
+            for row in rows
+        ]
 
     def search(self, query: str) -> list[dict[str, Any]]:
         term = query.strip().casefold()

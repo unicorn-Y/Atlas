@@ -90,7 +90,7 @@ class DockerSandboxManager:
         entry = self._containers.get(run_id)
         if not entry:
             raise RuntimeError("Docker 沙箱容器尚未启动。")
-        container, _image = entry
+        container, image = entry
         workspace = Path(self._roots[run_id]).resolve()
         cwd = Path(str(args.get("cwd") or workspace)).expanduser().resolve()
         if not cwd.is_relative_to(workspace):
@@ -119,7 +119,31 @@ class DockerSandboxManager:
             detail = "沙箱模式下此工具不可用。"
             return {"data": {"error": detail}, "content": [{"type": "text", "text": detail}],
                     "is_error": True}
-        argv = [shutil.which("docker") or "docker", "exec", "-w", container_cwd, container, *command]
+        requested_mode = args.get("sandbox_permissions")
+        if requested_mode is not None and (
+            not isinstance(requested_mode, str) or requested_mode not in {
+                "read-only", "workspace-write", "danger-full-access",
+            }
+        ):
+            detail = "sandbox_permissions must be read-only, workspace-write, or danger-full-access."
+            return {"data": {"error": detail, "sandbox_permissions": requested_mode,
+                             "sandbox_enforced": False},
+                    "content": [{"type": "text", "text": detail}], "is_error": True}
+        if requested_mode == "danger-full-access":
+            detail = "Docker 沙箱不能安全授予 danger-full-access；此次调用已拒绝。"
+            return {"data": {"error": detail, "sandbox_permissions": requested_mode,
+                             "sandbox_enforced": False},
+                    "content": [{"type": "text", "text": detail}], "is_error": True}
+        docker = shutil.which("docker") or "docker"
+        if requested_mode == "read-only":
+            # A running Docker container cannot change a bind mount from rw to
+            # ro for one exec. Run this call in a disposable container with a
+            # read-only workspace mount so the requested boundary is real.
+            argv = [docker, "run", "--rm", "--network", "none", "--mount",
+                    f"type=bind,source={workspace},target=/workspace,readonly",
+                    "-w", container_cwd, image, *command]
+        else:
+            argv = [docker, "exec", "-w", container_cwd, container, *command]
         started = time.monotonic()
         try:
             completed = await asyncio.to_thread(
@@ -132,8 +156,10 @@ class DockerSandboxManager:
             stderr, code = "命令超时", 124
         duration = round(time.monotonic() - started, 3)
         output = (stdout + stderr).replace("/workspace", str(workspace))
+        result_mode = requested_mode or "workspace-write"
         return {"data": {"command": " ".join(command), "cwd": str(cwd), "exit_code": code,
                          "stdout": stdout.replace("/workspace", str(workspace)),
                          "stderr": stderr.replace("/workspace", str(workspace)),
-                         "duration_seconds": duration, "state": "completed"},
+                         "duration_seconds": duration, "state": "completed",
+                         "sandbox_permissions": result_mode, "sandbox_enforced": True},
                 "content": [{"type": "text", "text": output}], "is_error": code != 0}

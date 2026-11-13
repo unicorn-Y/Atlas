@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -115,6 +116,32 @@ def _expand_root(value: Any, root: Path) -> Any:
     return value
 
 
+class _DisposerStack:
+    """Run plugin contribution cleanups once, in reverse registration order."""
+
+    def __init__(self) -> None:
+        self._items: list[Any] = []
+        self._disposed = False
+
+    def add(self, disposer: Any) -> None:
+        if callable(disposer):
+            self._items.append(disposer)
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+    def dispose(self) -> None:
+        if self._disposed:
+            return
+        self._disposed = True
+        for disposer in reversed(self._items):
+            try:
+                disposer()
+            except Exception as exc:  # noqa: BLE001 - one cleanup must not block others
+                log.warning("plugin.disposer_failed", error_type=type(exc).__name__)
+        self._items.clear()
+
+
 class PluginRuntime:
     """Manage plugin sources and expose their components to Atlas registries."""
 
@@ -126,6 +153,7 @@ class PluginRuntime:
         self._state: dict[str, Any] = {}
         self._enabled: dict[str, bool] = {}
         self._loaded: dict[str, dict[str, Any]] = {}
+        self._disposers: dict[str, _DisposerStack] = {}
         #: Bound dependencies remembered from ``load_all`` so ``reload`` can
         #: re-attach the same hook bus / capability registry without the caller
         #: having to pass them again.
@@ -701,6 +729,53 @@ class PluginRuntime:
         return [hook for config in configs for hook in parse_claude_hooks(config, source=str(root))]
 
     @staticmethod
+    def _codex_hook_specs(root: Path) -> list[dict[str, Any]]:
+        """Translate the supported Codex ``.codex/hooks.json`` subset.
+
+        Atlas exposes equivalent lifecycle points through ``HookBus``. Events
+        without an equivalent are ignored rather than attached to a misleading
+        hook point.
+        """
+        event_points = {
+            "UserPromptSubmit": "before_model",
+            "PreToolUse": "before_tool",
+            "PostToolUse": "after_tool",
+            "PreCompact": "before_compact",
+            "PostCompact": "after_compact",
+            "Stop": "agent_stop",
+            "SubagentStart": "subagent_start",
+            "SubagentStop": "subagent_end",
+        }
+        data = _read_json(root / ".codex" / "hooks.json")
+        hooks = data.get("hooks")
+        if not isinstance(hooks, dict):
+            return []
+        specs: list[dict[str, Any]] = []
+        for event, point in event_points.items():
+            groups = hooks.get(event)
+            if not isinstance(groups, list):
+                continue
+            for group in groups:
+                if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
+                    continue
+                matcher = group.get("matcher")
+                matcher = matcher.strip() if isinstance(matcher, str) else ""
+                for hook in group["hooks"]:
+                    if not isinstance(hook, dict) or hook.get("type") != "command":
+                        continue
+                    command = hook.get("command")
+                    if not isinstance(command, str) or not command.strip():
+                        continue
+                    expanded = command.replace("${CLAUDE_PLUGIN_ROOT}", root.resolve().as_posix())
+                    try:
+                        argv = shlex.split(expanded, posix=True)
+                    except ValueError:
+                        continue
+                    if argv:
+                        specs.append({"point": point, "command": argv, "matcher": matcher})
+        return specs
+
+    @staticmethod
     def _mcp_configs(root: Path, manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
         result = _read_json(root / ".mcp.json").get("mcpServers", {})
         result = dict(result) if isinstance(result, dict) else {}
@@ -1209,12 +1284,26 @@ class PluginRuntime:
     ) -> tuple[int, int]:
         """Drop everything one plugin registered; returns ``(capabilities, hooks)``."""
         owner = f"plugin:{name}"
-        removed = 0
-        if capabilities is not None and hasattr(capabilities, "unregister_source"):
-            removed = capabilities.unregister_source(owner)
-        hooks_cleared = 0
-        if hook_bus is not None and hasattr(hook_bus, "forget_owner"):
-            hooks_cleared = hook_bus.forget_owner(owner)
+        loaded = self._loaded.get(name)
+        disposer_stack = self._disposers.pop(name, None)
+        disposer = disposer_stack.dispose if disposer_stack is not None else None
+        if callable(disposer) and isinstance(loaded, dict):
+            removed = len(loaded.get("skills", [])) + len(loaded.get("commands", []))
+            hooks_cleared = int(loaded.get("hooks", 0) or 0)
+            disposer()
+            # Keep owner cleanup as a fail-safe for contributions registered by
+            # older plugin runtimes that did not provide individual disposers.
+            if capabilities is not None and hasattr(capabilities, "unregister_source"):
+                capabilities.unregister_source(owner)
+            if hook_bus is not None and hasattr(hook_bus, "forget_owner"):
+                hook_bus.forget_owner(owner)
+        else:
+            removed = 0
+            if capabilities is not None and hasattr(capabilities, "unregister_source"):
+                removed = capabilities.unregister_source(owner)
+            hooks_cleared = 0
+            if hook_bus is not None and hasattr(hook_bus, "forget_owner"):
+                hooks_cleared = hook_bus.forget_owner(owner)
         return removed, hooks_cleared
 
     async def reload(
@@ -1296,33 +1385,46 @@ class PluginRuntime:
         self, root: Path, *, plugin_name: str, hook_bus: Any,
         mcp_client: Any, capabilities: Any,
     ) -> dict[str, Any]:
-        loaded: dict[str, Any] = {"skills": [], "commands": [], "hooks": 0, "mcp": []}
+        disposers = _DisposerStack()
+        loaded: dict[str, Any] = {
+            "skills": [], "commands": [], "hooks": 0, "mcp": [],
+        }
         _, manifest = _manifest(root)
         if capabilities is not None:
             for skill in self._component_paths(root, manifest, "skills", root / "skills", directories=True):
                 content = (skill / "SKILL.md").read_text(encoding="utf-8", errors="replace")
                 loaded["skills"].append(skill.name)
+                capability_name = f"plugin.{plugin_name}.skill.{skill.name}"
                 capabilities.register(
-                    f"plugin.{plugin_name}.skill.{skill.name}", description=f"Skill from plugin {plugin_name}.",
+                    capability_name, description=f"Skill from plugin {plugin_name}.",
                     handler=lambda _inputs, _content=content: {"content": _content}, source=f"plugin:{plugin_name}",
                 )
+                disposers.add(lambda _name=capability_name: capabilities.unregister(_name))
             for command in self._commands(root, manifest):
                 loaded["commands"].append(command["name"])
                 content = command["content"]
                 if content is None and command["path"]:
                     content = Path(command["path"]).read_text(encoding="utf-8", errors="replace")
+                capability_name = f"plugin.{plugin_name}.command.{command['name']}"
                 capabilities.register(
-                    f"plugin.{plugin_name}.command.{command['name']}", description=str(command["metadata"].get("description") or f"Command prompt from plugin {plugin_name}."),
+                    capability_name, description=str(command["metadata"].get("description") or f"Command prompt from plugin {plugin_name}."),
                     handler=lambda _inputs, _content=content: {"prompt": _content}, source=f"plugin:{plugin_name}",
                 )
-        for spec in self._legacy_hook_specs(root):
+                disposers.add(lambda _name=capability_name: capabilities.unregister(_name))
+        for spec in [*self._legacy_hook_specs(root), *self._codex_hook_specs(root)]:
             point = str(spec.get("point", ""))
             command = spec.get("command")
             if point not in HOOK_POINTS or not isinstance(command, list) or not command:
                 continue
             argv = [str(arg) for arg in command]
+            matcher = str(spec.get("matcher") or "").strip()
 
-            def _handler(_argv: list[str] = argv, **payload: Any) -> None:
+            def _handler(_argv: list[str] = argv, _matcher: str = matcher,
+                         **payload: Any) -> None:
+                if _matcher:
+                    tool_name = payload.get("tool_name", payload.get("toolName", payload.get("tool")))
+                    if tool_name != _matcher:
+                        return
                 subprocess.run(_argv, input=json.dumps(payload, ensure_ascii=False, default=str), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, check=False)
 
             # Tagged so ``reload`` can clear exactly this plugin's previous
@@ -1331,6 +1433,7 @@ class PluginRuntime:
             _handler.__atlas_owner__ = f"plugin:{plugin_name}"
             if hook_bus is not None:
                 hook_bus.register(point, _handler)
+                disposers.add(lambda _point=point, _handler=_handler: hook_bus.unregister(_point, _handler))
             loaded["hooks"] += 1
         if mcp_client is not None:
             from atlas.tools.mcp_client import MCPServerConfig
@@ -1348,4 +1451,6 @@ class PluginRuntime:
                 )
                 await mcp_client._connect_server(config)
                 loaded["mcp"].append(server_name)
+        loaded["disposer_count"] = len(disposers)
+        self._disposers[plugin_name] = disposers
         return loaded

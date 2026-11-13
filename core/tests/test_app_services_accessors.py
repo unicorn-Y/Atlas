@@ -86,8 +86,8 @@ def test_two_containers_do_not_share_projections() -> None:
     first.session_projections.register(
         "demo", lambda key, _s=None: key, depends_on=("run.completed",)
     )
-    assert list(first.session_projections.names()) == ["demo"]
-    assert list(second.session_projections.names()) == []
+    assert list(first.session_projections.names()) == ["demo", "session.summary"]
+    assert list(second.session_projections.names()) == ["session.summary"]
 
 
 def test_unwired_and_wired_partition_the_declared_fields() -> None:

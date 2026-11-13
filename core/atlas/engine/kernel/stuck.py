@@ -52,6 +52,38 @@ class StuckDecision:
     message: str
 
 
+class RepeatToolReminder:
+    """Advisory reminder for a tool called repeatedly with identical arguments.
+
+    Results are intentionally excluded from the key: a changing error or output
+    must not hide the fact that the agent is issuing the same request again.
+    """
+
+    THRESHOLDS = (3, 5, 8)
+
+    def __init__(self) -> None:
+        self._last_key: str | None = None
+        self._count = 0
+        self._notified: set[int] = set()
+
+    def observe(self, name: str, arguments: dict[str, Any]) -> str | None:
+        key = _fingerprint([str(name), arguments])
+        if key == self._last_key:
+            self._count += 1
+        else:
+            self._last_key = key
+            self._count = 1
+            self._notified.clear()
+        if self._count not in self.THRESHOLDS or self._count in self._notified:
+            return None
+        self._notified.add(self._count)
+        return (
+            f"You have called {name} with the same arguments {self._count} times in a row. "
+            "Review the results and change the request if needed. This is a reminder; "
+            "the call is not blocked."
+        )
+
+
 class StuckDetector:
     def __init__(self, *, action_observation: int = 4, action_error: int = 3,
                  monologue: int = 3, alternating_pattern: int = 6) -> None:

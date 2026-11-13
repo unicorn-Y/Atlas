@@ -281,7 +281,7 @@ def _sql_session_last_active_by_id(session_id_expr: str) -> str:
         f"(SELECT started_at FROM sessions _act_s WHERE _act_s.id = {session_id_expr})")
 
 
-SCHEMA_VERSION = 31
+SCHEMA_VERSION = 32
 
 # Auto-maintenance VACUUMs only above this freelist fraction; below it a rewrite costs more I/O than it returns.
 # Auto-maintenance only VACUUMs when at least this fraction of the database file is reclaimable (``PRAGMA
@@ -446,6 +446,25 @@ CREATE TABLE IF NOT EXISTS sessions (
     FOREIGN KEY (parent_session_id) REFERENCES sessions(id),
     FOREIGN KEY (system_prompt_hash) REFERENCES system_prompts(hash)
 );
+
+-- Append-only lifecycle facts live beside the transcript. In particular, fork
+-- seed boundaries must not be encoded as synthetic rows in `messages`, whose
+-- semantics are owned by the transcript readers and migration/compaction paths.
+CREATE TABLE IF NOT EXISTS session_events (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS session_events_no_update
+BEFORE UPDATE ON session_events BEGIN
+    SELECT RAISE(ABORT, 'session_events is append-only');
+END;
+CREATE TRIGGER IF NOT EXISTS session_events_no_delete
+BEFORE DELETE ON session_events BEGIN
+    SELECT RAISE(ABORT, 'session_events is append-only');
+END;
 
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

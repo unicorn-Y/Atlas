@@ -277,10 +277,14 @@ class RunRequest:
     agent_role: str = "general"
     agent_depth: int = 0
     agent_type: str = "general"
+    agent_preset_id: str = "default"
+    agent_preset_capabilities: dict[str, Any] | None = None
+    permission_preset: str = "ask"
     moa: bool = False
     workspace_rules: list[dict[str, Any]] | None = None
     ignore_workspace_rules: bool = False
     mode: str = "act"
+    mode_explicit: bool = False
     tool_allow: list[str] | None = None
     tool_deny: list[str] | None = None
     read_only: bool = False
@@ -299,6 +303,71 @@ class RunRequest:
     # Host-registered content transforms applied to each tool result before the
     # model sees it. ``None`` keeps the kernel's behaviour byte-identical.
     tool_result_finalizers: Any = None
+    inbox: Any = None
+
+
+async def _apply_agent_preset_capabilities(agent, request: RunRequest, runtime) -> str | None:
+    """Apply a resolved agent preset before any model-facing work begins."""
+    capabilities = request.agent_preset_capabilities
+    if capabilities is None:
+        if request.agent_preset_id != "default":
+            return f"Agent preset {request.agent_preset_id!r} has no resolved capabilities."
+        return None
+    if not isinstance(capabilities, dict):
+        return "Agent preset capabilities must be an object."
+
+    tools = capabilities.get("tools")
+    if not isinstance(tools, dict) or not isinstance(tools.get("allow_all"), bool):
+        return "Agent preset tool capabilities are malformed."
+    allow = tools.get("allow")
+    deny = tools.get("deny")
+    skills = capabilities.get("skills")
+    mcp_servers = capabilities.get("mcp_servers")
+    mode = capabilities.get("mode")
+    model = capabilities.get("model")
+    if (not isinstance(allow, list) or any(not isinstance(item, str) or not item for item in allow)
+            or not isinstance(deny, list) or any(not isinstance(item, str) or not item for item in deny)
+            or not isinstance(skills, list) or any(not isinstance(item, str) or not item for item in skills)
+            or not isinstance(mcp_servers, list)
+            or any(not isinstance(item, str) or not item for item in mcp_servers)
+            or mode not in {"act", "plan"} or not isinstance(model, str) or not model):
+        return "Agent preset capabilities are malformed."
+
+    if not tools["allow_all"]:
+        from atlas.engine.tool_permissions import intersect_tool_allow
+
+        request.tool_allow = intersect_tool_allow(request.tool_allow, allow)
+    request.tool_deny = sorted(set(request.tool_deny or []) | set(deny))
+    runtime.tool_allow = request.tool_allow
+    runtime.tool_deny = request.tool_deny
+    runtime.mcp_server_allow = list(dict.fromkeys(mcp_servers))
+
+    if not request.mode_explicit:
+        request.mode = mode
+        runtime.mode = mode
+    if not request.model and model != "inherit":
+        request.model = model
+
+    existing = {item.get("name") for item in request.active_skill_instructions or []
+                if isinstance(item, dict)}
+    for name in skills:
+        if name in existing:
+            continue
+        manager = getattr(agent, "_skills", None)
+        activator = getattr(manager, "activate_for_model", None)
+        if not callable(activator):
+            return f"Agent preset skill {name!r} cannot be activated safely."
+        try:
+            content = await activator(name)
+        except Exception as exc:
+            return f"Agent preset skill {name!r} activation failed: {exc}"
+        if not isinstance(content, str) or not content.strip():
+            return f"Agent preset skill {name!r} is unavailable."
+        request.active_skill_instructions = [*(request.active_skill_instructions or []), {
+            "name": name, "content": content,
+        }]
+        existing.add(name)
+    return None
 
 
 @dataclass
@@ -451,7 +520,10 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
         steer_queue=callbacks.steer_queue, input_callback=callbacks.input_callback,
         workspace=request.workspace, workspace_trusted=request.workspace_trusted,
         agent_role=request.agent_role, agent_depth=request.agent_depth,
-        agent_type=request.agent_type, mode=request.mode,
+        agent_type=request.agent_type, agent_preset_id=request.agent_preset_id,
+        agent_preset_capabilities=request.agent_preset_capabilities,
+        permission_preset=request.permission_preset, mode=request.mode,
+        mode_explicit=request.mode_explicit,
         memory_scope_id=request.memory_scope_id,
         moa_enabled=moa_enabled,
         tool_allow=request.tool_allow, tool_deny=request.tool_deny or [],
@@ -472,6 +544,14 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
         subtask_group_completed=callbacks.subtask_group_completed,
         parent_process_event_callback=callbacks.parent_process_event_callback,
     )
+    if request.conversation_id and not request.ephemeral and not request.worker:
+        from atlas.engine.kernel.inbox import DurableInbox
+
+        runtime.inbox = request.inbox or DurableInbox(
+            DATA_ROOT / "engine", request.conversation_id,
+        )
+        await runtime.inbox.restore()
+        await runtime.todo_store.bind_session_events(DATA_ROOT / "engine", request.conversation_id)
     # The kernel reads this off the run context; carrying it here is what makes a
     # host-registered finalizer reach an actual run instead of sitting in
     # AppServices unused.
@@ -479,6 +559,12 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
     from atlas.tools.acp_fs import current as current_acp_filesystem
     runtime.acp_filesystem = current_acp_filesystem()
     state.runtime = runtime
+
+    preset_error = await _apply_agent_preset_capabilities(agent, request, runtime)
+    if preset_error:
+        yield {"type": "error", "category": "agent_preset", "detail": preset_error}
+        state.abort = True
+        return
 
     # Resolve model
     runtime.model = request.model or agent._model_mgr.current_model

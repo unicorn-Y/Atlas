@@ -124,6 +124,81 @@ def seed_profiles(store: TomlRecordStore) -> None:
             }})
 
 
+DEFAULT_AGENT_PRESETS = [
+    {
+        "id": "default", "name": "默认 Agent", "description": "继承当前会话工具权限",
+        "capabilities": {
+            "tools": {"allow": [], "allow_all": True, "deny": []}, "skills": [], "mcp_servers": [],
+            "model": "inherit", "mode": "act",
+        },
+    },
+]
+
+
+class AgentPresetStore(TomlRecordStore):
+    """Revisioned agent capability sets, stored independently from permission policy."""
+
+    def __init__(self, root: Path) -> None:
+        super().__init__(root, "agent-presets")
+
+    @staticmethod
+    def _names(value: Any, label: str) -> list[str]:
+        if not isinstance(value, list) or any(not isinstance(item, str) or not item.strip() for item in value):
+            raise ValueError(f"{label} must be a list of non-empty strings")
+        return list(dict.fromkeys(item.strip() for item in value))
+
+    @classmethod
+    def _capabilities(cls, value: Any) -> dict[str, Any]:
+        raw = value if isinstance(value, dict) else {}
+        tools = raw.get("tools") if isinstance(raw.get("tools"), dict) else {}
+        allow = tools.get("allow")
+        allow_all = bool(tools.get("allow_all", allow is None))
+        if allow_all:
+            allow = None
+        if allow is not None:
+            allow = cls._names(allow, "tools.allow")
+        deny = cls._names(tools.get("deny", []), "tools.deny")
+        skills = cls._names(raw.get("skills", []), "skills")
+        mcp_servers = cls._names(raw.get("mcp_servers", []), "mcp_servers")
+        model = str(raw.get("model") or "inherit")
+        mode = str(raw.get("mode") or "act")
+        if mode not in {"act", "plan"}:
+            raise ValueError("mode must be act or plan")
+        return {
+            "tools": {"allow": allow or [], "allow_all": allow_all, "deny": deny}, "skills": skills,
+            "mcp_servers": mcp_servers, "model": model, "mode": mode,
+        }
+
+    def put(self, value: dict[str, Any]) -> dict[str, Any]:
+        preset_id = str(value.get("id") or "")
+        current = self.get(preset_id) if preset_id else None
+        try:
+            revision = max(0, int((current or {}).get("revision", 0))) + 1
+        except (TypeError, ValueError):
+            revision = 1
+        record = {
+            **value,
+            "name": str(value.get("name") or preset_id),
+            "description": str(value.get("description") or ""),
+            "capabilities": self._capabilities(value.get("capabilities")),
+            "revision": revision,
+        }
+        return super().put(record)
+
+    def seed(self) -> None:
+        for preset in DEFAULT_AGENT_PRESETS:
+            if self.get(preset["id"]) is None:
+                self.put(preset)
+
+    def resolve(self, preset_id: str) -> dict[str, Any]:
+        """Return a preset's normalized capability set; never silently fall back."""
+        self.seed()
+        record = self.get(str(preset_id or ""))
+        if record is None:
+            raise KeyError(f"unknown agent preset: {preset_id}")
+        return self._capabilities(record.get("capabilities"))
+
+
 class WorktreeService:
     def __init__(self, base_dir: Path) -> None:
         self.base_dir = base_dir

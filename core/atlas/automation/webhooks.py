@@ -9,7 +9,31 @@ import secrets
 import sqlite3
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Protocol
+
+
+@dataclass(frozen=True)
+class WebhookSessionRequest:
+    """Authenticated, parsed request passed from a provider to automation dispatch."""
+
+    automation_id: str
+    payload: dict[str, Any]
+
+
+class WebhookAuthenticationError(ValueError):
+    """Provider could not authenticate the inbound request."""
+
+
+class WebhookPayloadError(ValueError):
+    """An authenticated webhook did not contain a JSON object."""
+
+
+class WebhookProvider(Protocol):
+    def authenticate(
+        self, automation_id: str, timestamp: str, signature: str, body: bytes,
+    ) -> WebhookSessionRequest: ...
 
 
 class WebhookCredentials:
@@ -82,6 +106,26 @@ class WebhookCredentials:
         return True
 
 
+class HmacWebhookProvider:
+    """Adapter for Atlas's timestamped SHA-256 webhook signature contract."""
+
+    def __init__(self, credentials: WebhookCredentials):
+        self.credentials = credentials
+
+    def authenticate(
+        self, automation_id: str, timestamp: str, signature: str, body: bytes,
+    ) -> WebhookSessionRequest:
+        if not self.credentials.verify(automation_id, timestamp, signature, body):
+            raise WebhookAuthenticationError("invalid or replayed webhook signature")
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise WebhookPayloadError("webhook body must be a JSON object") from exc
+        if not isinstance(payload, dict):
+            raise WebhookPayloadError("webhook body must be a JSON object")
+        return WebhookSessionRequest(automation_id=automation_id, payload=payload)
+
+
 _credentials: WebhookCredentials | None = None
 
 
@@ -92,4 +136,12 @@ def get_webhook_credentials() -> WebhookCredentials:
     return _credentials
 
 
-__all__ = ["WebhookCredentials", "get_webhook_credentials"]
+def get_webhook_provider(credentials: WebhookCredentials | None = None) -> WebhookProvider:
+    return HmacWebhookProvider(credentials or get_webhook_credentials())
+
+
+__all__ = [
+    "HmacWebhookProvider", "WebhookAuthenticationError", "WebhookCredentials",
+    "WebhookPayloadError", "WebhookProvider", "WebhookSessionRequest",
+    "get_webhook_credentials", "get_webhook_provider",
+]

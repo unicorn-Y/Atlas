@@ -3,15 +3,161 @@
 from __future__ import annotations
 
 import logging
+import inspect
+import json
 import re
 import shlex
+import sqlite3
+import threading
+import uuid
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
 import yaml
 
 logger = logging.getLogger(__name__)
+
+
+class CommandInvocationStore:
+    """Append-only durable log for human slash-command execution events."""
+
+    def __init__(self, path: str | Path):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as db:
+            db.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS command_invocation_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    invocation_id TEXT NOT NULL,
+                    event TEXT NOT NULL CHECK(event IN ('command/run', 'command/done')),
+                    command_name TEXT NOT NULL,
+                    input_json TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT '',
+                    result_json TEXT NOT NULL DEFAULT '',
+                    error TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                );
+                CREATE TRIGGER IF NOT EXISTS command_events_no_update
+                BEFORE UPDATE ON command_invocation_events
+                BEGIN SELECT RAISE(ABORT, 'command events are append-only'); END;
+                CREATE TRIGGER IF NOT EXISTS command_events_no_delete
+                BEFORE DELETE ON command_invocation_events
+                BEGIN SELECT RAISE(ABORT, 'command events are append-only'); END;
+                """
+            )
+
+    def _connect(self) -> sqlite3.Connection:
+        return sqlite3.connect(self.path, timeout=5)
+
+    def command_run(self, command_name: str, arguments: dict[str, Any]) -> str:
+        invocation_id = uuid.uuid4().hex
+        with self._connect() as db:
+            db.execute(
+                "INSERT INTO command_invocation_events "
+                "(invocation_id,event,command_name,input_json,created_at) VALUES (?,?,?,?,?)",
+                (invocation_id, "command/run", command_name,
+                 json.dumps(arguments, ensure_ascii=False, default=str),
+                 datetime.now(UTC).isoformat()),
+            )
+        return invocation_id
+
+    def command_done(
+        self, invocation_id: str, *, status: str, result: Any = None, error: str = "",
+    ) -> None:
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT command_name,input_json FROM command_invocation_events "
+                "WHERE invocation_id=? AND event='command/run' ORDER BY event_id LIMIT 1",
+                (invocation_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"unknown command invocation: {invocation_id}")
+            db.execute(
+                "INSERT INTO command_invocation_events "
+                "(invocation_id,event,command_name,input_json,status,result_json,error,created_at) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (invocation_id, "command/done", row[0], row[1], status,
+                 json.dumps(result, ensure_ascii=False, default=str) if result is not None else "",
+                 error, datetime.now(UTC).isoformat()),
+            )
+
+    def events(self, invocation_id: str | None = None) -> list[dict[str, Any]]:
+        with self._connect() as db:
+            db.row_factory = sqlite3.Row
+            if invocation_id is None:
+                rows = db.execute("SELECT * FROM command_invocation_events ORDER BY event_id").fetchall()
+            else:
+                rows = db.execute(
+                    "SELECT * FROM command_invocation_events WHERE invocation_id=? ORDER BY event_id",
+                    (invocation_id,),
+                ).fetchall()
+        return [dict(row) for row in rows]
+
+
+@dataclass(frozen=True)
+class RegisteredSlashCommand:
+    name: str
+    description: str
+    input: dict[str, Any]
+    handler: Callable[[dict[str, Any]], Any]
+    registration_id: str
+
+
+class SlashCommandRegistry:
+    """Runtime registry for plugin commands invoked directly by a human."""
+
+    def __init__(self):
+        self._commands: dict[str, RegisteredSlashCommand] = {}
+        self._lock = threading.RLock()
+
+    def register(
+        self, name: str, description: str, input: dict[str, Any],
+        handler: Callable[[dict[str, Any]], Any],
+    ) -> Callable[[], None]:
+        command_name = name.strip()
+        if not command_name or not callable(handler):
+            raise ValueError("slash command requires a name and callable handler")
+        command = RegisteredSlashCommand(command_name, description, dict(input), handler, uuid.uuid4().hex)
+        with self._lock:
+            if command_name in self._commands:
+                raise ValueError(f"slash command already registered: {command_name}")
+            self._commands[command_name] = command
+
+        def dispose() -> None:
+            with self._lock:
+                current = self._commands.get(command_name)
+                if current and current.registration_id == command.registration_id:
+                    self._commands.pop(command_name, None)
+
+        return dispose
+
+    def list(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [
+                {"name": item.name, "description": item.description, "input": dict(item.input)}
+                for item in sorted(self._commands.values(), key=lambda value: value.name.casefold())
+            ]
+
+    async def invoke(
+        self, name: str, arguments: dict[str, Any], *, event_store: CommandInvocationStore,
+    ) -> Any:
+        with self._lock:
+            command = self._commands.get(name)
+        if command is None:
+            raise KeyError(f"unknown slash command: {name}")
+        invocation_id = event_store.command_run(command.name, arguments)
+        try:
+            result = command.handler(arguments)
+            if inspect.isawaitable(result):
+                result = await result
+        except Exception as exc:
+            event_store.command_done(invocation_id, status="error", error=str(exc))
+            raise
+        event_store.command_done(invocation_id, status="ok", result=result)
+        return result
 
 
 @dataclass(frozen=True)
@@ -179,10 +325,17 @@ def render_user_command(
     command: UserCommand,
     arguments: str = "",
     *,
+    invocation_source: str = "user",
     recipes: Sequence[dict[str, Any]] = (),
     recipe_renderer: Callable[[dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
 ) -> RenderedCommand:
     """Load a selected body and expand Claude positional placeholders."""
+    if invocation_source not in {"user", "model"}:
+        raise ValueError("invocation_source must be 'user' or 'model'")
+    if invocation_source == "user" and command.metadata.get("user-invocable") is False:
+        raise PermissionError("command does not allow user invocation")
+    if invocation_source == "model" and command.metadata.get("disable-model-invocation") is True:
+        raise PermissionError("command does not allow model invocation")
     if command.recipe_id:
         recipe = next((item for item in recipes if str(item.get("id")) == command.recipe_id), None)
         if recipe is None:

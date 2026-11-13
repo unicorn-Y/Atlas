@@ -31,35 +31,35 @@
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
 | E1 | 只追加会话事件日志 = 唯一真源；`deriveMessages()` 派生模型历史 | `packages/core/session/src/index.ts:798,819`；`docs/subsystems/session.md` | `engine/session_sync.py:385-415` 直接写 role 行；run 事实走 `loop.py:603` JSONL 且**内容被抹掉**（`logs.py:104-116` 存 `{"length":N}`） | ABSENT |
-| E2 | turn / step 两级生命周期（turn=一条用户消息，step=一次模型调用），`turn/end` 带 typed reason | `packages/core/agent-loop/src/agent.ts:298,400`；`docs/agent-lifecycle.md` | `loop.py:1308` 单层 `for turn_index in range(max_turns)`，run=DSH turn，迭代=DSH step；`max_turns` 实为 step 上限 | PRESENT-WEAKER |
-| E3 | 工具执行流水线三瀑布：pre-execute → execute → post-execute → result，带 typed decision | `packages/core/tools/src/index.ts:1375,1499,1151,1787,1838`；`docs/tool-execution-pipeline.md` | `loop.py:900-1050` 单闭包：schema → plan gate → hook → approval → dispatch，无 post-execute 变换、无 finalizer、无 result 观察者 | ABSENT（作为流水线） |
+| E2 | turn / step 两级生命周期（turn=一条用户消息，step=一次模型调用），`turn/end` 带 typed reason | `packages/core/agent-loop/src/agent.ts:298,400`；`docs/agent-lifecycle.md` | typed terminal reason 已写入 run journal/result；完整 turn/step state machine 和 per-step end event 仍缺 | PRESENT-WEAKER |
+| E3 | 工具执行流水线三瀑布：pre-execute → execute → post-execute → result，带 typed decision | `packages/core/tools/src/index.ts:1375,1499,1151,1787,1838`；`docs/tool-execution-pipeline.md` | 有 PreToolUse/PostToolUse hooks 和 result finalizers；完整 typed decision/waterfall/result observer 尚未统一 | PRESENT-WEAKER |
 
 ### P1
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
 | E4 | 每工具强制输出契约 `{schema, render, presentationMeta}`，成功即校验 | `packages/core/tools/src/index.ts:214,1838` | 处理器自由返回 `{content,data,is_error}`；只校验**输入** `tools.py:172` | ABSENT |
-| E5 | 两有序表 durable inbox：`next-turn` / `next-step`，`inject` 不唤醒 | `packages/core/agent-loop/src/inbox.ts:74,109` | 单 `steer_queue`（`loop.py:1297-1302`），无 inject-without-wake | PRESENT-WEAKER |
-| E6 | 请求信封落日志 + 工具增删发 developer 消息告知模型 | `agent.ts:626-700` | 仅 `tool_snapshot.sha256`（`loop.py:2178-2190`），池变化对模型不可见 | ABSENT |
+| E5 | 两有序表 durable inbox：`next-turn` / `next-step`，`inject` 不唤醒 | `packages/core/agent-loop/src/inbox.ts:74,109` | `engine/kernel/inbox.py` 持久化两条 lane 并回放/确认；`runtime_ws_router.py` inject 分支写 inbox，不唤醒 steer 队列 | ✅ 本轮关闭 |
+| E6 | 请求信封落日志 + 工具增删发 developer 消息告知模型 | `agent.ts:626-700` | `request_envelope.py` 记录请求摘要/角色/长度/工具名；`loop.py` 在工具池变化时发 developer 消息 | ✅ 本轮关闭 |
 | E7 | 并发安全按**调用参数**判定，派发前**复检**，不支持者成 barrier | `packages/core/agent-loop/src/tool-calls.ts:60,122,199` | `tools.py:610` 静态名表 + `read_only` 回调；分类不复检 | ✅ **本次已修**（参数感知 + 派发前复检 + barrier） |
-| E8 | 上下文压缩在 **step 边界**按实测压力触发 + 溢出重试需 surface 代次前进 | `docs/subsystems/compaction.md`；`compaction-basic/src/config.ts:20,75,105` | `loop.py:1566-1570` 仅 turn 开始前；溢出强制压缩一次无代次守卫 | PRESENT-WEAKER |
+| E8 | 上下文压缩在 **step 边界**按实测压力触发 + 溢出重试需 surface 代次前进 | `docs/subsystems/compaction.md`；`compaction-basic/src/config.ts:20,75,105` | `loop.py` 每次模型调用前检查压缩；overflow 只有 provider history 摘要前进时才重试 | ✅ 本轮关闭 |
 | E9 | plan 模式：durable `plan/mode` 事件 + `plan:policy` 提示段 + 拒绝时带用户反馈 | `packages/plan/plan-mode/src/index.ts:52,217,425` | `PlanMode.prompt()` **从未被调用**；引导只按 run 初始 mode 注入一次 | ✅ **本次已修**（每轮按 live mode 重建 + 共享 PlanMode 实例） |
-| E10 | todo 每次写入都是 durable 事件，重启/叉分/未压缩也存活 | `packages/todo/tool-todo/src/index.ts:80,118` | 仅 UI 事件 `run.todos`；持久化只搭车 compaction manifest | PRESENT-WEAKER |
+| E10 | todo 每次写入都是 durable 事件，重启/叉分/未压缩也存活 | `packages/todo/tool-todo/src/index.ts:80,118` | `TodoStore` 将 `todo.updated` 快照写入 `session_events`，新 run 从最新快照恢复，写入失败会回滚内存状态 | ✅ 本轮关闭 |
 | E11 | goal 变更 CAS `{id, revision}`，过期拒绝；轮数上限默认 256 | `packages/goal/goal/src/index.ts:244` | `engine/goals.py:278` 整块 JSON 覆写，无版本检查；`max_turns` 默认 20 | PRESENT-WEAKER |
-| E12 | 审批关闭四值：`allowed-once`/`rejected`/`cancelled`/`unavailable`，全部 fail-closed，且 `ask|never` 在服务内先于任何 answerer 生效 | `packages/interaction/user-approval/src/index.ts:100,225-232` | 结果只有 `allow` / 其它；理由临时拼；`approval.required/responded` 只走实时 WS，不进 transcript | PRESENT-WEAKER |
-| E13 | 权限预设同时绑定 **沙箱模式 + 审批策略**，不匹配时派生 `custom` | `packages/interaction/permission-presets/src/index.ts:189-194` | 四个预设只映射单个 `permission_mode` 字符串（`approval_policy.py:32-60`），无沙箱维度 | PRESENT-WEAKER |
+| E12 | 审批关闭四值：`allowed-once`/`rejected`/`cancelled`/`unavailable`，全部 fail-closed，且 `ask|never` 在服务内先于任何 answerer 生效 | `packages/interaction/user-approval/src/index.ts:100,225-232` | 审批 asked/decided 通过 append-only `session_events` 持久化；ask/never 策略先于 answerer；失败关闭 | ✅ 本轮关闭 |
+| E13 | 权限预设同时绑定 **沙箱模式 + 审批策略**，不匹配时派生 `custom` | `packages/interaction/permission-presets/src/index.ts:189-194` | `approval_policy.py` 预设绑定 permission/sandbox/approval 三维；RunState 和 resume 保留三维设置，不匹配时派生 `custom` | ✅ 本轮关闭 |
 | E14 | OS 级沙箱按**每次调用**给 `read-only`/`workspace-write`/`danger-full-access`，并报告实际执行等级 | `packages/sandbox/sandbox-local/src/profiles.ts:16`；`docs/subsystems/sandbox.md` | 只有整 run 的 Docker 容器或主机 + `allowed_paths` 编辑器检查；`full_access` 下 shell 无文件效果边界 | ABSENT |
-| E15 | 持久 PTY：owner 鉴权、`waitReason` 四值（stdin_read/inferred_idle/timeout/session_exit）、有界回滚 | `packages/experimental/tool-terminal/src/index.ts:166-395` | `local_execution.py:1596-1631` 有 pty 但无 owner 检查、无 waitReason 分类 | PRESENT-WEAKER |
+| E15 | 持久 PTY：owner 鉴权、`waitReason` 四值（stdin_read/inferred_idle/timeout/session_exit）、有界回滚 | `packages/experimental/tool-terminal/src/index.ts:166-395` | `local_execution.py` 按 run owner 隔离进程读写/取消，并返回 `stdin_read` / `inferred_idle` / `timeout` / `session_exit` | ✅ 本轮关闭 |
 | E16 | 统一后台作业注册表：`job_output/list/kill`，256KiB 环形缓冲，settle 后 16KiB，每 owner 最多 10 个 | `packages/jobs/jobs-local/src/index.ts:33-42,128` | `ExecManager` 只管终端（`exec.py:181`，上限 64）；后台 subagent 与后台 shell 取回路径完全不同 | PRESENT-WEAKER |
-| E17 | 子代理统一激活：能力声明校验、`toolFilter` 真删且拒执行、fork 子（继承父已完成前缀）、persona | `packages/subagent/tool-subagent/src/index.ts:96,171` | `delegate_task/parallel` 有 output_schema/深度/权限降级/worktree，但**每个子代理都从裸提示起步**，缺 fork 与 persona | PRESENT-WEAKER |
-| E18 | 工具内请求沙箱升级：`sandbox_permissions` + `justification`，按调用审批，拒绝不动既有策略 | `packages/core/tools/src/ptc.ts:387-405` | 模型无法为单次调用申请更宽权限；`request_permissions` 只问人、返回字符串，工具层不检查 | ABSENT |
+| E17 | 子代理统一激活：能力声明校验、`toolFilter` 真删且拒执行、fork 子（继承父已完成前缀）、persona | `packages/subagent/tool-subagent/src/index.ts:96,171` | 有 delegate 工具 schema/深度/权限降级/worktree；仍缺 fork 已完成上下文和 persona 的完整激活路径 | PRESENT-WEAKER |
+| E18 | 工具内请求沙箱升级：`sandbox_permissions` + `justification`，按调用审批，拒绝不动既有策略 | `packages/core/tools/src/ptc.ts:387-405` | 单次 justification/approval 已接入；Docker 有 per-call 模式，host executor 缺少可执行隔离时 fail-closed | PRESENT-WEAKER |
 
 ### P2
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
 | E19 | `concludeTurn()`：工具结果可声明"本轮结束" | `packages/core/tools/src/index.ts:435,1428,1860` | 无；总要再付一次模型往返 | ABSENT |
-| E20 | 重复调用提醒：按 `(name, canonical_args)` 连续相同判定，阈值 [3,5,8]，只提醒不否决 | `packages/guard/repeat-tool-reminder/src/index.ts:44,58` | `stuck.py:55` 仍把观测一起哈希，同调用不同错误文本 → 看不见 | PRESENT-WEAKER |
+| E20 | 重复调用提醒：按 `(name, canonical_args)` 连续相同判定，阈值 [3,5,8]，只提醒不否决 | `packages/guard/repeat-tool-reminder/src/index.ts:44,58` | `stuck.py` 按连续相同工具名和规范化参数在第 3/5/8 次发提醒，不阻止调用，不纳入结果文本 | ✅ 本轮关闭 |
 | E21 | 工作目录 per-session durable `working-directory/change`，沙箱写根不随之移动 | `docs/subsystems/working-directory.md` | 工作区固定 per run；模型只能求用户改 | ABSENT |
 | E22 | Agent Teams：root 范围 roster、steer-only 消息、任务 DAG per-mutation revision CAS、`blockedBy` 无环、`waitForChange` | `packages/experimental/agent-team/src/index.ts:135-199` | 存储都在（`groups/store.py`、`kanban.py:15-190`、`peer_inbox.py`），但**没有作为模型工具暴露** | ABSENT（in-loop） |
 | E23 | Workflow：模型写编排**脚本**（`agent()`/`parallel()`/`pipeline()`） | `packages/workflow/workflow-ptc/src/index.ts:109` | `workflow` 工具只从目标规划 DAG，模型不能表达自定义控制流 | PRESENT-WEAKER |
@@ -92,19 +92,19 @@
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| S3 | 会话格式版本 + 相邻迁移链 v0→v4；读到**更新**版本必须拒绝并指出路径 | `packages/core/session/src/types.ts:89`；`session-format/src/chain.ts:41` | `SCHEMA_VERSION = 31`，只有 `current_version < N` 迁移门（`atlas_state_schema.py:1008`）；**没有 `>` 拒绝**——旧构建开新 DB 会直接跑下去 | PRESENT-WEAKER |
+| S3 | 会话格式版本 + 相邻迁移链 v0→v4；读到**更新**版本必须拒绝并指出路径 | `packages/core/session/src/types.ts:89`；`session-format/src/chain.ts:41` | `SCHEMA_VERSION = 32`；`atlas_state_schema.py` 对更高版本抛 `SchemaTooNewError` 并给出 DB 路径 | ✅ 本轮关闭 |
 | S4 | 崩溃修复是 reader 侧补 closer（含 `turn/end{interrupted}`），不是重写 transcript | `packages/core/session/src/repair.ts:53` | `loop.py:740-745,2497-2502` 写合成**内容行**，后续读者无法识别为合成 | PRESENT-WEAKER |
 | S5 | handle 式持久化：read/append/flush/close，单一写者，跨进程 kernel lease | `session-persistence/src/handle.ts:59,97,109` | WAL + busy_timeout + TTL lease（`atlas_state_common.py:569-582`）；TTL 到期即放开，非进程死亡释放 | PRESENT-WEAKER |
-| S6 | checkpoint 三屏障 fail-closed，写失败就阻断派发 | `session-checkpoint-policy/README.md` | `run_checkpoints.py:153,167` 明写 "Never raises"，失败静默丢恢复点 | PRESENT-WEAKER |
+| S6 | checkpoint 三屏障 fail-closed，写失败就阻断派发 | `session-checkpoint-policy/README.md` | `require_checkpoint()` 在阶段边界、工具派发前和工具结果持久化后失败即抛错，kernel 阻断继续执行 | ✅ 本轮关闭 |
 | S7 | 压缩 bracket 进日志，`summary` 记 shadowed seqs / token / provider / model，可重建 | `packages/compaction/compaction/src/types.ts:24,34,72` | 只有 run-log 一行 + DB 行锁 TTL 300s | PRESENT-WEAKER |
 | S9 | 免模型 tool-result 剪枝：8192 阈值 / 4096 头 / 1024 尾，落**遮蔽替换节点** | `compaction-tool-result-pruner/src/config.ts:11-13` | `context.py:315-375` 头尾各 2000，内存标记，全文写文件；**不落盘、resume 不重放** | PRESENT-WEAKER |
-| S11 | 投影注册表：纯单元、`stateVersion`、有线视图 schema、`asOfSeq` 快照 | `session-projection/src/index.ts:92` | `session_projections.py:96,161,204` 有 register/get/LRU，但**零个单元注册**（唯一的 register 在 docstring 里） | PRESENT-WEAKER |
-| S13 | 会话查询语料库：可丢弃 fts5 索引 + revision/generation 增量 + `current|shadowed|log-only` 分类 | `session-query-sqlite/src/schema.ts:8,127` | `atlas_state_search.py:1064,1140-1210` 有 FTS5/trigram/CJK，无增量、无分类、无游标 | PRESENT-WEAKER |
+| S11 | 投影注册表：纯单元、`stateVersion`、有线视图 schema、`asOfSeq` 快照 | `session-projection/src/index.ts:92` | 注册 `session.summary` 默认 projection；快照含 view schema、`stateVersion`、`asOfSeq` 与数据 | ✅ 本轮关闭 |
+| S13 | 会话查询语料库：可丢弃 fts5 索引 + revision/generation 增量 + `current|shadowed|log-only` 分类 | `session-query-sqlite/src/schema.ts:8,127` | 搜索结果提供稳定 `seq`、`after_seq` 游标和 `current|shadowed|log-only` 分类，覆盖 FTS/LIKE/CJK 路径 | ✅ 本轮关闭 |
 | S19 | durable 附件：内容寻址不可变 ref、每次读重校验、先准入后追加用户事件 | `attachment-local/src/file-store.ts:14,76` | 图片**从不持久化**——`agent/__init__.py:1022` 造瞬时 wire payload，只有 OCR 文本进 prompt | PRESENT-WEAKER |
 | S21 | fs 观察策略：per-session 观察态 + provider version token；未见过 vs 不存在区分 | `packages/fs/fs-observation-policy/src/index.ts:28` | 两套半成品：`edit.py:489,497` 快照随 run 死亡；`local_execution.py:1085,1319` 只有 `_read_paths` 集合，写入 `path.write_text` 存在 TOCTOU | PRESENT-WEAKER |
 | S22 | OTel：普通事件与 session-log 双通道独立队列 | `packages/telemetry/otel/src/index.ts:22,30` | `telemetry.py` 装了 OTLP provider，但 **`span()` 零生产调用点**（只有测试）→ 配了 endpoint 也没有 span | PRESENT-WEAKER |
 | S25 | tokenMeter 逐 surface 节点计价 + route-aware 图像计价 | `packages/llm/token-meter/src/index.ts:146` | 单一 `estimate_tokens()` 过消息列表（`context.py:95`） | PRESENT-WEAKER |
-| S32 | fork 要求边界不在开放 turn 内，`session/end-seed{inherited:true}` 标记继承切点 | `packages/core/session/src/fork.ts:21` | `session_sync.py:900-937` 按用户轮数克隆，无开放 turn 检查、无继承标记 → 中途 fork 会得到带未应答工具调用的子会话 | PRESENT-WEAKER |
+| S32 | fork 要求边界不在开放 turn 内，`session/end-seed{inherited:true}` 标记继承切点 | `packages/core/session/src/fork.ts:21` | `session_sync.py` 拒绝未闭合 tool turn；子会话导入事务中追加 `session/end-seed{inherited:true}` | ✅ 本轮关闭 |
 
 ### P2
 
@@ -143,20 +143,20 @@
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| X2 | 注册即可逆：每个注册返回 disposer，卸载即解绑 | `core/tools/src/index.ts:988` | 只有 plugin 来源的能力/hook 可移除（`capabilities.py:62`、`enrichment.py:149`），且仅 `PluginRuntime.reload` 调用 | PRESENT-WEAKER |
+| X2 | 注册即可逆：每个注册返回 disposer，卸载即解绑 | `core/tools/src/index.ts:988` | plugin skill/command/hook 注册有逐项 disposer；异步 MCP lifecycle 贡献尚无 disposer | PRESENT-WEAKER |
 | X3 | 插件管理 enable/disable 只改最后一层匹配的 `disabled`，报告 applied/restart-required | `boot/plugin-manager/src/index.ts:458,476` | `plugins/runtime.py:1149-1171` 重跑 `load_all`，**不先 `unregister_source`/`forget_owner`** → 有 skills 的插件先报错，hook 闭包每次切换都重复 | PRESENT-WEAKER（非幂等重载） |
-| X4 | profile/bundle/patch 有序层，按 row id 替换/插入，`--dump-config` 预览 | `docs/architecture.md:15-25` | `expert_mode.py:328-347` 单层深合并 + 门控清单；`plugins/patch_layer.py` 按文件打补丁 | PRESENT-WEAKER |
+| X4 | profile/bundle/patch 有序层，按 row id 替换/插入，`--dump-config` 预览 | `docs/architecture.md:15-25` | patch 支持 row_id/order 与有序 listing；profile/bundle merge 和配置预览仍缺 | PRESENT-WEAKER |
 | X5 | 安装/移除 bundle：包管理器解析依赖、lockfile 快照回滚、取消 | `plugin-manager/src/index.ts:374,497,645` | `plugins/runtime.py:851-982` 只支持本地 copy / marketplace / git，**无依赖解析、无回滚、无取消** | ABSENT |
 | X6 | 版本兼容与豁免：peer range 检查 + per-profile `compatibility.json` 精确豁免 + `acceptRisk` | `plugin-manager/README.md:67` | `plugins/runtime.py:342-380` 只校验 manifest 形状 | ABSENT |
 | X7 | 安装脚本审批门：`pendingBuilds` 转 `allowBuilds`，逐包持久批准 | `plugin-manager/src/build-approval.ts:49,75` | 无安装脚本执行，故无门 | ABSENT |
-| X8 | Agent 预设 = 子插件行 + isolate realm，注册表保留 revision | `packages/preset/agent-preset-registry/README.md:46-60` | `task_artifacts.py:96-99` 纯数据（instructions/≤8 skills/tools allow-deny/model/mode） | PRESENT-WEAKER |
-| X9 | 外部入口（webhook/ACP）必须带 agent preset + permission preset | `docs/subsystems/webhook.md:5,25` | `automation_router.py:95` 只有 message/model/effort/workspace | PRESENT-WEAKER |
+| X8 | Agent 预设 = 子插件行 + isolate realm，注册表保留 revision | `packages/preset/agent-preset-registry/README.md:46-60` | `AgentPresetStore` 持久化 revision 化 capability set（tools/skills/MCP/model/mode），并在 run 时应用；尚无 isolate realm/子插件隔离 | PRESENT-WEAKER |
+| X9 | 外部入口（webhook/ACP）必须带 agent preset + permission preset | `docs/subsystems/webhook.md:5,25` | automation/webhook 保存并验证两种 preset，AgentRunContext 应用能力；ACP 外部入口尚未接入 | PRESENT-WEAKER |
 | X10 | 插件管理作为模型工具，8 个动作，每次需 danger-full-access 或逐次审批 | `plugin-manager/src/tools.ts:20-46` | `engine/kernel/tools.py:412-414` 只有 list/request install | PRESENT-WEAKER |
 | X11 | bundle 清单带来源 official/availability/installed/覆盖行 | `plugin-manager/src/index.ts:282` | `plugins_router.py:39` → `discover()` 有基本字段，无 availability 模型 | PRESENT-WEAKER |
-| X16 | progressive disclosure：durable `<available_skills>` + 摘要 diff 替换 + `/name` 内联注入 | `docs/subsystems/skills.md:227-233` | `library/runtime.py:303-336` 每轮重建 SystemMessage index（缓存抖动），无退休语义 | PRESENT-WEAKER |
+| X16 | progressive disclosure：durable `<available_skills>` + 摘要 diff 替换 + `/name` 内联注入 | `docs/subsystems/skills.md:227-233` | skill registry 持久化 digest/active/retired 并生成 revisioned `<available_skills>`；`/name` 注入和摘要 diff 投递仍缺 | PRESENT-WEAKER |
 | X21 | MCP 服务器 instructions 成为**独立 prompt 段** | `docs/subsystems/mcp.md:22-60` | `mcp_client.py:639-643` 把 instructions 拼进**每个**工具描述，还加了 untrusted 前缀 | PRESENT-WEAKER |
 | X27 | client 扩展面：slots 注册、ConversationNodeDefinition、client 插件 | `docs/subsystems/slots.md:5-25` | `ConversationActivity.tsx:45-98` 中央 switch；`App.tsx` 静态 lazy import ~87 组件 | ABSENT |
-| X28 | 人类 slash 命令：插件注册 `{name,description,input,handler}`，不经模型执行，`command/run|done` 落日志 | `docs/subsystems/commands.md:5-95` | `runtime/commands.py:96-147` 只有 Markdown 命令，前端当 prompt 跑（`App.tsx:1971-1991`） | PRESENT-WEAKER |
+| X28 | 人类 slash 命令：插件注册 `{name,description,input,handler}`，不经模型执行，`command/run|done` 落日志 | `docs/subsystems/commands.md:5-95` | 有可逆 registry、invocation source gate 和 append-only command/run|done store；plugin/runtime/frontend dispatch 尚未接线 | PRESENT-WEAKER |
 | X24 | ACP：`session/new|list|resume|close|set_config_option|prompt|cancel`，per-session MCP 注入 | `acp/acp/README.md:60-80` | `tools/app_server.py:262-408` **自动批准所有工具**（`:114-122`）、拒绝 per-session MCP、无 resume/config-option | PRESENT-WEAKER |
 
 ### P2
@@ -164,18 +164,18 @@
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
 | X12 | Claude Code hooks 桥 | `experimental/hooks-claude-code/README.md` | `runtime/hooks.py:33-45` 28 个事件，`run_drive.py:3353` 接线 | PRESENT-PARITY |
-| X13 | Codex hooks 桥 | `experimental/hooks-codex/README.md` | 无 `.codex/hooks.json` 读取 | ABSENT |
+| X13 | Codex hooks 桥 | `experimental/hooks-codex/README.md` | Plugin `.codex/hooks.json` 可装入 HookBus 的受支持事件；repo/user 通用来源与 trust surface 仍缺 | PRESENT-WEAKER |
 | X14 | hook 逐条信任/审批门 | DSH **没有** | `runtime/hooks.py:679-735` fingerprint 作用域信任，fail-closed | **PRESENT-STRONGER** |
 | X15 | skill 发现根阶梯 | `docs/subsystems/skills.md:64-76` | `skills/__init__.py:599,621-676` 优先级映射等价 | PRESENT-PARITY |
-| X17 | `disable-model-invocation` / `user-invocable` 归一化 | `docs/subsystems/skills.md:100-110` | skill frontmatter 解析器从不读这两个键 | ABSENT |
+| X17 | `disable-model-invocation` / `user-invocable` 归一化 | `docs/subsystems/skills.md:100-110` | frontmatter 严格归一化两个布尔值；用户 slash 匹配和 `activate_for_model` 分别执行 invocation 门 | ✅ 本轮关闭 |
 | X18 | skill provider 协议 + per-scope 分层 | `docs/subsystems/skills.md:9-30,188-200` | `SkillSource` + `with_sources` 请求作用域副本，同步 rglob | PRESENT-WEAKER |
 | X19 | skill 新鲜度：chokidar 监听 + 读写路径即时失效 | `docs/subsystems/skills.md:78-81` | `skills/__init__.py:406-433` mtime+size 指纹，读时全量重扫 | PRESENT-WEAKER |
 | X20 | skill 依赖/生命周期门 | DSH 无依赖契约 | `skills/__init__.py:547-590` 预检 mcp/python/commands | **PRESENT-STRONGER** |
 | X22 | MCP liveness：500ms→30s 翻倍，10 次后移除工具，稳定后重置预算 | `mcp-client/README.md:64-67,89-93,129` | `mcp_client.py:803-840` `while not stopping` 无上限 | ✅ **本次已修**（10 次上限 + `unreachable` 终态 + 稳定 60s 后重置 + 显式重试解锁） |
-| X23 | MCP resources + 作用域隔离 | `docs/subsystems/mcp.md:39-70` | `mcp_client.py:1169-1215` 有，但单全局 client，无 scope | PRESENT-WEAKER |
+| X23 | MCP resources + 作用域隔离 | `docs/subsystems/mcp.md:39-70` | `MCPClient.for_scope()` 限制 tools/resources/templates；agent/session 仍未接入 scope facade | PRESENT-WEAKER |
 | X25 | SDK JSON-RPC：NDJSON、`initialize` 等树稳定、`session/wait`、关停 | `packages/sdk/README.md` | `tools/app_server.py:429` 协议 v1，无 settle barrier、无 wait | PRESENT-WEAKER |
 | X26 | typed Client↔Host Remote gateway（装饰器生成描述符/编解码/客户端类型） | `docs/api-gateway.md` | 手写 FastAPI router + 手写 TS client，契约靠人 | ABSENT |
-| X29 | webhook runtime：provider adapter + 可信规则返回 `WebhookSessionRequest` | `docs/subsystems/webhook.md:5,19-64` | `automation/webhooks.py:15-90` HMAC + 防重放（Atlas 更严），但无 provider 抽象、无 preset 绑定 | PRESENT-WEAKER |
+| X29 | webhook runtime：provider adapter + 可信规则返回 `WebhookSessionRequest` | `docs/subsystems/webhook.md:5,19-64` | 增加 `WebhookProvider`、HMAC provider adapter 与 typed `WebhookSessionRequest`；路由通过 provider 验证 | ✅ 本轮关闭 |
 | X30 | SSH 作为整套执行世界（fs/subprocess/sandbox 一起搬） | `docs/subsystems/ssh.md` | `ssh.py:32-651` 工具级代理，只在 local_file/exec/git 上分流 | PRESENT-WEAKER |
 | X31 | schedule 绑定原 session，到期回到该会话 | `docs/subsystems/schedule.md` | 两套并存：APScheduler（synthetic 会话）+ DBOS automation | PRESENT-WEAKER |
 | X32 | 组合自省：`--dump-config` 带逐层来源 | `docs/architecture.md:41` | `introspect/registry.py:214` 运行时探针，无"这个值由哪层设置" | PRESENT-WEAKER |
@@ -191,13 +191,13 @@
 |---|---|---|---|---|
 | D1 | 认证本地载体 + boot injection + OS 分配端口 | `apps/desktop/src/web-document.ts:41,72`；`main.ts:664,685` | `preload/index.cts:8` 硬编码 8765；`main/electron.ts:1006` 全局注入 token；无注入通道 | PRESENT-WEAKER |
 | D2 | 两进程 typed IPC 生命周期（ready/fatal/shutdown-complete/quit-inspection） | `apps/desktop/src/host-process.ts:189,57-78` | `backendProcess.ts:683,101,485` 靠 health + pid + 退出码推断 | PRESENT-WEAKER |
-| D3 | 流式增量：chunk 折叠进 per-node state，重连重放压缩流 | `api/session-controller/.../events.ts:8`；`ui-conversation/.../assembler.ts:174,364` | `eventBuffer.ts:40` 80ms 合并；`runtimeEvents.ts:54` **MAX_RUN_EVENTS=800 丢最旧**且时间线每批全量重建（`timeline.ts:378`） | PRESENT-WEAKER |
+| D3 | 流式增量：chunk 折叠进 per-node state，重连重放压缩流 | `api/session-controller/.../events.ts:8`；`ui-conversation/.../assembler.ts:174,364` | 不再对 800 条之后的旧事件截断；timeline 仍按全量事件重建，chunk folding/per-node incremental state 未完成 | PRESENT-WEAKER |
 | D4 | keyed ConversationNode renderer 注册表 | `ui-chat/.../register-node-renderers.ts:39-69` | `timeline.ts:73-99` 静态联合 + `ConversationActivity.tsx:42` 单 switch，无注册 API | ABSENT |
 | D5 | durable 附件暂存：内容寻址、先存后发、进度、可取消 | `docs/subsystems/attachment.md`；`client/file-upload/src/client/contract.ts` | `App.tsx:1380-1410` 读成 base64 data URL（4 张/4MiB/共 8MiB），`App.tsx:1222` 内联进 run.start | PRESENT-WEAKER |
 | D6 | 结构化草稿：chip 进文本模型、per-session 语义草稿、重载存活 | `ui-conversation/.../ReferenceChip.tsx` | `Composer.tsx:740` 纯 textarea；mentions 另存 `App.tsx:413`，草稿只存纯文本 `App.tsx:215` | PRESENT-WEAKER |
 | D7 | follow 重连：首帧 header+tail+cursor+投影基线，`page()` 补缺口 | `docs/subsystems/web-client.md:48` | `client.ts:670-694` 永远 `after_sequence: 0`；退避最多 3 次后放弃 | PRESENT-WEAKER |
 | D8 | 右侧栏：split 树、浮动面板、可插 tab 类型、per-session 布局 | `docs/subsystems/sidebar-right.md:26,74`；`ui-dockkit/.../FloatLayer.tsx` | `shell/Inspector.tsx:28,156` 单列固定 union，布局不持久 | PRESENT-WEAKER |
-| D9 | 应用内连接恢复控件（可点击重试 + 恢复确认） | `ui-primitives/.../ConnectionIndicator.tsx:6-40` | `App.tsx:3213` 静态"后端没有连接"点，重试只能去托盘 | PRESENT-WEAKER |
+| D9 | 应用内连接恢复控件（可点击重试 + 恢复确认） | `ui-primitives/.../ConnectionIndicator.tsx:6-40` | 断连提示提供键盘可操作的“重试连接”；桌面重启动作先确认 | ✅ 本轮关闭 |
 | D10 | 自动更新生命周期：调度 + 退避 + 抖动 + journal + 强制版本 | `apps/desktop/src/update-coordinator.ts:16`；`update-schedule.ts:20-26` | `main/releaseUpdate.ts:73,86` 手动检查 + SHA256 校验下载 | PRESENT-WEAKER |
 
 ### P2
@@ -223,7 +223,7 @@
 | D27 | 队列/steer/redirect | `ui-conversation/.../QueueDock.tsx` | `ConversationQueuePanel.tsx`；`useAtlasStore.ts:22,760` | PRESENT-PARITY |
 | D28 | 语音输入 | `docs/subsystems/voice-input.md:27` | `VoiceHud.tsx` + `App.tsx:1450-1530` + TTS + 通话浮层 | PRESENT-PARITY（Atlas 更宽） |
 | D29 | 更早历史分页 | `docs/subsystems/web-client.md:48` | `useAtlasStore.ts:452` 按 id 游标 + 满页启发式 | PRESENT-WEAKER |
-| D30 | 备选会话视图（Chat / Trajectory） | `ui-trajectory/.../TrajectoryView.tsx` | 只有一条线程渲染；`RolloutPanel.tsx:8` 是裸 JSONL | ABSENT |
+| D30 | 备选会话视图（Chat / Trajectory） | `ui-trajectory/.../TrajectoryView.tsx` | Rollout 提供可读 trajectory 与原始事件切换；完整 Chat/Trajectory 双模式会话 renderer 尚未实现 | PRESENT-WEAKER |
 | D31 | 多窗口/分栏 | DSH 单窗口 | `electron.ts:563,600`；`PaneWorkspace.tsx:28` 递归 split 树 | **PRESENT-STRONGER** |
 | D32 | 消息级操作 | `MessageIconActions.tsx:11-15`（仅复制+分支） | `App.tsx:3007-3032` 编辑重发/fork/fork+摘要/rewind/copy | **PRESENT-STRONGER** |
 | D33 | slash 命令注册表 | `docs/subsystems/commands.md:5-40` | `services/slashCommands.ts:29,52` 有去重与模糊排序；命令源仍是 `App.tsx:2240-2290` 静态数组 | PRESENT-PARITY |

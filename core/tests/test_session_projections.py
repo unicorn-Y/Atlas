@@ -184,6 +184,60 @@ def test_stats_expose_a_hit_rate_once_there_are_reads(cache: ProjectionCache) ->
     assert cache.stats()["hit_rate"] == 0.5
 
 
+def test_default_session_summary_projection_has_schema_and_cursor_snapshot() -> None:
+    from atlas.session_projections import SessionProjections
+
+    class Store:
+        last = {"id": 12, "role": "assistant", "content": "ready"}
+
+        def get_session(self, session_id: str) -> dict[str, object]:
+            return {"id": session_id, "title": "Demo", "message_count": 2}
+
+        def get_messages(self, session_id: str, **kwargs) -> list[dict[str, object]]:
+            return [self.last]
+
+    registry = SessionProjections()
+    store = Store()
+    assert registry.names() == ["session.summary"]
+    description = registry.describe()
+    assert description["stateVersion"] == 0
+    assert description["detail"][0]["schema"]["required"] == [
+        "sessionId", "messageCount", "lastMessage",
+    ]
+    snapshot = registry.get_snapshot("session.summary", "s1", store)
+
+    assert snapshot["stateVersion"] == 0
+    assert snapshot["asOfSeq"] == 12
+    assert snapshot["schema"]["required"] == ["sessionId", "messageCount", "lastMessage"]
+    assert snapshot["data"]["lastMessage"]["content"] == "ready"
+
+    store.last = {"id": 13, "role": "assistant", "content": "done"}
+    assert registry.invalidate_on("run.completed") == 1
+    updated = registry.get_snapshot("session.summary", "s1", store)
+    assert updated["stateVersion"] == 1
+    assert updated["asOfSeq"] == 13
+    assert updated["data"]["lastMessage"]["content"] == "done"
+
+
+def test_default_session_summary_projects_real_sessiondb_rows(tmp_path: Path) -> None:
+    from atlas.api.app_services import AppServices
+    from atlas.engine.state.atlas_state import SessionDB
+
+    registry = AppServices().session_projections
+    with SessionDB(tmp_path / "state.db") as db:
+        db.ensure_session("real-summary", "api_server")
+        message_id = db.append_message("real-summary", "user", content="hello")
+        snapshot = registry.get_snapshot("session.summary", "real-summary", db)
+
+    assert snapshot["asOfSeq"] == message_id
+    assert snapshot["data"]["messageCount"] == 1
+    assert snapshot["data"]["lastMessage"] == {
+        "seq": message_id,
+        "role": "user",
+        "content": "hello",
+    }
+
+
 # --------------------------------------------------------------------------
 # SessionDB wiring: the cache must be attached to real reads, and a real
 # committed write must be visible through it. Testing the cache class alone

@@ -773,6 +773,8 @@ class AutomationEngine:
                         ),
                         "webhook_payload": trigger_payload or {},
                         "agent_id": payload.get("agent_id") or record.get("owner_agent_id", ""),
+                        "agent_preset_id": payload.get("agent_preset_id", "default"),
+                        "permission_preset": payload.get("permission_preset", "ask"),
                         "model": payload.get("model", ""),
                         "reasoning_effort": payload.get("reasoning_effort", ""),
                         "skills": payload.get("skills", []),

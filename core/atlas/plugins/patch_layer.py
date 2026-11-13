@@ -162,8 +162,17 @@ def list_patches(plugin_root: str | Path) -> dict[str, Any]:
                 "original_saved": original_saved,
                 "added": not original_saved,
                 "note": record.get("note", "") if isinstance(record, dict) else "",
+                "row_id": record.get("row_id") if isinstance(record, dict) else None,
+                "order": (
+                    record.get("order", 0)
+                    if isinstance(record, dict)
+                    and isinstance(record.get("order", 0), int)
+                    and not isinstance(record.get("order", 0), bool)
+                    else 0
+                ),
                 "modified": int(path.stat().st_mtime),
             })
+    entries.sort(key=lambda item: (int(item.get("order") or 0), item["path"]))
     return {"plugin_root": str(root), "patches": entries, "count": len(entries)}
 
 
@@ -177,7 +186,15 @@ def effective_text(plugin_root: str | Path, relative: str) -> str:
     return (root / key).read_text(encoding="utf-8", errors="replace")
 
 
-def write(plugin_root: str | Path, relative: str, content: str, *, note: str = "") -> dict[str, Any]:
+def write(
+    plugin_root: str | Path,
+    relative: str,
+    content: str,
+    *,
+    note: str = "",
+    row_id: str | None = None,
+    order: int | None = None,
+) -> dict[str, Any]:
     """Record a local edit as a patch, keeping the shipped original for revert.
 
     Refuses a patch identical to what is already effective: an override that
@@ -186,6 +203,20 @@ def write(plugin_root: str | Path, relative: str, content: str, *, note: str = "
     """
     root = Path(plugin_root)
     key = _safe_relative(relative)
+    if row_id is not None and (not isinstance(row_id, str) or not row_id.strip()):
+        raise PatchError("补丁 row_id 必须是非空字符串")
+    if order is not None and (not isinstance(order, int) or isinstance(order, bool)):
+        raise PatchError("补丁 order 必须是整数")
+    manifest = _read_manifest(root)
+    if row_id is not None:
+        previous = next((path for path, record in manifest["patches"].items()
+                         if isinstance(record, dict) and record.get("row_id") == row_id
+                         and path != key.as_posix()), None)
+        if previous is not None:
+            # A stable row identity moves as a unit; restore its former target
+            # before materialising the replacement at the new path.
+            revert(root, previous)
+            manifest = _read_manifest(root)
     shipped = root / key
     patch = _patch_file(root, key)
     original = _original_path(root, key)
@@ -211,10 +242,14 @@ def write(plugin_root: str | Path, relative: str, content: str, *, note: str = "
     patch.write_text(content, encoding="utf-8")
     _materialise(root, key)
 
-    manifest = _read_manifest(root)
-    manifest["patches"][key.as_posix()] = {"note": note}
+    manifest["patches"][key.as_posix()] = {
+        "note": note,
+        "row_id": row_id,
+        "order": order if order is not None else 0,
+    }
     _write_manifest(root, manifest)
-    return {"path": key.as_posix(), "bytes": patch.stat().st_size, "note": note}
+    return {"path": key.as_posix(), "bytes": patch.stat().st_size, "note": note,
+            "row_id": row_id, "order": order if order is not None else 0}
 
 
 def revert(plugin_root: str | Path, relative: str) -> dict[str, Any]:
