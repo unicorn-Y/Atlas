@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpCircle, LoaderCircle, X } from 'lucide-react';
 import type { ReleaseUpdateStatus, SourceUpdateStatus } from '../../shared/ipc';
+import { appendUpdateJournal, createUpdateCoordinator } from '../services/update-coordinator';
+import { tn } from '../services/i18n';
 
-const RECHECK_MS = 5 * 60 * 1000;
 const CHANNEL_KEY = 'atlas.preference.update-channel';
 const SOURCE_KEY = 'atlas.preference.release-source';
 // Atlas 自己的发布仓库（私有仓库时主进程会带上 gh 登录令牌）。
@@ -17,26 +18,36 @@ export default function UpdateBanner() {
   const api = window.atlasDesktop;
   useEffect(() => {
     let alive = true;
+    let checkedChannel: 'source' | 'release' = 'source';
     const check = async () => {
       // 用户没选过通道时沿用原来的源码更新（老用户一直用的“立即更新”），发布版通道需显式切换。
       const storedChannel = localStorage.getItem(CHANNEL_KEY);
       const channel = storedChannel === 'release' ? 'release' : 'source';
+      checkedChannel = channel;
       if (channel === 'source') {
-        const status = await api?.checkForUpdate?.().catch(() => null);
-        if (alive) setView({ channel, source: status ?? undefined });
-      } else {
-        const source = localStorage.getItem(SOURCE_KEY) || DEFAULT_RELEASE_SOURCE;
-        const status = await api?.checkReleaseUpdate?.(source).catch(() => null);
-        if (alive) setView({ channel, release: status ?? undefined });
+        if (!api?.checkForUpdate) throw new Error('源码更新检查不可用');
+        return api.checkForUpdate();
       }
-      if (alive) setDismissed(false);
+      if (!api?.checkReleaseUpdate) throw new Error('发布版更新检查不可用');
+      const source = localStorage.getItem(SOURCE_KEY) || DEFAULT_RELEASE_SOURCE;
+      return api.checkReleaseUpdate(source);
     };
-    const first = window.setTimeout(() => void check(), 8000);
-    const timer = window.setInterval(() => void check(), RECHECK_MS);
-    const onFocus = () => void check(); const onChange = () => void check();
+    const coordinator = createUpdateCoordinator({
+      check,
+      channel: () => localStorage.getItem(CHANNEL_KEY) === 'release' ? 'release' : 'source',
+      initialDelayMs: 8000,
+      journal: (entry) => appendUpdateJournal(entry, localStorage),
+      onResult: (result) => {
+        if (!alive) return;
+        setView(checkedChannel === 'source' ? { channel: 'source', source: result as SourceUpdateStatus } : { channel: 'release', release: result as ReleaseUpdateStatus });
+        setDismissed(false);
+      },
+    });
+    coordinator.start();
+    const onFocus = () => coordinator.checkNow(); const onChange = () => coordinator.checkNow();
     window.addEventListener('focus', onFocus); window.addEventListener('atlas:update-settings-changed', onChange);
-    return () => { alive = false; window.clearTimeout(first); window.clearInterval(timer); window.removeEventListener('focus', onFocus); window.removeEventListener('atlas:update-settings-changed', onChange); };
-  }, []);
+    return () => { alive = false; coordinator.stop(); window.removeEventListener('focus', onFocus); window.removeEventListener('atlas:update-settings-changed', onChange); };
+  }, [api]);
   const download = async () => {
     const version = view?.release?.latest; const source = localStorage.getItem(SOURCE_KEY) || DEFAULT_RELEASE_SOURCE;
     if (!version || !api?.downloadReleaseUpdate || !api.installReleaseUpdate) return;
@@ -59,10 +70,10 @@ export default function UpdateBanner() {
       {expanded && (view.release?.notes || commits.length > 0) && <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap text-[11px] text-fg-2">{view.release?.notes || commits.map((item) => `${item.hash} ${item.subject}`).join('\n')}</pre>}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {view.channel === 'release'
-          ? <button type="button" disabled={busy} onClick={() => void download()} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 font-medium text-white disabled:opacity-50">{busy && <LoaderCircle className="size-3.5 animate-spin" />}{busy ? `下载中 ${progress}%` : '下载并重启安装'}</button>
-          : <button type="button" disabled={busy || Boolean(view.source?.blocked)} onClick={() => { setBusy(true); void api?.applyUpdate?.().finally(() => setBusy(false)); }} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 font-medium text-white disabled:opacity-50">{busy && <LoaderCircle className="size-3.5 animate-spin" />}立即更新源码</button>}
-        <button type="button" onClick={() => setExpanded((value) => !value)} className="rounded-lg px-2 py-1.5 text-fg-3 hover:bg-hover">{expanded ? '收起' : '查看说明'}</button>
-        {view.channel === 'release' && <><button type="button" onClick={() => { if (view.release?.latest) void api?.skipReleaseVersion?.(view.release.latest); setDismissed(true); }} className="rounded-lg px-2 py-1.5 text-fg-3 hover:bg-hover">跳过这个版本</button><button type="button" onClick={() => { void api?.remindReleaseLater?.(); setDismissed(true); }} className="rounded-lg px-2 py-1.5 text-fg-3 hover:bg-hover">稍后提醒</button></>}
+          ? <button type="button" disabled={busy} onClick={() => void download()} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 font-medium text-white disabled:opacity-50">{busy && <LoaderCircle className="size-3.5 animate-spin" />}{busy ? `下载中 ${progress}%` : tn('updates', '下载并重启安装')}</button>
+          : <button type="button" disabled={busy || Boolean(view.source?.blocked)} onClick={() => { setBusy(true); void api?.applyUpdate?.().finally(() => setBusy(false)); }} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 font-medium text-white disabled:opacity-50">{busy && <LoaderCircle className="size-3.5 animate-spin" />}{tn('updates', '立即更新源码')}</button>}
+        <button type="button" onClick={() => setExpanded((value) => !value)} className="rounded-lg px-2 py-1.5 text-fg-3 hover:bg-hover">{tn('updates', expanded ? '收起' : '查看说明')}</button>
+        {view.channel === 'release' && <><button type="button" onClick={() => { if (view.release?.latest) void api?.skipReleaseVersion?.(view.release.latest); setDismissed(true); }} className="rounded-lg px-2 py-1.5 text-fg-3 hover:bg-hover">{tn('updates', '跳过这个版本')}</button><button type="button" onClick={() => { void api?.remindReleaseLater?.(); setDismissed(true); }} className="rounded-lg px-2 py-1.5 text-fg-3 hover:bg-hover">{tn('updates', '稍后提醒')}</button></>}
       </div>
     </div><button aria-label="关闭更新提示" onClick={() => setDismissed(true)} className="grid size-6 place-items-center rounded-md text-fg-3 hover:bg-hover"><X className="size-3.5" /></button></div>
   </div>;

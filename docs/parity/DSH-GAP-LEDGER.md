@@ -198,7 +198,7 @@
 | D7 | follow 重连：首帧 header+tail+cursor+投影基线，`page()` 补缺口 | `docs/subsystems/web-client.md:48` | `client.ts:670-694` 永远 `after_sequence: 0`；退避最多 3 次后放弃 | PRESENT-WEAKER |
 | D8 | 右侧栏：split 树、浮动面板、可插 tab 类型、per-session 布局 | `docs/subsystems/sidebar-right.md:26,74`；`ui-dockkit/.../FloatLayer.tsx` | `shell/Inspector.tsx:28,156` 单列固定 union，布局不持久 | PRESENT-WEAKER |
 | D9 | 应用内连接恢复控件（可点击重试 + 恢复确认） | `ui-primitives/.../ConnectionIndicator.tsx:6-40` | 断连提示提供键盘可操作的“重试连接”；桌面重启动作先确认 | ✅ 本轮关闭 |
-| D10 | 自动更新生命周期：调度 + 退避 + 抖动 + journal + 强制版本 | `apps/desktop/src/update-coordinator.ts:16`；`update-schedule.ts:20-26` | `main/releaseUpdate.ts:73,86` 手动检查 + SHA256 校验下载 | PRESENT-WEAKER |
+| D10 | 自动更新生命周期：调度 + 退避 + 抖动 + journal + 强制版本 | `apps/desktop/src/update-coordinator.ts:16`；`update-schedule.ts:20-26` | `frontend/src/renderer/services/update-coordinator.ts:23,80`、`UpdateBanner.tsx:22,39` 已接入自动检查、抖动退避和 200 条本地 journal；强制版本策略尚未接入 | PARTIAL |
 
 ### P2
 
@@ -206,11 +206,11 @@
 |---|---|---|---|---|
 | D11 | 回合 diff 审阅（并排/换行/hover 预览/二进制标记） | `ui-deliverables/.../ReviewTab.tsx:107,131` | `ChangesPanel.tsx:199,343` hunk 级接受/拒绝 + 行评论（Atlas 更强），无并排 | PRESENT-PARITY（动作更强，阅读更弱） |
 | D12 | 每回合变更文件摘要 | `workspace-changes/src/recorder.ts:230` | `run_drive.py:1165` checkpoint manifest difflib，渲染成一行脚注 | PRESENT-PARITY（数据）/WEAKER（呈现） |
-| D13 | `present` 声明的交付物卡片 | `tool-present/src/index.ts:81`；`PresentedFileCard.tsx` | 无 `present` 工具，只有 artifact.created → Inspector 列表 | ABSENT |
+| D13 | `present` 声明的交付物卡片 | `tool-present/src/index.ts:81`；`PresentedFileCard.tsx` | 仍无 `present` agent 工具；注册入口在 W16 所有权之外的 `core/atlas/engine/tools/registry.py:103`，本批未改 API/卡片来伪装工具 | NOT-DONE |
 | D14 | 问题意图标签（`plan-review` 路由到专用面板） | `docs/subsystems/user-questions.md:25` | `intent=plan-review` 的 `input.required` 渲染进入现有计划审查、批准、修改控件 | ✅ 本轮关闭 |
 | D15 | 审批接管 composer（不可滚走） | `ui-approval/.../ApprovalPanel.tsx:1-62` | `ConversationActivity.tsx:351-400` 内联卡片（选项更丰富），可被滚走 | PRESENT-PARITY（选项强，位置弱） |
 | D16 | 文档预览 renderer 注册表 | `ui-sidebar-documentpreview/src/client/*` | `FilesPanel.tsx:635-690` 有 md/图片/PDF/xlsx/pptx/HTML | PRESENT-PARITY |
-| D17 | 命名空间 i18n | `client/locale/src/locale-settings.ts:16` | `services/i18n.ts:15-80` 用 MutationObserver 对 7.7k 条源串做 DOM 替换 | PRESENT-WEAKER |
+| D17 | 命名空间 i18n | `client/locale/src/locale-settings.ts:16` | `frontend/src/renderer/services/i18n.ts:11,28,143` 新增 namespace 注册/查询 API，`UpdateBanner.tsx:5,73` 使用 updates namespace；7.7k 条全局目录及 MutationObserver 替换尚未迁移 | PARTIAL |
 | D18 | 半径 token 尺度 + token-only 颜色（spec 强制） | `docs/ui-radius.md`；`ui-theme/src/styles/base.css` | `shell/themes.ts:4` 3 套主题 + 自定义 7 色，组件里 `rounded-[9px]` 随意 | PRESENT-WEAKER |
 | D19 | 无障碍契约（框架级 focus/IME/reduced-motion） | `ui-theme/src/styles/focus.css`；`packages/client/shortcuts` | `styles/app.css:205` 全局 focus-visible；手写 aria | PRESENT-WEAKER |
 | D20 | 单实例 + deep link | `apps/desktop/src/single-instance.ts:16` | `electron.ts:1171-1185` | PRESENT-PARITY |
