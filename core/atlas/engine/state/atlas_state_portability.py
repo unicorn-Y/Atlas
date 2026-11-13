@@ -773,6 +773,40 @@ class SessionPortabilityMixin:
             )
         )
 
+    def repair_interrupted_turns(self, session_id: str, turn_ids: set[str]) -> int:
+        """Append reader-discovered turn closers without modifying transcript messages.
+
+        The active turn set is rechecked inside the write transaction, making a
+        concurrent reader repair idempotent and preventing duplicate closers.
+        """
+        if not turn_ids:
+            return 0
+
+        def _repair(conn):
+            rows = conn.execute(
+                "SELECT event_type, payload_json FROM session_events "
+                "WHERE session_id = ? ORDER BY seq", (session_id,),
+            ).fetchall()
+            open_turns: dict[str, dict] = {}
+            for row in rows:
+                payload = json.loads(row["payload_json"])
+                turn_id = str(payload.get("turn_id") or "")
+                if not turn_id:
+                    continue
+                if row["event_type"] == "turn/start":
+                    open_turns[turn_id] = payload
+                elif row["event_type"] == "turn/end":
+                    open_turns.pop(turn_id, None)
+            repaired = 0
+            for turn_id in sorted(turn_ids.intersection(open_turns)):
+                self.append_session_event_with_cursor(conn, session_id, "turn/end", {
+                    "turn_id": turn_id, "reason": "interrupted", "synthetic": True,
+                })
+                repaired += 1
+            return repaired
+
+        return self._execute_write(_repair)
+
     def list_session_events(
         self, session_id: str, *, after_seq: int = 0, limit: int = 1000,
     ) -> list[dict[str, Any]]:

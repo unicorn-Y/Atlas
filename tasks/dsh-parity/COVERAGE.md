@@ -54,7 +54,7 @@ records an existing advantage that must not be reduced.
 | S1 | NOT-DONE (message rows and run journal are not an immutable sequenced event source) | [Ledger S1](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
 | S2 | NOT-DONE (surface replacement does not durably shadow earlier event sequence ranges) | [Ledger S2](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
 | S3 | CLOSED (session format migrations and forward-version refusal implemented) | [Ledger S3](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
-| S4 | PARTIAL (reader-side crash repair closer is not fully wired) | [Ledger S4](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
+| S4 | CLOSED (reader repairs stale open turns with durable `turn/end{interrupted}` events; transcript rows remain unchanged) | [Ledger S4](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT2-V4](waves/RESULT2-V4.md). |
 | S5 | PARTIAL (persistent handle/lease guarantees are incomplete) | [Ledger S5](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
 | S6 | CLOSED (checkpoint barriers fail closed) | [Ledger S6](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
 | S7 | PARTIAL (summary metadata cannot yet fully reconstruct compressed event history) | [Ledger S7](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
@@ -69,9 +69,9 @@ records an existing advantage that must not be reduced.
 | S16 | NOT-DONE (turnOutline projection is unavailable) | [Ledger S16](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
 | S17 | PARTIAL (ZIP export does not yet cover flushed live roots, child sessions, and attachment bytes) | [Ledger S17](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
 | S18 | PARTIAL (spill failure preservation and locator semantics are incomplete) | [Ledger S18](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
-| S19 | PARTIAL (durable content-addressed attachments and read-time integrity are incomplete) | [Ledger S19](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
+| S19 | CLOSED (images are admitted to immutable SHA-256 blobs before transcript append and verified on model-history reads) | [Ledger S19](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT2-V4](waves/RESULT2-V4.md). |
 | S20 | NOT-DONE (present deliverables and per-turn workspace changes are absent) | [Ledger S20](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
-| S21 | PARTIAL (session-scoped filesystem observation and provider tokens are incomplete) | [Ledger S21](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
+| S21 | CLOSED (complete reads persist per-session provider tokens; edits and writes perform optimistic stale-write checks before commit) | [Ledger S21](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT2-V4](waves/RESULT2-V4.md). |
 | S22 | PARTIAL (checkpoint span exists; independent event and session-log queues are incomplete) | [Ledger S22](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
 | S23 | NOT-DONE (deduplicated session telemetry ledger is absent) | [Ledger S23](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |
 | S24 | NOT-DONE (opt-in OTLP/HTTP product telemetry is absent) | [Ledger S24](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-B](RESULT-B.md). |

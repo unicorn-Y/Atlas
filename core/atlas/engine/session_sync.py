@@ -19,6 +19,8 @@ SessionDB 以 ``conversation_id`` 为会话身份；本模块不持有 task_id �
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import json
 import math
 import os
@@ -30,6 +32,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from atlas.engine.kernel.repair import ToolHistoryError
 
 from atlas.session_migration_gate import (
     begin_session_migration,
@@ -196,9 +200,138 @@ def read_session_model_messages(home: str | Path, conversation_id: str) -> list[
     # Corrupt orphan/duplicate receipts are excluded from the model projection;
     # the kernel's recovery pass then pairs unresolved assistant calls with an
     # explicit unknown-outcome receipt before the next request.
-    return normalize_tool_results(
+    model_history = normalize_tool_results(
         model_history, require_complete=False, drop_orphan_results=True,
     )
+    return resolve_session_attachments(home, conversation_id, model_history)
+
+
+_ATTACHMENT_REF_KEY = "_atlas_attachment_ref"
+_ACTIVE_SESSION_TURNS: set[tuple[str, str]] = set()
+
+
+class SessionAttachmentIntegrityError(ToolHistoryError):
+    """A durable attachment ref cannot be safely restored into model history."""
+
+
+def mark_session_turn_active(conversation_id: str, turn_id: str, active: bool) -> None:
+    """Track turns in this process so readers never repair a live in-process run."""
+    key = (str(conversation_id), str(turn_id))
+    if active:
+        _ACTIVE_SESSION_TURNS.add(key)
+    else:
+        _ACTIVE_SESSION_TURNS.discard(key)
+
+
+def persist_session_attachments(
+    home: str | Path, conversation_id: str, content: Any,
+) -> Any:
+    """Persist image data URLs before a user transcript row can reference them."""
+    if not isinstance(content, list):
+        return content
+    root = Path(home).expanduser().resolve() / "attachments"
+    result = []
+    for block in content:
+        item = dict(block) if isinstance(block, dict) else block
+        image = item.get("image_url") if isinstance(item, dict) else None
+        url = image.get("url") if isinstance(image, dict) else None
+        if not isinstance(url, str) or not url.startswith("data:image/"):
+            result.append(item)
+            continue
+        try:
+            header, encoded = url.split(",", 1)
+            media_type = header[5:].split(";", 1)[0]
+            if not media_type.startswith("image/") or ";base64" not in header:
+                raise ValueError("unsupported attachment encoding")
+            payload = base64.b64decode(encoded, validate=True)
+        except (ValueError, TypeError) as exc:
+            raise ValueError("invalid image attachment") from exc
+        digest = hashlib.sha256(payload).hexdigest()
+        destination = root / digest[:2] / digest
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            if hashlib.sha256(destination.read_bytes()).hexdigest() != digest:
+                raise ValueError("existing durable image attachment failed integrity verification")
+        else:
+            fd, temporary = tempfile.mkstemp(prefix=".attachment-", dir=destination.parent)
+            try:
+                with os.fdopen(fd, "wb") as stream:
+                    stream.write(payload)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                if destination.exists():
+                    if hashlib.sha256(destination.read_bytes()).hexdigest() != digest:
+                        raise ValueError("existing durable image attachment failed integrity verification")
+                else:
+                    os.replace(temporary, destination)
+            finally:
+                with suppress(FileNotFoundError):
+                    os.unlink(temporary)
+        item["image_url"] = {
+            "url": f"atlas-attachment://{digest}", "media_type": media_type,
+            _ATTACHMENT_REF_KEY: True,
+        }
+        result.append(item)
+    return result
+
+
+def resolve_session_attachments(
+    home: str | Path, conversation_id: str, messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Resolve and SHA-256 verify immutable image refs whenever model history is read."""
+    root = Path(home).expanduser().resolve() / "attachments"
+    for message in messages:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            image = block.get("image_url") if isinstance(block, dict) else None
+            ref = image.get("url") if isinstance(image, dict) else None
+            if not isinstance(ref, str) or not ref.startswith("atlas-attachment://"):
+                continue
+            digest = ref.removeprefix("atlas-attachment://")
+            if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+                raise SessionAttachmentIntegrityError("invalid durable image attachment reference")
+            try:
+                payload = (root / digest[:2] / digest).read_bytes()
+            except OSError as exc:
+                raise SessionAttachmentIntegrityError(
+                    "durable image attachment is missing or unreadable"
+                ) from exc
+            if hashlib.sha256(payload).hexdigest() != digest:
+                raise SessionAttachmentIntegrityError(
+                    "durable image attachment failed integrity verification"
+                )
+            media_type = str(image.get("media_type") or "image/png")
+            image["url"] = f"data:{media_type};base64,{base64.b64encode(payload).decode('ascii')}"
+            image.pop("media_type", None)
+            image.pop(_ATTACHMENT_REF_KEY, None)
+    return messages
+
+
+def record_file_observation(
+    home: str | Path, conversation_id: str, path: str, token: dict[str, Any],
+) -> None:
+    """Persist the last provider version token under its owning session and path."""
+    key = "fs-observation:" + hashlib.sha256(
+        f"{conversation_id}\0{path}".encode("utf-8")
+    ).hexdigest()
+    with _open_db(home) as db:
+        db.set_meta(key, json.dumps({"session_id": conversation_id, "path": path, "token": token}))
+
+
+def get_file_observation(
+    home: str | Path, conversation_id: str, path: str,
+) -> dict[str, Any] | None:
+    key = "fs-observation:" + hashlib.sha256(
+        f"{conversation_id}\0{path}".encode("utf-8")
+    ).hexdigest()
+    with _open_db(home) as db:
+        raw = db.get_meta(key)
+    if not raw:
+        return None
+    value = json.loads(raw)
+    return value.get("token") if value.get("session_id") == conversation_id and value.get("path") == path else None
 
 
 def begin_session_compaction(
@@ -339,9 +472,50 @@ def append_session_event(
 def read_session_events(
     home: str | Path, conversation_id: str, *, after_seq: int = 0, limit: int = 1000,
 ) -> list[dict[str, Any]]:
-    """Read lifecycle events for a conversation after a durable sequence cursor."""
+    """Close stale turns on read, then return lifecycle events without transcript rewrites."""
+    with _open_db(home) as db:
+        events = db.list_session_events(conversation_id, after_seq=0, limit=10_000)
+    open_turns: dict[str, dict[str, Any]] = {}
+    for event in events:
+        payload = event.get("payload") or {}
+        turn_id = str(payload.get("turn_id") or "")
+        if not turn_id:
+            continue
+        if event.get("event_type") == "turn/start":
+            open_turns[turn_id] = event
+        elif event.get("event_type") == "turn/end":
+            open_turns.pop(turn_id, None)
+    stale_turns = {
+        turn_id for turn_id, opened in open_turns.items()
+        if (conversation_id, turn_id) not in _ACTIVE_SESSION_TURNS
+        and not _turn_process_is_alive(opened.get("payload") or {})
+    }
+    if stale_turns:
+        with _open_db(home) as db:
+            db.repair_interrupted_turns(conversation_id, stale_turns)
     with _open_db(home) as db:
         return db.list_session_events(conversation_id, after_seq=after_seq, limit=limit)
+
+
+def _turn_process_is_alive(payload: dict[str, Any]) -> bool:
+    """Avoid repairing a live turn; PID reuse is rejected by its process creation token."""
+    pid = payload.get("process_id")
+    started = payload.get("process_started_at")
+    if type(pid) is not int or pid <= 0:
+        return False
+    if pid == os.getpid():
+        return True
+    if not isinstance(started, (int, float)):
+        return False
+    try:
+        import psutil
+
+        return abs(psutil.Process(pid).create_time() - float(started)) < 0.01
+    except Exception as exc:
+        # Access denied is not evidence that the owner died; missing and reused PIDs are.
+        if type(exc).__name__ == "AccessDenied":
+            return True
+        return False
 
 
 def latest_session_message(

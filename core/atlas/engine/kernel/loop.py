@@ -723,6 +723,19 @@ class AtlasKernel:
         def finish_turn(reason: TurnEndReason) -> None:
             if lifecycle.end_turn(reason):
                 record("turn_end", reason=reason.value)
+                if not request.ephemeral:
+                    from atlas.engine.session_sync import mark_session_turn_active
+
+                    mark_session_turn_active(session_id, run_id, False)
+                if not request.ephemeral:
+                    try:
+                        from atlas.engine.session_sync import append_session_event
+
+                        append_session_event(self.data_dir / "engine", session_id, "turn/end", {
+                            "turn_id": run_id, "reason": reason.value,
+                        })
+                    except Exception:
+                        log.exception("kernel.session_turn_end_persist_failed", extra={"session_id": session_id})
 
         def emit(event_type: str, **data: Any) -> dict[str, Any]:
             return KernelEvent(event_type, data).as_run_event()
@@ -773,6 +786,21 @@ class AtlasKernel:
             record("run_start", model=selected_model, session_id=session_id,
                    workspace=request.workspace or "", kernel="atlas")
             record("turn_start", turn_id=run_id, session_id=session_id)
+            if not request.ephemeral:
+                from atlas.engine.session_sync import append_session_event, mark_session_turn_active
+
+                mark_session_turn_active(session_id, run_id, True)
+
+                try:
+                    import psutil
+
+                    process_started_at = psutil.Process(os.getpid()).create_time()
+                except Exception:
+                    process_started_at = None
+                append_session_event(self.data_dir / "engine", session_id, "turn/start", {
+                    "turn_id": run_id,
+                    "process_id": os.getpid(), "process_started_at": process_started_at,
+                })
             # ``transition`` only fires on change, so the opening phase is
             # recorded here explicitly: a replay must start with a phase.
             record("run_phase", phase=str(state.phase), previous=None, elapsed_ms=0)
@@ -797,7 +825,9 @@ class AtlasKernel:
                 yield emit("moa_references", models=[item.get("model") for item in request.moa_references],
                            references=request.moa_references, latency_ms=request.moa_latency_ms)
 
-            from atlas.engine.session_sync import read_session_model_messages
+            from atlas.engine.session_sync import (
+                SessionAttachmentIntegrityError, read_session_model_messages,
+            )
             restored_snapshot_state: dict[str, Any] = {}
             try:
                 if request.ephemeral:
@@ -820,6 +850,8 @@ class AtlasKernel:
                     )
             except LookupError:
                 canonical_rows = []
+            except SessionAttachmentIntegrityError as exc:
+                raise ModelCallError(str(exc), category="invalid_history") from exc
             except ToolHistoryError as exc:
                 raise ModelCallError(str(exc), category="invalid_history") from exc
             except Exception:
@@ -828,11 +860,18 @@ class AtlasKernel:
             history = _session_history(canonical_rows) if canonical_rows else copy.deepcopy(request.history)
             if not any(m.get("role") == "user" and _message_text(m) == request.message for m in history[-3:]):
                 if not request.ephemeral:
-                    from atlas.engine.session_sync import append_user_message_before_model
+                    from atlas.engine.session_sync import (
+                        append_user_message_before_model, persist_session_attachments,
+                    )
+
+                    durable_user_content = await asyncio.to_thread(
+                        persist_session_attachments, self.data_dir / "engine", session_id,
+                        request.user_content if request.user_content is not None else request.message,
+                    )
 
                     await asyncio.to_thread(
                         append_user_message_before_model, self.data_dir / "engine", session_id,
-                        request.user_content if request.user_content is not None else request.message,
+                        durable_user_content,
                         {"kernel_run_id": run_id,
                          **({"turn_context": turn_context} if turn_context else {})},
                     )
@@ -877,6 +916,8 @@ class AtlasKernel:
                             current_user["content"] = request.user_content
             except LookupError:
                 pass
+            except SessionAttachmentIntegrityError as exc:
+                raise ModelCallError(str(exc), category="invalid_history") from exc
             except Exception:
                 log.exception("kernel.session_refresh_failed", extra={"session_id": session_id})
 
@@ -1538,6 +1579,8 @@ class AtlasKernel:
                         messages.extend(copy.deepcopy(pending_nudges))
                 except LookupError:
                     pass
+                except SessionAttachmentIntegrityError as exc:
+                    raise ModelCallError(str(exc), category="invalid_history") from exc
                 except Exception:
                     log.exception("kernel.session_refresh_failed", extra={"session_id": session_id})
 
@@ -2219,6 +2262,8 @@ class AtlasKernel:
                                 messages.extend(copy.deepcopy(pending_nudges))
                         except LookupError:
                             pass
+                        except SessionAttachmentIntegrityError as exc:
+                            raise ModelCallError(str(exc), category="invalid_history") from exc
                         except Exception:
                             log.exception("kernel.session_refresh_failed", extra={"session_id": session_id})
                         transition(RunPhase.AWAITING_MODEL_RESPONSE)
