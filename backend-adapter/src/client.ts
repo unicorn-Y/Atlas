@@ -584,7 +584,15 @@ export class BackendAdapter {
         if ('type' in event && event.type === 'agent_event') {
           const runtimeEvent = event as RuntimeEventEnvelope;
           if (runtimeEvent.run_id !== request.run_id || !Number.isInteger(runtimeEvent.sequence) || runtimeEvent.sequence <= lastSequence) return;
+          // A frame can arrive after a transient transport loss while the replay
+          // connection is still being established. Reopen from the last contiguous
+          // cursor so the server replays the missing page before later events.
+          if (runtimeEvent.sequence !== lastSequence + 1) {
+            socket.close(4000, 'Repair event sequence gap');
+            return;
+          }
           lastSequence = runtimeEvent.sequence;
+          retries = 0;
           localStorage.setItem(cursorKey, String(lastSequence));
           onEvent(runtimeEvent);
           if (['run.completed', 'run.failed', 'run.cancelled'].includes(runtimeEvent.event)) {
@@ -670,28 +678,60 @@ export class BackendAdapter {
   async attachRun(runId: string, onEvent: (event: RuntimeStreamEvent) => void): Promise<void> {
     if (!this.live) await this.initialize(3000);
     if (!this.live || this.runSockets.has(runId)) return;
-    await new Promise<void>((resolve) => {
+    const cursorKey = `atlas.runtime.cursor.${runId}`;
+    let lastSequence = Number(localStorage.getItem(cursorKey) ?? 0) || 0;
+    let retries = 0;
+    let terminal = false;
+    let firstConnect = true;
+    const connect = (): Promise<void> => new Promise<void>((resolve, reject) => {
       const socket = new WebSocket(`${this.baseUrl.replace(/^http/, 'ws')}/ws/chat`);
       this.runSockets.set(runId, socket);
-      let lastSequence = 0;
+      let opened = false;
+      let settled = false;
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        if (this.runSockets.get(runId) === socket) this.runSockets.delete(runId);
+        if (error) reject(error); else resolve();
+      };
       socket.addEventListener('open', () => {
-        socket.send(JSON.stringify({ type: 'resume', run_id: runId, after_sequence: 0 }));
+        opened = true;
+        socket.send(JSON.stringify({ type: 'resume', run_id: runId, after_sequence: firstConnect ? 0 : lastSequence }));
+        firstConnect = false;
       }, { once: true });
       socket.addEventListener('message', (message) => {
         let event: RuntimeStreamEvent;
         try { event = JSON.parse(String(message.data)) as RuntimeStreamEvent; } catch { return; }
         if (!('type' in event) || event.type !== 'agent_event') return;
         const runtimeEvent = event as RuntimeEventEnvelope;
-        if (runtimeEvent.run_id !== runId || runtimeEvent.sequence <= lastSequence) return;
+        if (runtimeEvent.run_id !== runId || !Number.isInteger(runtimeEvent.sequence) || runtimeEvent.sequence <= lastSequence) return;
+        if (runtimeEvent.sequence !== lastSequence + 1) {
+          socket.close(4000, 'Repair event sequence gap');
+          return;
+        }
         lastSequence = runtimeEvent.sequence;
-        localStorage.setItem(`atlas.runtime.cursor.${runId}`, String(lastSequence));
+        localStorage.setItem(cursorKey, String(lastSequence));
         onEvent(runtimeEvent);
-        if (['run.completed', 'run.failed', 'run.cancelled'].includes(runtimeEvent.event)) socket.close(1000, 'Run complete');
+        retries = 0;
+        if (['run.completed', 'run.failed', 'run.cancelled'].includes(runtimeEvent.event)) {
+          terminal = true;
+          socket.close(1000, 'Run complete');
+          finish();
+        }
       });
-      const done = () => { if (this.runSockets.get(runId) === socket) this.runSockets.delete(runId); resolve(); };
-      socket.addEventListener('close', done, { once: true });
-      socket.addEventListener('error', done, { once: true });
+      socket.addEventListener('error', () => {
+        if (!opened) finish(new BackendError('连不上后端的任务通道', 'WebSocket connection failed'));
+      });
+      socket.addEventListener('close', () => {
+        if (this.runSockets.get(runId) === socket) this.runSockets.delete(runId);
+        if (settled) return;
+        if (terminal) { finish(); return; }
+        if (!opened) { finish(new BackendError('任务恢复通道连接失败', 'Run follow socket failed before opening')); return; }
+        retries += 1;
+        window.setTimeout(() => { void connect().then(() => finish(), finish); }, Math.min(1000 * 2 ** (retries - 1), 8000));
+      }, { once: true });
     });
+    await connect();
   }
 
   respondToInput(runId: string, eventId: string, text: string): void {
