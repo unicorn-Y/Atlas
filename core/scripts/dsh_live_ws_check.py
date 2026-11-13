@@ -1,0 +1,77 @@
+"""Drive one real turn through a running Atlas backend over its WebSocket.
+
+Prints every event it receives, so the output is evidence of the live path:
+the client sends ``run.start``, the backend runs the real model and tools, and
+the script reports the terminal event plus the reply text. No credentials are
+read here; the backend owns them.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import sys
+import uuid
+
+try:
+    import websockets
+except ImportError:  # pragma: no cover - dependency is part of the desktop extras
+    print("websockets is not installed; install it to run this check", file=sys.stderr)
+    raise SystemExit(2)
+
+
+async def main() -> int:
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8799
+    prompt = sys.argv[2] if len(sys.argv) > 2 else "Reply with exactly the word: OK"
+    url = f"ws://127.0.0.1:{port}/ws/chat"
+    run_id = str(uuid.uuid4())
+    text_parts: list[str] = []
+    terminal: str | None = None
+
+    async with websockets.connect(url, max_size=8 * 1024 * 1024) as ws:
+        await ws.send(json.dumps({
+            "type": "run.start",
+            "run_id": run_id,
+            "conversation_id": f"dsh-live-{run_id[:8]}",
+            "workspace": str(__import__("pathlib").Path.cwd()),
+            "content": prompt,
+        }))
+        deadline = asyncio.get_running_loop().time() + 150
+        while asyncio.get_running_loop().time() < deadline:
+            try:
+                raw = await asyncio.wait_for(ws.recv(), timeout=5)
+            except asyncio.TimeoutError:
+                continue
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8", "replace")
+            try:
+                frame = json.loads(raw)
+            except ValueError:
+                continue
+            event = frame.get("event") or frame.get("type")
+            data = frame.get("data") or {}
+            if event == "message.delta":
+                text_parts.append(str(data.get("content") or ""))
+            elif event in {"tool.started", "tool.preparing"}:
+                print(f"[event] {event} name={data.get('name')}")
+            elif event in {"approval.required", "input.required", "run.plan.proposed"}:
+                print(f"[event] {event} tool={data.get('tool')} waiting")
+                await ws.send(json.dumps({
+                    "type": "approval.response",
+                    "event_id": data.get("approval_id") or data.get("event_id"),
+                    "choice": "allow_once",
+                }))
+            elif event in {"run.completed", "run.failed", "run.cancelled"}:
+                terminal = event
+                print(f"[terminal] {event} data={json.dumps(data, ensure_ascii=False)[:300]}")
+                break
+            elif event:
+                print(f"[event] {event}")
+
+    reply = "".join(text_parts).strip()
+    print(f"[reply] {reply[:400]!r}")
+    print(f"[result] terminal={terminal} chars={len(reply)}")
+    return 0 if terminal == "run.completed" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(asyncio.run(main()))

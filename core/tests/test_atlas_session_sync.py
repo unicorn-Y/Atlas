@@ -109,15 +109,20 @@ def test_goal_turn_evaluation_uses_persisted_atlas_manager(tmp_path, monkeypatch
     goal_command(home, "source", "verify the fixture outcome")
     seen = {}
 
-    def evaluate(manager, response):
-        seen["goal"] = manager.state.goal
+    def evaluate(_manager, response, *, judge=None, **_kwargs):
+        # The call under test passes ``judge=`` (model evaluation is optional), so
+        # the stub must accept it. It stays a plain function here: this test is
+        # about the persisted goal reaching the evaluator, not about the verdict.
+        seen["goal"] = _manager.state.goal
         seen["response"] = response
+        seen["judge"] = judge
         return {"status": "active", "should_continue": True,
                 "continuation_prompt": "continue the fixture", "verdict": "continue"}
 
     monkeypatch.setattr("hermes_cli.goals.GoalManager.evaluate_after_turn", evaluate)
     decision = evaluate_goal_after_turn(home, "source", "fixture response")
-    assert seen == {"goal": "verify the fixture outcome", "response": "fixture response"}
+    assert seen == {"goal": "verify the fixture outcome",
+                    "response": "fixture response", "judge": None}
     assert decision["continuation_prompt"] == "continue the fixture"
 
 

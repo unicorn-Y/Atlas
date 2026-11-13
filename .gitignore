@@ -222,3 +222,6 @@ data/start-atlas*.bat
 data/_p*.py
 data/_probe*.py
 data/workbench/
+
+# glm-hammer run state and receipts
+.glm-hammer/

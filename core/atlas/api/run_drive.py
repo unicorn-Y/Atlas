@@ -3248,6 +3248,11 @@ async def _execute_run(
 
         def plan_mode_callback(active: bool) -> None:
             run.dynamic_plan_mode = active
+            # The kernel hands tools a shallow copy of the run, so a mode write
+            # inside a tool handler never reaches this object. The callback is
+            # the shared channel: keeping ``mode`` in sync here means the prompt
+            # builder sees the same live value the tool gate enforces.
+            run.mode = "plan" if active else "act"
 
         run.plan_mode_callback = plan_mode_callback
 

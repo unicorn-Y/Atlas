@@ -30,7 +30,7 @@ from atlas.engine.state.atlas_state_common import (
 from atlas.engine.state.atlas_state_fts import _drop_orphan_fts_shadow_tables
 from atlas.engine.state.atlas_state_holders import _read_proc_argv
 from atlas.engine.state.atlas_state_search import _delete_meta, _meta_row
-from atlas.engine.state.atlas_state_errors import is_sqlite_lock_error
+from atlas.engine.state.atlas_state_errors import SchemaTooNewError, is_sqlite_lock_error
 from atlas.engine.state.atlas_state_titles import next_title_in_lineage
 
 # Pre-split logger identity so log filtering/capture is unchanged.
@@ -996,6 +996,18 @@ class SessionSchemaMixin:
                 "INSERT OR IGNORE INTO state_meta (key, value) VALUES (?, ?)",
                 [("store_instance_id", str(uuid.uuid4())), ("store_created_at_utc", now_iso),
                  (_MESSAGE_UID_BACKFILL_DONE, "1")],  # a fresh store has no legacy rows to backfill
+            )
+        elif int(row[0]) > SCHEMA_VERSION:
+            # Refuse, do not "migrate down". Every migration in this file is a
+            # forward row backfill: an older build opening a newer store would
+            # run none of them and then happily write rows shaped for a schema it
+            # does not know, silently corrupting a store a newer Atlas still
+            # owns. The DSH equivalent is a `status:'unsupported'` refusal that
+            # names the raw path; here the open is what must fail.
+            raise SchemaTooNewError(
+                f"state database schema version {int(row[0])} is newer than this build "
+                f"supports ({SCHEMA_VERSION}); refusing to open it. Upgrade Atlas, or "
+                f"point this build at a different data directory."
             )
         else:
             self._run_data_migrations(cursor, row[0], fts5_available)

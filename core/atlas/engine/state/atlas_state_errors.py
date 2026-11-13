@@ -183,6 +183,16 @@ class StateDbReplacedError(RuntimeError):
     dropping cannot fix a generation mismatch; they amplify it."""
 
 
+class SchemaTooNewError(RuntimeError):
+    """The store was written by a newer Atlas than this build understands.
+
+    Every schema migration here is a forward backfill, so an older build cannot
+    "downgrade" a newer store: it would run none of them and then write rows
+    shaped for a schema it does not know. Refusing the open keeps the newer
+    store intact instead of corrupting a file another Atlas still owns.
+    """
+
+
 class DeletedWalGenerationError(StateDbReplacedError):
     """A live process holds a deleted state.db-wal / -shm generation. Opening or
     writing through this handle would mint a second WAL inode (split-brain ->

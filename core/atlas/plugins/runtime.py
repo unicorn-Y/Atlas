@@ -992,9 +992,23 @@ class PluginRuntime:
         raise ValueError(f"unsupported plugin source: {source}")
 
     def set_enabled(self, name: str, enabled: bool) -> bool:
+        """Record the toggle and, when disabling, actually withdraw the plugin.
+
+        Popping ``_loaded`` only forgets the Python-side record. The capabilities
+        and hook handlers the plugin registered live in shared registries owned by
+        the agent, so without this the plugin keeps working after it has been
+        switched off — the exact opposite of what the switch promises. The
+        registries are reached through the wiring captured by the last
+        ``load_all``, which is the only handle this object has on them.
+        """
         self._enabled[name] = enabled
         self._save_state()
         if not enabled:
+            self._forget_plugin(
+                name,
+                capabilities=self._wiring.get("capabilities"),
+                hook_bus=self._wiring.get("hook_bus"),
+            )
             self._loaded.pop(name, None)
         return True
 
@@ -1149,11 +1163,31 @@ class PluginRuntime:
     async def load_all(
         self, *, hook_bus: Any = None, mcp_client: Any = None, capabilities: Any = None,
     ) -> dict[str, Any]:
-        """Load Atlas/Hermes compatibility contributions; Claude hooks go via HookStore."""
-        report: dict[str, Any] = {"loaded": [], "skipped": [], "errors": {}}
+        """Load Atlas/Hermes compatibility contributions; Claude hooks go via HookStore.
+
+        This runs on every enable/disable toggle, so it has to be idempotent.
+        ``self._loaded.clear()`` alone only forgets the Python-side record: the
+        capabilities and hook handlers those plugins registered in the shared
+        registries stay behind. The next load then hits a duplicate-capability
+        rejection (which is caught and reported per plugin, so the plugin looks
+        broken) and adds a second copy of every hook closure (which is not
+        caught at all, so hooks silently run twice). Clearing both registries by
+        source first is what makes a toggle actually replace the previous
+        generation instead of stacking on it.
+        """
+        report: dict[str, Any] = {
+            "loaded": [], "skipped": [], "errors": {},
+            "capabilities_removed": 0, "hooks_cleared": 0,
+        }
         self._wiring = {
             "hook_bus": hook_bus, "mcp_client": mcp_client, "capabilities": capabilities,
         }
+        for previous_name in list(self._loaded):
+            removed, hooks_cleared = self._forget_plugin(
+                previous_name, capabilities=capabilities, hook_bus=hook_bus,
+            )
+            report["capabilities_removed"] += removed
+            report["hooks_cleared"] += hooks_cleared
         self._loaded.clear()
         for plugin in self.discover():
             name = plugin["name"]
@@ -1169,6 +1203,19 @@ class PluginRuntime:
             except Exception as exc:
                 report["errors"][name] = str(exc)
         return report
+
+    def _forget_plugin(
+        self, name: str, *, capabilities: Any = None, hook_bus: Any = None,
+    ) -> tuple[int, int]:
+        """Drop everything one plugin registered; returns ``(capabilities, hooks)``."""
+        owner = f"plugin:{name}"
+        removed = 0
+        if capabilities is not None and hasattr(capabilities, "unregister_source"):
+            removed = capabilities.unregister_source(owner)
+        hooks_cleared = 0
+        if hook_bus is not None and hasattr(hook_bus, "forget_owner"):
+            hooks_cleared = hook_bus.forget_owner(owner)
+        return removed, hooks_cleared
 
     async def reload(
         self, name: str, *, hook_bus: Any = None, mcp_client: Any = None,
@@ -1219,13 +1266,9 @@ class PluginRuntime:
                     "error": f"清单无法解析（{manifest_path.name}）：{exc}",
                 }
 
-        removed = 0
-        if capabilities is not None and hasattr(capabilities, "unregister_source"):
-            removed = capabilities.unregister_source(f"plugin:{name}")
-
-        hooks_cleared = 0
-        if hook_bus is not None and hasattr(hook_bus, "forget_owner"):
-            hooks_cleared = hook_bus.forget_owner(f"plugin:{name}")
+        removed, hooks_cleared = self._forget_plugin(
+            name, capabilities=capabilities, hook_bus=hook_bus,
+        )
 
         previous = self._loaded.pop(name, None)
         try:

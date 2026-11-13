@@ -1,6 +1,7 @@
 """Atlas - All-in-one AI Personal Assistant."""
 
 import os
+import types
 from pathlib import Path
 
 
@@ -82,8 +83,57 @@ def _install_legacy_hermes_aliases() -> None:
         "atlas.tools.x2.hermes_": "atlas.tools.x2.atlas_",
     }
 
+    # Bare top-level names. The engine used to be imported as ``hermes_state``,
+    # ``hermes_constants`` and so on, with no ``atlas.`` prefix at all; the old
+    # finder only rewrote qualified ``atlas.*.hermes_*`` names, so those imports
+    # failed outright. Ten tests in ``test_atlas_session_sync.py`` were failing on
+    # ``ModuleNotFoundError: No module named 'hermes_state'`` for exactly this
+    # reason, and any installed plugin still importing the old way breaks too.
+    bare_renames = {
+        "hermes_state": "atlas.engine.state.atlas_state",
+        "hermes_state_messages": "atlas.engine.state.atlas_state_messages",
+        "hermes_state_schema": "atlas.engine.state.atlas_state_schema",
+        "hermes_state_common": "atlas.engine.state.atlas_state_common",
+        "hermes_state_search": "atlas.engine.state.atlas_state_search",
+        "hermes_state_timeline": "atlas.engine.state.atlas_state_timeline",
+        "hermes_state_errors": "atlas.engine.state.atlas_state_errors",
+        "hermes_state_holders": "atlas.engine.state.atlas_state_holders",
+        "hermes_state_fts": "atlas.engine.state.atlas_state_fts",
+        "hermes_state_titles": "atlas.engine.state.atlas_state_titles",
+        "hermes_state_portability": "atlas.engine.state.atlas_state_portability",
+        "hermes_constants": "atlas.engine.atlas_constants",
+        "hermes_time": "atlas.engine.state.timefmt",
+        # The old CLI package only matters for the one symbol tests patch; a bare
+        # "hermes_cli" -> "atlas" entry would alias the package object to this very
+        # module and make every submodule import fail, so only real names are listed.
+        "hermes_cli.goals": "atlas.engine.goals",
+        "hermes_runtime": "atlas.engine.atlas_runtime",
+        "hermes_policy": "atlas.engine.atlas_policy",
+    }
+
+    #: Retired top-level packages. These get a real (empty) package object rather
+    #: than a direct alias, because ``monkeypatch.setattr("hermes_cli.goals.X")``
+    #: and ``import hermes_cli.foo`` both require the parent package to import.
+    #: Aliasing the package itself onto ``atlas`` would not work: it would make
+    #: ``hermes_cli.<anything>`` resolve against Atlas's own namespace, so a typo
+    #: would silently patch the wrong object instead of failing.
+    legacy_packages = {"hermes_cli": "atlas"}
+
     class _LegacyHermesFinder(importlib.abc.MetaPathFinder):
         def find_spec(self, fullname, path=None, target=None):
+            package = legacy_packages.get(fullname)
+            if package is not None:
+                return importlib.util.spec_from_loader(
+                    fullname, loader=_NamespacePackageLoader(fullname))
+            exact = bare_renames.get(fullname)
+            if exact is not None:
+                try:
+                    module = importlib.import_module(exact)
+                except ImportError:
+                    return None
+                sys.modules[fullname] = module
+                return importlib.util.spec_from_loader(
+                    fullname, loader=_AliasLoader(module))
             for old, new in renames.items():
                 if fullname.startswith(old):
                     successor = new + fullname[len(old):]
@@ -102,6 +152,21 @@ def _install_legacy_hermes_aliases() -> None:
 
         def create_module(self, spec):
             return self._module
+
+        def exec_module(self, module):
+            return None
+
+    class _NamespacePackageLoader(importlib.abc.Loader):
+        """An empty package whose ``__path__`` is empty, so only explicit
+        submodule aliases from ``bare_renames`` can resolve beneath it."""
+
+        def __init__(self, name: str):
+            self._name = name
+
+        def create_module(self, spec):
+            module = types.ModuleType(self._name)
+            module.__path__ = []  # a package, but with nothing on the filesystem
+            return module
 
         def exec_module(self, module):
             return None

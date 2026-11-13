@@ -296,6 +296,9 @@ class RunRequest:
     session_env: dict[str, str] = field(default_factory=dict)
     ephemeral: bool = False
     bypass_prompt_cache: bool = False
+    # Host-registered content transforms applied to each tool result before the
+    # model sees it. ``None`` keeps the kernel's behaviour byte-identical.
+    tool_result_finalizers: Any = None
 
 
 @dataclass
@@ -469,6 +472,10 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
         subtask_group_completed=callbacks.subtask_group_completed,
         parent_process_event_callback=callbacks.parent_process_event_callback,
     )
+    # The kernel reads this off the run context; carrying it here is what makes a
+    # host-registered finalizer reach an actual run instead of sitting in
+    # AppServices unused.
+    runtime.tool_result_finalizers = request.tool_result_finalizers
     from atlas.tools.acp_fs import current as current_acp_filesystem
     runtime.acp_filesystem = current_acp_filesystem()
     state.runtime = runtime

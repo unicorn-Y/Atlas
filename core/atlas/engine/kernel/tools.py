@@ -621,6 +621,20 @@ class ToolScheduler:
             return bool(self.read_only(name, args))
         return name in READ_ONLY_TOOLS
 
+    def _safe_to_overlap_now(self, call: dict[str, Any]) -> bool:
+        """Re-ask the classifier at dispatch time, not only while grouping.
+
+        ``supports_parallel`` runs as the batch is being split, which can be well
+        before this call actually starts: an earlier sibling may have run for
+        minutes. A tool whose safety depends on its arguments therefore has to be
+        asked again immediately before dispatch, otherwise a call queued as a
+        read can start beside a write that was issued in between.
+        """
+        try:
+            return self.supports_parallel(call)
+        except Exception:  # noqa: BLE001 - a broken classifier must serialize
+            return False
+
     async def _execute(
         self,
         call: dict[str, Any],
@@ -752,7 +766,43 @@ class ToolScheduler:
         terminal receipt, so a batch with one failure still returns the other
         calls' real output. ``cancellation_requested`` is therefore True only for
         a genuine external ``asyncio.CancelledError`` aimed at the batch itself.
+
+        Each call's safety is re-checked here, at dispatch time. A call that was
+        grouped as a read but no longer qualifies (its arguments changed, or the
+        host classifier got stricter) becomes a barrier: it runs alone, after the
+        already-safe group has settled, instead of overlapping a write.
         """
+        safe: list[tuple[int, dict[str, Any]]] = []
+        unsafe: list[tuple[int, dict[str, Any]]] = []
+        for index, call in calls:
+            (safe if self._safe_to_overlap_now(call) else unsafe).append((index, call))
+
+        results_by_index: dict[int, ToolExecutionResult] = {}
+        stopped = False
+        if safe:
+            settled, stopped = await self._gather_parallel(safe, cancelled_indices)
+            results_by_index.update(
+                (index, result) for (index, _), result in zip(safe, settled)
+            )
+        for index, call in unsafe:
+            if stopped:
+                break
+            results_by_index[index] = await self._execute(call, cancelled_indices, index)
+            if index in cancelled_indices:
+                stopped = True
+        ordered = [
+            results_by_index[index]
+            if index in results_by_index else _cancelled_result(call, started=False)
+            for index, call in calls
+        ]
+        return ordered, stopped
+
+    async def _gather_parallel(
+        self,
+        calls: list[tuple[int, dict[str, Any]]],
+        cancelled_indices: set[int],
+    ) -> tuple[list[ToolExecutionResult], bool]:
+        """Gather one group of calls whose concurrency was already re-verified."""
         tasks = [
             asyncio.create_task(self._execute(call, cancelled_indices, index))
             for index, call in calls

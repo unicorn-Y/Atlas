@@ -891,6 +891,61 @@ async def get_conversation_log_location(
     }
 
 
+@router.get("/api/conversations/{conversation_id}/export")
+async def export_conversation(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str,
+    include_compacted: bool = Query(
+        False,
+        description="Include turns that in-place compaction archived (what the user still sees).",
+    ),
+    include_inactive: bool = Query(
+        False,
+        description="Include every stored row with its active/compacted flags (lossless backup shape).",
+    ),
+) -> dict[str, Any]:
+    """Export one conversation as a re-importable JSON document.
+
+    ``export_session`` already produces exactly this shape and
+    ``import_sessions`` already consumes it; only the HTTP surface was missing,
+    which left users with a share-to-HTML route and no way to get their own data
+    back out in a machine-readable form. The default is the round-trippable
+    projection: ``include_compacted`` is a display read that is deduped and
+    ordered for humans, so importing it would turn archived turns into live
+    context. Pass ``include_inactive=true`` for an explicitly lossless export.
+    """
+    memory = services.memory
+    if memory is None:
+        from atlas import server as _atlas_server
+
+        memory = _atlas_server.memory
+    assert memory is not None
+    if not await memory.get_conversation(conversation_id):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_sync import _open_db
+
+    session_home = DATA_ROOT / "engine"
+    if not (session_home / "state.db").exists():
+        raise HTTPException(status_code=503, detail="Session store is not initialized")
+
+    def _read() -> dict[str, Any] | None:
+        with _open_db(session_home) as db:
+            return db.export_session(
+                conversation_id,
+                include_compacted=include_compacted,
+                include_inactive=include_inactive,
+            )
+
+    document = await asyncio.to_thread(_read)
+    if not document:
+        raise HTTPException(status_code=404, detail="Session transcript not found")
+    document.setdefault("conversation_id", conversation_id)
+    document["export_format"] = "atlas.session.v1"
+    return document
+
+
 @router.get("/api/conversations/{conversation_id}/branches")
 async def get_conversation_branches(
     services: Annotated[AppServices, Depends(get_app_services)],

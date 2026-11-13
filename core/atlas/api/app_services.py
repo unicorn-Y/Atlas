@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from atlas.session_projections import SessionProjections
+from atlas.engine.kernel.tool_finalize import ToolResultFinalizers
 
 
 @dataclass(slots=True)
@@ -77,6 +78,11 @@ class AppServices:
     # constructed so every AppServices — including test harnesses that build a bare
     # container — gets one, and two features describing the same session share it.
     session_projections: Any = field(default_factory=SessionProjections)
+    # Ordered, disposable content transforms applied to a tool result just before
+    # the model sees it. Default-constructed for the same reason as
+    # ``session_projections``: a bare container must still give registrants a real
+    # registry, and a runtime without one gets a fresh no-op registry in the loop.
+    tool_result_finalizers: Any = field(default_factory=ToolResultFinalizers)
 
     # -- guarded accessors -------------------------------------------------
     # Every handler writes ``services.<field>.<method>``, and a field that is

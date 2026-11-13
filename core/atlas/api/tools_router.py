@@ -593,7 +593,10 @@ async def reconnect_failed_mcp_servers(
         raise HTTPException(status_code=503, detail="MCP client unavailable")
     runtime = mcp_client.get_runtime_status()
     states = {"failed", "error", "reconnecting", "auth-needed", "auth_needed",
-              "authorization_required", "needs_authorization"}
+              "authorization_required", "needs_authorization",
+              # Terminal state after the reconnect budget is spent. An explicit
+              # batch reconnect is exactly the "try again" that should clear it.
+              "unreachable"}
     selected = [row for row in runtime.get("servers", [])
                 if row.get("enabled", True) and str(row.get("state", "")).casefold() in states]
     semaphore = asyncio.Semaphore(3)
