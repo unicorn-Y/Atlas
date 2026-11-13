@@ -2,9 +2,34 @@ import { messages as enUS } from './locales/en-US';
 import { messages as zhCN } from './locales/zh-CN';
 
 export type Locale = 'zh-CN' | 'en-US';
+export type LocaleNamespace = string;
 
 const KEY = 'atlas.preference.locale';
 const SLOT_PATTERN = /__U26_SLOT_(\d+)__/g;
+const namespaceCatalogs = new Map<LocaleNamespace, Partial<Record<Locale, Record<string, string>>>>();
+
+registerLocaleNamespace('updates', 'en-US', {
+  '查看说明': 'View details',
+  '收起': 'Collapse',
+  '跳过这个版本': 'Skip this version',
+  '稍后提醒': 'Remind me later',
+  '下载并重启安装': 'Download and restart installation',
+  '立即更新源码': 'Update source now',
+});
+registerLocaleNamespace('updates', 'zh-CN', {
+  '查看说明': '查看说明',
+  '收起': '收起',
+  '跳过这个版本': '跳过这个版本',
+  '稍后提醒': '稍后提醒',
+  '下载并重启安装': '下载并重启安装',
+  '立即更新源码': '立即更新源码',
+});
+
+export function registerLocaleNamespace(namespace: LocaleNamespace, locale: Locale, messages: Record<string, string>): void {
+  const catalogs = namespaceCatalogs.get(namespace) ?? {};
+  catalogs[locale] = { ...catalogs[locale], ...messages };
+  namespaceCatalogs.set(namespace, catalogs);
+}
 
 const englishPatterns = Object.entries(enUS)
   .filter(([source]) => /__U26_SLOT_\d+__/.test(source))
@@ -113,4 +138,9 @@ export function t(source: string, locale: Locale = readLocale()): string {
     return pattern.translated.replace(SLOT_PATTERN, (_token, slot: string) => values.get(Number(slot)) ?? '');
   }
   return source;
+}
+
+export function tn(namespace: LocaleNamespace, source: string, locale: Locale = readLocale()): string {
+  const scoped = namespaceCatalogs.get(namespace)?.[locale]?.[source];
+  return scoped ?? t(source, locale);
 }

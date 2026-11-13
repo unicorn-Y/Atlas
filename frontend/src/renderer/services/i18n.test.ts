@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { observeLocalizedCopy, readLocale, saveLocale, t } from './i18n';
+import { observeLocalizedCopy, readLocale, registerLocaleNamespace, saveLocale, t, tn } from './i18n';
 import { messages as enUS } from './locales/en-US';
 
 describe('renderer locale resources', () => {
@@ -17,6 +17,14 @@ describe('renderer locale resources', () => {
     expect(readLocale()).toBe('en-US');
     expect(documentStub.documentElement.lang).toBe('en-US');
     expect(t('通知级别')).toBe('Notification level');
+  });
+
+  it('resolves a namespace override before the legacy locale catalog', () => {
+    registerLocaleNamespace('settings', 'en-US', { '通知级别': 'Settings notification level' });
+    saveLocale('en-US');
+    expect(tn('settings', '通知级别')).toBe('Settings notification level');
+    expect(tn('settings', '展开')).toBe(t('展开'));
+    expect(tn('updates', '查看说明')).toBe('View details');
   });
 
   it('keeps Chinese source copy when Chinese is selected and falls back safely', () => {
