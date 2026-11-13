@@ -171,7 +171,7 @@
 | X18 | skill provider 协议 + per-scope 分层 | `docs/subsystems/skills.md:9-30,188-200` | `SkillSource` + `with_sources` 请求作用域副本，同步 rglob | PRESENT-WEAKER |
 | X19 | skill 新鲜度：chokidar 监听 + 读写路径即时失效 | `docs/subsystems/skills.md:78-81` | `skills/__init__.py:406-433` mtime+size 指纹，读时全量重扫 | PRESENT-WEAKER |
 | X20 | skill 依赖/生命周期门 | DSH 无依赖契约 | `skills/__init__.py:547-590` 预检 mcp/python/commands | **PRESENT-STRONGER** |
-| X22 | MCP liveness：500ms→30s 翻倍，10 次后移除工具，稳定后重置预算 | `mcp-client/README.md:64-67,89-93,129` | `mcp_client.py:803-840` `while not stopping` 无上限 | ✅ **本次已修**（10 次上限 + `unreachable` 终态 + 稳定 60s 后重置 + 显式重试解锁） |
+| X22 | MCP liveness：500ms→30s 翻倍，10 次后移除工具，稳定后重置预算 | `mcp-client/README.md:64-67,89-93,129` | `tools/mcp_client.py` 500ms 起步、指数退避封顶 30s、10 次后转 `unreachable` 并移出工具索引、稳定 60s 后重置、显式重试解锁；8836 实测三个 MCP server 均 connected 且工具发现完成 | ✅ CLOSED |
 | X23 | MCP resources + 作用域隔离 | `docs/subsystems/mcp.md:39-70` | runtime MCP server allow-list 贯穿 preset/request 能力、kernel 工具发现与派发，并由 `MCPClient.for_scope()` 隔离资源读取 | ✅ 本轮关闭 |
 | X25 | SDK JSON-RPC：NDJSON、`initialize` 等树稳定、`session/wait`、关停 | `packages/sdk/README.md` | `tools/app_server.py:429` 协议 v1，无 settle barrier、无 wait | PRESENT-WEAKER |
 | X26 | typed Client↔Host Remote gateway（装饰器生成描述符/编解码/客户端类型） | `docs/api-gateway.md` | 手写 FastAPI router + 手写 TS client，契约靠人 | ABSENT |
@@ -206,7 +206,7 @@
 |---|---|---|---|---|
 | D11 | 回合 diff 审阅（并排/换行/hover 预览/二进制标记） | `ui-deliverables/.../ReviewTab.tsx:107,131` | `ChangesPanel.tsx:199,343` hunk 级接受/拒绝 + 行评论（Atlas 更强），无并排 | PRESENT-PARITY（动作更强，阅读更弱） |
 | D12 | 每回合变更文件摘要 | `workspace-changes/src/recorder.ts:230` | `run_drive.py:1165` checkpoint manifest difflib，渲染成一行脚注 | PRESENT-PARITY（数据）/WEAKER（呈现） |
-| D13 | `present` 声明的交付物卡片 | `tool-present/src/index.ts:81`；`PresentedFileCard.tsx` | 仍无 `present` agent 工具；注册入口在 W16 所有权之外的 `core/atlas/engine/tools/registry.py:103`，本批未改 API/卡片来伪装工具 | NOT-DONE |
+| D13 | `present` 声明的交付物卡片 | `tool-present/src/index.ts:81`；`PresentedFileCard.tsx` | `agent/tool_catalog.py` 暴露 `present`；`agent/presentation.py` / `tool_node.py` 只接受当前本地工作区内的现存文件并发出 `artifact_created`；`api/run_drive.py` 转发标题/摘要；`runtimeEvents.ts` 把自定义卡片信息写入 renderer artifact store | ✅ CLOSED |
 | D14 | 问题意图标签（`plan-review` 路由到专用面板） | `docs/subsystems/user-questions.md:25` | `intent=plan-review` 的 `input.required` 渲染进入现有计划审查、批准、修改控件 | ✅ 本轮关闭 |
 | D15 | 审批接管 composer（不可滚走） | `ui-approval/.../ApprovalPanel.tsx:1-62` | `ConversationActivity.tsx:351-400` 内联卡片（选项更丰富），可被滚走 | PRESENT-PARITY（选项强，位置弱） |
 | D16 | 文档预览 renderer 注册表 | `ui-sidebar-documentpreview/src/client/*` | `FilesPanel.tsx:635-690` 有 md/图片/PDF/xlsx/pptx/HTML | PRESENT-PARITY |

@@ -33,9 +33,8 @@ _MCP_START_FAILURE_COOLDOWN_SECONDS = 60.0
 # A server that keeps failing to come back must reach a terminal state instead of
 # being retried forever: an unbounded loop leaves its tools flapping in and out of
 # the model's schema with no way to tell "still starting" from "gone for good".
-# Ten attempts from 1s doubling lands at roughly 8 minutes; a reconnect that then
-# stays up for _MCP_RECONNECT_STABLE_SECONDS resets the budget, because a server
-# that recovers and runs for a while is not the same failure as one that never did.
+# A server that reconnects and then stays up for _MCP_RECONNECT_STABLE_SECONDS resets
+# the budget; a recovered server is not the same failure as one that never came back.
 _MCP_MAX_RECONNECT_ATTEMPTS = 10
 _MCP_RECONNECT_STABLE_SECONDS = 60.0
 _SENSITIVE_ARGUMENT_KEYS = frozenset({
@@ -848,7 +847,7 @@ class MCPClient:
         owner = handle._owner_task
         if owner is None:
             return
-        delay = 1.0
+        delay = 0.5
         try:
             try:
                 await owner

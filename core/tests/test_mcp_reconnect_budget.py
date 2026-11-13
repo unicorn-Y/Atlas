@@ -68,6 +68,33 @@ async def test_reconnect_gives_up_after_budget_and_reports_terminal_state(monkey
 
 
 @pytest.mark.asyncio
+async def test_reconnect_backoff_starts_at_half_a_second_and_caps_at_thirty(monkeypatch):
+    delays = []
+
+    async def record_sleep(seconds: float) -> None:
+        delays.append(seconds)
+
+    monkeypatch.setattr(mcp_client_module.asyncio, "sleep", record_sleep)
+    client = MCPClient()
+    cfg = MCPServerConfig(name="flaky", transport="stdio")
+    client._configured_configs["flaky"] = cfg
+
+    async def dropped() -> None:
+        return None
+
+    handle = _StubHandle(asyncio.create_task(dropped()))
+    client._servers["flaky"] = handle
+
+    async def always_fails(_cfg) -> None:
+        raise ConnectionError("refused")
+
+    client._connect_server = always_fails  # type: ignore[assignment]
+    await client._monitor_connection(cfg, handle)
+
+    assert delays == [0.5, 1, 2, 4, 8, 16, 30, 30, 30, 30]
+
+
+@pytest.mark.asyncio
 async def test_monitor_does_not_start_a_second_episode_after_giving_up(monkeypatch):
     monkeypatch.setattr(mcp_client_module.asyncio, "sleep", _no_sleep)
     client = MCPClient()

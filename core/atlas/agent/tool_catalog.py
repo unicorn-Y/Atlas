@@ -27,11 +27,25 @@ _WEB_EXTRACT_TOOL = {"type": "function", "function": {
     }, "required": ["url"], "additionalProperties": False},
 }}
 
+PRESENT_TOOL = {"type": "function", "function": {
+    "name": "present",
+    "description": (
+        "Declare an existing file in the current workspace as a user-facing deliverable. "
+        "Call this after creating the file so Atlas shows a deliverable card."
+    ),
+    "parameters": {"type": "object", "properties": {
+        "path": {"type": "string", "description": "Workspace-relative or absolute path to the existing file."},
+        "title": {"type": "string", "description": "Short title shown on the deliverable card."},
+        "summary": {"type": "string", "description": "Brief description shown with the file."},
+    }, "required": ["path"], "additionalProperties": False},
+}}
+
 
 def model_facing_tools(agent) -> list[dict[str, Any]]:
     """Assemble model-facing tool names for Atlas runtime telemetry."""
     """Assemble model-facing tool names for Atlas runtime telemetry."""
     tools = agent._mcp.get_tools_for_llm() if agent._mcp else []
+    tools.append(PRESENT_TOOL)
     tools.extend([
         {"type": "function", "function": {
             "name": "connector_google_search",

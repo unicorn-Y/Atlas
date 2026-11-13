@@ -1290,6 +1290,12 @@ async def execute_tools_node(
                               agent="parallel-workers",
                           )}],
                           "is_error": False}
+            elif fn_name == "present":
+                from atlas.agent.presentation import build_presented_file
+
+                artifact = build_presented_file(fn_args, workspace=workspace)
+                await ctx.event_queue.put({"type": "artifact_created", **artifact})
+                result = json.dumps({"presented": True, **artifact}, ensure_ascii=False)
             elif fn_name in {"create_document", "create_spreadsheet", "create_presentation"}:
                 if not workspace:
                     raise ValueError("先为当前对话选择工作目录，再创建 Office 文件。")

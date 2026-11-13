@@ -41,9 +41,12 @@ export function normalizeRuntimeEvent(envelope: RuntimeEventEnvelope): AgentEven
   if (envelope.event === 'artifact.created') {
     const data = envelope.data ?? {};
     const path = String(data.path ?? '');
+    const title = typeof data.title === 'string' && data.title.trim() ? data.title.trim() : '';
+    const summary = typeof data.summary === 'string' && data.summary.trim() ? data.summary.trim() : '';
     return { ...base, type: 'artifact.updated', data: {
       ...data, artifact_id: `created:${path || envelope.event_id}`, artifact_type: 'file',
-      name: path.split(/[\\/]/).pop() || '文件', summary: DOCUMENT_KIND[String(data.kind)] ?? '生成了文件',
+      name: title || path.split(/[\\/]/).pop() || '文件',
+      summary: summary || DOCUMENT_KIND[String(data.kind)] || '生成了文件',
     } };
   }
   if (!known.has(envelope.event)) return null;

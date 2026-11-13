@@ -69,6 +69,37 @@ describe('new wire events are known', () => {
   });
 });
 
+describe('declared deliverables', () => {
+  it('turns the present event into a titled artifact card in the renderer store', () => {
+    useAtlasStore.setState({
+      artifacts: [],
+      runs: [{
+        id: 'run-1', conversationId: 'conversation-1', title: 'Run',
+        status: 'running', phase: 'execution', startedAt: '', updatedAt: '',
+        lastEventSequence: 0, events: [],
+      }],
+      activeRunId: 'run-1',
+    });
+    const event = normalizeRuntimeEvent({
+      type: 'agent_event', event_id: 'run-1:14', run_id: 'run-1', sequence: 14,
+      timestamp: '2026-10-02T00:00:00Z', event: 'artifact.created',
+      data: {
+        path: 'deliverables/plan.md', kind: 'document', tool: 'present',
+        title: 'Implementation plan', summary: 'Ready for review',
+      },
+    });
+
+    expect(event?.type).toBe('artifact.updated');
+    if (!event) throw new Error('artifact.created should normalize');
+    useAtlasStore.getState().appendEvent(event);
+
+    expect(useAtlasStore.getState().artifacts).toContainEqual(expect.objectContaining({
+      runId: 'run-1', type: 'file', name: 'Implementation plan',
+      path: 'deliverables/plan.md', summary: 'Ready for review',
+    }));
+  });
+});
+
 describe('run event retention', () => {
   const baseRun = (events: AgentEvent[] = []): AgentRun => ({
     id: 'run-1', conversationId: 'c1', title: 'T', status: 'running', phase: 'execution',
