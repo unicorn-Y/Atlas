@@ -104,21 +104,27 @@ rtk python -m pytest -q -p no:cacheprovider tests/test_conversation_explain.py t
 
 `rtk python -m py_compile atlas/api/conversations_router.py` 成功；`rtk git diff --check` 通过。
 
-真实 HTTP 验证：后端 `/api/health` 返回 200；真实模型回合输出 `[result] terminal=run.completed chars=2`。随后从 `/api/conversations` 找到该回合，GET explain 返回 HTTP 200：
+真实 HTTP 验证（本轮重新执行）：在独立端口 8811 启动本次代码版本的 FastAPI 后端，`/api/health` 返回 200；真实模型回合返回模型 `deepseek-v4.1-flash`，`input_tokens=10243`、`output_tokens=2`，assistant 回复 `OK`，终止事件 `run.completed`。随后 GET explain 查询同一真实回合 assistant 消息 `18410`，返回 HTTP 200：
 
 ```text
-EXPLAIN_HTTP_OK conversation=dsh-live-350bdb91 message=18408 role=assistant turn=1 step=1 compaction_shadowed=False rewind_inactive=False
+BACKEND_HEALTH_HTTP=200
+[terminal] run.completed data={"result": "completed", "model": "deepseek-v4.1-flash", "usage": {"input_tokens": 10243, "uncached_input_tokens": 8707, "output_tokens": 2, "cached_input_tokens": 1536, "request_count": 1, "context_tokens": 10243, "context_limit": 1048576,
+[reply] 'OK'
+[result] terminal=run.completed chars=2
+EXPLAIN_HTTP_OK status=200 message=18410 role=assistant turn=1 step=1 compaction_shadowed=False rewind_inactive=False
+PORT_8811_CLOSED
 ```
 
 停止模型回合后对当前代码重新启动服务复验同一条消息：`EXPLAIN_HTTP_OK status=200 message=18408 turn=1 step=1`；完成后确认 `PORT_CLOSED`。
 
 ### 其余新增要求与目录责任
 
-- `capabilities.usage` 需要 `core/atlas/introspect/` 注册与调用计量，不在 Batch E 的 `frontend/src/` / `core/atlas/api/` 目录内；登记由 Batch D / capability-introspection owner 承接，本批未跨目录改动。
+- `capabilities.usage` 需要 `core/atlas/introspect/` 注册与调用计量，不在 Batch E 的 `frontend/src/` / `core/atlas/api/` 目录内；由 coordinator / introspection owner 承接，本批未跨目录改动。
 - effect receipt 要从 Batch A/C 的工具/沙箱执行点采集，并由 Batch B 的事件持久层写入；不在 Batch E 目录内，由 A/C/B 承接，本批未跨目录改动。
 - 八项优势的聚合回归文件 `core/tests/test_atlas_advantages.py` 不在本批所有权内。按能力由 A（写路径 LSP）、D（hooks/skills）、E（rewind、桌面多窗格、消息操作、富预览）和 memory/library owner 提供覆盖；本批没有改该聚合测试文件，也没有声称八项已锁定。
 - `core/scripts/dsh_parity_bench.py` 与 `BENCH.md` 不在 Batch E 目录内，由 coordinator/core-scripts owner 承接；本批未运行跨进程 DSH 对照，不给出性能优劣结论。
-- 新增 [`COVERAGE.md`](COVERAGE.md) 仅写 Batch E 的 D1–D33 行，并将 §6 新要求的范围/责任显式标记；完整 135 行覆盖表要等 A–D owner 合并各自状态。
+- [`COVERAGE.md`](COVERAGE.md) 已汇总 ledger 的 135 行（E/S/X/D），逐行标记 CLOSED、PARTIAL、NOT-DONE 或 ATLAS-STRONGER；状态依据 ledger 和五批 RESULT，不将未验证/弱实现写成 CLOSED。
+- A–D 的 RESULT 文件均存在，相关 worker worktree 当前干净；其输出已在主分支历史中，主工作树状态不包含先前描述的 44 个修改文件和 34 个新文件。没有把该历史工作误报成本轮未提交 diff。
 
 ## 全账本状态
 
