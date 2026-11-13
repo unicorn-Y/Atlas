@@ -51,7 +51,7 @@
 | E14 | OS 级沙箱按**每次调用**给 `read-only`/`workspace-write`/`danger-full-access`，并报告实际执行等级 | `packages/sandbox/sandbox-local/src/profiles.ts:16`；`docs/subsystems/sandbox.md` | 只有整 run 的 Docker 容器或主机 + `allowed_paths` 编辑器检查；`full_access` 下 shell 无文件效果边界 | ABSENT |
 | E15 | 持久 PTY：owner 鉴权、`waitReason` 四值（stdin_read/inferred_idle/timeout/session_exit）、有界回滚 | `packages/experimental/tool-terminal/src/index.ts:166-395` | `local_execution.py` 按 run owner 隔离进程读写/取消，并返回 `stdin_read` / `inferred_idle` / `timeout` / `session_exit` | ✅ 本轮关闭 |
 | E16 | 统一后台作业注册表：`job_output/list/kill`，256KiB 环形缓冲，settle 后 16KiB，每 owner 最多 10 个 | `packages/jobs/jobs-local/src/index.ts:33-42,128` | `ExecManager` 统一 owner-fenced shell 与 subagent 注册/列表/输出/终止；运行缓冲 256KiB、settled 16KiB、每 owner 10 个；`job_*` 工具已暴露模型调用 | ✅ 本轮关闭 |
-| E17 | 子代理统一激活：能力声明校验、`toolFilter` 真删且拒执行、fork 子（继承父已完成前缀）、persona | `packages/subagent/tool-subagent/src/index.ts:96,171` | 有 delegate 工具 schema/深度/权限降级/worktree；仍缺 fork 已完成上下文和 persona 的完整激活路径 | PRESENT-WEAKER |
+| E17 | 子代理统一激活：能力声明校验、`toolFilter` 真删且拒执行、fork 子（继承父已完成前缀）、persona | `packages/subagent/tool-subagent/src/index.ts:96,171` | 已验证 agent definition 的可信/能力约束与 allowlist；native 子代理 fork 父会话已完成轮次并记录 delegate lineage；agent prompt 作为受限 persona 指引注入 | ✅ 本轮关闭 |
 | E18 | 工具内请求沙箱升级：`sandbox_permissions` + `justification`，按调用审批，拒绝不动既有策略 | `packages/core/tools/src/ptc.ts:387-405` | 单次 justification/approval 已接入；Docker 有 per-call 模式，host executor 缺少可执行隔离时 fail-closed | PRESENT-WEAKER |
 
 ### P2

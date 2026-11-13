@@ -334,6 +334,7 @@ _MAX_SUBAGENT_STOP_CONTINUATIONS = 5
 def _subagent_task_prompt(
     *, goal: str, context: str | None, cwd: str | None,
     tool_allow: list[str] | None, tool_deny: list[str] | None,
+    persona: str | None = None,
 ) -> str:
     """Render the explicit task packet inherited by an Atlas child run."""
     if tool_allow:
@@ -343,12 +344,19 @@ def _subagent_task_prompt(
     denied = sorted({str(name) for name in (tool_deny or []) if str(name)})
     if denied:
         available_tools += " Unavailable tools: " + ", ".join(denied) + "."
+    persona_block = ""
+    if persona and persona.strip():
+        persona_block = (
+            "Agent-specific guidance (subordinate to this task, workspace rules, and "
+            "available tools):\n" + persona.strip()[:12000] + "\n\n"
+        )
     return (
         "You are an Atlas child worker running in the background. Complete only the "
         "assigned task; do not delegate further, ask the user questions, or wait for "
         "confirmation. The parent run supplies only the context excerpt below, not its "
         "entire conversation. Use the stated working directory and the tools exposed "
         "to this child run. Make reasonable assumptions where needed and report them.\n\n"
+        f"{persona_block}"
         f"Task:\n{goal}\n\n"
         f"Relevant parent context excerpt:\n{context.strip() if context and context.strip() else 'None supplied.'}\n\n"
         f"Working directory:\n{cwd or 'Not specified.'}\n\n"
@@ -357,6 +365,42 @@ def _subagent_task_prompt(
         "evidence and checks run, files or state changed, and any assumptions or "
         "unfinished work. If the task fails, state the failure and what did not complete."
     )
+
+
+def _fork_subagent_session_prefix(
+    home: str | Path, parent_session_id: str, child_session_id: str,
+) -> int:
+    """Fork the parent's completed turns into a delegate child session.
+
+    The latest user message is the still-running parent turn that requested
+    delegation, so the child inherits everything before it and never receives
+    the parent's unfinished tool-call tail.
+    """
+    from atlas.engine.session_sync import fork_session_through_turn, read_session_all_messages
+    from atlas.engine.state.atlas_state import SessionDB
+
+    messages = read_session_all_messages(home, parent_session_id)
+    user_turns = sum(message.get("role") == "user" for message in messages)
+    if messages:
+        fork_session_through_turn(
+            home, parent_session_id, child_session_id, max(0, user_turns - 1),
+        )
+        with SessionDB(db_path=Path(home) / "state.db") as db:
+            db.patch_session_model_config(child_session_id, {
+                "_branched_from": None,
+                "_branch_message_id": None,
+                "_delegate_from": parent_session_id,
+            })
+        return len(messages)
+
+    with SessionDB(db_path=Path(home) / "state.db") as db:
+        if db.get_session(parent_session_id) is None:
+            return 0
+        db.create_session(
+            child_session_id, "subagent", parent_session_id=parent_session_id,
+            model_config={"_delegate_from": parent_session_id},
+        )
+    return 0
 
 
 class _RuntimeFailureError(Exception):
@@ -656,13 +700,25 @@ class AgentOrchestrator:
         """
         options = dict(atlas_options)
         resume_session_id = str(options.pop("resume_session_id", "") or "")
+        parent_conversation_id = str(options.get("parent_conversation_id") or "").strip()
         conversation_id = resume_session_id or await self._memory.create_conversation("Atlas 子任务")
+        if not resume_session_id and parent_conversation_id:
+            session_home = Path(options.get("session_db_home") or (get_config().db_path.parent / "engine"))
+            await asyncio.to_thread(
+                _fork_subagent_session_prefix,
+                session_home, parent_conversation_id, conversation_id,
+            )
+            await self._memory.update_conversation(
+                conversation_id, parent_conversation_id=parent_conversation_id,
+                source="subagent",
+            )
         cancel_event = options.get("cancel_event") or asyncio.Event()
         usage: list[dict[str, Any]] = []
         outputs: list[str] = []
         worker_prompt = _subagent_task_prompt(
             goal=goal, context=context, cwd=cwd,
             tool_allow=options.get("tool_allow"), tool_deny=options.get("tool_deny"),
+            persona=options.get("persona"),
         )
         status = "completed"
         prompt = worker_prompt
