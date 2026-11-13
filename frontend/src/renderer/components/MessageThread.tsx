@@ -17,6 +17,7 @@ import type { InspectorTab } from '../shell/Inspector';
 import type { AgentEvent } from '../../types/runtime';
 import { settingsForMode, ThreadClassGroup, ThreadPresentationControls, THREAD_CLASSES, useThreadPresentationSettings, type ThreadClassId, type ThreadPresentationMode } from './ThreadPresentation';
 import ComputerUseTrail from './ComputerUseTrail';
+import ConversationTrajectory from './ConversationTrajectory';
 
 /** 每个会话最近一次的虚拟列表滚动状态，切回来时原位恢复。 */
 const savedScrollStates = new Map<string, StateSnapshot>();
@@ -166,6 +167,7 @@ export interface MessageThreadProps {
 }
 
 export default function MessageThread({ history, componentSelections = {}, username, historyActions, emptyState, footerNote, threadRef, setTab, onOpenBrowser, focusMode = false, focusSummary = '', tuiFullscreen = false, onToast }: MessageThreadProps) {
+  const [conversationView, setConversationView] = useState<'chat' | 'trajectory'>('chat');
   // 窄选择器：只有当前会话的运行事件/正文变化才重渲染这里，别的会话流式输出不打扰。
   const conversationId = useAtlasStore((state) => state.activeConversationId);
   const events = useAtlasStore((state) => state.runs.find((run) => run.id === state.activeRunId)?.events ?? EMPTY_EVENTS);
@@ -641,6 +643,11 @@ export default function MessageThread({ history, componentSelections = {}, usern
     className="min-h-0 flex-1 overflow-auto px-8 pt-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-[-2px]"
   >
     <span id="thread-keyboard-help" className="sr-only">对话活动区域。{tuiFullscreen ? '全屏时按 Page Up 或 Page Down 翻页；按 Escape 退出；选中对话文字后按 Ctrl+Shift+C 复制。' : ''}焦点在此区域时，按 Ctrl 加 O 在常规、思考和详细显示方式间切换。按 Tab 访问消息操作与活动设置。</span>
+    <div className="mx-auto flex w-[min(760px,100%)] justify-end gap-1 py-1" role="group" aria-label="会话视图">
+      <button type="button" aria-pressed={conversationView === 'chat'} onClick={() => setConversationView('chat')} className="rounded-md px-2 py-1 text-[11px] text-fg-2 hover:bg-hover">对话</button>
+      <button type="button" aria-pressed={conversationView === 'trajectory'} onClick={() => setConversationView('trajectory')} className="rounded-md px-2 py-1 text-[11px] text-fg-2 hover:bg-hover">轨迹</button>
+    </div>
+    {conversationView === 'trajectory' ? <div className="mx-auto w-[min(760px,100%)] pb-8"><ConversationTrajectory events={events} /></div> : <>
     <ThreadPresentationControls settings={presentation} onChange={setPresentation} hasReasoning={hasReasoning} />
     <ConversationSearch
       open={searchOpen}
@@ -681,6 +688,7 @@ export default function MessageThread({ history, componentSelections = {}, usern
       {screenReaderAnnouncement && <div className="sr-only" role="status" aria-live={presentation.announceCompletedReplies ? 'polite' : 'off'} aria-atomic="true">Atlas 回复：{screenReaderAnnouncement}</div>}
       {!focusMode && footerNote}
     </div>
+    </>}
   </div>;
 }
 

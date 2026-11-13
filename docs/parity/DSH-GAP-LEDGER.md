@@ -192,7 +192,7 @@
 | D1 | 认证本地载体 + boot injection + OS 分配端口 | `apps/desktop/src/web-document.ts:41,72`；`main.ts:664,685` | `preload/index.cts:8` 硬编码 8765；`main/electron.ts:1006` 全局注入 token；无注入通道 | PRESENT-WEAKER |
 | D2 | 两进程 typed IPC 生命周期（ready/fatal/shutdown-complete/quit-inspection） | `apps/desktop/src/host-process.ts:189,57-78` | `backendProcess.ts:683,101,485` 靠 health + pid + 退出码推断 | PRESENT-WEAKER |
 | D3 | 流式增量：chunk 折叠进 per-node state，重连重放压缩流 | `api/session-controller/.../events.ts:8`；`ui-conversation/.../assembler.ts:174,364` | 不再对 800 条之后的旧事件截断；timeline 仍按全量事件重建，chunk folding/per-node incremental state 未完成 | PRESENT-WEAKER |
-| D4 | keyed ConversationNode renderer 注册表 | `ui-chat/.../register-node-renderers.ts:39-69` | `timeline.ts:73-99` 静态联合 + `ConversationActivity.tsx:42` 单 switch，无注册 API | ABSENT |
+| D4 | keyed ConversationNode renderer 注册表 | `ui-chat/.../register-node-renderers.ts:39-69` | `ConversationActivity.tsx` 按 timeline kind 注册内置 renderer，`TimelineRow` 通过 keyed registry 分发；扩展注册/卸载和重复注册有单测。真实进程验收未通过，保留 PARTIAL | PARTIAL |
 | D5 | durable 附件暂存：内容寻址、先存后发、进度、可取消 | `docs/subsystems/attachment.md`；`client/file-upload/src/client/contract.ts` | `App.tsx:1380-1410` 读成 base64 data URL（4 张/4MiB/共 8MiB），`App.tsx:1222` 内联进 run.start | PRESENT-WEAKER |
 | D6 | 结构化草稿：chip 进文本模型、per-session 语义草稿、重载存活 | `ui-conversation/.../ReferenceChip.tsx` | `Composer.tsx:740` 纯 textarea；mentions 另存 `App.tsx:413`，草稿只存纯文本 `App.tsx:215` | PRESENT-WEAKER |
 | D7 | follow 重连：首帧 header+tail+cursor+投影基线，`page()` 补缺口 | `docs/subsystems/web-client.md:48` | `client.ts:670-694` 永远 `after_sequence: 0`；退避最多 3 次后放弃 | PRESENT-WEAKER |
@@ -223,7 +223,7 @@
 | D27 | 队列/steer/redirect | `ui-conversation/.../QueueDock.tsx` | `ConversationQueuePanel.tsx`；`useAtlasStore.ts:22,760` | PRESENT-PARITY |
 | D28 | 语音输入 | `docs/subsystems/voice-input.md:27` | `VoiceHud.tsx` + `App.tsx:1450-1530` + TTS + 通话浮层 | PRESENT-PARITY（Atlas 更宽） |
 | D29 | 更早历史分页 | `docs/subsystems/web-client.md:48` | `useAtlasStore.ts:452` 按 id 游标 + 满页启发式 | PRESENT-WEAKER |
-| D30 | 备选会话视图（Chat / Trajectory） | `ui-trajectory/.../TrajectoryView.tsx` | Rollout 提供可读 trajectory 与原始事件切换；完整 Chat/Trajectory 双模式会话 renderer 尚未实现 | PRESENT-WEAKER |
+| D30 | 备选会话视图（Chat / Trajectory） | `ui-trajectory/.../TrajectoryView.tsx` | 主会话 thread 增加 Chat/Trajectory 切换；Trajectory 当前只显示内存中的运行事件，历史归档和模式持久化未接入 | PARTIAL |
 | D31 | 多窗口/分栏 | DSH 单窗口 | `electron.ts:563,600`；`PaneWorkspace.tsx:28` 递归 split 树 | **PRESENT-STRONGER** |
 | D32 | 消息级操作 | `MessageIconActions.tsx:11-15`（仅复制+分支） | `App.tsx:3007-3032` 编辑重发/fork/fork+摘要/rewind/copy | **PRESENT-STRONGER** |
 | D33 | slash 命令注册表 | `docs/subsystems/commands.md:5-40` | `services/slashCommands.ts:29,52` 有去重与模糊排序；命令源仍是 `App.tsx:2240-2290` 静态数组 | PRESENT-PARITY |
