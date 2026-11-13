@@ -33,4 +33,18 @@ describe('TimelineProjection', () => {
     expect(projection.project([replacement])).toEqual(buildTimeline([replacement]));
     expect(projection.project([])).toEqual([]);
   });
+
+  it('keeps the current node baseline while replaying events that do not add timeline rows', () => {
+    const projection = new TimelineProjection();
+    const input = event('input', 1, 'run.started', 'hello');
+    const initial = projection.project([input]);
+    const baselineNode = initial[0];
+    const updated = projection.project([
+      input,
+      event('phase', 2, 'run.phase', 'execution'),
+      event('usage', 3, 'run.usage', 'tokens'),
+    ]);
+    expect(updated).toBe(initial);
+    expect(updated[0]).toBe(baselineNode);
+  });
 });

@@ -197,9 +197,14 @@ describe('BackendAdapter availability and recovery', () => {
   it('repairs a sequence gap by replaying from the last contiguous cursor', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('window', { setTimeout: (callback: TimerHandler, delay?: number) => setTimeout(callback, delay) });
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/api/health')
-      ? { ok: true } as Response
-      : { ok: true, json: async () => ({ version: '1.2' }) } as Response));
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/health')) return { ok: true } as Response;
+      if (url.includes('/events?')) return { ok: true, json: async () => ({
+        events: [runtimeEvent(2, 'message.completed'), runtimeEvent(3, 'run.completed')], next_cursor: 3, cursor: 3, has_more: false,
+      }) } as Response;
+      return { ok: true, json: async () => ({ version: '1.2' }) } as Response;
+    }));
     vi.stubGlobal('WebSocket', MockWebSocket);
     vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
     const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
@@ -214,19 +219,22 @@ describe('BackendAdapter availability and recovery', () => {
     first.receive(runtimeEvent(3, 'run.completed'));
     await vi.advanceTimersByTimeAsync(1_000);
 
-    const repair = MockWebSocket.instances[1];
-    repair.open();
-    expect(JSON.parse(repair.sent[0])).toEqual({ type: 'resume', run_id: 'run-1', after_sequence: 1 });
-    repair.receive(runtimeEvent(2, 'message.completed'));
-    repair.receive(runtimeEvent(3, 'run.completed'));
     await running;
     expect(events).toEqual([1, 2, 3]);
+    expect(MockWebSocket.instances).toHaveLength(1);
   });
 
   it('repairs a sequence gap while following an already-running run', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('window', { setTimeout: (callback: TimerHandler, delay?: number) => setTimeout(callback, delay) });
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true } as Response)));
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/health')) return { ok: true } as Response;
+      if (url.includes('/events?')) return { ok: true, json: async () => ({
+        events: [runtimeEvent(1, 'run.started'), runtimeEvent(2, 'message.completed'), runtimeEvent(3, 'run.completed')], next_cursor: 3, cursor: 3, has_more: false,
+      }) } as Response;
+      return { ok: true, json: async () => ({ version: '1.2' }) } as Response;
+    }));
     vi.stubGlobal('WebSocket', MockWebSocket);
     vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
     const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
@@ -239,14 +247,9 @@ describe('BackendAdapter availability and recovery', () => {
     first.open();
     first.receive(runtimeEvent(2, 'message.completed'));
     await vi.advanceTimersByTimeAsync(1_000);
-    const repair = MockWebSocket.instances[1];
-    repair.open();
-    expect(JSON.parse(repair.sent[0])).toEqual({ type: 'resume', run_id: 'run-1', after_sequence: 0 });
-    repair.receive(runtimeEvent(1, 'run.started'));
-    repair.receive(runtimeEvent(2, 'message.completed'));
-    repair.receive(runtimeEvent(3, 'run.completed'));
     await following;
     expect(events).toEqual([1, 2, 3]);
+    expect(MockWebSocket.instances).toHaveLength(1);
   });
 
   it('starts runs on any runtime protocol from 1.2 up and refuses older ones', async () => {

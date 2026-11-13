@@ -1,6 +1,10 @@
 import type { AgentEvent } from '../../types/runtime';
 import { buildTimeline, type TimelineItem } from './timeline';
 
+const NON_PROJECTING_EVENTS = new Set<AgentEvent['type']>([
+  'run.phase', 'run.plan.updated', 'run.usage', 'run.todos', 'run.context.sources', 'run.context.warning', 'run.steered',
+]);
+
 /** Keeps a run's projection and folds adjacent streamed reply chunks into that reply node. */
 export class TimelineProjection {
   private events: AgentEvent[] = [];
@@ -18,7 +22,7 @@ export class TimelineProjection {
 
     for (const event of events.slice(prefixLength)) {
       this.events.push(event);
-      if (!this.foldMessageDelta(event)) this.items = buildTimeline(this.events);
+      if (!this.foldMessageDelta(event) && !NON_PROJECTING_EVENTS.has(event.type)) this.items = buildTimeline(this.events);
     }
     return this.items;
   }

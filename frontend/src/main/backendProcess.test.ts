@@ -68,6 +68,8 @@ describe('backendProcess startup (H8 §10.3)', () => {
     // Point the backend resolver at this repository; spawn itself is mocked.
     vi.stubEnv('ATLAS_ROOT', REPO_ROOT);
     vi.stubEnv('ATLAS_PYTHON', 'atlas-fake-python');
+    // Avoid coupling this mocked process test to a real backend on the developer's default port.
+    vi.stubEnv('ATLAS_PORT', '0');
   });
   afterEach(() => {
     vi.unstubAllGlobals();

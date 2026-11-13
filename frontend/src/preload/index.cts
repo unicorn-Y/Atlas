@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AtlasDeepLink, AtlasDesktopApi, BackendStartupProgress, PlatformEditorId, ReleaseUpdateStatus } from '../shared/ipc.js';
+import type { AtlasDeepLink, AtlasDesktopApi, BackendLifecycleEvent, BackendStartupProgress, PlatformEditorId, ReleaseUpdateStatus } from '../shared/ipc.js';
 
 const BACKEND_STARTUP_CHANNEL = 'backend:startup-progress';
 
@@ -150,6 +150,18 @@ const desktopApi: AtlasDesktopApi = {
     const listener = (_event: Electron.IpcRendererEvent, progress: BackendStartupProgress) => callback(progress);
     ipcRenderer.on(BACKEND_STARTUP_CHANNEL, listener);
     return () => ipcRenderer.removeListener(BACKEND_STARTUP_CHANNEL, listener);
+  },
+  onBackendLifecycleEvent: (callback) => {
+    let latestSequence = 0;
+    const deliver = (value: BackendLifecycleEvent | null) => {
+      if (!value || value.sequence <= latestSequence) return;
+      latestSequence = value.sequence;
+      callback(value);
+    };
+    const listener = (_event: Electron.IpcRendererEvent, value: BackendLifecycleEvent) => deliver(value);
+    ipcRenderer.on('backend:lifecycle', listener);
+    void (ipcRenderer.invoke('backend:get-lifecycle') as Promise<BackendLifecycleEvent | null>).then(deliver).catch(() => undefined);
+    return () => ipcRenderer.removeListener('backend:lifecycle', listener);
   },
   onBrowserFind: (callback) => {
     const listener = () => callback();
