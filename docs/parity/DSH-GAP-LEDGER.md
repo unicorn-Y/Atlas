@@ -42,7 +42,7 @@
 | E5 | 两有序表 durable inbox：`next-turn` / `next-step`，`inject` 不唤醒 | `packages/core/agent-loop/src/inbox.ts:74,109` | `engine/kernel/inbox.py` 持久化两条 lane 并回放/确认；`runtime_ws_router.py` inject 分支写 inbox，不唤醒 steer 队列 | ✅ 本轮关闭 |
 | E6 | 请求信封落日志 + 工具增删发 developer 消息告知模型 | `agent.ts:626-700` | `request_envelope.py` 记录请求摘要/角色/长度/工具名；`loop.py` 在工具池变化时发 developer 消息 | ✅ 本轮关闭 |
 | E7 | 并发安全按**调用参数**判定，派发前**复检**，不支持者成 barrier | `packages/core/agent-loop/src/tool-calls.ts:60,122,199` | `tools.py` 调用级参数分类并在派发前复检；读写不明的调用串行化为 barrier | ✅ **本次已修**（参数感知 + 派发前复检 + barrier） |
-| E8 | 上下文压缩在 **step 边界**按实测压力触发 + 溢出重试需 surface 代次前进 | `docs/subsystems/compaction.md`；`compaction-basic/src/config.ts:20,75,105` | `loop.py` 每次模型调用前检查压缩；overflow 只有 provider history 摘要前进时才重试 | ✅ 本轮关闭 |
+| E8 | 上下文压缩在 **step 边界**按实测压力触发 + 溢出重试需 surface 代次前进 | `docs/subsystems/compaction.md`；`compaction-basic/src/config.ts:20,75,105` | 源码有调用前压缩与 surface 代次守卫；本批真实模型请求在模型 dispatch 前因 `requested_output_limit=None` 崩溃，动态闭环未验证 | PARTIAL |
 | E9 | plan 模式：durable `plan/mode` 事件 + `plan:policy` 提示段 + 拒绝时带用户反馈 | `packages/plan/plan-mode/src/index.ts:52,217,425` | kernel 每次模型调用按 live mode 重建共享 `PlanMode` 指引，持久化 plan-mode 变化并反馈拒绝 | ✅ **本次已修**（每轮按 live mode 重建 + 共享 PlanMode 实例） |
 | E10 | todo 每次写入都是 durable 事件，重启/叉分/未压缩也存活 | `packages/todo/tool-todo/src/index.ts:80,118` | `TodoStore` 将 `todo.updated` 快照写入 `session_events`，新 run 从最新快照恢复，写入失败会回滚内存状态 | ✅ 本轮关闭 |
 | E11 | goal 变更 CAS `{id, revision}`，过期拒绝；轮数上限默认 256 | `packages/goal/goal/src/index.ts:244` | `engine/goals.py` 持久 goal_id/revision，SQLite 单次写回原子比较并拒绝过期 writer；goal_subgoal 要求并返回当前 CAS token；默认 max_turns=256 | ✅ 本轮关闭 |
@@ -97,13 +97,13 @@
 | S5 | handle 式持久化：read/append/flush/close，单一写者，跨进程 kernel lease | `session-persistence/src/handle.ts:59,97,109` | WAL + busy_timeout + TTL lease（`atlas_state_common.py:569-582`）；TTL 到期即放开，非进程死亡释放 | PRESENT-WEAKER |
 | S6 | checkpoint 三屏障 fail-closed，写失败就阻断派发 | `session-checkpoint-policy/README.md` | `require_checkpoint()` 在阶段边界、工具派发前和工具结果持久化后失败即抛错，kernel 阻断继续执行 | ✅ 本轮关闭 |
 | S7 | 压缩 bracket 进日志，`summary` 记 shadowed seqs / token / provider / model，可重建 | `packages/compaction/compaction/src/types.ts:24,34,72` | 只有 run-log 一行 + DB 行锁 TTL 300s | PRESENT-WEAKER |
-| S9 | 免模型 tool-result 剪枝：8192 阈值 / 4096 头 / 1024 尾，落**遮蔽替换节点** | `compaction-tool-result-pruner/src/config.ts:11-13` | `context.py:315-375` 头尾各 2000，内存标记，全文写文件；**不落盘、resume 不重放** | PRESENT-WEAKER |
+| S9 | 免模型 tool-result 剪枝：8192 阈值 / 4096 头 / 1024 尾，落**遮蔽替换节点** | `compaction-tool-result-pruner/src/config.ts:11-13` | `context.py` 已按阈值生成带 `output_ref`/遮蔽标记的替换节点并保留全文；单测验证返回历史重放稳定，真实 session 持久化/resume 回放仍未验证 | PARTIAL |
 | S11 | 投影注册表：纯单元、`stateVersion`、有线视图 schema、`asOfSeq` 快照 | `session-projection/src/index.ts:92` | 注册 `session.summary` 默认 projection；快照含 view schema、`stateVersion`、`asOfSeq` 与数据 | ✅ 本轮关闭 |
 | S13 | 会话查询语料库：可丢弃 fts5 索引 + revision/generation 增量 + `current|shadowed|log-only` 分类 | `session-query-sqlite/src/schema.ts:8,127` | 搜索结果提供稳定 `seq`、`after_seq` 游标和 `current|shadowed|log-only` 分类，覆盖 FTS/LIKE/CJK 路径 | ✅ 本轮关闭 |
 | S19 | durable 附件：内容寻址不可变 ref、每次读重校验、先准入后追加用户事件 | `attachment-local/src/file-store.ts:14,76` | 图片**从不持久化**——`agent/__init__.py:1022` 造瞬时 wire payload，只有 OCR 文本进 prompt | PRESENT-WEAKER |
 | S21 | fs 观察策略：per-session 观察态 + provider version token；未见过 vs 不存在区分 | `packages/fs/fs-observation-policy/src/index.ts:28` | 两套半成品：`edit.py:489,497` 快照随 run 死亡；`local_execution.py:1085,1319` 只有 `_read_paths` 集合，写入 `path.write_text` 存在 TOCTOU | PRESENT-WEAKER |
 | S22 | OTel：普通事件与 session-log 双通道独立队列 | `packages/telemetry/otel/src/index.ts:22,30` | `require_checkpoint()` 会产生 `atlas.run_checkpoint.write` 生产 span；普通事件/session-log 独立队列仍未实现 | PRESENT-WEAKER |
-| S25 | tokenMeter 逐 surface 节点计价 + route-aware 图像计价 | `packages/llm/token-meter/src/index.ts:146` | `token_meter.py` 新增逐节点 route-aware 计价 API 和 `measure()` 集成；没有生产模型请求调用点或生产图像计价回调 | PRESENT-WEAKER |
+| S25 | tokenMeter 逐 surface 节点计价 + route-aware 图像计价 | `packages/llm/token-meter/src/index.ts:146` | `token_meter.py` 有逐节点 route-aware 计价 API 和 `measure()` 集成，单测覆盖；没有生产模型请求调用点或生产图像计价回调 | PARTIAL |
 | S32 | fork 要求边界不在开放 turn 内，`session/end-seed{inherited:true}` 标记继承切点 | `packages/core/session/src/fork.ts:21` | `session_sync.py` 拒绝未闭合 tool turn；子会话导入事务中追加 `session/end-seed{inherited:true}` | ✅ 本轮关闭 |
 
 ### P2
