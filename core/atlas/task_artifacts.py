@@ -160,13 +160,17 @@ class AgentPresetStore(TomlRecordStore):
         deny = cls._names(tools.get("deny", []), "tools.deny")
         skills = cls._names(raw.get("skills", []), "skills")
         mcp_servers = cls._names(raw.get("mcp_servers", []), "mcp_servers")
+        plugins_value = raw.get("plugins")
+        plugins = cls._names(plugins_value if plugins_value is not None else [], "plugins")
         model = str(raw.get("model") or "inherit")
         mode = str(raw.get("mode") or "act")
         if mode not in {"act", "plan"}:
             raise ValueError("mode must be act or plan")
         return {
             "tools": {"allow": allow or [], "allow_all": allow_all, "deny": deny}, "skills": skills,
-            "mcp_servers": mcp_servers, "model": model, "mode": mode,
+            "mcp_servers": mcp_servers, "plugins": plugins,
+            "plugin_allow_all": bool(raw.get("plugin_allow_all", plugins_value is None)),
+            "model": model, "mode": mode,
         }
 
     def put(self, value: dict[str, Any]) -> dict[str, Any]:
@@ -197,6 +201,15 @@ class AgentPresetStore(TomlRecordStore):
         if record is None:
             raise KeyError(f"unknown agent preset: {preset_id}")
         return self._capabilities(record.get("capabilities"))
+
+    def resolve_versioned(self, preset_id: str) -> dict[str, Any]:
+        """Resolve an immutable run snapshot with the persisted revision attached."""
+        self.seed()
+        record = self.get(str(preset_id or ""))
+        if record is None:
+            raise KeyError(f"unknown agent preset: {preset_id}")
+        return {"revision": max(1, int(record.get("revision", 1))),
+                "capabilities": self._capabilities(record.get("capabilities"))}
 
 
 class WorktreeService:

@@ -1574,7 +1574,10 @@ class AtlasKernel:
                     model_config.get("max_output_tokens")
                     or model_capabilities.get("max_output_tokens")
                 )
-                requested_output_limit = request.max_output_tokens or model_profile.max_output_tokens
+                requested_output_limit = (
+                    request.max_output_tokens or model_profile.max_output_tokens
+                    or configured_output_limit or 8192
+                )
                 output_resolver = getattr(agent._model_mgr, "output_tokens_for_model", None)
                 if callable(output_resolver):
                     output_token_limit = output_resolver(
