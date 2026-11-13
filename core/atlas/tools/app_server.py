@@ -71,7 +71,7 @@ async def serve_stdio(*, workspace: str | None = None,
             raise RuntimeError(migration.error or "Session migration is not ready")
         orchestrator = AgentOrchestrator(model_mgr=ModelManager(), memory=memory)
         default_workspace = str(Path(workspace or Path.cwd()).expanduser().resolve())
-        sessions: dict[str, dict[str, str]] = {}
+        sessions: dict[str, dict[str, Any]] = {}
         active: dict[str, asyncio.Event] = {}
         active_tasks: dict[str, asyncio.Task[None]] = {}
         pending_approvals: dict[str, asyncio.Future[str]] = {}
@@ -174,7 +174,10 @@ async def serve_stdio(*, workspace: str | None = None,
                     ))
                 async for event in orchestrator.run(
                     prompt, session["conversation_id"], workspace=session["workspace"],
-                    workspace_trusted=True, permission_mode="ask_writes",
+                    workspace_trusted=True, permission_mode=session.get("permission_mode", "ask_writes"),
+                    agent_preset_id=session.get("agent_preset_id", "default"),
+                    agent_preset_capabilities=session.get("agent_preset_capabilities"),
+                    permission_preset=session.get("permission_preset", "ask"),
                     cancel_event=cancel, approval_callback=approve,
                     input_callback=ask_user,
                 ):
@@ -328,10 +331,29 @@ async def serve_stdio(*, workspace: str | None = None,
                     if not Path(cwd).is_dir():
                         await response(request_id, error={"code": -32602, "message": "workspace is not a directory"})
                         continue
+                    agent_preset_id = str(params.get("agentPresetId") or "default").strip()
+                    permission_preset = str(params.get("permissionPreset") or "ask").strip()
+                    try:
+                        from atlas.approval_policy import PERMISSION_PRESETS
+                        from atlas.config import get_config
+                        from atlas.task_artifacts import AgentPresetStore
+
+                        if permission_preset not in PERMISSION_PRESETS:
+                            raise ValueError(f"unknown permission preset: {permission_preset}")
+                        preset_capabilities = AgentPresetStore(get_config().db_path.parent).resolve(agent_preset_id)
+                    except (KeyError, ValueError) as exc:
+                        await response(request_id, error={"code": -32602, "message": str(exc)})
+                        continue
                     session_id = str(uuid.uuid4())
                     conversation_id = str(params.get("conversation_id") or uuid.uuid4())
                     await memory.save_conversation_metadata(conversation_id, title_hint="Atlas app-server")
-                    sessions[session_id] = {"workspace": cwd, "conversation_id": conversation_id}
+                    sessions[session_id] = {
+                        "workspace": cwd, "conversation_id": conversation_id,
+                        "agent_preset_id": agent_preset_id,
+                        "agent_preset_capabilities": preset_capabilities,
+                        "permission_preset": permission_preset,
+                        "permission_mode": PERMISSION_PRESETS[permission_preset]["mode"],
+                    }
                     session_fs[session_id] = dict(session_fs.get("__initialize__", {})) if acp else {}
                     if acp:
                         await response(request_id, result={"sessionId": session_id})

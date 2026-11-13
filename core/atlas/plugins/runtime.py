@@ -148,12 +148,15 @@ class _DisposerStack:
 class PluginRealm:
     """A read/invoke facade that confines a run to selected plugin child rows."""
 
-    def __init__(self, registry: Any, plugin_rows: list[str]) -> None:
+    def __init__(self, registry: Any, plugin_rows: list[str], *, allow_all: bool = False) -> None:
         self._registry = registry
         self._sources = {f"plugin:{name}" for name in plugin_rows if isinstance(name, str)}
+        self._allow_all = allow_all
 
     def discover(self) -> list[dict[str, str]]:
-        return [row for row in self._registry.discover() if row.get("source") in self._sources]
+        return [row for row in self._registry.discover()
+                if row.get("source", "").startswith("plugin:")
+                and (self._allow_all or row.get("source") in self._sources)]
 
     async def invoke(self, name: str, inputs: dict[str, Any] | None = None) -> Any:
         if not any(row["name"] == name for row in self.discover()):
@@ -275,6 +278,49 @@ class PluginRuntime:
             )
             plugins[name] = plugin_info
         return list(plugins.values())
+
+    def put_config_layer(self, kind: str, name: str, rows: dict[str, Any]) -> None:
+        """Persist a named profile/bundle or ordered row-id patch layer."""
+        if kind not in {"profile", "bundle", "patches"}:
+            raise ValueError("kind must be profile, bundle, or patches")
+        if not isinstance(name, str) or not name.strip() or not isinstance(rows, dict):
+            raise ValueError("a non-empty layer name and object rows are required")
+        layers = self._state.setdefault("config_layers", {})
+        layers.setdefault(kind, {})[name.strip()] = rows
+        self._save_state()
+
+    def config_layers(self, profile: str | None = None, bundle: str | None = None) -> dict[str, Any]:
+        """Compose profile, bundle, then row-id patches into an inspectable snapshot."""
+        layers = self._state.get("config_layers", {})
+        if not isinstance(layers, dict):
+            layers = {}
+        selected: dict[str, dict[str, Any]] = {}
+        for kind, name in (("profile", profile), ("bundle", bundle)):
+            candidates = layers.get(kind, {})
+            value = candidates.get(name, {}) if name and isinstance(candidates, dict) else {}
+            selected[kind] = value if isinstance(value, dict) else {}
+        patches = layers.get("patches", {})
+        patch_rows: dict[str, Any] = {}
+        if isinstance(patches, dict):
+            for patchset in patches.values():
+                if isinstance(patchset, dict):
+                    patch_rows.update(patchset)
+        selected["patches"] = patch_rows
+        merged: dict[str, Any] = {}
+        for kind in ("profile", "bundle", "patches"):
+            for key, value in selected[kind].items():
+                row_id = key[4:] if key.startswith("row:") else None
+                if row_id:
+                    if value is None:
+                        merged.pop(row_id, None)
+                    else:
+                        merged[row_id] = value
+                elif isinstance(value, dict) and isinstance(merged.get(key), dict):
+                    merged[key] = {**merged[key], **value}
+                else:
+                    merged[key] = value
+        return {"profile": selected["profile"], "bundle": selected["bundle"],
+                "patches": selected["patches"], "merged": merged}
 
     def _capability_projection(
         self, root: Path, manifest: dict[str, Any], *, loaded_state: Any, plugin_source: str,

@@ -3278,5 +3278,17 @@ def plugins_reload(name: str) -> None:
     )
 
 
+@plugins_group.command("dump-config")
+@click.option("--profile", "profile_name", default=None, help="先应用指定 profile 层。")
+@click.option("--bundle", "bundle_name", default=None, help="再应用指定 bundle 层。")
+def plugins_dump_config(profile_name: str | None, bundle_name: str | None) -> None:
+    """打印 profile → bundle → row patch 的有效配置，不回显凭据字段。"""
+    import json
+    from atlas.secrets_store import scrub
+
+    result = scrub(_plugin_runtime().config_layers(profile_name, bundle_name))
+    click.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+
 if __name__ == "__main__":
     cli_main()

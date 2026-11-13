@@ -42,8 +42,25 @@ def test_agent_preset_resolve_returns_normalized_capabilities_and_rejects_unknow
 
     assert store.resolve("reviewer") == {
         "tools": {"allow": ["local_file"], "allow_all": False, "deny": []},
-        "skills": ["review"], "mcp_servers": [], "model": "inherit", "mode": "plan",
+        "skills": ["review"], "mcp_servers": [], "plugins": [],
+        "plugin_allow_all": True, "model": "inherit", "mode": "plan",
     }
     assert store.resolve("default")["tools"]["allow_all"] is True
+    assert store.resolve_versioned("reviewer")["revision"] == 1
     with pytest.raises(KeyError, match="missing"):
         store.resolve("missing")
+
+
+def test_agent_preset_plugin_rows_are_normalized_and_revisioned(tmp_path) -> None:
+    store = AgentPresetStore(tmp_path)
+    value = store.put({"id": "limited", "capabilities": {"plugins": ["one", "one"]}})
+    assert value["capabilities"]["plugins"] == ["one"]
+    assert value["capabilities"]["plugin_allow_all"] is False
+    assert store.resolve_versioned("limited") == {
+        "revision": 1,
+        "capabilities": {
+            "tools": {"allow": [], "allow_all": True, "deny": []},
+            "skills": [], "mcp_servers": [], "plugins": ["one"],
+            "plugin_allow_all": False, "model": "inherit", "mode": "act",
+        },
+    }

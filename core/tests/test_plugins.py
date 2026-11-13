@@ -52,6 +52,10 @@ class FakeMCPClient:
     async def _connect_server(self, config) -> None:
         self.connected.append(config.name)
 
+    async def disconnect_server(self, name: str) -> None:
+        if name in self.connected:
+            self.connected.remove(name)
+
 
 @pytest.fixture
 async def runtime(tmp_path: Path, plugin_dir: Path):
@@ -106,6 +110,27 @@ async def test_disable_skips_and_persists(runtime: PluginRuntime) -> None:
 
     reloaded = PluginRuntime(runtime._dirs, runtime._state_path)
     assert reloaded.discover()[0]["enabled"] is False
+
+
+async def test_plugin_disable_awaits_mcp_lifecycle_disposer(runtime: PluginRuntime) -> None:
+    mcp = FakeMCPClient()
+    await runtime.load_all(mcp_client=mcp)
+    assert mcp.connected == ["demo-mcp"]
+    await runtime.set_enabled("demo", False)
+    assert mcp.connected == []
+
+
+def test_profile_bundle_and_row_patch_layers_persist_and_dump(runtime: PluginRuntime) -> None:
+    runtime.put_config_layer("profile", "work", {"row:alpha": {"value": 1}, "theme": {"a": 1}})
+    runtime.put_config_layer("bundle", "review", {"row:alpha": {"value": 2}, "row:beta": {"value": 3}})
+    runtime.put_config_layer("patches", "active", {"row:beta": None, "theme": {"b": 2}})
+    fresh = PluginRuntime(runtime._dirs, runtime._state_path)
+    assert fresh.config_layers("work", "review") == {
+        "profile": {"row:alpha": {"value": 1}, "theme": {"a": 1}},
+        "bundle": {"row:alpha": {"value": 2}, "row:beta": {"value": 3}},
+        "patches": {"row:beta": None, "theme": {"b": 2}},
+        "merged": {"alpha": {"value": 2}, "theme": {"a": 1, "b": 2}},
+    }
 
 
 async def test_install_local_copies_into_user_dir(

@@ -323,6 +323,8 @@ async def _apply_agent_preset_capabilities(agent, request: RunRequest, runtime) 
     deny = tools.get("deny")
     skills = capabilities.get("skills")
     mcp_servers = capabilities.get("mcp_servers")
+    plugin_rows = capabilities.get("plugins", [])
+    plugin_allow_all = capabilities.get("plugin_allow_all", False)
     mode = capabilities.get("mode")
     model = capabilities.get("model")
     if (not isinstance(allow, list) or any(not isinstance(item, str) or not item for item in allow)
@@ -330,6 +332,9 @@ async def _apply_agent_preset_capabilities(agent, request: RunRequest, runtime) 
             or not isinstance(skills, list) or any(not isinstance(item, str) or not item for item in skills)
             or not isinstance(mcp_servers, list)
             or any(not isinstance(item, str) or not item for item in mcp_servers)
+            or not isinstance(plugin_rows, list)
+            or any(not isinstance(item, str) or not item for item in plugin_rows)
+            or not isinstance(plugin_allow_all, bool)
             or mode not in {"act", "plan"} or not isinstance(model, str) or not model):
         return "Agent preset capabilities are malformed."
 
@@ -341,6 +346,10 @@ async def _apply_agent_preset_capabilities(agent, request: RunRequest, runtime) 
     runtime.tool_allow = request.tool_allow
     runtime.tool_deny = request.tool_deny
     runtime.mcp_server_allow = list(dict.fromkeys(mcp_servers))
+    from atlas.plugins.runtime import PluginRealm
+    runtime.plugin_realm = PluginRealm(
+        agent._capabilities, list(dict.fromkeys(plugin_rows)), allow_all=plugin_allow_all,
+    )
 
     if not request.mode_explicit:
         request.mode = mode
