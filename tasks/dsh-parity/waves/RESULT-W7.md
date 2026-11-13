@@ -1,8 +1,8 @@
 # W7 result: sandbox and per-call escalation
 
-Date: 2026-11-14  
-Branch: `zcode/dsh-w7`  
-Rows: E14, E18  
+Date: 2026-11-14
+Branch: `zcode/dsh-w7`
+Rows: E14, E18
 Real-model port: 8827
 
 ## Row outcomes
