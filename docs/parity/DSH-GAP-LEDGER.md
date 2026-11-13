@@ -48,11 +48,11 @@
 | E11 | goal 变更 CAS `{id, revision}`，过期拒绝；轮数上限默认 256 | `packages/goal/goal/src/index.ts:244` | `engine/goals.py` 持久 goal_id/revision，SQLite 单次写回原子比较并拒绝过期 writer；goal_subgoal 要求并返回当前 CAS token；默认 max_turns=256 | ✅ 本轮关闭 |
 | E12 | 审批关闭四值：`allowed-once`/`rejected`/`cancelled`/`unavailable`，全部 fail-closed，且 `ask|never` 在服务内先于任何 answerer 生效 | `packages/interaction/user-approval/src/index.ts:100,225-232` | 审批 asked/decided 通过 append-only `session_events` 持久化；ask/never 策略先于 answerer；失败关闭 | ✅ 本轮关闭 |
 | E13 | 权限预设同时绑定 **沙箱模式 + 审批策略**，不匹配时派生 `custom` | `packages/interaction/permission-presets/src/index.ts:189-194` | `approval_policy.py` 预设绑定 permission/sandbox/approval 三维；RunState 和 resume 保留三维设置，不匹配时派生 `custom` | ✅ 本轮关闭 |
-| E14 | OS 级沙箱按**每次调用**给 `read-only`/`workspace-write`/`danger-full-access`，并报告实际执行等级 | `packages/sandbox/sandbox-local/src/profiles.ts:16`；`docs/subsystems/sandbox.md` | 只有整 run 的 Docker 容器或主机 + `allowed_paths` 编辑器检查；`full_access` 下 shell 无文件效果边界 | ABSENT |
+| E14 | OS 级沙箱按**每次调用**给 `read-only`/`workspace-write`/`danger-full-access`，并报告实际执行等级 | `packages/sandbox/sandbox-local/src/profiles.ts:16`；`docs/subsystems/sandbox.md` | Docker 调用支持 per-call `read-only`（临时只读 bind mount）和 `workspace-write`（运行容器内执行），结果返回 `sandbox_permissions` / `sandbox_enforced`；`danger-full-access` fail-closed。Windows host executor 仍无通用 per-call OS 隔离器，Docker daemon 未运行时无法实测 | PARTIAL |
 | E15 | 持久 PTY：owner 鉴权、`waitReason` 四值（stdin_read/inferred_idle/timeout/session_exit）、有界回滚 | `packages/experimental/tool-terminal/src/index.ts:166-395` | `local_execution.py` 按 run owner 隔离进程读写/取消，并返回 `stdin_read` / `inferred_idle` / `timeout` / `session_exit` | ✅ 本轮关闭 |
 | E16 | 统一后台作业注册表：`job_output/list/kill`，256KiB 环形缓冲，settle 后 16KiB，每 owner 最多 10 个 | `packages/jobs/jobs-local/src/index.ts:33-42,128` | `ExecManager` 统一 owner-fenced shell 与 subagent 注册/列表/输出/终止；运行缓冲 256KiB、settled 16KiB、每 owner 10 个；`job_*` 工具已暴露模型调用 | ✅ 本轮关闭 |
 | E17 | 子代理统一激活：能力声明校验、`toolFilter` 真删且拒执行、fork 子（继承父已完成前缀）、persona | `packages/subagent/tool-subagent/src/index.ts:96,171` | 有 delegate 工具 schema/深度/权限降级/worktree；仍缺 fork 已完成上下文和 persona 的完整激活路径 | PRESENT-WEAKER |
-| E18 | 工具内请求沙箱升级：`sandbox_permissions` + `justification`，按调用审批，拒绝不动既有策略 | `packages/core/tools/src/ptc.ts:387-405` | 单次 justification/approval 已接入；Docker 有 per-call 模式，host executor 缺少可执行隔离时 fail-closed | PRESENT-WEAKER |
+| E18 | 工具内请求沙箱升级：`sandbox_permissions` + `justification`，按调用审批，拒绝不动既有策略 | `packages/core/tools/src/ptc.ts:387-405` | `authorize_sandbox_escalation` 校验 justification、通过现有 approval callback 单次审批并禁止 always；Docker callback 仅把获批 mode 传给当前调用，宿主无 executor 时 fail-closed。定向单测通过；本批真实模型回合在模型路由阶段失败，端到端审批 UI/工具调用未观察到 | PARTIAL |
 
 ### P2
 
