@@ -318,6 +318,26 @@ class ContextManager:
             preview = f"[Tool: {tool_name}]\n" + preview
         return ToolOutputClip(preview, ref, original_bytes, len(preview.encode("utf-8")))
 
+    def mask_persisted_tool_result(self, content: str, *, tool_name: str = "") -> ToolOutputClip:
+        """Create a durable microcompact replacement while retaining the full output by reference."""
+        raw = str(content)
+        cfg = dict(self.config.get("microcompact", {}))
+        if cfg.get("enabled") is False:
+            return ToolOutputClip(raw, None, len(raw.encode("utf-8")), len(raw.encode("utf-8")))
+        threshold = max(0, int(cfg.get("threshold_chars", MICROCOMPACT_TOOL_RESULT_THRESHOLD_CHARS)))
+        if len(raw) <= threshold:
+            return ToolOutputClip(raw, None, len(raw.encode("utf-8")), len(raw.encode("utf-8")))
+        ref = self._output_ref({}, raw)
+        if ref is None:
+            return ToolOutputClip(raw, None, len(raw.encode("utf-8")), len(raw.encode("utf-8")))
+        head = max(0, int(cfg.get("head_chars", MICROCOMPACT_TOOL_RESULT_HEAD_CHARS)))
+        tail = max(0, int(cfg.get("tail_chars", MICROCOMPACT_TOOL_RESULT_TAIL_CHARS)))
+        notice = f"\n[Old tool output masked; full output: {ref}]\n"
+        preview = raw[:head] + notice + (raw[-tail:] if tail else "")
+        if tool_name:
+            preview = f"[Tool: {tool_name}]\n" + preview
+        return ToolOutputClip(preview, ref, len(raw.encode("utf-8")), len(preview.encode("utf-8")))
+
     @staticmethod
     def _micro_threshold(budget_tokens: int) -> int:
         return max(0, min(int(budget_tokens * 0.9), budget_tokens - 2000))
