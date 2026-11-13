@@ -99,7 +99,7 @@ async def test_load_all_registers_capabilities_hooks_and_mcp(
 
 
 async def test_disable_skips_and_persists(runtime: PluginRuntime) -> None:
-    runtime.set_enabled("demo", False)
+    await runtime.set_enabled("demo", False)
     report = await runtime.load_all()
     assert report["loaded"] == []
     assert report["skipped"] == [{"name": "demo", "reason": "disabled"}]
@@ -195,7 +195,7 @@ async def test_claude_format_plugin_full_chain(
     assert contributions[0]["hooks"][0]["event"] == "PreToolUse"
     assert set(contributions[0]["mcp_servers"]) == {"kit-mcp"}
 
-    runtime.set_enabled("claude-kit", False)
+    await runtime.set_enabled("claude-kit", False)
     report = await runtime.load_all(capabilities=registry)
     assert report["skipped"] == [{"name": "claude-kit", "reason": "disabled"}]
 

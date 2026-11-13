@@ -143,13 +143,13 @@
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| X2 | 注册即可逆：每个注册返回 disposer，卸载即解绑 | `core/tools/src/index.ts:988` | plugin skill/command/hook 注册有逐项 disposer；异步 MCP lifecycle 贡献尚无 disposer | PRESENT-WEAKER |
+| X2 | 注册即可逆：每个注册返回 disposer，卸载即解绑 | `core/tools/src/index.ts:988` | skill/command/hook 与新建 MCP connection 均加入 disposer；load/reload/disable 等待 async cleanup。已测 reload/disconnect；仍缺真实插件 MCP 服务端启停的进程级验收 | PARTIAL |
 | X3 | 插件管理 enable/disable 只改最后一层匹配的 `disabled`，报告 applied/restart-required | `boot/plugin-manager/src/index.ts:458,476` | `plugins/runtime.py:1149-1171` 重跑 `load_all`，**不先 `unregister_source`/`forget_owner`** → 有 skills 的插件先报错，hook 闭包每次切换都重复 | PRESENT-WEAKER（非幂等重载） |
-| X4 | profile/bundle/patch 有序层，按 row id 替换/插入，`--dump-config` 预览 | `docs/architecture.md:15-25` | patch 支持 row_id/order 与有序 listing；profile/bundle merge 和配置预览仍缺 | PRESENT-WEAKER |
+| X4 | profile/bundle/patch 有序层，按 row id 替换/插入，`--dump-config` 预览 | `docs/architecture.md:15-25` | 新增有序 row layer 合并（replace/insert/delete）及 JSON dump preview helper；尚未接入 profile/bundle 的持久化和 CLI `--dump-config` 命令 | PARTIAL |
 | X5 | 安装/移除 bundle：包管理器解析依赖、lockfile 快照回滚、取消 | `plugin-manager/src/index.ts:374,497,645` | `plugins/runtime.py:851-982` 只支持本地 copy / marketplace / git，**无依赖解析、无回滚、无取消** | ABSENT |
 | X6 | 版本兼容与豁免：peer range 检查 + per-profile `compatibility.json` 精确豁免 + `acceptRisk` | `plugin-manager/README.md:67` | `plugins/runtime.py:342-380` 只校验 manifest 形状 | ABSENT |
 | X7 | 安装脚本审批门：`pendingBuilds` 转 `allowBuilds`，逐包持久批准 | `plugin-manager/src/build-approval.ts:49,75` | 无安装脚本执行，故无门 | ABSENT |
-| X8 | Agent 预设 = 子插件行 + isolate realm，注册表保留 revision | `packages/preset/agent-preset-registry/README.md:46-60` | `AgentPresetStore` 持久化 revision 化 capability set（tools/skills/MCP/model/mode），并在 run 时应用；尚无 isolate realm/子插件隔离 | PRESENT-WEAKER |
+| X8 | Agent 预设 = 子插件行 + isolate realm，注册表保留 revision | `packages/preset/agent-preset-registry/README.md:46-60` | 新增 PluginRealm facade，按选定 plugin source 隔离 discover/invoke；尚未把子插件行持久化到 AgentPresetStore 或接入 Agent run 创建 realm | PARTIAL |
 | X9 | 外部入口（webhook/ACP）必须带 agent preset + permission preset | `docs/subsystems/webhook.md:5,25` | automation/webhook 保存并验证两种 preset，AgentRunContext 应用能力；ACP 外部入口尚未接入 | PRESENT-WEAKER |
 | X10 | 插件管理作为模型工具，8 个动作，每次需 danger-full-access 或逐次审批 | `plugin-manager/src/tools.ts:20-46` | `engine/kernel/tools.py:412-414` 只有 list/request install | PRESENT-WEAKER |
 | X11 | bundle 清单带来源 official/availability/installed/覆盖行 | `plugin-manager/src/index.ts:282` | `plugins_router.py:39` → `discover()` 有基本字段，无 availability 模型 | PRESENT-WEAKER |

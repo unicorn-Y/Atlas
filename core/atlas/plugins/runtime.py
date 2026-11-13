@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import re
@@ -130,16 +131,34 @@ class _DisposerStack:
     def __len__(self) -> int:
         return len(self._items)
 
-    def dispose(self) -> None:
+    async def dispose(self) -> None:
         if self._disposed:
             return
         self._disposed = True
         for disposer in reversed(self._items):
             try:
-                disposer()
+                result = disposer()
+                if inspect.isawaitable(result):
+                    await result
             except Exception as exc:  # noqa: BLE001 - one cleanup must not block others
                 log.warning("plugin.disposer_failed", error_type=type(exc).__name__)
         self._items.clear()
+
+
+class PluginRealm:
+    """A read/invoke facade that confines a run to selected plugin child rows."""
+
+    def __init__(self, registry: Any, plugin_rows: list[str]) -> None:
+        self._registry = registry
+        self._sources = {f"plugin:{name}" for name in plugin_rows if isinstance(name, str)}
+
+    def discover(self) -> list[dict[str, str]]:
+        return [row for row in self._registry.discover() if row.get("source") in self._sources]
+
+    async def invoke(self, name: str, inputs: dict[str, Any] | None = None) -> Any:
+        if not any(row["name"] == name for row in self.discover()):
+            raise KeyError(name)
+        return await self._registry.invoke(name, inputs)
 
 
 class PluginRuntime:
@@ -1066,7 +1085,7 @@ class PluginRuntime:
             return self.install_git(self._github_url(str(source)), name=name, ref=ref)
         raise ValueError(f"unsupported plugin source: {source}")
 
-    def set_enabled(self, name: str, enabled: bool) -> bool:
+    async def set_enabled(self, name: str, enabled: bool) -> bool:
         """Record the toggle and, when disabling, actually withdraw the plugin.
 
         Popping ``_loaded`` only forgets the Python-side record. The capabilities
@@ -1079,7 +1098,7 @@ class PluginRuntime:
         self._enabled[name] = enabled
         self._save_state()
         if not enabled:
-            self._forget_plugin(
+            await self._forget_plugin(
                 name,
                 capabilities=self._wiring.get("capabilities"),
                 hook_bus=self._wiring.get("hook_bus"),
@@ -1258,7 +1277,7 @@ class PluginRuntime:
             "hook_bus": hook_bus, "mcp_client": mcp_client, "capabilities": capabilities,
         }
         for previous_name in list(self._loaded):
-            removed, hooks_cleared = self._forget_plugin(
+            removed, hooks_cleared = await self._forget_plugin(
                 previous_name, capabilities=capabilities, hook_bus=hook_bus,
             )
             report["capabilities_removed"] += removed
@@ -1279,7 +1298,7 @@ class PluginRuntime:
                 report["errors"][name] = str(exc)
         return report
 
-    def _forget_plugin(
+    async def _forget_plugin(
         self, name: str, *, capabilities: Any = None, hook_bus: Any = None,
     ) -> tuple[int, int]:
         """Drop everything one plugin registered; returns ``(capabilities, hooks)``."""
@@ -1290,7 +1309,7 @@ class PluginRuntime:
         if callable(disposer) and isinstance(loaded, dict):
             removed = len(loaded.get("skills", [])) + len(loaded.get("commands", []))
             hooks_cleared = int(loaded.get("hooks", 0) or 0)
-            disposer()
+            await disposer()
             # Keep owner cleanup as a fail-safe for contributions registered by
             # older plugin runtimes that did not provide individual disposers.
             if capabilities is not None and hasattr(capabilities, "unregister_source"):
@@ -1355,7 +1374,7 @@ class PluginRuntime:
                     "error": f"清单无法解析（{manifest_path.name}）：{exc}",
                 }
 
-        removed, hooks_cleared = self._forget_plugin(
+        removed, hooks_cleared = await self._forget_plugin(
             name, capabilities=capabilities, hook_bus=hook_bus,
         )
 
@@ -1451,6 +1470,9 @@ class PluginRuntime:
                 )
                 await mcp_client._connect_server(config)
                 loaded["mcp"].append(server_name)
+                async def _disconnect(_name: str = server_name) -> None:
+                    await mcp_client.disconnect_server(_name)
+                disposers.add(_disconnect)
         loaded["disposer_count"] = len(disposers)
         self._disposers[plugin_name] = disposers
         return loaded

@@ -378,7 +378,7 @@ async def set_plugin_enabled(
         validation = await asyncio.to_thread(plugin_runtime.validate, str(plugin["path"]))
         if not validation["valid"]:
             raise HTTPException(status_code=409, detail={"message": "插件清单校验未通过，已保持停用", "validation": validation})
-    plugin_runtime.set_enabled(name, enabled)
+    await plugin_runtime.set_enabled(name, enabled)
     report = await _server()._reload_extensions()
     return {"name": name, "enabled": enabled, "report": report}
 

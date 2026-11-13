@@ -16,6 +16,33 @@ import pytest
 from atlas.plugins import patch_layer
 
 
+pytestmark = pytest.mark.unit
+
+
+def test_config_layers_replace_and_insert_by_row_id_in_declared_order():
+    base = [{"row_id": "a", "value": "base-a"}, {"row_id": "b", "value": "base-b"}]
+    profile = [{"row_id": "a", "value": "profile-a"}]
+    bundle = [{"row_id": "c", "value": "bundle-c", "after": "a"}]
+    patch = [{"row_id": "b", "value": "patch-b"}]
+
+    merged = patch_layer.merge_config_layers(base, profile, bundle, patch)
+
+    assert merged == [
+        {"row_id": "a", "value": "profile-a"},
+        {"row_id": "c", "value": "bundle-c"},
+        {"row_id": "b", "value": "patch-b"},
+    ]
+
+
+def test_dump_config_preview_returns_serialized_effective_config():
+    preview = patch_layer.dump_config_preview({"layers": ["profile", "bundle"]}, [
+        [{"row_id": "a", "value": 1}], [{"row_id": "a", "value": 2}],
+    ])
+
+    assert preview["effective"] == [{"row_id": "a", "value": 2}]
+    assert '"value": 2' in preview["json"]
+
+
 def _plugin(tmp_path: Path, *, files: dict[str, str] | None = None) -> Path:
     root = tmp_path / "demo-plugin"
     root.mkdir(parents=True)
