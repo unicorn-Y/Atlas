@@ -23,11 +23,11 @@ records an existing advantage that must not be reduced.
 | E11 | CLOSED (goal revision CAS and default round budget implemented) | [Ledger E11](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-A](RESULT-A.md). |
 | E12 | CLOSED (approval close values fail closed) | [Ledger E12](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-A](RESULT-A.md). |
 | E13 | CLOSED (permission preset binds sandbox and approval policy) | [Ledger E13](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-A](RESULT-A.md). |
-| E14 | NOT-DONE (per-call OS sandbox execution and actual level reporting are absent) | [Ledger E14](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-A](RESULT-A.md). |
+| E14 | PARTIAL (Docker per-call modes and enforcement reporting have focused tests; Docker Engine was unavailable and Windows host has no general per-call OS executor) | [Ledger E14](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT2-V7](waves/RESULT2-V7.md). |
 | E15 | CLOSED (persistent PTY ownership, wait reasons, and bounded replay implemented) | [Ledger E15](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-A](RESULT-A.md). |
 | E16 | CLOSED (unified background job registry implemented) | [Ledger E16](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-A](RESULT-A.md). |
 | E17 | PARTIAL (delegate support lacks full inherited fork prefix and persona behavior) | [Ledger E17](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-A](RESULT-A.md). |
-| E18 | PARTIAL (kernel escalation approval exists; host per-call sandbox executor is absent) | [Ledger E18](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-A](RESULT-A.md). |
+| E18 | PARTIAL (real DeepSeek run reached one-call approval; accepted host call failed closed because no per-call executor is available) | [Ledger E18](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT2-V7](waves/RESULT2-V7.md). |
 | E19 | NOT-DONE (tool result cannot yet conclude its enclosing turn) | [Ledger E19](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-A](RESULT-A.md). |
 | E20 | CLOSED (repeated identical tool calls produce non-blocking reminders) | [Ledger E20](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-A](RESULT-A.md). |
 | E21 | NOT-DONE (per-session durable working directory is absent) | [Ledger E21](../../docs/parity/DSH-GAP-LEDGER.md); [RESULT-A](RESULT-A.md). |
