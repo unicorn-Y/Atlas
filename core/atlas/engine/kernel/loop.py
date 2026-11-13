@@ -422,7 +422,8 @@ def _session_history(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else row.get("display_metadata", {})
         metadata = metadata if isinstance(metadata, dict) else {}
         for key in ("tool_calls", "tool_call_id", "tool_name", "output_ref", "repair_state",
-                    "turn_context", "reasoning_content", "reasoning_details"):
+                    "microcompacted", "masked_content", "turn_context",
+                    "reasoning_content", "reasoning_details"):
             if key in metadata:
                 message[key] = metadata[key]
             elif key in row:
@@ -1337,6 +1338,8 @@ class AtlasKernel:
                 )
                 await event_queue.put({"type": "run_usage", "usage": usage})
 
+            live_surface_meter: dict[str, Any] = {}
+
             async def record_model_attempt(event: dict[str, Any], *, purpose: str) -> None:
                 if event.get("ok"):
                     attempt_usage = event.get("usage") if isinstance(event.get("usage"), dict) else {}
@@ -1374,6 +1377,9 @@ class AtlasKernel:
                     }
                     usage.update({key: value for key, value in attempt_usage.items()
                                   if key not in usage})
+                    if purpose == "conversation" and live_surface_meter:
+                        usage["surface_token_estimate"] = live_surface_meter.get("surface_tokens")
+                        usage["surface_node_tokens"] = copy.deepcopy(live_surface_meter.get("nodes", []))
                     cost_usd: float | None = None
                     try:
                         model_entry = agent._model_mgr._find_model(str(event.get("model") or "")) or {}
@@ -1574,7 +1580,10 @@ class AtlasKernel:
                     model_config.get("max_output_tokens")
                     or model_capabilities.get("max_output_tokens")
                 )
-                requested_output_limit = request.max_output_tokens or model_profile.max_output_tokens
+                requested_output_limit = (
+                    request.max_output_tokens or model_profile.max_output_tokens
+                    or configured_output_limit or 4096
+                )
                 output_resolver = getattr(agent._model_mgr, "output_tokens_for_model", None)
                 if callable(output_resolver):
                     output_token_limit = output_resolver(
@@ -1965,8 +1974,17 @@ class AtlasKernel:
                         messages.append({"role": "developer", "content": pool_notice})
                 last_tool_pool = current_tool_pool
                 envelope = request_envelope(messages, tools)
+                from atlas.engine.agent.token_meter import price_surface_nodes
+
+                live_surface_meter.clear()
+                live_surface_meter.update(price_surface_nodes(
+                    [{"seq": index, "message": message} for index, message in enumerate(messages)],
+                    route={"model": turn_model,
+                           "provider": model_config.get("provider") or model_config.get("provider_name")},
+                ))
                 record("model_request_envelope", model=turn_model, attempt=turn_index + 1,
-                       **envelope)
+                       surface_token_estimate=live_surface_meter["surface_tokens"],
+                       surface_node_tokens=live_surface_meter["nodes"], **envelope)
                 tool_json = json.dumps(messages, ensure_ascii=False, default=str)
                 record("model_request", model=turn_model, input_chars=len(tool_json),
                        input_tokens=estimate_tokens(messages), attempt=turn_index + 1)
@@ -2512,16 +2530,29 @@ class AtlasKernel:
                                output_ref=receipt.get("output_ref"),
                                output=_tool_output_text(result.output))
                         content = _tool_output_text(result.output)
+                        durable_masked = False
                         if tool_hook_context.get(result.call_id):
                             content += "\n\n" + "\n".join(tool_hook_context.pop(result.call_id))
                         clipped = context_manager.clip_tool_result(content, tool_name=result.name)
                         if clipped.clipped_bytes < clipped.original_bytes:
                             content = clipped.content
                             receipt["output_ref"] = clipped.output_ref or receipt.get("output_ref")
+                            durable_masked = True
                             record("tool_output_clipped", tool_call_id=result.call_id,
                                    name=result.name, original_bytes=clipped.original_bytes,
                                    clipped_bytes=clipped.clipped_bytes,
                                    output_ref=receipt["output_ref"])
+                        if not durable_masked:
+                            masked = context_manager.mask_persisted_tool_result(content, tool_name=result.name)
+                            if masked.output_ref:
+                                content = masked.content
+                                receipt["output_ref"] = masked.output_ref
+                                durable_masked = True
+                                record("tool_output_microcompacted", tool_call_id=result.call_id,
+                                       name=result.name, original_bytes=masked.original_bytes,
+                                       clipped_bytes=masked.clipped_bytes, output_ref=masked.output_ref)
+                        receipt["microcompacted"] = durable_masked
+                        receipt["masked_content"] = durable_masked
                         # Registered finalizers run last, on the text the model is
                         # about to receive. They are a content transform only: the
                         # receipt, the call id and the outcome above are already
@@ -2594,6 +2625,8 @@ class AtlasKernel:
                         await persist_async("tool", content, {
                             "tool_call_id": result.call_id, "tool_name": result.name,
                             "kernel_run_id": run_id, "output_ref": receipt.get("output_ref"),
+                            "microcompacted": bool(receipt.get("microcompacted")),
+                            "masked_content": bool(receipt.get("masked_content")),
                             "receipt_state": receipt["state"],
                             "duration_ms": receipt["duration_ms"],
                         })

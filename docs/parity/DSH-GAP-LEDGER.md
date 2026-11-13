@@ -97,13 +97,13 @@
 | S5 | handle 式持久化：read/append/flush/close，单一写者，跨进程 kernel lease | `session-persistence/src/handle.ts:59,97,109` | WAL + busy_timeout + TTL lease（`atlas_state_common.py:569-582`）；TTL 到期即放开，非进程死亡释放 | PRESENT-WEAKER |
 | S6 | checkpoint 三屏障 fail-closed，写失败就阻断派发 | `session-checkpoint-policy/README.md` | `require_checkpoint()` 在阶段边界、工具派发前和工具结果持久化后失败即抛错，kernel 阻断继续执行 | ✅ 本轮关闭 |
 | S7 | 压缩 bracket 进日志，`summary` 记 shadowed seqs / token / provider / model，可重建 | `packages/compaction/compaction/src/types.ts:24,34,72` | 只有 run-log 一行 + DB 行锁 TTL 300s | PRESENT-WEAKER |
-| S9 | 免模型 tool-result 剪枝：8192 阈值 / 4096 头 / 1024 尾，落**遮蔽替换节点** | `compaction-tool-result-pruner/src/config.ts:11-13` | `context.py:315-375` 头尾各 2000，内存标记，全文写文件；**不落盘、resume 不重放** | PRESENT-WEAKER |
+| S9 | 免模型 tool-result 剪枝：8192 阈值 / 4096 头 / 1024 尾，落**遮蔽替换节点** | `compaction-tool-result-pruner/src/config.ts:11-13` | `context.py` 对超阈值工具结果先内容寻址保存全文，再将头尾预览、`output_ref`、`microcompacted` 与 `masked_content` 一并写入 SessionDB；kernel resume 从 metadata 恢复标记。大结果会在首次持久化时剪枝，避免重启后恢复全文进模型上下文 | PARTIAL (W2; persistence/resume path implemented, runtime restart replay not verified) |
 | S11 | 投影注册表：纯单元、`stateVersion`、有线视图 schema、`asOfSeq` 快照 | `session-projection/src/index.ts:92` | 注册 `session.summary` 默认 projection；快照含 view schema、`stateVersion`、`asOfSeq` 与数据 | ✅ 本轮关闭 |
 | S13 | 会话查询语料库：可丢弃 fts5 索引 + revision/generation 增量 + `current|shadowed|log-only` 分类 | `session-query-sqlite/src/schema.ts:8,127` | 搜索结果提供稳定 `seq`、`after_seq` 游标和 `current|shadowed|log-only` 分类，覆盖 FTS/LIKE/CJK 路径 | ✅ 本轮关闭 |
 | S19 | durable 附件：内容寻址不可变 ref、每次读重校验、先准入后追加用户事件 | `attachment-local/src/file-store.ts:14,76` | 图片**从不持久化**——`agent/__init__.py:1022` 造瞬时 wire payload，只有 OCR 文本进 prompt | PRESENT-WEAKER |
 | S21 | fs 观察策略：per-session 观察态 + provider version token；未见过 vs 不存在区分 | `packages/fs/fs-observation-policy/src/index.ts:28` | 两套半成品：`edit.py:489,497` 快照随 run 死亡；`local_execution.py:1085,1319` 只有 `_read_paths` 集合，写入 `path.write_text` 存在 TOCTOU | PRESENT-WEAKER |
 | S22 | OTel：普通事件与 session-log 双通道独立队列 | `packages/telemetry/otel/src/index.ts:22,30` | `require_checkpoint()` 与已注册的 `SessionDB.get_session_timeline()` 产生生产 span（`atlas.run_checkpoint.write` / `atlas.session.turn_outline`）；普通事件/session-log 独立队列仍未实现 | PRESENT-WEAKER |
-| S25 | tokenMeter 逐 surface 节点计价 + route-aware 图像计价 | `packages/llm/token-meter/src/index.ts:146` | `token_meter.py` 新增逐节点 route-aware 计价 API 和 `measure()` 集成；没有生产模型请求调用点或生产图像计价回调 | PRESENT-WEAKER |
+| S25 | tokenMeter 逐 surface 节点计价 + route-aware 图像计价 | `packages/llm/token-meter/src/index.ts:146` | kernel 每次 conversation 请求以实际 model/provider route 调用 `price_surface_nodes()`，并将逐节点估算写入请求日志与 usage；文本 surface 已接入生产路径，provider 图像定价回调仍未接入，图像继续使用 heuristic | PARTIAL (W2; production request wiring implemented, routed image pricing remains) |
 | S32 | fork 要求边界不在开放 turn 内，`session/end-seed{inherited:true}` 标记继承切点 | `packages/core/session/src/fork.ts:21` | `session_sync.py` 拒绝未闭合 tool turn；子会话导入事务中追加 `session/end-seed{inherited:true}` | ✅ 本轮关闭 |
 
 ### P2
