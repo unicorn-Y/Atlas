@@ -42,6 +42,9 @@ COMPACTABLE_TOOLS = frozenset({
     "local_exec", "local_process", "local_git", "local_edit_batch", "powershell", "execute_code",
     "session_search", "filesystem__read_text_file",
 })
+MICROCOMPACT_TOOL_RESULT_THRESHOLD_CHARS = 8192
+MICROCOMPACT_TOOL_RESULT_HEAD_CHARS = 4096
+MICROCOMPACT_TOOL_RESULT_TAIL_CHARS = 1024
 SUMMARY_PROMPT = (
     "Create a precise continuation summary for the same agent to resume this task without asking "
     "the user to repeat instructions. Summarize only the supplied history and never invent progress. "
@@ -362,23 +365,26 @@ class ContextManager:
         if group:
             groups.append(group)
         keep = max(0 if aggressive else 1, int(cfg.get("keep_recent_tool_results", 5)))
-        head = max(0, int(cfg.get("head_chars", 2000)))
-        tail = max(0, int(cfg.get("tail_chars", 2000)))
+        threshold_chars = max(0, int(cfg.get(
+            "threshold_chars", MICROCOMPACT_TOOL_RESULT_THRESHOLD_CHARS)))
+        head = max(0, int(cfg.get("head_chars", MICROCOMPACT_TOOL_RESULT_HEAD_CHARS)))
+        tail = max(0, int(cfg.get("tail_chars", MICROCOMPACT_TOOL_RESULT_TAIL_CHARS)))
         eligible_groups = groups[:len(groups) - keep] if keep else groups
         for indices in eligible_groups:
             for index in indices:
                 message = messages[index]
                 content = message["content"]
-                if len(content) <= head + tail + 256:
+                if len(content) <= threshold_chars:
                     continue
                 ref = self._output_ref(message, content)
                 if ref is None:
                     continue
                 message["content"] = (content[:head] +
-                    f"\n[Old tool output shortened; full output: {ref}]\n" +
+                    f"\n[Old tool output masked; full output: {ref}]\n" +
                     (content[-tail:] if tail else ""))
                 message["output_ref"] = ref
                 message["microcompacted"] = True
+                message["masked_content"] = True
         savings = estimate_tokens(history) - estimate_tokens(messages)
         return messages if savings >= int(cfg.get("min_token_savings", 256)) else copy.deepcopy(list(history))
 
