@@ -465,6 +465,15 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
             "yield_time_ms": {"type": "integer", "minimum": 0, "maximum": 30000},
             "stop": {"type": "boolean"},
         }, ["session_id"]),
+        _function_schema("job_list", "List this run's background shell, subagent and workflow jobs.", {}),
+        _function_schema("job_output", "Read bounded output from one background job in this run.", {
+            "job_id": {"type": "string", "minLength": 1},
+            "offset": {"type": "integer", "minimum": 0},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 262144},
+        }, ["job_id"]),
+        _function_schema("job_kill", "Cancel one running background job in this run.", {
+            "job_id": {"type": "string", "minLength": 1},
+        }, ["job_id"]),
         _function_schema("TaskOutput", "Deprecated compatibility alias for reading output from an Atlas background process; use local_process read when available.", {
             "task_id": {"type": "string"}, "taskId": {"type": "string"},
             "stream": {"type": "string", "enum": ["stdout", "stderr"]},
