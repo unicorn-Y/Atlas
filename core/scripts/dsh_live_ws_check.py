@@ -53,6 +53,17 @@ async def main() -> int:
                 text_parts.append(str(data.get("content") or ""))
             elif event in {"tool.started", "tool.preparing"}:
                 print(f"[event] {event} name={data.get('name')}")
+            elif event == "tool.completed":
+                contract = data.get("output_contract")
+                if isinstance(contract, dict):
+                    schema = contract.get("schema")
+                    schema_title = schema.get("title") if isinstance(schema, dict) else "registered"
+                    print(
+                        f"[event] tool.completed name={data.get('name')} "
+                        f"output_contract={contract.get('render', 'text')}/{schema_title}"
+                    )
+                else:
+                    print(f"[event] tool.completed name={data.get('name')} output_contract=missing")
             elif event in {"approval.required", "input.required", "run.plan.proposed"}:
                 print(f"[event] {event} tool={data.get('tool')} waiting")
                 await ws.send(json.dumps({

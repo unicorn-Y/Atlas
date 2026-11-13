@@ -38,13 +38,18 @@ describe('buildTimeline', () => {
       ev('run.status', { status: 'running' }, 0),
       ev('tool.started', { tool_call_id: 'a', name: 'local_file', arguments: { action: 'list', path: 'C:\\Atlas' } }, 1),
       ev('tool.started', { tool_call_id: 'b', name: 'local_file', arguments: { action: 'read', path: 'C:\\Atlas\\README.md' } }, 1),
-      ev('tool.completed', { tool_call_id: 'a', name: 'local_file', result: 'ok' }, 2),
+      ev('tool.completed', { tool_call_id: 'a', name: 'local_file', result: 'ok', output_contract: {
+        schema: { type: 'string' }, render: 'markdown', presentation_meta: { label: '文件预览' },
+      } }, 2),
       ev('tool.completed', { tool_call_id: 'b', name: 'local_file', result: 'ok', is_error: true }, 4),
       ev('run.completed', {}, 5),
     ]);
     expect(items.map((item) => item.kind)).toEqual(['user', 'steps', 'done']);
     const steps = items[1].kind === 'steps' ? items[1].steps : [];
     expect(steps.map((step) => [step.verb, step.state])).toEqual([['查看目录', 'done'], ['读取', 'failed']]);
+    expect(steps[0].outputContract).toEqual({
+      schema: { type: 'string' }, render: 'markdown', presentation_meta: { label: '文件预览' },
+    });
   });
 
   it('extracts the returned image for a read_file thumbnail', () => {

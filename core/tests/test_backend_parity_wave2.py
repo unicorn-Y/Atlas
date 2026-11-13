@@ -565,8 +565,14 @@ def test_large_tool_result_is_externalized_with_bounded_preview(tmp_path: Path) 
     assert "Full tool output saved" in preview and len(preview) < 9000
     mapped = server._map_tool_runtime_event({"type": "tool_result", "id": "call-1", "name": "local_file",
                                               "content": [{"text": preview}],
+                                              "output_contract": {"render": "markdown",
+                                                                  "presentation_meta": {"label": "预览"}},
                                               "data": {"full_output_path": full_path}})
     assert mapped[0] == "tool.completed" and mapped[1]["full_output_path"] == full_path
+    assert mapped[1]["output_contract"]["render"] == "markdown"
+    legacy = server._map_tool_runtime_event({"type": "tool_result", "id": "call-2",
+                                             "name": "legacy_host_tool", "content": "ok"})
+    assert legacy[1]["output_contract"]["schema"]["title"] == "legacy_host_tool output"
     assert externalize_tool_output("small", tmp_path, "run-1", "call-2") == ("small", None)
 
 
