@@ -24,8 +24,10 @@ import LspDiagnosticsPanel from './panels/LspDiagnosticsPanel';
 import RolloutPanel from './panels/RolloutPanel';
 import AndroidEmulatorPanel from './panels/AndroidEmulatorPanel';
 import RepoTreemapPanel from './panels/RepoTreemapPanel';
+import { inspectorLayoutKey, readInspectorLayout, writeInspectorLayout } from './inspectorLayout';
+import { getInspectorTab, listInspectorTabs } from './inspectorTabs';
 
-export type InspectorTab = 'tabs' | 'overview' | 'artifacts' | 'activity' | 'changes' | 'rollout' | 'android' | 'files' | 'treemap' | 'preview' | 'canvas' | 'specs' | 'terminal' | 'browser' | 'context' | 'processes' | 'dashboard';
+export type InspectorTab = string;
 
 const EMPTY_MESSAGES: ConversationMessage[] = [];
 const RUN_LABEL: Record<string, string> = { running: '正在处理', planning: '正在规划', waiting: '等你确认', paused: '已暂停', completed: '已完成', failed: '出错了', cancelled: '已停止', idle: '空闲' };
@@ -42,16 +44,18 @@ function commandForConversation(command: { id: string; text: string } | null, co
 // Diffs, file trees and a shell need room; the reading tabs keep the narrow column.
 const WIDE: InspectorTab[] = ['changes', 'rollout', 'android', 'files', 'treemap', 'preview', 'canvas', 'specs', 'terminal', 'browser'];
 const WIDTH_KEY = 'atlas.preference.inspector-width';
-const readWidth = () => { try { const value = Number(localStorage.getItem(WIDTH_KEY)); return value >= 180 ? value : null; } catch { return null; } };
+const readWidth = (conversationId: string) => { try { const value = Number(localStorage.getItem(`${WIDTH_KEY}.${encodeURIComponent(conversationId)}`)); return value >= 180 ? value : null; } catch { return null; } };
 const widthLimits = () => {
   const min = Math.min(300, Math.max(180, window.innerWidth * 0.38));
   return { min, max: Math.max(min, Math.min(window.innerWidth * 0.62, Math.max(220, window.innerWidth * 0.82))) };
 };
 
 /** Drag the panel's left edge to set its width (kept on this machine); double-click goes back to automatic. */
-function useResizableWidth() {
-  const [width, setWidth] = useState<number | null>(readWidth);
+function useResizableWidth(conversationId: string) {
+  const key = `${WIDTH_KEY}.${encodeURIComponent(conversationId)}`;
+  const [width, setWidth] = useState<number | null>(() => readWidth(conversationId));
   const [dragging, setDragging] = useState(false);
+  useEffect(() => { setWidth(readWidth(conversationId)); }, [conversationId]);
   useEffect(() => {
     const clamp = () => setWidth((current) => {
       if (current === null) return null;
@@ -82,7 +86,7 @@ function useResizableWidth() {
       setDragging(false);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
-      if (moved) try { localStorage.setItem(WIDTH_KEY, String(latest)); } catch { /* storage unavailable */ }
+      if (moved) try { localStorage.setItem(key, String(latest)); } catch { /* storage unavailable */ }
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end);
@@ -94,9 +98,9 @@ function useResizableWidth() {
     const { min, max } = widthLimits();
     const next = Math.round(Math.min(max, Math.max(min, (width ?? panelWidth) + (event.key === 'ArrowLeft' ? 20 : -20))));
     setWidth(next);
-    try { localStorage.setItem(WIDTH_KEY, String(next)); } catch { /* storage unavailable */ }
+    try { localStorage.setItem(key, String(next)); } catch { /* storage unavailable */ }
   };
-  const reset = () => { setWidth(null); try { localStorage.removeItem(WIDTH_KEY); } catch { /* storage unavailable */ } };
+  const reset = () => { setWidth(null); try { localStorage.removeItem(key); } catch { /* storage unavailable */ } };
   return { width, dragging, start, reset, resizeByKeyboard };
 }
 
@@ -138,6 +142,25 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
   // The terminal mounts on first visit and then stays, so hiding the tab doesn't end the shell.
   const [terminalOpened, setTerminalOpened] = useState(false);
   const [browserOpened, setBrowserOpened] = useState(false);
+  const [splitTab, setSplitTab] = useState<InspectorTab | null>(null);
+  const [floating, setFloating] = useState(false);
+  const layoutKey = inspectorLayoutKey(conversationId);
+  const [loadedLayoutKey, setLoadedLayoutKey] = useState('');
+  useEffect(() => {
+    try {
+      const saved = readInspectorLayout(conversationId);
+      onTab(saved.tab);
+      setSplitTab(saved.splitTab);
+      setFloating(saved.floating);
+    } catch { setSplitTab(null); setFloating(false); }
+    setLoadedLayoutKey(layoutKey);
+  // Conversation identity selects a separate, local layout; never apply one session's dock to another.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]);
+  useEffect(() => {
+    if (loadedLayoutKey !== layoutKey) return;
+    writeInspectorLayout(conversationId, { version: 1, tab, splitTab, floating });
+  }, [conversationId, layoutKey, loadedLayoutKey, tab, splitTab, floating]);
   useEffect(() => { if (tab === 'terminal') setTerminalOpened(true); if (tab === 'browser') setBrowserOpened(true); }, [tab]);
   const messages: ConversationMessage[] = useAtlasStore((state) => state.conversationMessages[conversationId]) ?? EMPTY_MESSAGES;
   const conversationRuns = useAtlasStore((state) => state.runs);
@@ -149,12 +172,14 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
   const refreshKey = `${run?.id}:${run?.status}`;
   const scopedTerminalCommand = commandForConversation(terminalCommand, conversationId);
 
-  const resize = useResizableWidth();
+  const resize = useResizableWidth(conversationId);
   const tabs: Array<[InspectorTab, string]> = [
     ['overview', '任务概览'], ['artifacts', `产物${artifacts.length ? ` ${artifacts.length}` : ''}`], ['activity', '步骤'], ['changes', '改动'], ['rollout', '运行记录'], ['android', 'Android'], ['files', '文件'], ['treemap', '树图'], ['preview', '预览'], ['canvas', '画布'], ['specs', '规格'], ['terminal', '终端'], ['browser', '浏览器'], ['context', '上下文'], ['processes', '进程'], ['dashboard', '看板'],
   ];
+  for (const extension of listInspectorTabs()) tabs.push([extension.id, extension.label]);
+  const extensionTab = getInspectorTab(tab);
   return <aside aria-label={fullScreenDiff ? '全屏差异查看器' : '任务面板'} style={!fullScreenDiff && resize.width ? { width: resize.width } : undefined}
-    className={cn('anim-fade relative flex shrink-0 flex-col bg-canvas shadow-[inset_1px_0_0_var(--line)]', fullScreenDiff ? 'fixed inset-3 z-40 min-w-0' : 'min-w-0', !resize.dragging && 'transition-[width] duration-200', !fullScreenDiff && !resize.width && (WIDE.includes(tab) ? 'w-[min(480px,62vw)]' : 'w-[min(340px,62vw)]'))}>
+    className={cn('anim-fade relative flex shrink-0 flex-col bg-canvas shadow-[inset_1px_0_0_var(--line)]', fullScreenDiff ? 'fixed inset-3 z-40 min-w-0' : floating ? 'fixed bottom-4 right-4 top-14 z-40 min-w-0 w-[min(620px,82vw)] shadow-xl' : 'min-w-0', !resize.dragging && 'transition-[width] duration-200', !fullScreenDiff && !floating && !resize.width && (WIDE.includes(tab) || extensionTab?.wide ? 'w-[min(480px,62vw)]' : 'w-[min(340px,62vw)]'))}>
     {!fullScreenDiff && <div role="separator" aria-orientation="vertical" aria-label="拖动或使用方向键调整任务面板宽度，双击恢复自动" aria-valuemin={widthLimits().min} aria-valuemax={widthLimits().max} aria-valuenow={Math.min(widthLimits().max, Math.max(widthLimits().min, resize.width ?? (WIDE.includes(tab) ? 480 : 340)))} tabIndex={0} title="拖动或用方向键调整宽度，双击恢复自动"
       onPointerDown={resize.start} onDoubleClick={resize.reset} onKeyDown={resize.resizeByKeyboard}
       className={cn('absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize after:absolute after:inset-y-0 after:left-[3px] after:w-0.5 after:rounded-full after:transition-colors hover:after:bg-brand/50', resize.dragging && 'after:bg-brand')} />}
@@ -169,10 +194,15 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
           className={cn('shrink-0 pb-2.5 text-[13px] transition-colors', tab === id ? 'font-medium text-fg shadow-[inset_0_-2px_0_var(--brand)]' : 'text-fg-3 hover:text-fg')}>{label}</button>)}
       </div>
       {fullScreenDiff && <button type="button" aria-label="返回任务面板" title="返回任务面板" onClick={() => onFullScreenDiffChange?.(false)} className="grid size-8 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><Minimize2 size={15} /></button>}
+      {!fullScreenDiff && <>
+        <button type="button" aria-label={splitTab ? '关闭分屏' : '拆分任务面板'} title={splitTab ? '关闭分屏' : '拆分任务面板'} onClick={() => setSplitTab((current) => current ? null : 'overview')} className="grid size-7 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg">{splitTab ? '▣' : '◫'}</button>
+        <button type="button" aria-label={floating ? '停靠任务面板' : '浮动任务面板'} title={floating ? '停靠任务面板' : '浮动任务面板'} onClick={() => setFloating((value) => !value)} className="grid size-7 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg">{floating ? '⇥' : '↗'}</button>
+      </>}
       <button aria-label={fullScreenDiff ? '关闭差异查看器' : '收起任务面板'} onClick={onClose} className="grid size-7 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-hover hover:text-fg"><X size={15} /></button>
     </div>
 
-    <div className="min-h-0 flex-1 overflow-auto p-5">
+    <div className={cn('min-h-0 flex-1', splitTab ? 'grid grid-cols-2 divide-x divide-line' : '')}>
+    <div className="min-h-0 overflow-auto p-5">
       {tab === 'tabs' && <section aria-label="任务面板标签概览" className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
         {tabs.map(([id, label]) => <button key={id} type="button" onClick={() => onTab(id)} className="card-surface flex min-h-24 flex-col items-start justify-between rounded-xl p-3 text-left hover:shadow-[inset_0_0_0_1px_var(--brand)]">
           <span className="text-[13px] font-medium text-fg">{label}</span><span className="text-[11.5px] text-fg-3">{id === tab ? '当前标签' : id === 'artifacts' ? `${artifacts.length} 个产物` : id === 'activity' ? `${steps.length} 个当前步骤` : id === 'changes' ? (run ? RUN_LABEL[run.status] ?? run.status : '暂无运行') : '点击打开此标签'}</span>
@@ -237,6 +267,24 @@ export default function Inspector({ tab, onTab, onClose, fullScreenDiff = false,
       {tab === 'context' && <ContextTab conversationTitle={conversationTitle} modelName={modelName} run={run} tools={tools} skills={skills} activeSkills={activeSkills}
         capabilities={capabilities} workspace={workspace} onChooseWorkspace={onChooseWorkspace} connected={connected}
         conversationId={conversationId} worktree={worktree} onWorktreeChanged={onWorktreeChanged} onToast={onToast} onPreview={onPreview} onAsk={onAsk} />}
+      {extensionTab && extensionTab.render({ conversationId, apiBaseUrl, connected, workspace, onToast })}
+    </div>
+    {splitTab && <section aria-label="分屏面板" className="flex min-h-0 flex-col">
+      <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+        <label htmlFor="inspector-split-tab" className="text-[11px] text-fg-3">分屏标签</label>
+        <select id="inspector-split-tab" value={splitTab} onChange={(event) => setSplitTab(event.target.value)} className="min-w-0 flex-1 rounded-md bg-sunken px-2 py-1 text-[12px] text-fg">
+          {tabs.filter(([id]) => id !== tab).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+        </select>
+        <button type="button" aria-label="关闭分屏" onClick={() => setSplitTab(null)} className="rounded px-1 text-fg-3 hover:bg-hover">×</button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        {getInspectorTab(splitTab)?.render({ conversationId, apiBaseUrl, connected, workspace, onToast }) ?? <div className="grid gap-2 text-[12px] text-fg-2">
+          <strong>{tabs.find(([id]) => id === splitTab)?.[1] ?? splitTab}</strong>
+          <p className="m-0 text-fg-3">此标签已加入分屏布局。</p>
+          <button type="button" onClick={() => onTab(splitTab)} className="justify-self-start rounded-lg bg-sunken px-2.5 py-1.5 hover:bg-hover">在主面板打开</button>
+        </div>}
+      </div>
+    </section>}
     </div>
   </aside>;
 }

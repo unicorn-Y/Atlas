@@ -195,8 +195,8 @@
 | D4 | keyed ConversationNode renderer 注册表 | `ui-chat/.../register-node-renderers.ts:39-69` | `timeline.ts:73-99` 静态联合 + `ConversationActivity.tsx:42` 单 switch，无注册 API | ABSENT |
 | D5 | durable 附件暂存：内容寻址、先存后发、进度、可取消 | `docs/subsystems/attachment.md`；`client/file-upload/src/client/contract.ts` | `App.tsx:1380-1410` 读成 base64 data URL（4 张/4MiB/共 8MiB），`App.tsx:1222` 内联进 run.start | PRESENT-WEAKER |
 | D6 | 结构化草稿：chip 进文本模型、per-session 语义草稿、重载存活 | `ui-conversation/.../ReferenceChip.tsx` | `Composer.tsx:740` 纯 textarea；mentions 另存 `App.tsx:413`，草稿只存纯文本 `App.tsx:215` | PRESENT-WEAKER |
-| D7 | follow 重连：首帧 header+tail+cursor+投影基线，`page()` 补缺口 | `docs/subsystems/web-client.md:48` | `client.ts:670-694` 永远 `after_sequence: 0`；退避最多 3 次后放弃 | PRESENT-WEAKER |
-| D8 | 右侧栏：split 树、浮动面板、可插 tab 类型、per-session 布局 | `docs/subsystems/sidebar-right.md:26,74`；`ui-dockkit/.../FloatLayer.tsx` | `shell/Inspector.tsx:28,156` 单列固定 union，布局不持久 | PRESENT-WEAKER |
+| D7 | follow 重连：首帧 header+tail+cursor+投影基线，`page()` 补缺口 | `docs/subsystems/web-client.md:48` | `client.ts` 现按连续序列检测缺口并从最后连续 cursor 重放；attachRun 支持断线续连，但协议仍缺 header/tail/投影基线帧与独立 page API | PARTIAL |
+| D8 | 右侧栏：split 树、浮动面板、可插 tab 类型、per-session 布局 | `docs/subsystems/sidebar-right.md:26,74`；`ui-dockkit/.../FloatLayer.tsx` | `Inspector` 支持每会话 tab/宽度/浮动/单层 split 槽位及扩展 tab 注册；内置 split 槽位仍是导航占位，尚无递归 split tree 和浮动窗口拖动 | PARTIAL |
 | D9 | 应用内连接恢复控件（可点击重试 + 恢复确认） | `ui-primitives/.../ConnectionIndicator.tsx:6-40` | 断连提示提供键盘可操作的“重试连接”；桌面重启动作先确认 | ✅ 本轮关闭 |
 | D10 | 自动更新生命周期：调度 + 退避 + 抖动 + journal + 强制版本 | `apps/desktop/src/update-coordinator.ts:16`；`update-schedule.ts:20-26` | `main/releaseUpdate.ts:73,86` 手动检查 + SHA256 校验下载 | PRESENT-WEAKER |
 
