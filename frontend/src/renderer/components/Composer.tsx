@@ -217,6 +217,30 @@ interface ComposerProps {
   onDeleteRecentScreenshot?: (id: string) => void;
 }
 
+export function ComposerAttachmentStatus({ progress, failedCount = 0, onCancel, onRetry }: {
+  progress?: string;
+  failedCount?: number;
+  onCancel?: () => void;
+  onRetry?: () => void;
+}) {
+  if (!progress && failedCount <= 0) return null;
+  return <div className="mt-2 flex items-center gap-2 text-[12px] text-fg-3" role="status" aria-live="polite">
+    {progress && <span>{progress}</span>}
+    {progress && onCancel && <button type="button" onClick={onCancel} className="text-brand hover:underline">取消</button>}
+    {failedCount > 0 && <><span>{failedCount} 个附件读取失败</span><button type="button" onClick={onRetry} className="inline-flex items-center gap-1 text-brand hover:underline"><RotateCcw size={12} />重试</button></>}
+  </div>;
+}
+
+export function ComposerDraftMentions({ mentions, onRemove }: { mentions: MentionItem[]; onRemove?: (item: MentionItem) => void }) {
+  if (!mentions.length) return null;
+  return <div className="mt-2.5 flex flex-wrap gap-2" aria-label="引用的上下文">
+    {mentions.map((item) => <span key={`${item.kind}:${item.id}`} className="inline-flex max-w-[260px] items-center gap-1 rounded-lg bg-brand-soft py-1 pr-1 pl-2 text-[12.5px] text-fg">
+      {item.kind === 'conversation' ? <Hash size={12} className="shrink-0" /> : <AtSign size={12} className="shrink-0" />}<span className="min-w-0 truncate" title={item.hint ?? item.label}>{item.label}</span>
+      <button type="button" aria-label={`移除引用 ${item.label}`} onClick={() => onRemove?.(item)} className="grid size-5 place-items-center rounded-md hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"><X size={12} /></button>
+    </span>)}
+  </div>;
+}
+
 export default function Composer(props: ComposerProps) {
   const hero = props.variant === 'hero';
   const [expert] = useExpertMode(backend.apiBaseUrl);
@@ -786,12 +810,7 @@ export default function Composer(props: ComposerProps) {
           className="absolute -top-1.5 -right-1.5 grid size-5 place-items-center rounded-full bg-fg text-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"><X size={12} /></button>
       </div>)}
     </div>}
-    {props.mentions && props.mentions.length > 0 && <div className="mt-2.5 flex flex-wrap gap-2" aria-label="引用的上下文">
-      {props.mentions.map((item) => <span key={`${item.kind}:${item.id}`} className="inline-flex max-w-[260px] items-center gap-1 rounded-lg bg-brand-soft py-1 pr-1 pl-2 text-[12.5px] text-fg">
-        {item.kind === 'conversation' ? <Hash size={12} className="shrink-0" /> : <AtSign size={12} className="shrink-0" />}<span className="min-w-0 truncate" title={item.hint ?? item.label}>{item.label}</span>
-        <button type="button" aria-label={`移除引用 ${item.label}`} onClick={() => props.onRemoveMention?.(item)} className="grid size-5 place-items-center rounded-md hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"><X size={12} /></button>
-      </span>)}
-    </div>}
+    {props.mentions && <ComposerDraftMentions mentions={props.mentions} onRemove={props.onRemoveMention} />}
     {props.files && props.files.length > 0 && <div className="mt-2.5 flex flex-wrap gap-2" aria-label="待发送文件">
       {props.files.map((file, index) => <span key={`${index}-${file.name}`} className="inline-flex max-w-[240px] items-center gap-1.5 rounded-lg bg-sunken py-1 pr-1 pl-2 text-[12.5px] text-fg-2 shadow-[inset_0_0_0_1px_var(--line)]">
         <FileIcon size={13} className="shrink-0 text-fg-3" /><span className="min-w-0 truncate">{file.name}</span>
@@ -799,11 +818,8 @@ export default function Composer(props: ComposerProps) {
         <button type="button" aria-label={`移除 ${file.name}`} onClick={() => props.onRemoveFile?.(index)} className="grid size-5 place-items-center rounded-md hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"><X size={12} /></button>
       </span>)}
     </div>}
-    {(props.attachmentProgress || (props.failedAttachmentCount ?? 0) > 0) && <div className="mt-2 flex items-center gap-2 text-[12px] text-fg-3" role="status" aria-live="polite">
-      {props.attachmentProgress && <span>{props.attachmentProgress}</span>}
-      {props.attachmentProgress && props.onCancelAttachmentUpload && <button type="button" onClick={props.onCancelAttachmentUpload} className="text-brand hover:underline">取消</button>}
-      {(props.failedAttachmentCount ?? 0) > 0 && <><span>{props.failedAttachmentCount} 个附件读取失败</span><button type="button" onClick={props.onRetryFailedAttachments} className="inline-flex items-center gap-1 text-brand hover:underline"><RotateCcw size={12} />重试</button></>}
-    </div>}
+    <ComposerAttachmentStatus progress={props.attachmentProgress} failedCount={props.failedAttachmentCount}
+      onCancel={props.onCancelAttachmentUpload} onRetry={props.onRetryFailedAttachments} />
     <input ref={fileRef} hidden type="file" multiple onChange={(event) => { props.onPickImages(event.target.files); event.currentTarget.value = ''; }} />
 
     <div className={cn('@container flex items-center gap-1.5', hero ? 'mt-3' : 'mt-2')}>
