@@ -11,6 +11,7 @@ export const DEFAULT_RELEASE_SOURCE = 'https://api.github.com/repos/unicorn-Y/At
 type View = { channel: 'release' | 'source'; release?: ReleaseUpdateStatus; source?: SourceUpdateStatus };
 export default function UpdateBanner() {
   const [view, setView] = useState<View | null>(null);
+  const [forcedRelease, setForcedRelease] = useState<ReleaseUpdateStatus | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -24,13 +25,18 @@ export default function UpdateBanner() {
       const storedChannel = localStorage.getItem(CHANNEL_KEY);
       const channel = storedChannel === 'release' ? 'release' : 'source';
       checkedChannel = channel;
+      const releaseSource = localStorage.getItem(SOURCE_KEY) || DEFAULT_RELEASE_SOURCE;
       if (channel === 'source') {
         if (!api?.checkForUpdate) throw new Error('源码更新检查不可用');
-        return api.checkForUpdate();
+        const [source, release] = await Promise.all([
+          api.checkForUpdate(),
+          api.checkReleaseUpdate?.(releaseSource).catch(() => null) ?? Promise.resolve(null),
+        ]);
+        return { source, release };
       }
       if (!api?.checkReleaseUpdate) throw new Error('发布版更新检查不可用');
-      const source = localStorage.getItem(SOURCE_KEY) || DEFAULT_RELEASE_SOURCE;
-      return api.checkReleaseUpdate(source);
+      const release = await api.checkReleaseUpdate(releaseSource);
+      return { release };
     };
     const coordinator = createUpdateCoordinator({
       check,
@@ -39,7 +45,9 @@ export default function UpdateBanner() {
       journal: (entry) => appendUpdateJournal(entry, localStorage),
       onResult: (result) => {
         if (!alive) return;
-        setView(checkedChannel === 'source' ? { channel: 'source', source: result as SourceUpdateStatus } : { channel: 'release', release: result as ReleaseUpdateStatus });
+        const release = result.release as ReleaseUpdateStatus | undefined;
+        if (release && !release.error) setForcedRelease(release.mandatory ? release : null);
+        setView(checkedChannel === 'source' ? { channel: 'source', source: result.source as SourceUpdateStatus, release } : { channel: 'release', release });
         setDismissed(false);
       },
     });
@@ -57,6 +65,16 @@ export default function UpdateBanner() {
     catch (error) { setView((old) => old?.release ? { ...old, release: { ...old.release, error: error instanceof Error ? error.message : String(error) } } : old); setBusy(false); }
     finally { off?.(); }
   };
+  if (forcedRelease) return <div role="alertdialog" aria-modal="true" aria-label="必须更新 Atlas" onKeyDown={(event) => { if (event.key === 'Escape') event.preventDefault(); }} className="fixed inset-0 z-[100] grid place-items-center bg-black/70 p-6 backdrop-blur-sm">
+    <section className="grid w-full max-w-lg gap-4 rounded-2xl border border-line bg-panel p-6 text-fg shadow-2xl">
+      <div><h1 className="m-0 text-lg font-semibold">{tn('updates', '必须更新 Atlas')}</h1><p className="mb-0 mt-2 text-sm leading-relaxed text-fg-2">{tn('updates', `当前版本 ${forcedRelease.current} 已停止支持。最低支持版本为 ${forcedRelease.minimumVersion}，请安装 ${forcedRelease.latest} 后继续使用。`)}</p></div>
+      {forcedRelease.error && <p role="alert" className="m-0 text-sm text-danger">{forcedRelease.error}</p>}
+      <button type="button" disabled={busy || !forcedRelease.available || !forcedRelease.assetName} onClick={() => void download()} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">
+        {busy && <LoaderCircle className="size-4 animate-spin" />}{busy ? `正在下载 ${progress}%` : tn('updates', '下载并安装受支持版本')}
+      </button>
+      {!forcedRelease.assetName && <p className="m-0 text-xs text-fg-3">{tn('updates', '该 Release 暂无 Windows 安装包，应用将保持锁定，直到发布包可用。')}</p>}
+    </section>
+  </div>;
   if (!view || dismissed) return null;
   const sourceUpdate = view.channel === 'source' && view.source?.available;
   const releaseUpdate = view.channel === 'release' && view.release?.available;

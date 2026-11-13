@@ -196,9 +196,9 @@
 | D5 | durable 附件暂存：内容寻址、先存后发、进度、可取消 | `docs/subsystems/attachment.md`；`client/file-upload/src/client/contract.ts` | `renderer/services/attachmentStaging.ts` 以 SHA-256 存入 IndexedDB；`App.tsx` 的文件、图片、白板图和最近截图路径先暂存再进入发送队列，显示进度、允许取消，并把暂存引用随会话草稿恢复。发送仍将 base64 内联到 run.start；缺少 UI 重载和有效真实模型端到端证据 | PARTIAL |
 | D6 | 结构化草稿：chip 进文本模型、per-session 语义草稿、重载存活 | `ui-conversation/.../ReferenceChip.tsx` | `renderer/services/composerDraft.ts` 按会话保存文本、mentions 和暂存附件引用；提交时将所有 chip 序列化进模型文本。单测覆盖序列化/隔离，尚未有真实 UI 重载或模型回合通过证据 | PARTIAL |
 | D7 | follow 重连：首帧 header+tail+cursor+投影基线，`page()` 补缺口 | `docs/subsystems/web-client.md:48` | `client.ts:670-694` 永远 `after_sequence: 0`；退避最多 3 次后放弃 | PRESENT-WEAKER |
-| D8 | 右侧栏：split 树、浮动面板、可插 tab 类型、per-session 布局 | `docs/subsystems/sidebar-right.md:26,74`；`ui-dockkit/.../FloatLayer.tsx` | `shell/Inspector.tsx:28,156` 单列固定 union，布局不持久 | PRESENT-WEAKER |
+| D8 | 右侧栏：split 树、浮动面板、可插 tab 类型、per-session 布局 | `docs/subsystems/sidebar-right.md:26,74`；`ui-dockkit/.../FloatLayer.tsx` | `PaneWorkspace.tsx` 递归 split；`inspectorTabs.ts` 扩展注册；`inspectorLayout.ts` 按会话保存 tab、split、dock 和浮动坐标；`Inspector.tsx` 浮窗标题栏可拖动并限制在视口内；全量 Vitest 中 4 个不相关测试文件失败，按 WAVE 2 门槛暂列 PARTIAL | PARTIAL |
 | D9 | 应用内连接恢复控件（可点击重试 + 恢复确认） | `ui-primitives/.../ConnectionIndicator.tsx:6-40` | 断连提示提供键盘可操作的“重试连接”；桌面重启动作先确认 | ✅ 本轮关闭 |
-| D10 | 自动更新生命周期：调度 + 退避 + 抖动 + journal + 强制版本 | `apps/desktop/src/update-coordinator.ts:16`；`update-schedule.ts:20-26` | `frontend/src/renderer/services/update-coordinator.ts:23,80`、`UpdateBanner.tsx:22,39` 已接入自动检查、抖动退避和 200 条本地 journal；强制版本策略尚未接入 | PARTIAL |
+| D10 | 自动更新生命周期：调度 + 退避 + 抖动 + journal + 强制版本 | `apps/desktop/src/update-coordinator.ts:16`；`update-schedule.ts:20-26` | 自动检查、退避、抖动及 journal 已接入；Release notes 支持 `Minimum-Atlas-Version: x.y.z`，主进程计算 mandatory，renderer 独立检查 Release 并在低版本时锁定界面；mandatory 忽略跳过/稍后提醒；全量 Vitest 中 4 个不相关测试文件失败，按 WAVE 2 门槛暂列 PARTIAL | PARTIAL |
 
 ### P2
 
@@ -210,7 +210,7 @@
 | D14 | 问题意图标签（`plan-review` 路由到专用面板） | `docs/subsystems/user-questions.md:25` | `intent=plan-review` 的 `input.required` 渲染进入现有计划审查、批准、修改控件 | ✅ 本轮关闭 |
 | D15 | 审批接管 composer（不可滚走） | `ui-approval/.../ApprovalPanel.tsx:1-62` | `ConversationActivity.tsx:351-400` 内联卡片（选项更丰富），可被滚走 | PRESENT-PARITY（选项强，位置弱） |
 | D16 | 文档预览 renderer 注册表 | `ui-sidebar-documentpreview/src/client/*` | `FilesPanel.tsx:635-690` 有 md/图片/PDF/xlsx/pptx/HTML | PRESENT-PARITY |
-| D17 | 命名空间 i18n | `client/locale/src/locale-settings.ts:16` | `frontend/src/renderer/services/i18n.ts:11,28,143` 新增 namespace 注册/查询 API，`UpdateBanner.tsx:5,73` 使用 updates namespace；7.7k 条全局目录及 MutationObserver 替换尚未迁移 | PARTIAL |
+| D17 | 命名空间 i18n | `client/locale/src/locale-settings.ts:16` | `updates` namespace 覆盖更新提示和强制更新文案，包含插值模板；其余约 7.7k 全局目录仍由 `t()` / `MutationObserver` 兼容路径消费 | PARTIAL |
 | D18 | 半径 token 尺度 + token-only 颜色（spec 强制） | `docs/ui-radius.md`；`ui-theme/src/styles/base.css` | `shell/themes.ts:4` 3 套主题 + 自定义 7 色，组件里 `rounded-[9px]` 随意 | PRESENT-WEAKER |
 | D19 | 无障碍契约（框架级 focus/IME/reduced-motion） | `ui-theme/src/styles/focus.css`；`packages/client/shortcuts` | `styles/app.css:205` 全局 focus-visible；手写 aria | PRESENT-WEAKER |
 | D20 | 单实例 + deep link | `apps/desktop/src/single-instance.ts:16` | `electron.ts:1171-1185` | PRESENT-PARITY |

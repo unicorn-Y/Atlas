@@ -23,7 +23,7 @@ export interface SourceUpdateStatus {
   blocked?: string;
   error?: string;
 }
-export interface ReleaseUpdateStatus { supported: boolean; available: boolean; current: string; latest?: string; notes?: string; assetName?: string; error?: string; skipped?: boolean }
+export interface ReleaseUpdateStatus { supported: boolean; available: boolean; current: string; latest?: string; minimumVersion?: string; mandatory?: boolean; notes?: string; assetName?: string; error?: string; skipped?: boolean }
 
 export type AtlasSettingsSection =
   | 'models' | 'advanced' | 'usage' | 'limits' | 'profiles' | 'hooks' | 'tools' | 'telegram' | 'channels'
