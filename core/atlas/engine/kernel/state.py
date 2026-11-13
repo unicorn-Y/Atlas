@@ -55,6 +55,65 @@ class TurnEndReason(StrEnum):
         return cls.FAILED
 
 
+class StepEndReason(StrEnum):
+    """Typed reason one model invocation stopped."""
+
+    RESPONSE = "response"
+    TOOL_CALLS = "tool_calls"
+    RETRIED = "retried"
+    INTERRUPTED = "interrupted"
+    FAILED = "failed"
+
+
+@dataclass(slots=True)
+class TurnLifecycle:
+    """Track the ordered model-call steps within one user-message turn."""
+
+    turn_id: str
+    step_count: int = 0
+    active_step: int | None = None
+    end_reason: TurnEndReason | None = None
+
+    def begin_step(self) -> int:
+        if self.end_reason is not None:
+            raise ValueError("turn has ended")
+        if self.active_step is not None:
+            raise ValueError("cannot begin a model step before ending the active step")
+        self.step_count += 1
+        self.active_step = self.step_count
+        return self.active_step
+
+    def end_step(self, step: int, reason: StepEndReason) -> bool:
+        if self.active_step != step:
+            return False
+        if not isinstance(reason, StepEndReason):
+            raise TypeError("step end reason must be a StepEndReason")
+        self.active_step = None
+        return True
+
+    def end_turn(self, reason: TurnEndReason) -> bool:
+        if self.end_reason is not None:
+            return False
+        if self.active_step is not None:
+            raise ValueError("cannot end a turn while a model step is active")
+        if not isinstance(reason, TurnEndReason):
+            raise TypeError("turn end reason must be a TurnEndReason")
+        self.end_reason = reason
+        return True
+
+
+@dataclass(slots=True)
+class TurnConclusion:
+    """Explicit final response requested by a tool in the current turn."""
+
+    requested: bool = False
+    response: str = ""
+
+    def conclude(self, response: Any) -> None:
+        self.response = str(response or "")
+        self.requested = True
+
+
 _TRANSITIONS: dict[RunPhase, frozenset[RunPhase]] = {
     RunPhase.PREPARING: frozenset({
         RunPhase.AWAITING_MODEL_RESPONSE, RunPhase.STREAMING, RunPhase.TOOLS, RunPhase.WAITING_APPROVAL,

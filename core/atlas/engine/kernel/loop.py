@@ -36,7 +36,8 @@ from atlas.engine.kernel.repair import (
     started_call_ids,
 )
 from atlas.engine.kernel.state import (
-    KernelEvent, RunPhase, RunState, RunTerminalStatus, TurnEndReason,
+    KernelEvent, RunPhase, RunState, RunTerminalStatus, StepEndReason, TurnConclusion,
+    TurnEndReason, TurnLifecycle,
 )
 from atlas.engine.kernel.stuck import RepeatToolReminder, StuckDetector
 from atlas.engine.kernel.tool_finalize import (
@@ -621,6 +622,24 @@ class AtlasKernel:
         raw = dict(config or {})
         self.config = dict(raw.get("engine", raw))
         self.raw_config = raw
+        self._activity_lock = asyncio.Lock()
+        self._active_runs = 0
+        self._maintenance_active = False
+
+    async def runMaintenance(self, callback: Callable[[], Any]) -> bool:
+        """Run one maintenance callback only while no user turn is active."""
+        async with self._activity_lock:
+            if self._active_runs or self._maintenance_active:
+                return False
+            self._maintenance_active = True
+        try:
+            result = callback()
+            if asyncio.iscoroutine(result):
+                await result
+            return True
+        finally:
+            async with self._activity_lock:
+                self._maintenance_active = False
 
     async def run(self, request: KernelRequest) -> AsyncIterator[dict[str, Any]]:
         from atlas.engine.kernel.exec import ExecManager
@@ -639,6 +658,11 @@ class AtlasKernel:
         session_id = request.conversation_id
         selected_model = request.model_id or getattr(runtime, "model", None) or agent._model_mgr.current_model
         state = RunState(run_id=run_id, session_id=session_id)
+        lifecycle = TurnLifecycle(run_id)
+        async with self._activity_lock:
+            if self._maintenance_active:
+                raise RuntimeError("cannot start a turn while idle maintenance is active")
+            self._active_runs += 1
         started_at = time.monotonic()
         usage_rows: list[dict[str, Any]] = copy.deepcopy(request.initial_usage_rows)
         state.usage_rows = usage_rows
@@ -689,6 +713,16 @@ class AtlasKernel:
             except Exception:
                 log.exception("kernel.run_log_write_failed", extra={"run_id": run_id, "event": event})
 
+        def finish_step(reason: StepEndReason) -> None:
+            active_step = lifecycle.active_step
+            if active_step is None or not lifecycle.end_step(active_step, reason):
+                return
+            record("step_end", step=active_step, reason=reason.value)
+
+        def finish_turn(reason: TurnEndReason) -> None:
+            if lifecycle.end_turn(reason):
+                record("turn_end", reason=reason.value)
+
         def emit(event_type: str, **data: Any) -> dict[str, Any]:
             return KernelEvent(event_type, data).as_run_event()
 
@@ -737,6 +771,7 @@ class AtlasKernel:
         try:
             record("run_start", model=selected_model, session_id=session_id,
                    workspace=request.workspace or "", kernel="atlas")
+            record("turn_start", turn_id=run_id, session_id=session_id)
             # ``transition`` only fires on change, so the opening phase is
             # recorded here explicitly: a replay must start with a phase.
             record("run_phase", phase=str(state.phase), previous=None, elapsed_ms=0)
@@ -1030,7 +1065,13 @@ class AtlasKernel:
             tool_started_at: dict[str, float] = {}
             forwarded_results: set[str] = set()
 
+            conclusion = TurnConclusion()
+
             async def dispatch_tool(call_id: str, name: str, args: dict[str, Any]) -> Any:
+                if name == "concludeTurn":
+                    conclusion.conclude(args.get("response"))
+                    return {"content": conclusion.response, "data": {"concluded": True},
+                            "outcome": "completed"}
                 if not _mcp_tool_allowed(runtime, name):
                     return {"content": f"MCP server is outside this agent preset's scope: {name}",
                             "is_error": True, "outcome": "denied"}
@@ -1894,7 +1935,19 @@ class AtlasKernel:
                     insert_at = 1 if messages and messages[0].get("role") == "system" else 0
                     messages = [*messages[:insert_at], {"role": "system", "content": deferred_note},
                                 *messages[insert_at:]]
-                tools = plan.filter_tools(available_tools, read_only_names=("build_repo_map",))
+                if supports_tools is not False:
+                    available_tools = [*available_tools, {
+                        "type": "function", "function": {
+                            "name": "concludeTurn",
+                            "description": "End this user turn after the current tool batch and provide the final response.",
+                            "parameters": {"type": "object", "properties": {
+                                "response": {"type": "string", "description": "Final response for this turn."},
+                            }, "required": ["response"], "additionalProperties": False},
+                        },
+                    }]
+                tools = plan.filter_tools(
+                    available_tools, read_only_names=("build_repo_map", "concludeTurn"),
+                )
                 offered_schemas.clear()
                 offered_schemas.update({
                     str((item.get("function") or item).get("name")): dict(
@@ -2054,6 +2107,9 @@ class AtlasKernel:
                     if prewarm_task is not None and not prewarm_task.done():
                         await asyncio.shield(prewarm_task)
                     call_model, call_fallbacks = _sticky_fallback_route(runtime, turn_model)
+                    step_id = lifecycle.begin_step()
+                    record("step_start", step=step_id, turn_id=run_id,
+                           model=turn_model, attempt=turn_index + 1)
                     model_task = asyncio.create_task(complete_stream(
                         agent, call_model, messages, tools,
                         reasoning_effort=turn_effort,
@@ -2114,6 +2170,7 @@ class AtlasKernel:
                         )
 
                     if model_interrupted_by_steer:
+                        finish_step(StepEndReason.INTERRUPTED)
                         await preserve_partial_output("steered")
                         partial_response_text.clear()
                         state.streamed_text = ""
@@ -2151,6 +2208,7 @@ class AtlasKernel:
                         if stream_error.category == "max_output_tokens":
                             partial = "".join(partial_response_text)
                             if await recover_output_limit(partial, "provider_error"):
+                                finish_step(StepEndReason.RETRIED)
                                 continue
                             raise stream_error
                         if (stream_error.category != "context_window_exceeded"
@@ -2163,6 +2221,7 @@ class AtlasKernel:
                         if (compaction.method == "none"
                                 or compaction_surface(messages) == surface_before):
                             raise stream_error
+                        finish_step(StepEndReason.RETRIED)
                         yield emit("run.compaction.progress", data={
                             "phase": compaction.method,
                             "before_tokens": compaction.before_tokens,
@@ -2183,6 +2242,8 @@ class AtlasKernel:
                         continue
                     if response is None:
                         raise ModelCallError("Model stream ended without a response", category="stream")
+                    finish_step(StepEndReason.TOOL_CALLS if response.tool_calls
+                                else StepEndReason.RESPONSE)
                     if inbox is not None:
                         for item in list(inbox_items_in_flight.values()):
                             await inbox.ack(item.event_id, lane=item.lane)
@@ -2648,6 +2709,16 @@ class AtlasKernel:
                     queue_nudge(batch_feedback.strip())
                 transition(RunPhase.STREAMING)
 
+                if conclusion.requested:
+                    final_response = conclusion.response
+                    state.response_text = final_response
+                    await persist_async("assistant", final_response, {
+                        "kernel_run_id": run_id, "finish_reason": "conclude_turn",
+                    })
+                    if final_response:
+                        yield emit("chunk", content=final_response)
+                    break
+
                 decision = stuck.check()
                 if decision is not None:
                     record("stuck", action=decision.action, reason=decision.reason)
@@ -2672,7 +2743,7 @@ class AtlasKernel:
             state.terminal_status = RunTerminalStatus.COMPLETED
             end_reason = TurnEndReason.from_terminal_status(state.terminal_status)
             elapsed = int((time.monotonic() - started_at) * 1000)
-            record("turn_end", reason=end_reason.value)
+            finish_turn(end_reason)
             record("run_end", status="completed", terminal_status=state.terminal_status.value,
                    duration_ms=elapsed, total_input_tokens=sum(int(row.get("input_tokens") or 0) for row in usage_rows),
                    total_output_tokens=sum(int(row.get("output_tokens") or 0) for row in usage_rows))
@@ -2681,11 +2752,11 @@ class AtlasKernel:
                                                 "terminal_status": state.terminal_status.value,
                                                 "turn_end_reason": end_reason.value})
         except asyncio.CancelledError:
+            finish_step(StepEndReason.INTERRUPTED)
             if state.phase not in {RunPhase.DONE, RunPhase.FAILED, RunPhase.INTERRUPTED}:
                 transition(RunPhase.INTERRUPTED)
             state.terminal_status = RunTerminalStatus.USER_INTERRUPTED
-            record("turn_end", reason=TurnEndReason.from_terminal_status(
-                state.terminal_status).value)
+            finish_turn(TurnEndReason.from_terminal_status(state.terminal_status))
             try:
                 await preserve_partial_output("interrupted")
                 # A stream can be cancelled after tool-call deltas arrived but
@@ -2734,13 +2805,13 @@ class AtlasKernel:
                     await exec_manager.shutdown()
             raise
         except Exception as exc:
+            finish_step(StepEndReason.FAILED)
             failure = f"{type(exc).__name__}: {exc}"
             if isinstance(exc, ModelCallError) and exc.category in {"budget", "context_budget"}:
                 state.terminal_status = RunTerminalStatus.BUDGET_EXCEEDED
             else:
                 state.terminal_status = RunTerminalStatus.ERROR
-            record("turn_end", reason=TurnEndReason.from_terminal_status(
-                state.terminal_status).value)
+            finish_turn(TurnEndReason.from_terminal_status(state.terminal_status))
             if state.phase not in {RunPhase.DONE, RunPhase.FAILED, RunPhase.INTERRUPTED}:
                 state.error = failure
                 transition(RunPhase.FAILED)
@@ -2782,6 +2853,15 @@ class AtlasKernel:
                 })
             yield emit("error", **error_data)
         finally:
+            finish_step(StepEndReason.INTERRUPTED)
+            finish_turn(TurnEndReason.from_terminal_status(
+                state.terminal_status or RunTerminalStatus.USER_INTERRUPTED,
+            ))
+            record("turn_close", turn_id=run_id,
+                   reason=lifecycle.end_reason.value,
+                   steps=lifecycle.step_count)
+            async with self._activity_lock:
+                self._active_runs = max(0, self._active_runs - 1)
             if exec_manager is not None and state.phase in {RunPhase.FAILED, RunPhase.INTERRUPTED}:
                 await exec_manager.shutdown()
 
