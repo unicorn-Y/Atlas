@@ -12,6 +12,17 @@ export interface BackendStartupProgress {
 }
 /** IPC channel the main process sends {@link BackendStartupProgress} events on. */
 export const BACKEND_STARTUP_CHANNEL = 'backend:startup-progress';
+export type BackendLifecycleKind = 'ready' | 'fatal' | 'shutdown-complete' | 'quit-inspection';
+export interface BackendLifecycleEvent {
+  kind: BackendLifecycleKind;
+  sequence: number;
+  timestamp: string;
+  pid?: number;
+  detail?: string;
+  runningTasks?: number;
+  scheduledTasks?: number;
+}
+export const BACKEND_LIFECYCLE_CHANNEL = 'backend:lifecycle';
 
 /** Source-mode update state (Atlas running from a git checkout). */
 export interface SourceUpdateStatus {
@@ -166,6 +177,7 @@ export interface AtlasDesktopApi {
   onDeepLink?(callback: (route: AtlasDeepLink) => void): () => void;
   /** Backend startup progress (H8 §10.3): fires during boot; `ready`/`failed` are terminal. */
   onBackendStartupProgress(callback: (progress: BackendStartupProgress) => void): () => void;
+  onBackendLifecycleEvent(callback: (event: BackendLifecycleEvent) => void): () => void;
   /** Receive Ctrl+F from a focused embedded page (its keyboard events do not bubble to React). */
   onBrowserFind?(callback: () => void): () => void;
   /** Zoom shortcuts and Ctrl+wheel originating inside a focused embedded webview. */

@@ -18,7 +18,7 @@ export interface EnsureBackendOptions {
   safeMode?: boolean;
 }
 
-const HEALTH_URL = `http://127.0.0.1:${process.env.ATLAS_PORT ?? '8765'}/api/health`;
+const healthUrl = () => `http://127.0.0.1:${process.env.ATLAS_PORT ?? '8765'}/api/health`;
 // A backend busy in a long tool call (page extraction, deep research) answers late, not
 // never. A too-short probe turned "busy" into "dead" and got healthy backends killed.
 const PROBE_TIMEOUT_MS = 1_500;
@@ -37,7 +37,7 @@ const LOG_TAIL_LINES = 50;
 const PROGRESS_HEARTBEAT_MS = 1_000;
 const STDERR_TAIL_LIMIT = 8_192;
 const shutdownToken = randomBytes(32).toString('hex');
-const PORT = Number(process.env.ATLAS_PORT ?? '8765');
+const port = () => Number(process.env.ATLAS_PORT ?? '8765');
 
 let managedChild: ChildProcess | null = null;
 let stopPromise: Promise<void> | null = null;
@@ -103,7 +103,7 @@ async function probeHealth(): Promise<HealthContact | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
   try {
-    const response = await fetch(HEALTH_URL, { signal: controller.signal });
+    const response = await fetch(healthUrl(), { signal: controller.signal });
     let payload: unknown = null;
     try {
       payload = await response.json();
@@ -321,7 +321,7 @@ async function terminate(child: ChildProcess): Promise<void> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3_000);
   try {
-    const response = await fetch(new URL('/api/runtime/shutdown', HEALTH_URL), {
+    const response = await fetch(new URL('/api/runtime/shutdown', healthUrl()), {
       method: 'POST',
       headers: { 'X-Atlas-Backend-Shutdown-Token': shutdownToken },
       signal: controller.signal,
@@ -396,10 +396,10 @@ function findListeningPid(): number | null {
       const output = execFileSync('netstat.exe', ['-ano', '-p', 'tcp'], {
         encoding: 'utf8', windowsHide: true, timeout: 3_000,
       });
-      const match = output.match(new RegExp(`^\\s*TCP\\s+\\S+:${PORT}\\s+\\S+\\s+LISTENING\\s+(\\d+)\\s*$`, 'im'));
+      const match = output.match(new RegExp(`^\\s*TCP\\s+\\S+:${port()}\\s+\\S+\\s+LISTENING\\s+(\\d+)\\s*$`, 'im'));
       return match ? Number(match[1]) : null;
     }
-    const output = execFileSync('sh', ['-lc', `lsof -nP -iTCP:${PORT} -sTCP:LISTEN -t 2>/dev/null | head -1`], {
+    const output = execFileSync('sh', ['-lc', `lsof -nP -iTCP:${port()} -sTCP:LISTEN -t 2>/dev/null | head -1`], {
       encoding: 'utf8', timeout: 3_000,
     }).trim();
     const parsed = Number(output);
@@ -446,13 +446,13 @@ async function preparePreviousBackend(onProgress?: (progress: BackendStartupProg
     // legacy attach path below; any other listener is a hard, named conflict.
     const contact = await probeHealth();
     if (!(contact && isAtlasHealthPayload(contact.payload))) {
-      throw new Error(`端口 ${PORT} 已被 ${processName(ownerPid)} (PID ${ownerPid}) 占用。请关闭该程序后重试。`);
+      throw new Error(`端口 ${port()} 已被 ${processName(ownerPid)} (PID ${ownerPid}) 占用。请关闭该程序后重试。`);
     }
   }
   if (pid === null || !pidIsRunning(pid)) return 'none';
   if (!isAtlasBackendProcess(pid)) {
     if (ownerPid === pid) {
-      throw new Error(`端口 ${PORT} 由 ${processName(pid)} (PID ${pid}) 占用，backend.pid 指向的进程无法确认为 Atlas 后端。`);
+      throw new Error(`端口 ${port()} 由 ${processName(pid)} (PID ${pid}) 占用，backend.pid 指向的进程无法确认为 Atlas 后端。`);
     }
     return 'none';
   }
@@ -511,7 +511,7 @@ async function externalAcceptsSessionToken(): Promise<boolean> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3_000);
   try {
-    const response = await fetch(HEALTH_URL.replace('/api/health', '/api/configuration'), {
+    const response = await fetch(healthUrl().replace('/api/health', '/api/configuration'), {
       signal: controller.signal,
       headers: { Origin: 'null', 'X-Atlas-Api-Token': process.env.ATLAS_API_TOKEN ?? '' },
     });
@@ -526,7 +526,7 @@ async function externalAcceptsSessionToken(): Promise<boolean> {
 async function attachExternal(): Promise<BackendLaunchResult> {
   if (!(await externalAcceptsSessionToken())) {
     throw new Error(
-      `端口 ${new URL(HEALTH_URL).port} 已被另一个 Atlas 后端占用，它不接受本窗口的访问令牌`
+      `端口 ${new URL(healthUrl()).port} 已被另一个 Atlas 后端占用，它不接受本窗口的访问令牌`
       + '（通常是没关掉的开发版后端）。请关闭那个进程后重新打开 Atlas。',
     );
   }

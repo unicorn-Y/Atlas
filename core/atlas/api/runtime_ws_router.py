@@ -7,7 +7,7 @@ import json
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
@@ -15,6 +15,34 @@ from atlas.api.runtime import RunState
 from atlas.approval_policy import grant as grant_approval_permission
 
 router = APIRouter()
+
+
+@router.get("/api/runtime/runs/{run_id}/events")
+async def page_run_events(
+    run_id: str,
+    services: Annotated[AppServices, Depends(get_app_services)],
+    after_sequence: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> dict[str, object]:
+    """Read a bounded event page for repairing a live WebSocket sequence gap."""
+    run = services.runtime_mgr.runs.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run state is no longer available")
+    async with run.event_lock:
+        events = [event for event in run.events if int(event.get("sequence", 0)) > after_sequence]
+        page = events[:limit]
+        cursor = max((int(event.get("sequence", 0)) for event in run.events), default=0)
+        header = run.events[:1]
+        tail = run.events[-10:]
+        return {
+            "events": page,
+            "next_cursor": int(page[-1]["sequence"]) if page else after_sequence,
+            "cursor": cursor,
+            "header": header,
+            "tail": tail,
+            "projection_baseline": {"run_id": run_id, "sequence": cursor},
+            "has_more": bool(page and int(page[-1]["sequence"]) < cursor),
+        }
 
 
 @router.websocket("/ws/chat")

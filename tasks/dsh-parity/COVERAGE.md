@@ -129,13 +129,13 @@ records an existing advantage that must not be reduced.
 
 | Row | Status | Reason / evidence |
 |---|---|---|
-| D1 | PARTIAL (OS-assigned port/startup injection remains incomplete) | See ledger row D1 in [DSH-GAP-LEDGER.md](../../docs/parity/DSH-GAP-LEDGER.md). |
-| D2 | PARTIAL (typed host IPC lifecycle is incomplete) | See ledger row D2 in [DSH-GAP-LEDGER.md](../../docs/parity/DSH-GAP-LEDGER.md). |
-| D3 | PARTIAL (the event cap is removed; incremental timeline projection remains incomplete) | See ledger row D3 in [DSH-GAP-LEDGER.md](../../docs/parity/DSH-GAP-LEDGER.md). |
+| D1 | PARTIAL (OS port allocation and boot injection implemented; full renderer suite has unrelated existing failures) | See ledger row D1 in [DSH-GAP-LEDGER.md](../../docs/parity/DSH-GAP-LEDGER.md) and [WAVE2-V8 result](waves/RESULT2-V8.md). |
+| D2 | PARTIAL (typed lifecycle IPC implemented; full renderer suite has unrelated existing failures) | See ledger row D2 in [DSH-GAP-LEDGER.md](../../docs/parity/DSH-GAP-LEDGER.md) and [WAVE2-V8 result](waves/RESULT2-V8.md). |
+| D3 | PARTIAL (delta and non-projecting events are incremental; structural projection and compressed replay remain incomplete) | See ledger row D3 in [DSH-GAP-LEDGER.md](../../docs/parity/DSH-GAP-LEDGER.md) and [WAVE2-V8 result](waves/RESULT2-V8.md). |
 | D4 | NOT-DONE (central built-in renderer switch has not been removed) | See ledger row D4 in [DSH-GAP-LEDGER.md](../../docs/parity/DSH-GAP-LEDGER.md). |
 | D5 | PARTIAL (durable attachment staging is incomplete) | See ledger row D5 in [DSH-GAP-LEDGER.md](../../docs/parity/DSH-GAP-LEDGER.md). |
 | D6 | PARTIAL (structured composer draft behavior is incomplete) | See ledger row D6 in [DSH-GAP-LEDGER.md](../../docs/parity/DSH-GAP-LEDGER.md). |
-| D7 | PARTIAL (reconnect baseline and sequence-gap repair are incomplete) | See ledger row D7 in [DSH-GAP-LEDGER.md](../../docs/parity/DSH-GAP-LEDGER.md). |
+| D7 | PARTIAL (server pages and contiguous sequence-gap repair implemented; full renderer suite has unrelated existing failures) | See ledger row D7 in [DSH-GAP-LEDGER.md](../../docs/parity/DSH-GAP-LEDGER.md) and [WAVE2-V8 result](waves/RESULT2-V8.md). |
 | D8 | PARTIAL (dock/float behavior is incomplete) | See ledger row D8 in [DSH-GAP-LEDGER.md](../../docs/parity/DSH-GAP-LEDGER.md). |
 | D9 | CLOSED (retry affordance and restart confirmation are implemented and tested) | See ledger row D9 in [DSH-GAP-LEDGER.md](../../docs/parity/DSH-GAP-LEDGER.md). |
 | D10 | PARTIAL (automatic update scheduling is incomplete) | See ledger row D10 in [DSH-GAP-LEDGER.md](../../docs/parity/DSH-GAP-LEDGER.md). |

@@ -5,15 +5,18 @@ import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { setImmediate } from 'node:timers';
 import path from 'node:path';
+import { injectBackendPort } from './backendPort.js';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ensureBackendRunning, readRunningBackendPid, stopManagedBackend, terminateBackendPid } from './backendProcess.js';
 import { checkSourceUpdate, launchSourceUpdater, sourceRoot } from './sourceUpdate.js';
 import { checkReleaseUpdate, downloadVerifiedInstaller, launchVerifiedInstaller, setReleasePreference } from './releaseUpdate.js';
 import {
+  BACKEND_LIFECYCLE_CHANNEL,
   BACKEND_STARTUP_CHANNEL,
   type AtlasDeepLink,
   type AtlasSettingsSection,
   type BackendStartupProgress,
+  type BackendLifecycleEvent,
   type CaptureWindowOption,
   type GlobalShortcutState,
   type PlatformEditorId,
@@ -58,6 +61,8 @@ let keepAwakeBlockerId: number | null = null;
 let performanceTraceActive = false;
 let runtimeState: 'running' | 'waiting' | 'idle' = 'idle';
 let quitActivitySummary = { runningTasks: 0, scheduledTasks: 0 };
+let lastBackendLifecycle: BackendLifecycleEvent | null = null;
+let backendLifecycleSequence = 0;
 let browserAddressShortcutTarget: Electron.WebContents | null = null;
 let browserAddressShortcutListener: ((event: Electron.Event, input: Electron.Input) => void) | null = null;
 let closePromptOpen = false;
@@ -315,7 +320,13 @@ function activityDetail(): string {
   return lines.join('\n');
 }
 
+function publishBackendLifecycle(event: Omit<BackendLifecycleEvent, 'timestamp' | 'sequence'>): void {
+  lastBackendLifecycle = { ...event, sequence: ++backendLifecycleSequence, timestamp: new Date().toISOString() } satisfies BackendLifecycleEvent;
+  windowRef?.webContents.send(BACKEND_LIFECYCLE_CHANNEL, lastBackendLifecycle);
+}
+
 async function requestExplicitQuit(owner?: BrowserWindow | null): Promise<boolean> {
+  publishBackendLifecycle({ kind: 'quit-inspection', ...quitActivitySummary });
   const hasActivity = quitActivitySummary.runningTasks > 0 || quitActivitySummary.scheduledTasks > 0;
   if (hasActivity) {
     const options = {
@@ -421,11 +432,13 @@ function startBackend(manual = false): void {
     if (attempt !== backendAttempt) return;
     backendSafeModeActive = platformPreferences.safeModeOnNextStart;
     retryCount = 0;
+    publishBackendLifecycle({ kind: 'ready' });
   }).catch((error: unknown) => {
     if (attempt !== backendAttempt || explicitQuit) return;
     backendSafeModeActive = false;
     const message = error instanceof Error ? error.message : String(error);
     const detail = message.slice(-6000);
+    publishBackendLifecycle({ kind: 'fatal', detail });
     publishProgress({ phase: 'failed', managed: false, elapsedMs: lastProgress.elapsedMs, detail, message: detail, logPath: backendLogPath() });
     if (retryCount < 3) {
       const delay = [1_000, 3_000, 10_000][retryCount++];
@@ -1369,6 +1382,7 @@ ipcMain.handle('platform:set-open-at-login', (event, enabled: unknown) => {
 async function restartBackendNow(reason: string, safeMode = platformPreferences.safeModeOnNextStart): Promise<void> {
   savePlatformPreferences({ ...platformPreferences, safeModeOnNextStart: safeMode });
   await stopManagedBackend(reason);
+  publishBackendLifecycle({ kind: 'shutdown-complete' });
   const pid = readRunningBackendPid();
   if (pid !== null) await terminateBackendPid(pid, reason);
   startBackend(true);
@@ -1377,6 +1391,10 @@ async function restartBackendNow(reason: string, safeMode = platformPreferences.
 ipcMain.handle('backend:retry', (event) => {
   assertTrustedAppSender(event);
   void restartBackendNow('user_retry');
+});
+ipcMain.handle('backend:get-lifecycle', (event) => {
+  assertTrustedAppSender(event);
+  return lastBackendLifecycle;
 });
 ipcMain.handle('backend:restart', async (event, safeMode: unknown) => {
   assertTrustedAppSender(event);
@@ -1745,6 +1763,7 @@ ipcMain.handle('skill-center:token', (event) => {
 
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
+  await injectBackendPort();
   applySavedDataRoot();
   platformPreferences = loadPlatformPreferences();
   app.setLoginItemSettings({ openAtLogin: platformPreferences.openAtLogin, args: platformPreferences.openAtLogin ? ['--background'] : [] });
@@ -1811,6 +1830,7 @@ app.on('before-quit', (event) => {
   if (trayRefreshTimer) { clearInterval(trayRefreshTimer); trayRefreshTimer = null; }
   globalShortcut.unregisterAll();
   void stopManagedBackend().finally(() => {
+    publishBackendLifecycle({ kind: 'shutdown-complete' });
     shutdownComplete = true;
     app.quit();
   });

@@ -524,6 +524,30 @@ export class BackendAdapter {
     return this.request(`/api/mcp/servers/${encodeURIComponent(name)}/restart`, { method: 'POST' });
   }
 
+  private async repairRunEventGap(
+    runId: string,
+    afterSequence: number,
+    onEvent: (event: RuntimeStreamEvent) => void,
+  ): Promise<{ cursor: number; terminal: boolean }> {
+    let cursor = afterSequence;
+    let highWater = cursor;
+    let terminal = false;
+    for (;;) {
+      const page = await this.request<{ events: RuntimeStreamEvent[]; next_cursor: number; cursor: number; has_more: boolean }>(
+        `/api/runtime/runs/${encodeURIComponent(runId)}/events?after_sequence=${cursor}&limit=200`,
+      );
+      highWater = Math.max(highWater, page.cursor);
+      for (const event of page.events) {
+        if (event.run_id !== runId || event.sequence !== cursor + 1) throw new BackendError('实时事件页不连续，无法安全恢复', 'Run event page has a sequence gap');
+        cursor = event.sequence;
+        onEvent(event);
+        terminal ||= ['run.completed', 'run.failed', 'run.cancelled'].includes(event.event);
+      }
+      if (!page.has_more || cursor >= highWater) return { cursor, terminal };
+      if (page.next_cursor <= cursor - page.events.length) throw new BackendError('实时事件页游标没有前进', 'Run event page cursor did not advance');
+    }
+  }
+
   async startRun(request: RunStartRequest, onEvent: (event: RuntimeStreamEvent) => void, shouldPause: () => boolean = () => false, maxReconnectAttempts = 5): Promise<void> {
     if (this.activeRuns.has(request.run_id)) throw new BackendError('这个任务已经在运行了，等它结束或先停止再发', `Run ${request.run_id} is already active`);
     this.activeRuns.add(request.run_id);
@@ -559,6 +583,7 @@ export class BackendAdapter {
     let lastSequence = Number(localStorage.getItem(cursorKey) ?? 0) || 0;
     let retries = 0;
     let terminal = false;
+    let repairSequenceGap = false;
     const connect = (resume: boolean): Promise<void> => new Promise((resolve, reject) => {
       const path = '/ws/chat';
       const socket = new WebSocket(`${this.baseUrl.replace(/^http/, 'ws')}${path}`);
@@ -588,6 +613,7 @@ export class BackendAdapter {
           // connection is still being established. Reopen from the last contiguous
           // cursor so the server replays the missing page before later events.
           if (runtimeEvent.sequence !== lastSequence + 1) {
+            repairSequenceGap = true;
             socket.close(4000, 'Repair event sequence gap');
             return;
           }
@@ -613,7 +639,16 @@ export class BackendAdapter {
         if (!supportsReplay) { finish(new BackendError('连接中断，这个后端不支持断线续跑', 'Connection lost; this backend does not support run event replay')); return; }
         if (retries >= maxReconnectAttempts) { finish(new BackendError('连接断了好几次都没能恢复，这次任务中断了', 'Run disconnected; reconnect limit reached')); return; }
         retries += 1;
-        window.setTimeout(() => { void connect(true).then(() => finish(), (error: Error) => {
+        window.setTimeout(() => { void (async () => {
+          if (repairSequenceGap) {
+            repairSequenceGap = false;
+            const repaired = await this.repairRunEventGap(request.run_id, lastSequence, onEvent);
+            lastSequence = repaired.cursor;
+            localStorage.setItem(cursorKey, String(lastSequence));
+            if (repaired.terminal) { terminal = true; finish(); return; }
+          }
+          await connect(true);
+        })().then(() => finish(), (error: Error) => {
           if (retries < maxReconnectAttempts && !terminal && !this.mockCancelled.has(request.run_id)) {
             window.setTimeout(() => { void connect(true).then(() => finish(), finish); }, Math.min(1000 * 2 ** (retries - 1), 8000));
           } else finish(error);
@@ -679,10 +714,13 @@ export class BackendAdapter {
     if (!this.live) await this.initialize(3000);
     if (!this.live || this.runSockets.has(runId)) return;
     const cursorKey = `atlas.runtime.cursor.${runId}`;
-    let lastSequence = Number(localStorage.getItem(cursorKey) ?? 0) || 0;
+    // A renderer reattachment starts with an empty projection. Replay from the header so it can
+    // reconstruct the complete run baseline; the persisted cursor is only diagnostic in that case.
+    let lastSequence = 0;
     let retries = 0;
     let terminal = false;
     let firstConnect = true;
+    let repairSequenceGap = false;
     const connect = (): Promise<void> => new Promise<void>((resolve, reject) => {
       const socket = new WebSocket(`${this.baseUrl.replace(/^http/, 'ws')}/ws/chat`);
       this.runSockets.set(runId, socket);
@@ -706,6 +744,7 @@ export class BackendAdapter {
         const runtimeEvent = event as RuntimeEventEnvelope;
         if (runtimeEvent.run_id !== runId || !Number.isInteger(runtimeEvent.sequence) || runtimeEvent.sequence <= lastSequence) return;
         if (runtimeEvent.sequence !== lastSequence + 1) {
+          repairSequenceGap = true;
           socket.close(4000, 'Repair event sequence gap');
           return;
         }
@@ -728,7 +767,16 @@ export class BackendAdapter {
         if (terminal) { finish(); return; }
         if (!opened) { finish(new BackendError('任务恢复通道连接失败', 'Run follow socket failed before opening')); return; }
         retries += 1;
-        window.setTimeout(() => { void connect().then(() => finish(), finish); }, Math.min(1000 * 2 ** (retries - 1), 8000));
+        window.setTimeout(() => { void (async () => {
+          if (repairSequenceGap) {
+            repairSequenceGap = false;
+            const repaired = await this.repairRunEventGap(runId, lastSequence, onEvent);
+            lastSequence = repaired.cursor;
+            localStorage.setItem(cursorKey, String(lastSequence));
+            if (repaired.terminal) { terminal = true; finish(); return; }
+          }
+          await connect();
+        })().then(() => finish(), finish); }, Math.min(1000 * 2 ** (retries - 1), 8000));
       }, { once: true });
     });
     await connect();
