@@ -150,7 +150,7 @@
 | X6 | 版本兼容与豁免：peer range 检查 + per-profile `compatibility.json` 精确豁免 + `acceptRisk` | `plugin-manager/README.md:67` | `plugins/runtime.py:342-380` 只校验 manifest 形状 | ABSENT |
 | X7 | 安装脚本审批门：`pendingBuilds` 转 `allowBuilds`，逐包持久批准 | `plugin-manager/src/build-approval.ts:49,75` | 无安装脚本执行，故无门 | ABSENT |
 | X8 | Agent 预设 = 子插件行 + isolate realm，注册表保留 revision | `packages/preset/agent-preset-registry/README.md:46-60` | `AgentPresetStore` 持久化 revision 化 capability set（tools/skills/MCP/model/mode），并在 run 时应用；尚无 isolate realm/子插件隔离 | PRESENT-WEAKER |
-| X9 | 外部入口（webhook/ACP）必须带 agent preset + permission preset | `docs/subsystems/webhook.md:5,25` | automation/webhook 保存并验证两种 preset，AgentRunContext 应用能力；ACP 外部入口尚未接入 | PRESENT-WEAKER |
+| X9 | 外部入口（webhook/ACP）必须带 agent preset + permission preset | `docs/subsystems/webhook.md:5,25` | automation/webhook 保存并验证两种 preset，AutomationEngine 将二者传入 `dispatch_turn`；ACP `session/new` / `session/prompt` 未接入 preset。ACP handler 在 `core/atlas/tools/app_server.py`，超出 W11 分配目录 | PARTIAL |
 | X10 | 插件管理作为模型工具，8 个动作，每次需 danger-full-access 或逐次审批 | `plugin-manager/src/tools.ts:20-46` | `engine/kernel/tools.py:412-414` 只有 list/request install | PRESENT-WEAKER |
 | X11 | bundle 清单带来源 official/availability/installed/覆盖行 | `plugin-manager/src/index.ts:282` | `plugins_router.py:39` → `discover()` 有基本字段，无 availability 模型 | PRESENT-WEAKER |
 | X16 | progressive disclosure：durable `<available_skills>` + 摘要 diff 替换 + `/name` 内联注入 | `docs/subsystems/skills.md:227-233` | skill registry 持久化 digest/active/retired 并生成 revisioned `<available_skills>`；`/name` 注入和摘要 diff 投递仍缺 | PRESENT-WEAKER |
