@@ -47,6 +47,37 @@ async def list_plugins(
     return {"plugins": plugin_runtime.discover()}
 
 
+@router.get("/api/plugins/config-layers")
+async def get_plugin_config_layers(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    profile: str | None = None,
+    bundle: str | None = None,
+) -> dict[str, Any]:
+    """Read-only preview of the ordered profile → bundle → row-patch layers.
+
+    Same composition as ``atlas plugins dump-config`` (``PluginRuntime
+    .config_layers``), exposed over HTTP so the desktop can show what the
+    effective configuration would be without writing anything. Config values
+    can carry secrets, so the snapshot goes through ``scrub`` before it
+    leaves the process.
+    """
+    plugin_runtime = _service("plugin_runtime", services)
+    if plugin_runtime is None:
+        raise HTTPException(status_code=503, detail="插件服务尚未就绪")
+    profile_name = profile.strip() if isinstance(profile, str) else None
+    bundle_name = bundle.strip() if isinstance(bundle, str) else None
+    try:
+        layers = await asyncio.to_thread(
+            plugin_runtime.config_layers,
+            profile_name or None, bundle_name or None,
+        )
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    from atlas.secrets_store import scrub
+
+    return scrub(layers)
+
+
 @router.post("/api/plugins/check-updates")
 async def check_plugin_updates(
     services: Annotated[AppServices, Depends(get_app_services)],

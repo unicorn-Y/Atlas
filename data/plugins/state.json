@@ -1,0 +1,36 @@
+{
+  "config_layers": {
+    "profile": {
+      "w4z5": {
+        "row:tool.terminal": {
+          "cmd": "bash"
+        },
+        "instructions": {
+          "text": "be brief"
+        }
+      }
+    },
+    "bundle": {
+      "w4z5pack": {
+        "row:tool.terminal": {
+          "cmd": "pwsh"
+        },
+        "row:tool.browser": {
+          "enabled": true
+        }
+      }
+    },
+    "patches": {
+      "local": {
+        "row:tool.terminal": {
+          "cmd": "nu"
+        }
+      }
+    }
+  },
+  "enabled": {
+    "w4z5-evidence": true
+  },
+  "marketplaces": {},
+  "sources": {}
+}

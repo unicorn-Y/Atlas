@@ -1,0 +1,8 @@
+{
+  "name": "w4z5-evidence",
+  "displayName": "W4Z5 Evidence Plugin",
+  "version": "1.0.0",
+  "description": "Live-evidence plugin for the WAVE4 Z5 parity batch: one stdio MCP server with published instructions.",
+  "author": {"name": "w4z5"},
+  "defaultEnabled": true
+}

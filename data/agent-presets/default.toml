@@ -1,0 +1,14 @@
+id = "default"
+name = "默认 Agent"
+description = "继承当前会话工具权限"
+revision = 1
+created_at = "2026-11-14T09:27:57.581094+00:00"
+updated_at = "2026-11-14T09:27:57.581094+00:00"
+[capabilities]
+tools = { allow = [], allow_all = true, deny = [] }
+skills = []
+mcp_servers = []
+plugins = []
+plugin_allow_all = true
+model = "inherit"
+mode = "act"
