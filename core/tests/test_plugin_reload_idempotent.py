@@ -190,3 +190,27 @@ async def test_reload_still_works_and_stays_idempotent(runtime: PluginRuntime):
     # reload reuses the same forget helper, so the outcome must match load_all.
     assert _capability_names(registry) == before
     assert len(hook_bus._hooks["after_response"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_disable_then_enable_replaces_exactly_one_plugin_generation(runtime: PluginRuntime):
+    registry = AgentCapabilityRegistry()
+    hook_bus = HookBus()
+
+    first = await runtime.load_all(hook_bus=hook_bus, capabilities=registry)
+    assert first["loaded"] == ["demo"]
+    assert len(hook_bus._hooks["after_response"]) == 1
+
+    await runtime.set_enabled("demo", False)
+    assert _capability_names(registry) == set()
+    assert hook_bus._hooks["after_response"] == []
+
+    await runtime.set_enabled("demo", True)
+    reloaded = await runtime.load_all(hook_bus=hook_bus, capabilities=registry)
+
+    assert reloaded["loaded"] == ["demo"]
+    assert reloaded["errors"] == {}
+    assert _capability_names(registry) == {
+        "plugin.demo.skill.greet", "plugin.demo.command.standup",
+    }
+    assert len(hook_bus._hooks["after_response"]) == 1

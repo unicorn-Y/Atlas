@@ -79,6 +79,7 @@ READ_ONLY_TOOLS = frozenset({
     "ios_ui_describe", "TaskGet", "TaskList", "TaskOutput",
     "memory_search",
     "read_terminal",
+    "list_plugins", "get_plugin", "list_plugin_marketplaces",
 })
 EDIT_TOOL_NAMES = frozenset({"apply_patch", "edit", "write", "notebook_edit"})
 
@@ -436,6 +437,13 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
         _function_schema("wait_for_environment", "Wait briefly for a local workspace path to become available.", {
             "path": {"type": "string"}, "timeout_seconds": {"type": "number", "minimum": 0, "maximum": 60},
         }, ["path"]),
+        _function_schema("list_plugins", "List discovered local and installed plugins with lifecycle and override metadata.", {
+            "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+        }),
+        _function_schema("get_plugin", "Inspect one discovered plugin bundle by name.", {
+            "plugin_name": {"type": "string"},
+        }, ["plugin_name"]),
+        _function_schema("list_plugin_marketplaces", "List configured plugin marketplace sources.", {}),
         _function_schema("list_available_plugins_to_install", "List plugins available in configured Atlas marketplaces.", {
             "marketplace": {"type": "string"}, "query": {"type": "string"},
             "limit": {"type": "integer", "minimum": 1, "maximum": 100},
@@ -443,6 +451,15 @@ def kernel_tool_schemas(*, include_workflow: bool) -> list[dict[str, Any]]:
         _function_schema("request_plugin_install", "Request approval to install a plugin from a configured marketplace.", {
             "marketplace": {"type": "string"}, "plugin_name": {"type": "string"},
         }, ["marketplace", "plugin_name"]),
+        _function_schema("update_plugin", "Update a plugin from its configured source. Requires per-call user approval.", {
+            "plugin_name": {"type": "string"},
+        }, ["plugin_name"]),
+        _function_schema("set_plugin_enabled", "Enable or disable a plugin. Requires per-call user approval.", {
+            "plugin_name": {"type": "string"}, "enabled": {"type": "boolean"},
+        }, ["plugin_name", "enabled"]),
+        _function_schema("uninstall_plugin", "Uninstall a plugin and withdraw its runtime contributions. Requires per-call user approval.", {
+            "plugin_name": {"type": "string"},
+        }, ["plugin_name"]),
         _function_schema("git_pr_create", "Push the current branch and create a GitHub pull request from the active workspace.", {
             "title": {"type": "string"}, "body": {"type": "string"},
             "base": {"type": "string"}, "draft": {"type": "boolean"},

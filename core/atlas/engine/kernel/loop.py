@@ -3353,70 +3353,34 @@ class AtlasKernel:
             return {"content": "The user approved the plan. Plan mode is off; continue with implementation.",
                     "data": {"mode": "act", "summary": str(arguments.get("summary") or "")},
                     "outcome": "completed"}
-        if name in {"list_available_plugins_to_install", "request_plugin_install"}:
-            from atlas.tools.plugin_marketplace import plugin_runtime_for
-
-            try:
-                plugin_runtime = plugin_runtime_for(agent)
-                if name == "list_available_plugins_to_install":
-                    marketplace_filter = str(arguments.get("marketplace") or "")
-                    query = str(arguments.get("query") or "").casefold()
-                    limit = max(1, min(100, int(arguments.get("limit", 50))))
-                    marketplaces = plugin_runtime.list_marketplaces()
-                    installed = {item.get("name") for item in plugin_runtime.discover()}
-                    plugins = []
-                    for marketplace in marketplaces:
-                        market_name = str(marketplace.get("name") or "")
-                        if marketplace_filter and market_name != marketplace_filter:
-                            continue
-                        for item in plugin_runtime.list_marketplace_plugins(market_name):
-                            plugin_name = str(item.get("name") or "")
-                            if not plugin_name or plugin_name in installed:
-                                continue
-                            if query and query not in f"{plugin_name} {item.get('description', '')}".casefold():
-                                continue
-                            plugins.append({key: item[key] for key in (
-                                "name", "description", "version", "marketplace", "source",
-                            ) if key in item})
-                    return {"content": json.dumps(plugins[:limit], ensure_ascii=False),
-                            "data": {"plugins": plugins[:limit]}}
-
+        from atlas.tools.plugin_marketplace import PLUGIN_MANAGER_TOOLS, execute_plugin_manager_tool
+        if name in PLUGIN_MANAGER_TOOLS:
+            async def approve_plugin_action(tool_name: str, tool_arguments: dict[str, Any]) -> Any:
                 approved_ids = getattr(runtime, "_preapproved_tool_call_ids", set())
-                if call_id not in approved_ids:
-                    approval = getattr(runtime, "approval_callback", None)
-                    if not callable(approval):
-                        return {"content": "Plugin installation approval is unavailable in this run.",
-                                "is_error": True, "outcome": "denied"}
-                    approval_id = f"approval:{call_id or uuid.uuid4().hex}"
-                    await event_queue.put({
-                        "type": "approval_required", "event_id": approval_id,
-                        "tool_call_id": call_id, "name": name, "arguments": dict(arguments),
-                    })
-                    choice = approval(approval_id, name, dict(arguments))
-                    if hasattr(choice, "__await__"):
-                        choice = await choice
-                    outcome = normalize_approval(choice)
-                    if outcome != APPROVAL_ALLOWED:
-                        return {"content": approval_denial_reason(
-                                    outcome, tool="Plugin installation"),
-                                "is_error": True, "outcome": "denied",
-                                "approval_outcome": outcome}
-                result = await asyncio.to_thread(
-                    plugin_runtime.install_marketplace_plugin,
-                    str(arguments.get("marketplace") or ""),
-                    str(arguments.get("plugin_name") or ""),
-                )
-                report = await plugin_runtime.load_all(
-                    hook_bus=getattr(agent, "hooks", None),
-                    mcp_client=getattr(agent, "_mcp", None),
-                    capabilities=getattr(agent, "capabilities", None),
-                )
-                result["loaded"] = result.get("name") in report.get("loaded", [])
-                result["load_report"] = report
-                return {"content": json.dumps(result, ensure_ascii=False),
-                        "data": result, "outcome": "completed"}
-            except (KeyError, OSError, RuntimeError, ValueError, PermissionError) as exc:
-                return {"content": str(exc), "is_error": True, "outcome": "failed"}
+                if call_id and call_id in approved_ids:
+                    return APPROVAL_ALLOWED
+                if getattr(runtime, "permission_mode", "") == "read_only":
+                    return "deny"
+                approval = getattr(runtime, "approval_callback", None)
+                if not callable(approval):
+                    return "deny"
+                approval_id = f"approval:{call_id or uuid.uuid4().hex}"
+                await event_queue.put({
+                    "type": "approval_required", "event_id": approval_id,
+                    "tool_call_id": call_id, "name": tool_name,
+                    "arguments": dict(tool_arguments),
+                    "reason": "Plugin management can change or execute installed code.",
+                })
+                choice = approval(approval_id, tool_name, dict(tool_arguments))
+                return await choice if hasattr(choice, "__await__") else choice
+
+            return await execute_plugin_manager_tool(
+                name, arguments, agent=agent,
+                approve=approve_plugin_action if name in {
+                    "request_plugin_install", "update_plugin", "set_plugin_enabled",
+                    "uninstall_plugin",
+                } else None,
+            )
         if name in {"list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"}:
             try:
                 client = scoped_mcp_client_for_runtime(getattr(agent, "_mcp", None), runtime)

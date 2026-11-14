@@ -23,7 +23,8 @@ def test_ssh_workspace_maps_to_atlas_terminal_scope_without_network():
 @pytest.mark.asyncio
 async def test_ssh_workspace_scope_is_bound_to_atlas_turn_without_network(tmp_path, monkeypatch):
     from atlas.ssh import SSHWorkspaceManager
-    from tools.terminal_scope import get_terminal_scope
+    from atlas.tools.terminal_scope import get_terminal_scope
+    from atlas.engine.kernel.loop import AtlasKernel
 
     monkeypatch.setattr(SSHWorkspaceManager, "hosts", lambda _self: [
         {"alias": "build-host", "hostname": "build.example.test", "user": "builder"},
@@ -34,35 +35,38 @@ async def test_ssh_workspace_scope_is_bound_to_atlas_turn_without_network(tmp_pa
     )
     observed = {}
 
-    class StubAtlasAgent:
-        def __init__(self, **kwargs):
-            observed["cwd"] = kwargs["cwd"]
-            observed["init_scope"] = get_terminal_scope()
-            self.session_id = kwargs["session_id"]
-            self._last_turn_usage = None
+    async def run_kernel(self, request):
+        observed["workspace"] = request.workspace
+        observed["run_scope"] = get_terminal_scope()
+        yield {"type": "atlas.result", "result": {"final_response": "ssh scope ready"}}
 
-        def _build_system_prompt(self, system_message=None):
-            return system_message or "Atlas"
-
-        def run_conversation(self, **_kwargs):
-            observed["run_scope"] = get_terminal_scope()
-            return {"final_response": "ssh scope ready", "messages": []}
-
-        def close(self):
-            pass
-
+    monkeypatch.setattr(AtlasKernel, "run", run_kernel)
     runtime = AtlasRuntime(
         data_dir=tmp_path, model_manager=settings,
-        agent_factory=lambda **kwargs: StubAtlasAgent(**kwargs),
     )
     events = [event async for event in runtime.run_turn(
         message="use ssh workspace", conversation_id="ssh-scope", workspace="ssh://build-host/srv/project",
-        history=[],
+        history=[], atlas_agent=SimpleNamespace(), atlas_context=SimpleNamespace(mode="act"),
     )]
     assert events[-1]["result"]["final_response"] == "ssh scope ready"
     expected = {
         "TERMINAL_ENV": "ssh", "TERMINAL_SSH_HOST": "build-host", "TERMINAL_SSH_USER": "builder",
         "TERMINAL_SSH_PERSISTENT": "true", "TERMINAL_CWD": "/srv/project",
     }
-    assert observed == {"cwd": "/srv/project", "init_scope": expected, "run_scope": expected}
+    assert observed == {"workspace": "ssh://build-host/srv/project", "run_scope": expected}
+    assert get_terminal_scope() is None
+
+    async def fail_kernel(self, _request):
+        observed["failed_scope"] = get_terminal_scope()
+        yield {"type": "run.started"}
+        raise RuntimeError("kernel failed")
+
+    monkeypatch.setattr(AtlasKernel, "run", fail_kernel)
+    with pytest.raises(RuntimeError, match="kernel failed"):
+        [event async for event in runtime.run_turn(
+            message="fail inside ssh workspace", conversation_id="ssh-scope-failure",
+            workspace="ssh://build-host/srv/project", history=[],
+            atlas_agent=SimpleNamespace(), atlas_context=SimpleNamespace(mode="act"),
+        )]
+    assert observed["failed_scope"] == expected
     assert get_terminal_scope() is None

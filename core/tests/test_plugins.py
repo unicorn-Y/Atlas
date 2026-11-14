@@ -77,6 +77,45 @@ async def test_discover_reports_manifest_details(runtime: PluginRuntime) -> None
     assert plugin["hooks"] == 1  # invalid hook point ignored
     assert plugin["mcp_servers"] == ["demo-mcp"]
     assert plugin["enabled"] is True and plugin["loaded"] is False
+    assert plugin["official"] is None  # no source attestation is configured
+    assert plugin["official_attestation"] is None
+    assert plugin["availability"] == {
+        "available": True, "reason": "plugin manifest discovered",
+    }
+    assert plugin["installed"] is False
+    assert plugin["overrides"] == []
+
+
+def test_discovery_reports_installed_plugin_override_rows(runtime: PluginRuntime) -> None:
+    installed = runtime.install_local(runtime._dirs[0] / "demo-plugin")
+    root = Path(installed["path"])
+    from atlas.plugins import patch_layer
+
+    patch_layer.write(root, "skills/greet/SKILL.md", "patched\n", row_id="skill:greet", order=4)
+
+    plugin = runtime.discover()[0]
+
+    assert plugin["installed"] is True
+    assert plugin["overrides"] == [{
+        "path": "skills/greet/SKILL.md", "row_id": "skill:greet", "order": 4, "note": "",
+    }]
+
+
+def test_discovery_only_reports_official_when_source_record_attests_it(runtime: PluginRuntime) -> None:
+    runtime._state.setdefault("sources", {})["demo"] = {
+        "source": "marketplace", "official": True,
+    }
+    runtime._save_state()
+
+    discovered = runtime.discover()[0]
+    assert discovered["official"] is None  # claims are not verified by Atlas
+    assert discovered["official_attestation"] is True
+
+    runtime._state["sources"]["demo"].pop("official")
+    runtime._save_state()
+    discovered = runtime.discover()[0]
+    assert discovered["official"] is None
+    assert discovered["official_attestation"] is None
 
 
 async def test_load_all_registers_capabilities_hooks_and_mcp(

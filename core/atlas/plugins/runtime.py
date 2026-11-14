@@ -244,6 +244,17 @@ class PluginRuntime:
                 continue  # unaddressable directory; never fail the whole listing
             enabled = self._enabled.get(name, manifest.get("defaultEnabled", True)) is not False
             loaded = name in self._loaded
+            try:
+                installed = root.resolve().is_relative_to(self._installed_base().resolve())
+            except (OSError, ValueError):
+                installed = False
+            # There is no verified official-source trust store yet. Preserve an
+            # upstream/source claim as an attestation field, but never label it
+            # "official" without a verifier.
+            official_attestation = source.get("official") if isinstance(source, dict) else None
+            if not isinstance(official_attestation, bool):
+                official_attestation = None
+            overrides = patch_layer.list_patches(root).get("patches", [])
             plugin_info = {
                 "name": name,
                 "display_name": str(manifest.get("displayName") or name),
@@ -258,6 +269,14 @@ class PluginRuntime:
                 "manifest": str(manifest_path) if manifest_path else None,
                 "path": str(root),
                 "source": source.get("source", "local") if isinstance(source, dict) else "local",
+                "official": None,
+                "official_attestation": official_attestation,
+                "availability": {"available": True, "reason": "plugin manifest discovered"},
+                "installed": installed,
+                "overrides": [
+                    {key: patch.get(key) for key in ("path", "row_id", "order", "note")}
+                    for patch in overrides
+                ],
                 "marketplace": source.get("marketplace") if isinstance(source, dict) else None,
                 "skills": [path.name for path in self._component_paths(root, manifest, "skills", root / "skills", directories=True)],
                 "commands": [item["name"] for item in self._commands(root, manifest)],

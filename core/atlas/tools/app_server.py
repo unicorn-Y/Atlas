@@ -32,6 +32,45 @@ async def _wait_with_cancel(future: asyncio.Future[Any], cancel: asyncio.Event) 
         await asyncio.gather(cancel_wait, return_exceptions=True)
 
 
+def _acp_permission_allowed(result: Any) -> bool:
+    """Fail closed unless the ACP client selected an offered allow option."""
+    if not isinstance(result, dict):
+        return False
+    outcome = result.get("outcome")
+    if not isinstance(outcome, dict) or outcome.get("outcome") != "selected":
+        return False
+    return outcome.get("optionId") == "allow_once"
+
+
+def _conversation_metadata(conversation: dict[str, Any]) -> dict[str, Any]:
+    raw = conversation.get("metadata")
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, str):
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        return value if isinstance(value, dict) else {}
+    return {}
+
+
+def _acp_config_options(permission_preset: str) -> list[dict[str, Any]]:
+    from atlas.approval_policy import PERMISSION_PRESETS
+
+    options = [
+        {"value": name, "name": str(item.get("label") or name)}
+        for name, item in PERMISSION_PRESETS.items()
+    ]
+    return [{
+        "configId": "permissionPreset",
+        "name": "Permission preset",
+        "type": "select",
+        "currentValue": permission_preset,
+        "options": options,
+    }]
+
+
 def _claim_stdio_channel() -> tuple[Any, Any]:
     """Keep the JSON-RPC pipes for ourselves and hand child processes harmless fds.
 
@@ -77,6 +116,7 @@ async def serve_stdio(*, workspace: str | None = None,
         pending_approvals: dict[str, asyncio.Future[str]] = {}
         pending_inputs: dict[str, asyncio.Future[str]] = {}
         pending_client_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        pending_acp_permissions: dict[str, asyncio.Future[dict[str, Any]]] = {}
         session_fs: dict[str, dict[str, bool]] = {}
         from atlas.tools.acp_fs import (
             AcpFilesystem, capabilities_from_initialize, reset_current, set_current,
@@ -113,13 +153,30 @@ async def serve_stdio(*, workspace: str | None = None,
 
             async def approve(event_id: str, tool_name: str, args: dict[str, Any]) -> str:
                 if acp:
-                    await notify("session/update", {
-                        "sessionId": session_id,
-                        "update": {"sessionUpdate": "tool_call_update",
-                                   "toolCallId": event_id.removeprefix("approval:"),
-                                   "status": "in_progress", "rawInput": args},
+                    permission_id = f"acp-permission-{uuid.uuid4().hex}"
+                    future = asyncio.get_running_loop().create_future()
+                    pending_acp_permissions[permission_id] = future
+                    await outgoing.put({
+                        "jsonrpc": "2.0", "id": permission_id,
+                        "method": "session/request_permission",
+                        "params": {
+                            "sessionId": session_id,
+                            "toolCall": {
+                                "toolCallId": event_id.removeprefix("approval:"),
+                                "title": tool_name, "kind": "other",
+                                "status": "in_progress", "rawInput": args,
+                            },
+                            "options": [
+                                {"optionId": "allow_once", "name": "Allow once", "kind": "allow_once"},
+                                {"optionId": "reject_once", "name": "Reject", "kind": "reject_once"},
+                            ],
+                        },
                     })
-                    return "allow"
+                    try:
+                        result = await _wait_with_cancel(future, cancel)
+                        return "allow" if _acp_permission_allowed(result) else "deny"
+                    finally:
+                        pending_acp_permissions.pop(permission_id, None)
                 future = asyncio.get_running_loop().create_future()
                 pending_approvals[event_id] = future
                 await notify("approval/request", {
@@ -262,11 +319,14 @@ async def serve_stdio(*, workspace: str | None = None,
                 method = str(request.get("method") or "")
                 params = request.get("params") if isinstance(request.get("params"), dict) else {}
                 request_id = request.get("id")
-                acp_wire = method == "session/new" or (
+                acp_wire = method in {"session/new", "session/list", "session/resume",
+                                     "session/set_config_option"} or (
                     method in {"session/prompt", "session/cancel", "session/close"}
                     and "sessionId" in params
                 )
-                if method in {"session/start", "session/new", "session/prompt", "session/cancel", "session/close"}:
+                if method in {"session/start", "session/new", "session/list", "session/resume",
+                              "session/set_config_option", "session/prompt", "session/cancel",
+                              "session/close"}:
                     if (protocol == "acp") != acp_wire:
                         await response(request_id, error={
                             "code": -32601,
@@ -275,6 +335,8 @@ async def serve_stdio(*, workspace: str | None = None,
                         continue
                 if not method and request_id is not None:
                     future = pending_client_requests.get(str(request_id))
+                    if future is None:
+                        future = pending_acp_permissions.get(str(request_id))
                     if future is not None and not future.done():
                         result = request.get("result")
                         future.set_result(result if isinstance(result, dict) else {})
@@ -292,7 +354,14 @@ async def serve_stdio(*, workspace: str | None = None,
                         await response(request_id, result={
                             "protocolVersion": 1,
                             "agentInfo": {"name": "Atlas", "version": "0.1.0"},
-                            "agentCapabilities": {"loadSession": False, "sessionCapabilities": {"close": {}}},
+                            "agentCapabilities": {
+                                "loadSession": False,
+                                "sessionCapabilities": {
+                                    # `list` is the ACP list-session extension;
+                                    # configOptions advertises Atlas' permissionPreset option.
+                                    "close": {}, "resume": {}, "list": {}, "configOptions": {},
+                                },
+                            },
                         })
                     else:
                         await response(request_id, result={
@@ -315,10 +384,10 @@ async def serve_stdio(*, workspace: str | None = None,
                     await response(request_id, result={"tools": tools})
                 elif method in {"session/start", "session/new"}:
                     acp = method == "session/new"
-                    if acp and params.get("mcpServers"):
+                    if acp and method in {"session/new", "session/resume"} and params.get("mcpServers"):
                         await response(request_id, error={
                             "code": -32602,
-                            "message": "Per-session ACP MCP server injection is unavailable; configure MCP servers in Atlas.",
+                            "message": "Per-session ACP MCP server injection is unavailable; use an empty mcpServers list.",
                         })
                         continue
                     cwd_arg = params.get("cwd") if acp else params.get("workspace")
@@ -344,8 +413,10 @@ async def serve_stdio(*, workspace: str | None = None,
                     except (KeyError, ValueError) as exc:
                         await response(request_id, error={"code": -32602, "message": str(exc)})
                         continue
-                    session_id = str(uuid.uuid4())
-                    conversation_id = str(params.get("conversation_id") or uuid.uuid4())
+                    conversation_id = str(uuid.uuid4()) if acp else str(
+                        params.get("conversation_id") or uuid.uuid4()
+                    )
+                    session_id = conversation_id if acp else str(uuid.uuid4())
                     await memory.save_conversation_metadata(conversation_id, title_hint="Atlas app-server")
                     sessions[session_id] = {
                         "workspace": cwd, "conversation_id": conversation_id,
@@ -356,11 +427,138 @@ async def serve_stdio(*, workspace: str | None = None,
                     }
                     session_fs[session_id] = dict(session_fs.get("__initialize__", {})) if acp else {}
                     if acp:
-                        await response(request_id, result={"sessionId": session_id})
+                        conversation = await memory.get_conversation(conversation_id)
+                        metadata = _conversation_metadata(conversation or {})
+                        metadata["acp"] = {
+                            "agentPresetId": agent_preset_id,
+                            "permissionPreset": permission_preset,
+                        }
+                        await memory.update_conversation(
+                            conversation_id, workspace=cwd,
+                            permission_mode=PERMISSION_PRESETS[permission_preset]["mode"],
+                            metadata=metadata,
+                        )
+                        await response(request_id, result={
+                            "sessionId": session_id,
+                            "configOptions": _acp_config_options(permission_preset),
+                        })
                     else:
                         await response(request_id, result={
                             "session_id": session_id, "conversation_id": conversation_id, "workspace": cwd,
                         })
+                elif method == "session/list":
+                    try:
+                        limit = max(1, min(100, int(params.get("limit", 50))))
+                        cursor = max(0, int(params.get("cursor", "0")))
+                    except (TypeError, ValueError):
+                        await response(request_id, error={
+                            "code": -32602, "message": "session/list limit or cursor is invalid",
+                        })
+                        continue
+                    conversations = await memory.list_conversations(limit=None)
+                    acp_conversations = [
+                        item for item in conversations
+                        if isinstance(_conversation_metadata(item).get("acp"), dict)
+                    ]
+                    page = acp_conversations[cursor:cursor + limit]
+                    next_cursor = str(cursor + limit) if cursor + limit < len(acp_conversations) else None
+                    await response(request_id, result={
+                        "sessions": [{
+                            "sessionId": str(item["id"]),
+                            "cwd": str(item.get("workspace") or ""),
+                            "title": str(item.get("title") or ""),
+                            "updatedAt": str(item.get("updated_at") or ""),
+                        } for item in page],
+                        **({"nextCursor": next_cursor} if next_cursor is not None else {}),
+                    })
+                elif method == "session/resume":
+                    session_id = str(params.get("sessionId") or "")
+                    cwd_arg = params.get("cwd")
+                    if not session_id or not cwd_arg or not Path(str(cwd_arg)).is_absolute():
+                        await response(request_id, error={
+                            "code": -32602, "message": "session/resume requires sessionId and an absolute cwd",
+                        })
+                        continue
+                    cwd = str(Path(str(cwd_arg)).expanduser().resolve())
+                    conversation = await memory.get_conversation(session_id)
+                    metadata = _conversation_metadata(conversation or {})
+                    acp_metadata = metadata.get("acp")
+                    if conversation is None or not isinstance(acp_metadata, dict):
+                        await response(request_id, error={"code": -32002, "message": "unknown ACP session"})
+                        continue
+                    stored_cwd = str(Path(str(conversation.get("workspace") or "")).expanduser().resolve())
+                    if not Path(cwd).is_dir() or os.path.normcase(cwd) != os.path.normcase(stored_cwd):
+                        await response(request_id, error={
+                            "code": -32602, "message": "session/resume cwd must match the session workspace",
+                        })
+                        continue
+                    agent_preset_id = str(acp_metadata.get("agentPresetId") or "default")
+                    permission_preset = str(acp_metadata.get("permissionPreset") or "ask")
+                    try:
+                        from atlas.approval_policy import PERMISSION_PRESETS
+                        from atlas.config import get_config
+                        from atlas.task_artifacts import AgentPresetStore
+
+                        if permission_preset not in PERMISSION_PRESETS:
+                            raise ValueError(f"unknown permission preset: {permission_preset}")
+                        preset_capabilities = AgentPresetStore(get_config().db_path.parent).resolve(agent_preset_id)
+                    except (KeyError, ValueError) as exc:
+                        await response(request_id, error={"code": -32602, "message": str(exc)})
+                        continue
+                    sessions[session_id] = {
+                        "workspace": cwd, "conversation_id": session_id,
+                        "agent_preset_id": agent_preset_id,
+                        "agent_preset_capabilities": preset_capabilities,
+                        "permission_preset": permission_preset,
+                        "permission_mode": PERMISSION_PRESETS[permission_preset]["mode"],
+                    }
+                    session_fs[session_id] = dict(session_fs.get("__initialize__", {}))
+                    await response(request_id, result={
+                        "configOptions": _acp_config_options(permission_preset),
+                    })
+                elif method == "session/set_config_option":
+                    # Atlas ACP extension: stable ACP v1 has no standardized
+                    # permission-preset config option, so expose only this narrow
+                    # selector and keep it independent from app-server methods.
+                    session_id = str(params.get("sessionId") or "")
+                    session = sessions.get(session_id)
+                    if session is None:
+                        await response(request_id, error={"code": -32002, "message": "unknown ACP session"})
+                        continue
+                    if session_id in active:
+                        await response(request_id, error={
+                            "code": -32011, "message": "cannot change session configuration during an active run",
+                        })
+                        continue
+                    if params.get("configId") != "permissionPreset":
+                        await response(request_id, error={
+                            "code": -32602, "message": "unknown configId: permissionPreset is the only supported option",
+                        })
+                        continue
+                    value = params.get("value")
+                    if params.get("type") not in (None, "id") or not isinstance(value, str):
+                        await response(request_id, error={
+                            "code": -32602, "message": "permissionPreset requires a string id value",
+                        })
+                        continue
+                    from atlas.approval_policy import PERMISSION_PRESETS
+
+                    if value not in PERMISSION_PRESETS:
+                        await response(request_id, error={
+                            "code": -32602, "message": f"unknown permission preset: {value}",
+                        })
+                        continue
+                    session["permission_preset"] = value
+                    session["permission_mode"] = PERMISSION_PRESETS[value]["mode"]
+                    conversation = await memory.get_conversation(session["conversation_id"])
+                    metadata = _conversation_metadata(conversation or {})
+                    acp_metadata = metadata.setdefault("acp", {})
+                    acp_metadata["permissionPreset"] = value
+                    await memory.update_conversation(
+                        session["conversation_id"],
+                        permission_mode=PERMISSION_PRESETS[value]["mode"], metadata=metadata,
+                    )
+                    await response(request_id, result={"configOptions": _acp_config_options(value)})
                 elif method == "session/prompt":
                     acp = "sessionId" in params
                     session_id = str((params.get("sessionId") if acp else params.get("session_id")) or "")
@@ -426,6 +624,7 @@ async def serve_stdio(*, workspace: str | None = None,
                     if event is not None:
                         event.set()
                     sessions.pop(session_id, None)
+                    session_fs.pop(session_id, None)
                     await response(request_id, result={} if acp else {"closed": True})
                 else:
                     await response(request_id, error={"code": -32601, "message": f"method not found: {method}"})
@@ -441,6 +640,9 @@ async def serve_stdio(*, workspace: str | None = None,
             if not future.done():
                 future.set_result("")
         for future in pending_client_requests.values():
+            if not future.done():
+                future.set_result({"outcome": "cancelled"})
+        for future in pending_acp_permissions.values():
             if not future.done():
                 future.set_result({"outcome": "cancelled"})
         if active_tasks:

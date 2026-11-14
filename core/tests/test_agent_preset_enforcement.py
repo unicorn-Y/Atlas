@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from atlas.agent.run_phases import RunRequest, _apply_agent_preset_capabilities
+from atlas.agent.capabilities import AgentCapabilityRegistry
 from atlas.engine.kernel.loop import _mcp_tool_allowed, _plan_mode_denies
 
 
@@ -25,7 +26,9 @@ async def test_preset_intersects_tool_scope_and_applies_non_explicit_model_and_m
     )
     runtime = SimpleNamespace(mode=request.mode, model=None, mcp_server_allow=None)
 
-    error = await _apply_agent_preset_capabilities(SimpleNamespace(_skills=None), request, runtime)
+    error = await _apply_agent_preset_capabilities(
+        SimpleNamespace(_skills=None, _capabilities=AgentCapabilityRegistry()), request, runtime,
+    )
 
     assert error is None
     assert request.tool_allow == ["read_file"]
@@ -44,7 +47,9 @@ async def test_explicit_user_model_and_mode_override_preset():
     )
     runtime = SimpleNamespace(mode="act", model=None, mcp_server_allow=None)
 
-    error = await _apply_agent_preset_capabilities(SimpleNamespace(_skills=None), request, runtime)
+    error = await _apply_agent_preset_capabilities(
+        SimpleNamespace(_skills=None, _capabilities=AgentCapabilityRegistry()), request, runtime,
+    )
 
     assert error is None
     assert request.model == "user-model"
@@ -63,7 +68,7 @@ async def test_preset_skills_are_activated_and_missing_skills_fail_closed():
         agent_preset_capabilities=_capabilities(skills=["allowed"]),
     )
     runtime = SimpleNamespace(mode="act", model=None, mcp_server_allow=None)
-    agent = SimpleNamespace(_skills=Skills())
+    agent = SimpleNamespace(_skills=Skills(), _capabilities=AgentCapabilityRegistry())
 
     error = await _apply_agent_preset_capabilities(agent, request, runtime)
     assert error is None
@@ -80,9 +85,43 @@ async def test_non_default_preset_without_capabilities_fails_closed():
     request = RunRequest(message="x", conversation_id="c", agent_preset_id="research")
     runtime = SimpleNamespace(mode="act", model=None, mcp_server_allow=None)
 
-    error = await _apply_agent_preset_capabilities(SimpleNamespace(_skills=None), request, runtime)
+    error = await _apply_agent_preset_capabilities(
+        SimpleNamespace(_skills=None, _capabilities=AgentCapabilityRegistry()), request, runtime,
+    )
 
     assert error and "capabilities" in error
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_preset_limits_plugin_realm_to_selected_child_rows():
+    registry = AgentCapabilityRegistry()
+    registry.register(
+        "plugin.docs.skill.search", description="Search docs",
+        handler=lambda _: "docs", source="plugin:docs",
+    )
+    registry.register(
+        "plugin.calendar.skill.create", description="Create events",
+        handler=lambda _: "calendar", source="plugin:calendar",
+    )
+    request = RunRequest(
+        message="x", conversation_id="c", agent_preset_id="research",
+        agent_preset_capabilities=_capabilities(
+            plugins=["docs"], plugin_allow_all=False,
+        ),
+    )
+    runtime = SimpleNamespace(mode="act", model=None, mcp_server_allow=None)
+    agent = SimpleNamespace(_skills=None, _capabilities=registry)
+
+    error = await _apply_agent_preset_capabilities(agent, request, runtime)
+
+    assert error is None
+    assert [item["name"] for item in runtime.plugin_realm.discover()] == [
+        "plugin.docs.skill.search",
+    ]
+    assert await runtime.plugin_realm.invoke("plugin.docs.skill.search") == "docs"
+    with pytest.raises(KeyError):
+        await runtime.plugin_realm.invoke("plugin.calendar.skill.create")
 
 
 @pytest.mark.unit
