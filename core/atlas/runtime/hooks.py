@@ -497,8 +497,21 @@ async def execute_claude_hooks(
                 if isinstance(worktree_path, str) and os.path.exists(worktree_path):
                     decision.update(blocked=True, reason=stderr.strip() or output.strip() or "Worktree removal failed")
             elif code == 2 and event in _BLOCKING_EXIT_EVENTS:
+                # Exit 2 means "block" only for Claude Code hooks. Codex reserves
+                # exit 2 for a hook *error* — a missing script, a bad interpreter —
+                # and its own runtime reports that to the user without cancelling
+                # the turn. Treating a broken Codex hook as an intentional block
+                # cancelled every prompt on a machine whose `~/.codex/hooks.json`
+                # pointed at a deleted script: the reply became the interpreter's
+                # error text and the model was never called (request_count 0).
                 if event == "ConfigChange" and event_payload.get("source") == "policy_settings":
                     pass
+                elif str(group.get("source") or "").startswith("codex:"):
+                    result["logs"].append({
+                        "event": event, "source": group.get("source"),
+                        "skipped": "codex hook error (exit 2) is not a block",
+                        "stderr": stderr.strip()[:400],
+                    })
                 else:
                     decision.update(blocked=True, reason=stderr.strip() or output.strip() or "Blocked by hook")
             elif code == 2 and event in {"PostToolUse", "PostToolUseFailure"}:
