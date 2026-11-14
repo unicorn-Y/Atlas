@@ -324,6 +324,10 @@ class AgentRunContext:
     subtask_progress: Callable[..., Any] | None = None
     subtask_completed: Callable[..., Any] | None = None
     subtask_group_completed: Callable[..., Any] | None = None
+    # E25 idle maintenance producer: the host path sets this so the kernel's
+    # runMaintenance() slot (run.turn fully closed, public state still idle)
+    # has real housekeeping to run instead of a no-op. Must never raise.
+    maintenance_callback: Callable[[], Any] | None = None
 
 
 _EVENT_STREAM_DONE = object()
