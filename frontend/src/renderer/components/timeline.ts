@@ -100,7 +100,7 @@ export type TimelineItem =
   /** /review 代码审查的结构化结论，由 ReviewFindingsCard 渲染；findings 为空即「没有发现问题」。 */
   | { kind: 'review'; id: string; scope: string; scopeLabel: string; workspace: string; mode?: 'general' | 'security' | 'cleanup-only'; findings: ReviewFinding[] }
   | { kind: 'component'; id: string; component: StructuredComponentItem }
-  /** Node supplied by a registered client extension renderer. */
+  /** Node supplied by a registered client extension renderer (produced only via {@link registerExtensionNodeClaim}). */
   | { kind: 'extension'; id: string; nodeType: string; data: Record<string, unknown> }
   | { kind: 'artifact'; id: string; name: string; summary: string }
   | { kind: 'done'; id: string; result: string; startedAt?: string; endedAt: string; usage?: RunUsage; changes?: RunChanges }
@@ -386,6 +386,34 @@ function imageToolResult(value: unknown): { preview?: string; summary?: string }
   const url = part?.image_url?.url;
   const preview = typeof url === 'string' && /^data:image\/(png|jpe?g|webp|gif|bmp);base64,/i.test(url) ? url : undefined;
   return { preview, summary: typeof result.text_summary === 'string' ? result.text_summary : undefined };
+}
+
+/** X27: a client extension claiming runtime events the built-in timeline does not render. */
+export interface ExtensionNodeClaim {
+  /** Becomes the extension node's nodeType; must match a registered ConversationNodeDefinition. */
+  nodeType: string;
+  match: (event: AgentEvent) => boolean;
+}
+
+const extensionClaims = new Map<string, ExtensionNodeClaim>();
+
+/** Register an extension claim; the returned disposer removes exactly this claim.
+ *  Only events that reach the assembler *after* registration can become extension nodes. */
+export function registerExtensionNodeClaim(claim: ExtensionNodeClaim): () => void {
+  if (!claim.nodeType.trim()) throw new Error('Extension node type is required');
+  extensionClaims.set(claim.nodeType, claim);
+  return () => {
+    if (extensionClaims.get(claim.nodeType) === claim) extensionClaims.delete(claim.nodeType);
+  };
+}
+
+function extensionClaimFor(event: AgentEvent): ExtensionNodeClaim | null {
+  for (const claim of extensionClaims.values()) {
+    try {
+      if (claim.match(event)) return claim;
+    } catch { /* a broken claim must not break the built-in timeline */ }
+  }
+  return null;
 }
 
 /** Keeps the reducer's open reply, steps and tool-call state across incoming event batches. */
@@ -813,8 +841,17 @@ export function createTimelineAssembler(): { append: (events: readonly AgentEven
           status: typeof data.status === 'number' ? data.status : undefined,
         });
         break;
-      default:
+      default: {
+        // X27: events the built-in timeline does not render stay invisible, but a
+        // registered client extension can claim them; the claim turns the event into
+        // a kind:'extension' node that the ConversationNode registry draws by nodeType.
+        const claim = extensionClaimFor(event);
+        if (claim) {
+          closeReply(); closeBlocks();
+          items.push({ kind: 'extension', id: event.id, nodeType: claim.nodeType, data: event.data });
+        }
         break;
+      }
     }
   };
   return {

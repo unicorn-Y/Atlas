@@ -1,8 +1,10 @@
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BackendStartupProgress } from '../shared/ipc.js';
+import { injectBackendPort } from './backendPort.js';
 
 // H8 §10.3 unit tests: slow starts are not killed, process exits surface immediately,
 // the total cap still bounds the wait, and failure reports carry the log tail.
@@ -85,6 +87,31 @@ describe('backendProcess startup (H8 §10.3)', () => {
     expect(result).toEqual({ ready: true, managed: false });
     expect(h.spawn).not.toHaveBeenCalled();
     expect(progress.map((p) => p.phase)).toEqual(['probing', 'ready']);
+  });
+
+  // D1: boot injection end to end — the OS port selected at Electron ready must be the
+  // one the health probe hits and the one the spawned backend inherits, not the 8765 default.
+  it('probes and spawns on the ATLAS_PORT injected at boot', async () => {
+    fs.mkdirSync(resolve(REPO_ROOT, '.tmp'), { recursive: true });
+    vi.stubEnv('ATLAS_DATA_DIR', fs.mkdtempSync(resolve(REPO_ROOT, '.tmp', 'backend-port-')));
+    const injected = await injectBackendPort();
+    expect(injected).toBe(Number(process.env.ATLAS_PORT));
+
+    const probeUrls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (h.spawn.mock.calls.length === 0) throw new Error('ECONNREFUSED');
+      const url = String(input);
+      probeUrls.push(url);
+      return { status: 200, json: async () => ({ status: 'ok' }) };
+    }));
+    const child = makeChild();
+    stubSpawn(child);
+    await expect(ensureBackendRunning()).resolves.toEqual({ ready: true, managed: true, pid: 4242 });
+
+    expect(probeUrls.length).toBeGreaterThan(0);
+    expect(new Set(probeUrls)).toEqual(new Set([`http://127.0.0.1:${injected}/api/health`]));
+    expect(h.spawn).toHaveBeenCalledTimes(1);
+    expect(h.spawn.mock.calls[0]?.[2]?.env?.ATLAS_PORT).toBe(String(injected));
   });
 
   it('keeps waiting through a slow 30-second start and kills nothing', async () => {

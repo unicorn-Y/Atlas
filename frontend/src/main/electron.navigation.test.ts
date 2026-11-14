@@ -3,11 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const electronMocks = vi.hoisted(() => {
   const window = {
     on: vi.fn(),
+    once: vi.fn(),
     minimize: vi.fn(),
     maximize: vi.fn(),
     unmaximize: vi.fn(),
     close: vi.fn(),
     isMaximized: vi.fn(() => false),
+    isDestroyed: vi.fn(() => false),
     setAlwaysOnTop: vi.fn(),
     loadURL: vi.fn(),
     loadFile: vi.fn(),
@@ -19,6 +21,7 @@ const electronMocks = vi.hoisted(() => {
       reload: vi.fn(),
     },
   };
+  const tray = { on: vi.fn(), setContextMenu: vi.fn(), setImage: vi.fn(), setToolTip: vi.fn() };
   const BrowserWindow = Object.assign(
     vi.fn(function BrowserWindowMock() { return window; }),
     {
@@ -28,6 +31,7 @@ const electronMocks = vi.hoisted(() => {
   );
   return {
     window,
+    tray,
     BrowserWindow,
     app: {
       isPackaged: false,
@@ -35,15 +39,23 @@ const electronMocks = vi.hoisted(() => {
       getPath: vi.fn(() => '/atlas-test-user-data'),
       requestSingleInstanceLock: vi.fn(() => true),
       setAsDefaultProtocolClient: vi.fn(),
+      setLoginItemSettings: vi.fn(),
       whenReady: vi.fn(() => Promise.resolve()),
       on: vi.fn(),
       quit: vi.fn(),
+      exit: vi.fn(),
     },
-    dialog: { showOpenDialog: vi.fn() },
+    dialog: { showOpenDialog: vi.fn(), showErrorBox: vi.fn(), showMessageBox: vi.fn(async () => ({ response: 0 })) },
     globalShortcut: { register: vi.fn(() => true), unregister: vi.fn(), unregisterAll: vi.fn() },
     ipcMain: { on: vi.fn(), handle: vi.fn() },
-    Menu: { setApplicationMenu: vi.fn() },
-    nativeImage: { createFromPath: vi.fn(() => ({ isEmpty: () => true })) },
+    Menu: { buildFromTemplate: vi.fn((items: unknown[]) => items), setApplicationMenu: vi.fn() },
+    nativeImage: {
+      createFromPath: vi.fn(() => ({ isEmpty: () => true })),
+      createEmpty: vi.fn(),
+      createFromDataURL: vi.fn(),
+    },
+    powerSaveBlocker: { isStarted: vi.fn(() => false), start: vi.fn(() => 1), stop: vi.fn() },
+    Tray: vi.fn(function TrayMock() { return tray; }),
     session: { defaultSession: { webRequest: { onBeforeSendHeaders: vi.fn() } } },
     shell: { openExternal: vi.fn(), openPath: vi.fn(), showItemInFolder: vi.fn() },
   };
@@ -60,11 +72,18 @@ describe('Electron development navigation trust', () => {
     vi.resetModules();
     vi.clearAllMocks();
     vi.stubEnv('VITE_DEV_SERVER_URL', 'http://127.0.0.1:5173');
+    // Isolate the boot's preference/token reads and keep the tray timer from staying pending.
+    vi.stubEnv('ATLAS_DATA_DIR', '/atlas-navigation-test');
+    vi.stubGlobal('setInterval', vi.fn(() => 123));
+    vi.stubGlobal('clearInterval', vi.fn());
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ components: {} }) })));
     await import('./electron.js');
-    await vi.waitFor(() => expect(electronMocks.BrowserWindow).toHaveBeenCalled());
+    // The boot must actually reach window creation (it used to die inside an incomplete mock).
+    await vi.waitFor(() => expect(electronMocks.BrowserWindow).toHaveBeenCalled(), { timeout: 5000, interval: 25 });
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });
 

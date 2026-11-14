@@ -145,12 +145,15 @@ describe('BrowserRecorderPanel', () => {
 });
 
 describe('BrowserSettingsSection', () => {
-  it('offers exactly the four takeover modes plus CDP and proxy inputs', () => {
-    expect(BROWSER_MODES.map((mode) => mode.value)).toEqual(['standalone', 'copied-profile', 'cdp', 'extension']);
+  it('offers the six takeover modes (auto and browser extension included) plus CDP and proxy inputs', () => {
+    // auto 与 extension 是后续提交补上的接管方式（8e211b06 / 30a0c710），断言跟上现状。
+    expect(BROWSER_MODES.map((mode) => mode.value)).toEqual(['auto', 'standalone', 'copied-profile', 'live_chrome', 'cdp', 'extension']);
     const html = renderToStaticMarkup(<BrowserSettingsSection apiBaseUrl="http://x" />);
+    expect(html).toContain('自动选择');
     expect(html).toContain('独立浏览器');
     expect(html).toContain('复制本机配置');
-    expect(html).toContain('连接已打开的浏览器（CDP）');
+    expect(html).toContain('连接正在使用的 Chrome');
+    expect(html).toContain('自定义 CDP 地址');
     expect(html).toContain('浏览器扩展');
     expect(html).toContain('保存设置');
     // CDP 输入框只在选择了 cdp 模式时出现
