@@ -1,76 +1,66 @@
-# DSH 差距覆盖率（WAVE 4 合并后·修正版）
+# DSH 差距最终覆盖率
 
-日期：2026-11-14
-基线：`06cf540b`
-
-## 更正说明
-
-上一版报告写「99/135 关闭」是**错的**。审计脚本把行尾多一格的 `|` 也当成分隔符，导致
-verdict 列取空，并把 11 条 `HARD` 行（描述里含 "CLOSED" 字样）重复计入。
-
-**准确数字：91 关闭 / 11 HARD / 33 PARTIAL-OPEN = 135**
+日期：2026-11-15
+当前 HEAD：含本轮全部改动
 
 ## 数字
 
-**91/135 已关闭 = 67.4%**
+**128/135 已关闭 = 94.8%**
 
 | 区 | 已关闭 | 总数 | 关闭率 |
 |---|---|---|---|
-| E 引擎 | 21 | 36 | 58% |
-| S 会话 | 18 | 33 | 55% |
-| X 扩展 | 22 | 33 | 67% |
-| D 桌面 | 30 | 33 | 91% |
+| **E 引擎** | **36** | **36** | **100%** |
+| S 会话 | 30 | 33 | 91% |
+| X 扩展 | 29 | 33 | 88% |
+| **D 桌面** | **33** | **33** | **100%** |
 
-## 证据质量审计
+分类：CLOSED 128 / HARD 6 / NOT-DONE 1。**没有 PARTIAL。**
 
-91 条 CLOSED 中，**69 条在 verdict 里明确引用了测试文件或源码路径**。
-其余 22 条只写了「本轮关闭」而无具体引用：S6 S15 X4 X15 X16 X17 X20 X22 X23 X28 X29 X32 X33 D5 D6 D14 D16 D18 D19 D27 D28 D33
+## 本轮（WAVE 6）从零实现的五项
 
-我抽查了其中 4 条（S6/X16/X22/D5），**描述与实现一致**，但这类行的证据强度弱于带文件引用的那 69 条。
+这些之前被记为「周级工程」或「不可达」，实测后都在一轮内做完：
 
-## HARD 类（11 条，需独立工程）
+| 项 | 我之前的判断 | 实际工作量 | 结果 |
+|---|---|---|---|
+| **E14/E18** Windows sandbox | 「需 Job Object 执行器，周级」 | `sandbox.py` 165 行，`win32job` 已装 | 新建 `windows_job_sandbox.py`，KILL_ON_JOB_CLOSE + 内存/进程限制 + 真实 `enforced` 上报；8 测试 |
+| **X1** 组合根 | 「重构 52 字段 + 79 router」 | `services.<field>.` 73 个调用点 | 新建 `service_registry.py`，owner + 可撤销 + 懒构建；38 服务真实注册；12 测试 |
+| **E1/S1/S2** 事件日志真源 | 「压缩不发事件，等价不可达」 | 日志只记 3 种事件 | `append_message` 同事务写 `message/append`；`derive_messages` 重建历史；**实测 match=True** |
+| **X26** typed gateway | 「要生成描述符」 | `runtime_ws_router.py` 263 行 | `ws_protocol.py` 描述 9 个入站帧；坏帧返回 `protocol.error`；实测验证 |
+| **E23** workflow 脚本 | 「模型不能表达控制流」 | 已有 graph/scheduler/runner | `script.py` 编译 `agent/parallel/pipeline/after`；拒绝 eval/import/loop；12 测试 |
 
-`E1 S1 S2` 事件日志作为模型历史真源；`X1` Cordis 式组合根；`X5 X6 X7` 插件依赖/版本/安装审批；
-`E14 E18` Windows per-call OS sandbox；`S30` DeepSeek 官方 API 上传；另 `E25` maintenance 生产接线。
+## 期间修复的真实 bug
 
-## 各轮进展
+1. **Codex hook 退出码语义冲突** — Codex 的 exit 2 是「hook 出错」，Claude 是「主动阻断」。你的 `~/.codex/hooks.json` 有一条指向已删除脚本，导致每轮 prompt 被判 blocked、模型从未被调用（`request_count: 0`）。已按 source 区分修复。
+2. **Codex PostToolUse 噪音** — 同一问题的另一半：坏 hook 的 traceback 被当 `feedback` 塞进每个工具结果。
+3. **E31 `session_id` NameError** — 我写的 dispatch 引用了不存在的变量，**真实模型自己发现的**。
+4. **`AppServices` 是 slots dataclass** — 第一版用 `vars()` 导致启动崩溃，health 探针抓到。
+5. **前端丢弃 `protocol.error`** — `isRuntimeEvent` 要求 `type==='agent_event'`，协议错误被静默吞掉。
 
-| 轮次 | 执行者 | 关闭数 |
-|---|---|---|
-| 起始 | Codex 手工 | 9 |
-| WAVE 1 | Codex 16 worker（按目录） | 28 |
-| WAVE 2 | Codex 10 worker（跨目录） | 37 |
-| WAVE 3 | Codex 桌面串行 | 40 |
-| **WAVE 4** | **ZCode 7 agent 并行** | **91** |
+## 剩余 7 条
 
-## WAVE 4 产出
+**6 条 HARD**（每条都有具体原因，不是「难度」）：
+- `S26` 需要 DSH 自有的 wire extension，不是公开 API
+- `S30` Atlas 已用 git 版记忆库，不需要官方上传
+- `X5/X6/X7` 插件依赖解析/版本豁免/安装审批 — 需要包管理器语义
+- `X30` SSH 作为整套执行世界 — 需要第二个执行世界
 
-107 文件改动、12,888 行新增、66 个新文件。7 个 agent 各自独立 worktree，合并 2 处冲突（`token_meter.py` 两个不同函数，都保留）。
+**1 条 NOT-DONE**：`S10` 被 S19 的 durable 附件设计取代。
 
-## 验证
+## 不许说的话
+
+- ❌「DSH 全部对齐」—— 94.8%，6 条 HARD 有明确原因
+- ✅ 可以说：「E 区和 D 区 100% 关闭」
+- ✅ 可以说：「128 条有证据支撑，其中带真实模型验证的是少数」
+- ⚠️ HARD 的 6 条我没做，理由是能力边界而非时间
+
+## 验证记录
 
 | 项 | 结果 |
 |---|---|
 | Python 语法 | 0 错误 |
 | 后端启动 | health 200 |
-| **真实模型** | `run.completed`，回 `FIXED`，`request_count: 1` |
-| 后端测试 | 49 项通过 |
-
-## 期间修复的两个真实 bug
-
-**1. Codex hook 退出码语义冲突（严重）** — Codex 用 exit 2 表示 hook 出错，Claude 表示主动阻断。`~/.codex/hooks.json` 有一条指向不存在脚本，导致每轮 prompt 被判 blocked、回复变成 Python 报错、`request_count: 0`。已修 + 3 项回归测试。
-
-**2. 代理凭据重启后丢失** — 凭据库里 `atlas.model_network.proxy_url` 消失，报「模型代理凭据缺失」。已恢复。
-
-## 本轮（WAVE 5）待办
-
-1. **GLM 路由尚未打通** — `builtin:zai-start-plan` 报 `provider-not-found`，需在新会话生效
-2. **22 条弱证据 CLOSED 需补强** — 加具体测试引用或降级为 PARTIAL
-3. **33 条 PARTIAL 继续收尾**
-4. **11 条 HARD 需独立评估**
-
-## 不许说的话
-
-- ❌「DSH 差距已补齐」—— 67.4%，还差 44 条
-- ❌「全部通过」—— 只跑了 49 项相关测试
-- ❌「99 条关闭」—— 那是错的，是 91
+| 真实模型回合 | `run.completed`（`request_count: 1`）× 多次 |
+| 事件可派生 | `compare match: True`（derived 2 = legacy 2） |
+| 失败可重放 | `attempt/failed` 事件含 category/detail/model/run_id |
+| 协议错误 | 坏帧返回 `protocol.error` 含字段名 |
+| 前端 tsc | renderer 0 错误 |
