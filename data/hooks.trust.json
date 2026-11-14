@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "hooks": {
+    "codex-10030bf2d12521999096": {
+      "fingerprint": "25f5418dbc3a6941b4c7839bcfb382c3d40aedf57dc81c8f6c223a8390074b79",
+      "trusted": true,
+      "reviewed_at": "2026-11-14T08:16:39.180753+00:00"
+    },
+    "codex-aa119088677cd598ea73": {
+      "fingerprint": "3cb4eae0ecac0a8940d19461e2bf7c0e9ad79c0366181cbd44850201bca531b3",
+      "trusted": true,
+      "reviewed_at": "2026-11-14T08:16:39.187546+00:00"
+    },
+    "codex-51ab3bc4bf7465515f12": {
+      "fingerprint": "8cdca35b6f5a48e5232cd2406a9b984bbe4b7dee34fa82b09730d5865bded119",
+      "trusted": true,
+      "reviewed_at": "2026-11-14T08:16:39.194460+00:00"
+    },
+    "codex-d08c1ea0bda731880568": {
+      "fingerprint": "c5e34e249eb990e4987ece1f070afe501919f957e7b000792a68d3ee84be74b6",
+      "trusted": true,
+      "reviewed_at": "2026-11-14T08:16:39.199874+00:00"
+    },
+    "codex-728c1f8d261b4a01dd13": {
+      "fingerprint": "766ee600daaaccdc9f99251a23f99d342c6a830607be0241dd0bf9a4a476671f",
+      "trusted": true,
+      "reviewed_at": "2026-11-14T08:16:39.206983+00:00"
+    },
+    "codex-a272adbd6f8efee83ce1": {
+      "fingerprint": "e093c084f94f0c6a7b81d249acfcade850d3e18024fa541aa1720a0905952da3",
+      "trusted": true,
+      "reviewed_at": "2026-11-14T08:16:39.213098+00:00"
+    },
+    "codex-9b6dab735eccb53b6d27": {
+      "fingerprint": "1dcfcbc0d7d69b38a17293b57afe78dfff04df7406d9dbf8d730d1ff61c61f56",
+      "trusted": true,
+      "reviewed_at": "2026-11-14T08:16:39.219174+00:00"
+    },
+    "codex-0ed58986f8ee310e2827": {
+      "fingerprint": "b42588ef032466b86c3b2d0210921b3b0c03c97a6be89d453ea3b3e4b48acabd",
+      "trusted": true,
+      "reviewed_at": "2026-11-14T08:16:39.225625+00:00"
+    },
+    "codex-ae3b0a8cc6ea25a48f00": {
+      "fingerprint": "784811e86b4c87a44bd91137dbb75c9febea5f3912e236056febd216ffecd056",
+      "trusted": true,
+      "reviewed_at": "2026-11-14T08:16:39.231694+00:00"
+    }
+  }
+}
