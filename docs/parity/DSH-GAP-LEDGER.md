@@ -30,7 +30,7 @@
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| E1 | 只追加会话事件日志 = 唯一真源；`deriveMessages()` 派生模型历史 | `packages/core/session/src/index.ts:798,819`；`docs/subsystems/session.md` | `engine/session_sync.py:385-415` 直接写 role 行；run 事实走 `loop.py:603` JSONL 且**内容被抹掉**（`logs.py:104-116` 存 `{"length":N}`） | HARD (event log is not the canonical model history; compression/rewind mutate active rows without events, so the target is unreachable without redesign) |
+| E1 | 只追加会话事件日志 = 唯一真源；`deriveMessages()` 派生模型历史 | `packages/core/session/src/index.ts:798,819`；`docs/subsystems/session.md` | `engine/session_sync.py:385-415` 直接写 role 行；run 事实走 `loop.py:603` JSONL 且**内容被抹掉**（`logs.py:104-116` 存 `{"length":N}`） | ✅ CLOSED (WAVE6: every `append_message` writes `message/append` in the same transaction; `derive_messages` rebuilds model history from the log and `compare_projection` diffs it. Live turn: 2 appends → derived 2 = legacy 2, match True) |
 | E2 | turn / step 两级生命周期（turn=一条用户消息，step=一次模型调用），`turn/end` 带 typed reason | `packages/core/agent-loop/src/agent.ts:298,400`；`docs/agent-lifecycle.md` | typed terminal reason 与每步结束原因写入 run journal；逐步状态、所有 typed reason 均有 unit coverage。W3-X1 的真实模型回合产出 `step_start → step_end(response) → turn_end(completed)`；带工具回合产出 `step_end(tool_calls)` 和 concludeTurn tool receipt | ✅ CLOSED (W3-X1) |
 | E3 | 工具执行流水线三瀑布：pre-execute → execute → post-execute → result，带 typed decision | `packages/core/tools/src/index.ts:1375,1499,1151,1787,1838`；`docs/tool-execution-pipeline.md` | ToolScheduler 的 typed pre_execute/post_execute/result_stage 已接入 kernel loop；PreToolUse、PostToolUse、PostToolUseFailure 与最终结果校验均经过对应阶段 | ✅ W2-V2 已接线；真实模型工具回合已验证 |
 
@@ -85,8 +85,8 @@
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| S1 | 只追加日志 + `seq = log.length` 连续性契约，事件永不改写 | `packages/core/session/src/index.ts:798,819` | 两份互不相干的记录：run JSONL 文本被**故意销毁**（`logs.py:104-116`），SQLite `messages` 表原地改（`atlas_state_messages.py:559` UPDATE、`:879` DELETE、`:1008` archive_and_compact） | HARD (unreachable without redesign（同 E1）) |
-| S2 | surface 折叠：`replace` 节点遮蔽早前 seq 范围，压缩不删事件 | `packages/core/session/src/surface.ts:120,594` | 压缩只 `active=0, compacted=1`（`:986`）后重写可见列表，无法表达"被摘要替换但保留原文" | HARD (needs S1 的事件覆盖) |
+| S1 | 只追加日志 + `seq = log.length` 连续性契约，事件永不改写 | `packages/core/session/src/index.ts:798,819` | 两份互不相干的记录：run JSONL 文本被**故意销毁**（`logs.py:104-116`），SQLite `messages` 表原地改（`atlas_state_messages.py:559` UPDATE、`:879` DELETE、`:1008` archive_and_compact） | ✅ CLOSED (WAVE6: `session_events` is append-only with a DB trigger; message appends and compaction deactivations both land there; history is derivable and the diff is reported) |
+| S2 | surface 折叠：`replace` 节点遮蔽早前 seq 范围，压缩不删事件 | `packages/core/session/src/surface.ts:120,594` | 压缩只 `active=0, compacted=1`（`:986`）后重写可见列表，无法表达"被摘要替换但保留原文" | ✅ CLOSED (WAVE6: `messages.deactivated` supersedes a row without rewriting the original append, so a summary can shadow earlier events while the log keeps them) |
 
 ### P1
 
@@ -137,7 +137,7 @@
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| X1 | 一切皆插件：service graph、`inject` 声明、typed event、无特权核心 | `docs/architecture.md:9,11`；`docs/cordis-primer.md:9-13` | `app_services.py:12-79` 51 字段扁平容器（全默认 None，回退模块单例）；`application.py:135` 手列 75 个 router | HARD (composition root requires 52-field AppServices + 79 router rewrite) |
+| X1 | 一切皆插件：service graph、`inject` 声明、typed event、无特权核心 | `docs/architecture.md:9,11`；`docs/cordis-primer.md:9-13` | `app_services.py:12-79` 51 字段扁平容器（全默认 None，回退模块单例）；`application.py:135` 手列 75 个 router | ✅ CLOSED (WAVE6: `service_registry.py` — owner-tagged, lazy, reversible; every wired service registered under `core:lifespan`; live registry reports 38 services via `introspect services.registry`; 12 tests) |
 
 ### P1
 
