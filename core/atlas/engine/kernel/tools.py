@@ -68,7 +68,7 @@ ToolStage = Callable[..., ToolDecision | Awaitable[ToolDecision]]
 READ_ONLY_TOOLS = frozenset({
     "read_file", "search_files", "session_search", "web_search", "web_fetch", "deep_research",
     "read", "glob", "grep", "list_directory", "lsp_diagnostics", "lsp_hover",
-    "lsp_definition", "lsp_references", "lsp_document_symbols", "build_repo_map",
+    "lsp_definition", "lsp_implementation", "lsp_references", "lsp_document_symbols", "build_repo_map",
     "read_office", "coding.repo_map", "coding.ast_grep.run",
     "view_image",
     "list_available_plugins_to_install",
@@ -105,7 +105,7 @@ TOOL_TIMEOUT_FAMILIES: tuple[tuple[str, frozenset[str], float], ...] = (
     ("read", frozenset({
         "read_file", "read", "glob", "list_directory", "read_office", "view_image",
         "read_terminal", "lsp_diagnostics", "lsp_hover", "lsp_definition",
-        "lsp_references", "lsp_document_symbols", "local_file", "local_git",
+        "lsp_implementation", "lsp_references", "lsp_document_symbols", "local_file", "local_git",
     }), 60.0),
 )
 #: Fallback for tools that belong to no family (unknown/MCP/plugin tools).

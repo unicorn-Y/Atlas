@@ -67,15 +67,15 @@
 | E25 | 空闲维护槽 `runMaintenance()`，公开状态仍 idle | `docs/subsystems/core.md#the-agent-handle` | `atlas_runtime.py` 在每个成功 run 完成后进入 `AtlasKernel.runMaintenance()`；内核拒绝与活跃 turn 重叠且 unit tested，但 production `AgentRunContext` 没有提供 `maintenance_callback`，因此 host 路径回退成 no-op | PARTIAL (W3-X1: production maintenance producer still absent) |
 | E26 | `tools.restrict()` 注册级 scope 层，未知名/空集注册即失败 | `packages/core/tools/src/index.ts:1103` | `tool_permissions.py` run 级 allow/deny glob 交集有 unit coverage；注册表无工具集绑定的 `restrict()` view，也没有 unknown/empty registration validation | PARTIAL (W3-X2: policy is run-scoped only) |
 | E27 | PTC 模式：单一 `run_code` 传输，其它工具直调被拒并提示，子调用各记日志 | `packages/core/tools/src/ptc.ts:30` | Atlas `execute_code` 可被调用并经当前工具执行管线记录；定向 execute_code tests 通过，但仍是可选附加工具，kernel 不提供排他的 run_code-only 模式 | PARTIAL (W3-X2: optional code tool, no enforced PTC mode) |
-| E28 | 压缩区域安全：位置跨度，不切开 tool-call/result 对，尾部按 token 计价 | `compaction-basic/src/region.ts:117,139` | `context.py:415-440` 行为等价（取最早未配对） | PRESENT-PARITY |
-| E29 | `ctx.tokenMeter`：按 surface 节点分别计价，成功请求 usage 可锚定 | `packages/llm/token-meter/src/index.ts:101,146` | `token_meter.py:68-135` 只有压力档位，无逐节点计价 | PRESENT-WEAKER |
-| E30 | LSP 四操作闭合联合 + provider registry | `docs/subsystems/lsp.md` | 五操作（`workspace_lsp.py:61-99`）但缺 `goToImplementation` | PRESENT-PARITY |
-| E31 | 会话查询五工具（含 event read/trace/lineage） | `packages/experimental/tool-session-query/src/index.ts:66-109` | 只有 `session_search` + `read_session` | PRESENT-WEAKER |
-| E32 | Git worktree：从固定 revision 创建，模型可"进入"而不必新开 run | `docs/subsystems/worktrees.md` | `task_artifacts.py:139-152` 可建，但要新 run 才切换 | PRESENT-WEAKER |
+| E28 | 压缩区域安全：位置跨度，不切开 tool-call/result 对，尾部按 token 计价 | `compaction-basic/src/region.ts:117,139` | `context.py` 以消息位置保护未配对 tool call/result，并按 token 计算尾部；`test_kernel_compaction_surface.py` 与剪枝测试通过；本批未在真实模型回合触发压缩 | PARTIAL (W3-X3: unit evidence, no live compaction observation) |
+| E29 | `ctx.tokenMeter`：按 surface 节点分别计价，成功请求 usage 可锚定 | `packages/llm/token-meter/src/index.ts:101,146` | `token_meter.py` 有逐 surface node 计价，kernel 每次模型请求写入 `model_request_envelope`；真实 W3-X3 回合日志观察到 8209 surface estimate / 3 节点与 successful run 的 9946 input tokens，但没有把 provider usage 锚定回各节点 | PARTIAL (W3-X3: node estimates live; provider usage anchoring remains absent) |
+| E30 | LSP 四操作闭合联合 + provider registry | `docs/subsystems/lsp.md` | 新增 `goToImplementation` operation、模型 schema、kernel read-only allowlist 与 dispatch 映射；service-level fake LSP 单测通过，真实模型尚未实际调用该操作，且统一 provider registry 未实现 | PARTIAL (W3-X3: operation wired/tested; no live call or provider registry) |
+| E31 | 会话查询五工具（含 event read/trace/lineage） | `packages/experimental/tool-session-query/src/index.ts:66-109` | 现有 `session_search`、`read_session`、`send_to_session` 可用；没有 event read/trace/lineage 的统一模型工具面；corpus tests passed | PARTIAL (W3-X3: core queries exist, event/trace/lineage tools missing) |
+| E32 | Git worktree：从固定 revision 创建，模型可"进入"而不必新开 run | `docs/subsystems/worktrees.md` | conversation worktree 可从 branch 创建/移除，但接口只接受 base branch 名且切换 workspace 要下一轮运行；没有 pinned revision enter-within-run 行为 | PARTIAL (W3-X3: worktree baseline exists; revision pin and in-run enter missing) |
 | E33 | 兜底补齐：写路径诊断增量（Atlas 独有） | — | `engine/lsp_bridge.py:38-80` | **PRESENT-STRONGER** |
-| E34 | 取消时为每个跳过调用生成合成 `tool/result`，保证可重放 | `tool-calls.ts:250` | `tools.py:912,830-845` 已等价 | PRESENT-PARITY |
-| E35 | 压缩锁 bracket 落 transcript，可检测孤儿 | `docs/subsystems/compaction.md` | `loop.py:1417-1440` lease 在 DB，崩溃后靠推断 | PRESENT-PARITY |
-| E36 | 后台作业完成通知作为 followup 投递 | `tool-jobs/src/index.ts:30,253` | `atlas_runtime.py:880-930` 走 SQLite inbox + system block/steer | PRESENT-WEAKER |
+| E34 | 取消时为每个跳过调用生成合成 `tool/result`，保证可重放 | `tool-calls.ts:250` | `tools.py` 为被取消或未开始的调用合成 cancelled receipt/result；kernel timeout/cancel tests passed；本批未观察真实模型取消回合 | PARTIAL (W3-X3: unit proof, no live cancellation observation) |
+| E35 | 压缩锁 bracket 落 transcript，可检测孤儿 | `docs/subsystems/compaction.md` | lease 仍只落 DB；崩溃后靠状态推断，run journal 没有 durable compaction start/end bracket；checkpoint barrier tests passed | PARTIAL (W3-X3: DB lease exists, transcript bracket missing) |
+| E36 | 后台作业完成通知作为 followup 投递 | `tool-jobs/src/index.ts:30,253` | `atlas_runtime.py` SQLite inbox watcher 可将后台通知送入 steer queue，初始通知随 system context 进入模型；通知/进程测试 passed，但本批无真实后台作业完成后续投递回合 | PARTIAL (W3-X3: queue path tested, no live followup observation) |
 
 ---
 

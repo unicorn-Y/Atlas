@@ -21,6 +21,7 @@ manager) so no background loop thread or server process leaks into other tests.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
@@ -228,7 +229,6 @@ def test_missing_binary_gives_chinese_hint(lsp_dir, monkeypatch):
         assert svc.enabled_for(str(target)) is True  # 注册表命中 + git 工作区内 → 门控放行
         assert svc.get_diagnostics_sync(str(target)) == []  # 缺失 → 无诊断，绝不安装
         assert svc.enabled_for(str(target)) is True  # 缺失 ≠ broken：装好即用，无需重启
-
         hint = svc.describe_missing(str(target))
         assert hint and "安装" in hint
 
@@ -236,6 +236,64 @@ def test_missing_binary_gives_chinese_hint(lsp_dir, monkeypatch):
         assert lsp_facade.missing_hint(str(target)) == hint  # 门面同样非空
         assert "安装" in lsp_facade.missing_hint(str(target))
 
+
+def test_workspace_lsp_implementation_uses_implementation_request(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from atlas.tools import workspace_lsp
+
+    target = tmp_path / "service.py"
+    target.write_text("class Service: pass\n", encoding="utf-8")
+    requests = []
+
+    class Client:
+        async def open_file(self, _path, *, language_id):
+            assert language_id == "python"
+            return 1
+
+        async def _send_request_with_retry(self, method, params, *, timeout):
+            requests.append((method, params, timeout))
+            return [{"uri": "file:///implementation.py"}]
+
+    client = Client()
+
+    async def get_or_spawn(_path):
+        return client
+
+    service = SimpleNamespace(
+        _server_for=lambda _path: object(),
+        _get_or_spawn=get_or_spawn,
+        _loop=SimpleNamespace(run=lambda coro, timeout: asyncio.run(coro)),
+        _touch=lambda _client: None,
+    )
+    monkeypatch.setattr(workspace_lsp, "_service_for", lambda _path: (service, _fake_def()))
+
+    result = workspace_lsp.query_lsp(
+        str(tmp_path), operation="implementation", path="service.py", line=0, character=7,
+    )
+
+    assert result == {
+        "available": True,
+        "result": [{"uri": "file:///implementation.py"}],
+        "path": "service.py",
+    }
+    assert requests == [(
+        "textDocument/implementation",
+        {"textDocument": {"uri": target.as_uri()}, "position": {"line": 0, "character": 7}},
+        20.0,
+    )]
+    assert any(
+        item["function"]["name"] == "lsp_implementation"
+        for item in workspace_lsp.lsp_tool_schemas()
+    )
+    from atlas.engine.kernel.tools import READ_ONLY_TOOLS, kernel_tool_schemas
+
+    kernel_tools = kernel_tool_schemas(include_workflow=False)
+    assert "lsp_implementation" in READ_ONLY_TOOLS
+    assert any(
+        item["function"]["name"] == "lsp_implementation"
+        for item in kernel_tools
+    )
 
 # ---- 验收 8：注册表映射（不起真 server）----------------------------------------
 

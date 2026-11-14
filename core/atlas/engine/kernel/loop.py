@@ -3226,7 +3226,7 @@ class AtlasKernel:
                 return {"content": str(exc), "is_error": True, "outcome": "failed"}
             return {"content": json.dumps(data, ensure_ascii=False),
                     "data": data, "outcome": "completed"}
-        if name in {"lsp_diagnostics", "lsp_hover", "lsp_definition",
+        if name in {"lsp_diagnostics", "lsp_hover", "lsp_definition", "lsp_implementation",
                     "lsp_references", "lsp_document_symbols"}:
             from atlas.tools.workspace_lsp import query_lsp
 
@@ -3235,7 +3235,8 @@ class AtlasKernel:
                 return {"content": "LSP queries require an active workspace.", "is_error": True}
             operation = {
                 "lsp_diagnostics": "diagnostics", "lsp_hover": "hover",
-                "lsp_definition": "definition", "lsp_references": "references",
+                "lsp_definition": "definition", "lsp_implementation": "implementation",
+                "lsp_references": "references",
                 "lsp_document_symbols": "document_symbols",
             }[name]
             try:

@@ -78,12 +78,13 @@ def query_lsp(workspace: str, *, operation: str, path: str,
                     "reason": "The language server did not return fresh diagnostics in time."}
         return {"available": True, "path": file_path.relative_to(root).as_posix(),
                 "diagnostics": diagnostics}
-    if operation in {"hover", "definition", "references"}:
+    if operation in {"hover", "definition", "implementation", "references"}:
         if line is None or character is None or line < 0 or character < 0:
             raise ValueError("line and character must be non-negative zero-based positions")
     methods = {
         "hover": "textDocument/hover",
         "definition": "textDocument/definition",
+        "implementation": "textDocument/implementation",
         "references": "textDocument/references",
         "document_symbols": "textDocument/documentSymbol",
     }
@@ -120,6 +121,11 @@ def lsp_tool_schemas() -> list[dict[str, Any]]:
         }},
         {"type": "function", "function": {
             "name": "lsp_definition", "description": "Find definitions at a zero-based file position.",
+            "parameters": {"type": "object", "properties": {"path": path, **position},
+                            "required": ["path", "line", "character"], "additionalProperties": False},
+        }},
+        {"type": "function", "function": {
+            "name": "lsp_implementation", "description": "Find implementations at a zero-based file position.",
             "parameters": {"type": "object", "properties": {"path": path, **position},
                             "required": ["path", "line", "character"], "additionalProperties": False},
         }},
