@@ -265,6 +265,47 @@ async def test_agent_turn_payload_goes_to_injected_dispatch(env: Any) -> None:
     env.store.delete(automation_id)
 
 
+@pytest.mark.unit
+async def test_agent_turn_conversation_binding_reaches_dispatch_and_receipt(env: Any) -> None:
+    """X31: schedule 绑定原会话 — payload.conversation_id 必须贯通 dispatch
+    payload 与 run receipt；缺省时回退 synthetic automation-<id> 会话。"""
+    automation_id = "eng-agent-turn-bound"
+    _put(
+        env,
+        automation_id,
+        owner_agent_id="owner-b",
+        payload={
+            "kind": "agent_turn",
+            "message": "回到这个会话",
+            "conversation_id": "chat-bound-1",
+        },
+    )
+    env.hooks.reset()
+    receipt = await env.engine.run_now(automation_id, wait=RUN_WAIT)
+    assert receipt["status"] == "SUCCESS"
+    assert receipt["result"]["status"] == "ok"
+    assert receipt["result"]["conversation_id"] == "chat-bound-1"
+    call = env.hooks.dispatch_calls[0]
+    assert call["conversation_id"] == "chat-bound-1"
+    env.store.delete(automation_id)
+
+    # 缺省 conversation_id → synthetic automation-<id>（DSH 语义中的兜底目标）
+    automation_id = "eng-agent-turn-unbound"
+    _put(
+        env,
+        automation_id,
+        owner_agent_id="owner-b",
+        payload={"kind": "agent_turn", "message": "无绑定"},
+    )
+    env.hooks.reset()
+    receipt = await env.engine.run_now(automation_id, wait=RUN_WAIT)
+    assert receipt["result"]["conversation_id"] == f"automation-{automation_id}"
+    # 引擎按 payload 原样透传（空串）；synthetic 回退由 run_drive 的
+    # _automation_dispatch_turn 在路由时补齐（payload.conversation_id or automation-<id>）。
+    assert env.hooks.dispatch_calls[0]["conversation_id"] == ""
+    env.store.delete(automation_id)
+
+
 async def test_script_payload_runs_real_subprocess(env: Any) -> None:
     automation_id = "eng-script-echo"
     _put(env, automation_id, payload={"kind": "script", "script": "echo atlas-w4-ok"})
