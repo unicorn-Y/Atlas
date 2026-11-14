@@ -331,28 +331,29 @@ describe('message pagination and bounded cache', () => {
 
   it('defaults to the latest page and prepends an earlier one on loadEarlier', async () => {
     useAtlasStore.setState({ configLoaded: false, activeConversationId: '', activeRunId: null });
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ models: [], current: '' }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 'conversation-open', title: 'Open chat', updated_at: '' }] } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ servers: [], tool_count: 0, tools: [] }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills: [] }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ capabilities: [] }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 'm-100', role: 'user', content: 'latest', created_at: '' }] } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ profiles: [] }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ recipes: [] }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => REASONING_STAGES } as Response);
-    fetchMock.mockImplementation((url: string) => {
-      if (String(url).includes('/messages?limit=100&before_id=m-100')) {
-        return Promise.resolve({ ok: true, json: async () => [message('m-20'), message('m-21')] } as Response);
-      }
-      return Promise.resolve({ ok: true, json: async () => [] } as Response);
+    // Route by URL instead of call order: initialize fans out concurrently, so a
+    // positional Once-chain would couple this test to unrelated fetch scheduling.
+    const fetchMock = vi.fn((url: string) => {
+      const target = String(url);
+      const json = (payload: unknown) => Promise.resolve({ ok: true, json: async () => payload } as Response);
+      if (target.includes('/messages?limit=101&before_id=m-100')) return json([message('m-20'), message('m-21')]);
+      if (target.includes('/messages')) return json([{ id: 'm-100', role: 'user', content: 'latest', created_at: '' }]);
+      if (target.includes('/api/models/reasoning-stages')) return json(REASONING_STAGES);
+      if (target.includes('/api/profiles')) return json({ profiles: [] });
+      if (target.includes('/api/recipes')) return json({ recipes: [] });
+      if (target.includes('/api/agent/capabilities')) return json({ capabilities: [] });
+      if (target.includes('/api/tools')) return json({ servers: [], tool_count: 0, tools: [] });
+      if (target.includes('/api/skills')) return json({ skills: [] });
+      if (target.includes('/api/configuration')) return json({ models: [], current: '' });
+      if (target.includes('/api/conversations')) return json([{ id: 'conversation-open', title: 'Open chat', updated_at: '' }]);
+      return json({});
     });
     vi.stubGlobal('fetch', fetchMock);
     await useAtlasStore.getState().initialize();
 
     const messagesUrl = String(fetchMock.mock.calls.find(([target]) => String(target).includes('/messages'))?.[0]);
-    expect(messagesUrl).toContain('/api/conversations/conversation-open/messages?limit=100');
+    // 一页 100 条 + 1 条探针：多取的那条只用来判断还有没有更早的，不进渲染列表。
+    expect(messagesUrl).toContain('/api/conversations/conversation-open/messages?limit=101');
     expect(useAtlasStore.getState().conversationMessages['conversation-open'][0].content).toBe('latest');
 
     useAtlasStore.setState({
@@ -363,7 +364,7 @@ describe('message pagination and bounded cache', () => {
 
     const state = useAtlasStore.getState();
     const earlierUrl = String(fetchMock.mock.calls.find(([target]) => String(target).includes('before_id'))?.[0]);
-    expect(earlierUrl).toContain('/api/conversations/c-early/messages?limit=100&before_id=m-100');
+    expect(earlierUrl).toContain('/api/conversations/c-early/messages?limit=101&before_id=m-100');
     expect(state.conversationMessages['c-early'].map((item) => item.id)).toEqual(['m-20', 'm-21', 'm-100']);
     // 一页没满 100 条 → 前面没有更早的了
     expect(state.messagesHasEarlier['c-early']).toBe(false);

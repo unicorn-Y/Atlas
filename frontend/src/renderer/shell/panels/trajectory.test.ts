@@ -16,4 +16,19 @@ describe('trajectory event descriptions', () => {
       .toBe('等待审批 · terminal');
     expect(describeTrajectoryEvent({ event: 'custom.event' }).label).toBe('custom.event');
   });
+
+  it('accepts live runtime events that carry the name in `type`, identically to archived `event` rows', () => {
+    // Live runtime frames (renderer AgentEvent) use `type`; archived rollout rows use `event`.
+    expect(describeTrajectoryEvent({ type: 'tool.started', data: { name: 'terminal', arguments: { command: 'ls' } } }))
+      .toEqual({ label: '开始工具 · terminal', detail: '{"command":"ls"}' });
+    expect(describeTrajectoryEvent({ type: 'message.delta', data: { content: '正在写' } }))
+      .toEqual({ label: '生成回复', detail: '正在写' });
+    expect(describeTrajectoryEvent({ type: 'run.completed' }).label).toBe('运行完成');
+    expect(describeTrajectoryEvent({ type: 'tool.completed', data: { name: 'local_file', result: { lines: 3 } } }))
+      .toEqual({ label: '完成工具 · local_file', detail: '{"lines":3}' });
+    // `type` wins when both keys are present, so live frames never fall through to replay spelling.
+    expect(describeTrajectoryEvent({ type: 'run.failed', event: 'run.completed', data: { error: 'boom' } }))
+      .toEqual({ label: '运行失败', detail: 'boom' });
+    expect(describeTrajectoryEvent({}).label).toBe('unknown');
+  });
 });
