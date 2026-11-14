@@ -143,8 +143,8 @@
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| X2 | 注册即可逆：每个注册返回 disposer，卸载即解绑 | `core/tools/src/index.ts:988` | plugin skill/command/hook 注册有逐项 disposer；异步 MCP lifecycle 贡献尚无 disposer | PRESENT-WEAKER |
-| X3 | 插件管理 enable/disable 只改最后一层匹配的 `disabled`，报告 applied/restart-required | `boot/plugin-manager/src/index.ts:458,476` | `plugins/runtime.py:1149-1171` 重跑 `load_all`，**不先 `unregister_source`/`forget_owner`** → 有 skills 的插件先报错，hook 闭包每次切换都重复 | PRESENT-WEAKER（非幂等重载） |
+| X2 | 注册即可逆：每个注册返回 disposer，卸载即解绑 | `core/tools/src/index.ts:988` | plugin skill/command/hook/MCP 贡献均有 reverse-order disposer；async disconnect 由 `test_plugin_reload_idempotent.py::test_async_mcp_contribution_is_disposed_on_reload` 覆盖；本批没有真实模型触发插件 MCP 的 live 生命周期观察 | PARTIAL (W3-X5: async disposer unit proof; no live model lifecycle observation) |
+| X3 | 插件管理 enable/disable 只改最后一层匹配的 `disabled`，报告 applied/restart-required | `boot/plugin-manager/src/index.ts:458,476` | `PluginRuntime.load_all/reload` 在重载前撤销旧 capability 与 hook owner；`test_plugin_reload_idempotent.py` 覆盖重复加载不重复注册；本批相关回归含一项插件 E2E 中文断言失败，且没有真实模型 enable/disable 行为观察 | PARTIAL (W3-X5: idempotent reload code/tests exist; live model behavior not verified) |
 | X4 | profile/bundle/patch 有序层，按 row id 替换/插入，`--dump-config` 预览 | `docs/architecture.md:15-25` | patch 支持 row_id/order 与有序 listing；profile/bundle merge 和配置预览仍缺 | PRESENT-WEAKER |
 | X5 | 安装/移除 bundle：包管理器解析依赖、lockfile 快照回滚、取消 | `plugin-manager/src/index.ts:374,497,645` | `plugins/runtime.py:851-982` 只支持本地 copy / marketplace / git，**无依赖解析、无回滚、无取消** | HARD (package-manager dependency resolution, lockfile rollback, and cancellation semantics are absent) |
 | X6 | 版本兼容与豁免：peer range 检查 + per-profile `compatibility.json` 精确豁免 + `acceptRisk` | `plugin-manager/README.md:67` | `plugins/runtime.py:342-380` 只校验 manifest 形状 | HARD (requires package compatibility and persisted per-profile risk-acceptance semantics) |
@@ -154,8 +154,8 @@
 | X10 | 插件管理作为模型工具，8 个动作，每次需 danger-full-access 或逐次审批 | `plugin-manager/src/tools.ts:20-46` | `engine/kernel/tools.py:412-414` 只有 list/request install | PRESENT-WEAKER |
 | X11 | bundle 清单带来源 official/availability/installed/覆盖行 | `plugin-manager/src/index.ts:282` | `plugins_router.py:39` → `discover()` 有基本字段，无 availability 模型 | PRESENT-WEAKER |
 | X16 | progressive disclosure：durable `<available_skills>` + 摘要 diff 替换 + `/name` 内联注入 | `docs/subsystems/skills.md:227-233` | `/name` 匹配 user-invocable 技能并把完整指令内联到当轮 system prompt；持久化 catalog 的 added/updated/retired 以 revisioned `<skill_summary_diff>` 投递 | ✅ 已关闭（W10） |
-| X21 | MCP 服务器 instructions 成为**独立 prompt 段** | `docs/subsystems/mcp.md:22-60` | `mcp_client.py:639-643` 把 instructions 拼进**每个**工具描述，还加了 untrusted 前缀 | PRESENT-WEAKER |
-| X27 | client 扩展面：slots 注册、ConversationNodeDefinition、client 插件 | `docs/subsystems/slots.md:5-25` | `ConversationActivity.tsx:45-98` 中央 switch；`App.tsx` 静态 lazy import ~87 组件 | ABSENT |
+| X21 | MCP 服务器 instructions 成为**独立 prompt 段** | `docs/subsystems/mcp.md:22-60` | `mcp_client.py` 保留 server instructions 独立集合，kernel prompt assembly 添加一段带 untrusted 标注的 server guidance；`test_mcp_instructions_section.py` 覆盖不内联工具描述、稳定排序和类型校验；本批未用真实模型观察该 prompt guidance 对工具行为的影响 | PARTIAL (W3-X5: separate prompt section unit-tested; live model behavior not verified) |
+| X27 | client 扩展面：slots 注册、ConversationNodeDefinition、client 插件 | `docs/subsystems/slots.md:5-25` | `ConversationActivity.tsx` 有 `ConversationNodeDefinition` 注册表与 disposer，`ConversationNodeRegistry.test.tsx` 覆盖扩展 node 渲染/卸载；`App.tsx` 的页面与主视图仍使用静态导入/中央渲染分发，client plugin slots 尚未贯通 | PARTIAL (W3-X5: timeline node registry exists; application-wide slots/plugin loading absent) |
 | X28 | 人类 slash 命令：插件注册 `{name,description,input,handler}`，不经模型执行，`command/run|done` 落日志 | `docs/subsystems/commands.md:5-95` | `/api/commands` 暴露 plugin handler；前端 slash 输入直接 POST `/api/commands/invoke`，handler 调用不经模型且 append-only 记录 command/run|done | ✅ 本轮关闭 |
 | X24 | ACP：`session/new|list|resume|close|set_config_option|prompt|cancel`，per-session MCP 注入 | `acp/acp/README.md:60-80` | `tools/app_server.py:262-408` **自动批准所有工具**（`:114-122`）、拒绝 per-session MCP、无 resume/config-option | PRESENT-WEAKER |
 
