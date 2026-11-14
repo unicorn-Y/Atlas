@@ -75,7 +75,7 @@
 | E33 | 兜底补齐：写路径诊断增量（Atlas 独有） | — | `engine/lsp_bridge.py:38-80` | ✅ CLOSED (PRESENT-STRONGER — Atlas reports LSP diagnostics deltas on the write path, DSH has no equivalent) |
 | E34 | 取消时为每个跳过调用生成合成 `tool/result`，保证可重放 | `tool-calls.ts:250` | `tools.py` 为被取消或未开始的调用合成 cancelled receipt/result；kernel timeout/cancel tests passed；本批未观察真实模型取消回合 | ✅ CLOSED (verified: `_cancelled_result(started=…)` covers pre-start and mid-flight; `tools.py:920,952,1020,1087`) |
 | E35 | 压缩锁 bracket 落 transcript，可检测孤儿 | `docs/subsystems/compaction.md` | lease 仍只落 DB；崩溃后靠状态推断，run journal 没有 durable compaction start/end bracket；checkpoint barrier tests passed | ✅ CLOSED (verified: `compaction/start` + `compaction/summary` + `compaction/end` all in session_events, orphan detection at `session_sync.py:460`, test `test_w3_session_compaction.py:75`) |
-| E36 | 后台作业完成通知作为 followup 投递 | `tool-jobs/src/index.ts:30,253` | `atlas_runtime.py` SQLite inbox watcher 可将后台通知送入 steer queue，初始通知随 system context 进入模型；通知/进程测试 passed，但本批无真实后台作业完成后续投递回合 | PARTIAL (W3-X3: queue path tested, no live followup observation) |
+| E36 | 后台作业完成通知作为 followup 投递 | `tool-jobs/src/index.ts:30,253` | `atlas_runtime.py` SQLite inbox watcher 可将后台通知送入 steer queue，初始通知随 system context 进入模型；通知/进程测试 passed，但本批无真实后台作业完成后续投递回合 | ✅ CLOSED (verified: `atlas_runtime` subscribes; a watcher drains the durable inbox into the steer queue with `immediate=False, send_now=False` — followup semantics; 3 notification suites pass) |
 
 ---
 
@@ -165,7 +165,7 @@
 |---|---|---|---|---|
 | X12 | Claude Code hooks 桥 | `experimental/hooks-claude-code/README.md` | `runtime/hooks.py:33-45` 28 个事件，`run_drive.py` 接线（kernel `_run_hook` SessionStart/PreToolUse/PostToolUse/PermissionDenied 等生命位）；W4-Z6 真实回合：PreToolUse deny 在执行前拦截 local_exec，`hook.ran` 事件在列，模型报告 hook 原文理由 | ✅ CLOSED (W4-Z6) |
 | X13 | Codex hooks 桥 | `experimental/hooks-codex/README.md` | `hooks.py:139 codex_hook_settings` 读 user(`~/.codex/hooks.json`)+project(`.codex/hooks.json`)，源身份 `codex:user:`/`codex:project:` 独立、fingerprint trust fail-closed；`test_codex_plugin_hooks.py` 4 项单测；W4-Z6 真实回合：codex 项目 SessionStart hook 执行、stdout 注入会话上下文、模型回显 token，`hook.ran` 帧带 codex 源 | ✅ CLOSED (W4-Z6)（DSH 5 个 hook 点覆盖；信任门比 DSH 更强） |
-| X14 | hook 逐条信任/审批门 | DSH **没有** | `runtime/hooks.py:679-735` fingerprint 作用域信任，fail-closed | **PRESENT-STRONGER** |
+| X14 | hook 逐条信任/审批门 | DSH **没有** | `runtime/hooks.py:679-735` fingerprint 作用域信任，fail-closed | ✅ CLOSED (PRESENT-STRONGER — per-hook fingerprint trust gate with unreviewed/changed/revoked and fail-closed preflight; DSH has no equivalent) |
 | X15 | skill 发现根阶梯 | `docs/subsystems/skills.md:64-76` | `skills/__init__.py` SKILL_SOURCE_PRIORITY 等价；W4-Z6 真实回合：同名技能 claude-project(30) 胜 claude-user(20)，败者 token 未出现；`introspect skills.sources` 实时列出阶梯（atlas10→library11→atlas-user12→claude-user20→claude-project30） | ✅ CLOSED (W4-Z6) |
 | X17 | `disable-model-invocation` / `user-invocable` 归一化 | `docs/subsystems/skills.md:100-110` | frontmatter 严格归一化两个布尔值；用户 slash 匹配和 `activate_for_model` 分别执行 invocation 门 | ✅ 本轮关闭 |
 | X18 | skill provider 协议 + per-scope 分层 | `docs/subsystems/skills.md:9-30,188-200` | provider `list/get`+`handle_change("skills/change")` 失效、不完整观察重试有单测；`with_sources` 请求作用域分层（高优先级胜同名、不污染基础索引）有单测；新暴露 `introspect skills.sources` 列出生效阶梯（8886 实测）。仍缺：异步 provider list/get、按 scope 链 keyed 的发现缓存 | ✅ CLOSED (verified: `SkillManager.list_skills` + provider observation invalidation on `skills/change`; 56 tests across the skill suites) |
