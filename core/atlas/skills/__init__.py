@@ -318,9 +318,15 @@ class SkillManager:
         self._skills_dir = skills_dir or SKILLS_DIR
         self._index: dict[str, SkillInfo] = {}  # name → SkillInfo
         self._scan_fingerprint: tuple[tuple[str, int, int], ...] | None = None
+        self._revision = 0
         self._sources: dict[str, SkillSource] = {
             "atlas": SkillSource("atlas", self._skills_dir, 10, layout="category"),
         }
+
+    @property
+    def revision(self) -> int:
+        """Monotonic catalog revision; bumps on each complete scan that changes the served index."""
+        return self._revision
 
     def register_skill_source(self, source: SkillSource) -> None:
         """Register or replace an external source before scanning the index.
@@ -335,12 +341,16 @@ class SkillManager:
         self._sources[source.name] = SkillSource(
             source.name, Path(source.root).expanduser(), source.priority, source.layout,
         )
+        # Provider-layer change: any previously complete observation is stale now
+        # (skills/change invalidation, S27).
+        self.handle_change("skills/change")
 
     def unregister_skill_source(self, name: str) -> None:
         """Remove a dynamic source, for example after a plugin is disabled."""
         if name == "atlas":
             raise ValueError("the built-in Atlas skills source cannot be removed")
         self._sources.pop(name, None)
+        self.handle_change("skills/change")
 
     def replace_skill_sources(self, prefix: str, sources: list[SkillSource]) -> None:
         """Replace a family of dynamic sources and rebuild the canonical index."""
@@ -428,8 +438,14 @@ class SkillManager:
         if observed != fingerprint:
             self._scan_fingerprint = None
             return
+        previous = {name: (str(info.path), info.description) for name, info in self._index.items()}
         self._index = index
         self._scan_fingerprint = observed if complete else None
+        if complete:
+            served = {name: (str(info.path), info.description) for name, info in index.items()}
+            if served != previous:
+                self._revision += 1
+                log.info("skills.changed", revision=self._revision, skills=len(index))
 
     # -- freshness -------------------------------------------------------------
 
@@ -487,6 +503,7 @@ class SkillManager:
         if event_type != "skills/change":
             return False
         self._scan_fingerprint = None
+        log.info("skills.change_invalidated")
         return True
 
     def search_skills(self, query: str) -> list[SkillInfo]:

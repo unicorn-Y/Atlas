@@ -44,7 +44,10 @@ def test_turn_outline_projection_emits_otel_span(tmp_path, monkeypatch):
             yield current
 
     tracer = Tracer()
-    monkeypatch.setitem(telemetry._state, "tracer", tracer)
+    # S22: atlas.session.* spans ride the independent session-log channel, so the
+    # session tracer (not the ordinary-event tracer) is the one that receives them.
+    monkeypatch.setitem(telemetry._state, "session_tracer", tracer)
+    monkeypatch.setitem(telemetry._state, "tracer", Tracer())
     with SessionDB(db_path=tmp_path / "state.db") as db:
         db.ensure_session("timeline-traced", "cli")
         db.append_message("timeline-traced", "user", content="Trace this outline")

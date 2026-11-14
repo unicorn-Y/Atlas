@@ -1476,6 +1476,27 @@ async def _handle_rules_trust(
     })
 
 
+def _context_conversation_admitted(other_workspace: Any, run_workspace: Any) -> bool:
+    """Host admission for a referenced conversation snapshot (S29).
+
+    A local referenced session is only admitted when it belongs to the run's
+    current workspace — the same cwd rule the session query tools enforce.
+    Empty or ssh-bound workspaces keep the legacy behavior (there is no local
+    boundary to compare against).
+    """
+    other_ws = str(other_workspace or "").strip()
+    run_ws = str(run_workspace or "").strip()
+    if not run_ws or run_ws.startswith("ssh://") or not other_ws or other_ws.startswith("ssh://"):
+        return True
+    try:
+        return (
+            str(Path(other_ws).expanduser().resolve()).casefold()
+            == str(Path(run_ws).expanduser().resolve()).casefold()
+        )
+    except OSError:
+        return False
+
+
 async def _handle_run_start(
     conn_id: str, data: dict[str, Any], manager: RuntimeManager | None = None,
 ) -> None:
@@ -2207,8 +2228,16 @@ async def _handle_run_start(
         run.workspace = str(workspace_path)
         if run.sandbox:
             run.allowed_paths = [str(workspace_path.resolve())]
-        if not run.ephemeral and memory is not None and getattr(memory, "_db", None) is not None and not (conversation and conversation.get("worktree_path")):
-            await memory.update_conversation(conv_id, workspace=str(Path(workspace).expanduser().resolve()))
+        # Persist the effective workspace so later runs can host-admit referenced
+        # conversations (S29). The row is created lazily on first message append,
+        # so seed the metadata row first or the UPDATE silently matches nothing
+        # and every conversation keeps workspace NULL.
+        if not run.ephemeral and memory is not None and not (conversation and conversation.get("worktree_path")):
+            try:
+                await memory.save_conversation_metadata(conv_id, title_hint=str(content or conv_id))
+                await memory.update_conversation(conv_id, workspace=str(Path(workspace).expanduser().resolve()))
+            except (OSError, ValueError, RuntimeError) as exc:
+                log.warning("run.workspace_persist_failed", conversation_id=conv_id, error=str(exc))
         if context_files and not run.workspace:
             invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
             await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
@@ -2255,12 +2284,32 @@ async def _handle_run_start(
                     "category": "validation", "detail": f"context conversation not found: {other_id}",
                 }))
                 return
+            # Host admission (S29): a referenced session is only readable when it
+            # belongs to the current workspace — the same workspace rule the session
+            # query tools enforce. Never authorize from model-supplied content.
+            # MemoryStore rows carry ``workspace``; SessionDB rows carry ``cwd``.
+            if not _context_conversation_admitted(
+                other.get("workspace") or other.get("cwd"), run.workspace,
+            ):
+                invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
+                await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
+                    "category": "validation",
+                    "detail": f"context conversation not admitted to the current workspace: {other_id}",
+                }))
+                return
             messages = (await _session_messages(str(other_id)))[-20:]
             compacted = await orchestrator.context_maintenance.compact({
                 "goal": other.get("title", "Referenced conversation"),
                 "session_summary": "\n".join(f"{m['role']}: {m['content'][:1000]}" for m in messages),
             }) if orchestrator else {"session_summary": "\n".join(m["content"][:500] for m in messages)}
-            content += f"\n\n[Referenced conversation: {other.get('title', other_id)}]\n{compacted.get('session_summary', '')}"
+            from atlas.agent.session_queries import reference_snapshot
+
+            content += "\n\n" + reference_snapshot({
+                "kind": "referenced_conversation",
+                "id": str(other_id),
+                "title": other.get("title", str(other_id)),
+                "summary": compacted.get("session_summary", ""),
+            })
         if data.get("ephemeral") is True:
             if memory is None:
                 invalid_run = RunState(run_id, conv_id, model_id or model_mgr.current_model)
@@ -2982,6 +3031,16 @@ async def _execute_run(
             record_api_timing("run_started_emitted")
         elif event in {"run.completed", "run.failed", "run.cancelled"}:
             record_api_timing("terminal_event", terminal=event)
+            try:
+                from atlas import telemetry as _telemetry
+
+                # Product telemetry is caller-selected (S24): the event name and
+                # the run identifier are chosen here, never scraped from history.
+                _telemetry.product_event(
+                    f"atlas.run.{event.removeprefix('run.')}", {"run_id": run.run_id},
+                )
+            except Exception:
+                log.debug("run.product_event_failed", event=event, run_id=run.run_id)
         if not run.ephemeral and event in {"component.push", "canvas.update"}:
             # Runtime events live in memory only. Keep interactive components and
             # shared-canvas updates in the canonical transcript for reopen/reload.

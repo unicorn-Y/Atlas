@@ -32,7 +32,17 @@ log = structlog.get_logger(__name__)
 
 _TRACER_NAME = "atlas"
 
-_state: dict[str, Any] = {"provider": None, "tracer": None, "endpoint": None}
+# Session-log spans (``atlas.session.*``) ride a second, fully independent
+# provider/processor/exporter so a stalled session-log export can never
+# head-of-line block ordinary event spans, and vice versa (DSH parity S22:
+# ordinary-event vs session-log channels with separate bounded queues).
+SESSION_LOG_SPAN_PREFIX = "atlas.session."
+SESSION_LOG_ENDPOINT_ENV = "OTEL_EXPORTER_OTLP_SESSION_LOG_ENDPOINT"
+
+_state: dict[str, Any] = {
+    "provider": None, "tracer": None, "endpoint": None,
+    "session_provider": None, "session_tracer": None, "session_endpoint": None,
+}
 
 
 def endpoint_from_env() -> str | None:
@@ -44,6 +54,16 @@ def endpoint_from_env() -> str | None:
     return None
 
 
+def session_log_endpoint_from_env() -> str | None:
+    """Resolve the dedicated session-log OTLP endpoint, or ``None``.
+
+    A missing dedicated endpoint means the session-log channel shares the
+    ordinary-event endpoint (still with its own queue and exporter).
+    """
+    value = os.environ.get(SESSION_LOG_ENDPOINT_ENV, "").strip()
+    return value or None
+
+
 def is_enabled() -> bool:
     """True once a real provider is installed."""
     return _state["provider"] is not None
@@ -53,9 +73,17 @@ def setup_telemetry(
     endpoint: str | None = None,
     *,
     service_name: str = "atlas",
+    session_log_endpoint: str | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
-    """Install a global tracer provider exporting OTLP/HTTP.
+    """Install global tracer providers exporting OTLP/HTTP over two channels.
+
+    Channel one carries ordinary event spans. Channel two carries
+    ``atlas.session.*`` session-log spans on its own provider, batch
+    processor, bounded queue, and exporter, so neither channel can
+    head-of-line block the other. When no dedicated session-log endpoint is
+    configured the second channel shares the first endpoint but never the
+    queue.
 
     Returns a status dict; never raises. Calling twice is a no-op unless ``force``.
     """
@@ -93,27 +121,53 @@ def setup_telemetry(
             )
         )
         trace.set_tracer_provider(provider)
-        _state.update(
-            provider=provider, tracer=provider.get_tracer(_TRACER_NAME), endpoint=resolved
+
+        session_resolved = (
+            session_log_endpoint or session_log_endpoint_from_env() or resolved
         )
-        log.info("telemetry.enabled", endpoint=resolved)
-        return {"enabled": True, "endpoint": resolved}
+        # Deliberately NOT installed as the global tracer provider: it is only
+        # reachable through span() name routing below, and it owns a separate
+        # queue/exporter so session-log backpressure stays isolated.
+        session_provider = TracerProvider(resource=resource)
+        session_provider.add_span_processor(
+            BatchSpanProcessor(
+                OTLPSpanExporter(endpoint=session_resolved),
+                max_queue_size=2048,
+                max_export_batch_size=512,
+                schedule_delay_millis=5000,
+            )
+        )
+        _state.update(
+            provider=provider, tracer=provider.get_tracer(_TRACER_NAME), endpoint=resolved,
+            session_provider=session_provider,
+            session_tracer=session_provider.get_tracer(f"{_TRACER_NAME}.session"),
+            session_endpoint=session_resolved,
+        )
+        log.info("telemetry.enabled", endpoint=resolved, session_log_endpoint=session_resolved)
+        return {"enabled": True, "endpoint": resolved, "session_log_endpoint": session_resolved}
     except Exception as exc:  # noqa: BLE001 - telemetry must not break startup
         log.warning("telemetry.setup_failed", error=str(exc))
         return {"enabled": False, "reason": str(exc)}
 
 
 def shutdown() -> None:
-    """Flush pending spans. Safe to call when nothing was configured."""
-    provider = _state["provider"]
-    if provider is None:
+    """Flush pending spans on both channels. Safe to call when nothing was configured."""
+    providers = [_state["provider"], _state["session_provider"]]
+    if providers[0] is None:
         return
     try:
-        provider.shutdown()
-    except Exception as exc:  # noqa: BLE001
-        log.warning("telemetry.shutdown_failed", error=str(exc))
+        for provider in providers:
+            if provider is None:
+                continue
+            try:
+                provider.shutdown()
+            except Exception as exc:  # noqa: BLE001
+                log.warning("telemetry.shutdown_failed", error=str(exc))
     finally:
-        _state.update(provider=None, tracer=None, endpoint=None)
+        _state.update(
+            provider=None, tracer=None, endpoint=None,
+            session_provider=None, session_tracer=None, session_endpoint=None,
+        )
 
 
 def _version() -> str:
@@ -123,6 +177,11 @@ def _version() -> str:
         return str(__version__)
     except Exception:  # noqa: BLE001
         return "unknown"
+
+
+def service_version() -> str:
+    """Public product-telemetry attribute source for the running Atlas version."""
+    return _version()
 
 
 def _scrub_attributes(attributes: dict[str, Any]) -> dict[str, Any]:
@@ -156,14 +215,26 @@ def _scrub_attributes(attributes: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
+def _tracer_for(name: str) -> Any:
+    """Route a span to its channel by name prefix.
+
+    ``atlas.session.*`` spans go to the independent session-log channel; every
+    other span goes to the ordinary-event channel.
+    """
+    if name.startswith(SESSION_LOG_SPAN_PREFIX):
+        return _state["session_tracer"]
+    return _state["tracer"]
+
+
 @contextmanager
 def span(name: str, attributes: dict[str, Any] | None = None) -> Iterator[Any]:
     """Start a span if telemetry is enabled, otherwise yield ``None``.
 
     Yields the span so callers can set attributes mid-flight; they must not
-    assume it is non-``None``.
+    assume it is non-``None``. ``atlas.session.*`` names are exported through
+    the independent session-log channel.
     """
-    tracer = _state["tracer"]
+    tracer = _tracer_for(name)
     if tracer is None:
         yield None
         return
@@ -249,11 +320,20 @@ def status() -> dict[str, Any]:
     return {
         "enabled": is_enabled(),
         "endpoint": _state["endpoint"],
+        "session_log_endpoint": _state["session_endpoint"],
+        "channels": {
+            "events": {"endpoint": _state["endpoint"], "queue": "independent"},
+            "session-log": {"endpoint": _state["session_endpoint"], "queue": "independent"},
+        },
         "configured_via": (
             "argument" if is_enabled() else ("env" if endpoint_from_env() else None)
         ),
         "env": {
             key: bool(os.environ.get(key))
-            for key in ("OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+            for key in (
+                "OTEL_EXPORTER_OTLP_ENDPOINT",
+                "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+                SESSION_LOG_ENDPOINT_ENV,
+            )
         },
     }

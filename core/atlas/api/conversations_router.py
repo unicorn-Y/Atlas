@@ -561,6 +561,35 @@ async def explain_conversation_message(
     return explanation
 
 
+@router.get("/api/conversations/{conversation_id}/timeline")
+async def get_conversation_timeline(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str,
+    limit: int = Query(500, ge=1, le=2000),
+    after_row_id: int = Query(0, ge=0),
+) -> dict[str, Any]:
+    """Bounded turn-outline projection over the durable session rows.
+
+    Exposes the registered ``SessionDB.get_session_timeline`` projection (S16)
+    over HTTP; reading it emits the ``atlas.session.turn_outline`` span on the
+    independent session-log telemetry channel (S22).
+    """
+    memory = services.memory or _server().memory
+    if memory is None:
+        raise HTTPException(status_code=503, detail="Conversation store is unavailable")
+    if await memory.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    from atlas.config import DATA_ROOT
+    from atlas.engine.state.atlas_state import SessionDB
+
+    def load_timeline() -> dict[str, Any]:
+        with SessionDB(db_path=DATA_ROOT / "engine" / "state.db") as db:
+            return db.get_session_timeline(conversation_id, limit=limit, after_row_id=after_row_id)
+
+    return await asyncio.to_thread(load_timeline)
+
+
 @router.post("/api/conversations/{conversation_id}/handoff-summary")
 async def create_handoff_summary(
     services: Annotated[AppServices, Depends(get_app_services)], conversation_id: str,

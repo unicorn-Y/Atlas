@@ -919,6 +919,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             telemetry_state = _telemetry.setup_telemetry()
             if telemetry_state.get("enabled"):
                 log.info("telemetry.ready", endpoint=telemetry_state.get("endpoint"))
+                # Product telemetry is caller-selected (S24): the application
+                # explicitly chooses this milestone and its attributes only.
+                _telemetry.product_event("atlas.app.started", {
+                    "version": _telemetry.service_version(),
+                })
             else:
                 log.debug("telemetry.inert", reason=telemetry_state.get("reason"))
         except Exception:
