@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { defaultBindings, matchShortcut, SHORTCUTS } from './shortcuts';
+import { comboFromEvent, defaultBindings, matchShortcut, SHORTCUTS } from './shortcuts';
 
 describe('focus view shortcut', () => {
   afterEach(() => { vi.restoreAllMocks(); });
@@ -18,5 +18,13 @@ describe('focus view shortcut', () => {
     const key = (parts: Partial<KeyboardEvent>) => ({ key: 'w', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...parts }) as KeyboardEvent;
     expect(matchShortcut(key({ ctrlKey: true }), defaultBindings())).toBe('closeTab');
     expect(matchShortcut(key({ ctrlKey: true, shiftKey: true }), defaultBindings())).toBe('closeWindow');
+  });
+
+  it('does not capture or run shortcuts while an IME is composing', () => {
+    for (const input of [{ isComposing: true }, { keyCode: 229 }]) {
+      const event = { key: 'w', ctrlKey: true, metaKey: false, shiftKey: false, altKey: false, ...input } as unknown as KeyboardEvent;
+      expect(comboFromEvent(event)).toBe('');
+      expect(matchShortcut(event, defaultBindings())).toBeNull();
+    }
   });
 });

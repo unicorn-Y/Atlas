@@ -27,6 +27,16 @@ describe('renderer locale resources', () => {
     expect(tn('updates', '查看说明')).toBe('View details');
   });
 
+  it('isolates identical keys between namespaces and refreshes compiled interpolated messages', () => {
+    registerLocaleNamespace('wave3-one', 'en-US', { '目录': 'Directory one', '已加入 __U26_SLOT_0__ 项': 'Added __U26_SLOT_0__ entries' });
+    registerLocaleNamespace('wave3-two', 'en-US', { '目录': 'Directory two' });
+    expect(tn('wave3-one', '目录', 'en-US')).toBe('Directory one');
+    expect(tn('wave3-two', '目录', 'en-US')).toBe('Directory two');
+    expect(tn('wave3-one', '已加入 3 项', 'en-US')).toBe('Added 3 entries');
+    registerLocaleNamespace('wave3-one', 'en-US', { '已加入 __U26_SLOT_0__ 项': '__U26_SLOT_0__ entries are ready' });
+    expect(tn('wave3-one', '已加入 5 项', 'en-US')).toBe('5 entries are ready');
+  });
+
   it('provides namespaced copy for mandatory update policy', () => {
     saveLocale('en-US');
     expect(tn('updates', '必须更新 Atlas')).toBe('Atlas update required');

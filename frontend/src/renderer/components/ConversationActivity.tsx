@@ -104,9 +104,7 @@ function DoneLine({ item, events, store, setTab }: { item: Extract<TimelineItem,
     <Check size={14} className="text-ok" />完成{item.startedAt ? `，用时 ${duration(item.startedAt, item.endedAt)}` : ''}
     {summary && <TokenUsageToggle usage={summary} open={usageOpen} onToggle={() => setUsageOpen((value) => !value)} />}
     {tokens && <span className="tabular-nums">· {tokens} tokens{cached ? `（${cached}）` : ''}</span>}
-    {changed && <button className="text-fg-2 hover:text-fg" onClick={() => setTab('changes')}>
-      · 改了 {changed.files} 个文件 <span className="tabular-nums text-ok">+{changed.additions}</span> <span className="tabular-nums text-danger">−{changed.deletions}</span>
-    </button>}
+    {changed && <RunChangesSummary changes={changed} onOpen={() => setTab('changes')} />}
     <button className="ml-2 text-fg-2 underline decoration-line-strong underline-offset-[3px] hover:text-fg" onClick={() => setTab('activity')}>全部步骤</button>
     {changed && <button className="ml-2 inline-flex items-center gap-1 text-fg-2 hover:text-fg"
       onClick={() => void store.sendMessage('/review')}><SearchCheck size={13} />审查本次改动</button>}
@@ -114,6 +112,17 @@ function DoneLine({ item, events, store, setTab }: { item: Extract<TimelineItem,
     {summary && usageOpen && <TokenUsageCard usage={summary} />}
     <RunTraceDetails events={events} usage={summary} />
   </div>;
+}
+
+export function RunChangesSummary({ changes, onOpen }: { changes: { files: number; additions: number; deletions: number }; onOpen: () => void }) {
+  return <button type="button" onClick={onOpen} aria-label="查看本回合文件改动摘要"
+    className="card-surface mt-1 flex basis-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] text-fg-2 hover:bg-hover">
+    <FileText size={15} aria-hidden="true" />
+    <span className="min-w-0 flex-1">本回合改了 {changes.files} 个文件</span>
+    <span className="tabular-nums text-ok">+{changes.additions}</span>
+    <span className="tabular-nums text-danger">−{changes.deletions}</span>
+    <ChevronRight size={13} aria-hidden="true" />
+  </button>;
 }
 
 function reportedReasoningTokens(events: AgentEvent[]): number | null {
@@ -317,12 +326,31 @@ function SubtaskRow({ step, live, runId, store, onCancelSubtask }: { step: Step;
   </li>;
 }
 
+function respondsToApproval(response: AgentEvent, request: AgentEvent): boolean {
+  return response.type === 'approval.responded' && (response.data.event_id === request.id
+    || (typeof request.data.approval_id === 'string' && Boolean(request.data.approval_id) && response.data.approval_id === request.data.approval_id));
+}
+
+export function pendingApprovalEvents(events: readonly AgentEvent[]): AgentEvent[] {
+  return events.filter((event) => event.type === 'approval.required'
+    && !events.some((response) => respondsToApproval(response, event)));
+}
+
+/** The composer host mounts this outside the conversation scroller while input is awaiting approval. */
+export function PendingApprovalDock({ events, store }: { events: AgentEvent[]; store: ReturnType<typeof useAtlasStore.getState> }) {
+  const pending = pendingApprovalEvents(events);
+  if (!pending.length) return null;
+  return <section aria-label="待处理审批" aria-live="polite" className="max-h-[min(50vh,28rem)] shrink-0 overflow-auto">
+    {pending.map((event) => <Approval key={event.id} event={event} store={store} />)}
+  </section>;
+}
+
 function Approval({ event, store }: { event: AgentEvent; store: ReturnType<typeof useAtlasStore.getState> }) {
   const [details, setDetails] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const data = event.data;
-  const response = store.getRun(event.runId)?.events.find((item) => item.type === 'approval.responded' && (item.data.event_id === event.id || item.data.approval_id === data.approval_id));
+  const response = store.getRun(event.runId)?.events.find((item) => respondsToApproval(item, event));
   const choice = response?.data.choice;
   const allowAlwaysAvailable = data.allow_always_available === true;
   const permissionScope = data.permission_scope && typeof data.permission_scope === 'object' ? data.permission_scope as Record<string, unknown> : null;

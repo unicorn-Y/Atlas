@@ -14,9 +14,9 @@ const button = cva(
       },
       size: {
         sm: 'h-7 px-2.5 text-[12.5px] rounded-lg [&_svg]:size-3.5',
-        md: 'h-8 px-3.5 text-[13px] rounded-[9px] [&_svg]:size-4',
-        lg: 'h-10 px-5 text-sm rounded-[11px] [&_svg]:size-4',
-        icon: 'size-8 rounded-[9px] [&_svg]:size-[17px]',
+        md: 'h-8 px-3.5 text-[13px] rounded-lg [&_svg]:size-4',
+        lg: 'h-10 px-5 text-sm rounded-xl [&_svg]:size-4',
+        icon: 'size-8 rounded-lg [&_svg]:size-[17px]',
         'icon-sm': 'size-7 rounded-lg [&_svg]:size-4',
       },
     },

@@ -254,7 +254,7 @@ function buildTrayMenu(): void {
   ]));
 }
 
-function createTray(): void {
+export function createTray(): void {
   if (trayRef) return;
   const image = nativeImage.createFromPath(path.join(app.getAppPath(), 'assets', 'icon', 'icon-dark.png'));
   trayRef = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
@@ -624,7 +624,7 @@ function openSideChatWindow(conversationId: string, initialQuestion?: string): v
   win.once('ready-to-show', () => { win.show(); win.focus(); });
 }
 
-function createApplicationMenu(): void {
+export function createApplicationMenu(): void {
   const mac = process.platform === 'darwin';
   const menu = Menu.buildFromTemplate([
     ...(mac ? [{ label: app.name, submenu: [{ role: 'about' as const }, { type: 'separator' as const }, { role: 'quit' as const }] }] : []),
@@ -841,7 +841,7 @@ function assertTrustedAppSender(event: Electron.IpcMainEvent | Electron.IpcMainI
   if (!trusted) throw new Error('此操作仅允许 Atlas 应用页面调用。');
 }
 
-function parseAtlasDeepLink(raw: string): AtlasDeepLink | null {
+export function parseAtlasDeepLink(raw: string): AtlasDeepLink | null {
   try {
     const url = new URL(raw);
     if (url.protocol !== 'atlas:' || url.username || url.password || url.port || url.hash) return null;
@@ -1026,6 +1026,24 @@ function attachBackendToken() {
   });
 }
 
+export async function recoverRendererCrash(win: BrowserWindow, details: { reason: string; exitCode: number }): Promise<void> {
+  if (details.reason === 'clean-exit') return;
+  saveDesktopCrashReport('renderer-process-gone', { ...details, processType: 'renderer' });
+  try {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'error', title: 'Atlas 页面意外退出',
+      message: '请选择恢复方式。安全模式会禁用全部插件、扩展和 MCP，并重新启动后端。',
+      buttons: ['重新加载', '禁用全部插件并重启', '稍后'], defaultId: 0, cancelId: 2,
+    });
+    if (response === 2) return;
+    if (response === 1) await restartBackendNow('renderer_crash_safe_mode', true);
+    if (!win.isDestroyed()) win.webContents.reload();
+  } catch {
+    saveDesktopCrashReport('renderer-recovery-failed', { action: 'reload-or-safe-mode-restart' });
+    if (!win.isDestroyed()) win.webContents.reload();
+  }
+}
+
 function createWindow() {
   if (windowRef && !windowRef.isDestroyed()) {
     windowRef.show();
@@ -1100,13 +1118,8 @@ function createWindow() {
     else void win.loadFile(path.join(here, '../../dist/index.html'));
   };
   loadApp();
-  // A dead renderer or a failed first paint would otherwise leave an all-white
-  // window until the user manually restarts: bring the page back on its own.
-  win.webContents.on('render-process-gone', (_event, details) => {
-    if (details.reason === 'clean-exit') return;
-    saveDesktopCrashReport('renderer-process-gone', { reason: details.reason, exitCode: details.exitCode, processType: 'renderer' });
-    win.webContents.reload();
-  });
+  // Recover a dead renderer with a reload or a plugin-disabled restart.
+  win.webContents.on('render-process-gone', (_event, details) => { void recoverRendererCrash(win, details); });
   let loadRetries = 0;
   win.webContents.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
     if (!isMainFrame || code === -3) return; // -3: aborted by a newer navigation

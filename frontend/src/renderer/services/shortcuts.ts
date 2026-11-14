@@ -106,8 +106,9 @@ const KEY_NAMES: Record<string, string> = {
   ' ': 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc',
 };
 
-/** "Ctrl+Shift+K" for a keydown, or '' while only modifiers are held. */
+/** "Ctrl+Shift+K" for a keydown, or '' for modifiers and IME composition. */
 export function comboFromEvent(event: KeyboardEvent): string {
+  if (event.isComposing || event.keyCode === 229) return '';
   if (['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) return '';
   const parts: string[] = [];
   if (event.ctrlKey || event.metaKey) parts.push('Ctrl');

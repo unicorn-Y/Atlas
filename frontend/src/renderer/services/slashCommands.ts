@@ -1,4 +1,5 @@
 import { fuzzyScore } from './fuzzy';
+import { useSyncExternalStore } from 'react';
 
 /** Runtime contract shared by built-in, skill, and workspace slash commands. */
 export interface SlashCommand {
@@ -18,6 +19,36 @@ export interface SlashCommand {
   run: (argument: string) => void;
 }
 
+const commandSources = new Map<string, readonly SlashCommand[]>();
+const sourceListeners = new Set<() => void>();
+let sourceVersion = 0;
+
+function notifySourcesChanged() {
+  sourceVersion += 1;
+  for (const listener of sourceListeners) listener();
+}
+
+/** Extensions can contribute commands before or after the composer mounts. */
+export function registerSlashCommandSource(source: string, commands: readonly SlashCommand[]): () => void {
+  if (!source.trim() || commandSources.has(source)) throw new Error(`Duplicate or empty slash command source: ${source}`);
+  normalizeSlashCommands([...commandSources.values()].flat().concat(commands));
+  const entries = commands.map((command) => ({ ...command, source: command.source ?? source }));
+  commandSources.set(source, entries);
+  notifySourcesChanged();
+  return () => {
+    if (commandSources.get(source) !== entries) return;
+    commandSources.delete(source);
+    notifySourcesChanged();
+  };
+}
+
+export function useSlashCommandSourcesVersion(): number {
+  return useSyncExternalStore((listener) => {
+    sourceListeners.add(listener);
+    return () => { sourceListeners.delete(listener); };
+  }, () => sourceVersion, () => sourceVersion);
+}
+
 export function resolveSlashAvailability(command: SlashCommand, state: { hasConversation: boolean; busy: boolean }): SlashCommand {
   if (command.disabledReason) return command;
   if (command.requiresConversation && !state.hasConversation) return { ...command, disabledReason: '先打开一个会话' };
@@ -27,6 +58,10 @@ export function resolveSlashAvailability(command: SlashCommand, state: { hasConv
 
 /** Register a command set with stable IDs and explicit display origins. */
 export function registerSlashCommands(commands: readonly SlashCommand[]): SlashCommand[] {
+  return normalizeSlashCommands([...commands, ...[...commandSources.values()].flat()]);
+}
+
+function normalizeSlashCommands(commands: readonly SlashCommand[]): SlashCommand[] {
   const ids = new Set<string>();
   return commands.map((command) => {
     if (!command.id.trim() || ids.has(command.id)) throw new Error(`Duplicate or empty slash command ID: ${command.id}`);

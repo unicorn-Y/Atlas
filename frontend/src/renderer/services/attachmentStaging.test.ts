@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { contentAddressedId, loadStagedAttachment, readFileBytes, stageAttachment } from './attachmentStaging';
+import { readComposerDraft, writeComposerDraft } from './composerDraft';
 
 function memoryIndexedDb(): IDBFactory {
   const rows = new Map<string, { id: string; blob: Blob }>();
@@ -59,5 +60,18 @@ describe('attachment staging primitives', () => {
 
     expect(staged).toMatchObject({ id: expect.stringMatching(/^sha256:/), name: 'notes.txt', kind: 'file' });
     expect(await restored?.text()).toBe('durable attachment');
+  });
+
+  it('restores a session draft attachment reference and durable bytes with fresh storage clients', async () => {
+    vi.stubGlobal('indexedDB', memoryIndexedDb());
+    const staged = await stageAttachment(new File(['draft payload'], 'draft.txt', { type: 'text/plain' }), 'file', new AbortController().signal, () => undefined);
+    const persisted = new Map<string, string>();
+    writeComposerDraft({ setItem: (key, value) => { persisted.set(key, value); }, removeItem: (key) => { persisted.delete(key); } }, 'session-1', {
+      text: 'Review this file', mentions: [{ kind: 'file', id: 'src/main.ts', label: 'main.ts' }], attachments: [staged],
+    });
+    const restored = readComposerDraft({ getItem: (key) => persisted.get(key) ?? null }, 'session-1');
+    expect(restored.attachments).toEqual([staged]);
+    expect(await (await loadStagedAttachment(restored.attachments[0].id))?.text()).toBe('draft payload');
+    expect(readComposerDraft({ getItem: (key) => persisted.get(key) ?? null }, 'session-2').attachments).toEqual([]);
   });
 });

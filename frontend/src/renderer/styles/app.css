@@ -12,6 +12,13 @@ code, pre, kbd, samp { font-family: var(--atlas-mono-font, ui-monospace, SFMono-
  * Brass (--brand) stays reserved for Atlas itself: the mark, and anything that shows Atlas is working.
  */
 :root, [data-theme=light] {
+  --atlas-radius-xs: 2px;
+  --atlas-radius-sm: 4px;
+  --atlas-radius-md: 6px;
+  --atlas-radius-lg: 8px;
+  --atlas-radius-xl: 12px;
+  --atlas-radius-2xl: 16px;
+  --atlas-radius-3xl: 24px;
   font-size: var(--atlas-font-size, 16px);
   font-family: var(--atlas-font, inherit);
   --bg: #F4F3F0;
@@ -154,6 +161,13 @@ code, pre, kbd, samp { font-family: var(--atlas-mono-font, ui-monospace, SFMono-
 }
 
 @theme inline {
+  --radius-xs: var(--atlas-radius-xs);
+  --radius-sm: var(--atlas-radius-sm);
+  --radius-md: var(--atlas-radius-md);
+  --radius-lg: var(--atlas-radius-lg);
+  --radius-xl: var(--atlas-radius-xl);
+  --radius-2xl: var(--atlas-radius-2xl);
+  --radius-3xl: var(--atlas-radius-3xl);
   --color-bg: var(--bg);
   --color-overlay: var(--overlay);
   --color-sunken: var(--sunken);
@@ -202,7 +216,7 @@ code, pre, kbd, samp { font-family: var(--atlas-mono-font, ui-monospace, SFMono-
     text-rendering: optimizeLegibility;
   }
   ::selection { background: var(--brand-soft); }
-  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: var(--atlas-radius-md); }
   button { cursor: pointer; }
   button:disabled { cursor: default; }
   * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
@@ -300,5 +314,5 @@ code, pre, kbd, samp { font-family: var(--atlas-mono-font, ui-monospace, SFMono-
 .reasoning-collapsible[data-state='closed'] > .reasoning-collapsible-fade { animation: fade-in .3s ease-in-out reverse forwards; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
