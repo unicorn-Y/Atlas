@@ -13,6 +13,7 @@ import pytest
 from atlas.agent.capabilities import AgentCapabilityRegistry
 from atlas.agent.run_phases import RunRequest, _apply_agent_preset_capabilities
 from atlas.engine.kernel.loop import (
+    _mcp_tool_allowed,
     _plugin_realm_admits_skill,
     _plugin_realm_allows,
     runtime_tool_allowed,
@@ -170,6 +171,22 @@ def test_kernel_predicate_keeps_mcp_server_scope_independent_of_realm():
     # mcp_server_allow handles configured scopes; realm handles plugin rows.
     assert runtime_tool_allowed(runtime, "docs__search")
     assert not runtime_tool_allowed(runtime, "calendar__create_event")
+
+
+@pytest.mark.unit
+def test_preset_empty_mcp_scope_does_not_swallow_realm_owned_servers():
+    """X8: a preset with an empty ``mcp_servers`` row denies every CONFIGURED
+    server but must leave plugin-contributed servers to the realm — otherwise
+    the configured-server scope eats the plugin rows before they are decided."""
+    realm = _realm(rows=["docs"], mcp_owners={"docs-server": "docs", "cal-server": "calendar"})
+    runtime = SimpleNamespace(plugin_realm=realm, mcp_server_allow=[])
+    assert not _mcp_tool_allowed(runtime, "toml-server__grep")  # configured, not listed
+    assert _mcp_tool_allowed(runtime, "docs-server__search")  # realm-owned → realm decides
+    assert runtime_tool_allowed(runtime, "docs-server__search")
+    assert not runtime_tool_allowed(runtime, "cal-server__create_event")  # realm denies
+    # Without a realm the empty scope blocks everything namespaced (fail-closed).
+    bare = SimpleNamespace(plugin_realm=None, mcp_server_allow=[])
+    assert not _mcp_tool_allowed(bare, "docs-server__search")
 
 
 @pytest.mark.unit

@@ -96,6 +96,14 @@ def _mcp_tool_allowed(runtime: Any, name: str) -> bool:
     if allowed is None or "__" not in name:
         return True
     server = name.split("__", 1)[0]
+    # X8: a plugin-contributed server is scoped by the preset's plugin rows
+    # (the realm), never by the configured-server allowlist — otherwise an
+    # applied preset with an empty ``mcp_servers`` row would swallow every
+    # plugin child row before the realm can decide.
+    realm = getattr(runtime, "plugin_realm", None)
+    owns = getattr(realm, "owns_server", None)
+    if callable(owns) and owns(server):
+        return True
     return server in allowed
 
 

@@ -202,6 +202,10 @@ class PluginRealm:
         owner = self._mcp_owners.get(str(server))
         return owner is None or self.allows_plugin(owner)
 
+    def owns_server(self, server: str) -> bool:
+        """Whether ``server`` was contributed by a plugin (realm-scoped, not config)."""
+        return str(server) in self._mcp_owners
+
     def discover(self) -> list[dict[str, str]]:
         return [row for row in self._registry.discover()
                 if row.get("source", "").startswith("plugin:")
