@@ -2189,13 +2189,14 @@ class AtlasKernel:
                         messages.append({"role": "developer", "content": pool_notice})
                 last_tool_pool = current_tool_pool
                 envelope = request_envelope(messages, tools)
-                from atlas.engine.agent.token_meter import price_surface_nodes
+                from atlas.engine.agent.token_meter import price_surface_nodes, route_image_pricer
 
                 live_surface_meter.clear()
                 live_surface_meter.update(price_surface_nodes(
                     [{"seq": index, "message": message} for index, message in enumerate(messages)],
                     route={"model": turn_model,
                            "provider": model_config.get("provider") or model_config.get("provider_name")},
+                    image_pricing=route_image_pricer(model_config),
                 ))
                 record("model_request_envelope", model=turn_model, attempt=turn_index + 1,
                        surface_token_estimate=live_surface_meter["surface_tokens"],
