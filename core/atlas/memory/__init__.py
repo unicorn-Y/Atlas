@@ -286,7 +286,7 @@ class MemoryStore:
         query = (
             "SELECT id, title, created_at, updated_at, pinned, archived, workspace, "
             "worktree_path, worktree_branch, base_branch, parent_conversation_id, fork_message_id, "
-            "permission_mode, allowed_paths, executor, sandbox, extra_roots, source "
+            "permission_mode, allowed_paths, executor, sandbox, extra_roots, source, metadata "
             "FROM conversations ORDER BY pinned DESC, updated_at DESC"
         )
         cursor = await self._db.execute(query if limit is None else query + " LIMIT ?",
