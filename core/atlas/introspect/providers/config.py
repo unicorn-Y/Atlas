@@ -29,6 +29,7 @@ from typing import Any
 from atlas.introspect.registry import Context, Method, Provider, object_schema
 
 _MAX_VALUE_CHARS = 300
+_MISSING = object()
 
 
 def _config() -> Any:
@@ -102,6 +103,111 @@ def _get_key(ctx: Context, args: dict[str, Any]) -> dict[str, Any]:
     return {"key": key, "found": True, "value": _redact(value, key)}
 
 
+def _walk(node: Any, keys: list[str]) -> Any:
+    """Follow a dotted path through dicts; return ``_MISSING`` when absent."""
+    for key in keys:
+        if isinstance(node, dict) and key in node:
+            node = node[key]
+        else:
+            return _MISSING
+    return node
+
+
+def _render(value: Any, key: str) -> Any:
+    """Scrub through the one redaction authority, then cap the length."""
+    rendered = _redact(value, key)
+    if isinstance(rendered, str) and len(rendered) > _MAX_VALUE_CHARS:
+        rendered = rendered[:_MAX_VALUE_CHARS] + "…"
+    return rendered
+
+
+def _layer_row(layer: str, node: Any, dotted: str, **extra: Any) -> dict[str, Any]:
+    present = node is not _MISSING
+    row: dict[str, Any] = {"layer": layer, "present": present, **extra}
+    if present:
+        row["value"] = _render(node, dotted)
+    return row
+
+
+def _provenance(ctx: Context, args: dict[str, Any]) -> dict[str, Any]:
+    """Report which layer supplies one key's effective value.
+
+    Mirrors ``AtlasConfig.get`` resolution order — request override → session
+    config → project config → expert-overlay-over-atlas.toml → unset — without
+    changing what any layer returns. Every value goes through ``scrub``.
+    """
+    dotted = str(args.get("key") or "").strip()
+    if not dotted:
+        return {"key": "", "found": False, "winner": None,
+                "layers": [], "note": "key 参数不能为空"}
+    keys = dotted.split(".")
+
+    cfg = _config()
+    rows: list[dict[str, Any]] = []
+
+    context_applicable = True
+    try:
+        from atlas.project_context import (
+            current_config_override, current_project_id, current_session_id,
+            project_config_ignored,
+        )
+        from atlas.project_settings import load_project_config, load_session_config
+
+        rows.append(_layer_row(
+            "request-override", _walk(current_config_override(), keys), dotted,
+        ))
+        session_id = current_session_id()
+        if session_id:
+            rows.append(_layer_row(
+                "session", _walk(load_session_config(session_id), keys), dotted,
+            ))
+        else:
+            rows.append({"layer": "session", "present": False, "note": "当前无会话上下文"})
+        project_id = current_project_id()
+        if project_id and not project_config_ignored():
+            rows.append(_layer_row(
+                "project", _walk(load_project_config(project_id), keys), dotted,
+            ))
+        else:
+            rows.append({"layer": "project", "present": False, "note": "当前无项目上下文"})
+    except (ImportError, ValueError):
+        context_applicable = False
+        rows.extend([
+            {"layer": "request-override", "present": False, "note": "上下文不可用"},
+            {"layer": "session", "present": False, "note": "上下文不可用"},
+            {"layer": "project", "present": False, "note": "上下文不可用"},
+        ])
+
+    raw_node = _walk(cfg.raw or {}, keys)
+    base_node = _walk(cfg.base_raw or {}, keys)
+    overlay_wins = (
+        raw_node is not _MISSING
+        and (base_node is _MISSING or raw_node != base_node)
+    )
+    rows.append(_layer_row(
+        "expert-overlay", raw_node if overlay_wins else _MISSING, dotted,
+        note="专家模式 config.toml 覆盖层（~/.atlas-expert）",
+    ))
+    rows.append(_layer_row("atlas.toml", base_node, dotted))
+
+    winner = None
+    effective = None
+    for row in rows:
+        if row.get("present"):
+            winner = row["layer"]
+            effective = row.get("value")
+            break
+    return {
+        "key": dotted,
+        "found": winner is not None,
+        "winner": winner,
+        "effective_value": effective,
+        "context_applicable": context_applicable,
+        "layers": rows,
+        "note": "解析顺序与 AtlasConfig.get 一致：请求覆盖 → 会话 → 项目 → 专家叠加 → atlas.toml → 代码内置默认。",
+    }
+
+
 def _paths(ctx: Context, args: dict[str, Any]) -> dict[str, Any]:
     from atlas import config as config_module
 
@@ -152,6 +258,15 @@ PROVIDER = Provider(
             summary="对比 atlas.toml 与生效配置，看专家模式叠加了哪些键。",
             input_schema=object_schema(),
             run=_layers,
+        ),
+        Method(
+            name="provenance",
+            summary="逐层来源：一个键的生效值由哪一层（请求覆盖/会话/项目/专家叠加/atlas.toml）提供。",
+            input_schema=object_schema(
+                {"key": {"type": "string", "description": "点号路径，如 gateway.base_url。"}},
+                required=("key",),
+            ),
+            run=_provenance,
         ),
         Method(
             name="paths",
