@@ -239,6 +239,57 @@ def _plugin_patches(ctx: Context, args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _sources(ctx: Context, _args: dict[str, Any]) -> dict[str, Any]:
+    """Enumerate the discovery ladder: one row per registered SkillSource.
+
+    This is the host-visible view of the per-scope layering seam — the same
+    priorities ``default_skill_sources`` / ``register_skill_source`` /
+    ``with_sources`` compose. Higher priority wins duplicate names; the row
+    order is exactly the scan order, so the answer explains precedence without
+    re-deriving it from code.
+    """
+    mgr = _mgr_with_catalog(ctx)
+    if mgr is None:
+        return {"note": "当前应用没有 skill_mgr 服务。"}
+    sources = getattr(mgr, "_sources", None)
+    if not isinstance(sources, dict):
+        return {"error": "skill_mgr 没有可读的 _sources 注册表。"}
+    rows = []
+    for source in sorted(sources.values(), key=lambda item: (item.priority, item.name)):
+        try:
+            layout_parts = {"single": 1, "flat": 2, "category": 3}.get(
+                getattr(source, "layout", ""), None,
+            )
+            skill_files = 0
+            if source.root.is_dir():
+                skill_files = sum(
+                    1 for path in source.root.rglob("SKILL.md")
+                    if layout_parts is None
+                    or len(path.relative_to(source.root).parts) == layout_parts
+                )
+            rows.append({
+                "name": source.name,
+                "priority": source.priority,
+                "layout": source.layout,
+                "root": str(source.root),
+                "exists": source.root.is_dir(),
+                "skill_md_count": skill_files,
+            })
+        except OSError as exc:
+            rows.append({
+                "name": getattr(source, "name", "?"),
+                "priority": getattr(source, "priority", -1),
+                "layout": getattr(source, "layout", "?"),
+                "root": str(getattr(source, "root", "")),
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+    return {
+        "count": len(rows),
+        "sources": rows,
+        "note": "按扫描顺序排列；同名技能由更高 priority 的来源胜出（同层内 name、path 决胜）。",
+    }
+
+
 PROVIDER = Provider(
     id="skills",
     title="技能目录",
@@ -260,6 +311,12 @@ PROVIDER = Provider(
             summary="列出技能分类。",
             input_schema=object_schema(),
             run=_categories,
+        ),
+        Method(
+            name="sources",
+            summary="列出发现根阶梯：每个来源的优先级、布局、根目录与发现的 SKILL.md 数。",
+            input_schema=object_schema(),
+            run=_sources,
         ),
         Method(
             name="preflight",

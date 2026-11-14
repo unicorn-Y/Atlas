@@ -163,23 +163,23 @@
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| X12 | Claude Code hooks 桥 | `experimental/hooks-claude-code/README.md` | `runtime/hooks.py:33-45` 28 个事件，`run_drive.py:3353` 接线 | PRESENT-PARITY |
-| X13 | Codex hooks 桥 | `experimental/hooks-codex/README.md` | Plugin `.codex/hooks.json` 可装入 HookBus 的受支持事件；repo/user 通用来源与 trust surface 仍缺 | PRESENT-WEAKER |
+| X12 | Claude Code hooks 桥 | `experimental/hooks-claude-code/README.md` | `runtime/hooks.py:33-45` 28 个事件，`run_drive.py` 接线（kernel `_run_hook` SessionStart/PreToolUse/PostToolUse/PermissionDenied 等生命位）；W4-Z6 真实回合：PreToolUse deny 在执行前拦截 local_exec，`hook.ran` 事件在列，模型报告 hook 原文理由 | ✅ CLOSED (W4-Z6) |
+| X13 | Codex hooks 桥 | `experimental/hooks-codex/README.md` | `hooks.py:139 codex_hook_settings` 读 user(`~/.codex/hooks.json`)+project(`.codex/hooks.json`)，源身份 `codex:user:`/`codex:project:` 独立、fingerprint trust fail-closed；`test_codex_plugin_hooks.py` 4 项单测；W4-Z6 真实回合：codex 项目 SessionStart hook 执行、stdout 注入会话上下文、模型回显 token，`hook.ran` 帧带 codex 源 | ✅ CLOSED (W4-Z6)（DSH 5 个 hook 点覆盖；信任门比 DSH 更强） |
 | X14 | hook 逐条信任/审批门 | DSH **没有** | `runtime/hooks.py:679-735` fingerprint 作用域信任，fail-closed | **PRESENT-STRONGER** |
-| X15 | skill 发现根阶梯 | `docs/subsystems/skills.md:64-76` | `skills/__init__.py:599,621-676` 优先级映射等价 | PRESENT-PARITY |
+| X15 | skill 发现根阶梯 | `docs/subsystems/skills.md:64-76` | `skills/__init__.py` SKILL_SOURCE_PRIORITY 等价；W4-Z6 真实回合：同名技能 claude-project(30) 胜 claude-user(20)，败者 token 未出现；`introspect skills.sources` 实时列出阶梯（atlas10→library11→atlas-user12→claude-user20→claude-project30） | ✅ CLOSED (W4-Z6) |
 | X17 | `disable-model-invocation` / `user-invocable` 归一化 | `docs/subsystems/skills.md:100-110` | frontmatter 严格归一化两个布尔值；用户 slash 匹配和 `activate_for_model` 分别执行 invocation 门 | ✅ 本轮关闭 |
-| X18 | skill provider 协议 + per-scope 分层 | `docs/subsystems/skills.md:9-30,188-200` | `SkillSource` + `with_sources` 请求作用域副本，同步 rglob | PRESENT-WEAKER |
-| X19 | skill 新鲜度：chokidar 监听 + 读写路径即时失效 | `docs/subsystems/skills.md:78-81` | `skills/__init__.py:406-433` mtime+size 指纹，读时全量重扫 | PRESENT-WEAKER |
-| X20 | skill 依赖/生命周期门 | DSH 无依赖契约 | `skills/__init__.py:547-590` 预检 mcp/python/commands | **PRESENT-STRONGER** |
+| X18 | skill provider 协议 + per-scope 分层 | `docs/subsystems/skills.md:9-30,188-200` | provider `list/get`+`handle_change("skills/change")` 失效、不完整观察重试有单测；`with_sources` 请求作用域分层（高优先级胜同名、不污染基础索引）有单测；新暴露 `introspect skills.sources` 列出生效阶梯（8886 实测）。仍缺：异步 provider list/get、按 scope 链 keyed 的发现缓存 | PARTIAL (W4-Z6: 阶梯已暴露+分层已测；异步 provider 协议仍缺) |
+| X19 | skill 新鲜度：chokidar 监听 + 读写路径即时失效 | `docs/subsystems/skills.md:78-81` | 读/写路径 `_ensure_fresh()`（mtime_ns+size 指纹）即时失效，`test_skills_hot_reload.py` 覆盖；W4-Z6 真实回合：SKILL.md 会话中途编辑、下一次运行即见新 token。DSH 的 chokidar 常驻 watcher 是实现差异，可观测行为（重启外即时生效）已实证 | ✅ CLOSED (W4-Z6)（机制：读路径指纹 vs DSH watcher） |
+| X20 | skill 依赖/生命周期门 | DSH 无依赖契约 | `skills/__init__.py` preflight mcp/python/commands；W4-Z6 真实回合：`run.failed`，detail=`skill dependencies block activation: mcp_servers:nonexistent-z6-mcp (missing)`；`introspect skills.preflight` 同面可查（未为对齐退化） | ✅ CLOSED (W4-Z6)（**PRESENT-STRONGER** 保持） |
 | X22 | MCP liveness：500ms→30s 翻倍，10 次后移除工具，稳定后重置预算 | `mcp-client/README.md:64-67,89-93,129` | `tools/mcp_client.py` 500ms 起步、指数退避封顶 30s、10 次后转 `unreachable` 并移出工具索引、稳定 60s 后重置、显式重试解锁；8836 实测三个 MCP server 均 connected 且工具发现完成 | ✅ CLOSED |
 | X23 | MCP resources + 作用域隔离 | `docs/subsystems/mcp.md:39-70` | runtime MCP server allow-list 贯穿 preset/request 能力、kernel 工具发现与派发，并由 `MCPClient.for_scope()` 隔离资源读取 | ✅ 本轮关闭 |
-| X25 | SDK JSON-RPC：NDJSON、`initialize` 等树稳定、`session/wait`、关停 | `packages/sdk/README.md` | `tools/app_server.py:429` 协议 v1，无 settle barrier、无 wait | PRESENT-WEAKER |
-| X26 | typed Client↔Host Remote gateway（装饰器生成描述符/编解码/客户端类型） | `docs/api-gateway.md` | 手写 FastAPI router + 手写 TS client，契约靠人 | ABSENT |
+| X25 | SDK JSON-RPC：NDJSON、`initialize` 等树稳定、`session/wait`、关停 | `packages/sdk/README.md` | `tools/app_server.py` 新增 `session/wait`（run 任务落定才回 `{}`，waiter 由 run 任务解析、reader 不阻塞，审批/输入中途仍可应答）、`shutdown`（回执后走 EOF 同款优雅排空）、`session/status` running/idle 通知；`test_app_server_sdk_lifecycle.py` 5 项；W4-Z6 真实 stdio 全生命周期：initialize→session/start→真实模型 prompt（`text: Z6APPSERVEROK`）→wait `{}`→status 序→shutdown `{}`→进程退出 0。残余：prompt 仍是阻塞完成回执（DSH 为 durable enqueue receipt）、无 working-directory get/set、无 subagent.started/finished 通知 | ✅ CLOSED (W4-Z6)（残余差异如左） |
+| X26 | typed Client↔Host Remote gateway（装饰器生成描述符/编解码/客户端类型） | `docs/api-gateway.md` | W4-Z6 终判 sweep：core/frontend/backend-adapter 全仓无 `@Remote/RemoteScope/typert`、无 codegen/类型生成管线；契约仍靠手写 FastAPI router + 手写 TS adapter；`gateway_service.py` 是 channel→agent 桥而非 RPC 网关 | HARD (W4-Z6: 需装饰器协议层+构建期 codegen+lookup 绑定，属新原语) |
 | X29 | webhook runtime：provider adapter + 可信规则返回 `WebhookSessionRequest` | `docs/subsystems/webhook.md:5,19-64` | 增加 `WebhookProvider`、HMAC provider adapter 与 typed `WebhookSessionRequest`；路由通过 provider 验证 | ✅ 本轮关闭 |
-| X30 | SSH 作为整套执行世界（fs/subprocess/sandbox 一起搬） | `docs/subsystems/ssh.md` | `ssh.py:32-651` 工具级代理，只在 local_file/exec/git 上分流 | PRESENT-WEAKER |
-| X31 | schedule 绑定原 session，到期回到该会话 | `docs/subsystems/schedule.md` | 两套并存：APScheduler（synthetic 会话）+ DBOS automation | PRESENT-WEAKER |
-| X32 | 组合自省：`--dump-config` 带逐层来源 | `docs/architecture.md:41` | `introspect/registry.py:214` 运行时探针，无"这个值由哪层设置" | PRESENT-WEAKER |
-| X33 | agent 类型 / subagent provider 缝 | `docs/architecture.md:130-136` | `agent/definitions.py:84-120` 多格式发现 + `agents/backends/` 适配器 | PRESENT-PARITY |
+| X30 | SSH 作为整套执行世界（fs/subprocess/sandbox 一起搬） | `docs/subsystems/ssh.md` | `ssh.py` 工具级代理（local_file/local_edit/local_git/local_exec/local_shell 经 SSH 分流）；W4-Z6 loopback asyncssh 真实 SSH wire 取证（`test_ssh_execution_world.py` 4 项）：exec 通道+OS 探测、SFTP write/read/list、remote exec cwd、remote edit fail-closed 全过。fs/subprocess/sandbox 整体搬上 SSH 仍缺——新原语，本轮禁建 | PARTIAL (W4-Z6: 工具级执行世界已在真实 SSH wire 实证；整套搬迁仍缺) |
+| X31 | schedule 绑定原 session，到期回到该会话 | `docs/subsystems/schedule.md` | DBOS automation：`payload.conversation_id` 经 `AutomationEngine._execute`→`_automation_dispatch_turn` 贯通 dispatch 与 receipt，缺省回退 `automation-<id>`（`test_automation_engine.py` 新单测）；W4-Z6 真实 date 触发：到期 run 落进绑定会话 `z6-schedule-target`，assistant 消息持久化（receipt `conversation_id` 一致） | ✅ CLOSED (W4-Z6)（绑定靠 DBOS automation；APScheduler 旧道并存） |
+| X32 | 组合自省：`--dump-config` 带逐层来源 | `docs/architecture.md:41` | 新增 introspect `config.provenance`：单键逐层来源（request-override→session→project→expert-overlay→atlas.toml，镜像 `AtlasConfig.get` 解析序，全层值过 scrub），10 项单测；`config.layers` 与 `plugins dump-config`（profile→bundle→patch）已有；8886 实测 server.port→atlas.toml、models.custom.api_key 不泄漏 | ✅ CLOSED (W4-Z6) |
+| X33 | agent 类型 / subagent provider 缝 | `docs/architecture.md:130-136` | `agent/definitions.py` 多格式发现（codex toml/copilot/claude/opencode/workspace/plugin）+ `agents/backends/` 适配器；`test_backend_parity_wave7.py` 11 项过；W4-Z6 真实 delegate 回合：`delegate_task` agent=`z6-reviewer`（workspace `.claude/agents` 定义）子任务完成、子回答带定义规定的 `Z6REVIEWERMETA` persona token，`backend="atlas"` | ✅ CLOSED (W4-Z6) |
 
 ---
 
