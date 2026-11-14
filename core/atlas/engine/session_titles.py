@@ -11,3 +11,11 @@ def set_user_title(home: str | Path, conversation_id: str, title: str) -> bool:
 
     with _open_db(home) as db:
         return db.set_session_title(conversation_id, title)
+
+
+def refresh_user_title(home: str | Path, conversation_id: str) -> bool:
+    """Unpin a user rename (S28 ``refresh()``) so automatic titles re-compete."""
+    from atlas.engine.session_sync import _open_db
+
+    with _open_db(home) as db:
+        return db.refresh_session_title(conversation_id)

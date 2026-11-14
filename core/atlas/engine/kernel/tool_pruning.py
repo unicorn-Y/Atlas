@@ -99,6 +99,7 @@ _FAMILY_BY_NAME = {
     "visualization_artifact": "visual",
     "canvas_update": "visual",
     "push_component": "visual",
+    "present": "deliverable",
     "memory_search": "memory", "memory_supersede": "memory",
     "agent_memory_read": "memory",
     "agent_memory_write": "memory", "session_search": "memory",
@@ -163,6 +164,9 @@ _PRIORS: dict[str, float] = {
     # occasionally useful, never to be guessed at
     "workflow": 1.0, "build_repo_map": 1.0, "lsp_diagnostics": 1.0,
     "notebook_edit": 1.0, "read_office": 1.0,
+    # deliverable declaration: needed whenever the turn produced a user-facing
+    # file, which the tier guess cannot predict — so a small prior, not zero.
+    "present": 1.0,
 }
 _CORE_TOOLS = frozenset(_PRIORS)
 

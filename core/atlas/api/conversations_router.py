@@ -1381,6 +1381,31 @@ async def update_conversation(
     return {"status": "ok", "conversation_id": conversation_id}
 
 
+@router.post("/api/conversations/{conversation_id}/refresh-title")
+async def refresh_conversation_title(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str,
+) -> dict[str, Any]:
+    """S28 ``refresh()``: unpin the user rename so automatic titles re-compete.
+
+    The pinned text is kept; only its ``user`` provenance is dropped, so the
+    next automatic (llm) title write lands. ``unpinned`` is False when the
+    conversation does not exist, is untitled, or was never user-pinned.
+    """
+    memory = services.memory
+    if memory is None:
+        from atlas import server as _atlas_server
+
+        memory = _atlas_server.memory
+    if memory is not None and await memory.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    from atlas.config import DATA_ROOT
+    from atlas.engine.session_titles import refresh_user_title
+
+    unpinned = await asyncio.to_thread(refresh_user_title, DATA_ROOT / "engine", conversation_id)
+    return {"conversation_id": conversation_id, "unpinned": unpinned}
+
+
 @router.post("/api/conversations/{conversation_id}/truncate")
 async def truncate_conversation(
     services: Annotated[AppServices, Depends(get_app_services)],
