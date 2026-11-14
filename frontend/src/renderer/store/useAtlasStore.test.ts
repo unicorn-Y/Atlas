@@ -343,7 +343,7 @@ describe('message pagination and bounded cache', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ recipes: [] }) } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => REASONING_STAGES } as Response);
     fetchMock.mockImplementation((url: string) => {
-      if (String(url).includes('/messages?limit=100&before_id=m-100')) {
+      if (String(url).includes('/messages?limit=101&before_id=m-100')) {
         return Promise.resolve({ ok: true, json: async () => [message('m-20'), message('m-21')] } as Response);
       }
       return Promise.resolve({ ok: true, json: async () => [] } as Response);
@@ -352,7 +352,8 @@ describe('message pagination and bounded cache', () => {
     await useAtlasStore.getState().initialize();
 
     const messagesUrl = String(fetchMock.mock.calls.find(([target]) => String(target).includes('/messages'))?.[0]);
-    expect(messagesUrl).toContain('/api/conversations/conversation-open/messages?limit=100');
+    // 一页 100 条 + 1 条探针：多取的那条只用来判断还有没有更早的，不进渲染列表。
+    expect(messagesUrl).toContain('/api/conversations/conversation-open/messages?limit=101');
     expect(useAtlasStore.getState().conversationMessages['conversation-open'][0].content).toBe('latest');
 
     useAtlasStore.setState({
@@ -363,7 +364,7 @@ describe('message pagination and bounded cache', () => {
 
     const state = useAtlasStore.getState();
     const earlierUrl = String(fetchMock.mock.calls.find(([target]) => String(target).includes('before_id'))?.[0]);
-    expect(earlierUrl).toContain('/api/conversations/c-early/messages?limit=100&before_id=m-100');
+    expect(earlierUrl).toContain('/api/conversations/c-early/messages?limit=101&before_id=m-100');
     expect(state.conversationMessages['c-early'].map((item) => item.id)).toEqual(['m-20', 'm-21', 'm-100']);
     // 一页没满 100 条 → 前面没有更早的了
     expect(state.messagesHasEarlier['c-early']).toBe(false);

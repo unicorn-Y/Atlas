@@ -28,12 +28,28 @@ describe('observed history pagination', () => {
     const latest = Array.from({ length: 101 }, (_, index) => message(`m-${index}`));
     const getMessages = vi.spyOn(backend, 'getMessages').mockResolvedValueOnce(latest).mockResolvedValueOnce([message('m-0')]);
     await useAtlasStore.getState().openConversation({ id: 'source', title: 'Source' });
+    // The probe row (m-0) stays server-side so the first page shows exactly 100 newest rows.
     expect(useAtlasStore.getState().conversationMessages.source).toEqual(latest.slice(1));
     expect(useAtlasStore.getState().messagesHasEarlier.source).toBe(true);
     await useAtlasStore.getState().loadEarlier('source');
     expect(getMessages).toHaveBeenLastCalledWith('source', { limit: 101, beforeId: 'm-1' });
+    // The probe row arrives in the earlier page, so no gap remains between the two pages.
     expect(useAtlasStore.getState().conversationMessages.source).toEqual(latest);
     expect(useAtlasStore.getState().messagesHasEarlier.source).toBe(false);
+  });
+
+  it('repairs an overlapping earlier page without duplicating the shared row', async () => {
+    const latest = Array.from({ length: 101 }, (_, index) => message(`m-${index}`));
+    const overlapping = Array.from({ length: 101 }, (_, index) => message(`m-${index}`));
+    const getMessages = vi.spyOn(backend, 'getMessages').mockResolvedValueOnce(latest).mockResolvedValueOnce(overlapping);
+    await useAtlasStore.getState().openConversation({ id: 'source', title: 'Source' });
+    await useAtlasStore.getState().loadEarlier('source');
+    const ids = useAtlasStore.getState().conversationMessages.source.map((row) => row.id);
+    expect(ids).toEqual(Array.from({ length: 101 }, (_, index) => `m-${index}`));
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(getMessages).toHaveBeenLastCalledWith('source', { limit: 101, beforeId: 'm-1' });
+    // A full 101-row earlier page proves there is more history behind it.
+    expect(useAtlasStore.getState().messagesHasEarlier.source).toBe(true);
   });
 });
 

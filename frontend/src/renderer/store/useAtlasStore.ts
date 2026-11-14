@@ -214,6 +214,12 @@ const terminal = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled']);
 
 // -- 长会话有界化：消息分页 + 会话正文的 LRU 缓存 --
 const MESSAGE_PAGE_SIZE = 100;
+/**
+ * 每页多取一条作为「探针」：返回 101 条就说明前面还有更早的消息，返回 ≤100 条就是到头了。
+ * 探针本身留在服务端，翻页时按 oldest.id 重新取回，所以既不会重复渲染，也不会漏掉断档。
+ */
+const MESSAGE_LOOKAHEAD = 1;
+const MESSAGE_FETCH_SIZE = MESSAGE_PAGE_SIZE + MESSAGE_LOOKAHEAD;
 const MESSAGE_CACHE_LIMIT = 10;
 /** 会话正文缓存的触达顺序（最旧在前）；只用于淘汰，不参与渲染。 */
 const messageCacheOrder: string[] = [];
@@ -238,13 +244,16 @@ function pruneMessageCache(activeId: string) {
 }
 
 async function reloadMessages(conversationId: string) {
-  // 只拉最新一页（后端契约：返回最新 limit 条，升序）；更早的由 loadEarlier 按需翻页。
-  const messages = await backend.getMessages(conversationId, { limit: MESSAGE_PAGE_SIZE });
+  // 只拉最新一页（后端契约：返回最新 limit 条，升序）；多取一条只用于判断"前面还有没有"，
+  // 探针本身不进渲染列表，翻页时按 oldest.id 再取回来。
+  const messages = await backend.getMessages(conversationId, { limit: MESSAGE_FETCH_SIZE });
+  const hasEarlier = messages.length > MESSAGE_PAGE_SIZE;
+  const visible = hasEarlier ? messages.slice(-MESSAGE_PAGE_SIZE) : messages;
   touchMessageCache(conversationId);
   pruneMessageCache(useAtlasStore.getState().activeConversationId);
   useAtlasStore.setState((state) => ({
-    conversationMessages: { ...state.conversationMessages, [conversationId]: messages },
-    messagesHasEarlier: { ...state.messagesHasEarlier, [conversationId]: messages.length >= MESSAGE_PAGE_SIZE },
+    conversationMessages: { ...state.conversationMessages, [conversationId]: visible },
+    messagesHasEarlier: { ...state.messagesHasEarlier, [conversationId]: hasEarlier },
   }));
 }
 const storageGet = (key: string) => { try { return localStorage.getItem(key); } catch { return null; } };
@@ -457,7 +466,9 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
       if (!oldest?.id) return;
       set({ loadingEarlierConversationId: conversationId });
       try {
-        const page = await backend.getMessages(conversationId, { limit: MESSAGE_PAGE_SIZE, beforeId: oldest.id });
+        // 多取一条：超出一页说明前面还有更早的；探针一并并入列表，避免 next page 与既有页之间出现缺口。
+        const page = await backend.getMessages(conversationId, { limit: MESSAGE_FETCH_SIZE, beforeId: oldest.id });
+        const hasEarlier = page.length > MESSAGE_PAGE_SIZE;
         touchMessageCache(conversationId);
         useAtlasStore.setState((current) => {
           const existing = current.conversationMessages[conversationId] ?? [];
@@ -465,7 +476,7 @@ export const useAtlasStore = create<AtlasState>((set, get) => {
           const fresh = page.filter((message) => !known.has(message.id));
           return {
             conversationMessages: fresh.length ? { ...current.conversationMessages, [conversationId]: [...fresh, ...existing] } : current.conversationMessages,
-            messagesHasEarlier: { ...current.messagesHasEarlier, [conversationId]: page.length >= MESSAGE_PAGE_SIZE },
+            messagesHasEarlier: { ...current.messagesHasEarlier, [conversationId]: hasEarlier },
           };
         });
       } catch (error) {
