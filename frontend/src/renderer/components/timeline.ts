@@ -388,7 +388,8 @@ function imageToolResult(value: unknown): { preview?: string; summary?: string }
   return { preview, summary: typeof result.text_summary === 'string' ? result.text_summary : undefined };
 }
 
-export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
+/** Keeps the reducer's open reply, steps and tool-call state across incoming event batches. */
+export function createTimelineAssembler(): { append: (events: readonly AgentEvent[]) => TimelineItem[] } {
   const items: TimelineItem[] = [];
   const byExecution = new Map<string, Step>();
   let track: { kind: 'steps'; id: string; steps: Step[] } | null = null;
@@ -418,7 +419,7 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
   // call reuses the same attempt/index keys.
   const forgetResolved = () => { for (const [key, entry] of preparing) if (entry.resolved) preparing.delete(key); };
 
-  for (const event of events) {
+  const applyEvent = (event: AgentEvent) => {
     const data = event.data;
     switch (event.type) {
       case 'run.status': {
@@ -815,8 +816,17 @@ export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
       default:
         break;
     }
-  }
-  return items;
+  };
+  return {
+    append(events) {
+      for (const event of events) applyEvent(event);
+      return items;
+    },
+  };
+}
+
+export function buildTimeline(events: AgentEvent[]): TimelineItem[] {
+  return createTimelineAssembler().append(events);
 }
 
 /** Share of input tokens served from the provider's prompt cache, e.g. "缓存 62%"; null when unknown or zero. */

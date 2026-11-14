@@ -7,7 +7,9 @@ import { DiagnosticsList, SeverityDots } from '../../components/diagnostics';
 import type { LspDiagnosticItem } from '../../components/timeline';
 import { shortPath } from '../../components/timeline';
 import { cn } from '../../ui/cn';
+import { Tip } from '../../ui/Tooltip';
 import { Empty } from './Empty';
+import { DiffFilePreview, isBinaryDiff, SideBySideDiff } from './diffReview';
 
 /** A note on one line of the diff, sent to Atlas together with the others. */
 interface LineComment { id: string; path: string; line: number | null; side: 'new' | 'old'; code: string; text: string }
@@ -285,7 +287,7 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
             ? `${activeWorkspace.replace(/[\\/]+$/, '')}${activeWorkspace.includes('\\') ? '\\' : '/'}${relativePath.replace(/[\\/]/g, activeWorkspace.includes('\\') ? '\\' : '/')}`
             : undefined;
           return <div key={`${file.workspace}:${file.path}`} ref={(node) => { fileRefs.current[file.path] = node; }} className={cn('overflow-hidden rounded-xl card-surface', selectedFile === file.path && 'ring-1 ring-brand/50')}>
-            <button onClick={() => { setSelectedFile(file.path); toggle(file.path); }} aria-expanded={expanded} aria-current={selectedFile === file.path ? 'true' : undefined} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-hover">
+            <Tip side="left" label={<DiffFilePreview path={file.path} diff={file.diff} />}><button onClick={() => { setSelectedFile(file.path); toggle(file.path); }} aria-expanded={expanded} aria-current={selectedFile === file.path ? 'true' : undefined} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-hover">
               <ChevronRight size={13} className={cn('shrink-0 text-fg-3 transition-transform', expanded && 'rotate-90')} />
               <span aria-label={`文件状态：${STATUS[file.status]?.label ?? file.status}`} className={cn('shrink-0 rounded-full bg-sunken px-2 py-0.5 text-[11px]', STATUS[file.status]?.tone)}>{STATUS[file.status]?.label ?? file.status}</span>
               <code className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg" title={file.path}>{shortPath(file.path)}</code>
@@ -293,7 +295,7 @@ export default function ChangesPanel({ runId, runStatus, apiBaseUrl, connected, 
                 <SeverityDots diagnostics={fileDiagnostics.diagnostics as LspDiagnosticItem[]} />{fileDiagnostics.count} 个问题
               </span>}
               <span className="shrink-0 text-[11.5px] tabular-nums"><span className="text-ok">+{file.additions}</span> <span className="text-danger">−{file.deletions}</span></span>
-            </button>
+            </button></Tip>
             {expanded && <>
               {openPath && window.atlasDesktop?.openFileInEditor && <div className="flex justify-end border-t border-line px-3 py-1.5">
                 <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('atlas:add-context-file', { detail: { path: relativePath } }))}
@@ -365,13 +367,16 @@ function numberLines(diff: string): DiffLine[] {
 }
 
 /** 统一 diff 渲染（含行号）；InitDialog 复用它来预览 AGENTS.md 的提案差异。 */
-export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, onReviewHunk, comments, onAdd, onEdit, onRemove, navigationEnabled = false }: {
+export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, onReviewHunk, comments, onAdd, onEdit, onRemove, navigationEnabled = false, defaultLayout = 'unified' }: {
   diff: string; truncated?: boolean; path: string; openPath?: string; hunks?: RunChangeHunk[]; busyHunkId?: string;
   navigationEnabled?: boolean;
+  defaultLayout?: 'unified' | 'split';
   onReviewHunk?: (hunk: RunChangeHunk, action: 'accept' | 'reject') => void; comments?: LineComment[];
   onAdd: (comment: Omit<LineComment, 'id'>) => void; onEdit: (id: string, text: string) => void; onRemove: (id: string) => void;
 }) {
   const lines = useMemo(() => numberLines(diff), [diff]);
+  const [layout, setLayout] = useState(defaultLayout);
+  const [wrap, setWrap] = useState(false);
   const [draft, setDraft] = useState<{ index: number; text: string } | null>(null);
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const [externalError, setExternalError] = useState('');
@@ -448,11 +453,20 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
     requestAnimationFrame(() => commentButtonRefs.current[index]?.focus());
   };
   return <div className="max-h-96 overflow-auto bg-code py-2 font-mono text-[11.5px] leading-[1.6] shadow-[inset_0_1px_0_var(--line)]">
+    <div role="group" aria-label="差异阅读设置" className="mb-2 flex items-center gap-1 px-3 font-sans text-fg-2">
+      <button type="button" aria-pressed={layout === 'unified'} onClick={() => setLayout('unified')} className="rounded-md px-2 py-1 hover:bg-hover">统一</button>
+      <button type="button" aria-pressed={layout === 'split'} onClick={() => setLayout('split')} className="rounded-md px-2 py-1 hover:bg-hover">并排</button>
+      <button type="button" aria-pressed={wrap} onClick={() => setWrap((value) => !value)} className="ml-auto rounded-md px-2 py-1 hover:bg-hover">自动换行</button>
+    </div>
     {openPath && window.atlasDesktop?.openPath && <div className="mb-1 flex justify-end px-3 font-sans">
       <button type="button" onClick={() => { setExternalError(''); void window.atlasDesktop!.openPath(openPath).then((result) => { if (result !== 'opened' && result !== 'revealed') setExternalError(`无法打开文件：${result}`); }).catch((error) => setExternalError(error instanceof Error ? error.message : String(error))); }}
         className="inline-flex min-h-7 items-center gap-1.5 rounded-md px-2 text-[11.5px] text-fg-2 hover:bg-hover hover:text-fg"><ExternalLink size={12} />用默认编辑器打开</button>
     </div>}
     {externalError && <p role="alert" className="mx-3 my-1 rounded-md bg-danger-soft px-2 py-1 font-sans text-[11.5px] text-danger">{externalError}</p>}
+    {isBinaryDiff(diff) && layout === 'unified' && <p role="status" className="m-0 px-3 py-2 font-sans text-fg-3">二进制文件 · 无文本差异预览</p>}
+    {layout === 'split' && <SideBySideDiff diff={diff} path={path} wrap={wrap} />}
+    {layout === 'split' && commentable && <p className="mx-3 mb-0 font-sans text-fg-3">切换统一视图可添加行评论和审核差异块。</p>}
+    <div hidden={layout !== 'unified'}>
     <div role="search" aria-label="在当前文件改动中搜索" className="mb-1 flex flex-wrap items-center gap-1.5 px-3 font-sans">
       <label htmlFor={searchInputId} className="sr-only">搜索当前文件改动</label>
       <div className="flex h-7 min-w-32 flex-1 items-center gap-1.5 rounded-md bg-sunken px-2 shadow-[inset_0_0_0_1px_var(--line)] focus-within:shadow-[inset_0_0_0_1px_var(--brand)]">
@@ -495,7 +509,7 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
         if (hit.start > cursor) highlighted.push(lineContent.slice(cursor, hit.start));
         highlighted.push(<mark key={`search-${hitIndex}`} ref={(node) => { searchHitRefs.current[hitIndex] = node; }}
           aria-current={activeSearchHit === hitIndex ? 'true' : undefined}
-          className={cn('rounded-sm', activeSearchHit === hitIndex ? 'bg-amber-300 text-black ring-1 ring-amber-500' : 'bg-amber-900/50 text-inherit')}>
+          className={cn('rounded-sm', activeSearchHit === hitIndex ? 'bg-warn-soft text-fg ring-1 ring-warn' : 'bg-brand-soft text-inherit')}>
           {lineContent.slice(hit.start, hit.end)}
         </mark>);
         cursor = hit.end;
@@ -508,7 +522,7 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
             ? <button ref={(node) => { commentButtonRefs.current[index] = node; }} aria-label={`评论第 ${number} 行`} onClick={() => setDraft({ index, text: '' })}
               className="grid w-4 shrink-0 place-items-center text-brand opacity-0 group-hover:opacity-100 focus:opacity-100"><MessageSquarePlus size={11} /></button>
             : <span className="w-4 shrink-0" />}
-          <span className="min-w-0 flex-1 pr-3 whitespace-pre">{line.kind === 'hunk' ? line.text || ' ' : <>{line.text.slice(0, 1)}{lineHitIndexes.length ? highlighted : line.text.slice(1) || ' '}</>}</span>
+          <span title={line.kind === 'hunk' ? undefined : lineContent} className={cn('min-w-0 flex-1 pr-3', wrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre')}>{line.kind === 'hunk' ? line.text || ' ' : <>{line.text.slice(0, 1)}{lineHitIndexes.length ? highlighted : line.text.slice(1) || ' '}</>}</span>
           {line.kind === 'hunk' && line.text.startsWith('@@') && <button type="button" aria-expanded={!collapsedHunks.has(line.hunkIndex)} aria-label={`${collapsedHunks.has(line.hunkIndex) ? '展开' : '折叠'}差异块 ${line.hunkIndex + 1}`}
             onClick={() => setCollapsedHunks((current) => { const next = new Set(current); if (next.has(line.hunkIndex)) next.delete(line.hunkIndex); else next.add(line.hunkIndex); return next; })}
             className="mr-2 shrink-0 rounded px-1.5 py-0.5 font-sans text-[10.5px] text-fg-3 hover:bg-hover">{collapsedHunks.has(line.hunkIndex) ? '展开' : '折叠'}</button>}
@@ -555,6 +569,7 @@ export function DiffView({ diff, truncated, path, openPath, hunks, busyHunkId, o
         </div>}
       </div>;
     })}
+    </div>
     {truncated && <div className="px-3 pt-1 text-fg-3">改动太大，只显示了前一部分。</div>}
   </div>;
 }

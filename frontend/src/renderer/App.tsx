@@ -19,6 +19,8 @@ import { getSelectedInputStream } from './services/audioDevices';
 import { hasFileDropPayload, isBlockedFileDropTarget, readDroppedItems } from './services/fileDrop';
 import { loadStagedAttachment, stageAttachment, type StagedAttachment } from './services/attachmentStaging';
 import { readComposerDraft, serializeMentionContext, writeComposerDraft } from './services/composerDraft';
+import { PendingApprovalDock, pendingApprovalEvents } from './components/ConversationActivity';
+import { registerSlashCommands, useSlashCommandSourcesVersion } from './services/slashCommands';
 const MessageThread = lazy(() => import('./components/MessageThread'));
 const TodoPanel = lazy(() => import('./components/TodoPanel'));
 const ProgressCapsule = lazy(() => import('./components/ProgressCapsule'));
@@ -2135,7 +2137,8 @@ function AppContent() {
     setWindowTitleFields(clean);
     setPref('window-title-fields', clean.join(','));
   };
-  const slashCommands: SlashCommand[] = [
+  useSlashCommandSourcesVersion();
+  const slashCommands: SlashCommand[] = registerSlashCommands([
     { id: 'window-title', label: '/window-title', hint: '选择窗口标题显示的会话、模型、工作目录和运行状态', run: () => setWindowTitleOpen(true) },
     { id: 'treemap', label: '/treemap', hint: '按文件大小查看当前工作区的仓库树图', run: () => showInspectorTab('treemap') },
     { id: 'scroll-speed', label: '/scroll-speed', hint: '调整对话滚轮速度并即时预览', run: () => setScrollSpeedOpen(true) },
@@ -2774,7 +2777,7 @@ function AppContent() {
       group: commandGroup(command.source), source: command.source || '自定义命令', takesArgument: Boolean(command.argument_hint), argumentHint: command.argument_hint || undefined,
       run: (argument: string) => void runCustomCommand(command, argument),
     })),
-  ];
+  ]);
   const conversationCommands = new Set(['tag', 'rename', 'fork', 'rewind', 'side', 'btw', 'compact', 'share', 'cost', 'permissions', 'goal', 'chapter']);
   const idleCommands = new Set(['undo', 'redo', 'fork', 'rewind', 'compact']);
   slashCommands.forEach((command) => {
@@ -3458,7 +3461,9 @@ function AppContent() {
                   <span className="size-1.5 animate-pulse rounded-full bg-brand" />
                   {activeRun && /^\s*\/review\b/i.test(store.runPrompts[activeRun.id]?.content ?? '') ? 'Reviewing · 正在审查' : '运行中 · 新消息可排队或转为优先任务'}
                 </div>}
-                <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={focusedLayout ? null : <>{extractSkillBanner}{suggestionHeader}{editBanner}{goalHeader}{recoveryHeader}{runHeader}{rewindBanner}</>} />
+                {pendingApprovalEvents(activeEvents).length
+                  ? <PendingApprovalDock events={activeEvents} store={store} />
+                  : <Composer {...composerBase} variant="dock" onSubmit={() => void submit(false)} placeholder={activeRun && !runDone ? '接着补充，会在这一步做完后发出…' : '接着说要做什么，/ 看命令，! 开头直接在终端运行…'} header={focusedLayout ? null : <>{extractSkillBanner}{suggestionHeader}{editBanner}{goalHeader}{recoveryHeader}{runHeader}{rewindBanner}</>} />}
                 {statusBarVisible && <div className={cn('mt-1 flex min-w-0 items-center gap-1 px-1 text-[11.5px] text-fg-3', focusedLayout && 'hidden')}>
                   <div className="flex min-w-0 shrink items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="运行设置">{runTools}</div>
                   <span className="flex-1" />

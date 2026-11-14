@@ -10,6 +10,7 @@ import { Button } from '../../ui/Button';
 import { cn } from '../../ui/cn';
 import { Empty } from './Empty';
 import FileHistoryMenu, { type ViewedVersion } from './FileHistoryMenu';
+import { canPreviewDocument, DocumentPreview, useDocumentPreviewRegistryVersion } from './documentPreviewRegistry';
 
 const GIT: Record<string, { label: string; tone: string }> = {
   M: { label: 'M', tone: 'text-brand' }, A: { label: 'A', tone: 'text-ok' }, D: { label: 'D', tone: 'text-danger' }, '?': { label: 'U', tone: 'text-ok' },
@@ -19,11 +20,10 @@ const GIT: Record<string, { label: string; tone: string }> = {
 const PREVIEWABLE = /\.(html?|pdf|svg|png|jpe?g|gif|webp)$/i;
 const IMAGE = /\.(png|jpe?g|gif|webp|svg)$/i;
 const MARKDOWN = /\.(md|markdown)$/i;
-const FRAME = /\.(html?|pdf)$/i;
 const OFFICE = /\.(docx|xlsx|pptx)$/i;
 const XLSX = /\.xlsx$/i;
 const PDF = /\.pdf$/i;
-const canPreview = (path: string) => MARKDOWN.test(path) || IMAGE.test(path) || FRAME.test(path) || OFFICE.test(path);
+const canPreview = canPreviewDocument;
 const basename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 const absoluteWorkspacePath = (root: string, relative: string): string | null => {
   if (root.startsWith('ssh://') || relative.split(/[\\/]/).some((part) => part === '..')) return null;
@@ -107,6 +107,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
   runEvents?: AgentEvent[]; onShowChanges?: () => void;
   previewOnly?: boolean; previewPath?: string; initialFilePath?: string;
 }) {
+  useDocumentPreviewRegistryVersion();
   const [dirs, setDirs] = useState<Record<string, WorkspaceEntry[]>>({});
   const [expanded, setExpanded] = useState<string[]>([]);
   const [loading, setLoading] = useState<string[]>([]);
@@ -631,7 +632,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
       </div>}
       {showVersionDiff && version && file ? (() => { const diff = diffLines(version.file.content, file.content); return <pre aria-label="当前文件与选中历史版本的差异" className="m-0 min-h-0 flex-1 overflow-auto bg-code p-3 font-mono text-[12px] leading-[1.6]">{diff.truncated && <span className="block text-fg-3">只比较前 600 行；文件后续内容未显示。</span>}{diff.lines.map((line, index) => <span key={index} className={`block whitespace-pre-wrap break-all ${line.kind === 'add' ? 'bg-ok-soft text-fg' : line.kind === 'remove' ? 'bg-danger-soft text-fg' : 'text-fg-2'}`}>{line.kind === 'add' ? '+ ' : line.kind === 'remove' ? '− ' : '  '}{line.text || ' '}</span>)}</pre>; })()
         : shown && previewing
-        ? MARKDOWN.test(shown.path)
+        ? <DocumentPreview file={shown} workspace={workspace} fallback={MARKDOWN.test(shown.path)
           ? <div className="prose-atlas min-h-0 flex-1 overflow-auto px-4 py-3 text-[13.5px]"><ReactMarkdown remarkPlugins={[remarkGfm]}>{shown.content}</ReactMarkdown></div>
           : OFFICE.test(file.path)
             ? XLSX.test(file.path)
@@ -682,7 +683,7 @@ export default function FilesPanel({ workspace, onChooseWorkspace, refreshKey, o
               <img src={backend.rawFileUrl(workspace, file.path)} alt={file.path} onError={() => setError('图片预览加载失败。')} className="max-h-full max-w-full object-contain" />
             </button>
             // The raw endpoint already serves scriptable files sandboxed; the frame gets no same-origin access either way.
-            : <iframe title={`预览 ${file.path}`} src={backend.rawFileUrl(workspace, file.path)} onError={() => setError('文件预览加载失败。')} sandbox="allow-scripts" className="min-h-0 w-full flex-1 border-0 bg-white" />
+            : <iframe title={`预览 ${file.path}`} src={backend.rawFileUrl(workspace, file.path)} onError={() => setError('文件预览加载失败。')} sandbox="allow-scripts" className="min-h-0 w-full flex-1 border-0 bg-white" />} />
         : shown?.binary ? <p className="m-0 p-4 text-[13px] text-fg-3">{version ? '这个版本是二进制文件，看不了内容；可以恢复后再预览。' : '这是二进制文件，不能直接预览。'}</p>
         : editing && !version ? <textarea aria-label={`编辑 ${file.path}`} spellCheck={false} value={draft} onChange={(event) => setDraft(event.target.value)}
           wrap={wrapCode ? 'soft' : 'off'} style={{ fontSize: `${codeFontSize}px`, whiteSpace: wrapCode ? 'pre-wrap' : 'pre' }}

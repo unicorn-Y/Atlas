@@ -1,5 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConversationSummary } from '@atlas/backend-adapter';
 
@@ -7,7 +8,7 @@ vi.mock('./SidePane', () => ({ default: () => 'side pane content' }));
 const { default: PaneWorkspace } = await import('./PaneWorkspace');
 
 describe('PaneWorkspace', () => {
-  afterEach(() => { Reflect.deleteProperty(globalThis, 'localStorage'); });
+  afterEach(() => { Reflect.deleteProperty(globalThis, 'localStorage'); vi.unstubAllGlobals(); });
 
   it('renders a persisted recursive layout containing the primary and side sessions', () => {
     const tree = {
@@ -34,5 +35,22 @@ describe('PaneWorkspace', () => {
     expect(markup.match(/side pane content/g)).toHaveLength(2);
     expect(markup).toContain('data-pane-id="side-a"');
     expect(markup).toContain('data-pane-id="side-b"');
+  });
+
+  it('closes a side pane, persists the reduced split tree and preserves the main conversation', async () => {
+    let saved = JSON.stringify({ kind: 'split', splitId: 'root', axis: 'row', ratio: 0.6,
+      first: { kind: 'pane', id: 'main' }, second: { kind: 'pane', id: 'side' } });
+    vi.stubGlobal('window', new EventTarget());
+    vi.stubGlobal('localStorage', { getItem: () => saved, setItem: (_key: string, value: string) => { saved = value; }, removeItem: () => undefined });
+    const onRemove = vi.fn();
+    let view!: ReactTestRenderer;
+    await act(async () => { view = create(<PaneWorkspace besideId="" activeId="main" conversations={[{ id: 'main', title: 'Main' }, { id: 'side', title: 'Side' }]}
+      username="User" onSwitch={vi.fn()} onRemove={onRemove}><div id="main-content">main conversation</div></PaneWorkspace>); });
+    act(() => { view.root.findByProps({ 'aria-label': '关闭分屏' }).props.onClick(); });
+    expect(onRemove).toHaveBeenCalledWith('side');
+    expect(JSON.parse(saved)).toEqual({ kind: 'pane', id: 'main' });
+    expect(view.root.findByProps({ id: 'main-content' }).children).toEqual(['main conversation']);
+    expect(view.root.findAllByProps({ role: 'separator' })).toHaveLength(0);
+    act(() => view.unmount());
   });
 });

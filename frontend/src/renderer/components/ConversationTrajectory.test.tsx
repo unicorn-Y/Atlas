@@ -1,17 +1,20 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import ConversationTrajectory from './ConversationTrajectory';
 import type { AgentEvent } from '../../types/runtime';
+import ConversationTrajectory from './ConversationTrajectory';
 
 describe('ConversationTrajectory', () => {
-  it('renders readable events in order with their details', () => {
+  it('renders a readable ordered alternate view of tool calls and results', () => {
     const events = [
-      { id: '1', timestamp: '2026-11-14T10:00:00Z', event: 'tool.started', data: { name: 'read_file', arguments: 'README.md' } },
-      { id: '2', timestamp: '2026-11-14T10:00:01Z', event: 'message.completed', data: { role: 'assistant', content: 'Finished.' } },
-    ] as unknown as AgentEvent[];
+      { id: 'start', type: 'tool.started', data: { tool_name: 'read_file', arguments: '{"path":"src/main.ts"}' } },
+      { id: 'result', type: 'tool.completed', data: { tool_name: 'read_file', content: 'source contents' } },
+    ].map((event, index) => ({ ...event, runId: 'run-1', sequence: index + 1, timestamp: `2026-11-14T12:00:0${index}Z` })) as AgentEvent[];
     const html = renderToStaticMarkup(<ConversationTrajectory events={events} />);
-    expect(html.indexOf('开始工具 · read_file')).toBeLessThan(html.indexOf('助手回复'));
-    expect(html).toContain('README.md');
-    expect(html).toContain('Finished.');
+    expect(html).toContain('aria-label="会话轨迹"');
+    expect(html).toContain('read_file');
+    expect(html).toContain('src/main.ts');
+    expect(html).toContain('source contents');
+    expect(html.indexOf('#1')).toBeLessThan(html.indexOf('#2'));
+    expect(html).not.toContain('[object Object]');
   });
 });

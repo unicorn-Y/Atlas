@@ -6,8 +6,13 @@ import SettingsPage from '../pages/SettingsPage';
 
 const REASONING_STAGES = { enabled: false, planning: 'high', execution: 'medium', verification: 'high' } as const;
 
-beforeEach(() => vi.stubGlobal('window', new EventTarget()));
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(() => {
+  vi.stubGlobal('window', new EventTarget());
+  // These tests mock history requests; background reattach/branch summaries use separate channels.
+  vi.spyOn(backend, 'liveBackendRuns').mockResolvedValue([]);
+  vi.spyOn(backend, 'summarizeConversationBranch').mockResolvedValue({} as never);
+});
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('conversation creation', () => {
   it('persists Skill activation by name for later run requests', () => {

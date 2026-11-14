@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowUpCircle, LoaderCircle, X } from 'lucide-react';
-import type { ReleaseUpdateStatus, SourceUpdateStatus } from '../../shared/ipc';
+import type { AtlasDesktopApi, ReleaseUpdateStatus, SourceUpdateStatus } from '../../shared/ipc';
 import { appendUpdateJournal, createUpdateCoordinator } from '../services/update-coordinator';
 import { tn } from '../services/i18n';
 
@@ -9,6 +9,40 @@ const SOURCE_KEY = 'atlas.preference.release-source';
 // Atlas 自己的发布仓库（私有仓库时主进程会带上 gh 登录令牌）。
 export const DEFAULT_RELEASE_SOURCE = 'https://api.github.com/repos/unicorn-Y/Atlas/releases/latest';
 type View = { channel: 'release' | 'source'; release?: ReleaseUpdateStatus; source?: SourceUpdateStatus };
+
+export async function checkUpdateChannel(api: Pick<AtlasDesktopApi, 'checkForUpdate' | 'checkReleaseUpdate'> | undefined,
+  channel: 'source' | 'release', releaseSource: string): Promise<{ source?: SourceUpdateStatus; release?: ReleaseUpdateStatus | null }> {
+  if (channel === 'source') {
+    if (!api?.checkForUpdate) throw new Error('源码更新检查不可用');
+    const [source, release] = await Promise.all([
+      api.checkForUpdate(),
+      api.checkReleaseUpdate?.(releaseSource).catch(() => null) ?? Promise.resolve(null),
+    ]);
+    return { source, release };
+  }
+  if (!api?.checkReleaseUpdate) throw new Error('发布版更新检查不可用');
+  const release = await api.checkReleaseUpdate(releaseSource);
+  if (release.error) throw new Error(release.error);
+  return { release };
+}
+
+export function MandatoryUpdateDialog({ release, busy, progress, onDownload }: {
+  release: ReleaseUpdateStatus; busy: boolean; progress: number; onDownload: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { dialog.current?.showModal(); }, []);
+  return <dialog ref={dialog} role="alertdialog" aria-modal="true" aria-label="必须更新 Atlas" onCancel={(event) => event.preventDefault()} className="fixed inset-0 m-0 grid h-dvh w-dvw max-h-none max-w-none place-items-center border-0 bg-black/70 p-6 text-fg backdrop-blur-sm">
+    <section className="grid w-full max-w-lg gap-4 rounded-2xl border border-line bg-panel p-6 text-fg shadow-2xl">
+      <div><h1 className="m-0 text-lg font-semibold">{tn('updates', '必须更新 Atlas')}</h1><p className="mb-0 mt-2 text-sm leading-relaxed text-fg-2">{tn('updates', `当前版本 ${release.current} 已停止支持。最低支持版本为 ${release.minimumVersion}，请安装 ${release.latest} 后继续使用。`)}</p></div>
+      {release.error && <p role="alert" className="m-0 text-sm text-danger">{release.error}</p>}
+      <button type="button" disabled={busy || !release.available || !release.assetName} onClick={onDownload} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">
+        {busy && <LoaderCircle className="size-4 animate-spin" />}{busy ? `正在下载 ${progress}%` : tn('updates', '下载并安装受支持版本')}
+      </button>
+      {!release.assetName && <p className="m-0 text-xs text-fg-3">{tn('updates', '该 Release 暂无 Windows 安装包，应用将保持锁定，直到发布包可用。')}</p>}
+    </section>
+  </dialog>;
+}
+
 export default function UpdateBanner() {
   const [view, setView] = useState<View | null>(null);
   const [forcedRelease, setForcedRelease] = useState<ReleaseUpdateStatus | null>(null);
@@ -26,17 +60,7 @@ export default function UpdateBanner() {
       const channel = storedChannel === 'release' ? 'release' : 'source';
       checkedChannel = channel;
       const releaseSource = localStorage.getItem(SOURCE_KEY) || DEFAULT_RELEASE_SOURCE;
-      if (channel === 'source') {
-        if (!api?.checkForUpdate) throw new Error('源码更新检查不可用');
-        const [source, release] = await Promise.all([
-          api.checkForUpdate(),
-          api.checkReleaseUpdate?.(releaseSource).catch(() => null) ?? Promise.resolve(null),
-        ]);
-        return { source, release };
-      }
-      if (!api?.checkReleaseUpdate) throw new Error('发布版更新检查不可用');
-      const release = await api.checkReleaseUpdate(releaseSource);
-      return { release };
+      return checkUpdateChannel(api, channel, releaseSource);
     };
     const coordinator = createUpdateCoordinator({
       check,
@@ -57,24 +81,20 @@ export default function UpdateBanner() {
     return () => { alive = false; coordinator.stop(); window.removeEventListener('focus', onFocus); window.removeEventListener('atlas:update-settings-changed', onChange); };
   }, [api]);
   const download = async () => {
-    const version = view?.release?.latest; const source = localStorage.getItem(SOURCE_KEY) || DEFAULT_RELEASE_SOURCE;
+    const version = forcedRelease?.latest ?? view?.release?.latest; const source = localStorage.getItem(SOURCE_KEY) || DEFAULT_RELEASE_SOURCE;
     if (!version || !api?.downloadReleaseUpdate || !api.installReleaseUpdate) return;
     setBusy(true); setProgress(0);
     const off = api.onReleaseDownloadProgress?.(setProgress);
     try { await api.downloadReleaseUpdate(source, version); await api.installReleaseUpdate(); }
-    catch (error) { setView((old) => old?.release ? { ...old, release: { ...old.release, error: error instanceof Error ? error.message : String(error) } } : old); setBusy(false); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setView((old) => old?.release ? { ...old, release: { ...old.release, error: message } } : old);
+      setForcedRelease((old) => old ? { ...old, error: message } : old);
+      setBusy(false);
+    }
     finally { off?.(); }
   };
-  if (forcedRelease) return <div role="alertdialog" aria-modal="true" aria-label="必须更新 Atlas" onKeyDown={(event) => { if (event.key === 'Escape') event.preventDefault(); }} className="fixed inset-0 z-[100] grid place-items-center bg-black/70 p-6 backdrop-blur-sm">
-    <section className="grid w-full max-w-lg gap-4 rounded-2xl border border-line bg-panel p-6 text-fg shadow-2xl">
-      <div><h1 className="m-0 text-lg font-semibold">{tn('updates', '必须更新 Atlas')}</h1><p className="mb-0 mt-2 text-sm leading-relaxed text-fg-2">{tn('updates', `当前版本 ${forcedRelease.current} 已停止支持。最低支持版本为 ${forcedRelease.minimumVersion}，请安装 ${forcedRelease.latest} 后继续使用。`)}</p></div>
-      {forcedRelease.error && <p role="alert" className="m-0 text-sm text-danger">{forcedRelease.error}</p>}
-      <button type="button" disabled={busy || !forcedRelease.available || !forcedRelease.assetName} onClick={() => void download()} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">
-        {busy && <LoaderCircle className="size-4 animate-spin" />}{busy ? `正在下载 ${progress}%` : tn('updates', '下载并安装受支持版本')}
-      </button>
-      {!forcedRelease.assetName && <p className="m-0 text-xs text-fg-3">{tn('updates', '该 Release 暂无 Windows 安装包，应用将保持锁定，直到发布包可用。')}</p>}
-    </section>
-  </div>;
+  if (forcedRelease) return <MandatoryUpdateDialog release={forcedRelease} busy={busy} progress={progress} onDownload={() => void download()} />;
   if (!view || dismissed) return null;
   const sourceUpdate = view.channel === 'source' && view.source?.available;
   const releaseUpdate = view.channel === 'release' && view.release?.available;

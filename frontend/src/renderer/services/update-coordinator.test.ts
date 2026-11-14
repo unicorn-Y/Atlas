@@ -30,4 +30,44 @@ describe('update coordinator', () => {
     appendUpdateJournal({ at: '3', event: 'check.failed', channel: 'release', error: 'offline' }, storage, 2);
     expect(JSON.parse(values.get('atlas.update.journal') ?? '[]').map((entry: { at: string }) => entry.at)).toEqual(['2', '3']);
   });
+
+  it('checks on the configured interval after success and cancels scheduled checks on stop', async () => {
+    vi.useFakeTimers();
+    try {
+      const check = vi.fn().mockResolvedValue({ current: '1.0.0', latest: '1.1.0' });
+      const journal = vi.fn();
+      const onResult = vi.fn();
+      const coordinator = createUpdateCoordinator({ check, journal, onResult, initialDelayMs: 100, intervalMs: 1000 });
+      coordinator.start();
+      coordinator.start();
+      await vi.advanceTimersByTimeAsync(99);
+      expect(check).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(check).toHaveBeenCalledOnce();
+      expect(onResult).toHaveBeenCalledWith({ current: '1.0.0', latest: '1.1.0' });
+      expect(journal).toHaveBeenLastCalledWith(expect.objectContaining({ current: '1.0.0', latest: '1.1.0' }));
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(check).toHaveBeenCalledTimes(2);
+      coordinator.stop();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(check).toHaveBeenCalledTimes(2);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('never starts overlapping checks when focus requests another check', async () => {
+    vi.useFakeTimers();
+    try {
+      let complete!: (value: { available: boolean }) => void;
+      const check = vi.fn(() => new Promise<{ available: boolean }>((resolve) => { complete = resolve; }));
+      const coordinator = createUpdateCoordinator({ check, journal: vi.fn() });
+      coordinator.start();
+      await vi.advanceTimersByTimeAsync(0);
+      coordinator.checkNow();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(check).toHaveBeenCalledOnce();
+      complete({ available: false });
+      await Promise.resolve();
+      coordinator.stop();
+    } finally { vi.useRealTimers(); }
+  });
 });

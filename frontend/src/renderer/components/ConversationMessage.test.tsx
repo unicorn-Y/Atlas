@@ -63,4 +63,17 @@ describe('ConversationMessage', () => {
     expect(html).toContain('导出表格为 CSV');
     expect(html).toContain('<table');
   });
+
+  it('keeps built-in message actions alongside session-specific edit, fork and rewind controls', () => {
+    const user = renderToStaticMarkup(<ConversationMessage id="user-tail" role="user" content="Question" username="User"
+      actions={<><button aria-label="修改后重新发送">编辑</button><button aria-label="回到这条之前">撤回</button></>} />);
+    const assistant = renderToStaticMarkup(<ConversationMessage id="assistant-tail" role="assistant" content="Answer" username="User"
+      actions={<><button aria-label="从这里分叉出一个新对话">分叉</button><button aria-label="分叉，并把前面的内容总结成一段">摘要分叉</button></>} />);
+    expect(user).toContain('aria-label="修改后重新发送"');
+    expect(user).toContain('aria-label="回到这条之前"');
+    expect(assistant).toContain('aria-label="从这里分叉出一个新对话"');
+    expect(assistant).toContain('aria-label="分叉，并把前面的内容总结成一段"');
+    expect(assistant).toContain('aria-label="查看 Markdown 源码"');
+    expect(assistant).toContain('aria-label="更多消息操作"');
+  });
 });
