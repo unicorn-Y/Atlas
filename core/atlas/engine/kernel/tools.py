@@ -80,6 +80,9 @@ READ_ONLY_TOOLS = frozenset({
     "memory_search",
     "read_terminal",
     "list_plugins", "get_plugin", "list_plugin_marketplaces",
+    # Durable session reads (E31): fail-closed workspace gates live in the
+    # handlers, so the kernel classifies them as reads like session_search.
+    "session_event_search", "session_trace", "session_event_trace", "session_event_read",
 })
 EDIT_TOOL_NAMES = frozenset({"apply_patch", "edit", "write", "notebook_edit"})
 
@@ -107,6 +110,7 @@ TOOL_TIMEOUT_FAMILIES: tuple[tuple[str, frozenset[str], float], ...] = (
         "read_file", "read", "glob", "list_directory", "read_office", "view_image",
         "read_terminal", "lsp_diagnostics", "lsp_hover", "lsp_definition",
         "lsp_implementation", "lsp_references", "lsp_document_symbols", "local_file", "local_git",
+        "session_event_search", "session_trace", "session_event_trace", "session_event_read",
     }), 60.0),
 )
 #: Fallback for tools that belong to no family (unknown/MCP/plugin tools).

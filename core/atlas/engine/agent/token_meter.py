@@ -223,6 +223,59 @@ def price_surface_nodes(
     return {"surface_tokens": surface_tokens, "nodes": output_nodes}
 
 
+def anchor_surface_to_usage(
+    *,
+    surface_nodes: Sequence[Mapping[str, Any]],
+    surface_tokens: int,
+    provider_input_tokens: int,
+    request_sha256: str = "",
+    cached_tokens: int = 0,
+) -> dict[str, Any] | None:
+    """Anchor one successful request's provider usage back to surface nodes.
+
+    ``price_surface_nodes`` estimates each node heuristically; a provider that
+    returns real usage reports a total that will not match the estimate. The
+    anchor is a pure projection: every node's estimate is scaled by
+    ``provider_input_tokens / surface_tokens`` so the anchored per-node prices
+    sum (modulo rounding) to the provider-reported input. Nothing here mutates
+    the estimates themselves — consumers that need the raw heuristic keep
+    reading ``surface_node_tokens``.
+
+    Returns ``None`` when there is nothing to anchor with (no usage, no nodes,
+    or a non-positive surface total); callers then skip the anchor keys
+    entirely instead of writing a misleading empty record.
+    """
+    try:
+        provider_total = max(0, int(provider_input_tokens or 0))
+        estimated_total = int(surface_tokens or 0)
+        estimated_nodes = list(surface_nodes or ())
+    except (TypeError, ValueError):
+        return None
+    if provider_total <= 0 or estimated_total <= 0 or not estimated_nodes:
+        return None
+    ratio = provider_total / estimated_total
+    anchored_nodes: list[dict[str, int]] = []
+    for node in estimated_nodes:
+        try:
+            seq = int(node.get("seq"))
+            estimated = int(node.get("tokens", node.get("heuristic_tokens", 0)) or 0)
+        except (TypeError, ValueError, AttributeError):
+            return None
+        anchored_nodes.append({
+            "seq": seq,
+            "heuristic_tokens": estimated,
+            "anchored_tokens": int(round(estimated * ratio)),
+        })
+    return {
+        "request_sha256": str(request_sha256 or ""),
+        "provider_input_tokens": provider_total,
+        "surface_tokens": estimated_total,
+        "anchor_ratio": round(ratio, 6),
+        "anchored": True,
+        "surface_node_tokens_anchored": anchored_nodes,
+    }
+
+
 def _with_surface_prices(
     result: dict[str, Any],
     surface_nodes: Sequence[Mapping[str, Any]] | None,
@@ -274,6 +327,6 @@ def level_index(band: str) -> int:
 
 
 __all__ = [
-    "DEFAULT_CONTEXT_WINDOW", "LEVELS", "level_index", "measure", "measure_session",
-    "price_surface_nodes",
+    "DEFAULT_CONTEXT_WINDOW", "LEVELS", "anchor_surface_to_usage", "level_index",
+    "measure", "measure_session", "price_surface_nodes",
 ]
