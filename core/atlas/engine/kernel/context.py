@@ -144,13 +144,28 @@ class ToolOutputClip:
 
 
 class ContextManager:
-    def __init__(self, config: Mapping[str, Any] | None = None, *, output_dir: str | Path | None = None):
+    def __init__(self, config: Mapping[str, Any] | None = None, *, output_dir: str | Path | None = None,
+                 provider: str = "", model: str = ""):
         settings = dict(config or {})
         self.config = dict(settings.get("engine", settings))
+        self.configure_model(provider=provider, model=model)
         self.output_dir = Path(output_dir) if output_dir else None
         self.consecutive_failures = 0
         self.last_assistant_completed_at: float | None = None
         self._evaluated_phase_boundaries: set[str] = set()
+
+    def configure_model(self, *, provider: str, model: str) -> None:
+        """Resolve the selected route's compaction overrides at each step boundary."""
+        policy = dict(self.config.get("context_compaction") or {})
+        overrides = dict(policy.pop("overrides", {}) or {})
+        policy.update(dict(overrides.get(provider, {}) or {}))
+        policy.update(dict(overrides.get(f"{provider}/{model}", {}) or {}))
+        self.compaction_policy = policy
+        for name, default in (("threshold_ratio", 0.8), ("retain_ratio", 0.16)):
+            value = float(policy.get(name, default))
+            if not math.isfinite(value) or not 0 < value < 1:
+                raise ValueError(f"context_compaction.{name} must be in (0, 1)")
+            policy[name] = value
 
     async def compact_in_place(
         self,
@@ -238,6 +253,8 @@ class ContextManager:
             cap = AUTO_COMPACT_WINDOW_TOKENS
         compact_effective = max(0, min(window, cap) - reserve)
         auto = max(0, compact_effective - int(self.config.get("auto_compact_buffer_tokens", AUTO_COMPACT_BUFFER_TOKENS)))
+        if "context_compaction" in self.config:
+            auto = min(auto, math.floor(compact_effective * self.compaction_policy["threshold_ratio"]))
         env_percent = os.environ.get("ATLAS_AUTO_COMPACT_PCT")
         if env_percent:
             try:
@@ -271,15 +288,10 @@ class ContextManager:
             return str(ref)
         if self.output_dir is None:
             return None  # Full evidence must exist before any output can be cut.
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        path = self.output_dir / (hashlib.sha256(content.encode("utf-8")).hexdigest() + ".txt")
-        if not path.exists():
-            try:
-                with path.open("x", encoding="utf-8", newline="") as stream:
-                    stream.write(content)
-            except FileExistsError:
-                pass
-        return str(path.resolve())
+        from atlas.spill_store import save_text
+
+        saved = save_text(content, directory=self.output_dir)
+        return str(saved["hint"]) if saved else None
 
     def clip_tool_result(self, content: str, *, tool_name: str = "") -> ToolOutputClip:
         """Persist and preview oversized tool text before adding it to model history.
@@ -452,6 +464,16 @@ class ContextManager:
         # Keep recent turns and every unmatched call outside the summarized range.
         keep_messages = max(1, int(self.config.get("context_keep_messages", 6)))
         cut = max(0, len(messages) - keep_messages)
+        if "context_compaction" in self.config:
+            retain_budget = math.floor(model_window * self.compaction_policy["retain_ratio"])
+            cut = max(0, len(messages) - 1)
+            retained_tokens = estimate_tokens(messages[cut:])
+            while cut > 0:
+                candidate_tokens = estimate_tokens(messages[cut - 1:cut])
+                if retained_tokens + candidate_tokens > retain_budget:
+                    break
+                retained_tokens += candidate_tokens
+                cut -= 1
         latest_user = next((i for i in range(len(messages) - 1, -1, -1)
                             if messages[i].get("role") == "user"), None)
         pending: dict[str, int] = {}

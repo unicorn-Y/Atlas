@@ -53,7 +53,11 @@ def _append_session_event_row(
          json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
          datetime.now(timezone.utc).isoformat()),
     )
-    return int(cursor.lastrowid)
+    sequence = int(cursor.lastrowid)
+    from atlas.session_telemetry import mirror_session_event
+
+    mirror_session_event(conn, sequence)
+    return sequence
 _IMPORT_MESSAGE_JSON_FIELDS = (
     "reasoning_details", "codex_reasoning_items", "codex_message_items", "absorbed_message_uids", "tool_call_uids",
 )

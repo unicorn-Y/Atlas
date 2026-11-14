@@ -1738,6 +1738,11 @@ class AtlasKernel:
                         turn_model, sdk_betas,
                     ) or context_window
                 model_window = int(context_window or 200_000)
+                compaction_route = agent._model_mgr._find_model(str(turn_model)) or {}
+                context_manager.configure_model(
+                    provider=str(compaction_route.get("provider") or ""),
+                    model=str(compaction_route.get("model") or turn_model),
+                )
                 configured_output_limit = (
                     model_config.get("max_output_tokens")
                     or model_capabilities.get("max_output_tokens")
@@ -1882,6 +1887,11 @@ class AtlasKernel:
                                     "plan": plan.plan.to_dict() if plan.plan else None,
                                     "todo": copy.deepcopy(request.plan_state),
                                     "open_tool_call_ids": sorted(open_call_ids),
+                                    "provider": str(compaction_route.get("provider") or ""),
+                                    "model": str(compaction_route.get("model") or turn_model),
+                                    "before_tokens": result.before_tokens,
+                                    "after_tokens": result.after_tokens,
+                                    "policy": copy.deepcopy(context_manager.compaction_policy),
                                 },
                             )
                         except Exception as exc:

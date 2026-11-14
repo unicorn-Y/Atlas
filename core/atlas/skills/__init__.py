@@ -317,7 +317,7 @@ class SkillManager:
     def __init__(self, skills_dir: Path | None = None) -> None:
         self._skills_dir = skills_dir or SKILLS_DIR
         self._index: dict[str, SkillInfo] = {}  # name → SkillInfo
-        self._scan_fingerprint: tuple[tuple[str, int, int], ...] = ()
+        self._scan_fingerprint: tuple[tuple[str, int, int], ...] | None = None
         self._sources: dict[str, SkillSource] = {
             "atlas": SkillSource("atlas", self._skills_dir, 10, layout="category"),
         }
@@ -370,7 +370,16 @@ class SkillManager:
 
     def scan_skills_sync(self) -> None:
         """Scan skills directory and build index (synchronous)."""
-        self._index.clear()
+        try:
+            fingerprint = self._current_fingerprint()
+            self._scan_skills_observation(fingerprint)
+        except OSError as exc:
+            self._scan_fingerprint = None
+            log.warning("skills.incomplete_observation", error=str(exc))
+
+    def _scan_skills_observation(self, fingerprint: tuple[tuple[str, int, int], ...]) -> None:
+        index: dict[str, SkillInfo] = {}
+        complete = True
 
         count = 0
         sources = sorted(
@@ -388,6 +397,7 @@ class SkillManager:
             for skill_md in skill_files:
                 parsed = _parse_skill_md(skill_md)
                 if parsed is None:
+                    complete = False
                     continue
 
                 fm, _body = parsed
@@ -403,18 +413,23 @@ class SkillManager:
                 info.source = source.name
                 info.source_priority = source.priority
 
-                existing = self._index.get(info.name)
+                existing = index.get(info.name)
                 if existing is not None:
                     log.warning("skills.duplicate_name", name=info.name,
                                 existing=existing.path, new=str(skill_md))
                     if existing.source_priority >= info.source_priority:
                         continue
-                self._index[info.name] = info
+                index[info.name] = info
                 if existing is None:
                     count += 1
 
         log.info("skills.scanned", count=count, sources=len(sources))
-        self._scan_fingerprint = self._current_fingerprint()
+        observed = self._current_fingerprint()
+        if observed != fingerprint:
+            self._scan_fingerprint = None
+            return
+        self._index = index
+        self._scan_fingerprint = observed if complete else None
 
     # -- freshness -------------------------------------------------------------
 
@@ -425,10 +440,7 @@ class SkillManager:
             if not source.root.is_dir():
                 continue
             for path in source.root.rglob("SKILL.md"):
-                try:
-                    stat = path.stat()
-                except OSError:
-                    continue
+                stat = path.stat()
                 entries.append((str(path), stat.st_mtime_ns, stat.st_size))
         return tuple(sorted(entries))
 
@@ -461,6 +473,21 @@ class SkillManager:
         """Get a skill by its name."""
         self._ensure_fresh()
         return self._index.get(name)
+
+    def list(self) -> list[SkillInfo]:
+        """Provider protocol entry point for observing available skills."""
+        return self.list_skills()
+
+    def get(self, name: str) -> SkillInfo | None:
+        """Provider protocol entry point for resolving one skill."""
+        return self.get_skill(name)
+
+    def handle_change(self, event_type: str) -> bool:
+        """Invalidate the provider observation when a skills/change arrives."""
+        if event_type != "skills/change":
+            return False
+        self._scan_fingerprint = None
+        return True
 
     def search_skills(self, query: str) -> list[SkillInfo]:
         """Search skills by name, description, or tags."""

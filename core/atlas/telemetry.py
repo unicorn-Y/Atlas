@@ -21,6 +21,7 @@ Design constraints, in order of importance:
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -212,6 +213,25 @@ def current_ids() -> dict[str, str]:
         "trace_id": format(context.trace_id, "032x"),
         "span_id": format(context.span_id, "016x"),
     }
+
+
+def product_event(name: str, attributes: dict[str, Any] | None = None) -> bool:
+    """Export an explicitly selected product event through the configured OTLP sink.
+
+    Only attributes supplied by the caller are included. Session history and
+    runtime context are never inspected by this entry point.
+    """
+    if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,127}", name):
+        return False
+    with span("atlas.product") as current:
+        if current is None:
+            return False
+        try:
+            current.add_event(name, attributes=_scrub_attributes(attributes or {}))
+        except Exception as exc:  # noqa: BLE001 - product analytics is best-effort
+            log.debug("telemetry.product_event_failed", error=str(exc))
+            return False
+    return True
 
 
 def trace_log_processor(

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import re
 import sqlite3
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -52,6 +54,25 @@ _CHAIN_STEP_SQL = f"""
 
 # Turn-lease rows expired longer than this are swept by the next acquisition of any conversation.
 _TURN_LEASE_SWEEP_GRACE_S = 86400.0
+
+
+def lease_holder_is_stale(holder: str, expires_at: float, now: float) -> bool:
+    """Keep a verifiable local process owner fenced even when its heartbeat stalls."""
+    from atlas.engine.state.atlas_state import _compression_lock_holder_process_is_dead, psutil
+    from atlas.engine.state.atlas_state_pidns import holder_pid_checkable
+
+    match = re.search(r"(?:^|:)pid=(\d+)(?::|$)", holder or "")
+    if match and holder_pid_checkable(holder):
+        pid = int(match.group(1))
+        if pid == os.getpid():
+            return False
+        if psutil is not None:
+            try:
+                return not psutil.pid_exists(pid)
+            except Exception:
+                return False
+        return _compression_lock_holder_process_is_dead(holder)
+    return float(expires_at) <= now
 
 
 def _cooldown_row(exists: bool, cooldown_until, error) -> dict[str, Any]:
@@ -515,7 +536,7 @@ class SessionCompressionMixin:
         def _do(conn):
             return _claim_lease_row(
                 conn, "compression_locks", "session_id", session_id, holder, now, expires_at,
-                lambda h, e: e < now or _compression_lock_holder_process_is_dead(h))
+                lambda h, e: lease_holder_is_stale(h, e, now))
 
         try:
             acquired, reclaimed_holder = self._execute_write(_do)
@@ -587,12 +608,16 @@ class SessionCompressionMixin:
             # behind, and nothing else revisits a conversation nobody resumes. The grace keeps the
             # recent expiries a still-live owner can renew from a starved refresher; it is also the
             # longest a suspended holder can go unrefreshed and still keep its lease.
-            conn.execute("DELETE FROM session_turn_leases WHERE expires_at < ?",
-                         (now - _TURN_LEASE_SWEEP_GRACE_S,))
+            expired = conn.execute("SELECT conversation_id, holder, expires_at FROM session_turn_leases "
+                                   "WHERE expires_at < ?", (now - _TURN_LEASE_SWEEP_GRACE_S,)).fetchall()
+            for row in expired:
+                if lease_holder_is_stale(row["holder"], row["expires_at"], now):
+                    conn.execute("DELETE FROM session_turn_leases WHERE conversation_id = ? AND holder = ?",
+                                 (row["conversation_id"], row["holder"]))
             conversation_id = self._session_turn_lease_key_on_conn(conn, session_id)
             return _claim_lease_row(
                 conn, "session_turn_leases", "conversation_id", conversation_id, holder, now, expires_at,
-                lambda h, e: float(e) <= now or _compression_lock_holder_process_is_dead(h),
+                lambda h, e: lease_holder_is_stale(h, e, now),
             )[0]
         return bool(self._execute_write(_do, patience_s=patience_s))
 
