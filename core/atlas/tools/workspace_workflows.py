@@ -517,9 +517,31 @@ async def _session_manage(args: dict[str, Any], agent: Any, runtime: Any) -> dic
                 worktree_branch="", base_branch="",
             ):
                 return _result({}, error="The current conversation was not found.")
-            return _result({"conversation_id": conversation_id, "workspace": str(target),
-                            "applies_from_next_run": True,
-                            "active_run_workspace": str(_get(runtime, "workspace", "") or "")})
+            active_run_workspace = str(_get(runtime, "workspace", "") or "")
+            event_error = ""
+            try:
+                # Durable record (E21): per-session working-directory changes land
+                # in the append-only session event log next to turn/start and the
+                # compaction bracket, so a rewind/replay can see the move and the
+                # active run's fixed write root together.
+                from atlas.config import DATA_ROOT
+                from atlas.engine.session_sync import append_session_event
+
+                append_session_event(DATA_ROOT / "engine", conversation_id,
+                                     "working-directory/change", {
+                    "from": str(current.get("workspace") or ""),
+                    "to": str(target),
+                    "applies_from_next_run": True,
+                    "active_run_workspace": active_run_workspace,
+                })
+            except Exception as exc:
+                event_error = str(exc)
+            payload = {"conversation_id": conversation_id, "workspace": str(target),
+                       "applies_from_next_run": True,
+                       "active_run_workspace": active_run_workspace}
+            if event_error:
+                payload["event_mirror_error"] = event_error
+            return _result(payload)
 
         title = str(args.get("title") or "").strip()
         if not title or len(title) > 200:

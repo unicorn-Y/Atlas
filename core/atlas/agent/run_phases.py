@@ -528,6 +528,34 @@ async def _execute_run_phases(
 # -- phases ---------------------------------------------------------------
 
 
+def _idle_maintenance_callback():
+    """Build the production idle-maintenance producer for one run (E25).
+
+    Runs the SessionDB auto-maintenance sweep in a worker thread once the run's
+    turn has fully closed. The sweep is throttled (at most once per 24h),
+    idempotent, never raises, and refuses VACUUM while other processes hold the
+    store, so the idle slot can never cost the next turn its data. Returns a
+    coroutine function because the kernel awaits awaitable callbacks.
+    """
+
+    async def _run_idle_maintenance() -> dict[str, Any]:
+        def _blocking() -> dict[str, Any]:
+            from atlas.engine.state.atlas_state import SessionDB
+
+            try:
+                with SessionDB() as db:
+                    return db.maybe_auto_prune_and_vacuum()
+            except Exception as exc:  # noqa: BLE001 — maintenance must never raise into the kernel
+                log.info("agent.idle_maintenance_failed", error=str(exc))
+                return {"skipped": True, "error": str(exc)}
+
+        result = await asyncio.to_thread(_blocking)
+        log.info("agent.idle_maintenance_ran", result=result)
+        return result
+
+    return _run_idle_maintenance
+
+
 async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]:
     """Normalize the request, build the run context, resolve the model."""
     request, callbacks = state.request, state.callbacks
@@ -585,6 +613,14 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
         )
         await runtime.inbox.restore()
         await runtime.todo_store.bind_session_events(DATA_ROOT / "engine", request.conversation_id)
+        # E25 idle maintenance producer: after the run closes its turn, the
+        # kernel's runMaintenance() slot calls this so housekeeping (throttled,
+        # idempotent, holder-aware — see SessionDB.maybe_auto_prune_and_vacuum)
+        # actually runs in production instead of a host-path no-op. The kernel
+        # refuses maintenance while any turn is active, so the public state
+        # stays idle; a host may have already supplied its own callback.
+        if runtime.maintenance_callback is None:
+            runtime.maintenance_callback = _idle_maintenance_callback()
     # The kernel reads this off the run context; carrying it here is what makes a
     # host-registered finalizer reach an actual run instead of sitting in
     # AppServices unused.

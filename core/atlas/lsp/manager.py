@@ -43,7 +43,7 @@ from atlas.lsp import eventlog
 from atlas.lsp.availability import missing_server_hint
 from atlas.lsp.client import DIAGNOSTICS_DOCUMENT_WAIT, LSPClient, _diagnostic_key as _diag_key
 from atlas.lsp.servers import (
-    SERVERS, UNTRUSTED_SAFE_SERVERS, ServerContext, ServerDef, custom_servers, find_server_for_file, language_id_for,
+    UNTRUSTED_SAFE_SERVERS, ServerContext, ServerDef, custom_servers, language_id_for,
 )
 from atlas.lsp.workspace import clear_cache, is_trusted_workspace, operator_workspace_roots, resolve_workspace_for_file
 
@@ -184,6 +184,12 @@ class LSPService:
         self._disabled_servers = set(disabled_servers or [])
         self._idle_timeout = idle_timeout
         self._extra_servers: List[ServerDef] = list(extra_servers or [])
+        # Unified provider registry (E30): built-ins + config-declared servers in
+        # one register/query point; ``_server_for`` resolves through it. Runtime
+        # additions (tests, embedders) may register root-scoped providers here.
+        from atlas.lsp.registry import LspProviderRegistry
+
+        self._registry = LspProviderRegistry.seed_defaults(self._extra_servers)
         self._broken_retry = max(0.0, broken_retry_seconds)
         self._warmup_timeout = max(0.0, warmup_timeout)
         # ``None`` = misconfigured → fail closed (every root excluded) until the user fixes the key: a
@@ -266,13 +272,26 @@ class LSPService:
             return cls(enabled=True, wait_mode="document", wait_timeout=DIAGNOSTICS_DOCUMENT_WAIT, install_strategy="auto")
 
     def _server_for(self, file_path: str) -> Optional[ServerDef]:
-        """Config-declared servers first (they may claim an extension ahead of a built-in), then the registry."""
-        extra = find_server_for_file(file_path, self._extra_servers) if self._extra_servers else None
-        return extra or find_server_for_file(file_path)
+        """Config-declared servers first (they may claim an extension ahead of a built-in), then the registry.
+
+        Resolution goes through the unified provider registry: config-declared
+        servers are seeded ahead of the built-ins (priority 10 vs 50), so the
+        result is identical to the previous extra-then-builtin lookup, plus any
+        root-scoped provider registered after construction wins over both.
+        """
+        return self._registry.for_file(file_path)
 
     def handles_extension(self, ext: str) -> bool:
         """True iff a config-declared or built-in server claims ``ext`` (pre-write capture decision)."""
-        return any(ext.lower() in s.extensions for s in (*self._extra_servers, *SERVERS))
+        return self._registry.handles_extension(ext)
+
+    def register_provider(self, provider: ServerDef, *, root: str | None = None,
+                          priority: int = 50) -> None:
+        """Register an additional provider (root-scoped entries win over the seeded catalog)."""
+        self._registry.register(provider, root=root, priority=priority)
+
+    def unregister_provider(self, server_id: str, *, root: str | None = None) -> int:
+        return self._registry.unregister(server_id, root=root)
 
     # ---- public API ----
 
