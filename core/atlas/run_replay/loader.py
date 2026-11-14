@@ -108,6 +108,7 @@ def _scan_file(path: Path) -> dict:
     last: dict | None = None
     run_end_raw = ""
     ends_with_newline = True
+    session_id: str | None = None
     try:
         with path.open("r", encoding="utf-8", errors="replace") as handle:
             for raw in handle:
@@ -128,6 +129,11 @@ def _scan_file(path: Path) -> dict:
                 if first is None:
                     first = parsed
                 last = parsed
+                # run_start may not be the first line (api_timing and request
+                # envelopes land first), so capture the owning session from any
+                # run_start event while the file is being read anyway.
+                if session_id is None and parsed.get("event") == "run_start":
+                    session_id = as_str(parsed.get("session_id"))
                 # Cheap substring test before paying for a second decode: only
                 # ``run_end`` carries the authoritative duration. Both separator
                 # styles are matched so a compact re-serialisation still counts,
@@ -173,6 +179,7 @@ def _scan_file(path: Path) -> dict:
         "bad_lines": bad,
         "first": first if isinstance(first, dict) else None,
         "last": last if isinstance(last, dict) else None,
+        "session_id": session_id,
         "truncated": truncated,
         "duration_ms": duration_ms,
         "end_status": end_status,
@@ -221,6 +228,9 @@ def _merge_info(run_id: str, paths: list[Path]) -> RunInfo:
             main_count = scan["event_count"]
             main_path = path
         first, last = scan["first"], scan["last"]
+        # Captured by the full-file scan below: run_start is not always the
+        # first line (api_timing lands first), so trust the scan result.
+        session_id = session_id or scan.get("session_id")
         if first:
             if first.get("event") == "run_start":
                 session_id = session_id or as_str(first.get("session_id"))
