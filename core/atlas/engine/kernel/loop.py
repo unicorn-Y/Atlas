@@ -3693,6 +3693,31 @@ class AtlasKernel:
                 "is_error": bool(result.get("is_error")) if isinstance(result, dict) else False,
                 "outcome": "failed" if isinstance(result, dict) and result.get("is_error") else "completed",
             }
+        if name in {"session_event_search", "session_trace", "session_event_trace", "session_event_read"}:
+            # Durable session reads. The handler derives the workspace gate from
+            # the *session* row, never from model-supplied arguments, so a tool
+            # call cannot widen its own authority. Registered here because these
+            # existed only on the legacy agent path: the kernel advertised the
+            # schemas and then answered "unknown tool" on every call.
+            from atlas.agent.session_queries import execute_query
+            from atlas.config import DATA_ROOT
+            from atlas.engine.session_sync import _open_db
+
+            workspace = str(getattr(runtime, "workspace", "") or "")
+            try:
+                with _open_db(DATA_ROOT / "engine") as session_db:
+                    result = await asyncio.to_thread(
+                        execute_query, session_db, name, dict(arguments or {}),
+                        workspace=workspace,
+                        current_session=str(getattr(runtime, "conversation_id", "") or ""),
+                    )
+            except PermissionError as exc:
+                return {"content": str(exc), "is_error": True, "outcome": "denied"}
+            except (ValueError, KeyError, OSError) as exc:
+                return {"content": f"{type(exc).__name__}: {exc}", "is_error": True,
+                        "outcome": "failed"}
+            return {"content": json.dumps(result, ensure_ascii=False), "data": result,
+                    "outcome": "completed"}
         if name == "memory_search":
             from atlas.memory.library import get_library
 

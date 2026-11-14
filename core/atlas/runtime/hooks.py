@@ -515,7 +515,11 @@ async def execute_claude_hooks(
                 else:
                     decision.update(blocked=True, reason=stderr.strip() or output.strip() or "Blocked by hook")
             elif code == 2 and event in {"PostToolUse", "PostToolUseFailure"}:
-                if stderr.strip():
+                # Same split as the blocking case above: Claude's exit 2 is
+                # guidance for the model, Codex's is a hook error. Injecting a
+                # broken Codex hook's stderr as `feedback` appended the
+                # interpreter's traceback to every tool result.
+                if stderr.strip() and not str(group.get("source") or "").startswith("codex:"):
                     decision["feedback"] = "\n".join(
                         item for item in (str(decision.get("feedback") or ""), stderr.strip()) if item
                     )
