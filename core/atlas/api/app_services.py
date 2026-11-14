@@ -7,6 +7,7 @@ from typing import Any
 
 from atlas.session_projections import SessionProjections
 from atlas.engine.kernel.tool_finalize import ToolResultFinalizers
+from atlas.api.service_registry import ServiceRegistry
 from atlas.runtime.commands import SlashCommandRegistry
 
 
@@ -85,6 +86,13 @@ class AppServices:
     # ``session_projections``: a bare container must still give registrants a real
     # registry, and a runtime without one gets a fresh no-op registry in the loop.
     tool_result_finalizers: Any = field(default_factory=ToolResultFinalizers)
+    # Ownership and reversibility for services. The fields above stay exactly as
+    # they are — 73 call sites read them directly, and migrating that for no
+    # user-visible gain would be churn. What this adds is what the dataclass
+    # cannot express: which owner provided a service, and how to take it back.
+    # ``bind_into`` projects a registered service onto its same-named field, so
+    # the two views never diverge.
+    service_registry: Any = field(default_factory=ServiceRegistry)
 
     # -- guarded accessors -------------------------------------------------
     # Every handler writes ``services.<field>.<method>``, and a field that is

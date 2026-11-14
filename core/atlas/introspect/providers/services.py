@@ -142,6 +142,29 @@ def _wiring(ctx: Context, _args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _registry(ctx: Context, _args: dict[str, Any]) -> dict[str, Any]:
+    """Who registered each service, and what a teardown could remove.
+
+    `wiring` answers "is the field filled"; this answers "who filled it" — the
+    question a plugin unload actually needs, and the one a flat dataclass cannot
+    answer at all.
+    """
+    container = ctx.services
+    if container is None:
+        return {"note": "当前应用还没有 AppServices 容器。"}
+    registry = getattr(container, "service_registry", None)
+    if registry is None:
+        return {"note": "这个容器没有 service_registry。"}
+    snapshot = getattr(registry, "snapshot", None)
+    owners = getattr(registry, "owners", None)
+    registered = snapshot() if callable(snapshot) else {}
+    return {
+        "registered": registered,
+        "count": len(registered),
+        "by_owner": owners() if callable(owners) else {},
+    }
+
+
 PROVIDER = Provider(
     id="services",
     title="服务图谱",
@@ -184,6 +207,12 @@ PROVIDER = Provider(
             summary="容器自身的接线报告：已接线的字段与类型、未接线的字段。",
             input_schema=object_schema(),
             run=_wiring,
+        ),
+        Method(
+            name="registry",
+            summary="服务注册表：每个服务由谁注册、按 owner 的计数，以及哪些可被撤销。",
+            input_schema=object_schema(),
+            run=_registry,
         ),
     ),
 )

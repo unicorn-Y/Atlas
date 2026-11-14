@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import os
 import subprocess  # noqa: F401 — compat: tests patch ``atlas.server.subprocess.run``
@@ -700,6 +701,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Office live-control state belongs to this app lifespan and must be
         # available before the first task-pane request arrives.
         services.office_live_sessions = {}
+        # Give every wired service a registered owner without changing a single
+        # read site: the fields stay authoritative for `services.<field>`, and
+        # the registry records who provided each one so a teardown can remove
+        # exactly one contributor's services. Each factory returns the instance
+        # already bound, so resolve() can never build a second copy.
+        for _field in dataclasses.fields(services):
+            _name = _field.name
+            if _name in {"service_registry", "session_projections",
+                         "tool_result_finalizers", "startup", "runtime_mgr"}:
+                continue
+            _value = getattr(services, _name, None)
+            if _value is None:
+                continue
+            try:
+                services.service_registry.register(
+                    _name, (lambda v=_value: v), owner="core:lifespan",
+                )
+            except ValueError:
+                pass  # a plugin already registered this name with its own owner
         manager.services = services
 
         # At this point config/model managers, the orchestrator, and built-in
