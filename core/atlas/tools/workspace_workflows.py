@@ -512,8 +512,6 @@ async def _session_manage(args: dict[str, Any], agent: Any, runtime: Any) -> dic
                 worktree_branch="", base_branch="",
             ):
                 return _result({}, error="The current conversation was not found.")
-            if hasattr(runtime, "workspace"):
-                runtime.workspace = str(target)
             return _result({"conversation_id": conversation_id, "workspace": str(target),
                             "applies_from_next_run": True,
                             "active_run_workspace": str(_get(runtime, "workspace", "") or "")})

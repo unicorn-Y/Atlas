@@ -285,6 +285,7 @@ class RunRequest:
     ignore_workspace_rules: bool = False
     mode: str = "act"
     mode_explicit: bool = False
+    tool_mode: str = "native"
     tool_allow: list[str] | None = None
     tool_deny: list[str] | None = None
     read_only: bool = False
@@ -532,6 +533,7 @@ async def _phase_begin(agent, state: _RunState) -> AsyncIterator[dict[str, Any]]
         agent_type=request.agent_type, agent_preset_id=request.agent_preset_id,
         agent_preset_capabilities=request.agent_preset_capabilities,
         permission_preset=request.permission_preset, mode=request.mode,
+        tool_mode=request.tool_mode,
         mode_explicit=request.mode_explicit,
         memory_scope_id=request.memory_scope_id,
         moa_enabled=moa_enabled,

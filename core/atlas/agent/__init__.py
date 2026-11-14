@@ -262,6 +262,7 @@ def _append_project_note(path: Path, section: str, note: str) -> None:
 class AgentRunContext:
     """Control hooks scoped to one agent run."""
 
+    tool_mode: str = "native"
     cancel_event: asyncio.Event | None = None
     pause_event: asyncio.Event | None = None
     approval_callback: Callable[[str, str, dict], Any] | None = None
@@ -978,6 +979,7 @@ class AgentOrchestrator:
         ignore_workspace_rules: bool = False,
         mode: str = "act",
         mode_explicit: bool | None = None,
+        tool_mode: str = "native",
         tool_allow: list[str] | None = None,
         tool_deny: list[str] | None = None,
         read_only: bool = False,
@@ -1040,6 +1042,7 @@ class AgentOrchestrator:
             moa=moa, workspace_rules=workspace_rules,
             ignore_workspace_rules=ignore_workspace_rules, mode=mode,
             mode_explicit=(mode != "act" if mode_explicit is None else mode_explicit),
+            tool_mode=tool_mode,
             tool_allow=tool_allow, tool_deny=tool_deny, read_only=read_only,
             permission_mode=permission_mode, allowed_paths=allowed_paths,
             sandbox_enabled=sandbox_enabled, project_id=project_id,

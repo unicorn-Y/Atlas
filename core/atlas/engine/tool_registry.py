@@ -45,6 +45,51 @@ _ALIASES = {
     "new_context_window": ("new_context_window", None),
 }
 
+# Every Atlas alias above crosses the same host bridge, but its result has a
+# tool-specific meaning. Most bridge handlers return text. Reading an image is
+# the one exception: it may return the registry's multimodal envelope.
+_ALIAS_OUTPUT_DESCRIPTIONS = {
+    "read_file": "File contents, or a multimodal envelope when the file is an image.",
+    "write_file": "Text receipt describing the file write outcome.",
+    "search_files": "Text search results from the requested workspace paths.",
+    "patch": "Text receipt describing the patch outcome and any diagnostics.",
+    "terminal": "Text output from the requested terminal command.",
+    "process_manage": "Text status or output for the requested background process operation.",
+    "clarify": "Text result from the user clarification request.",
+    "todo_list": "Text representation of the updated task list.",
+    "execute_code": "Text output from the requested code execution.",
+    "session_search": "Text search results from the requested session query.",
+    "delegate_task": "Text result describing the delegated task outcome.",
+    "new_context_window": "Text handoff summary for the next model context.",
+}
+
+
+def _alias_output_schema(name: str) -> dict[str, Any]:
+    """Return the output shape declared for one Atlas alias registration."""
+    description = _ALIAS_OUTPUT_DESCRIPTIONS[name]
+    if name == "read_file":
+        return {
+            "title": "read_file output",
+            "description": description,
+            "oneOf": [
+                {"type": "string"},
+                {
+                    "type": "object",
+                    "properties": {
+                        "_multimodal": {"const": True},
+                        "content": {"type": "array"},
+                    },
+                    "required": ["_multimodal", "content"],
+                    "additionalProperties": True,
+                },
+            ],
+        }
+    return {
+        "title": f"{name} output",
+        "description": description,
+        "type": "string",
+    }
+
 _HERMES_CORE_TOOLS = {
     "read_file", "write_file", "patch", "search_files", "terminal",
     "process_manage", "todo_list", "clarify", "execute_code", "new_context_window",
@@ -565,6 +610,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
             registry.register(
                 name=name, toolset=atlas_toolset, schema=schema, handler=handler,
                 is_async=False, description=schema["description"], override=True,
+                output_schema=_alias_output_schema(name),
                 check_fn=getattr(native_entry, "check_fn", None),
                 max_result_size_chars=getattr(native_entry, "max_result_size_chars", None),
                 dynamic_schema_overrides=getattr(native_entry, "dynamic_schema_overrides", None),

@@ -8,6 +8,7 @@ read here; the backend owns them.
 from __future__ import annotations
 
 import asyncio
+import argparse
 import json
 import sys
 import uuid
@@ -20,21 +21,29 @@ except ImportError:  # pragma: no cover - dependency is part of the desktop extr
 
 
 async def main() -> int:
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8799
-    prompt = sys.argv[2] if len(sys.argv) > 2 else "Reply with exactly the word: OK"
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("port", nargs="?", type=int, default=8799)
+    parser.add_argument("prompt", nargs="?", default="Reply with exactly the word: OK")
+    parser.add_argument("--tool-mode", choices=("native", "ptc"))
+    args = parser.parse_args()
+    port = args.port
+    prompt = args.prompt
     url = f"ws://127.0.0.1:{port}/ws/chat"
     run_id = str(uuid.uuid4())
     text_parts: list[str] = []
     terminal: str | None = None
 
     async with websockets.connect(url, max_size=8 * 1024 * 1024) as ws:
-        await ws.send(json.dumps({
+        start_payload = {
             "type": "run.start",
             "run_id": run_id,
             "conversation_id": f"dsh-live-{run_id[:8]}",
             "workspace": str(__import__("pathlib").Path.cwd()),
             "content": prompt,
-        }))
+        }
+        if args.tool_mode:
+            start_payload["tool_mode"] = args.tool_mode
+        await ws.send(json.dumps(start_payload))
         deadline = asyncio.get_running_loop().time() + 150
         while asyncio.get_running_loop().time() < deadline:
             try:

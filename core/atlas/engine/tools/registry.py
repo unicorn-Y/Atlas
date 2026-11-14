@@ -534,6 +534,20 @@ class ToolRegistry:
     def get_all_entries(self) -> list[ToolEntry]:
         return self._snapshot_entries()
 
+    def restrict(self, tool_names: Set[str] | list[str] | tuple[str, ...]) -> "RestrictedToolRegistry":
+        """Create a registration-scoped view limited to a non-empty set of known tools."""
+        if isinstance(tool_names, str):
+            raise ValueError("restricted tool names must be a non-empty collection")
+        names = frozenset(tool_names)
+        if not names:
+            raise ValueError("restricted tool names must not be empty")
+        if any(not isinstance(name, str) or not name for name in names):
+            raise ValueError("restricted tool names must be non-empty strings")
+        unknown = names.difference(self.get_all_tool_names())
+        if unknown:
+            raise ValueError(f"unknown restricted tool name(s): {', '.join(sorted(unknown))}")
+        return RestrictedToolRegistry(self, names)
+
     def get_tool_names_for_toolset(self, toolset: str) -> list[str]:
         return sorted(e.name for e in self._grouped(self._snapshot_entries()).get(toolset, []))
 
@@ -1058,6 +1072,31 @@ class ToolRegistry:
                     "name": ts, "env_vars": groups[ts][0].requires_env,
                     "tools": [entry.name for entry in groups[ts]]})
         return available, unavailable
+
+
+class RestrictedToolRegistry:
+    """A narrow registry view that cannot expose or dispatch tools outside its set."""
+
+    def __init__(self, registry: ToolRegistry, tool_names: frozenset[str]) -> None:
+        self._registry = registry
+        self._tool_names = tool_names
+
+    def get_tool_names(self) -> list[str]:
+        return sorted(name for name in self._tool_names
+                      if self._registry.get_entry(name) is not None)
+
+    def get_definitions(
+        self, tool_names: Set[str] | None = None, quiet: bool = False,
+    ) -> list[dict]:
+        requested = self._tool_names if tool_names is None else self._tool_names.intersection(tool_names)
+        return self._registry.get_definitions(set(requested), quiet=quiet)
+
+    def dispatch(
+        self, name: str, args: dict, *, scope: Optional[str] = None, **kwargs,
+    ) -> str | dict:
+        if name not in self._tool_names:
+            return tool_error(f"Tool {name!r} is outside this restricted registry")
+        return self._registry.dispatch(name, args, scope=scope, **kwargs)
 
 
 def _unique_env(entries: list[ToolEntry]) -> list:
