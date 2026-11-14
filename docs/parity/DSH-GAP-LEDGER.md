@@ -94,9 +94,9 @@
 |---|---|---|---|---|
 | S3 | 会话格式版本 + 相邻迁移链 v0→v4；读到**更新**版本必须拒绝并指出路径 | `packages/core/session/src/types.ts:89`；`session-format/src/chain.ts:41` | `SCHEMA_VERSION = 32`；`atlas_state_schema.py` 对更高版本抛 `SchemaTooNewError` 并给出 DB 路径 | ✅ 本轮关闭 |
 | S4 | 崩溃修复是 reader 侧补 closer（含 `turn/end{interrupted}`），不是重写 transcript | `packages/core/session/src/repair.ts:53` | `read_session_events()` 在读取时检查进程归属，对 stale open turn 事务性追加合成 `turn/end{interrupted}`；不修改 transcript，kernel 写入真实 `turn/start/end` | ✅ 本轮关闭 |
-| S5 | handle 式持久化：read/append/flush/close，单一写者，跨进程 kernel lease | `session-persistence/src/handle.ts:59,97,109` | WAL + busy_timeout + TTL lease（`atlas_state_common.py:569-582`）；TTL 到期即放开，非进程死亡释放 | PRESENT-WEAKER |
+| S5 | handle 式持久化：read/append/flush/close，单一写者，跨进程 kernel lease | `session-persistence/src/handle.ts:59,97,109` | SessionDB 提供 WAL、busy_timeout 与 TTL lease（`atlas_state_common.py:569-582`）；租约按过期时间释放，不证明持有进程仍存活，也没有统一 read/append/flush/close handle API | PARTIAL (W3-X4: DB lease exists; handle lifecycle and owner liveness missing) |
 | S6 | checkpoint 三屏障 fail-closed，写失败就阻断派发 | `session-checkpoint-policy/README.md` | `require_checkpoint()` 在阶段边界、工具派发前和工具结果持久化后失败即抛错，kernel 阻断继续执行 | ✅ 本轮关闭 |
-| S7 | 压缩 bracket 进日志，`summary` 记 shadowed seqs / token / provider / model，可重建 | `packages/compaction/compaction/src/types.ts:24,34,72` | 只有 run-log 一行 + DB 行锁 TTL 300s | PRESENT-WEAKER |
+| S7 | 压缩 bracket 进日志，`summary` 记 shadowed seqs / token / provider / model，可重建 | `packages/compaction/compaction/src/types.ts:24,34,72` | 只有 run-log 压缩记录 + DB 行锁 TTL 300s；缺少可重建的完整 bracket 与 shadowed seq/token/provider/model payload | PARTIAL (W3-X4: persisted lease and run-log marker only) |
 | S9 | 免模型 tool-result 剪枝：8192 阈值 / 4096 头 / 1024 尾，落**遮蔽替换节点** | `compaction-tool-result-pruner/src/config.ts:11-13` | `context.py` 对超阈值工具结果先内容寻址保存全文，再将头尾预览、`output_ref`、`microcompacted` 与 `masked_content` 一并写入 SessionDB；kernel resume 从 metadata 恢复标记。大结果会在首次持久化时剪枝，避免重启后恢复全文进模型上下文 | PARTIAL (W2; persistence/resume path implemented, runtime restart replay not verified) |
 | S11 | 投影注册表：纯单元、`stateVersion`、有线视图 schema、`asOfSeq` 快照 | `session-projection/src/index.ts:92` | 注册 `session.summary` 默认 projection；快照含 view schema、`stateVersion`、`asOfSeq` 与数据 | ✅ 本轮关闭 |
 | S13 | 会话查询语料库：可丢弃 fts5 索引 + revision/generation 增量 + `current|shadowed|log-only` 分类 | `session-query-sqlite/src/schema.ts:8,127` | 搜索结果提供稳定 `seq`、`after_seq` 游标和 `current|shadowed|log-only` 分类，覆盖 FTS/LIKE/CJK 路径 | ✅ 本轮关闭 |
@@ -110,24 +110,24 @@
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| S8 | 压缩策略 0.8 阈值 / 0.16 保留、per-provider-model 覆盖 | `compaction-basic/src/config.ts:20,23,191` | `context.py:196-256` 预留 21k / 缓冲 13k，全局配置 | PRESENT-PARITY |
+| S8 | 压缩策略 0.8 阈值 / 0.16 保留、per-provider-model 覆盖 | `compaction-basic/src/config.ts:20,23,191` | `context.py` 使用 Atlas 全局 context window、buffer 与 percentage 配置；没有 0.8/0.16 固定策略与 per-provider-model override 合约 | PARTIAL (W3-X4: global thresholds only) |
 | S10 | 图像 offload：log-only 决策 + message projection | `compaction-image-offload/src/*` | 无（图片从不进历史，见 S19） | ABSENT（被 S19 阻塞） |
-| S12 | 投影持久缓存 `session_projcache`：`(key,ver,seq,val)` 行 | `session-projection-cache/src/spec.ts:29` | 无持久缓存；`state/projections.py:86` 是无关的页缓存 | ABSENT |
-| S14 | 模型可见查询工具五件套 | `experimental/tool-session-query/src/index.ts:66-96` | 只有 `session_search` | PRESENT-WEAKER |
+| S12 | 投影持久缓存 `session_projcache`：`(key,ver,seq,val)` 行 | `session-projection-cache/src/spec.ts:29` | SessionDB 暂无 `session_projcache` 表；`state/projections.py` 是进程内 LRU 页缓存，`session_projections.py` 的 typed view 也仅进程内缓存；本批投影/schema/cursor 定向回归通过，未实现跨进程/重启持久化 | PARTIAL (W3-X4: in-process caches are tested; durable cache absent) |
+| S14 | 模型可见查询工具五件套 | `experimental/tool-session-query/src/index.ts:66-96` | kernel 暴露 `session_search`、`read_session` 等部分查询能力；无五件套完整 query/trace/event 工具面；session query corpus tests passed | PARTIAL (W3-X4: query surface incomplete) |
 | S15 | `sessionStats` 投影：整日志折叠，含 llmMs/toolMs/ttftMs | `session-stats/README.md:42-46` | `conversations_router.py:815-868` 只有消息数/轮数/token 成本 | PRESENT-WEAKER |
 | S16 | `turnOutline` 投影 | `session-turn-outline/src/projection.ts:85` | `atlas_state_timeline.py` 由 `SessionTimelineMixin` 注册到 `SessionDB`；`get_session_timeline()` 和 `get_session_messages_around()` 可直接调用，并有真实 SQLite 覆盖 | PRESENT-PARITY |
-| S17 | 会话导出 ZIP：live root 先 flush，含子会话与附件字节 | `session-log-export/src/archive.ts:187-195` | `export_session/import_sessions` 存在（`atlas_state_portability.py:293,734`）但**无 HTTP 路由**，不含附件 | PRESENT-WEAKER |
-| S18 | spill 缝：`saveText → {locator, bytes, hint}`，保存失败保留原文 | `docs/subsystems/spill.md:92`；`spill-policy/src/index.ts:27` | `context.py:274-310` 写 sha256 文件 + 路径提示；`spill_store.py:128` 按龄/大小清理；无 locator 抽象、无降级契约 | PRESENT-WEAKER |
-| S20 | deliverables `present` 工具 + per-turn `workspace/changes` | `tool-present/src/index.ts:40,105`；`workspace-changes/src/recorder.ts:351` | `canvas_update/push_component` 只推瞬时事件；变更文件只由子代理上报 | ABSENT |
-| S23 | session telemetry ledger：每规范事件一条，`(sessionId,formatVersion,seq)` 去重 | `session-telemetry-otel/src/index.ts:121` | 无（没有事件流可镜像） | ABSENT |
-| S24 | product telemetry 调用方选事件，OTLP/HTTP，不自动采会话数据 | `host/product-telemetry-otel/src/index.ts:85` | 全仓无 posthog/mixpanel/amplitude/segment | ABSENT |
-| S26 | DeepSeek 官方 API 增量上传会话日志，watermark + 8MiB 排空 | `session-log-deepseek/README.md:31,40` | 不适用 | ABSENT |
-| S27 | skill provider `list/get`、`skills/change` 失效、不完整观察不缓存 | `packages/skill/skill/src/index.ts:356,439` | 单层索引 + rglob 全量重扫（`skills/__init__.py:291,310`） | PRESENT-WEAKER |
+| S17 | 会话导出 ZIP：live root 先 flush，含子会话与附件字节 | `session-log-export/src/archive.ts:187-195` | JSON HTTP 导出路由已挂载（`conversations_router.py:1067-1118`），store 有 `export_session/import_sessions`，route tests passed；仍无 ZIP archive、live root flush 与附件字节打包 | PARTIAL (W3-X4: JSON route exists; ZIP/flush/attachments missing) |
+| S18 | spill 缝：`saveText → {locator, bytes, hint}`，保存失败保留原文 | `docs/subsystems/spill.md:92`；`spill-policy/src/index.ts:27` | `context.py` 写 SHA-256 内容寻址文件并提供路径提示；`spill_store.py` 有按龄/大小清理与定向测试；没有统一 locator/bytes/hint 返回契约或保存失败保留原文的降级保证 | PARTIAL (W3-X4: file spill path tested; locator/fallback contract absent) |
+| S20 | deliverables `present` 工具 + per-turn `workspace/changes` | `tool-present/src/index.ts:40,105`；`workspace-changes/src/recorder.ts:351` | legacy agent catalog/dispatcher 有 `present` 工具与 artifact event；没有 per-turn `workspace/changes` recorder。真实模型 W3-X4 回合转去本地工具并触发 `AskUserQuestion`，未调用 `present`，故没有 live 行为证据 | PARTIAL (W3-X4: present implementation exists; changes recorder and live proof missing) |
+| S23 | session telemetry ledger：每规范事件一条，`(sessionId,formatVersion,seq)` 去重 | `session-telemetry-otel/src/index.ts:121` | 没有规范 session-event ledger、formatVersion/seq 去重投影与重放；本批没有覆盖此 ledger 的回归 | ABSENT |
+| S24 | product telemetry 调用方选事件，OTLP/HTTP，不自动采会话数据 | `host/product-telemetry-otel/src/index.ts:85` | 没有符合调用方 opt-in、OTLP/HTTP exporter 的 product telemetry seam；本批未添加外部 analytics SDK | ABSENT |
+| S26 | DeepSeek 官方 API 增量上传会话日志，watermark + 8MiB 排空 | `session-log-deepseek/README.md:31,40` | 没有官方会话上传 API contract、增量 watermark 或 8 MiB drain path；本批不推测官方契约 | NOT-DONE (W3-X4: official upload contract unavailable in repository) |
+| S27 | skill provider `list/get`、`skills/change` 失效、不完整观察不缓存 | `packages/skill/skill/src/index.ts:356,439` | skill catalog 有本地索引/递归扫描能力，但未找到稳定 provider `list/get` 与 `skills/change` 失效通知契约；本批未新增 provider 层行为 | PARTIAL (W3-X4: local index exists; provider invalidation contract missing) |
 | S28 | 会话标题三来源 newest-wins，用户重命名钉住，`refresh()` 解钉 | `session-title/README.md:32` | `atlas_state_titles.py:43,84` 有 rank 顺序 + 用户标题 | PRESENT-PARITY |
-| S29 | `@session` 引用：host 准入的另一会话快照 + untrusted 包裹 | `docs/subsystems/session-reference.md` | `read_session` 返回末 N 条纯文本 | PRESENT-WEAKER |
+| S29 | `@session` 引用：host 准入的另一会话快照 + untrusted 包裹 | `docs/subsystems/session-reference.md` | `read_session` 能按授权会话读取末 N 条文本，但无 `@session` 引用解析、host admission 与显式 untrusted 包裹 | PARTIAL (W3-X4: direct read exists; reference admission/marking missing) |
 | S30 | 长期记忆：**DSH 完全没有** | `tool-ralph/README.md:36` | `memory/library/__init__.py:141,252` Markdown+git 页、三元组索引、30s→6h 退避队列、supersede 台账 | HARD (Atlas is already stronger; do not change product memory to imitate the missing DSH feature) |
 | S31 | rewind：**DSH 没有**（`rewind` 只是类型字面量） | `conversation-context.ts:6` | 三模式 rewind + preview + redo + 文件还原（`conversations_router.py:1394,1568`） | **PRESENT-STRONGER** |
-| S33 | 尝试级可观测：失败尝试也 durable 可重放 | `docs/architecture.md:120` | `run_replay/` + `run_checkpoints.py:122` 更强，但 run log **不含内容** | PRESENT-PARITY |
+| S33 | 尝试级可观测：失败尝试也 durable 可重放 | `docs/architecture.md:120` | `run_replay/` 与 `run_checkpoints.py` 持久化失败尝试/checkpoint；本批 `test_run_replay.py` 通过；run log 不含模型/工具内容，且本批无真实失败回合重放 | PARTIAL (W3-X4: durable replay tests pass; live failed-attempt replay/content absent) |
 
 ---
 
