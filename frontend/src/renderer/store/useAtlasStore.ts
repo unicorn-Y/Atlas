@@ -1282,6 +1282,15 @@ async function startRun(conversationId: string, item: QueuedMessage) {
   // 流式 delta 按 ~12.5Hz 合并进 store；其余事件先冲出攒着的 delta 再立即透传，顺序不变。
   const buffer = createEventBuffer((events) => { for (const event of events) get().appendEvent(event); });
   const handleEvent = (envelope: RuntimeEventEnvelope) => {
+    // The server answers a malformed outbound frame with `protocol.error`, which
+    // is not an agent_event. Surfacing it is the whole point of validating: a
+    // silent drop would look identical to the message never arriving.
+    const protocolError = envelope as unknown as { type?: string; error?: unknown };
+    if (protocolError?.type === 'protocol.error') {
+      const detail = typeof protocolError.error === 'string' ? protocolError.error : '未知协议错误';
+      set({ error: `发送失败：${detail}`, errorDetail: detail });
+      return;
+    }
     if (!isRuntimeEvent(envelope)) return;
     const event = normalizeRuntimeEvent(envelope);
     if (event?.type === 'run.usage') {

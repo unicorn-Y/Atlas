@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSock
 from atlas.api.app_services import AppServices
 from atlas.api.dependencies import get_app_services
 from atlas.api.runtime import RunState
+from atlas.api.ws_protocol import validate as validate_frame
 from atlas.approval_policy import grant as grant_approval_permission
 
 router = APIRouter()
@@ -76,6 +77,17 @@ async def ws_chat(
         while True:
             raw = await ws.receive_text()
             data = json.loads(raw)
+            msg_type = data.get("type", "")
+            # Validate before dispatch so a malformed frame is answered with the
+            # field that is wrong, instead of being silently ignored (unknown
+            # type) or surfacing later as a KeyError inside a handler.
+            payload, protocol_error = validate_frame(data)
+            if protocol_error is not None:
+                await ws.send_text(json.dumps({
+                    "type": "protocol.error", "error": protocol_error,
+                }, ensure_ascii=False))
+                continue
+            data = payload
             msg_type = data.get("type", "")
 
             if msg_type == "run.start":
