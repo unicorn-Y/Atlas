@@ -3479,12 +3479,21 @@ class AtlasKernel:
                 choice = approval(approval_id, tool_name, dict(tool_arguments))
                 return await choice if hasattr(choice, "__await__") else choice
 
+            # Permission-preset translation for the adapter contract: read-only
+            # runs deny mutations outright; full-access runs are the documented
+            # danger-full-access bypass; anything else keeps per-call approval.
+            runtime_mode = str(getattr(runtime, "permission_mode", "") or "")
+            adapter_mode = (
+                "read_only" if runtime_mode == "read_only"
+                else "danger-full-access" if runtime_mode == "full_access" else None
+            )
             return await execute_plugin_manager_tool(
                 name, arguments, agent=agent,
                 approve=approve_plugin_action if name in {
                     "request_plugin_install", "update_plugin", "set_plugin_enabled",
                     "uninstall_plugin",
                 } else None,
+                permission_mode=adapter_mode,
             )
         if name in {"list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"}:
             try:
