@@ -1497,6 +1497,30 @@ def _context_conversation_admitted(other_workspace: Any, run_workspace: Any) -> 
         return False
 
 
+_SESSION_REF_RE = re.compile(r"@session:([A-Za-z0-9][A-Za-z0-9._\-/:]*)")
+
+
+def _parse_session_references(content: str) -> list[str]:
+    """Extract ``@session:<id>`` references from run input text (S29).
+
+    Each mention becomes a host-admitted referenced-session snapshot: the id is
+    resolved and admitted by the same workspace rule as explicit
+    ``context_conversations`` before anything is injected, and the injected
+    content is wrapped untrusted — the mention itself never authorizes a read.
+    Tolerates the ``@session:<profile>/<id>`` deep-link form by taking the id
+    after the last ``/`` (the profile segment is display scope, not admission).
+    Order-preserving, de-duplicated.
+    """
+    refs: list[str] = []
+    for match in _SESSION_REF_RE.finditer(str(content or "")):
+        ref = match.group(1).strip("/").strip(".")
+        if "/" in ref:
+            ref = ref.rsplit("/", 1)[-1]
+        if ref and ref not in refs:
+            refs.append(ref)
+    return refs
+
+
 async def _handle_run_start(
     conn_id: str, data: dict[str, Any], manager: RuntimeManager | None = None,
 ) -> None:
@@ -2155,6 +2179,23 @@ async def _handle_run_start(
             "detail": "context_conversations must contain at most three conversation ids",
         }))
         return
+    # S29: ``@session:<id>`` mentions in the run input are session references on
+    # the same footing as explicit context_conversations — resolved and admitted
+    # by the identical workspace rule below, injected wrapped-untrusted, and
+    # bound by the same cap of three. The mention in the text never authorizes
+    # a read by itself; host admission does.
+    parsed_refs = [ref for ref in _parse_session_references(content)
+                   if ref not in [str(item) for item in context_conversations]]
+    if len(context_conversations) + len(parsed_refs) > 3:
+        invalid_run = RunState(run_id, str(data.get("conversation_id", "")),
+                               model_id or getattr(model_mgr, "current_model", ""))
+        await manager.send(conn_id, invalid_run.next_envelope("run.failed", {
+            "category": "validation",
+            "detail": "at most three referenced conversations total "
+                      "(context_conversations + @session mentions)",
+        }))
+        return
+    context_conversations = [*context_conversations, *parsed_refs]
     if workspace and str(workspace).startswith("ssh://"):
         try:
             host, remote_root = ssh_workspaces.parse_workspace(str(workspace))
