@@ -966,6 +966,21 @@ _REVIEW_TOOL_SCHEMAS: tuple[tuple[str, dict[str, Any]], ...] = (
     }),
 )
 
+# Per-tool output contracts (DSH E4): the review registry tools return text
+# receipts; declaring them here keeps every registry tool semantic per tool.
+_REVIEW_OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "review_command": {
+        "title": "review_command output",
+        "description": "Text receipt of the read-only verification command: stdout/stderr tail, exit code, or a structured `error` body when the command was refused.",
+        "type": "string",
+    },
+    "submit_findings": {
+        "title": "submit_findings output",
+        "description": "Text receipt confirming the review.findings event emission: severity counts and finding ids, or a structured `error` body.",
+        "type": "string",
+    },
+}
+
 
 def _resolve_active_context(session_id: str) -> tuple[Any, Any, Any]:
     """(agent, runtime, loop) for a live run, mirroring tool_registry's lookup."""
@@ -1026,6 +1041,7 @@ def register_review_tools() -> None:
             name=name, toolset="atlas", schema=schema,
             handler=_make_registry_handler(name), is_async=False,
             description=str(schema["description"]), override=True,
+            output_schema=_REVIEW_OUTPUT_SCHEMAS.get(name),
         )
 
 

@@ -216,6 +216,14 @@ class ToolOutputContract:
     presentation_meta: dict = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class _ScopeRestriction:
+    """One bound registration-scoped restriction (DSH ``tools.restrict`` semantics)."""
+
+    allow: frozenset[str] | None
+    deny: frozenset[str] | None
+
+
 _DEFAULT_OUTPUT_SCHEMA = {
     "oneOf": [
         {"type": "string"},
@@ -454,6 +462,9 @@ class ToolRegistry:
         self._toolset_aliases: dict[str, str] = {}
         # MCP refresh mutates while other threads read: serialize writes, snapshot reads.
         self._lock = threading.RLock()
+        # Registration-scoped restrictions per profile scope (see restrict_scope):
+        # intersecting allow/deny layers that mask process-global tools for that scope.
+        self._restrictions: dict[str, list[_ScopeRestriction]] = {}
         # Bumped on every mutation; get_tool_definitions memoizes against it.
         self._generation: int = 0
 
@@ -520,6 +531,10 @@ class ToolRegistry:
         scoped = self._scoped_tools.get(scope_key)
         if scoped is not None and name in scoped:
             return scoped[name]
+        # A scope restriction hides process-global entries; overlay entries above
+        # stay visible (scoped registrations are never masked by the global mask).
+        if name in self._tools and self._restriction_removed(name, scope_key):
+            return None
         return self._tools.get(name)
 
     def snapshot_registration(
@@ -547,6 +562,75 @@ class ToolRegistry:
         if unknown:
             raise ValueError(f"unknown restricted tool name(s): {', '.join(sorted(unknown))}")
         return RestrictedToolRegistry(self, names)
+
+    def restrict_scope(
+        self, *, allow: Set[str] | list[str] | tuple[str, ...] | None = None,
+        deny: Set[str] | list[str] | tuple[str, ...] | None = None,
+        scope: Optional[str] = None,
+    ) -> Callable[[], None]:
+        """Bind a registration-scoped restriction layer and return its disposer.
+
+        DSH ``tools.restrict()`` semantics: the restriction masks process-global
+        tools for one profile scope; an empty filter (neither ``allow`` nor
+        ``deny``), an empty name set, or any unknown tool name fails here instead
+        of silently producing a wrong toolset. Restrictions *intersect* — every
+        bound layer must keep a tool for it to stay visible. Tools registered in
+        the scope's own overlay (profile-local plugin/MCP registrations) remain
+        visible; the mask applies only to process-global entries.
+
+        The disposer lifts exactly this layer, so a scoped lifetime (one child
+        run, one profile turn) can unbind it without touching other layers.
+        """
+        if allow is None and deny is None:
+            raise ValueError(
+                "restrict_scope({}) is a no-op: pass allow and/or deny "
+                "(an empty filter is almost always a materialized-empty-config bug)")
+        if isinstance(allow, str) or isinstance(deny, str):
+            raise ValueError("restrict_scope allow/deny must be collections of tool names")
+        allow_names = frozenset(allow) if allow is not None else None
+        deny_names = frozenset(deny) if deny is not None else None
+        for label, names in (("allow", allow_names), ("deny", deny_names)):
+            if names is not None and not names:
+                raise ValueError(f"restrict_scope {label} must not be empty")
+            if any(not isinstance(name, str) or not name for name in names or ()):
+                raise ValueError(f"restrict_scope {label} must contain non-empty strings")
+        named = (allow_names or frozenset()) | (deny_names or frozenset())
+        unknown = named.difference(self.get_all_tool_names())
+        if unknown:
+            raise ValueError(
+                f"restrict_scope() names unknown tool(s): {', '.join(sorted(unknown))}; "
+                f"known tools: {', '.join(self.get_all_tool_names()) or '(none)'}")
+        scope_key = atlas_home_key(scope)
+        layer = _ScopeRestriction(allow=allow_names, deny=deny_names)
+        with self._lock:
+            self._restrictions.setdefault(scope_key, []).append(layer)
+            self._generation += 1
+
+        def dispose() -> None:
+            with self._lock:
+                layers = self._restrictions.get(scope_key)
+                if layers and layer in layers:
+                    layers.remove(layer)
+                    if not layers:
+                        self._restrictions.pop(scope_key, None)
+                    self._generation += 1
+
+        return dispose
+
+    def _restriction_removed(self, name: str, scope_key: Optional[str]) -> bool:
+        """True when the scope's restriction layers jointly hide a process-global tool."""
+        layers = self._restrictions.get(scope_key) if scope_key else None
+        if not layers:
+            return False
+        allowed: set[str] | None = None
+        denied: set[str] = set()
+        for layer in layers:
+            if layer.allow is not None:
+                allowed = set(layer.allow) if allowed is None else (allowed & layer.allow)
+            denied |= set(layer.deny or ())
+        if name in denied:
+            return True
+        return allowed is not None and name not in allowed
 
     def get_tool_names_for_toolset(self, toolset: str) -> list[str]:
         return sorted(e.name for e in self._grouped(self._snapshot_entries()).get(toolset, []))
@@ -893,9 +977,15 @@ class ToolRegistry:
         result = []
         check_results: dict[Callable, bool] = {}
         entries_by_name = {entry.name: entry for entry in self._snapshot_entries()}
+        scope_key = self.current_scope_key()
+        overlay_names = set(self._slot(scope_key))
         for name in sorted(tool_names):
             entry = entries_by_name.get(name)
             if not entry:
+                continue
+            if name not in overlay_names and self._restriction_removed(name, scope_key):
+                if not quiet:
+                    logger.debug("Tool %s hidden by a registration-scoped restriction", name)
                 continue
             if entry.check_fn and not _memo_check(entry.check_fn, check_results):
                 if not quiet:

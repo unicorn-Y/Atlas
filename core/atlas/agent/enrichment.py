@@ -683,6 +683,26 @@ class DelegationService:
         return {key: value for key, value in record.items()
                 if key not in {"cancel_event", "steer_queue"}}
 
+    def list_subtasks(self) -> list[dict[str, Any]]:
+        """Return this run's team roster in creation order, without control objects.
+
+        This is the model-visible Agent Teams roster: one row per live child with
+        its identity, goal, and status. Closed children are included until
+        ``close_subtask`` consumes them, so the caller sees the full team.
+        """
+        return [
+            {key: value for key, value in record.items()
+             if key not in {"cancel_event", "steer_queue"}}
+            for record in self._subtasks.values()
+        ]
+
+    def roster_status_signature(self) -> dict[str, str]:
+        """Compact per-member status map used by team-wide waits."""
+        return {
+            subtask_id: str(record.get("status") or "")
+            for subtask_id, record in self._subtasks.items()
+        }
+
     async def wait_background(self, subtask_id: str) -> None:
         """Wait for one background child; primarily useful to lifecycle owners and tests."""
         task = self._background_tasks.get(subtask_id)

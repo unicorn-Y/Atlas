@@ -348,6 +348,7 @@ def bind_atlas_tools(agent: Any, runtime: Any, loop: asyncio.AbstractEventLoop) 
             },
             handler=lambda _args, **_kwargs: "Context handoff is only available during an Atlas run.",
             is_async=False, override=True,
+            output_schema=_alias_output_schema("new_context_window"),
         )
     repo_map_name = str(REPOMAP_TOOL_SPEC["name"])
     repo_map_parameters = dict(REPOMAP_TOOL_SPEC["input_schema"])

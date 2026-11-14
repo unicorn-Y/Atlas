@@ -835,6 +835,11 @@ registry.register(
         timeout_s=args.get("timeout_s", _DEFAULT_TIMEOUT_S), task_id=kw.get("task_id"),
         local=bool(args.get("local", False)),
     ),
+    output_schema={
+        "title": "browser_exec output",
+        "description": "Text report of the executed browser automation step: result value, page state, or a structured `error` body.",
+        "type": "string",
+    },
     check_fn=is_browser_use_cli_mode,
     dynamic_schema_overrides=_dynamic_schema_overrides,
     emoji="🌐",
