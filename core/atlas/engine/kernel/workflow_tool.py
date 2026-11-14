@@ -14,13 +14,16 @@ from atlas.engine.tool_permissions import tool_allowed
 from atlas.engine.kernel.model_call import complete_stream
 from atlas.engine.kernel.subagents import KernelWorkflowSubagentRunner
 from atlas.workflow import (
+    WorkflowGraph,
     WorkflowJournal,
+    WorkflowNode,
     WorkflowResult,
     plan_workflow,
     pause_workflow,
     resume_workflow,
     run_workflow,
 )
+from atlas.workflow.graph import validate_graph
 
 
 WORKFLOW_TOOL_SPEC: dict[str, Any] = {
@@ -28,7 +31,9 @@ WORKFLOW_TOOL_SPEC: dict[str, Any] = {
     "description": (
         "Plan a larger task as a dependency graph and execute its ready tasks in parallel. "
         "Each node runs as an isolated Atlas subagent in the current workspace. Use goal for a "
-        "new workflow, or resume_workflow_id to continue a previously paused workflow."
+        "new workflow, resume_workflow_id to continue a previously paused workflow, or script "
+        "to supply the orchestration yourself with agent(...), parallel([...]), pipeline([...]) "
+        "and after(deps, expr)."
     ),
     "parameters": {
         "type": "object",
@@ -37,6 +42,16 @@ WORKFLOW_TOOL_SPEC: dict[str, Any] = {
             "resume_workflow_id": {
                 "type": "string",
                 "description": "Resume a previously paused workflow by its workflow_id.",
+            },
+            "script": {
+                "type": "string",
+                "description": (
+                    "Orchestration script, used instead of letting the planner invent the DAG. "
+                    "One statement per line: `a = agent(\"goal\")`, "
+                    "`b = parallel([agent(\"x\"), agent(\"y\")])`, "
+                    "`c = pipeline([agent(\"x\"), agent(\"y\")])`, "
+                    "`d = after(a, agent(\"z\"))`. Only these four call forms are accepted."
+                ),
             },
         },
         "additionalProperties": False,
@@ -113,14 +128,41 @@ async def execute_workflow_tool(
         return result.text
 
     if not resume_id:
-        graph = await plan_workflow(
-            goal,
-            workspace=workspace,
-            call_model=call_planner,
-            model=selected_model,
-        )
-        graph.workflow_id = str(uuid.uuid4())
-        workflow_id = graph.workflow_id
+        script_source = str(arguments.get("script") or "").strip()
+        if script_source:
+            # A model-authored script takes precedence over the planner: the model
+            # asked for that exact control flow, and re-planning would silently
+            # discard the structure it wanted.
+            from atlas.workflow.script import ScriptError, parse_script
+
+            try:
+                compiled = parse_script(script_source)
+            except ScriptError as exc:
+                return {
+                    "content": f"workflow script rejected: {exc}",
+                    "is_error": True, "outcome": "failed",
+                }
+            graph = WorkflowGraph(
+                goal=goal or "scripted workflow",
+                workspace=workspace or "",
+                workflow_id=str(uuid.uuid4()),
+                nodes=[
+                    WorkflowNode(id=node["id"], goal=node["goal"],
+                                 depends_on=list(node.get("depends_on") or []))
+                    for node in compiled.nodes
+                ],
+            )
+            validate_graph(graph)
+            workflow_id = graph.workflow_id
+        else:
+            graph = await plan_workflow(
+                goal,
+                workspace=workspace,
+                call_model=call_planner,
+                model=selected_model,
+            )
+            graph.workflow_id = str(uuid.uuid4())
+            workflow_id = graph.workflow_id
     else:
         workflow_id = resume_id
 
