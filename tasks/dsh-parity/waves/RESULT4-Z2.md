@@ -262,3 +262,12 @@ $ python -m pytest tests/test_w4_z2_batch.py tests/test_kernel_compaction_surfac
   worktree 后端禁用，避免 fail-closed 信任闸拦住测试回合；不触碰用户真实配置）、`data/user-settings.json` 为本批
   测试配置，均被 gitignore，不入库。
 - 后端进程已全部关闭（8882 无监听）。
+
+## 事故记录（透明披露）
+
+收尾清理本批残留进程时，一条 PowerShell 过滤器误杀了**不属于本批**的两个
+`D:\Atlas\core\.venv\python -m uvicorn atlas.server:app --host 127.0.0.1 --port 8874` 进程（主检出区、
+端口 8874，应为其它批次/编排器在用的后端）。已立即用相同命令行 + 计划书的标准代理环境
+（HTTP(S)_PROXY=http://127.0.0.1:7897）分离重启，`netstat` 确认 8874 恢复 LISTENING（PID 7156）。
+原两个进程可能是同端口的双实例（Windows SO_REUSEADDR 允许），现只恢复为单实例；若 8874 的属主
+发现缺第二个实例，请自行重启另一个。数据均落盘（主检出区 data/），进程重启不丢状态。
