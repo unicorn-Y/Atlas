@@ -2117,7 +2117,19 @@ class AtlasKernel:
                         if str((item.get("function") or item).get("name", ""))
                         not in {"local_edit", "local_edit_batch"}
                     ]
-                    available_tools = [*available_tools, *edit_manager.get_tools_for_llm()]
+                    # The editor schemas are appended after the allow/deny
+                    # sweep above, so they must pass the same predicate here;
+                    # otherwise a restricted child (agent definition `tools:`)
+                    # would still be offered write/edit/apply_patch.
+                    available_tools = [
+                        *available_tools,
+                        *[
+                            schema for schema in edit_manager.get_tools_for_llm()
+                            if tool_allowed(
+                                str(schema["function"]["name"]), tool_allow, tool_deny,
+                            )
+                        ],
+                    ]
                 # Keep contracts for the complete executable pool, including
                 # schemas that tool_search may defer and expose later this turn.
                 tool_output_contracts = output_contracts_for_tools(available_tools)

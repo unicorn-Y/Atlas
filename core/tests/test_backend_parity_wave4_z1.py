@@ -517,3 +517,27 @@ async def test_restricted_scheduler_still_allows_concludeturn_but_honors_deny():
         {"id": "c2", "function": {"name": "concludeTurn", "arguments": {}}})
     assert result.receipt.state == "failed"
     assert "not allowed" in str(result.output.get("error", ""))
+
+
+def test_kernel_editor_schemas_honor_tool_allow():
+    """E26: kernel editor schemas are appended after the allow/deny sweep, so
+    they must be gated by the same predicate. A restricted child that is not
+    granted edit/write/apply_patch must never be offered them."""
+    from pathlib import Path
+
+    from atlas.engine.kernel.edit import EDIT_TOOL_NAMES
+    from atlas.engine.kernel.edit import EditManager
+    from atlas.engine.tool_permissions import tool_allowed
+
+    manager = EditManager(Path.cwd())
+    offered = [str(item["function"]["name"]) for item in manager.get_tools_for_llm()]
+    assert set(offered) == set(EDIT_TOOL_NAMES)
+
+    allow = ["local_file", "search_files"]
+    gated = [
+        name for name in offered if tool_allowed(name, allow, ())
+    ]
+    assert gated == [], f"restricted run still offered {gated}"
+
+    unrestricted = [name for name in offered if tool_allowed(name, None, ())]
+    assert set(unrestricted) == set(EDIT_TOOL_NAMES)
