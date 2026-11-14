@@ -1,0 +1,85 @@
+2026-11-14 14:28:30 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-_7q2v2jm\atlas\config\atlas.toml
+.....F...F....F                                                          [100%]
+================================== FAILURES ===================================
+_____________ test_delegation_service_roster_and_status_signature _____________
+
+    def test_delegation_service_roster_and_status_signature():
+        from atlas.agent.enrichment import DelegationService
+    
+>       service = DelegationService(SimpleNamespace(backends={}), MagicMock())
+                                                                  ^^^^^^^^^
+E       NameError: name 'MagicMock' is not defined
+
+tests\test_backend_parity_wave4_z1.py:155: NameError
+_______________ test_kanban_task_tool_passes_expected_revision ________________
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/w4-z1/.tmp/pytest/test_kanban_task_tool_passes_e0')
+
+    def test_kanban_task_tool_passes_expected_revision(tmp_path):
+        from unittest.mock import MagicMock
+    
+        agent = AgentOrchestrator(MagicMock(), MagicMock(), agent_backend_host=SimpleNamespace(backends={}))
+        runtime = AgentRunContext(run_id="kanban-run", conversation_id="kanban-conv")
+    
+        output, _ = _dispatch(agent, runtime, "kanban_create_board", {"name": "z1-tool"})
+>       board_id = json.loads(output["messages"][-1].content)["id"]
+                              ^^^^^^^^^^^^^^^^^^
+E       TypeError: string indices must be integers, not 'str'
+
+tests\test_backend_parity_wave4_z1.py:265: TypeError
+____________ test_registry_tools_expose_semantic_output_contracts _____________
+
+    def test_registry_tools_expose_semantic_output_contracts():
+        import atlas.engine.tools.browser_use_cli  # noqa: F401 - registers browser_exec
+        import atlas.engine.tools.todo_tool  # noqa: F401 - registers todo_list
+        from atlas.engine.tools.registry import registry
+        from atlas.review.engine import register_review_tools
+    
+        register_review_tools()
+        import atlas.engine.tool_registry  # noqa: F401 - binds new_context_window
+    
+        for name in ("todo_list", "browser_exec", "review_command", "submit_findings",
+                     "new_context_window", "read_file"):
+            contract = registry.get_output_contract(name)
+>           assert contract is not None, f"{name} has no output contract"
+E           AssertionError: new_context_window has no output contract
+E           assert None is not None
+
+tests\test_backend_parity_wave4_z1.py:437: AssertionError
+============================== warnings summary ===============================
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_backend_parity_wave4_z1.py::test_delegation_service_roster_and_status_signature
+FAILED tests/test_backend_parity_wave4_z1.py::test_kanban_task_tool_passes_expected_revision
+FAILED tests/test_backend_parity_wave4_z1.py::test_registry_tools_expose_semantic_output_contracts
+3 failed, 12 passed, 5 warnings in 3.75s

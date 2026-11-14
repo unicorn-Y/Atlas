@@ -212,12 +212,14 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
         },
     }, {
         "type": "function", "function": {
-            "name": "kanban_update_task", "description": "Claim or update a task card. Set status to running to claim, review for verification, or done after acceptance.",
+            "name": "kanban_update_task", "description": "Claim or update a task card. Set status to running to claim, review for verification, or done after acceptance. Pass expected_revision (the revision from your last read) to reject stale overwrites of newer work.",
             "parameters": {"type": "object", "properties": {
                 "board_id": {"type": "string"}, "task_id": {"type": "string"},
                 "status": {"type": "string", "enum": ["todo", "running", "blocked", "review", "done"]},
                 "assignee": {"type": "string"}, "output": {"type": "string"},
                 "run_id": {"type": "string"},
+                "expected_revision": {"type": "integer", "minimum": 1,
+                                      "description": "Revision the task had when you last read it; the update fails if it moved since."},
             }, "required": ["board_id", "task_id"], "additionalProperties": False},
         },
     }])
@@ -232,11 +234,12 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
              "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
          }, "required": ["board_id", "title"], "additionalProperties": False}}},
         {"type": "function", "function": {"name": "kanban_update",
-         "description": "Update an Atlas task card's status, assignee, output, or run record.",
+         "description": "Update an Atlas task card's status, assignee, output, or run record. Pass expected_revision to reject stale overwrites of newer work.",
          "parameters": {"type": "object", "properties": {
              "board_id": {"type": "string"}, "task_id": {"type": "string"},
              "status": {"type": "string", "enum": ["todo", "running", "blocked", "review", "done"]},
              "assignee": {"type": "string"}, "output": {"type": "string"}, "run_id": {"type": "string"},
+             "expected_revision": {"type": "integer", "minimum": 1},
              "max_attempts": {"type": "integer", "minimum": 1, "maximum": 10},
              "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
          }, "required": ["board_id", "task_id"], "additionalProperties": False}}},
@@ -582,7 +585,50 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
                 }, "required": ["tasks"], "additionalProperties": False},
             },
         })
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": "ralph",
+                "description": (
+                    "Run a foreground fresh-agent Ralph loop toward one immutable objective. "
+                    "Use ONLY when the user explicitly asks for Ralph or fresh-agent iterative "
+                    "execution. Each round opens a new child with no parent conversation and no "
+                    "prior child session; the shared workspace is long-term memory, and only a "
+                    "bounded structured report (continue/complete/blocked) crosses rounds. The "
+                    "call returns when a worker reports completion or a concrete blocker, or at "
+                    "the round limit (default ceiling 256). Ordinary long-running same-session "
+                    "work belongs to goal tools, not ralph."
+                ),
+                "parameters": {"type": "object", "properties": {
+                    "objective": {"type": "string", "minLength": 1,
+                                  "description": "The immutable completion objective for every fresh Ralph round."},
+                    "max_rounds": {"type": "integer", "minimum": 1, "maximum": 256,
+                                   "description": "Optional round cap, bounded by the deployment ceiling of 256."},
+                }, "required": ["objective"], "additionalProperties": False},
+            },
+        })
         tools.extend([
+            {"type": "function", "function": {
+                "name": "subtask_list",
+                "description": (
+                    "List this run's team roster: every child task (subagent) with its id, "
+                    "goal, agent type, status, and model. Use it before messaging or waiting "
+                    "so you address members by their real subtask_id."
+                ),
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            }},
+            {"type": "function", "function": {
+                "name": "team_wait",
+                "description": (
+                    "Wait for the next change in this run's team roster or any member's status "
+                    "(bounded by timeout_seconds, 1-3600). Returns immediately with reason "
+                    "'noProgress' when no member is running or queued; otherwise returns when "
+                    "a member changes status, with reason 'changed' or 'timeout'."
+                ),
+                "parameters": {"type": "object", "properties": {
+                    "timeout_seconds": {"type": "number", "minimum": 1, "maximum": 3600},
+                }, "additionalProperties": False},
+            }},
             {"type": "function", "function": {
                 "name": "subtask_status",
                 "description": "查看一个子任务的状态、最近进度和完成结果。",
@@ -699,6 +745,19 @@ def output_contracts_for_tools(tools: list[dict[str, Any]]) -> dict[str, dict[st
             continue
         contract = registry.get_output_contract(name)
         if contract is None:
+            from atlas.engine.tool_registry import alias_output_schema
+            # The kernel path does not import the built-in engine/tools modules,
+            # so the registry has no entries for the Atlas alias names; their
+            # semantic per-tool output contracts live in the alias table and
+            # travel with the same event/persistence path as registry contracts.
+            alias_schema = alias_output_schema(name)
+            if alias_schema is not None:
+                contracts[name] = {
+                    "schema": alias_schema,
+                    "render": "text",
+                    "presentation_meta": {},
+                }
+                continue
             # Tools supplied by MCP, local execution, or a host adapter do not
             # register in ToolRegistry. Give each of them an explicit, uniquely
             # named JSON-compatible result contract so the same renderer path

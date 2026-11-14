@@ -333,4 +333,13 @@ registry.register(
     name="todo_list", toolset="todo", schema=TODO_SCHEMA, check_fn=check_todo_requirements,
     handler=lambda args, **kw: todo_tool(
         todos=args.get("todos"), merge=args.get("merge", False), store=kw.get("store")),
+    output_schema={
+        "title": "todo_list output",
+        "description": (
+            "JSON text encoding {todos: [{id, content, status, parent?}], "
+            "revision: integer, summary: {total, pending, in_progress, completed, cancelled}} "
+            "for the full current task list; error objects carry an `error` key instead."
+        ),
+        "type": "string",
+    },
     emoji="📋")

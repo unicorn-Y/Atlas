@@ -67,9 +67,18 @@ async def main() -> int:
                 if isinstance(contract, dict):
                     schema = contract.get("schema")
                     schema_title = schema.get("title") if isinstance(schema, dict) else "registered"
+                    schema_desc = (schema.get("description") or "") if isinstance(schema, dict) else ""
+                    shape = ""
+                    if isinstance(schema, dict):
+                        if "oneOf" in schema:
+                            shape = "oneOf"
+                        elif schema.get("type"):
+                            shape = str(schema["type"])
+                    desc_head = f" desc={schema_desc[:60]!r}" if schema_desc else ""
                     print(
                         f"[event] tool.completed name={data.get('name')} "
                         f"output_contract={contract.get('render', 'text')}/{schema_title}"
+                        f"/shape={shape}{desc_head}"
                     )
                 else:
                     print(f"[event] tool.completed name={data.get('name')} output_contract=missing")
@@ -88,7 +97,7 @@ async def main() -> int:
                 print(f"[event] {event}")
 
     reply = "".join(text_parts).strip()
-    print(f"[reply] {reply[:400]!r}")
+    print(f"[reply] {reply[:4000]!r}")
     print(f"[result] terminal={terminal} chars={len(reply)}")
     return 0 if terminal == "run.completed" else 1
 

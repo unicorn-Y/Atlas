@@ -1,0 +1,455 @@
+2026-11-14 15:35:49 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-eoq3ispr\atlas\config\atlas.toml
+.......................................................................F [ 91%]
+.....FF                                                                  [100%]
+================================== FAILURES ===================================
+____ test_local_file_mutation_is_checkpointed_before_write_and_restorable _____
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/w4-z1/.tmp/pytest/test_local_file_mutation_is_ch0')
+
+    async def test_local_file_mutation_is_checkpointed_before_write_and_restorable(
+        tmp_path: Path,
+    ) -> None:
+        path = tmp_path / "workspace" / "source.py"
+        path.parent.mkdir()
+        path.write_text("original", encoding="utf-8")
+        checkpoints = ShadowGitCheckpointStore(tmp_path / "shadow")
+        local = LocalExecutionRuntime()
+        agent = AgentOrchestrator(MagicMock(), MagicMock(), local_execution=local,
+                                  checkpoint_store=checkpoints)
+        runtime = AgentRunContext()
+        state = {
+            "messages": [AIMessage(content="", tool_calls=[{
+                "name": "local_file", "args": {
+                    "action": "write", "path": str(path), "content": "mutated",
+                }, "id": "write-1",
+            }])],
+            "pending_events": [], "tool_rounds": 0, "runtime": runtime,
+        }
+        try:
+            await agent._execute_tools_node(state)
+            checkpoint_event = await runtime.event_queue.get()
+            assert checkpoint_event["type"] == "checkpoint_created"
+>           assert path.read_text(encoding="utf-8") == "mutated"
+E           AssertionError: assert 'original' == 'mutated'
+E             
+E             - mutated
+E             + original
+
+tests\test_agent_enrichment.py:262: AssertionError
+---------------------------- Captured stdout call -----------------------------
+2026-11-14 15:35:52 [warning  ] local_execution.tool_failed    error='read the file first with local_file action=read (D:\\Atlas\\.worktrees\\w4-z1\\.tmp\\pytest\\test_local_file_mutation_is_ch0\\workspace\\source.py)' tool=local_file
+___________ test_inline_delegate_dispatches_through_atlas_lifecycle ___________
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/w4-z1/.tmp/pytest/test_inline_delegate_dispatche0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000020AC4D0AA90>
+
+    @pytest.mark.asyncio
+    async def test_inline_delegate_dispatches_through_atlas_lifecycle(tmp_path, monkeypatch):
+        delegate = AsyncMock(return_value={"status": "completed", "result": "child result"})
+        def configure(agent):
+            agent._delegation = SimpleNamespace(delegate_task=delegate)
+>       events, requests, _ = await run_script(tmp_path, monkeypatch, [
+            ToolCall("delegate_task", {"goal": "fixture child", "background": False}),
+            Text("parent completed"),
+        ], configure_agent=configure, tool_allow=["delegate_task", "read_file"])
+
+tests\test_c1_child_policy.py:32: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_c1_review_e2e.py:44: in run_script
+    events = [item async for item in AtlasRuntime(data_dir=tmp_path, model_manager=models).run_turn(
+tests\test_c1_review_e2e.py:44: in <listcomp>
+    events = [item async for item in AtlasRuntime(data_dir=tmp_path, model_manager=models).run_turn(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <atlas.engine.atlas_runtime.AtlasRuntime object at 0x0000020AC4D27E90>
+message = 'Perform the fixture task', user_content = None
+conversation_id = 'review-session', source = 'foreground'
+workspace = 'D:\\Atlas\\.worktrees\\w4-z1\\.tmp\\pytest\\test_inline_delegate_dispatche0'
+history = [], system_message = None, volatile_context = None
+cancel_event = None, input_callback = None, steer_queue = None
+atlas_agent = <atlas.agent.AgentOrchestrator object at 0x0000020AC4BAFD50>
+atlas_context = AgentRunContext(tool_mode='native', cancel_event=<asyncio.locks.Event object at 0x0000020AC4D27E10 [unset]>, pause_eve...fy_nudge_sent=False, subtask_started=None, subtask_progress=None, subtask_completed=None, subtask_group_completed=None)
+reasoning_effort = None, max_output_tokens = None, enabled_toolsets = None
+moa_enabled = False, model_id = None, title_callback = None
+lifecycle_hook_callback = None, plan_state = None, plan_update_callback = None
+ephemeral = False, bypass_prompt_cache = False
+
+    async def run_turn(
+        self,
+        *,
+        message: str,
+        user_content: Any | None = None,
+        conversation_id: str,
+        source: str = "foreground",
+        workspace: str | None,
+        history: list[dict[str, Any]],
+        system_message: str | None = None,
+        volatile_context: list[str] | None = None,
+        cancel_event: asyncio.Event | None = None,
+        input_callback: Callable[[str, str, list[str] | None], Any] | None = None,
+        steer_queue: asyncio.Queue[dict[str, str]] | None = None,
+        atlas_agent: Any = None,
+        atlas_context: Any = None,
+        reasoning_effort: str | None = None,
+        max_output_tokens: int | None = None,
+        enabled_toolsets: list[str] | None = None,
+        moa_enabled: bool = False,
+        model_id: str | None = None,
+        title_callback: Callable[[str, str], Any] | None = None,
+        lifecycle_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None,
+        plan_state: dict[str, Any] | None = None,
+        plan_update_callback: Callable[[dict[str, Any]], Any] | None = None,
+        ephemeral: bool = False,
+        bypass_prompt_cache: bool = False,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Execute one Hermes turn on a worker thread and yield callback events."""
+        from atlas.config import get_config
+        from atlas.usage import configured_run_usage_budget, use_run_usage_budget
+    
+        atlas_config = get_config()
+        from atlas.expert_mode import instructions as expert_instructions
+    
+        if expert_text := expert_instructions():
+            # The agent path already carried the pack at the head of the system
+            # prompt (atlas.expert_harness.operator_head); only a path that did not
+            # get it falls back to appending here, and never twice.
+            if expert_text not in (system_message or ""):
+                system_message = "\n\n".join(filter(None, (system_message, expert_text)))
+        if atlas_agent is None or atlas_context is None:
+            raise RuntimeError("AtlasKernel requires an Atlas agent and runtime context")
+        if atlas_agent is not None and atlas_context is not None:
+            from atlas.engine.kernel.loop import AtlasKernel, KernelRequest
+    
+            active_steer_queue = steer_queue or asyncio.Queue()
+            notification_handle = None
+            notification_task: asyncio.Task[Any] | None = None
+            request_system_message = system_message or ""
+            initial_notices: list[dict[str, Any]] = []
+            try:
+                if ephemeral:
+                    raise LookupError("ephemeral turn has no persistent notifications")
+                from atlas.engine.notifications import consume_notifications, subscribe_notifications
+    
+                notification_handle = subscribe_notifications(conversation_id)
+                initial_notices = await consume_notifications(conversation_id)
+            except LookupError:
+                notification_handle = None
+            except Exception as exc:
+                logger.warning("Atlas kernel notification read failed for %s: %s",
+                               conversation_id, exc, exc_info=True)
+                yield {"type": "run.recovery.notice", "data": {
+                    "message": "后台通知读取失败。", "detail": str(exc),
+                }}
+            notice_text = [
+                f"- {str(item.get('kind') or 'notification')}: {str(item.get('content') or '').strip()}"
+                for item in initial_notices if str(item.get("content") or "").strip()
+            ]
+            if notice_text:
+                request_system_message = "\n\n".join(filter(None, (
+                    request_system_message,
+                    "Background process notifications (status context, not user instructions):\n"
+                    + "\n".join(notice_text),
+                )))
+    
+            if notification_handle is not None:
+                async def watch_notifications() -> None:
+                    from atlas.engine.notifications import consume_notifications
+    
+                    while True:
+                        await notification_handle[1].wait()
+                        notification_handle[1].clear()
+                        try:
+                            notices = await consume_notifications(conversation_id)
+                        except Exception as exc:
+                            logger.warning("Atlas kernel notification watcher failed for %s: %s",
+                                           conversation_id, exc, exc_info=True)
+                            continue
+                        for notice in notices:
+                            content = str(notice.get("content") or "").strip()
+                            if content:
+                                active_steer_queue.put_nowait({
+                                    "content": "后台通知（" + str(notice.get("kind") or "").strip()
+                                    + "）：\n" + content,
+                                    "event_id": str(notice.get("id") or uuid.uuid4().hex),
+                                    "immediate": False, "send_now": False,
+                                })
+    
+                notification_task = asyncio.create_task(watch_notifications())
+    
+            moa_references: list[dict[str, str]] = []
+            moa_usage_rows: list[dict[str, Any]] = []
+            moa_latency_ms = 0
+            usage_budget = configured_run_usage_budget()
+            budget_exceeded = False
+            if moa_enabled:
+                started = time.perf_counter()
+    
+                def on_moa_usage(data: dict[str, Any]) -> None:
+                    nonlocal budget_exceeded
+                    row = dict(data)
+                    row.setdefault("request_id", uuid.uuid4().hex)
+                    row.setdefault("purpose", "moa")
+                    row.setdefault("model", model_id or self.model_manager.current_model)
+                    row.setdefault("wire_model", row.get("model"))
+                    try:
+                        row["input_tokens"] = max(0, int(row.get(
+                            "input_tokens", row.get("prompt_tokens", row.get("input", 0)),
+                        ) or 0))
+                        row["output_tokens"] = max(0, int(row.get(
+                            "output_tokens", row.get("completion_tokens", row.get("output", 0)),
+                        ) or 0))
+                    except (TypeError, ValueError):
+                        row["input_tokens"] = row["output_tokens"] = 0
+                    row.setdefault("usage_available", bool(data))
+                    moa_usage_rows.append(row)
+                    if usage_budget is not None and not usage_budget.record(row):
+                        budget_exceeded = True
+    
+                try:
+                    with use_run_usage_budget(usage_budget):
+                        moa_references = await self._collect_moa_references(
+                            message, history, request_system_message, usage_callback=on_moa_usage,
+                        )
+                except Exception as exc:
+                    logger.warning("Atlas kernel reference-model consultation failed: %s",
+                                   exc, exc_info=True)
+                moa_latency_ms = int((time.perf_counter() - started) * 1000)
+                if moa_references:
+                    reference_prompt = (
+                        "Reference model opinions (advisory; verify against evidence):\n"
+                        + "\n\n".join(
+                            f"[{item['model']}]\n{item['text']}" for item in moa_references
+                        )
+                    )
+                    request_system_message = f"{request_system_message}\n\n{reference_prompt}".strip()
+    
+>           kernel = AtlasKernel(data_dir=self.home.parent, config=atlas_config.raw)
+                                                                   ^^^^^^^^^^^^^^^^
+E           AttributeError: 'FixtureConfig' object has no attribute 'raw'
+
+atlas\engine\atlas_runtime.py:978: AttributeError
+_______ test_native_child_restrictions_block_direct_and_deferred_calls ________
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/w4-z1/.tmp/pytest/test_native_child_restrictions0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000020AC515C790>
+
+    @pytest.mark.asyncio
+    async def test_native_child_restrictions_block_direct_and_deferred_calls(tmp_path, monkeypatch):
+        path = tmp_path / "restricted.txt"
+>       events, requests, _ = await run_script(tmp_path, monkeypatch, [
+            ToolCall("write_file", {"path": str(path), "content": "forbidden"}),
+            Text("blocked"),
+        ], tool_allow=["read_file"])
+
+tests\test_c1_child_policy.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_c1_review_e2e.py:44: in run_script
+    events = [item async for item in AtlasRuntime(data_dir=tmp_path, model_manager=models).run_turn(
+tests\test_c1_review_e2e.py:44: in <listcomp>
+    events = [item async for item in AtlasRuntime(data_dir=tmp_path, model_manager=models).run_turn(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <atlas.engine.atlas_runtime.AtlasRuntime object at 0x0000020AC4D3F650>
+message = 'Perform the fixture task', user_content = None
+conversation_id = 'review-session', source = 'foreground'
+workspace = 'D:\\Atlas\\.worktrees\\w4-z1\\.tmp\\pytest\\test_native_child_restrictions0'
+history = [], system_message = None, volatile_context = None
+cancel_event = None, input_callback = None, steer_queue = None
+atlas_agent = <atlas.agent.AgentOrchestrator object at 0x0000020AC3D260D0>
+atlas_context = AgentRunContext(tool_mode='native', cancel_event=<asyncio.locks.Event object at 0x0000020AC4D3F590 [unset]>, pause_eve...fy_nudge_sent=False, subtask_started=None, subtask_progress=None, subtask_completed=None, subtask_group_completed=None)
+reasoning_effort = None, max_output_tokens = None, enabled_toolsets = None
+moa_enabled = False, model_id = None, title_callback = None
+lifecycle_hook_callback = None, plan_state = None, plan_update_callback = None
+ephemeral = False, bypass_prompt_cache = False
+
+    async def run_turn(
+        self,
+        *,
+        message: str,
+        user_content: Any | None = None,
+        conversation_id: str,
+        source: str = "foreground",
+        workspace: str | None,
+        history: list[dict[str, Any]],
+        system_message: str | None = None,
+        volatile_context: list[str] | None = None,
+        cancel_event: asyncio.Event | None = None,
+        input_callback: Callable[[str, str, list[str] | None], Any] | None = None,
+        steer_queue: asyncio.Queue[dict[str, str]] | None = None,
+        atlas_agent: Any = None,
+        atlas_context: Any = None,
+        reasoning_effort: str | None = None,
+        max_output_tokens: int | None = None,
+        enabled_toolsets: list[str] | None = None,
+        moa_enabled: bool = False,
+        model_id: str | None = None,
+        title_callback: Callable[[str, str], Any] | None = None,
+        lifecycle_hook_callback: Callable[[str, dict[str, Any]], Any] | None = None,
+        plan_state: dict[str, Any] | None = None,
+        plan_update_callback: Callable[[dict[str, Any]], Any] | None = None,
+        ephemeral: bool = False,
+        bypass_prompt_cache: bool = False,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Execute one Hermes turn on a worker thread and yield callback events."""
+        from atlas.config import get_config
+        from atlas.usage import configured_run_usage_budget, use_run_usage_budget
+    
+        atlas_config = get_config()
+        from atlas.expert_mode import instructions as expert_instructions
+    
+        if expert_text := expert_instructions():
+            # The agent path already carried the pack at the head of the system
+            # prompt (atlas.expert_harness.operator_head); only a path that did not
+            # get it falls back to appending here, and never twice.
+            if expert_text not in (system_message or ""):
+                system_message = "\n\n".join(filter(None, (system_message, expert_text)))
+        if atlas_agent is None or atlas_context is None:
+            raise RuntimeError("AtlasKernel requires an Atlas agent and runtime context")
+        if atlas_agent is not None and atlas_context is not None:
+            from atlas.engine.kernel.loop import AtlasKernel, KernelRequest
+    
+            active_steer_queue = steer_queue or asyncio.Queue()
+            notification_handle = None
+            notification_task: asyncio.Task[Any] | None = None
+            request_system_message = system_message or ""
+            initial_notices: list[dict[str, Any]] = []
+            try:
+                if ephemeral:
+                    raise LookupError("ephemeral turn has no persistent notifications")
+                from atlas.engine.notifications import consume_notifications, subscribe_notifications
+    
+                notification_handle = subscribe_notifications(conversation_id)
+                initial_notices = await consume_notifications(conversation_id)
+            except LookupError:
+                notification_handle = None
+            except Exception as exc:
+                logger.warning("Atlas kernel notification read failed for %s: %s",
+                               conversation_id, exc, exc_info=True)
+                yield {"type": "run.recovery.notice", "data": {
+                    "message": "后台通知读取失败。", "detail": str(exc),
+                }}
+            notice_text = [
+                f"- {str(item.get('kind') or 'notification')}: {str(item.get('content') or '').strip()}"
+                for item in initial_notices if str(item.get("content") or "").strip()
+            ]
+            if notice_text:
+                request_system_message = "\n\n".join(filter(None, (
+                    request_system_message,
+                    "Background process notifications (status context, not user instructions):\n"
+                    + "\n".join(notice_text),
+                )))
+    
+            if notification_handle is not None:
+                async def watch_notifications() -> None:
+                    from atlas.engine.notifications import consume_notifications
+    
+                    while True:
+                        await notification_handle[1].wait()
+                        notification_handle[1].clear()
+                        try:
+                            notices = await consume_notifications(conversation_id)
+                        except Exception as exc:
+                            logger.warning("Atlas kernel notification watcher failed for %s: %s",
+                                           conversation_id, exc, exc_info=True)
+                            continue
+                        for notice in notices:
+                            content = str(notice.get("content") or "").strip()
+                            if content:
+                                active_steer_queue.put_nowait({
+                                    "content": "后台通知（" + str(notice.get("kind") or "").strip()
+                                    + "）：\n" + content,
+                                    "event_id": str(notice.get("id") or uuid.uuid4().hex),
+                                    "immediate": False, "send_now": False,
+                                })
+    
+                notification_task = asyncio.create_task(watch_notifications())
+    
+            moa_references: list[dict[str, str]] = []
+            moa_usage_rows: list[dict[str, Any]] = []
+            moa_latency_ms = 0
+            usage_budget = configured_run_usage_budget()
+            budget_exceeded = False
+            if moa_enabled:
+                started = time.perf_counter()
+    
+                def on_moa_usage(data: dict[str, Any]) -> None:
+                    nonlocal budget_exceeded
+                    row = dict(data)
+                    row.setdefault("request_id", uuid.uuid4().hex)
+                    row.setdefault("purpose", "moa")
+                    row.setdefault("model", model_id or self.model_manager.current_model)
+                    row.setdefault("wire_model", row.get("model"))
+                    try:
+                        row["input_tokens"] = max(0, int(row.get(
+                            "input_tokens", row.get("prompt_tokens", row.get("input", 0)),
+                        ) or 0))
+                        row["output_tokens"] = max(0, int(row.get(
+                            "output_tokens", row.get("completion_tokens", row.get("output", 0)),
+                        ) or 0))
+                    except (TypeError, ValueError):
+                        row["input_tokens"] = row["output_tokens"] = 0
+                    row.setdefault("usage_available", bool(data))
+                    moa_usage_rows.append(row)
+                    if usage_budget is not None and not usage_budget.record(row):
+                        budget_exceeded = True
+    
+                try:
+                    with use_run_usage_budget(usage_budget):
+                        moa_references = await self._collect_moa_references(
+                            message, history, request_system_message, usage_callback=on_moa_usage,
+                        )
+                except Exception as exc:
+                    logger.warning("Atlas kernel reference-model consultation failed: %s",
+                                   exc, exc_info=True)
+                moa_latency_ms = int((time.perf_counter() - started) * 1000)
+                if moa_references:
+                    reference_prompt = (
+                        "Reference model opinions (advisory; verify against evidence):\n"
+                        + "\n\n".join(
+                            f"[{item['model']}]\n{item['text']}" for item in moa_references
+                        )
+                    )
+                    request_system_message = f"{request_system_message}\n\n{reference_prompt}".strip()
+    
+>           kernel = AtlasKernel(data_dir=self.home.parent, config=atlas_config.raw)
+                                                                   ^^^^^^^^^^^^^^^^
+E           AttributeError: 'FixtureConfig' object has no attribute 'raw'
+
+atlas\engine\atlas_runtime.py:978: AttributeError
+============================== warnings summary ===============================
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_agent_enrichment.py::test_local_file_mutation_is_checkpointed_before_write_and_restorable
+FAILED tests/test_c1_child_policy.py::test_inline_delegate_dispatches_through_atlas_lifecycle
+FAILED tests/test_c1_child_policy.py::test_native_child_restrictions_block_direct_and_deferred_calls
+3 failed, 76 passed, 5 warnings in 10.10s

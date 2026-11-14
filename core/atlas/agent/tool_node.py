@@ -816,9 +816,15 @@ async def execute_tools_node(
                     data = await asyncio.to_thread(
                         store.create_board, str(fn_args["name"]), fn_args.get("board_id"),
                     )
+                    result = {"data": data, "content": [{
+                        "type": "text", "text": json.dumps(data, ensure_ascii=False),
+                    }], "is_error": False}
                 elif fn_name == "kanban_list":
                     board_id = str(fn_args["board_id"])
                     data = await asyncio.to_thread(store.tasks, board_id)
+                    result = {"data": {"tasks": data}, "content": [{
+                        "type": "text", "text": json.dumps({"tasks": data}, ensure_ascii=False),
+                    }], "is_error": False}
                 elif fn_name in {"kanban_create_task", "kanban_create"}:
                     board_id = str(fn_args["board_id"])
                     if fn_args.get("parent"):
@@ -841,6 +847,7 @@ async def execute_tools_node(
                 else:
                     board_id = str(fn_args["board_id"])
                     task_id = str(fn_args.pop("task_id"))
+                    expected_revision = fn_args.pop("expected_revision", None)
                     changes = {key: value for key, value in fn_args.items() if key != "board_id"}
                     current = next((task for task in await asyncio.to_thread(store.tasks, board_id)
                                     if task.get("id") == task_id), None)
@@ -853,12 +860,14 @@ async def execute_tools_node(
                             reason = str(completed_hook.get("reason") or "Task completion blocked by hook")
                             result = {"content": [{"type": "text", "text": reason}], "is_error": True}
                         else:
-                            data = await asyncio.to_thread(store.update_task, board_id, task_id, changes)
+                            data = await asyncio.to_thread(
+                                store.update_task, board_id, task_id, changes, expected_revision)
                             result = {"data": data, "content": [{
                                 "type": "text", "text": json.dumps(data, ensure_ascii=False),
                             }], "is_error": False}
                     else:
-                        data = await asyncio.to_thread(store.update_task, board_id, task_id, changes)
+                        data = await asyncio.to_thread(
+                            store.update_task, board_id, task_id, changes, expected_revision)
                         result = {"data": data, "content": [{
                             "type": "text", "text": json.dumps(data, ensure_ascii=False),
                         }], "is_error": False}
@@ -1079,7 +1088,15 @@ async def execute_tools_node(
                 requested_depth = int(fn_args.get("max_depth", configured_depth))
                 if requested_depth < 1 or requested_depth > 8:
                     raise ValueError("max_depth must be between 1 and 8")
-                from atlas.engine.tool_permissions import intersect_tool_allow
+                from atlas.engine.tool_permissions import intersect_tool_allow, validate_toolset_binding
+                # Registration-scoped toolset binding (DSH tools.restrict parity):
+                # a definition that names unknown tools, or resolves to no tool at
+                # all, fails the delegation here instead of silently spawning a
+                # child with a silently-narrowed toolset.
+                validate_toolset_binding(
+                    definition.get("tools"),
+                    [item["function"]["name"] for item in agent._model_facing_tools()],
+                )
                 tool_allow = intersect_tool_allow(
                     atlas_options.get("tool_allow"), definition.get("tools"),
                     [item["function"]["name"] for item in agent._model_facing_tools()],
@@ -1166,6 +1183,46 @@ async def execute_tools_node(
                     frame_delegate_result_data(result["data"]), ensure_ascii=False,
                 )}]
                 result["is_error"] = False
+            elif fn_name == "subtask_list":
+                # Agent Teams roster (DSH listMembers parity): one row per live child.
+                roster = agent._delegation.list_subtasks()
+                result = {"data": {"members": roster}, "content": [{
+                    "type": "text", "text": json.dumps({"members": roster}, ensure_ascii=False),
+                }], "is_error": False}
+            elif fn_name == "team_wait":
+                # DSH waitForChange parity: wait for the next roster/status change,
+                # bounded, with the DSH noProgress fast path when nobody is running.
+                timeout_seconds = fn_args.get("timeout_seconds", 30)
+                try:
+                    timeout_seconds = float(timeout_seconds)
+                except (TypeError, ValueError):
+                    raise ValueError("timeout_seconds must be a number")
+                if not 1 <= timeout_seconds <= 3600:
+                    raise ValueError("timeout_seconds must be between 1 and 3600")
+                delegation = agent._delegation
+                baseline = delegation.roster_status_signature()
+                running = any(status in {"queued", "running", "provisioning"}
+                              for status in baseline.values())
+                changed_signature: dict[str, str] | None = None
+                if not running:
+                    reason = "noProgress"
+                else:
+                    deadline = asyncio.get_running_loop().time() + timeout_seconds
+                    reason = "timeout"
+                    while asyncio.get_running_loop().time() < deadline:
+                        await asyncio.sleep(min(0.5, max(0.05, timeout_seconds / 10)))
+                        current = delegation.roster_status_signature()
+                        if current != baseline:
+                            changed_signature = current
+                            reason = "changed"
+                            break
+                roster = delegation.list_subtasks()
+                data = {"changed": reason == "changed", "reason": reason,
+                        "members": roster,
+                        **({"statuses": changed_signature} if changed_signature else {})}
+                result = {"data": data, "content": [{
+                    "type": "text", "text": json.dumps(data, ensure_ascii=False),
+                }], "is_error": False}
             elif fn_name == "subtask_status":
                 status = agent._delegation.subtask_status(str(fn_args["subtask_id"]))
                 if status is None:
@@ -1303,6 +1360,43 @@ async def execute_tools_node(
                               subtask_id=str(data.get("group_id") or ""),
                               agent="parallel-workers",
                           )}],
+                          "is_error": False}
+            elif fn_name == "ralph":
+                # Foreground Ralph loop (DSH tool-ralph parity) over the existing
+                # delegation + structured-output seams. Fixed script: the model
+                # supplies data only; it cannot alter the loop, schema, or handoff
+                # validation.
+                if agent._delegation is None:
+                    raise RuntimeError("No AgentBackendHost is configured for delegation")
+                from atlas.agent.ralph_loop import (
+                    render_terminal,
+                    resolve_max_rounds,
+                    run_ralph_loop,
+                )
+
+                objective = str(fn_args.get("objective") or "").strip()
+                if not objective:
+                    raise ValueError("ralph requires a non-empty objective")
+                max_rounds = resolve_max_rounds(fn_args.get("max_rounds"))
+                configured_depth = int(_agent.get_config().get("delegation.max_spawn_depth", 4))
+                child_options = {**atlas_options,
+                                 "workspace_trusted": ctx.workspace_trusted,
+                                 "agent_role": "leaf",
+                                 "agent_type": "general",
+                                 "parent_conversation_id": ctx.conversation_id,
+                                 "depth": ctx.agent_depth + 1,
+                                 "permission_mode": permission_mode,
+                                 "max_spawn_depth": min(configured_depth, ctx.agent_depth + 1)}
+                envelope = await run_ralph_loop(
+                    agent._delegation,
+                    objective=objective,
+                    max_rounds=max_rounds,
+                    child_options=child_options,
+                    cwd=workspace,
+                )
+                text = render_terminal(envelope)
+                result = {"data": {"envelope": envelope, "text": text},
+                          "content": [{"type": "text", "text": text}],
                           "is_error": False}
             elif fn_name == "present":
                 from atlas.agent.presentation import build_presented_file

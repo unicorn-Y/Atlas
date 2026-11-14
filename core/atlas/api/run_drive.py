@@ -2960,7 +2960,7 @@ async def _execute_run(
         try:
             SessionProjections.invalidate_for(services, event)
         except Exception:  # noqa: BLE001 - a cache miss must never fail a run
-            log.warning("session_projections.invalidate_failed", event=event, exc_info=True)
+            log.warning("session_projections.invalidate_failed", evt=event, exc_info=True)
         if not run.ephemeral and event in {"subtask.started", "subtask.progress", "subtask.output", "subtask.completed",
                      "subtask.group_completed", "subtask.background_completed"}:
             try:
@@ -2976,7 +2976,7 @@ async def _execute_run(
                     },
                 )
             except Exception:
-                log.exception("subtask_activity.persist_failed", event=event,
+                log.exception("subtask_activity.persist_failed", evt=event,
                               subtask_id=data.get("subtask_id"), run_id=run.run_id)
         if event == "run.started":
             record_api_timing("run_started_emitted")
@@ -2995,7 +2995,7 @@ async def _execute_run(
                                    "run_id": run.run_id, "sequence": run.sequence + 1},
                 )
             except Exception:
-                log.exception("runtime_widget.persist_failed", event=event, run_id=run.run_id)
+                log.exception("runtime_widget.persist_failed", evt=event, run_id=run.run_id)
         event_kind = {"run.completed": "completion", "run.failed": "failure", "approval.required": "approval"}.get(event)
         if event_kind and not run.ephemeral:
             try:
@@ -3011,7 +3011,7 @@ async def _execute_run(
                         text = f"Atlas {event_kind}：{str(data.get('title') or data.get('message') or run.user_input or run.run_id)[:300]}"
                         await channel_manager.send(channel, chat_id, text)
             except Exception:
-                log.warning("u4.mobile_push_failed", event=event, run_id=run.run_id, exc_info=True)
+                log.warning("u4.mobile_push_failed", evt=event, run_id=run.run_id, exc_info=True)
         if event == "run.started":
             data = {
                 **data,

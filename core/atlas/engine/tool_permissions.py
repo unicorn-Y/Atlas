@@ -103,3 +103,35 @@ def intersect_tool_allow(parent, child, available=()):
 
     names = set(available) | set(_ALIASES) | {item[0] for item in _ALIASES.values()} | _x2_tool_names()
     return sorted(name for name in names if tool_allowed(name, parent) and tool_allowed(name, child))
+
+
+def validate_toolset_binding(patterns, available=()) -> list[str] | None:
+    """Fail fast on a child toolset that names unknown tools or resolves to nothing.
+
+    DSH ``tools.restrict()`` registration semantics: unknown names and empty sets
+    fail the binding instead of silently degrading to a narrower toolset. Exact
+    entries must match at least one known name in the child's model-facing
+    universe; globs are optional capabilities (``mcp__git__*`` with no matching
+    server connected is a normal state) and only fail when the whole binding
+    resolves to an empty set. ``None`` means "unrestricted" and passes.
+    Returns the concrete matched names so callers can reuse the resolution.
+    """
+    if patterns is None:
+        return None
+    from atlas.engine.tool_registry import _ALIASES
+
+    names = set(available) | set(_ALIASES) | {item[0] for item in _ALIASES.values()} | _x2_tool_names()
+    entries = [str(item) for item in patterns if str(item).strip()]
+    unknown = [
+        item for item in entries
+        if not any(ch in item for ch in "*?[")  # globs are optional capabilities
+        and not any(fnmatchcase(name, item) for name in names)
+    ]
+    if unknown:
+        raise ValueError(
+            "agent definition names unknown tool(s): " + ", ".join(sorted(unknown))
+            + f"; known names: {', '.join(sorted(names)) or '(none)'}")
+    matched = sorted(name for name in names if any(fnmatchcase(name, item) for item in entries))
+    if not matched:
+        raise ValueError("agent definition toolset resolves to an empty tool set")
+    return matched

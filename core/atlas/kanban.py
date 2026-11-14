@@ -37,6 +37,7 @@ class KanbanStore:
                             output TEXT NOT NULL DEFAULT '', run_id TEXT NOT NULL DEFAULT '',
                             attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
                             timeout_seconds INTEGER NOT NULL DEFAULT 1800,
+                            revision INTEGER NOT NULL DEFAULT 1,
                             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                         );
                         CREATE INDEX IF NOT EXISTS kanban_tasks_board_status ON kanban_tasks(board_id, status);
@@ -48,6 +49,8 @@ class KanbanStore:
                         db.execute("ALTER TABLE kanban_tasks ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 3")
                     if "timeout_seconds" not in columns:
                         db.execute("ALTER TABLE kanban_tasks ADD COLUMN timeout_seconds INTEGER NOT NULL DEFAULT 1800")
+                    if "revision" not in columns:
+                        db.execute("ALTER TABLE kanban_tasks ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
                     db.execute("CREATE TABLE IF NOT EXISTS kanban_task_runs (id TEXT PRIMARY KEY, task_id TEXT NOT NULL, status TEXT NOT NULL, output TEXT NOT NULL DEFAULT '', started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, finished_at TEXT)")
                 _INITIALIZED_DATABASES.add(key)
 
@@ -102,50 +105,74 @@ class KanbanStore:
                         str(value.get("assignee", "")), json.dumps(dependencies), status,
                         str(value.get("run_id", "")), max_attempts, timeout_seconds))
         return next(task for task in self.tasks(board_id) if task["id"] == task_id)
-    def update_task(self, board_id: str, task_id: str, changes: dict[str, Any]) -> dict[str, Any]:
+    def update_task(self, board_id: str, task_id: str, changes: dict[str, Any],
+                    expected_revision: int | None = None) -> dict[str, Any]:
+        """CAS one authorized task mutation against its per-mutation revision.
+
+        ``expected_revision`` is the caller's last-read revision: a mismatch
+        raises instead of overwriting newer work (Agent Teams task DAG parity).
+        Every committed mutation bumps the revision.
+        """
         allowed = {"title", "description", "assignee", "dependencies", "status", "output", "run_id", "max_attempts", "timeout_seconds"}
         if set(changes) - allowed:
             raise ValueError("unsupported task fields")
-        current = next((task for task in self.tasks(board_id) if task["id"] == task_id), None)
-        if current is None:
-            raise KeyError("task not found")
-        merged = {**current, **changes}
-        if merged["status"] not in STATUSES:
-            raise ValueError("invalid task status")
-        if not 1 <= int(merged.get("max_attempts", 3)) <= 10 or not 1 <= int(merged.get("timeout_seconds", 1800)) <= 86400:
-            raise ValueError("max_attempts must be 1..10 and timeout_seconds 1..86400")
-        deps = merged.get("dependencies", [])
-        if not isinstance(deps, list) or task_id in deps:
-            raise ValueError("invalid or self-referential dependencies")
-        all_tasks = self.tasks(board_id)
-        by_id = {task["id"]: task for task in all_tasks}
-        visiting: set[str] = set()
-        visited: set[str] = set()
-
-        def visit(node: str) -> None:
-            if node in visiting:
-                raise ValueError("dependency cycle")
-            if node in visited:
-                return
-            visiting.add(node)
-            dependencies_for_node = deps if node == task_id else by_id.get(node, {}).get("dependencies", [])
-            for dependency in dependencies_for_node:
-                if dependency == task_id or dependency not in by_id:
-                    raise ValueError(f"invalid dependency: {dependency}")
-                visit(dependency)
-            visiting.remove(node)
-            visited.add(node)
-
-        visit(task_id)
-        if merged["status"] == "running" and any(
-            by_id.get(dep, {}).get("status") != "done" for dep in deps
+        if expected_revision is not None and (
+            not isinstance(expected_revision, int) or isinstance(expected_revision, bool)
         ):
-            raise ValueError("dependencies must be done before a task can run")
+            raise ValueError("expected_revision must be an integer")
         with self._connect() as db:
-            db.execute("UPDATE kanban_tasks SET title=?,description=?,assignee=?,dependencies=?,status=?,output=?,run_id=?,max_attempts=?,timeout_seconds=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND board_id=?",
+            db.row_factory = sqlite3.Row
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute(
+                "SELECT * FROM kanban_tasks WHERE id=? AND board_id=?", (task_id, board_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError("task not found")
+            current = {**dict(row), "dependencies": json.loads(row["dependencies"])}
+            if expected_revision is not None and int(current["revision"]) != int(expected_revision):
+                raise ValueError(
+                    f"task revision conflict: expected revision {expected_revision}, "
+                    f"current revision {current['revision']}; re-read the task and retry")
+            merged = {**current, **changes}
+            if merged["status"] not in STATUSES:
+                raise ValueError("invalid task status")
+            if not 1 <= int(merged.get("max_attempts", 3)) <= 10 or not 1 <= int(merged.get("timeout_seconds", 1800)) <= 86400:
+                raise ValueError("max_attempts must be 1..10 and timeout_seconds 1..86400")
+            deps = merged.get("dependencies", [])
+            if not isinstance(deps, list) or task_id in deps:
+                raise ValueError("invalid or self-referential dependencies")
+            by_id = {
+                task_id_: {**dict(task_row), "dependencies": json.loads(task_row["dependencies"])}
+                for task_id_, task_row in (
+                    (r["id"], r) for r in db.execute(
+                        "SELECT * FROM kanban_tasks WHERE board_id=?", (board_id,)).fetchall())
+            }
+            visiting: set[str] = set()
+            visited: set[str] = set()
+
+            def visit(node: str) -> None:
+                if node in visiting:
+                    raise ValueError("dependency cycle")
+                if node in visited:
+                    return
+                visiting.add(node)
+                dependencies_for_node = deps if node == task_id else by_id.get(node, {}).get("dependencies", [])
+                for dependency in dependencies_for_node:
+                    if dependency == task_id or dependency not in by_id:
+                        raise ValueError(f"invalid dependency: {dependency}")
+                    visit(dependency)
+                visiting.remove(node)
+                visited.add(node)
+
+            visit(task_id)
+            if merged["status"] == "running" and any(
+                by_id.get(dep, {}).get("status") != "done" for dep in deps
+            ):
+                raise ValueError("dependencies must be done before a task can run")
+            db.execute("UPDATE kanban_tasks SET title=?,description=?,assignee=?,dependencies=?,status=?,output=?,run_id=?,max_attempts=?,timeout_seconds=?,revision=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND board_id=?",
                        (merged["title"], merged["description"], merged["assignee"], json.dumps(deps),
                         merged["status"], merged["output"], merged["run_id"], merged["max_attempts"],
-                        merged["timeout_seconds"], task_id, board_id))
+                        merged["timeout_seconds"], int(current["revision"]) + 1, task_id, board_id))
             if merged["status"] != current["status"] or ("output" in changes and merged["output"] != current["output"]):
                 db.execute("INSERT INTO kanban_task_runs(id,task_id,status,output,finished_at) VALUES(?,?,?,?,?)",
                            (str(uuid.uuid4()), task_id, merged["status"], str(merged["output"])[-20000:],
@@ -176,7 +203,7 @@ class KanbanStore:
                 deps = json.loads(row["dependencies"])
                 if any(db.execute("SELECT status FROM kanban_tasks WHERE id=?", (dep,)).fetchone()[0] != "done" for dep in deps):
                     continue
-                db.execute("UPDATE kanban_tasks SET status='running',attempts=attempts+1,updated_at=CURRENT_TIMESTAMP WHERE id=?", (row["id"],))
+                db.execute("UPDATE kanban_tasks SET status='running',attempts=attempts+1,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?", (row["id"],))
                 db.execute("INSERT INTO kanban_task_runs(id,task_id,status,output) VALUES(?,?,?,?)",
                            (str(uuid.uuid4()), row["id"], "running", ""))
                 claimed.append(row["id"])

@@ -1,0 +1,74 @@
+2026-11-14 15:36:07 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-y3e_q__8\atlas\config\atlas.toml
+F                                                                        [100%]
+================================== FAILURES ===================================
+____ test_local_file_mutation_is_checkpointed_before_write_and_restorable _____
+
+tmp_path = WindowsPath('D:/Atlas/.worktrees/w4-z1/.tmp/pytest/test_local_file_mutation_is_ch0')
+
+    async def test_local_file_mutation_is_checkpointed_before_write_and_restorable(
+        tmp_path: Path,
+    ) -> None:
+        path = tmp_path / "workspace" / "source.py"
+        path.parent.mkdir()
+        path.write_text("original", encoding="utf-8")
+        checkpoints = ShadowGitCheckpointStore(tmp_path / "shadow")
+        local = LocalExecutionRuntime()
+        agent = AgentOrchestrator(MagicMock(), MagicMock(), local_execution=local,
+                                  checkpoint_store=checkpoints)
+        runtime = AgentRunContext()
+        state = {
+            "messages": [AIMessage(content="", tool_calls=[{
+                "name": "local_file", "args": {
+                    "action": "write", "path": str(path), "content": "mutated",
+                }, "id": "write-1",
+            }])],
+            "pending_events": [], "tool_rounds": 0, "runtime": runtime,
+        }
+        try:
+            await agent._execute_tools_node(state)
+            checkpoint_event = await runtime.event_queue.get()
+            assert checkpoint_event["type"] == "checkpoint_created"
+>           assert path.read_text(encoding="utf-8") == "mutated"
+E           AssertionError: assert 'original' == 'mutated'
+E             
+E             - mutated
+E             + original
+
+tests\test_agent_enrichment.py:262: AssertionError
+---------------------------- Captured stdout call -----------------------------
+2026-11-14 15:36:08 [warning  ] local_execution.tool_failed    error='read the file first with local_file action=read (D:\\Atlas\\.worktrees\\w4-z1\\.tmp\\pytest\\test_local_file_mutation_is_ch0\\workspace\\source.py)' tool=local_file
+============================== warnings summary ===============================
+tests/test_agent_enrichment.py::test_local_file_mutation_is_checkpointed_before_write_and_restorable
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_agent_enrichment.py::test_local_file_mutation_is_checkpointed_before_write_and_restorable
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_agent_enrichment.py::test_local_file_mutation_is_checkpointed_before_write_and_restorable
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_agent_enrichment.py::test_local_file_mutation_is_checkpointed_before_write_and_restorable
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_agent_enrichment.py::test_local_file_mutation_is_checkpointed_before_write_and_restorable
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_agent_enrichment.py::test_local_file_mutation_is_checkpointed_before_write_and_restorable
+1 failed, 5 warnings in 3.94s
