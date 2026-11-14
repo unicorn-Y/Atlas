@@ -94,6 +94,37 @@ def test_registry_rejects_handler_output_that_violates_declared_schema():
         registry.deregister("w2_invalid_probe")
 
 
+def test_restricted_registry_requires_known_non_empty_registration_scope():
+    registry = ToolRegistry()
+    calls = []
+    registry.register(
+        "w2_restricted_probe", "w2", {"parameters": {"type": "object"}},
+        lambda _args: calls.append("allowed") or "ok",
+    )
+    registry.register(
+        "w2_unrestricted_probe", "w2", {"parameters": {"type": "object"}},
+        lambda _args: calls.append("unrestricted") or "ok",
+    )
+    try:
+        with pytest.raises(ValueError, match="must not be empty"):
+            registry.restrict([])
+        with pytest.raises(ValueError, match="unknown restricted tool"):
+            registry.restrict(["w2_missing_probe"])
+
+        restricted = registry.restrict(["w2_restricted_probe"])
+        assert restricted.get_tool_names() == ["w2_restricted_probe"]
+        assert [item["function"]["name"] for item in restricted.get_definitions()] == [
+            "w2_restricted_probe",
+        ]
+        assert restricted.dispatch("w2_restricted_probe", {}) == "ok"
+        denied = restricted.dispatch("w2_unrestricted_probe", {})
+        assert "restricted registry" in denied
+        assert calls == ["allowed"]
+    finally:
+        registry.deregister("w2_restricted_probe")
+        registry.deregister("w2_unrestricted_probe")
+
+
 def test_registry_revalidates_post_hook_output_against_the_registered_contract():
     registry = ToolRegistry()
     registry.register(

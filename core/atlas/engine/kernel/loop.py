@@ -227,6 +227,38 @@ class KernelRequest:
     bypass_prompt_cache: bool = False
 
 
+def _tools_for_mode(tool_schemas: list[dict[str, Any]], tool_mode: str) -> list[dict[str, Any]]:
+    """Apply the run's transport mode to the final executable tool pool."""
+    if tool_mode == "native":
+        return tool_schemas
+    if tool_mode != "ptc":
+        raise ValueError(f"unsupported tool mode: {tool_mode}")
+    execute_code = next((schema for schema in tool_schemas
+                         if str((schema.get("function") or {}).get("name", "")) == "execute_code"), None)
+    if execute_code is None:
+        raise RuntimeError("PTC mode requires execute_code to be allowed and available")
+    run_code = copy.deepcopy(execute_code)
+    run_code["function"]["name"] = "run_code"
+    run_code["function"]["description"] = (
+        "Execute a Python program that calls Atlas tools through atlas.call_tool(). "
+        "This is the only tool transport available in PTC mode."
+    )
+    return [run_code]
+
+
+def _final_model_tools(available_tools: list[dict[str, Any]], plan: Any, tool_mode: str) -> list[dict[str, Any]]:
+    """Build the exact tool list that is sent in the next model request."""
+    tools = _tools_for_mode(
+        plan.filter_tools(available_tools, read_only_names=("build_repo_map", "concludeTurn")),
+        tool_mode,
+    )
+    if tool_mode == "ptc" and [
+        str((schema.get("function") or {}).get("name", "")) for schema in tools
+    ] != ["run_code"]:
+        raise RuntimeError("PTC model requests must expose only run_code")
+    return tools
+
+
 def _message_text(message: dict[str, Any]) -> str:
     value = message.get("content", "")
     if isinstance(value, str):
@@ -648,6 +680,9 @@ class AtlasKernel:
 
         runtime = request.runtime
         agent = request.agent
+        tool_mode = getattr(runtime, "tool_mode", "native") or "native"
+        if tool_mode not in {"native", "ptc"}:
+            raise ValueError(f"unsupported tool mode: {tool_mode}")
         # Result finalizers are host-owned: the runtime carries them so a plugin
         # or test harness can register one without the kernel importing it. An
         # empty registry is the default and changes nothing.
@@ -2060,7 +2095,8 @@ class AtlasKernel:
                 deferred_note = None
                 tool_pool_pruned = False
                 schema_chars_before = len(json.dumps(available_tools, ensure_ascii=False, default=str))
-                if os.environ.get("ATLAS_TOOL_PRUNING", "1").strip().lower() not in {"0", "false", "no", "off"}:
+                if (tool_mode != "ptc" and os.environ.get("ATLAS_TOOL_PRUNING", "1").strip().lower()
+                        not in {"0", "false", "no", "off"}):
                     # Static slimming: the pool is chosen from a coarse
                     # TASK TIER, never from this turn's message or the recent
                     # tool history. That is the whole point: a pool that reacts
@@ -2137,9 +2173,7 @@ class AtlasKernel:
                             }, "required": ["response"], "additionalProperties": False},
                         },
                     }]
-                tools = plan.filter_tools(
-                    available_tools, read_only_names=("build_repo_map", "concludeTurn"),
-                )
+                tools = _final_model_tools(available_tools, plan, tool_mode)
                 tool_output_contracts.update(output_contracts_for_tools(tools))
                 offered_schemas.clear()
                 offered_schemas.update({
@@ -3057,6 +3091,77 @@ class AtlasKernel:
         self, agent: Any, runtime: Any, call_id: str | None, name: str, arguments: dict[str, Any],
         event_queue: asyncio.Queue[Any], *, exec_manager: Any = None, nested: bool = False,
     ) -> Any:
+        tool_mode = getattr(runtime, "tool_mode", "native") or "native"
+        if tool_mode == "ptc" and nested and name in {"execute_code", "run_code"}:
+            return {"content": "Nested code execution is disabled in PTC mode.",
+                    "is_error": True, "outcome": "denied"}
+        if name == "run_code" and tool_mode != "ptc":
+            return {"content": "run_code is available only in PTC mode.",
+                    "is_error": True, "outcome": "denied"}
+        if tool_mode == "ptc" and name != "run_code" and not nested:
+            return {
+                "content": f"Direct tool call {name!r} is disabled in PTC mode. Use run_code and atlas.call_tool().",
+                "is_error": True,
+                "outcome": "denied",
+            }
+
+        if name == "run_code":
+            execute_code = getattr(agent, "execute_code", None)
+            if not callable(execute_code):
+                return {"content": "PTC mode requires an execute_code runtime.",
+                        "is_error": True, "outcome": "failed"}
+            from atlas.engine.tool_permissions import tool_allowed
+
+            tool_allow = getattr(runtime, "tool_allow", None)
+            tool_deny = getattr(runtime, "tool_deny", ())
+            if not tool_allowed("execute_code", tool_allow, tool_deny):
+                return {"content": "run_code is not allowed in this run.",
+                        "is_error": True, "outcome": "denied"}
+
+            async def dispatch_code_tool(child_name: str, child_arguments: dict, _workspace: str):
+                child_id = f"{call_id or 'run_code'}:ptc:{uuid.uuid4().hex}"
+                await event_queue.put({
+                    "type": "tool_call", "id": child_id, "name": child_name,
+                    "arguments": dict(child_arguments), "nested": True,
+                })
+                if not tool_allowed(child_name, tool_allow, tool_deny):
+                    result = {"content": f"{child_name} is not allowed in this run.",
+                              "is_error": True, "outcome": "denied"}
+                else:
+                    result = await self._dispatch(
+                        agent, runtime, child_id, child_name, dict(child_arguments), event_queue,
+                        exec_manager=exec_manager, nested=True,
+                    )
+                await event_queue.put({
+                    "type": "tool_result", "id": child_id, "name": child_name,
+                    "output": result, "is_error": bool(
+                        isinstance(result, dict) and result.get("is_error")),
+                })
+                return result
+
+            try:
+                nested_catalog = [
+                    schema for schema in agent._model_facing_tools()
+                    if str((schema.get("function") or {}).get("name", "")) != "execute_code"
+                ]
+                result = await execute_code(
+                    str(arguments.get("code") or ""),
+                    run_id=getattr(runtime, "run_id", None),
+                    conversation_id=getattr(runtime, "conversation_id", None),
+                    tool_allow=tool_allow, tool_deny=list(tool_deny or ()),
+                    read_only=bool(getattr(runtime, "read_only", False)),
+                    tool_catalog=nested_catalog,
+                    cancel_event=getattr(runtime, "cancel_event", None),
+                    tool_dispatch=dispatch_code_tool,
+                )
+            except (TypeError, ValueError, RuntimeError) as exc:
+                return {"content": str(exc), "is_error": True, "outcome": "failed"}
+            return {"content": json.dumps(result, ensure_ascii=False, default=str),
+                    "data": result,
+                    "is_error": bool(result.get("exit_code", 1)) if isinstance(result, dict) else False,
+                    "outcome": "completed" if isinstance(result, dict)
+                    and result.get("exit_code", 1) == 0 else "failed"}
+
         async def dispatch_alias(target: str, args: dict[str, Any]) -> Any:
             internal_events: asyncio.Queue[Any] = asyncio.Queue()
             result = await self._dispatch(

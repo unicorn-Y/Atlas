@@ -103,6 +103,14 @@ def _resolve_permission_policy(data: dict[str, Any]) -> dict[str, Any]:
     return resolved
 
 
+def _requested_tool_mode(data: dict[str, Any]) -> str:
+    """Validate the per-run tool transport mode before assembling a run."""
+    tool_mode = data.get("tool_mode", "native")
+    if not isinstance(tool_mode, str) or tool_mode not in {"native", "ptc"}:
+        raise ValueError("tool_mode must be 'native' or 'ptc'")
+    return tool_mode
+
+
 def _restore_permission_policy(run: RunState, context: dict[str, Any]) -> None:
     """Restore the independent permission dimensions for an interrupted run."""
     run.sandbox_mode = context.get("sandbox_mode") or run.sandbox_mode
@@ -1498,6 +1506,16 @@ async def _handle_run_start(
                 await manager.send(conn_id, env)
         return
 
+    try:
+        tool_mode = _requested_tool_mode(data)
+    except ValueError as exc:
+        invalid = RunState(run_id, str(data.get("conversation_id", "")), "")
+        invalid.status = "failed"
+        await manager.send(conn_id, invalid.next_envelope("run.failed", {
+            "category": "validation", "detail": str(exc),
+        }))
+        return
+
     content = data.get("content", "")
     if not isinstance(content, str):
         content = str(content)
@@ -1861,6 +1879,7 @@ async def _handle_run_start(
                        ignore_project_config=ignore_project_config, session_id=str(conv_id)):
         model_id = model_id or model_mgr.current_model
     run = preparation_run
+    run.tool_mode = tool_mode
     run.conversation_id = conv_id
     run.ephemeral = data.get("ephemeral") is True
     if "bypass_prompt_cache" in data and not isinstance(data.get("bypass_prompt_cache"), bool):
@@ -3657,6 +3676,7 @@ async def _execute_run(
             workspace_rules=workspace_rules,
             ignore_workspace_rules=run.ignore_workspace_rules,
             mode=mode,
+            tool_mode=run.tool_mode,
             tool_allow=run.tool_allow,
             tool_deny=run.tool_deny,
             read_only=run.read_only or run.ephemeral,

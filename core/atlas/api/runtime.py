@@ -37,6 +37,7 @@ class RunState:
         "read_only", "active_skills", "profile_id", "agent_id", "user_input",
         "permission_mode", "allowed_paths", "trust_future", "trust_event_id",
         "sandbox_mode", "approval_policy", "permission_preset",
+        "tool_mode",
         "inbox",
         "executor", "sandbox", "extra_roots",
         "trust_roots",
@@ -103,6 +104,7 @@ class RunState:
         self.sandbox_mode: str | None = None
         self.approval_policy: str | None = None
         self.permission_preset: str | None = None
+        self.tool_mode = "native"
         self.inbox: Any = None
         self.allowed_paths: list[str] = []
         self.trust_future: asyncio.Future[bool] | None = None
