@@ -852,9 +852,16 @@ class AtlasKernel:
                    workspace=request.workspace or "", kernel="atlas")
             record("turn_start", turn_id=run_id, session_id=session_id)
             if not request.ephemeral:
-                from atlas.engine.session_sync import append_session_event, mark_session_turn_active
+                from atlas.engine.session_sync import (
+                    append_session_event,
+                    ensure_session_workspace,
+                    mark_session_turn_active,
+                )
 
                 mark_session_turn_active(session_id, run_id, True)
+                # Durable session queries admit a session by matching its stored
+                # cwd against this run's workspace; stamp it once, at run start.
+                ensure_session_workspace(self.data_dir / "engine", session_id, request.workspace)
 
                 try:
                     import psutil
@@ -1563,6 +1570,7 @@ class AtlasKernel:
                 await event_queue.put({"type": "run_usage", "usage": usage})
 
             live_surface_meter: dict[str, Any] = {}
+            live_envelope_sha: dict[str, str] = {}
 
             async def record_model_attempt(event: dict[str, Any], *, purpose: str) -> None:
                 if event.get("ok"):
@@ -1604,6 +1612,37 @@ class AtlasKernel:
                     if purpose == "conversation" and live_surface_meter:
                         usage["surface_token_estimate"] = live_surface_meter.get("surface_tokens")
                         usage["surface_node_tokens"] = copy.deepcopy(live_surface_meter.get("nodes", []))
+                        # Anchor the provider-reported input back onto the same
+                        # surface nodes: a pure projection over the estimates
+                        # above, so per-node prices sum (modulo rounding) to the
+                        # provider total without mutating the estimates.
+                        from atlas.engine.agent.token_meter import anchor_surface_to_usage
+
+                        anchor = anchor_surface_to_usage(
+                            surface_nodes=live_surface_meter.get("nodes", []),
+                            surface_tokens=int(live_surface_meter.get("surface_tokens") or 0),
+                            provider_input_tokens=input_count,
+                            request_sha256=live_envelope_sha.get("value", ""),
+                            cached_tokens=cached_count,
+                        )
+                        if anchor is not None:
+                            usage["surface_anchor"] = {
+                                key: value for key, value in anchor.items()
+                                if key != "surface_node_tokens_anchored"
+                            }
+                            usage["surface_node_tokens_anchored"] = copy.deepcopy(
+                                anchor["surface_node_tokens_anchored"],
+                            )
+                            record("model_request_anchor",
+                                   purpose=purpose,
+                                   request_sha256=anchor["request_sha256"],
+                                   provider_input_tokens=anchor["provider_input_tokens"],
+                                   cached_tokens=cached_count,
+                                   surface_token_estimate=anchor["surface_tokens"],
+                                   anchor_ratio=anchor["anchor_ratio"],
+                                   surface_node_tokens_anchored=copy.deepcopy(
+                                       anchor["surface_node_tokens_anchored"],
+                                   ))
                     cost_usd: float | None = None
                     try:
                         model_entry = agent._model_mgr._find_model(str(event.get("model") or "")) or {}
@@ -1880,6 +1919,12 @@ class AtlasKernel:
                             begin_session_compaction, self.data_dir / "engine", session_id, holder,
                         )
                         compaction_lease.update({"holder": holder, "watermark": watermark})
+                        # Mirror the SessionDB compaction/start event into the run
+                        # journal: a crash between lease acquisition and publication
+                        # then leaves a detectable start-without-end bracket here,
+                        # not just an inference from database state.
+                        record("compaction_start", holder=holder, watermark=watermark,
+                               trigger=compaction_trigger)
 
                 async def prepare_compaction(*, force: bool = False) -> Any:
                     nonlocal durable_history, held_messages, history, messages, prompt
@@ -1908,6 +1953,8 @@ class AtlasKernel:
                                     abort_session_compaction, self.data_dir / "engine", session_id,
                                     compaction_lease["holder"],
                                 )
+                            record("compaction_end", holder=compaction_lease["holder"],
+                                   reason="aborted", detail=type(exc).__name__)
                             compaction_lease["holder"] = None
                         if (isinstance(exc, ModelCallError)
                                 and exc.category == "hook_blocked"):
@@ -1959,6 +2006,8 @@ class AtlasKernel:
                                 },
                             )
                         except Exception as exc:
+                            record("compaction_end", holder=holder,
+                                   reason="failed", detail=type(exc).__name__)
                             compaction_lease["holder"] = None
                             raise ModelCallError(
                                 f"SessionDB compaction publication failed: {exc}",
@@ -1969,6 +2018,9 @@ class AtlasKernel:
                         record("compaction", method=result.method,
                                before_tokens=result.before_tokens, after_tokens=result.after_tokens,
                                budget_tokens=result.budget_tokens, forced=force)
+                        record("compaction_end", holder=holder, reason="completed",
+                               method=result.method, before_tokens=result.before_tokens,
+                               after_tokens=result.after_tokens)
                         if request.lifecycle_hook_callback is not None:
                             await self._run_hook(request, "PostCompact", {
                                 "trigger": compaction_trigger, "conversation_id": session_id,
@@ -2003,6 +2055,8 @@ class AtlasKernel:
                             abort_session_compaction, self.data_dir / "engine", session_id,
                             compaction_lease["holder"],
                         )
+                        record("compaction_end", holder=compaction_lease["holder"],
+                               reason="aborted", detail="no_compaction_method")
                         compaction_lease["holder"] = None
                     if result.error and result.after_tokens > result.budget_tokens:
                         raise ModelCallError(result.error, category="context_budget")
@@ -2241,6 +2295,8 @@ class AtlasKernel:
                 record("model_request_envelope", model=turn_model, attempt=turn_index + 1,
                        surface_token_estimate=live_surface_meter["surface_tokens"],
                        surface_node_tokens=live_surface_meter["nodes"], **envelope)
+                live_envelope_sha.clear()
+                live_envelope_sha["value"] = str(envelope.get("request_sha256") or "")
                 tool_json = json.dumps(messages, ensure_ascii=False, default=str)
                 record("model_request", model=turn_model, input_chars=len(tool_json),
                        input_tokens=estimate_tokens(messages), attempt=turn_index + 1)

@@ -229,6 +229,24 @@ def mark_session_turn_active(conversation_id: str, turn_id: str, active: bool) -
         _ACTIVE_SESSION_TURNS.discard(key)
 
 
+def ensure_session_workspace(home: str | Path, conversation_id: str, workspace: Any) -> None:
+    """Record the run's local workspace on the engine session row when absent.
+
+    Durable session queries admit a session by matching its stored ``cwd``
+    metadata against the current run's workspace. Kernel runs created bare
+    session rows without cwd, so that admission gate could never pass. This
+    fills the NULL once per session; an existing cwd is never overwritten
+    (``_UPSERT_KEEP_EXISTING_SQL`` COALESCE semantics). SSH workspaces are
+    skipped: session queries fail closed for them anyway.
+    """
+    conversation_id = str(conversation_id or "").strip()
+    workspace = str(workspace or "").strip()
+    if not conversation_id or not workspace or workspace.startswith("ssh://"):
+        return
+    with _open_db(home) as db:
+        db.ensure_session(conversation_id, "api_server", cwd=workspace)
+
+
 def persist_session_attachments(
     home: str | Path, conversation_id: str, content: Any,
 ) -> Any:
@@ -436,6 +454,32 @@ def compact_session_messages(
             raise
         finally:
             db.release_compression_lock(conversation_id, holder)
+
+
+def detect_orphaned_compactions(home: str | Path, conversation_id: str) -> list[dict[str, Any]]:
+    """Return durable ``compaction/start`` brackets with no matching ``compaction/end``.
+
+    Read-only projection over the session event log. A start without an end for
+    the same holder means the run died between lease acquisition and publication
+    (crash, kill, power loss) — the lease TTL will expire on its own, but the
+    orphan is detectable from the transcript instead of inferred from lock rows.
+    """
+    with _open_db(home) as db:
+        events = db.list_session_events(conversation_id, after_seq=0, limit=10_000)
+    open_brackets: dict[str, dict[str, Any]] = {}
+    for event in events:
+        kind = str(event.get("event_type") or "")
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        holder = str(payload.get("holder") or "")
+        if kind == "compaction/start" and holder:
+            open_brackets[holder] = {
+                "holder": holder,
+                "watermark": payload.get("watermark"),
+                "start_seq": event.get("seq"),
+            }
+        elif kind == "compaction/end" and holder:
+            open_brackets.pop(holder, None)
+    return list(open_brackets.values())
 
 
 def restore_session_snapshot(home: str | Path, conversation_id: str) -> dict[str, Any] | None:
