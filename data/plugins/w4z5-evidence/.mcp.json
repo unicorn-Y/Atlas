@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "w4z5-evidence": {
+      "command": "C:/Users/25011/AppData/Local/hermes/hermes-agent/venv/Scripts/python.exe",
+      "args": ["D:/Atlas/.worktrees/w4-z5/core/scripts/w4z5_evidence_mcp_server.py"]
+    }
+  }
+}
