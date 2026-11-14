@@ -184,6 +184,37 @@ class SessionTitlesMixin:
             "UPDATE sessions SET title_source = ? WHERE id = ? AND title IS NOT NULL", (source, session_id)
         ) > 0
 
+    def refresh_session_title(self, session_id: str) -> bool:
+        """Unpin a session title so automatic titles can re-compete (S28 ``refresh()``).
+
+        A user rename pins the row (``title_source='user'``, rank above every automatic
+        writer), which is exactly what blocks ``set_auto_title`` forever after. Refresh
+        drops that pin: the current text is kept but demoted to ``derived`` provenance,
+        restoring the same competition rules an untitled row has — the next ``llm``
+        write lands, and the engine's titler (which refuses ``user`` rows up front)
+        will run again. Legacy rows with NULL provenance are treated as user renames
+        (see :meth:`_title_rank`), so they are refreshable too.
+
+        Returns True when a pinned row was actually unpinned; False when the session
+        does not exist, is untitled, or already holds automatic provenance.
+        """
+        user_rank = self._TITLE_SOURCE_RANK[self.TITLE_SOURCE_USER]
+
+        def _do(conn):
+            row = conn.execute(
+                "SELECT title, title_source FROM sessions WHERE id = ?", (session_id,),
+            ).fetchone()
+            if row is None or row["title"] is None:
+                return 0
+            if self._title_rank(row["title_source"]) < user_rank:
+                return 0
+            return conn.execute(
+                "UPDATE sessions SET title_source = ? WHERE id = ? AND title IS ? AND title_source IS ?",
+                (self.TITLE_SOURCE_DERIVED, session_id, row["title"], row["title_source"]),
+            ).rowcount
+
+        return self._execute_write(_do) > 0
+
     def get_session_by_title(self, title: str) -> Optional[dict[str, Any]]:
         """Look up a session by exact title. Returns session dict or None."""
         row = self._read_one(

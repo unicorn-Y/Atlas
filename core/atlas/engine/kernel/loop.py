@@ -366,6 +366,10 @@ _ALWAYS_KEEP_TOOLS = (
     "memory_search", "session_search",
     "ask_user", "request_user_input", "AskUserQuestion",
     "tool_search", "workflow",
+    # S20: the deliverable declaration must be reachable in every tier — a
+    # finished user-facing file can happen in any kind of turn, and the W3
+    # live probe showed the model silently losing `present` to tier pruning.
+    "present",
 )
 
 
