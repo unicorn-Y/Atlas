@@ -117,6 +117,11 @@ async def serve_stdio(*, workspace: str | None = None,
         pending_inputs: dict[str, asyncio.Future[str]] = {}
         pending_client_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
         pending_acp_permissions: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        # SDK session/settle barrier: `session/wait` registers one future per
+        # waiter; the run task resolves them when it settles. The reader loop
+        # never blocks on a run, so approvals/inputs stay answerable mid-wait.
+        pending_session_waits: dict[str, list[asyncio.Future[None]]] = {}
+        wait_responders: set[asyncio.Task[None]] = set()
         session_fs: dict[str, dict[str, bool]] = {}
         from atlas.tools.acp_fs import (
             AcpFilesystem, capabilities_from_initialize, reset_current, set_current,
@@ -211,6 +216,12 @@ async def serve_stdio(*, workspace: str | None = None,
 
             failure_detail = ""
             fs_token = None
+            if not acp:
+                # Whole-session running/idle transitions, DSH `session.status`
+                # semantics: one notification per transition, run-scoped.
+                await notify("session/status", {
+                    "session_id": session_id, "status": "running",
+                })
             try:
                 fs_caps = session_fs.get(session_id, {}) if acp else {}
                 if acp and (fs_caps.get("read") or fs_caps.get("write")):
@@ -305,8 +316,15 @@ async def serve_stdio(*, workspace: str | None = None,
             finally:
                 if fs_token is not None:
                     reset_current(fs_token)
+                if not acp:
+                    await notify("session/status", {
+                        "session_id": session_id, "status": "idle",
+                    })
                 active.pop(session_id, None)
                 active_tasks.pop(session_id, None)
+                for waiter in pending_session_waits.pop(session_id, []):
+                    if not waiter.done():
+                        waiter.set_result(None)
 
         while True:
             line = await asyncio.to_thread(rpc_in.readline)
@@ -326,7 +344,7 @@ async def serve_stdio(*, workspace: str | None = None,
                 )
                 if method in {"session/start", "session/new", "session/list", "session/resume",
                               "session/set_config_option", "session/prompt", "session/cancel",
-                              "session/close"}:
+                              "session/close", "session/wait", "shutdown"}:
                     if (protocol == "acp") != acp_wire:
                         await response(request_id, error={
                             "code": -32601,
@@ -617,6 +635,56 @@ async def serve_stdio(*, workspace: str | None = None,
                     else:
                         future.set_result(str(params.get("value") or ""))
                         await response(request_id, result={"accepted": True})
+                elif method == "session/wait":
+                    # DSH SDK `session/wait`: settle barrier for one session's
+                    # active run. Returns {} once the root run is no longer
+                    # active; unknown sessions are rejected. Registered waiters
+                    # are resolved by the run task itself, so the reader loop
+                    # stays free to answer approval/input requests mid-wait.
+                    session_id = str(
+                        (params.get("sessionId") if "sessionId" in params
+                         else params.get("session_id")) or ""
+                    )
+                    if session_id not in sessions:
+                        await response(request_id, error={
+                            "code": -32002, "message": "unknown session",
+                        })
+                        continue
+                    task = active_tasks.get(session_id)
+                    if task is None or task.done():
+                        await response(request_id, result={})
+                        continue
+                    waiter: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+                    waits = pending_session_waits.setdefault(session_id, [])
+                    waits.append(waiter)
+                    if task.done():
+                        # The run settled between the done-check and the
+                        # registration; its finally already walked this list.
+                        if not waiter.done():
+                            waiter.set_result(None)
+                        if waiter in waits:
+                            waits.remove(waiter)
+                        if not waits:
+                            pending_session_waits.pop(session_id, None)
+
+                    async def respond_when_settled(
+                        future: asyncio.Future[None] = waiter, wait_id: Any = request_id,
+                    ) -> None:
+                        await future
+                        await response(wait_id, result={})
+
+                    responder = asyncio.create_task(
+                        respond_when_settled(),
+                        name=f"atlas-session-wait:{session_id[:12]}",
+                    )
+                    wait_responders.add(responder)
+                    responder.add_done_callback(wait_responders.discard)
+                elif method == "shutdown":
+                    # DSH SDK `shutdown`: acknowledge, then run the same
+                    # graceful drain as EOF (cancel active runs, fail pending
+                    # client requests, flush ordered output, close the memory).
+                    await response(request_id, result={})
+                    break
                 elif method == "session/close":
                     acp = "sessionId" in params
                     session_id = str((params.get("sessionId") if acp else params.get("session_id")) or "")
@@ -645,8 +713,14 @@ async def serve_stdio(*, workspace: str | None = None,
         for future in pending_acp_permissions.values():
             if not future.done():
                 future.set_result({"outcome": "cancelled"})
+        for waiters in pending_session_waits.values():
+            for future in waiters:
+                if not future.done():
+                    future.set_result(None)
         if active_tasks:
             await asyncio.gather(*list(active_tasks.values()), return_exceptions=True)
+        if wait_responders:
+            await asyncio.gather(*list(wait_responders), return_exceptions=True)
         await outgoing.put(None)
         await writer
     finally:
