@@ -183,6 +183,14 @@ describe('desktop backend lifecycle publishing (D2)', () => {
     const fatal = events.at(-1);
     expect(fatal).toMatchObject({ kind: 'fatal', detail: 'backend exploded' });
     await expect(Promise.resolve(ipcHandler('backend:get-lifecycle')(trustedEvent()))).resolves.toEqual(fatal);
+
+    // Quitting also announces the managed backend stop before the app goes away.
+    const beforeQuit = mocks.app.on.mock.calls.find(([event]) => event === 'before-quit')?.[1] as ((event: { preventDefault: () => void }) => void) | undefined;
+    expect(beforeQuit).toBeTypeOf('function');
+    beforeQuit?.({ preventDefault: vi.fn() });
+    await vi.waitFor(() => expect(lifecycleEvents().filter((event) => event.kind === 'shutdown-complete')).toHaveLength(2), { timeout: 5000, interval: 25 });
+    expect(lifecycleEvents().at(-1)).toMatchObject({ kind: 'shutdown-complete' });
+    expect(mocks.app.quit).toHaveBeenCalledOnce();
   });
 
   it('publishes quit-inspection with the reported activity before asking the user', async () => {
