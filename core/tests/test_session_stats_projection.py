@@ -43,6 +43,31 @@ def test_timing_projection_is_durable_filtered_and_does_not_double_count(tmp_pat
     assert all(value == 0 for value in session_timing_stats("missing", tmp_path).values())
 
 
+def test_run_info_session_id_is_captured_when_run_start_is_not_first_line(tmp_path):
+    """Live run logs open with api_timing/request envelopes; the owning session
+    must still be found so the timing projection can filter by session."""
+    from atlas.run_replay import list_runs
+
+    root = tmp_path / "runs"
+    root.mkdir(parents=True)
+    events = [
+        {"event": "api_timing", "stage": "request_received"},
+        {"event": "run_status", "state": "queued"},
+        {"event": "run_start", "session_id": "session-late", "model": "deepseek-v4.1-flash"},
+        {"event": "model_request", "purpose": "conversation", "duration_ms": 500,
+         "first_token_ms": 100, "output_tokens": 8, "attempt": 1},
+        {"event": "step_end", "reason": "completed"},
+        {"event": "run_end", "status": "completed"},
+    ]
+    (root / "late.jsonl").write_text("".join(
+        json.dumps({**item, "run_id": "late", "timestamp": "2026-11-14T02:00:00Z"}) + "\n"
+        for item in events
+    ), encoding="utf-8")
+    infos = list_runs(limit=None, runs_dir=root)
+    assert [info.session_id for info in infos] == ["session-late"]
+    assert session_timing_stats("session-late", root)["llmMs"] == 500
+
+
 @pytest.mark.asyncio
 async def test_stats_api_serves_projection(tmp_path, monkeypatch):
     import atlas.config
