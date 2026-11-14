@@ -13,6 +13,7 @@ comforting zero.
 
 from __future__ import annotations
 
+import structlog
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -21,6 +22,8 @@ from atlas.engine.kernel.context import (
     ContextManager,
     ContextThresholds,
 )
+
+log = structlog.get_logger(__name__)
 
 #: Named bands, ordered. ``critical`` is the one that stops a turn.
 LEVELS = ("idle", "roomy", "filling", "tight", "critical")
@@ -276,6 +279,51 @@ def anchor_surface_to_usage(
     }
 
 
+def route_image_pricer(model_config: Mapping[str, Any] | None) -> (
+    Callable[[Mapping[str, Any], Sequence[Mapping[str, Any]]], Sequence[Mapping[str, Any]]] | None
+):
+    """Build the route-aware image pricing callback from the model entry, or ``None``.
+
+    A model entry may declare ``image_pricing`` as a uniform per-image visual
+    token cost (``"image_pricing": 800``) or as a mapping
+    ``{"visual_tokens": int, "text": str}`` where ``text`` is the placeholder
+    substituted for each image occurrence before text estimation. Absent or
+    invalid configuration returns ``None`` so the request keeps the fixed
+    heuristic — metering must never break a request.
+    """
+    if not isinstance(model_config, Mapping):
+        return None
+    pricing = model_config.get("image_pricing")
+    if pricing is None:
+        return None
+    visual: int | None
+    text = ""
+    if isinstance(pricing, bool):
+        visual = None
+    elif isinstance(pricing, int) and pricing >= 0:
+        visual = pricing
+    elif isinstance(pricing, Mapping):
+        candidate = pricing.get("visual_tokens")
+        visual = candidate if type(candidate) is int and candidate >= 0 else None
+        raw_text = pricing.get("text")
+        if isinstance(raw_text, str):
+            text = raw_text
+    else:
+        visual = None
+    if visual is None:
+        log.warning(
+            "token_meter.image_pricing_ignored",
+            reason="model entry image_pricing must be a non-negative int or "
+                   '{"visual_tokens": int, "text": str}',
+        )
+        return None
+
+    def _price(route: Mapping[str, Any], images: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        return [{"visual_tokens": visual, "text": text} for _ in images]
+
+    return _price
+
+
 def _with_surface_prices(
     result: dict[str, Any],
     surface_nodes: Sequence[Mapping[str, Any]] | None,
@@ -328,5 +376,5 @@ def level_index(band: str) -> int:
 
 __all__ = [
     "DEFAULT_CONTEXT_WINDOW", "LEVELS", "anchor_surface_to_usage", "level_index",
-    "measure", "measure_session", "price_surface_nodes",
+    "measure", "measure_session", "price_surface_nodes", "route_image_pricer",
 ]
