@@ -13,7 +13,7 @@ import StructuredComponentCard from './StructuredComponentCard';
 import ForegroundConfirmCard from './x2/ForegroundConfirmCard';
 import BrowserHandoffCard from './x2/BrowserHandoffCard';
 import { DiagnosticsList } from './diagnostics';
-import { buildTimeline, cacheShare, describeTool, duration, isPlanReviewIntent, tokenCount, type Step, type TimelineItem } from './timeline';
+import { buildTimeline, cacheShare, describeTool, duration, isPlanReviewIntent, registerExtensionNodeClaim, tokenCount, type Step, type TimelineItem } from './timeline';
 import { TimelineProjection } from './timelineProjection';
 import type { InspectorTab } from '../shell/Inspector';
 import { TokenUsageCard, TokenUsageToggle } from './TokenUsage';
@@ -49,11 +49,15 @@ export interface ConversationNodeProps {
 export interface ConversationNodeDefinition {
   kind: string;
   renderer: ComponentType<ConversationNodeProps>;
+  /** X27: claim runtime events the built-in timeline does not render; matching events
+   *  become kind:'extension' nodes with nodeType === kind, drawn by this renderer. */
+  match?: (event: AgentEvent) => boolean;
 }
 
 const conversationNodeRenderers = new Map<string, ComponentType<ConversationNodeProps>>();
 
-/** Register a keyed timeline renderer; the returned disposer unregisters only this renderer. */
+/** Register a keyed timeline renderer; the returned disposer unregisters only this renderer
+ *  (and its event claim, when the definition declared one). */
 export function registerConversationNode(definition: ConversationNodeDefinition): () => void {
   if (!definition.kind.trim()) throw new Error('Conversation node kind is required');
   if (conversationNodeRenderers.has(definition.kind)) {
@@ -61,7 +65,9 @@ export function registerConversationNode(definition: ConversationNodeDefinition)
   }
   const { kind, renderer } = definition;
   conversationNodeRenderers.set(kind, renderer);
+  const disposeClaim = definition.match ? registerExtensionNodeClaim({ nodeType: kind, match: definition.match }) : null;
   return () => {
+    disposeClaim?.();
     if (conversationNodeRenderers.get(kind) === renderer) conversationNodeRenderers.delete(kind);
   };
 }

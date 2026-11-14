@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentEvent } from '../../types/runtime';
-import { buildTimeline, cacheShare, describeTool, duration, isPlanReviewIntent, shortPath, tokenCount } from './timeline';
+import { buildTimeline, cacheShare, describeTool, duration, isPlanReviewIntent, registerExtensionNodeClaim, shortPath, tokenCount } from './timeline';
 
 let seq = 0;
 const ev = (type: AgentEvent['type'], data: Record<string, unknown>, second = seq): AgentEvent =>
@@ -120,6 +120,38 @@ describe('buildTimeline', () => {
     ]);
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ kind: 'component', component: { id: 'status', title: '部署', kind: 'progress', data: { steps: [{ status: 'done' }] } } });
+  });
+
+  it('emits extension nodes for events claimed by a registered client extension (X27)', () => {
+    seq = 0;
+    const dispose = registerExtensionNodeClaim({
+      nodeType: 'canvas-mirror',
+      match: (event) => event.type === 'canvas.update',
+    });
+    try {
+      const items = buildTimeline([
+        ev('run.started', { content: '画一下' }, 0),
+        ev('canvas.update', { canvas: { page: 1 } }, 1),
+        ev('run.completed', {}, 2),
+      ]);
+      expect(items.map((item) => item.kind)).toEqual(['user', 'extension', 'done']);
+      expect(items[1]).toMatchObject({ kind: 'extension', nodeType: 'canvas-mirror', data: { canvas: { page: 1 } } });
+      // A claim that throws must not break the built-in timeline.
+      const broken = registerExtensionNodeClaim({ nodeType: 'broken', match: () => { throw new Error('boom'); } });
+      const second = buildTimeline([ev('safety.reviewed', { verdict: 'allow' })]);
+      expect(second).toEqual([]);
+      broken();
+    } finally {
+      dispose();
+    }
+    // Disposed: the event is invisible again, and re-registering a new claim reaches it once more.
+    expect(buildTimeline([ev('canvas.update', { canvas: {} }, 1)])).toEqual([]);
+    const again = registerExtensionNodeClaim({ nodeType: 'canvas-mirror', match: (event) => event.type === 'canvas.update' });
+    try {
+      expect(buildTimeline([ev('canvas.update', { canvas: {} }, 1)]).map((item) => item.kind)).toEqual(['extension']);
+    } finally {
+      again();
+    }
   });
 });
 
