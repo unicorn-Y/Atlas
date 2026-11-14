@@ -38,18 +38,39 @@ describe('observed history pagination', () => {
     expect(useAtlasStore.getState().messagesHasEarlier.source).toBe(false);
   });
 
-  it('repairs an overlapping earlier page without duplicating the shared row', async () => {
-    const latest = Array.from({ length: 101 }, (_, index) => message(`m-${index}`));
-    const overlapping = Array.from({ length: 101 }, (_, index) => message(`m-${index}`));
-    const getMessages = vi.spyOn(backend, 'getMessages').mockResolvedValueOnce(latest).mockResolvedValueOnce(overlapping);
+  it('walks back over consecutive full pages without gaps or duplicates, then stops on a short page', async () => {
+    const page = (start: number, count: number) => Array.from({ length: count }, (_, index) => message(`m-${start + index}`));
+    const getMessages = vi.spyOn(backend, 'getMessages')
+      .mockResolvedValueOnce(page(500, 101))
+      .mockResolvedValueOnce(page(400, 101))
+      .mockResolvedValueOnce(page(398, 2));
+    await useAtlasStore.getState().openConversation({ id: 'source', title: 'Source' });
+    expect(useAtlasStore.getState().messagesHasEarlier.source).toBe(true);
+
+    await useAtlasStore.getState().loadEarlier('source');
+    expect(getMessages).toHaveBeenLastCalledWith('source', { limit: 101, beforeId: 'm-501' });
+    expect(useAtlasStore.getState().messagesHasEarlier.source).toBe(true);
+
+    await useAtlasStore.getState().loadEarlier('source');
+    expect(getMessages).toHaveBeenLastCalledWith('source', { limit: 101, beforeId: 'm-400' });
+    expect(useAtlasStore.getState().messagesHasEarlier.source).toBe(false);
+
+    const ids = useAtlasStore.getState().conversationMessages.source.map((row) => row.id);
+    expect(ids).toEqual([...page(398, 2), ...page(400, 101), ...page(501, 100)].map((row) => row.id));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('repairs an overlapping earlier page without duplicating rows already on screen', async () => {
+    const page = (start: number, count: number) => Array.from({ length: count }, (_, index) => message(`m-${start + index}`));
+    vi.spyOn(backend, 'getMessages')
+      .mockResolvedValueOnce(page(1, 101))
+      // Server side effect: the earlier page echoes two rows that are already rendered.
+      .mockResolvedValueOnce([message('m-0'), message('m-1'), message('m-2')]);
     await useAtlasStore.getState().openConversation({ id: 'source', title: 'Source' });
     await useAtlasStore.getState().loadEarlier('source');
     const ids = useAtlasStore.getState().conversationMessages.source.map((row) => row.id);
-    expect(ids).toEqual(Array.from({ length: 101 }, (_, index) => `m-${index}`));
+    expect(ids).toEqual(page(0, 102).map((row) => row.id));
     expect(new Set(ids).size).toBe(ids.length);
-    expect(getMessages).toHaveBeenLastCalledWith('source', { limit: 101, beforeId: 'm-1' });
-    // A full 101-row earlier page proves there is more history behind it.
-    expect(useAtlasStore.getState().messagesHasEarlier.source).toBe(true);
   });
 });
 

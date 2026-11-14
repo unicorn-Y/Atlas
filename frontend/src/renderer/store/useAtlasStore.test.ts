@@ -331,22 +331,22 @@ describe('message pagination and bounded cache', () => {
 
   it('defaults to the latest page and prepends an earlier one on loadEarlier', async () => {
     useAtlasStore.setState({ configLoaded: false, activeConversationId: '', activeRunId: null });
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ models: [], current: '' }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 'conversation-open', title: 'Open chat', updated_at: '' }] } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ servers: [], tool_count: 0, tools: [] }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills: [] }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ capabilities: [] }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 'm-100', role: 'user', content: 'latest', created_at: '' }] } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ profiles: [] }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ recipes: [] }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => REASONING_STAGES } as Response);
-    fetchMock.mockImplementation((url: string) => {
-      if (String(url).includes('/messages?limit=101&before_id=m-100')) {
-        return Promise.resolve({ ok: true, json: async () => [message('m-20'), message('m-21')] } as Response);
-      }
-      return Promise.resolve({ ok: true, json: async () => [] } as Response);
+    // Route by URL instead of call order: initialize fans out concurrently, so a
+    // positional Once-chain would couple this test to unrelated fetch scheduling.
+    const fetchMock = vi.fn((url: string) => {
+      const target = String(url);
+      const json = (payload: unknown) => Promise.resolve({ ok: true, json: async () => payload } as Response);
+      if (target.includes('/messages?limit=101&before_id=m-100')) return json([message('m-20'), message('m-21')]);
+      if (target.includes('/messages')) return json([{ id: 'm-100', role: 'user', content: 'latest', created_at: '' }]);
+      if (target.includes('/api/models/reasoning-stages')) return json(REASONING_STAGES);
+      if (target.includes('/api/profiles')) return json({ profiles: [] });
+      if (target.includes('/api/recipes')) return json({ recipes: [] });
+      if (target.includes('/api/agent/capabilities')) return json({ capabilities: [] });
+      if (target.includes('/api/tools')) return json({ servers: [], tool_count: 0, tools: [] });
+      if (target.includes('/api/skills')) return json({ skills: [] });
+      if (target.includes('/api/configuration')) return json({ models: [], current: '' });
+      if (target.includes('/api/conversations')) return json([{ id: 'conversation-open', title: 'Open chat', updated_at: '' }]);
+      return json({});
     });
     vi.stubGlobal('fetch', fetchMock);
     await useAtlasStore.getState().initialize();
