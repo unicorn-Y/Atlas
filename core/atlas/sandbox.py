@@ -86,9 +86,77 @@ class DockerSandboxManager:
             capture_output=True, text=True, timeout=30,
         )
 
+    async def _host_job_fallback(self, run_id: str, name: str,
+                                 args: dict[str, Any]) -> dict[str, Any] | None:
+        """Run a local execution tool inside a Job Object when no container exists.
+
+        Returns ``None`` when this host cannot contain anything, so the caller
+        keeps its original error instead of silently running unsandboxed.
+        """
+        from atlas.windows_job_sandbox import (
+            JobSandboxUnavailable,
+            run_in_job,
+            sandbox_capabilities,
+        )
+
+        caps = sandbox_capabilities()
+        if not caps.get("available"):
+            return None
+        mode = str(args.get("sandbox_permissions") or "workspace-write")
+        if mode == "read-only":
+            # A Job Object cannot enforce a filesystem ACL. Refuse rather than
+            # run a "read-only" command that is free to write.
+            return {
+                "data": {"error": "read-only is not enforceable by the host job backend",
+                         "sandbox_enforced": False, "sandbox_backend": "win32job"},
+                "content": [{"type": "text", "text":
+                             "read-only sandbox is not enforceable on this host; "
+                             "install Docker or use workspace-write."}],
+                "is_error": True,
+            }
+
+        workspace = Path(self._roots.get(run_id) or args.get("cwd") or ".").resolve()
+        cwd = Path(str(args.get("cwd") or workspace)).expanduser().resolve()
+        if not cwd.is_relative_to(workspace):
+            raise PermissionError("沙箱命令的工作目录必须位于工作目录内。")
+
+        if name == "local_shell":
+            argv = ["cmd", "/c", str(args.get("command", ""))]
+        elif name == "local_exec":
+            argv = [str(args.get("executable", "")), *[str(a) for a in args.get("args", [])]]
+        elif name == "local_git":
+            action = str(args.get("action", "status"))
+            argv = ["git", {"status": "--short --branch", "diff": "diff"}.get(action, action)]
+            argv = [p for part in argv for p in part.split()]
+        else:
+            return None
+
+        try:
+            result = await run_in_job(argv, mode=mode, cwd=cwd,
+                                      timeout=float(args.get("timeout") or 120))
+        except JobSandboxUnavailable:
+            return None
+
+        payload = result.as_dict()
+        payload["sandbox_backend"] = "win32job"
+        text = payload["stdout"] or payload["stderr"] or f"exit {payload['exit_code']}"
+        return {
+            "data": payload,
+            "content": [{"type": "text", "text": text}],
+            "is_error": bool(payload["exit_code"]) or payload["timed_out"],
+            "sandbox_enforced": payload["enforced"],
+        }
+
     async def call_tool(self, run_id: str, name: str, args: dict[str, Any]) -> dict[str, Any]:
         entry = self._containers.get(run_id)
         if not entry:
+            # No container for this run. On a host where Docker is absent or not
+            # started, a per-call Job Object can still contain the process tree,
+            # which is strictly better than running unsandboxed. The result says
+            # which backend ran so a caller can never mistake the two.
+            host = await self._host_job_fallback(run_id, name, args)
+            if host is not None:
+                return host
             raise RuntimeError("Docker 沙箱容器尚未启动。")
         container, image = entry
         workspace = Path(self._roots[run_id]).resolve()
