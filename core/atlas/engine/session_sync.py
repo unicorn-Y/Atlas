@@ -530,6 +530,34 @@ def latest_session_message_id(
     return None
 
 
+def record_failed_attempt(
+    home: str | Path, conversation_id: str, *, category: str, detail: str,
+    model: str | None = None, run_id: str | None = None,
+) -> int | None:
+    """Make a run that failed before producing a message replayable.
+
+    A run can die before any transcript row exists — an unknown model id, a
+    provider that rejects the request. Without this the session has no events at
+    all, so "it failed" lives only in the live socket: nothing durable says what
+    was attempted or why it stopped. Recorded as its own event type so a replay
+    can show the attempt without inventing a message row.
+    """
+    if not str(conversation_id or "").strip():
+        return None
+    try:
+        with _open_db(home) as db:
+            if db.get_session(conversation_id) is None:
+                db.ensure_session(conversation_id, "api_server")
+            return db.append_session_event(conversation_id, "attempt/failed", {
+                "category": str(category or ""),
+                "detail": str(detail or "")[:2000],
+                "model": model,
+                "run_id": run_id,
+            })
+    except Exception:  # noqa: BLE001 - never turn a failure report into a new failure
+        return None
+
+
 def append_session_event(
     home: str | Path, conversation_id: str, event_type: str, payload: dict[str, Any],
 ) -> int:

@@ -3051,6 +3051,24 @@ async def _execute_run(
             SessionProjections.invalidate_for(services, event)
         except Exception:  # noqa: BLE001 - a cache miss must never fail a run
             log.warning("session_projections.invalidate_failed", evt=event, exc_info=True)
+        # A failed run must be durable even when it died before any transcript row
+        # existed; otherwise "it failed" lives only in the live socket and a
+        # replay cannot show what was attempted. This funnel sees every terminal
+        # failure, so one hook covers all four call sites.
+        if event == "run.failed" and not run.ephemeral:
+            try:
+                from atlas.config import DATA_ROOT
+                from atlas.engine.session_sync import record_failed_attempt
+
+                await asyncio.to_thread(
+                    record_failed_attempt, DATA_ROOT / "engine", run.conversation_id,
+                    category=str(data.get("category") or ""),
+                    detail=str(data.get("detail") or ""),
+                    model=str(getattr(run, "model", "") or "") or None,
+                    run_id=run.run_id,
+                )
+            except Exception:  # noqa: BLE001 - reporting a failure must not fail
+                log.warning("run.failed_attempt_not_recorded", run_id=run.run_id)
         if not run.ephemeral and event in {"subtask.started", "subtask.progress", "subtask.output", "subtask.completed",
                      "subtask.group_completed", "subtask.background_completed"}:
             try:
