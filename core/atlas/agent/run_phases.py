@@ -433,6 +433,28 @@ class _RunState:
 async def execute_run(
     agent, request: RunRequest, callbacks: RunCallbacks,
 ) -> AsyncIterator[dict[str, Any]]:
+    """Single entrypoint: hold the conversation turn lease, then run the phases.
+
+    The lease gives the run cross-process single-writer visibility for its
+    whole duration (DSH S5 parity): the holder row carries this process's PID,
+    a background task refreshes it across long turns, and destructive
+    transcript mutations that opt into ``reject_active_turn_lease`` are fenced
+    while it is held. Acquisition is best-effort — when another live writer
+    owns the lease (or the store is briefly unavailable) the run proceeds
+    exactly as before, because the runtime manager already serializes runs per
+    conversation and a user turn must never fail on a fencing nicety.
+    """
+    from atlas.engine.session_handle import hold_turn_lease
+
+    async with hold_turn_lease(request):
+        async with aclosing(_execute_run_phases(agent, request, callbacks)) as events:
+            async for event in events:
+                yield event
+
+
+async def _execute_run_phases(
+    agent, request: RunRequest, callbacks: RunCallbacks,
+) -> AsyncIterator[dict[str, Any]]:
     """Run the agent on a user message, yielding streaming events.
 
     Events yielded:
