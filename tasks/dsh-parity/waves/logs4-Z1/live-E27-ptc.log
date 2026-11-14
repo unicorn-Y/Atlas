@@ -1,0 +1,41 @@
+[event] rules.loaded
+[event] run.context.sources
+[event] run.started
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] run.status
+[event] run.phase
+[event] run.context.sources
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] tool.preparing name=run_code
+[event] tool.preparing name=run_code
+[event] tool.started name=run_code
+[event] run.recovery.notice
+[event] tool.started name=clock.curr_time
+[event] tool.completed name=clock.curr_time output_contract=text/clock.curr_time output
+[event] tool.completed name=run_code output_contract=text/run_code output
+[event] run.status
+[event] run.status
+[event] run.usage
+[event] run.usage
+[event] message.completed
+[event] run.phase
+[terminal] run.completed data={"result": "completed", "model": "deepseek-v4.1-flash", "usage": {"input_tokens": 10448, "uncached_input_tokens": 2256, "output_tokens": 248, "cached_input_tokens": 8192, "cache_write_tokens": null, "request_count": 2, "context_tokens": 5321, "context_limit": 1048576, "model": "deepseek-v4.1-flash",
+[reply] "我先用 `run_code` 调用 `clock.curr_time`，不直接调用其它工具。已按要求执行，未调用其它工具。\n\n**结果**\n- `atlas.call_tool('clock.curr_time', {})` 返回：`2026-11-14T06:50:21.080135+00:00`（UTC），即本地时间 2026-11-14 14:50 (+08:00)。\n- `outcome: completed`，退出码 0，无 stderr。\n\n说明一点：返回值是 dict 形式的 content 字符串，`result` 字段本身是 `null`（`ATLAS_RESULT:null`），所以时间是从 content 里读出来的，而不是结构化字段。"
+[result] terminal=run.completed chars=333

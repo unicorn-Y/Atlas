@@ -1,0 +1,58 @@
+2026-11-14 15:27:40 [info     ] config.loaded                  path=C:\Users\25011\AppData\Local\Temp\atlas-tests-f1bkx23o\atlas\config\atlas.toml
+..................F....                                                  [100%]
+================================== FAILURES ===================================
+_____ test_restricted_scheduler_still_allows_concludeturn_but_honors_deny _____
+
+    @pytest.mark.asyncio
+    async def test_restricted_scheduler_still_allows_concludeturn_but_honors_deny():
+        """E26: a closed tool_allow list must not lock a run out of ending its turn;
+        an explicit deny on concludeTurn still applies."""
+        from atlas.engine.kernel.tools import ToolScheduler
+    
+        async def dispatch(_call_id, _name, _args):
+            return {"content": "ok", "outcome": "completed"}
+    
+        scheduler = ToolScheduler(dispatch, allow=["local_file"])
+        result = await scheduler.execute({"id": "c1", "function": {"name": "concludeTurn", "arguments": {}}})
+>       assert result.receipt.state == "completed"
+E       AssertionError: assert 'failed' == 'completed'
+E         
+E         - completed
+E         + failed
+
+tests\test_backend_parity_wave4_z1.py:513: AssertionError
+============================== warnings summary ===============================
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\memory_library_router.py:431: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\memory_library_router.py:438: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\settings_export_router.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SettingsDocument(BaseModel):
+
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\settings_export_router.py:55: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportPreviewRequest(BaseModel):
+
+tests/test_backend_parity_wave4_z1.py::test_restrict_scope_fails_on_empty_filter_unknown_names_and_empty_sets
+  D:\Atlas\.worktrees\w4-z1\core\atlas\api\settings_export_router.py:62: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ImportApplyRequest(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_backend_parity_wave4_z1.py::test_restricted_scheduler_still_allows_concludeturn_but_honors_deny
+1 failed, 22 passed, 5 warnings in 4.67s

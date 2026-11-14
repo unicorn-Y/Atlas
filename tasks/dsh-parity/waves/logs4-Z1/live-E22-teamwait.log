@@ -1,0 +1,70 @@
+[event] rules.loaded
+[event] run.context.sources
+[event] run.started
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] mcp.startup.progress
+[event] run.status
+[event] run.phase
+[event] run.context.sources
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] tool.preparing name=tool_search
+[event] tool.started name=tool_search
+[event] run.recovery.notice
+[event] tool.completed name=tool_search output_contract=text/tool_search output/shape=
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] tool.preparing name=tool_search
+[event] tool.started name=tool_search
+[event] tool.completed name=tool_search output_contract=text/tool_search output/shape=
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] tool.preparing name=exec_command
+[event] tool.started name=exec_command
+[event] tool.completed name=exec_command output_contract=text/exec_command output/shape=
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] run.status
+[event] tool.preparing name=AskUserQuestion
+[event] tool.preparing name=AskUserQuestion
+[event] tool.preparing name=AskUserQuestion
+[event] tool.started name=AskUserQuestion
+[event] input.required tool=None waiting
+[reply] '先确认一下 `team_wait` 这个工具是否已注册。工具存在。现在调用 `team_wait`，超时设为 2 秒。工具已加载，现在执行调用。'
+[result] terminal=None chars=72
