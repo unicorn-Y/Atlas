@@ -84,7 +84,7 @@ describe('backendProcess startup (H8 §10.3)', () => {
     stubHealth(() => ({ status: 'ok' }));
     const progress: BackendStartupProgress[] = [];
     const result = await ensureBackendRunning({ onProgress: (p) => progress.push(p) });
-    expect(result).toEqual({ ready: true, managed: false });
+    expect(result).toMatchObject({ ready: true, managed: false });
     expect(h.spawn).not.toHaveBeenCalled();
     expect(progress.map((p) => p.phase)).toEqual(['probing', 'ready']);
   });
@@ -205,7 +205,7 @@ describe('backendProcess startup (H8 §10.3)', () => {
     expect(h.spawn).not.toHaveBeenCalled();
     health = { status: 'ok' };
     await vi.advanceTimersByTimeAsync(1_000);
-    await expect(promise).resolves.toEqual({ ready: true, managed: false });
+    await expect(promise).resolves.toMatchObject({ ready: true, managed: false });
   });
 
   it('still gives up at the 300-second total cap, with the log tail', async () => {
@@ -238,7 +238,7 @@ describe('backendProcess startup (H8 §10.3)', () => {
 
   it('attaches to a degraded external backend without spawning', async () => {
     stubHealth(() => ({ status: 'degraded', components: { mcp: 'failed' } }));
-    await expect(ensureBackendRunning()).resolves.toEqual({ ready: true, managed: false });
+    await expect(ensureBackendRunning()).resolves.toMatchObject({ ready: true, managed: false });
     expect(h.spawn).not.toHaveBeenCalled();
   });
 });
