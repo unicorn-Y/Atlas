@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import Composer, { ComposerDraftMentions } from './Composer';
+import { TooltipProvider } from '../ui/Tooltip';
 import { readComposerDraft, writeComposerDraft, type ComposerDraft } from '../services/composerDraft';
 
 describe('Composer draft restore UI', () => {
@@ -37,9 +38,10 @@ describe('Composer draft restore UI', () => {
     const persisted = new Map<string, string>();
     writeComposerDraft({ setItem: (key, value) => { persisted.set(key, value); }, removeItem: (key) => { persisted.delete(key); } }, 'session-1', draft);
     const restored = readComposerDraft({ getItem: (key) => persisted.get(key) ?? null }, 'session-1');
-    const markup = renderToStaticMarkup(<Composer value={restored.text} mentions={restored.mentions} files={restored.attachments} attachments={[]}
+    // The real app mounts Composer inside App's TooltipProvider; the static render needs the same Radix root.
+    const markup = renderToStaticMarkup(<TooltipProvider><Composer value={restored.text} mentions={restored.mentions} files={restored.attachments} attachments={[]}
       onChange={vi.fn()} onSubmit={vi.fn()} placeholder="Message" onRemoveAttachment={vi.fn()} onPickImages={vi.fn()}
-      listening={false} onToggleMic={vi.fn()} models={[]} model="test" onSelectModel={vi.fn()} onManageModels={vi.fn()} status="" />);
+      listening={false} onToggleMic={vi.fn()} models={[]} model="test" onSelectModel={vi.fn()} onManageModels={vi.fn()} status="" /></TooltipProvider>);
     expect(markup).toContain('Review the attached design');
     expect(markup).toContain('Design discussion');
     expect(markup).toContain('design.pdf');

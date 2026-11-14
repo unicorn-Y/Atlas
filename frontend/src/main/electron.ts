@@ -573,7 +573,7 @@ function showFloatingComposer(context?: { selectedText?: string; conversationId?
   }
 }
 
-function openConversationWindow(conversationId?: string, newSession = false): void {
+export function openConversationWindow(conversationId?: string, newSession = false): void {
   if (conversationId && !/^[A-Za-z0-9_-]{1,128}$/.test(conversationId)) throw new Error('无效的会话 ID。');
   const existing = conversationId ? conversationWindows.get(conversationId) : undefined;
   if (existing && !existing.isDestroyed()) {
