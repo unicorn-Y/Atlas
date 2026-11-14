@@ -171,6 +171,10 @@ def read_session_all_messages(home: str | Path, conversation_id: str) -> list[di
 def read_session_model_messages(home: str | Path, conversation_id: str) -> list[dict[str, Any]]:
     """Read the canonical active model history with SessionDB row identities intact."""
     with _open_db(home) as db:
+        cached = db.read_projection_cache(conversation_id, "model_history", 1)
+        if cached is not None:
+            return resolve_session_attachments(home, conversation_id, cached)
+        revision = db.projection_revision(conversation_id)
         rows = db._fetch_conversation_rows(
             [conversation_id], db._active_clause(False, False), with_session_id=False,
         )
@@ -187,7 +191,7 @@ def read_session_model_messages(home: str | Path, conversation_id: str) -> list[
         for key in ("tool_calls", "tool_call_id", "tool_name", "finish_reason",
                     "reasoning", "reasoning_content", "reasoning_details",
                     "codex_reasoning_items", "codex_message_items", "_compressed_summary",
-                    "tool_snapshot"):
+                    "tool_snapshot", "output_ref", "microcompacted", "masked_content"):
             if key in metadata and key not in message:
                 message[key] = metadata[key]
     model_history = [
@@ -203,6 +207,8 @@ def read_session_model_messages(home: str | Path, conversation_id: str) -> list[
     model_history = normalize_tool_results(
         model_history, require_complete=False, drop_orphan_results=True,
     )
+    with _open_db(home) as db:
+        db.write_projection_cache(conversation_id, "model_history", 1, revision, model_history)
     return resolve_session_attachments(home, conversation_id, model_history)
 
 
@@ -341,13 +347,26 @@ def begin_session_compaction(
     with _open_db(home) as db:
         if not db.try_acquire_compression_lock(conversation_id, holder, ttl_seconds):
             raise RuntimeError("SessionDB compaction is already active for this conversation")
-        return int(db.get_active_message_watermark(conversation_id))
+        try:
+            watermark = int(db.get_active_message_watermark(conversation_id))
+            db.append_session_event(conversation_id, "compaction/start", {
+                "holder": holder, "watermark": watermark,
+            })
+            return watermark
+        except BaseException:
+            db.release_compression_lock(conversation_id, holder)
+            raise
 
 
 def abort_session_compaction(home: str | Path, conversation_id: str, holder: str) -> None:
     """Release an acquired compaction lease when preparation or publication fails."""
     with _open_db(home) as db:
-        db.release_compression_lock(conversation_id, holder)
+        try:
+            db.append_session_event(conversation_id, "compaction/end", {
+                "holder": holder, "reason": "aborted",
+            })
+        finally:
+            db.release_compression_lock(conversation_id, holder)
 
 
 def compact_session_messages(
@@ -409,6 +428,12 @@ def compact_session_messages(
             )
             stamp_db_persisted_markers(compacted_messages)
             return int(count)
+        except BaseException:
+            with suppress(Exception):
+                db.append_session_event(conversation_id, "compaction/end", {
+                    "holder": holder, "reason": "aborted",
+                })
+            raise
         finally:
             db.release_compression_lock(conversation_id, holder)
 

@@ -113,13 +113,42 @@ def _scrub_surrogates(value: Any) -> Any:
 
 
 def _stale_holder(row, now: float) -> bool:
-    """A lock/lease row whose holder is expired or a provably dead local process."""
-    from atlas.engine.state.atlas_state import _compression_lock_holder_process_is_dead
-    return float(row["expires_at"]) <= now or _compression_lock_holder_process_is_dead(row["holder"])
+    """Use the same process-owner fence as admission when guarding writes."""
+    from atlas.engine.state.atlas_state_compression import lease_holder_is_stale
+    return lease_holder_is_stale(row["holder"], row["expires_at"], now)
 
 
 class SessionMessagesMixin:
     """Message append/replace/rewind, reactions, resume conversations, replay dedupe."""
+
+    def projection_revision(self, session_id: str) -> int:
+        row = self._read_one(
+            "SELECT revision FROM session_projection_revisions WHERE session_id = ?", (session_id,))
+        return int(row[0]) if row else 0
+
+    def read_projection_cache(self, session_id: str, key: str, version: int) -> Any:
+        row = self._read_one(
+            "SELECT c.val FROM session_projcache c LEFT JOIN session_projection_revisions r "
+            "ON r.session_id = c.session_id WHERE c.session_id = ? AND c.key = ? "
+            "AND c.ver = ? AND c.seq = COALESCE(r.revision, 0)", (session_id, key, version))
+        return json.loads(row[0]) if row else None
+
+    def write_projection_cache(self, session_id: str, key: str, version: int,
+                               revision: int, value: Any) -> bool:
+        encoded = json.dumps(value, ensure_ascii=False)
+
+        def _write(conn):
+            row = conn.execute("SELECT revision FROM session_projection_revisions WHERE session_id = ?",
+                               (session_id,)).fetchone()
+            if (int(row[0]) if row else 0) != revision:
+                return False
+            conn.execute(
+                "INSERT INTO session_projcache(session_id, key, ver, seq, val) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(session_id, key) DO UPDATE SET ver=excluded.ver, seq=excluded.seq, val=excluded.val",
+                (session_id, key, version, revision, encoded))
+            return True
+
+        return bool(self._execute_write(_write))
 
     def _bump_conversation_generation(self, conn, session_id: str, end_reason: str) -> None:
         """Advance the peer's conversation generation past a boundary, in the txn that writes it. Only
@@ -1091,7 +1120,37 @@ class SessionMessagesMixin:
             conn.execute(f"{_SET_COUNTERS_SQL}{', model_config = ?' if patch else ''} WHERE id = ?",
                 (inserted, tool_calls_total, *((patched_model_config,) if patch else ()), session_id))
             return inserted
-        return self._execute_transcript_write(_do, compacted_messages)
+        def _publish(conn):
+            active_ids = {int(row[0]) for row in conn.execute(
+                "SELECT id FROM messages WHERE session_id = ? AND active = 1", (session_id,))}
+            prior_seq = conn.execute(
+                "SELECT COALESCE(MAX(seq), 0) FROM session_events "
+                "WHERE session_id = ? AND event_type = 'compaction/summary'", (session_id,)).fetchone()[0]
+            source_seqs = [int(row[0]) for row in conn.execute(
+                "SELECT seq FROM session_events WHERE session_id = ? AND seq > ? ORDER BY seq",
+                (session_id, prior_seq))]
+            count = _do(conn)
+            shadowed = [int(row[0]) for row in conn.execute(
+                "SELECT id FROM messages WHERE session_id = ? AND active = 0 AND compacted = 1 ORDER BY id",
+                (session_id,)) if int(row[0]) in active_ids]
+            summary = next((message for message in compacted_messages
+                            if message.get("_compressed_summary")), None)
+            metadata = dict((summary or {}).get("display_metadata") or {})
+            manifest = dict(metadata.get("_atlas_session_snapshot") or {})
+            self.append_session_event_with_cursor(conn, session_id, "compaction/summary", {
+                "holder": lock_holder,
+                "shadowed_message_ids": shadowed,
+                "shadowed_seqs": source_seqs,
+                "summary": (summary or {}).get("content"),
+                "messages": compacted_messages,
+                "snapshot": manifest,
+            })
+            self.append_session_event_with_cursor(conn, session_id, "compaction/end", {
+                "holder": lock_holder, "reason": "completed", "active_message_count": count,
+            })
+            return count
+
+        return self._execute_transcript_write(_publish, compacted_messages)
 
     def _message_column_names(self, conn) -> list[str]:
         """Column names of the messages table, cached per-connection era."""

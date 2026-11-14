@@ -499,6 +499,36 @@ CREATE TABLE IF NOT EXISTS messages (
     tool_call_uid TEXT
 );
 
+CREATE TABLE IF NOT EXISTS session_projection_revisions (
+    session_id TEXT PRIMARY KEY,
+    revision INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS session_projcache (
+    session_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    ver INTEGER NOT NULL,
+    seq INTEGER NOT NULL,
+    val TEXT NOT NULL,
+    PRIMARY KEY (session_id, key)
+);
+CREATE TRIGGER IF NOT EXISTS session_projection_insert AFTER INSERT ON messages BEGIN
+    INSERT INTO session_projection_revisions VALUES (NEW.session_id, 1)
+    ON CONFLICT(session_id) DO UPDATE SET revision = revision + 1;
+    DELETE FROM session_projcache WHERE session_id = NEW.session_id;
+END;
+CREATE TRIGGER IF NOT EXISTS session_projection_update AFTER UPDATE ON messages BEGIN
+    INSERT INTO session_projection_revisions VALUES (OLD.session_id, 1)
+    ON CONFLICT(session_id) DO UPDATE SET revision = revision + 1;
+    INSERT INTO session_projection_revisions VALUES (NEW.session_id, 1)
+    ON CONFLICT(session_id) DO UPDATE SET revision = revision + 1;
+    DELETE FROM session_projcache WHERE session_id IN (OLD.session_id, NEW.session_id);
+END;
+CREATE TRIGGER IF NOT EXISTS session_projection_delete AFTER DELETE ON messages BEGIN
+    INSERT INTO session_projection_revisions VALUES (OLD.session_id, 1)
+    ON CONFLICT(session_id) DO UPDATE SET revision = revision + 1;
+    DELETE FROM session_projcache WHERE session_id = OLD.session_id;
+END;
+
 CREATE TABLE IF NOT EXISTS session_model_usage (
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     model TEXT NOT NULL,

@@ -22,6 +22,7 @@ from pathlib import Path, PurePosixPath
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from atlas.api.app_services import AppServices
@@ -1025,6 +1026,9 @@ async def get_conversation_stats(
     if usage_ledger is not None:
         report = await usage_ledger.query(start=None, end=None, group_by="conversation")
         usage = next((row for row in report.get("rows", []) if row.get("key") == conversation_id), None)
+    from atlas.session_stats import session_timing_stats
+
+    timing_stats = await asyncio.to_thread(session_timing_stats, conversation_id)
     return {
         "conversation_id": conversation_id,
         "message_count": len(messages),
@@ -1038,6 +1042,7 @@ async def get_conversation_stats(
         "started_at": min(parsed_timestamps).isoformat() if parsed_timestamps else None,
         "last_activity_at": max(parsed_timestamps).isoformat() if parsed_timestamps else None,
         "duration_seconds": max(0, int((max(parsed_timestamps) - min(parsed_timestamps)).total_seconds())) if parsed_timestamps else None,
+        "sessionStats": timing_stats,
     }
 
 
@@ -1117,6 +1122,26 @@ async def export_conversation(
     document.setdefault("conversation_id", conversation_id)
     document["export_format"] = "atlas.session.v1"
     return document
+
+
+@router.get("/api/conversations/{conversation_id}/export.zip")
+async def export_conversation_zip(
+    services: Annotated[AppServices, Depends(get_app_services)],
+    conversation_id: str,
+) -> Response:
+    """Export the admitted conversation, child sessions and immutable attachments."""
+    memory = _service("memory", services)
+    assert memory is not None
+    if not await memory.get_conversation(conversation_id):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    from atlas.config import DATA_ROOT
+    from atlas.session_archive import build_session_archive
+
+    try:
+        archive = await asyncio.to_thread(build_session_archive, DATA_ROOT / "engine", conversation_id)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=409, detail="Session archive could not be completed") from exc
+    return Response(archive, media_type="application/zip")
 
 
 @router.get("/api/conversations/{conversation_id}/branches")

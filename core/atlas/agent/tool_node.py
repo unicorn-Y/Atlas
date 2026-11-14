@@ -972,6 +972,19 @@ async def execute_tools_node(
                         max_tokens=900, temperature=0.2,
                     )
                     result = {"content": [{"type": "text", "text": answer.text}], "is_error": False}
+            elif fn_name in {"session_event_search", "session_trace", "session_event_trace", "session_event_read"}:
+                from atlas.agent.session_queries import execute_query, reference_snapshot
+                from atlas.config import DATA_ROOT
+                from atlas.engine.session_sync import _open_db
+
+                def _query_session():
+                    with _open_db(DATA_ROOT / "engine") as db:
+                        return execute_query(db, fn_name, fn_args, workspace=workspace,
+                                             current_session=str(ctx.conversation_id or ""))
+
+                payload = await asyncio.to_thread(_query_session)
+                result = {"data": payload, "content": [{"type": "text", "text": reference_snapshot(payload)}],
+                          "is_error": False}
             elif fn_name == "read_session":
                 if not fn_args.get("conversation_id") and not fn_args.get("title"):
                     recent = await agent._memory.list_conversations(limit=30)
@@ -992,8 +1005,9 @@ async def execute_tools_node(
                     rows = await asyncio.to_thread(read_session_messages, DATA_ROOT / "engine", conversation_id, limit=limit)
                     payload = {"conversation_id": conversation_id, "title": target.get("title"),
                                "messages": [{"role": str(row.get("role", "")), "content": str(row.get("content", ""))} for row in rows]}
+                    from atlas.agent.session_queries import reference_snapshot
                     result = {"data": payload,
-                              "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
+                              "content": [{"type": "text", "text": reference_snapshot(payload)}],
                               "is_error": False}
             elif fn_name == "send_to_session":
                 message = str(fn_args.get("message") or "").strip()
@@ -1813,6 +1827,17 @@ async def execute_tools_node(
                 "type": "text", "text": "" if content is None else str(content),
             }]
         result["is_error"] = bool(result.get("is_error", False))
+
+        if ctx.conversation_id and ctx.run_id:
+            from atlas.agent.presentation import record_workspace_changes
+            from atlas.config import DATA_ROOT
+            try:
+                await asyncio.to_thread(
+                    record_workspace_changes, DATA_ROOT / "engine", str(ctx.conversation_id), str(ctx.run_id),
+                    workspace=workspace, tool=fn_name, args=fn_args, result=result,
+                )
+            except (OSError, ValueError, RuntimeError):
+                log.warning("agent.workspace_changes_record_failed", tool=fn_name, exc_info=True)
 
         # One tool-call trace row per dispatch, sharing ``run_id`` with the model
         # request traces so a run reads back end to end. Best effort: tracing must

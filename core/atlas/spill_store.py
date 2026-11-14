@@ -26,12 +26,38 @@ Two rules shape the policy:
 from __future__ import annotations
 
 import time
+import hashlib
 from pathlib import Path
 from typing import Any, Iterable
 
 import structlog
 
 log = structlog.get_logger(__name__)
+
+
+def save_text(text: str, *, directory: Path) -> dict[str, Any] | None:
+    """Persist UTF-8 text before replacement; None requires the caller to retain it.
+
+    A locator is an absolute local file URI. The hint remains a native path for
+    tools that accept filesystem paths. Failed writes never return a locator.
+    """
+    from atlas.engine.tools.spill_safety import ensure_spill_dir, write_text_exclusive
+
+    payload = text.encode("utf-8")
+    digest = hashlib.sha256(payload).hexdigest()
+    path = Path(directory) / (digest + ".txt")
+    try:
+        ensure_spill_dir(path.parent)
+        try:
+            write_text_exclusive(path, text)
+        except FileExistsError:
+            pass
+        # Existing files must be verified too: a dangling/stale locator loses evidence.
+        if path.is_symlink() or path.read_bytes() != payload:
+            return None
+        return {"locator": path.resolve().as_uri(), "bytes": len(payload), "hint": str(path.resolve())}
+    except (OSError, UnicodeError):
+        return None
 
 #: Subdirectory names the kernel writes spilled text into.
 SPILL_DIR_NAMES = ("tool-output", "compact-output")

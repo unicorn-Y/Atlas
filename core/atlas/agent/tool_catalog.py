@@ -46,6 +46,8 @@ def model_facing_tools(agent) -> list[dict[str, Any]]:
     """Assemble model-facing tool names for Atlas runtime telemetry."""
     tools = agent._mcp.get_tools_for_llm() if agent._mcp else []
     tools.append(PRESENT_TOOL)
+    from atlas.agent.session_queries import query_tools
+    tools.extend(query_tools())
     tools.extend([
         {"type": "function", "function": {
             "name": "connector_google_search",
