@@ -75,9 +75,14 @@ _SESSION_SCHEMA = _schema(
 )
 _WORKTREE_SCHEMA = _schema(
     "workspace_worktree_manage",
-    "List repository worktrees or create/remove the current conversation's registered worktree. Creation/removal require explicit user approval; removal never forces a dirty tree and keeps its branch.",
+    "List repository worktrees or create/remove the current conversation's registered worktree. "
+    "Creation/removal require explicit user approval; removal never forces a dirty tree and keeps its branch. "
+    "base_branch accepts any commit-ish: a branch name, or a pinned commit SHA to create the worktree at an "
+    "exact revision. The created worktree is an ordinary local directory, so you can read and edit files "
+    "inside it (absolute paths under the returned worktree_path) within this same run, without starting a new run.",
     {"action": {"type": "string", "enum": ["list", "create", "remove"]},
-     "base_branch": {"type": "string"}, "name": {"type": "string", "maxLength": 24}},
+     "base_branch": {"type": "string", "description": "Branch name or pinned commit SHA the worktree starts from."},
+     "name": {"type": "string", "maxLength": 24}},
     ["action"],
 )
 _MODEL_SCHEMA = _schema(
