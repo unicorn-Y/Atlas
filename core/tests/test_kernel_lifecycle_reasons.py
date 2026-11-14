@@ -27,11 +27,26 @@ def test_turn_lifecycle_tracks_model_steps_and_typed_step_end():
 
     first = turn.begin_step()
     assert turn.end_step(first, StepEndReason.TOOL_CALLS) is True
+    assert turn.step_reasons[first] is StepEndReason.TOOL_CALLS
     assert turn.end_step(first, StepEndReason.RESPONSE) is False
 
     second = turn.begin_step()
     assert second == 2
     assert turn.end_step(second, StepEndReason.RESPONSE) is True
+    assert turn.step_reasons == {
+        1: StepEndReason.TOOL_CALLS,
+        2: StepEndReason.RESPONSE,
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("reason", list(StepEndReason))
+def test_turn_lifecycle_records_every_typed_step_end_reason(reason):
+    turn = TurnLifecycle("run-reason")
+    step = turn.begin_step()
+
+    assert turn.end_step(step, reason) is True
+    assert turn.step_reasons[step] is reason
 
 
 @pytest.mark.unit

@@ -72,6 +72,7 @@ class TurnLifecycle:
     turn_id: str
     step_count: int = 0
     active_step: int | None = None
+    step_reasons: dict[int, StepEndReason] = field(default_factory=dict)
     end_reason: TurnEndReason | None = None
 
     def begin_step(self) -> int:
@@ -89,6 +90,7 @@ class TurnLifecycle:
         if not isinstance(reason, StepEndReason):
             raise TypeError("step end reason must be a StepEndReason")
         self.active_step = None
+        self.step_reasons[step] = reason
         return True
 
     def end_turn(self, reason: TurnEndReason) -> bool:

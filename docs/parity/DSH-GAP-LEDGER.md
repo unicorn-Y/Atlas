@@ -30,15 +30,15 @@
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| E1 | 只追加会话事件日志 = 唯一真源；`deriveMessages()` 派生模型历史 | `packages/core/session/src/index.ts:798,819`；`docs/subsystems/session.md` | `engine/session_sync.py:385-415` 直接写 role 行；run 事实走 `loop.py:603` JSONL 且**内容被抹掉**（`logs.py:104-116` 存 `{"length":N}`） | ABSENT |
-| E2 | turn / step 两级生命周期（turn=一条用户消息，step=一次模型调用），`turn/end` 带 typed reason | `packages/core/agent-loop/src/agent.ts:298,400`；`docs/agent-lifecycle.md` | typed terminal reason 已写入 run journal/result；完整 turn/step state machine 和 per-step end event 仍缺 | PRESENT-WEAKER |
+| E1 | 只追加会话事件日志 = 唯一真源；`deriveMessages()` 派生模型历史 | `packages/core/session/src/index.ts:798,819`；`docs/subsystems/session.md` | `engine/session_sync.py:385-415` 直接写 role 行；run 事实走 `loop.py:603` JSONL 且**内容被抹掉**（`logs.py:104-116` 存 `{"length":N}`） | HARD (event log is not the canonical model history; compression/rewind mutate active rows without events, so the target is unreachable without redesign) |
+| E2 | turn / step 两级生命周期（turn=一条用户消息，step=一次模型调用），`turn/end` 带 typed reason | `packages/core/agent-loop/src/agent.ts:298,400`；`docs/agent-lifecycle.md` | typed terminal reason 与每步结束原因写入 run journal；逐步状态、所有 typed reason 均有 unit coverage。W3-X1 的真实模型回合产出 `step_start → step_end(response) → turn_end(completed)`；带工具回合产出 `step_end(tool_calls)` 和 concludeTurn tool receipt | ✅ CLOSED (W3-X1) |
 | E3 | 工具执行流水线三瀑布：pre-execute → execute → post-execute → result，带 typed decision | `packages/core/tools/src/index.ts:1375,1499,1151,1787,1838`；`docs/tool-execution-pipeline.md` | ToolScheduler 的 typed pre_execute/post_execute/result_stage 已接入 kernel loop；PreToolUse、PostToolUse、PostToolUseFailure 与最终结果校验均经过对应阶段 | ✅ W2-V2 已接线；真实模型工具回合已验证 |
 
 ### P1
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| E4 | 每工具强制输出契约 `{schema, render, presentationMeta}`，成功即校验 | `packages/core/tools/src/index.ts:214,1838` | registry 工具支持注册输出 JSON Schema 并在 handler 与 post-hook 后校验；kernel/API 事件携带契约，时间线和工具卡片消费 `render` 与 presentation metadata；无显式声明的既有及 host 工具仍使用兼容通用 JSON schema | PARTIAL (W2-V2; explicit semantic schemas for existing tools remain) |
+| E4 | 每工具强制输出契约 `{schema, render, presentationMeta}`，成功即校验 | `packages/core/tools/src/index.ts:214,1838` | registry 工具支持注册输出 JSON Schema 并在 handler 与 post-hook 后校验；kernel/API 事件携带契约，时间线和工具卡片消费 `render` 与 presentation metadata；12 个存量 registry 工具仍使用默认宽泛 schema，host/MCP 工具使用兼容 schema；W3-X1 真实模型观察到 concludeTurn 的 `text/concludeTurn output` 合同 | PARTIAL (W3-X1: stored tool schemas are not yet semantic per tool) |
 | E5 | 两有序表 durable inbox：`next-turn` / `next-step`，`inject` 不唤醒 | `packages/core/agent-loop/src/inbox.ts:74,109` | `engine/kernel/inbox.py` 持久化两条 lane 并回放/确认；`runtime_ws_router.py` inject 分支写 inbox，不唤醒 steer 队列 | ✅ 本轮关闭 |
 | E6 | 请求信封落日志 + 工具增删发 developer 消息告知模型 | `agent.ts:626-700` | `request_envelope.py` 记录请求摘要/角色/长度/工具名；`loop.py` 在工具池变化时发 developer 消息 | ✅ 本轮关闭 |
 | E7 | 并发安全按**调用参数**判定，派发前**复检**，不支持者成 barrier | `packages/core/agent-loop/src/tool-calls.ts:60,122,199` | `tools.py` 调用级参数分类并在派发前复检；读写不明的调用串行化为 barrier | ✅ **本次已修**（参数感知 + 派发前复检 + barrier） |
@@ -48,23 +48,23 @@
 | E11 | goal 变更 CAS `{id, revision}`，过期拒绝；轮数上限默认 256 | `packages/goal/goal/src/index.ts:244` | `engine/goals.py` 持久 goal_id/revision，SQLite 单次写回原子比较并拒绝过期 writer；goal_subgoal 要求并返回当前 CAS token；默认 max_turns=256 | ✅ 本轮关闭 |
 | E12 | 审批关闭四值：`allowed-once`/`rejected`/`cancelled`/`unavailable`，全部 fail-closed，且 `ask|never` 在服务内先于任何 answerer 生效 | `packages/interaction/user-approval/src/index.ts:100,225-232` | 审批 asked/decided 通过 append-only `session_events` 持久化；ask/never 策略先于 answerer；失败关闭 | ✅ 本轮关闭 |
 | E13 | 权限预设同时绑定 **沙箱模式 + 审批策略**，不匹配时派生 `custom` | `packages/interaction/permission-presets/src/index.ts:189-194` | `approval_policy.py` 预设绑定 permission/sandbox/approval 三维；RunState 和 resume 保留三维设置，不匹配时派生 `custom` | ✅ 本轮关闭 |
-| E14 | OS 级沙箱按**每次调用**给 `read-only`/`workspace-write`/`danger-full-access`，并报告实际执行等级 | `packages/sandbox/sandbox-local/src/profiles.ts:16`；`docs/subsystems/sandbox.md` | Docker per-call `read-only`（临时只读 bind mount）/`workspace-write`（run 容器）有执行等级返回及定向测试；`danger-full-access` fail-closed。Docker Engine 当前不可用，未观察容器实跑；Windows host 仍无通用 per-call OS executor，host 部分为 HARD 缺口 | PARTIAL |
+| E14 | OS 级沙箱按**每次调用**给 `read-only`/`workspace-write`/`danger-full-access`，并报告实际执行等级 | `packages/sandbox/sandbox-local/src/profiles.ts:16`；`docs/subsystems/sandbox.md` | Docker per-call `read-only`（临时只读 bind mount）/`workspace-write`（run 容器）有执行等级返回及定向测试；`danger-full-access` fail-closed。Docker Engine 当前不可用，未观察容器实跑；Windows host 无通用 per-call OS executor | HARD (Windows per-call OS sandbox requires a Job Object/AppContainer executor; Docker Engine is unavailable) |
 | E15 | 持久 PTY：owner 鉴权、`waitReason` 四值（stdin_read/inferred_idle/timeout/session_exit）、有界回滚 | `packages/experimental/tool-terminal/src/index.ts:166-395` | `local_execution.py` 按 run owner 隔离进程读写/取消，并返回 `stdin_read` / `inferred_idle` / `timeout` / `session_exit` | ✅ 本轮关闭 |
 | E16 | 统一后台作业注册表：`job_output/list/kill`，256KiB 环形缓冲，settle 后 16KiB，每 owner 最多 10 个 | `packages/jobs/jobs-local/src/index.ts:33-42,128` | `ExecManager` 统一 owner-fenced shell 与 subagent 注册/列表/输出/终止；运行缓冲 256KiB、settled 16KiB、每 owner 10 个；`job_*` 工具已暴露模型调用 | ✅ 本轮关闭 |
 | E17 | 子代理统一激活：能力声明校验、`toolFilter` 真删且拒执行、fork 子（继承父已完成前缀）、persona | `packages/subagent/tool-subagent/src/index.ts:96,171` | 已验证 agent definition 的可信/能力约束与 allowlist；native 子代理 fork 父会话已完成轮次并记录 delegate lineage；agent prompt 作为受限 persona 指引注入 | ✅ 本轮关闭 |
-| E18 | 工具内请求沙箱升级：`sandbox_permissions` + `justification`，按调用审批，拒绝不动既有策略 | `packages/core/tools/src/ptc.ts:387-405` | 单次 justification/approval 通过定向测试；DeepSeek V4.1 Flash 真实回合观察到 `local_exec` 的 `approval.required`，返回 `allow_once` 后 host 无 executor 路径 fail-closed，工具未执行且 run 完成；通用 host per-call executor 仍缺失 | PARTIAL |
+| E18 | 工具内请求沙箱升级：`sandbox_permissions` + `justification`，按调用审批，拒绝不动既有策略 | `packages/core/tools/src/ptc.ts:387-405` | 单次 justification/approval 通过定向测试；DeepSeek V4.1 Flash 真实回合观察到 `local_exec` 的 `approval.required`，返回 `allow_once` 后 host 无 executor 路径 fail-closed，工具未执行且 run 完成；通用 host per-call executor 仍缺失 | PARTIAL; HARD(host: per-call OS executor requires Job Object/AppContainer) |
 
 ### P2
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| E19 | `concludeTurn()`：工具结果可声明"本轮结束" | `packages/core/tools/src/index.ts:435,1428,1860` | 无；总要再付一次模型往返 | ABSENT |
+| E19 | `concludeTurn()`：工具结果可声明"本轮结束" | `packages/core/tools/src/index.ts:435,1428,1860` | kernel 暴露 concludeTurn tool，工具回执后直接设置 final response 并结束循环；unit lifecycle coverage；W3-X1 DeepSeek 回合实际调用 `concludeTurn`，一次模型请求后 `run.completed`，回复 `CONCLUDED_OK` | ✅ CLOSED (W3-X1) |
 | E20 | 重复调用提醒：按 `(name, canonical_args)` 连续相同判定，阈值 [3,5,8]，只提醒不否决 | `packages/guard/repeat-tool-reminder/src/index.ts:44,58` | `stuck.py` 按连续相同工具名和规范化参数在第 3/5/8 次发提醒，不阻止调用，不纳入结果文本 | ✅ 本轮关闭 |
 | E21 | 工作目录 per-session durable `working-directory/change`，沙箱写根不随之移动 | `docs/subsystems/working-directory.md` | 工作区固定 per run；模型只能求用户改 | ABSENT |
 | E22 | Agent Teams：root 范围 roster、steer-only 消息、任务 DAG per-mutation revision CAS、`blockedBy` 无环、`waitForChange` | `packages/experimental/agent-team/src/index.ts:135-199` | 存储都在（`groups/store.py`、`kanban.py:15-190`、`peer_inbox.py`），但**没有作为模型工具暴露** | ABSENT（in-loop） |
 | E23 | Workflow：模型写编排**脚本**（`agent()`/`parallel()`/`pipeline()`） | `packages/workflow/workflow-ptc/src/index.ts:109` | `workflow` 工具只从目标规划 DAG，模型不能表达自定义控制流 | PRESENT-WEAKER |
 | E24 | Ralph：串行上下文重置迭代，`maxRounds` 256，handoff ≤16KiB | `packages/experimental/tool-ralph/src/index.ts:35,151` | 无 | ABSENT |
-| E25 | 空闲维护槽 `runMaintenance()`，公开状态仍 idle | `docs/subsystems/core.md#the-agent-handle` | 无；压缩/目标评估在用户消息路径或定时器上 | PRESENT-WEAKER |
+| E25 | 空闲维护槽 `runMaintenance()`，公开状态仍 idle | `docs/subsystems/core.md#the-agent-handle` | `atlas_runtime.py` 在每个成功 run 完成后进入 `AtlasKernel.runMaintenance()`；内核拒绝与活跃 turn 重叠且 unit tested，但 production `AgentRunContext` 没有提供 `maintenance_callback`，因此 host 路径回退成 no-op | PARTIAL (W3-X1: production maintenance producer still absent) |
 | E26 | `tools.restrict()` 注册级 scope 层，未知名/空集注册即失败 | `packages/core/tools/src/index.ts:1103` | run 级 allow/deny glob 交集（`tool_permissions.py:6,35`），无进程内 per-agent 作用域 | PRESENT-WEAKER |
 | E27 | PTC 模式：单一 `run_code` 传输，其它工具直调被拒并提示，子调用各记日志 | `packages/core/tools/src/ptc.ts:30` | `execute_code` 是**可选附加**工具，不替换工具面 | PRESENT-WEAKER |
 | E28 | 压缩区域安全：位置跨度，不切开 tool-call/result 对，尾部按 token 计价 | `compaction-basic/src/region.ts:117,139` | `context.py:415-440` 行为等价（取最早未配对） | PRESENT-PARITY |
@@ -85,8 +85,8 @@
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| S1 | 只追加日志 + `seq = log.length` 连续性契约，事件永不改写 | `packages/core/session/src/index.ts:798,819` | 两份互不相干的记录：run JSONL 文本被**故意销毁**（`logs.py:104-116`），SQLite `messages` 表原地改（`atlas_state_messages.py:559` UPDATE、`:879` DELETE、`:1008` archive_and_compact） | ABSENT |
-| S2 | surface 折叠：`replace` 节点遮蔽早前 seq 范围，压缩不删事件 | `packages/core/session/src/surface.ts:120,594` | 压缩只 `active=0, compacted=1`（`:986`）后重写可见列表，无法表达"被摘要替换但保留原文" | ABSENT |
+| S1 | 只追加日志 + `seq = log.length` 连续性契约，事件永不改写 | `packages/core/session/src/index.ts:798,819` | 两份互不相干的记录：run JSONL 文本被**故意销毁**（`logs.py:104-116`），SQLite `messages` 表原地改（`atlas_state_messages.py:559` UPDATE、`:879` DELETE、`:1008` archive_and_compact） | HARD (canonical event history and append-only mutation semantics are absent; compression/rewind mutate active rows without an event contract) |
+| S2 | surface 折叠：`replace` 节点遮蔽早前 seq 范围，压缩不删事件 | `packages/core/session/src/surface.ts:120,594` | 压缩只 `active=0, compacted=1`（`:986`）后重写可见列表，无法表达"被摘要替换但保留原文" | HARD (surface replacement requires the missing append-only event log and retained original events) |
 
 ### P1
 
@@ -125,7 +125,7 @@
 | S27 | skill provider `list/get`、`skills/change` 失效、不完整观察不缓存 | `packages/skill/skill/src/index.ts:356,439` | 单层索引 + rglob 全量重扫（`skills/__init__.py:291,310`） | PRESENT-WEAKER |
 | S28 | 会话标题三来源 newest-wins，用户重命名钉住，`refresh()` 解钉 | `session-title/README.md:32` | `atlas_state_titles.py:43,84` 有 rank 顺序 + 用户标题 | PRESENT-PARITY |
 | S29 | `@session` 引用：host 准入的另一会话快照 + untrusted 包裹 | `docs/subsystems/session-reference.md` | `read_session` 返回末 N 条纯文本 | PRESENT-WEAKER |
-| S30 | 长期记忆：**DSH 完全没有** | `tool-ralph/README.md:36` | `memory/library/__init__.py:141,252` Markdown+git 页、三元组索引、30s→6h 退避队列、supersede 台账 | **PRESENT-STRONGER** |
+| S30 | 长期记忆：**DSH 完全没有** | `tool-ralph/README.md:36` | `memory/library/__init__.py:141,252` Markdown+git 页、三元组索引、30s→6h 退避队列、supersede 台账 | HARD (Atlas is already stronger; do not change product memory to imitate the missing DSH feature) |
 | S31 | rewind：**DSH 没有**（`rewind` 只是类型字面量） | `conversation-context.ts:6` | 三模式 rewind + preview + redo + 文件还原（`conversations_router.py:1394,1568`） | **PRESENT-STRONGER** |
 | S33 | 尝试级可观测：失败尝试也 durable 可重放 | `docs/architecture.md:120` | `run_replay/` + `run_checkpoints.py:122` 更强，但 run log **不含内容** | PRESENT-PARITY |
 
@@ -137,7 +137,7 @@
 
 | # | 能力 | DSH 证据 | Atlas 现状 | 结论 |
 |---|---|---|---|---|
-| X1 | 一切皆插件：service graph、`inject` 声明、typed event、无特权核心 | `docs/architecture.md:9,11`；`docs/cordis-primer.md:9-13` | `app_services.py:12-79` 51 字段扁平容器（全默认 None，回退模块单例）；`application.py:135` 手列 75 个 router | ABSENT |
+| X1 | 一切皆插件：service graph、`inject` 声明、typed event、无特权核心 | `docs/architecture.md:9,11`；`docs/cordis-primer.md:9-13` | `app_services.py:12-79` 51 字段扁平容器（全默认 None，回退模块单例）；`application.py:135` 手列 75 个 router | HARD (requires replacing the 52-field AppServices and 79-router composition root) |
 
 ### P1
 
@@ -146,9 +146,9 @@
 | X2 | 注册即可逆：每个注册返回 disposer，卸载即解绑 | `core/tools/src/index.ts:988` | plugin skill/command/hook 注册有逐项 disposer；异步 MCP lifecycle 贡献尚无 disposer | PRESENT-WEAKER |
 | X3 | 插件管理 enable/disable 只改最后一层匹配的 `disabled`，报告 applied/restart-required | `boot/plugin-manager/src/index.ts:458,476` | `plugins/runtime.py:1149-1171` 重跑 `load_all`，**不先 `unregister_source`/`forget_owner`** → 有 skills 的插件先报错，hook 闭包每次切换都重复 | PRESENT-WEAKER（非幂等重载） |
 | X4 | profile/bundle/patch 有序层，按 row id 替换/插入，`--dump-config` 预览 | `docs/architecture.md:15-25` | patch 支持 row_id/order 与有序 listing；profile/bundle merge 和配置预览仍缺 | PRESENT-WEAKER |
-| X5 | 安装/移除 bundle：包管理器解析依赖、lockfile 快照回滚、取消 | `plugin-manager/src/index.ts:374,497,645` | `plugins/runtime.py:851-982` 只支持本地 copy / marketplace / git，**无依赖解析、无回滚、无取消** | ABSENT |
-| X6 | 版本兼容与豁免：peer range 检查 + per-profile `compatibility.json` 精确豁免 + `acceptRisk` | `plugin-manager/README.md:67` | `plugins/runtime.py:342-380` 只校验 manifest 形状 | ABSENT |
-| X7 | 安装脚本审批门：`pendingBuilds` 转 `allowBuilds`，逐包持久批准 | `plugin-manager/src/build-approval.ts:49,75` | 无安装脚本执行，故无门 | ABSENT |
+| X5 | 安装/移除 bundle：包管理器解析依赖、lockfile 快照回滚、取消 | `plugin-manager/src/index.ts:374,497,645` | `plugins/runtime.py:851-982` 只支持本地 copy / marketplace / git，**无依赖解析、无回滚、无取消** | HARD (package-manager dependency resolution, lockfile rollback, and cancellation semantics are absent) |
+| X6 | 版本兼容与豁免：peer range 检查 + per-profile `compatibility.json` 精确豁免 + `acceptRisk` | `plugin-manager/README.md:67` | `plugins/runtime.py:342-380` 只校验 manifest 形状 | HARD (requires package compatibility and persisted per-profile risk-acceptance semantics) |
+| X7 | 安装脚本审批门：`pendingBuilds` 转 `allowBuilds`，逐包持久批准 | `plugin-manager/src/build-approval.ts:49,75` | 无安装脚本执行，故无门 | HARD (Atlas has no package build-script execution model or per-package approval ledger) |
 | X8 | Agent 预设 = 子插件行 + isolate realm，注册表保留 revision | `packages/preset/agent-preset-registry/README.md:46-60` | `AgentPresetStore` 持久化 revision 化 capability set（tools/skills/MCP/model/mode），并在 run 时应用；尚无 isolate realm/子插件隔离 | PRESENT-WEAKER |
 | X9 | 外部入口（webhook/ACP）必须带 agent preset + permission preset | `docs/subsystems/webhook.md:5,25` | automation/webhook 保存并验证两种 preset，AutomationEngine 将二者传入 `dispatch_turn`；ACP `session/new` / `session/prompt` 未接入 preset。ACP handler 在 `core/atlas/tools/app_server.py`，超出 W11 分配目录 | PARTIAL |
 | X10 | 插件管理作为模型工具，8 个动作，每次需 danger-full-access 或逐次审批 | `plugin-manager/src/tools.ts:20-46` | `engine/kernel/tools.py:412-414` 只有 list/request install | PRESENT-WEAKER |
