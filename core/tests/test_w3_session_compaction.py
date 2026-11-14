@@ -71,12 +71,18 @@ def test_compaction_bracket_and_rebuildable_summary_are_durable(tmp_path):
                              snapshot_state={"provider": "provider", "model": "model", "before_tokens": 100})
     with SessionDB(db_path=tmp_path / "state.db") as db:
         events = db.list_session_events("s")
-    assert [event["event_type"] for event in events] == [
+    # Every message append now also lands in the log (E1/S1), so this asserts the
+    # compaction bracket's own ordering rather than the log's total contents.
+    compaction = [e for e in events if e["event_type"].startswith("compaction/")]
+    assert [event["event_type"] for event in compaction] == [
         "compaction/start", "compaction/summary", "compaction/end",
     ]
-    summary = events[1]["payload"]
+    summary = compaction[1]["payload"]
     assert summary["shadowed_message_ids"]
-    assert summary["shadowed_seqs"] == [events[0]["seq"]]
+    # shadowed_seqs covers every event the summary supersedes, which now includes
+    # the message/append rows in addition to the compaction/start bracket itself.
+    assert compaction[0]["seq"] in summary["shadowed_seqs"]
+    assert summary["shadowed_seqs"] == sorted(summary["shadowed_seqs"])
     assert summary["messages"][0]["content"] == "summary text"
     assert summary["snapshot"]["state"]["before_tokens"] == 100
 

@@ -445,6 +445,16 @@ class SessionMessagesMixin:
                 turn_lease_holder=turn_lease_holder, turn_lease_ttl_seconds=turn_lease_ttl_seconds)
             msg_id = conn.execute(_INSERT_MESSAGE_SQL, params).lastrowid
             self._bump_session_counters(conn, session_id, 1, _tool_calls_count(tool_calls), unit=True)
+            # E1/S1: every message row also lands in the append-only event log,
+            # in this same transaction. Without it the log could say a turn
+            # started and ended but not what the model actually saw, so nothing
+            # could ever be derived from it. Written through the caller's cursor
+            # because SessionDB's writer lock is not reentrant.
+            self.append_session_event_with_cursor(conn, session_id, "message/append", {
+                "message_id": msg_id, "role": role,
+                "tool_name": tool_name, "tool_call_id": tool_call_id,
+                "has_tool_calls": bool(tool_calls),
+            })
             return msg_id
         # THE critical write (failure aborts the turn): long patience so a sibling legitimately
         # holding the lock for seconds (VACUUM, checkpoint) can't kill it.
@@ -1012,7 +1022,16 @@ class SessionMessagesMixin:
                 "UPDATE messages SET active = 0, compacted = 0 "
                 f"WHERE session_id = ? AND id IN ({placeholders})",
                 [session_id, *rewind_ids])
+        # Record what the archive is about to hide, so a history derived from the
+        # event log knows these rows are no longer live. The append itself stays
+        # untouched — this is a supersede, not a rewrite.
+        _archived_ids = [int(row[0]) for row in conn.execute(
+            "SELECT id FROM messages WHERE session_id = ? AND active = 1", (session_id,))]
         conn.execute(_ARCHIVE_ACTIVE_SQL, (session_id,))
+        if _archived_ids:
+            self.append_session_event_with_cursor(conn, session_id, "messages.deactivated", {
+                "message_ids": _archived_ids, "reason": "compaction",
+            })
         # Same identity carry as publish_compression_child (#59661): carried tail copies keep the
         # durable row's timestamp so display dedupe still collapses generations. Donors are active-only;
         # the rewound/archived originals above never donate, so this is a no-op for a clean compaction.
