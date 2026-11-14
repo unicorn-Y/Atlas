@@ -380,7 +380,16 @@ async def set_plugin_enabled(
             raise HTTPException(status_code=409, detail={"message": "插件清单校验未通过，已保持停用", "validation": validation})
     await plugin_runtime.set_enabled(name, enabled)
     report = await _server()._reload_extensions()
-    return {"name": name, "enabled": enabled, "report": report}
+    skipped = {item.get("name") for item in report.get("skipped", [])
+               if isinstance(item, dict)}
+    applied = (
+        name in report.get("loaded", []) if enabled
+        else name in skipped and not report.get("errors", {}).get(name)
+    )
+    return {
+        "name": name, "enabled": enabled, "applied": applied,
+        "restart_required": False, "report": report,
+    }
 
 
 _EXTERNAL_IMPORT_SOURCES = {"claude", "codex"}

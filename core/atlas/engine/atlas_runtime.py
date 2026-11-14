@@ -1056,9 +1056,21 @@ class AtlasRuntime:
 
                 title_task.add_done_callback(title_task_done)
             try:
-                with use_run_usage_budget(usage_budget):
-                    async for event in kernel.run(request):
-                        yield event
+                terminal_scope_token = None
+                if isinstance(workspace, str) and workspace.strip().startswith("ssh://"):
+                    from atlas.tools.terminal_scope import set_terminal_scope
+
+                    _, terminal_policy = self._ssh_workspace_terminal_policy(workspace.strip())
+                    terminal_scope_token = set_terminal_scope(terminal_policy)
+                try:
+                    with use_run_usage_budget(usage_budget):
+                        async for event in kernel.run(request):
+                            yield event
+                finally:
+                    if terminal_scope_token is not None:
+                        from atlas.tools.terminal_scope import reset_terminal_scope
+
+                        reset_terminal_scope(terminal_scope_token)
                 # Give run-scoped maintenance a single idle window after the
                 # user turn has fully closed. Hosts can provide a callback on
                 # the runtime context; the kernel enforces that maintenance

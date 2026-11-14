@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from atlas import server
@@ -299,3 +300,31 @@ async def test_marketplace_and_enable_endpoints_map_missing_to_404(monkeypatch) 
 
     assert plugins.status_code == 404
     assert enabled.status_code == 404
+
+
+@pytest.mark.unit
+async def test_plugin_toggle_reports_applied_and_restart_requirement(monkeypatch) -> None:
+    class _ToggleRuntime:
+        enabled = True
+
+        def discover(self):
+            return [{"name": "demo", "path": "demo", "enabled": self.enabled}]
+
+        async def set_enabled(self, _name, enabled):
+            self.enabled = enabled
+
+        def validate(self, _path):
+            return {"valid": True}
+
+    async def reload_extensions():
+        return {"loaded": [], "skipped": [{"name": "demo", "reason": "disabled"}], "errors": {}}
+
+    monkeypatch.setattr(server, "plugin_runtime", _ToggleRuntime())
+    monkeypatch.setattr(server, "_reload_extensions", reload_extensions)
+    transport = ASGITransport(app=server.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/api/plugins/demo/enabled", json={"enabled": False})
+
+    assert response.status_code == 200
+    assert response.json()["applied"] is True
+    assert response.json()["restart_required"] is False

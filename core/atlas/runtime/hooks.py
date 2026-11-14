@@ -136,6 +136,41 @@ def claude_hook_settings(
     return result
 
 
+def codex_hook_settings(
+    project_dir: str | Path | None = None,
+    user_hooks_path: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    """Read Codex user/project ``hooks.json`` declarations as scoped hooks.
+
+    Codex and Claude share the event/group/command shape for the supported
+    lifecycle subset, but keep separate source identities so each declaration
+    receives its own fail-closed trust review.
+    """
+    paths: list[tuple[str, Path]] = []
+    user_path = (
+        Path(user_hooks_path).expanduser()
+        if user_hooks_path else Path.home() / ".codex" / "hooks.json"
+    )
+    paths.append(("user", user_path))
+    if project_dir is not None:
+        project = Path(project_dir).expanduser()
+        paths.append(("project", project / ".codex" / "hooks.json"))
+
+    result: list[dict[str, Any]] = []
+    for scope, path in paths:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, Mapping):
+            continue
+        hooks = parse_claude_hooks(data, source=f"codex:{scope}:{path}")
+        for hook in hooks:
+            hook["id"] = "codex-" + hook["id"].removeprefix("claude-")
+        result.extend(hooks)
+    return result
+
+
 def _event_payload(event: str, payload: Mapping[str, Any], cwd: str | None) -> dict[str, Any]:
     data = dict(payload)
     data["hook_event_name"] = event
@@ -745,6 +780,7 @@ class HookStore:
 
     def list_claude(self, cwd: str | None = None) -> list[dict[str, Any]]:
         hooks = claude_hook_settings(cwd)
+        hooks.extend(codex_hook_settings(cwd))
         hooks.extend(self._plugin_hook_list())
         overrides = {
             item.get("id"): bool(item.get("enabled", True))
