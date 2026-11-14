@@ -40,26 +40,37 @@ def plugin_runtime_for(agent: Any) -> Any:
 
 async def execute_plugin_manager_tool(
     name: str, arguments: dict[str, Any], *, agent: Any, approve: Any = None,
+    permission_mode: str | None = None,
 ) -> dict[str, Any]:
-    """Run one plugin-manager action; every mutation requires this-call approval."""
+    """Run one plugin-manager action; every mutation requires this-call approval.
+
+    ``permission_mode`` mirrors the run's permission preset: ``read_only``
+    denies every mutation outright, ``danger-full-access`` is the documented
+    bypass that runs a mutation without prompting, and any other mode keeps
+    the per-call approval gate.
+    """
     if name not in PLUGIN_MANAGER_TOOLS:
         return {"content": f"Unknown plugin manager action: {name}", "is_error": True,
                 "outcome": "failed"}
     plugin_runtime = plugin_runtime_for(agent)
     if name in _PLUGIN_MANAGER_WRITES:
-        if not callable(approve):
-            return {"content": "Plugin management writes require per-call user approval.",
+        if permission_mode == "read_only":
+            return {"content": "Plugin management writes are denied in read-only mode.",
                     "is_error": True, "outcome": "denied"}
-        try:
-            decision = approve(name, dict(arguments))
-            if hasattr(decision, "__await__"):
-                decision = await decision
-        except Exception as exc:
-            return {"content": f"Plugin management approval failed: {exc}", "is_error": True,
-                    "outcome": "denied"}
-        if normalize_approval(decision) != ALLOWED:
-            return {"content": "Plugin management action was not approved.", "is_error": True,
-                    "outcome": "denied"}
+        if permission_mode != "danger-full-access":
+            if not callable(approve):
+                return {"content": "Plugin management writes require per-call user approval.",
+                        "is_error": True, "outcome": "denied"}
+            try:
+                decision = approve(name, dict(arguments))
+                if hasattr(decision, "__await__"):
+                    decision = await decision
+            except Exception as exc:
+                return {"content": f"Plugin management approval failed: {exc}", "is_error": True,
+                        "outcome": "denied"}
+            if normalize_approval(decision) != ALLOWED:
+                return {"content": "Plugin management action was not approved.", "is_error": True,
+                        "outcome": "denied"}
 
     try:
         if name == "list_plugins":
