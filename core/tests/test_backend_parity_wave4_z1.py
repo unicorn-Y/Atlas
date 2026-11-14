@@ -442,3 +442,78 @@ def test_registry_tools_expose_semantic_output_contracts():
         assert schema.get("title") == f"{name} output"
         assert schema.get("description")
         assert schema.get("type") == "string" or "oneOf" in schema
+
+
+def test_alias_output_contracts_flow_through_kernel_contract_lookup():
+    """E4: the kernel contract lookup serves alias semantic schemas when the
+    registry is unbound (the server process never imports engine/tools)."""
+    from atlas.agent.tool_catalog import output_contracts_for_tools
+
+    tools = [{"function": {"name": "read_file"}}, {"function": {"name": "execute_code"}},
+             {"function": {"name": "some_host_tool"}}]
+    contracts = output_contracts_for_tools(tools)
+    read_schema = contracts["read_file"]["schema"]
+    assert read_schema["title"] == "read_file output"
+    assert read_schema.get("description")
+    assert "oneOf" in read_schema  # the multimodal envelope shape, not the anyOf fallback
+    assert contracts["execute_code"]["schema"]["type"] == "string"
+    assert contracts["execute_code"]["schema"].get("description")
+    fallback = contracts["some_host_tool"]["schema"]
+    assert "anyOf" in fallback and not fallback.get("description")
+
+
+def test_alias_output_schema_resolves_native_kernel_names():
+    """E4: kernel-facing native names (local_file/local_shell/ask_user) resolve
+    to the same semantic alias contracts, retitled for the model-facing name."""
+    from atlas.engine.tool_registry import alias_output_schema
+
+    local_file = alias_output_schema("local_file")
+    assert local_file["title"] == "local_file output"
+    assert "oneOf" in local_file
+    assert "multimodal envelope" in local_file["description"]
+    assert alias_output_schema("local_shell")["description"].startswith("Text output")
+    assert alias_output_schema("ask_user")["title"] == "ask_user output"
+    assert alias_output_schema("completely_unknown") is None
+    # alias registration names keep working too
+    assert alias_output_schema("read_file")["title"] == "read_file output"
+
+
+def test_kernel_envelope_string_content_is_the_validation_target():
+    """The kernel catalog envelope {"content": "<text>", ...} validates its text
+    against oneOf/string alias contracts instead of failing as a bare dict."""
+    from atlas.engine.kernel.loop import _presentation_schema_violation
+
+    one_of = alias_one_of = {
+        "title": "local_file output",
+        "oneOf": [
+            {"type": "string"},
+            {"type": "object", "properties": {"_multimodal": {"const": True},
+                                              "content": {"type": "array"}},
+             "required": ["_multimodal", "content"]},
+        ],
+    }
+    envelope = {"content": "=== README ===\n1\t# Atlas", "data": {}, "is_error": False}
+    assert _presentation_schema_violation(envelope, one_of) is None
+    assert _presentation_schema_violation(
+        {"content": ["block", {"x": 1}], "data": {}}, one_of) is not None
+    assert _presentation_schema_violation("raw text", one_of) is None
+
+
+@pytest.mark.asyncio
+async def test_restricted_scheduler_still_allows_concludeturn_but_honors_deny():
+    """E26: a closed tool_allow list must not lock a run out of ending its turn;
+    an explicit deny on concludeTurn still applies."""
+    from atlas.engine.kernel.tools import ToolScheduler
+
+    async def dispatch(_call_id, _name, _args):
+        return {"content": "ok", "outcome": "completed"}
+
+    scheduler = ToolScheduler(dispatch, allow=["local_file"])
+    result = await scheduler.execute({"id": "c1", "function": {"name": "concludeTurn", "arguments": {}}})
+    assert result.receipt.state == "completed"
+
+    denied_scheduler = ToolScheduler(dispatch, allow=None, deny=["concludeTurn"])
+    result = await denied_scheduler.execute(
+        {"id": "c2", "function": {"name": "concludeTurn", "arguments": {}}})
+    assert result.receipt.state == "failed"
+    assert "not allowed" in str(result.output.get("error", ""))

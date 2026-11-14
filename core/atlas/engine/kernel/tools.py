@@ -713,7 +713,14 @@ class ToolScheduler:
             if not name or not call_id:
                 raise ValueError("Tool calls require an id and name")
             policy_name = "local_edit" if name in EDIT_TOOL_NAMES else name
-            if not tool_allowed(policy_name, self.allow, self.deny):
+            if name == "concludeTurn":
+                # Turn finalization is transport, not a capability: a closed
+                # tool_allow list must not lock a run out of ending its turn.
+                # An explicit deny still applies.
+                allowed = tool_allowed(name, None, self.deny)
+            else:
+                allowed = tool_allowed(policy_name, self.allow, self.deny)
+            if not allowed:
                 state = "failed"
                 output = error_output(
                     error_from_exception(

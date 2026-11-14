@@ -745,6 +745,19 @@ def output_contracts_for_tools(tools: list[dict[str, Any]]) -> dict[str, dict[st
             continue
         contract = registry.get_output_contract(name)
         if contract is None:
+            from atlas.engine.tool_registry import alias_output_schema
+            # The kernel path does not import the built-in engine/tools modules,
+            # so the registry has no entries for the Atlas alias names; their
+            # semantic per-tool output contracts live in the alias table and
+            # travel with the same event/persistence path as registry contracts.
+            alias_schema = alias_output_schema(name)
+            if alias_schema is not None:
+                contracts[name] = {
+                    "schema": alias_schema,
+                    "render": "text",
+                    "presentation_meta": {},
+                }
+                continue
             # Tools supplied by MCP, local execution, or a host adapter do not
             # register in ToolRegistry. Give each of them an explicit, uniquely
             # named JSON-compatible result contract so the same renderer path

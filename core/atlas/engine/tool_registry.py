@@ -90,6 +90,39 @@ def _alias_output_schema(name: str) -> dict[str, Any]:
         "type": "string",
     }
 
+
+def alias_output_schema(name: str) -> dict[str, Any] | None:
+    """Public per-alias output contract lookup for contract consumers.
+
+    The kernel path never imports the built-in ``engine/tools`` modules, so its
+    registry has no ``todo_list``/``local_file``/... entries; the alias table
+    here is the semantic per-tool contract source for those names. Accepts both
+    the alias registration name (``read_file``) and the kernel-facing native
+    name (``local_file``). ``None`` when *name* is not an Atlas alias.
+    """
+    key = name if name in _ALIAS_OUTPUT_DESCRIPTIONS else _NATIVE_ALIAS_KEYS.get(name)
+    if key is None:
+        return None
+    schema = _alias_output_schema(key)
+    if name == key:
+        return schema
+    schema = dict(schema)
+    schema["title"] = f"{name} output"
+    if name == "local_file":
+        schema["description"] = (
+            "For read actions: file contents, or a multimodal envelope when the "
+            "file is an image. For write/move/delete actions: text receipt of the "
+            "requested file operation and any diagnostics."
+        )
+    return schema
+
+
+# Native (kernel-facing) tool name -> alias registration key. Several alias keys
+# share one native surface (local_file carries read/write/search actions).
+_NATIVE_ALIAS_KEYS: dict[str, str] = {}
+for _alias_key, (_native_name, _alias_action) in _ALIASES.items():
+    _NATIVE_ALIAS_KEYS.setdefault(_native_name, _alias_key)
+
 _HERMES_CORE_TOOLS = {
     "read_file", "write_file", "patch", "search_files", "terminal",
     "process_manage", "todo_list", "clarify", "execute_code", "new_context_window",

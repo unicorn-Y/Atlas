@@ -259,6 +259,36 @@ def _final_model_tools(available_tools: list[dict[str, Any]], plan: Any, tool_mo
     return tools
 
 
+def _presentation_schema_violation(output: Any, schema: dict[str, Any]) -> str | None:
+    """Validate one host-tool output against its presentation contract.
+
+    Returns the validation error text, or None when the output satisfies the
+    schema. Contracts describe what the model reads, not the internal dispatch
+    envelope: a kernel catalog result (``{"content": "<text>", ...}``) validates
+    its ``content`` text, and a string-typed contract with a block-list envelope
+    validates ``content[0].text``. An envelope carrying no text at all cannot
+    violate a string contract.
+    """
+    target = output
+    if isinstance(output, dict) and isinstance(output.get("content"), str):
+        target = output["content"]
+    elif isinstance(output, dict) and schema.get("type") == "string":
+        content = output.get("content")
+        text = None
+        if isinstance(content, list) and content and isinstance(content[0], dict):
+            text = content[0].get("text")
+        if not isinstance(text, str):
+            return None
+        target = text
+    try:
+        import jsonschema
+
+        jsonschema.validate(target, schema)
+    except Exception as exc:  # noqa: BLE001 - host output must stay in the tool-result channel
+        return str(exc)[:300]
+    return None
+
+
 def _message_text(message: dict[str, Any]) -> str:
     value = message.get("content", "")
     if isinstance(value, str):
@@ -1250,17 +1280,16 @@ class AtlasKernel:
                     output.get("is_error") or output.get("error") or output.get("success") is False
                 ):
                     return ToolDecision()
-                try:
-                    import jsonschema
-
-                    jsonschema.validate(output, presentation["schema"])
-                except Exception as exc:  # noqa: BLE001 - host output must stay in the tool-result channel
+                violation = _presentation_schema_violation(
+                    output, presentation.get("schema") or {},
+                )
+                if violation is not None:
                     from atlas.engine.tools.registry import tool_error
 
                     validated = tool_error(
                         "Tool output violated its declared schema",
                         error_type="tool_output_schema", tool=name,
-                        validation_error=str(exc)[:300],
+                        validation_error=violation,
                     )
                     return ToolDecision.replace(validated)
                 return ToolDecision()
