@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -27,6 +28,10 @@ from atlas.skills.dependencies import canonical_skill_dependencies, dependency_p
 log = structlog.get_logger()
 
 SKILLS_DIR = PROJECT_ROOT / "skills"
+
+# X18: bounded LRU for request-scoped ``with_sources`` views. A scope chain
+# maps to one view; disk edits stay covered by each view's fingerprint check.
+_SCOPED_VIEW_CACHE_MAX = 8
 
 
 # ---------------------------------------------------------------------------
@@ -322,6 +327,10 @@ class SkillManager:
         self._sources: dict[str, SkillSource] = {
             "atlas": SkillSource("atlas", self._skills_dir, 10, layout="category"),
         }
+        # X18: request-scoped views from ``with_sources``, keyed by the scope
+        # chain and self-invalidating on disk changes via each view's
+        # ``_ensure_fresh``. Bounded so long sessions cannot accumulate views.
+        self._scoped_views: OrderedDict[tuple, "SkillManager"] = OrderedDict()
 
     @property
     def revision(self) -> int:
@@ -364,12 +373,37 @@ class SkillManager:
         self.scan_skills_sync()
 
     def with_sources(self, sources: list[SkillSource]) -> "SkillManager":
-        """Build a request-scoped view using this same index/activation layer."""
+        """Build a request-scoped view using this same index/activation layer.
+
+        Views are memoized per scope chain (X18): the cache key covers this
+        manager's current source ladder plus the request's extra sources, so
+        any base-source registration change resolves to a fresh view, while a
+        SKILL.md edit on disk is still caught by the cached view's own
+        ``_ensure_fresh`` fingerprint — the same invalidation contract as the
+        base manager, no separate watcher.
+        """
+        key = (
+            tuple(sorted(
+                (name, source.priority, source.layout, str(source.root))
+                for name, source in self._sources.items()
+            )),
+            tuple(sorted(
+                (source.name, source.priority, source.layout, str(source.root))
+                for source in sources
+            )),
+        )
+        cached = self._scoped_views.get(key)
+        if cached is not None:
+            self._scoped_views.move_to_end(key)
+            return cached
         scoped = SkillManager(self._skills_dir)
         scoped._sources = dict(self._sources)
         for source in sources:
             scoped.register_skill_source(source)
         scoped.scan_skills_sync()
+        self._scoped_views[key] = scoped
+        while len(self._scoped_views) > _SCOPED_VIEW_CACHE_MAX:
+            self._scoped_views.popitem(last=False)
         return scoped
 
     # -- scanning --------------------------------------------------------------

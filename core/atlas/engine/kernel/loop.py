@@ -96,7 +96,70 @@ def _mcp_tool_allowed(runtime: Any, name: str) -> bool:
     if allowed is None or "__" not in name:
         return True
     server = name.split("__", 1)[0]
+    # X8: a plugin-contributed server is scoped by the preset's plugin rows
+    # (the realm), never by the configured-server allowlist — otherwise an
+    # applied preset with an empty ``mcp_servers`` row would swallow every
+    # plugin child row before the realm can decide.
+    realm = getattr(runtime, "plugin_realm", None)
+    owns = getattr(realm, "owns_server", None)
+    if callable(owns) and owns(server):
+        return True
     return server in allowed
+
+
+def _plugin_realm_allows(runtime: Any, name: str) -> bool:
+    """Confine plugin-contributed tools to the run's plugin realm (X8).
+
+    An agent preset's ``plugins`` rows select the plugin child rows a run may
+    see; tools namespaced under a plugin-contributed MCP server are visible
+    only when the owning plugin row is selected (or ``plugin_allow_all``).
+    Unowned servers (atlas.toml config) are the ``mcp_server_allow`` scope's
+    job and pass through here.
+    """
+    realm = getattr(runtime, "plugin_realm", None)
+    if realm is None or "__" not in name:
+        return True
+    allows = getattr(realm, "allows_mcp_server", None)
+    if not callable(allows):
+        return True
+    return bool(allows(name.split("__", 1)[0]))
+
+
+def runtime_tool_allowed(runtime: Any, name: str) -> bool:
+    """One visibility predicate for a run's model tool pool and dispatch."""
+    return _mcp_tool_allowed(runtime, name) and _plugin_realm_allows(runtime, name)
+
+
+def _plugin_realm_admits_skill(runtime: Any, agent: Any, args: Any) -> bool:
+    """Fail-closed X8 gate for ``use_skill``: plugin-sourced skills must be in-realm.
+
+    The skill index hides confined plugin skills, but the model could still name
+    one directly; this closes that path. Unknown/non-plugin skills pass through,
+    so built-in activation semantics are unchanged.
+    """
+    realm = getattr(runtime, "plugin_realm", None)
+    if realm is None:
+        return True
+    name = ""
+    if isinstance(args, dict):
+        raw = args.get("name")
+        if isinstance(raw, str):
+            name = raw.strip()
+    if not name:
+        return True
+    skills = getattr(agent, "_skills", None)
+    get_skill = getattr(skills, "get_skill", None)
+    if not callable(get_skill):
+        return True
+    try:
+        info = get_skill(name)
+    except Exception:  # noqa: BLE001 - a broken index must not turn into a fake denial
+        return True
+    source = str(getattr(info, "source", "") or "") if info is not None else ""
+    admits = getattr(realm, "admits_plugin_source", None)
+    if not callable(admits):
+        return True
+    return bool(admits(source))
 
 
 def scoped_mcp_client_for_runtime(client: Any, runtime: Any) -> Any:
@@ -1185,7 +1248,7 @@ class AtlasKernel:
 
             async def pre_execute(call_id: str, name: str, args: dict[str, Any]) -> ToolDecision:
                 """Run the existing PreToolUse hook at the scheduler's pre-execute seam."""
-                if name == "concludeTurn" or not _mcp_tool_allowed(runtime, name):
+                if name == "concludeTurn" or not runtime_tool_allowed(runtime, name):
                     return ToolDecision()
                 if call_id in bad_tool_args:
                     return ToolDecision()
@@ -1312,9 +1375,17 @@ class AtlasKernel:
                     conclusion.conclude(args.get("response"))
                     return {"content": conclusion.response, "data": {"concluded": True},
                             "outcome": "completed"}
-                if not _mcp_tool_allowed(runtime, name):
-                    return {"content": f"MCP server is outside this agent preset's scope: {name}",
+                if not runtime_tool_allowed(runtime, name):
+                    if not _mcp_tool_allowed(runtime, name):
+                        return {"content": f"MCP server is outside this agent preset's scope: {name}",
+                                "is_error": True, "outcome": "denied"}
+                    return {"content": f"Plugin is outside this agent preset's plugin scope: {name}",
                             "is_error": True, "outcome": "denied"}
+                if name == "use_skill" and not _plugin_realm_admits_skill(runtime, agent, args):
+                    return {"content": (
+                        "Skill is contributed by a plugin outside this agent preset's "
+                        f"plugin scope: {args.get('name')}"
+                    ), "is_error": True, "outcome": "denied"}
                 if call_id in bad_tool_args:
                     # Unparseable arguments: answer this call only, the rest of the batch runs.
                     return {"content": bad_tool_args.pop(call_id), "is_error": True,
@@ -2140,7 +2211,7 @@ class AtlasKernel:
                 available_tools = filter_executable_tools(available_tools, tool_allow, tool_deny)
                 available_tools = [
                     schema for schema in available_tools
-                    if _mcp_tool_allowed(runtime, str((schema.get("function") or schema).get("name", "")))
+                    if runtime_tool_allowed(runtime, str((schema.get("function") or schema).get("name", "")))
                 ]
 
                 include_workflow = (
@@ -2162,7 +2233,7 @@ class AtlasKernel:
                             "job_list", "job_output", "job_kill",
                         })
                         and tool_allowed(str(schema["function"]["name"]), tool_allow, tool_deny)
-                        and _mcp_tool_allowed(runtime, str(schema["function"]["name"]))
+                        and runtime_tool_allowed(runtime, str(schema["function"]["name"]))
                         and not (read_only and schema["function"]["name"] == "workflow")
                     ],
                     sort=False,
@@ -3688,7 +3759,7 @@ class AtlasKernel:
             candidates.extend(kernel_candidates)
             candidates = [
                 schema for schema in candidates
-                if _mcp_tool_allowed(
+                if runtime_tool_allowed(
                     runtime, str((schema.get("function") or schema).get("name", "")),
                 )
             ]
