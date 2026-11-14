@@ -149,7 +149,8 @@ describe('BackendAdapter availability and recovery', () => {
     const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
     await adapter.initialize();
 
-    await expect(adapter.deleteFact('temporary')).resolves.toBeUndefined();
+    // deleteFact was removed with the MemOS purge (6834eb38); deleteKnowledge is the void DELETE that remains.
+    await expect(adapter.deleteKnowledge('temporary')).resolves.toBeUndefined();
   });
 
   it('resumes the same run after disconnect and ignores replayed events', async () => {
@@ -250,6 +251,126 @@ describe('BackendAdapter availability and recovery', () => {
     await following;
     expect(events).toEqual([1, 2, 3]);
     expect(MockWebSocket.instances).toHaveLength(1);
+  });
+
+  // D7 renderer side: an empty renderer projection always rebuilds from the header (sequence 0);
+  // a mid-run transport loss without a gap resumes from the contiguous cursor instead.
+  it('reattaches from sequence 0 over a stale persisted cursor and resumes contiguously after a drop', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('window', { setTimeout: (callback: TimerHandler, delay?: number) => setTimeout(callback, delay) });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/api/health')
+      ? { ok: true } as Response
+      : { ok: true, json: async () => ({ version: '1.2' }) } as Response));
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    const store = new Map<string, string>([['atlas.runtime.cursor.run-1', '9']]);
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+      removeItem: (key: string) => void store.delete(key),
+    });
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+    const events: number[] = [];
+    const following = adapter.attachRun('run-1', (event) => events.push(event.sequence));
+
+    await vi.advanceTimersByTimeAsync(0);
+    const first = MockWebSocket.instances[0];
+    first.open();
+    // The persisted cursor is only diagnostic on reattach: replay from the header.
+    expect(JSON.parse(first.sent[0])).toEqual({ type: 'resume', run_id: 'run-1', after_sequence: 0 });
+    first.receive(runtimeEvent(1, 'run.started'));
+    first.receive(runtimeEvent(2, 'message.completed'));
+    expect(store.get('atlas.runtime.cursor.run-1')).toBe('2');
+    first.disconnect();
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    const resumed = MockWebSocket.instances[1];
+    resumed.open();
+    expect(JSON.parse(resumed.sent[0])).toEqual({ type: 'resume', run_id: 'run-1', after_sequence: 2 });
+    resumed.receive(runtimeEvent(3, 'run.completed'));
+    await following;
+    expect(events).toEqual([1, 2, 3]);
+    expect(MockWebSocket.instances).toHaveLength(2);
+  });
+
+  // D7 renderer side: a gap repaired from a page that does not end the run must rejoin the
+  // WebSocket from the repaired cursor and keep following, not restart the run.
+  it('rejoins the websocket from the repaired cursor after a non-terminal page repair', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('window', { setTimeout: (callback: TimerHandler, delay?: number) => setTimeout(callback, delay) });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/health')) return { ok: true } as Response;
+      if (url.includes('/events?')) return { ok: true, json: async () => ({
+        events: [runtimeEvent(2, 'message.completed')], next_cursor: 2, cursor: 2, has_more: false,
+      }) } as Response;
+      return { ok: true, json: async () => ({ version: '1.2' }) } as Response;
+    }));
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+    const events: number[] = [];
+    const running = adapter.startRun({ type: 'run.start', run_id: 'run-1', content: 'hello', conversation_id: 'conv-1' }, (event) => events.push(event.sequence));
+
+    await vi.advanceTimersByTimeAsync(0);
+    const first = MockWebSocket.instances[0];
+    first.open();
+    first.receive(runtimeEvent(1, 'run.started'));
+    first.receive(runtimeEvent(3, 'tool.started'));
+    await vi.advanceTimersByTimeAsync(1_000);
+    const rejoined = MockWebSocket.instances[1];
+    rejoined.open();
+    expect(JSON.parse(rejoined.sent[0])).toEqual({ type: 'resume', run_id: 'run-1', after_sequence: 2 });
+    rejoined.receive(runtimeEvent(3, 'tool.started'));
+    rejoined.receive(runtimeEvent(4, 'run.completed'));
+    await running;
+    expect(events).toEqual([1, 2, 3, 4]);
+    expect(MockWebSocket.instances).toHaveLength(2);
+  });
+
+  // D7 renderer side: the bounded page walk continues while the server head is ahead of the
+  // consumed cursor, and only then hands over to the WebSocket follow.
+  it('walks consecutive event pages until the gap is closed, then follows live', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('window', { setTimeout: (callback: TimerHandler, delay?: number) => setTimeout(callback, delay) });
+    const eventPages = new Map<string, unknown>([
+      ['after_sequence=0', { events: [runtimeEvent(1, 'run.started'), runtimeEvent(2, 'message.completed')], next_cursor: 2, cursor: 4, has_more: true }],
+      ['after_sequence=2', { events: [runtimeEvent(3, 'tool.started'), runtimeEvent(4, 'tool.completed')], next_cursor: 4, cursor: 4, has_more: false }],
+    ]);
+    const fetchedPages: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/health')) return { ok: true } as Response;
+      const pageKey = eventPages.keys().find((suffix) => url.includes(suffix));
+      if (pageKey !== undefined) {
+        fetchedPages.push(pageKey);
+        return { ok: true, json: async () => eventPages.get(pageKey) } as Response;
+      }
+      return { ok: true, json: async () => ({ version: '1.2' }) } as Response;
+    }));
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
+    const adapter = new BackendAdapter({ baseUrl: 'http://localhost:8765' });
+    await adapter.initialize();
+    const events: number[] = [];
+    const following = adapter.attachRun('run-1', (event) => events.push(event.sequence));
+
+    await vi.advanceTimersByTimeAsync(0);
+    const first = MockWebSocket.instances[0];
+    first.open();
+    first.receive(runtimeEvent(5, 'message.delta'));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(fetchedPages).toEqual(['after_sequence=0', 'after_sequence=2']);
+
+    const rejoined = MockWebSocket.instances[1];
+    rejoined.open();
+    expect(JSON.parse(rejoined.sent[0])).toEqual({ type: 'resume', run_id: 'run-1', after_sequence: 4 });
+    rejoined.receive(runtimeEvent(5, 'message.delta'));
+    rejoined.receive(runtimeEvent(6, 'run.completed'));
+    await following;
+    expect(events).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(MockWebSocket.instances).toHaveLength(2);
   });
 
   it('starts runs on any runtime protocol from 1.2 up and refuses older ones', async () => {
