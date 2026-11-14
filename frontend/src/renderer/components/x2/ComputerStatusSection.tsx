@@ -61,7 +61,7 @@ export default function ComputerStatusSection({ apiBaseUrl, className }: { apiBa
         className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-40">
         {loading ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />}重新探测
       </button>
-      {window.atlasDesktop?.retrySessionScreenshot && <button type="button" onClick={() => { setRetryMessage(''); void window.atlasDesktop?.retrySessionScreenshot?.().then((result) => setRetryMessage(result.started ? '已请求重试；成功后截图会添加到当前会话输入框。' : result.reason ?? '暂时无法重试。')).catch((error) => setRetryMessage(error instanceof Error ? error.message : String(error))); }} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg"><RefreshCw size={13} />重新捕获截图</button>}
+      {typeof window !== 'undefined' && window.atlasDesktop?.retrySessionScreenshot && <button type="button" onClick={() => { setRetryMessage(''); void window.atlasDesktop?.retrySessionScreenshot?.().then((result) => setRetryMessage(result.started ? '已请求重试；成功后截图会添加到当前会话输入框。' : result.reason ?? '暂时无法重试。')).catch((error) => setRetryMessage(error instanceof Error ? error.message : String(error))); }} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg"><RefreshCw size={13} />重新捕获截图</button>}
     </div>
     {retryMessage && <p className="my-1 text-[12px] text-fg-3" role="status">{retryMessage}</p>}
     <p className="m-0 mt-1 mb-3 text-[13px] text-fg-3">让 Atlas 能看屏幕、动鼠标和键盘的能力。前台窗口里的操作会先问你，鼠标一动就会暂停。</p>
