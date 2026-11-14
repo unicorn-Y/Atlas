@@ -344,11 +344,29 @@ def _skill_row(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def skill_index_message(skill_mgr: Any, query: str, *, top_k: int = 30,
-                        list_all_below: int = 30) -> str | None:
-    """System-message text for this turn's skill index, or None when there are no skills."""
+                        list_all_below: int = 30,
+                        plugin_realm: Any = None) -> str | None:
+    """System-message text for this turn's skill index, or None when there are no skills.
+
+    ``plugin_realm`` (X8) confines plugin-contributed entries to the run's
+    selected plugin child rows: a skill whose source is ``plugin:<name>:…`` is
+    only listed when the realm admits that plugin. Non-plugin sources and runs
+    without a realm are untouched, and the shared index cache stays global —
+    the filter applies to this turn's projection only.
+    """
     if skill_mgr is None:
         return None
     index, items = _skill_index(skill_mgr)
+    if plugin_realm is not None and items:
+        admits = getattr(plugin_realm, "admits_plugin_source", None)
+        if callable(admits):
+            filtered = [item for item in items
+                        if admits(str(item.get("source") or ""))]
+            if len(filtered) != len(items):
+                # The shared index spans every plugin; rebuild over the realm's
+                # subset so retrieval cannot surface a confined row either.
+                items = filtered
+                index = Bm25Index(items)
     if not items:
         return None
     if len(items) <= list_all_below:

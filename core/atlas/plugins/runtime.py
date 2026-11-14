@@ -145,13 +145,62 @@ class _DisposerStack:
         self._items.clear()
 
 
-class PluginRealm:
-    """A read/invoke facade that confines a run to selected plugin child rows."""
+def plugin_of_source(source: str) -> str | None:
+    """Plugin id behind a ``plugin:<name>...`` source string, else ``None``.
 
-    def __init__(self, registry: Any, plugin_rows: list[str], *, allow_all: bool = False) -> None:
+    Skill sources are ``plugin:<plugin>:<skill-dir>``; capability rows are
+    ``plugin:<plugin>``. Everything else (atlas, claude-user, ...) has no owner.
+    """
+    if not isinstance(source, str) or not source.startswith("plugin:"):
+        return None
+    rest = source[len("plugin:"):]
+    return rest.split(":", 1)[0] if rest else None
+
+
+class PluginRealm:
+    """A read/invoke facade that confines a run to selected plugin child rows.
+
+    The realm is the consumption end of the agent preset's ``plugins`` rows
+    (X8): every model-visible plugin contribution — capability rows, the skill
+    index entries contributed by plugins, and model tools namespaced under a
+    plugin-contributed MCP server — must be admitted here before the run sees
+    it. ``plugin_allow_all`` (the preset default when no rows are listed)
+    disables the confinement entirely.
+    """
+
+    def __init__(self, registry: Any, plugin_rows: list[str], *, allow_all: bool = False,
+                 mcp_owners: dict[str, str] | None = None) -> None:
         self._registry = registry
         self._sources = {f"plugin:{name}" for name in plugin_rows if isinstance(name, str)}
         self._allow_all = allow_all
+        # Model tool namespace → owning plugin. Servers absent from this map are
+        # configured (atlas.toml / request-level), not plugin child rows, so the
+        # realm does not confine them — that is ``mcp_servers``' job.
+        self._mcp_owners = {
+            str(server): str(owner) for server, owner in (mcp_owners or {}).items()
+            if isinstance(server, str) and isinstance(owner, str)
+        }
+
+    def allows_plugin(self, plugin: str) -> bool:
+        """Whether one plugin's child rows are visible inside this realm."""
+        return self._allow_all or f"plugin:{plugin}" in self._sources
+
+    def admits_plugin_source(self, source: str) -> bool:
+        """Whether a ``plugin:<name>...`` source string is inside the realm.
+
+        Non-plugin sources (built-in skills, user skills) are never confined.
+        """
+        owner = plugin_of_source(source)
+        return owner is None or self.allows_plugin(owner)
+
+    def allows_mcp_server(self, server: str) -> bool:
+        """Whether tools namespaced under ``server`` are inside the realm.
+
+        Unowned servers are always allowed; a plugin-contributed server is
+        allowed only when its owning plugin row is selected.
+        """
+        owner = self._mcp_owners.get(str(server))
+        return owner is None or self.allows_plugin(owner)
 
     def discover(self) -> list[dict[str, str]]:
         return [row for row in self._registry.discover()

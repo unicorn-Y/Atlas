@@ -348,8 +348,26 @@ async def _apply_agent_preset_capabilities(agent, request: RunRequest, runtime) 
     runtime.tool_deny = request.tool_deny
     runtime.mcp_server_allow = list(dict.fromkeys(mcp_servers))
     from atlas.plugins.runtime import PluginRealm
+    # X8: the realm must also confine model tools contributed by plugin MCP
+    # servers, so the server→plugin ownership map is resolved from the plugin
+    # runtime at run start (a configured server has no owner and is left to
+    # ``mcp_server_allow``).
+    mcp_owners: dict[str, str] = {}
+    contributions = getattr(getattr(agent, "_plugin_runtime", None),
+                            "enabled_contributions", None)
+    if callable(contributions):
+        try:
+            for contribution in contributions():
+                plugin_name = str(contribution.get("name") or "")
+                if not plugin_name:
+                    continue
+                for server in (contribution.get("mcp_servers") or {}):
+                    mcp_owners[str(server)] = plugin_name
+        except Exception:  # noqa: BLE001 - provenance gaps must not kill the run
+            log.debug("agent.plugin_mcp_owners_unavailable", exc_info=True)
     runtime.plugin_realm = PluginRealm(
         agent._capabilities, list(dict.fromkeys(plugin_rows)), allow_all=plugin_allow_all,
+        mcp_owners=mcp_owners,
     )
 
     if not request.mode_explicit:
@@ -1173,6 +1191,9 @@ async def _build_messages(agent, state: _RunState) -> list[BaseMessage]:
                 agent._skills, request.message,
                 top_k=int(library_cfg.get("skill_index_top_k", 30)),
                 list_all_below=int(library_cfg.get("skill_index_list_all_below", 30)),
+                # X8: a preset's plugin rows confine the model-visible catalog —
+                # plugin skills outside the realm are not offered to the model.
+                plugin_realm=getattr(state.runtime, "plugin_realm", None),
             )
         except Exception:
             log.debug("agent.skill_index_unavailable", exc_info=True)
